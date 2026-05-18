@@ -126,6 +126,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry.sql)
   endif()
+
+  list(APPEND SOLO_TESTS cache_invalidate_uaf.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

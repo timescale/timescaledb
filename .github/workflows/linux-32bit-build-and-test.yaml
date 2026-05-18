@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [config, check_paths]
     container:
-      image: i386/debian:bookworm-slim@sha256:8665d1820386db07d0e28d67c08785778ee9bbb5b563e9bc91ff214cbedeea79
+      image: i386/debian:bookworm-slim@sha256:78db3d04276373ba96e129d5bdf46c25619a9dbd6a1ce74858ac50cab29d01cc
       options: --privileged --ulimit core=-1:-1 --ulimit fsize=-1:-1
       env:
         PG_SRC_DIR: pgbuild

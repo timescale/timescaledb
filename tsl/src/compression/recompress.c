@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include "debug_point.h"
+#include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
 #include <utils/inval.h>
@@ -22,6 +23,7 @@
 #include "create.h"
 #include "debug_assert.h"
 #include "guc.h"
+#include "hypertable.h"
 #include "indexing.h"
 #include "recompress.h"
 #include "ts_catalog/array_utils.h"
@@ -82,6 +84,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 
 	if (!ts_chunk_is_partial(chunk))
 	{
@@ -614,7 +617,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 			break;
 		}
 
-		/* Reset index scan if we are done with with this segment */
+		/* Reset index scan if we are done with this segment */
 		if (done_with_segment)
 		{
 			continue;
@@ -1059,19 +1062,26 @@ static enum Batch_match_result
 match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby, ScanKey orderby_scankeys,
 				  bool *nulls_first)
 {
-	ScanKey key;
-	for (int i = 0; i < num_orderby; i++)
+	/*
+	 * Only the leading orderby column gives a sound before/after verdict from
+	 * batch metadata. The min/max for later orderby columns are aggregated
+	 * over all rows in the batch, not conditional on the leading column, so a
+	 * tuple whose leading column is in range but whose later column is out of
+	 * range is interleaved with the batch in multi-column sort order — not
+	 * strictly before or after it.
+	 */
+	if (num_orderby >= 1)
 	{
-		key = &orderby_scankeys[i * 2];
+		ScanKey key = &orderby_scankeys[0];
 		if (!slot_key_test(compressed_slot, key))
 		{
-			return handle_null_scan(key->sk_flags, nulls_first[i], Tuple_before);
+			return handle_null_scan(key->sk_flags, nulls_first[0], Tuple_before);
 		}
 
-		key = &orderby_scankeys[i * 2 + 1];
+		key = &orderby_scankeys[1];
 		if (!slot_key_test(compressed_slot, key))
 		{
-			return handle_null_scan(key->sk_flags, nulls_first[i], Tuple_after);
+			return handle_null_scan(key->sk_flags, nulls_first[0], Tuple_after);
 		}
 	}
 

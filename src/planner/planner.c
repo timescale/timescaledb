@@ -1470,8 +1470,8 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			{
 				ts_planner_constraint_cleanup(root, rel);
 			}
-
 			break;
+
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
 			/* Check for UPDATE/DELETE/MERGE (DML) on compressed chunks */
@@ -1482,10 +1482,14 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 				{
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
 				}
-				break;
 			}
-			TS_FALLTHROUGH;
-		default:
+			else
+			{
+				apply_optimizations(root, reltype, rel, rte, ht);
+			}
+			break;
+
+		case TS_REL_HYPERTABLE:
 			/*
 			 * Set the indexlist for a hypertable parent to NIL since we
 			 * should not try to do any index scans on hypertable parents,
@@ -1497,10 +1501,26 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			 * This has to be after the hypertable is expanded, since the
 			 * indexlist is used during hypertable expansion.
 			 */
-			if (reltype == TS_REL_HYPERTABLE)
+
+			rel->indexlist = NIL;
+
+			if (!rte->inh)
 			{
-				rel->indexlist = NIL;
+				/*
+				 * This happens with SELECT FROM ONLY hypertable or with an
+				 * empty hypertable. Mark it as dummy, otherwise we'll get a
+				 * scan on hypertable relation itself. It's always empty, so
+				 * this scan is useless and looks misleading.
+				 */
+				mark_dummy_rel(rel);
 			}
+			else
+			{
+				apply_optimizations(root, reltype, rel, rte, ht);
+			}
+			break;
+
+		default:
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
 	}

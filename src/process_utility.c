@@ -1287,6 +1287,28 @@ process_vacuum(ProcessUtilityArgs *args)
 
 			if (OidIsValid(table_relid))
 			{
+				/*
+				 * Continuous aggregates expose a view to the user, which
+				 * VACUUM/ANALYZE refuses to process. Redirect to the
+				 * underlying materialization hypertable so its chunks (and
+				 * any compressed chunks) are processed instead.
+				 */
+				ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(table_relid);
+				if (cagg)
+				{
+					Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+					if (mat_ht)
+					{
+						RangeVar *mat_rv = makeRangeVar(pstrdup(NameStr(mat_ht->fd.schema_name)),
+														pstrdup(NameStr(mat_ht->fd.table_name)),
+														-1);
+						vacuum_rel = makeVacuumRelation(mat_rv,
+														mat_ht->main_table_relid,
+														vacuum_rel->va_cols);
+						table_relid = mat_ht->main_table_relid;
+					}
+				}
+
 				ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_MISSING_OK);
 
 				if (ht)
@@ -3693,19 +3715,48 @@ process_index_start(ProcessUtilityArgs *args)
 		if (cagg)
 		{
 			ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+
+			if (stmt->unique)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("continuous aggregates do not support UNIQUE indexes")));
+			}
+		}
+
+		if (stmt->unique || stmt->primary)
+		{
+			/*
+			 * When building a unique index on a chunk, there may be compressed data
+			 * present on the chunk that would not be considered by postgres validity
+			 * check. We need to check for constraint violations ourselves in those
+			 * cases.
+			 */
+			Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+			if (OidIsValid(relid))
+			{
+				Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+				if (chunk && ts_chunk_is_compressed(chunk))
+				{
+					/*
+					 * Expression index elements are still raw parse trees at that point
+					 * and cannot be passed to deparse_expression directly, so run the
+					 * standard PostgreSQL transformation first.
+					 */
+					Relation rel = table_open(chunk->table_id, AccessShareLock);
+					IndexStmt *transformed = transformIndexStmt(chunk->table_id, stmt, NULL);
+					table_close(rel, NoLock);
+					validate_index_constraints(chunk, transformed);
+				}
+			}
 		}
 
 		if (!ht)
 		{
 			ts_cache_release(&hcache);
 			return DDL_CONTINUE;
-		}
-
-		if (stmt->unique)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("continuous aggregates do not support UNIQUE indexes")));
 		}
 
 		/* Make the RangeVar for the underlying materialization hypertable */
@@ -4857,7 +4908,7 @@ continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
 {
 	Oid ownerid = ts_rel_get_owner(view_relid);
 
-	if (!has_privs_of_role(GetUserId(), ownerid))
+	if (!ts_has_owner_privs(GetUserId(), ownerid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
@@ -5776,6 +5827,20 @@ static DDLResult
 process_create_stmt(ProcessUtilityArgs *args)
 {
 	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
+	ListCell *lc;
+
+	foreach (lc, stmt->inhRelations)
+	{
+		RangeVar *parent = lfirst_node(RangeVar, lc);
+		Oid parent_relid = RangeVarGetRelid(parent, NoLock, true);
+
+		if (OidIsValid(parent_relid) && ts_is_hypertable(parent_relid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertables do not support inheritance")));
+		}
+	}
 
 	List *pg_options = NIL, *hypertable_options = NIL;
 	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &pg_options);

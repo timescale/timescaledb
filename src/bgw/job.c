@@ -905,7 +905,7 @@ ts_bgw_job_check_max_retries(BgwJob *job)
 void
 ts_bgw_job_permission_check(BgwJob *job, const char *cmd)
 {
-	if (!has_privs_of_role(GetUserId(), job->fd.owner))
+	if (!ts_has_owner_privs(GetUserId(), job->fd.owner))
 	{
 		const char *owner_name = GetUserNameFromId(job->fd.owner, false);
 		const char *user_name = GetUserNameFromId(GetUserId(), false);
@@ -1267,7 +1267,20 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	if (!job_failed && ts_is_tss_enabled() && scheduler_test_hook == NULL)
 	{
-		const char *stmt = ts_bgw_job_function_call_string(job);
+		const char *stmt;
+#ifdef USE_TELEMETRY
+		/*
+		 * The telemetry job has no real procedure backing its
+		 * proc_schema/proc_name pair, so looking up its funcid would fail.
+		 * Use a fixed synthetic call string instead.
+		 */
+		if (ts_is_telemetry_job(job))
+		{
+			stmt = "CALL _timescaledb_functions.policy_telemetry()";
+		}
+		else
+#endif
+			stmt = ts_bgw_job_function_call_string(job);
 		ts_end_tss_store_callback(stmt, -1, (int) strlen(stmt), 0, 0);
 	}
 

@@ -109,6 +109,14 @@ GROUP BY bucket
 HAVING count(device_id) > 0
 ORDER BY 1 LIMIT 1;
 
+-- NULL bucket width must not be rewritten (and must not crash, see issue
+-- found by the LLM fuzzer)
+SELECT time_bucket(NULL::interval, day) AS bucket,
+   count(*)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1 LIMIT 1;
+
 -- infinity origin
 SELECT time_bucket(INTERVAL '3 days', day, 'infinity'::timestamptz) AS bucket,
    AVG(temperature),

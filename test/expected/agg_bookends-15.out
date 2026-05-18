@@ -505,12 +505,14 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT first(temp, time) FROM ONLY btest;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
-   ->  Seq Scan on btest (actual rows=0.00 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
+         One-Time Filter: false
 
 :PREFIX SELECT last(temp, time) FROM ONLY btest;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
-   ->  Seq Scan on btest (actual rows=0.00 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
+         One-Time Filter: false
 
 -- test constants
 :PREFIX SELECT first(100, 100) FROM btest;

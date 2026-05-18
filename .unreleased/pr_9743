@@ -1,0 +1,2 @@
+Fixes: #9743 Fixes the composite bloom metadata column naming scheme
+Thanks: @pavanmanishd for the first version of the fix

@@ -209,6 +209,29 @@ FROM conditions
 GROUP BY 1
 WITH NO DATA;
 
+-- negative or zero bucket width must be rejected at creation time;
+-- otherwise refresh later trips Assert(bucket_width > 0).
+CREATE MATERIALIZED VIEW mat_neg WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('-1 hour'::interval, timec), avg(temperature)
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW mat_zero WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('0'::interval, timec), avg(temperature)
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW mat_neg_month WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('-1 month'::interval, timec), avg(temperature)
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+
 -- row security on table
 create table rowsec_tab( a bigint, b integer, c integer);
 select table_name from create_hypertable( 'rowsec_tab', 'a', chunk_time_interval=>10);
@@ -504,3 +527,23 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous, timescaledb.materia
 
 -- No FROM clause in CAGG definition
 CREATE MATERIALIZED VIEW cagg1 with (timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT 1 GROUP BY 1 WITH NO DATA;
+
+-- non-positive bucket width on integer-typed hypertable
+CREATE TABLE int_ht(timec bigint NOT NULL, val float);
+SELECT create_hypertable('int_ht', 'timec', chunk_time_interval => 1000000);
+CREATE OR REPLACE FUNCTION int_ht_now() RETURNS bigint LANGUAGE SQL STABLE AS $$ SELECT 0::bigint $$;
+SELECT set_integer_now_func('int_ht', 'int_ht_now');
+
+CREATE MATERIALIZED VIEW mat_neg_int WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(-100::bigint, timec), avg(val)
+FROM int_ht
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW mat_zero_int WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(0::bigint, timec), avg(val)
+FROM int_ht
+GROUP BY 1
+WITH NO DATA;

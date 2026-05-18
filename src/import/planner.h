@@ -52,8 +52,6 @@ extern TSDLLEXPORT List *ts_build_path_tlist(PlannerInfo *root, Path *path);
 
 extern TSDLLEXPORT Node *ts_replace_nestloop_params(PlannerInfo *root, Node *expr);
 
-extern void ts_ExecSetTupleBound(int64 tuples_needed, PlanState *child_node);
-
 #if PG18_GE
 /* In PG18, child ems are not added to ec_members
  * but need to be maintained in separate Lists.

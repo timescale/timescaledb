@@ -269,7 +269,6 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 
 		/* Verify bloom column exists in the compressed chunk */
 		AttrNumber compressed_attnum = get_attnum(compressed_relid, col_name);
-		Assert(AttributeNumberIsValid(compressed_attnum));
 		if (!AttributeNumberIsValid(compressed_attnum))
 		{
 			continue;

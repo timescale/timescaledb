@@ -1,0 +1,1 @@
+Fixes: #9744 Use a fixed call string for the telemetry job in ts_stat_statements recording

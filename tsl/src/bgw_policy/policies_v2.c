@@ -393,7 +393,7 @@ policies_remove(PG_FUNCTION_ARGS)
 
 	for (i = 0; i < npolicies; i++)
 	{
-		char *curr_policy = VARDATA(policy[i]);
+		char *curr_policy = TextDatumGetCString(policy[i]);
 
 		if (pg_strcasecmp(curr_policy, POLICY_REFRESH_CAGG_PROC_NAME) == 0)
 		{
@@ -403,9 +403,7 @@ policies_remove(PG_FUNCTION_ARGS)
 		{
 			success = policy_compression_remove_internal(cagg_oid, if_exists);
 		}
-		else if (pg_strncasecmp(curr_policy,
-								POLICY_RETENTION_PROC_NAME,
-								strlen(POLICY_RETENTION_PROC_NAME)) == 0)
+		else if (pg_strcasecmp(curr_policy, POLICY_RETENTION_PROC_NAME) == 0)
 		{
 			success = policy_retention_remove_internal(cagg_oid, if_exists);
 		}
@@ -413,6 +411,7 @@ policies_remove(PG_FUNCTION_ARGS)
 		{
 			ereport(NOTICE, (errmsg("No relevant policy found")));
 		}
+		pfree(curr_policy);
 		if (!success)
 		{
 			++failures;

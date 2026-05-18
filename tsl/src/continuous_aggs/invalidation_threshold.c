@@ -264,27 +264,7 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 		}
 		else
 		{
-			if (cagg->bucket_function->bucket_fixed_interval == false)
-			{
-				return ts_compute_beginning_of_the_next_bucket_variable(maxval,
-																		cagg->bucket_function);
-			}
-
-			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
-			Assert(bucket_width > 0);
-			NullableDatum offset = INIT_NULL_DATUM;
-			NullableDatum origin = INIT_NULL_DATUM;
-			fill_bucket_offset_origin(cagg->bucket_function,
-									  refresh_window->type,
-									  &offset,
-									  &origin);
-			int64 bucket_start = ts_time_bucket_by_type_extended(bucket_width,
-																 maxval,
-																 refresh_window->type,
-																 offset,
-																 origin);
-			/* Add one bucket to get to the end of the last bucket */
-			return ts_time_saturating_add(bucket_start, bucket_width, refresh_window->type);
+			return cagg_next_bucket_start(maxval, refresh_window->type, cagg->bucket_function);
 		}
 	}
 

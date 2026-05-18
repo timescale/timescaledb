@@ -523,6 +523,25 @@ NOTICE:  No relevant policy found
 -----------------
  f
 
+-- Short and prefix-matching policy names must not match a real policy
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'a');
+NOTICE:  No relevant policy found
+ remove_policies 
+-----------------
+ f
+
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_retention_extra');
+NOTICE:  No relevant policy found
+ remove_policies 
+-----------------
+ f
+
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'p');
+NOTICE:  No relevant policy found
+ remove_policies 
+-----------------
+ f
+
 SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
  remove_policies 
 -----------------

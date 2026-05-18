@@ -142,11 +142,10 @@ cagg_compute_watermark(ContinuousAgg *cagg, int64 watermark, bool isnull)
 		{
 			/*
 			 * Since `value` is already bucketed, `bucketed = true` flag can
-			 * be added to ts_compute_beginning_of_the_next_bucket_variable() as
+			 * be added to ts_cagg_variable_next_bucket_start() as
 			 * an optimization, if necessary.
 			 */
-			watermark =
-				ts_compute_beginning_of_the_next_bucket_variable(watermark, cagg->bucket_function);
+			watermark = ts_cagg_variable_next_bucket_start(watermark, cagg->bucket_function);
 		}
 		else
 		{

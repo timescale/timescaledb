@@ -1407,7 +1407,8 @@ DROP TABLE dependee CASCADE;
 NOTICE:  drop cascades to policy d1 on table dependent
 EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualified
 --- QUERY PLAN ---
- Seq Scan on dependent
+ Result
+   One-Time Filter: false
 
 -----   RECURSION    ----
 --
@@ -1510,26 +1511,8 @@ NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
 --- QUERY PLAN ---
- Seq Scan on s1
-   Filter: ((hashed SubPlan 1) AND f_leak(b))
-   SubPlan 1
-     ->  Append
-           ->  Seq Scan on s2 s2_1
-                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
-           ->  Seq Scan on _hyper_7_27_chunk s2_2
-                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
-           ->  Seq Scan on _hyper_7_28_chunk s2_3
-                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
-           ->  Seq Scan on _hyper_7_29_chunk s2_4
-                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
-           ->  Seq Scan on _hyper_7_30_chunk s2_5
-                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
-           ->  Seq Scan on _hyper_7_31_chunk s2_6
-                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
-           ->  Seq Scan on _hyper_7_32_chunk s2_7
-                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
-           ->  Seq Scan on _hyper_7_33_chunk s2_8
-                 Filter: (((x % 2) = 0) AND (y ~~ '%2f%'::text))
+ Result
+   One-Time Filter: false
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p1 ON s1 USING (a in (select x from v2)); -- using VIEW in RLS policy
@@ -2336,7 +2319,8 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
 PREPARE plancache_test2 AS WITH q AS MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2348,14 +2332,12 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
                  Filter: (((a % 2) = 0) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 PREPARE plancache_test4 AS WITH q AS (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2367,14 +2349,12 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
                  Filter: (((a % 2) = 0) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 PREPARE plancache_test6 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test6;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2386,62 +2366,37 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test6;
                  Filter: (((a % 2) = 0) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 PREPARE plancache_test3 AS WITH q AS MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
 --- QUERY PLAN ---
  Nested Loop
    CTE q
-     ->  Seq Scan on z2
+     ->  Result
+           One-Time Filter: false
    ->  CTE Scan on q
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Custom Scan (ChunkAppend) on z1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on z1 z1_1
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_49_chunk z1_2
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk z1_3
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk z1_4
+               Filter: (((a % 2) = 0) AND f_leak(b))
 
 PREPARE plancache_test5 AS WITH q AS (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
 --- QUERY PLAN ---
- Nested Loop
-   ->  Seq Scan on z2
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 0) AND f_leak(b))
+ Result
+   One-Time Filter: false
 
 PREPARE plancache_test7 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test7;
 --- QUERY PLAN ---
- Nested Loop
-   ->  Seq Scan on z2
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 0) AND f_leak(b))
+ Result
+   One-Time Filter: false
 
 SET ROLE regress_rls_group1;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2480,7 +2435,8 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2492,13 +2448,11 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
                  Filter: (((a % 2) = 0) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2510,43 +2464,29 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
                  Filter: (((a % 2) = 0) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 0) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
 --- QUERY PLAN ---
  Nested Loop
    CTE q
-     ->  Seq Scan on z2
+     ->  Result
+           One-Time Filter: false
    ->  CTE Scan on q
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 0) AND f_leak(b))
+   ->  Custom Scan (ChunkAppend) on z1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on z1 z1_1
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_49_chunk z1_2
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk z1_3
+               Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk z1_4
+               Filter: (((a % 2) = 0) AND f_leak(b))
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
 --- QUERY PLAN ---
- Nested Loop
-   ->  Seq Scan on z2
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 0) AND f_leak(b))
+ Result
+   One-Time Filter: false
 
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2585,7 +2525,8 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2597,13 +2538,11 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
                  Filter: (((a % 2) = 1) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 1) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2615,43 +2554,29 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
                  Filter: (((a % 2) = 1) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 1) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
 --- QUERY PLAN ---
  Nested Loop
    CTE q
-     ->  Seq Scan on z2
+     ->  Result
+           One-Time Filter: false
    ->  CTE Scan on q
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Custom Scan (ChunkAppend) on z1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on z1 z1_1
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_49_chunk z1_2
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk z1_3
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk z1_4
+               Filter: (((a % 2) = 1) AND f_leak(b))
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
 --- QUERY PLAN ---
- Nested Loop
-   ->  Seq Scan on z2
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 1) AND f_leak(b))
+ Result
+   One-Time Filter: false
 
 SET ROLE regress_rls_group2;
 SELECT * FROM z1 WHERE f_leak(b);
@@ -2690,7 +2615,8 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2702,13 +2628,11 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
                  Filter: (((a % 2) = 1) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 1) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
 --- QUERY PLAN ---
- Nested Loop
+ Result
+   One-Time Filter: false
    CTE q
      ->  Custom Scan (ChunkAppend) on z1
            Chunks excluded during startup: 0
@@ -2720,43 +2644,29 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
                  Filter: (((a % 2) = 1) AND f_leak(b))
            ->  Seq Scan on _hyper_9_51_chunk z1_4
                  Filter: (((a % 2) = 1) AND f_leak(b))
-   ->  CTE Scan on q
-   ->  Materialize
-         ->  Seq Scan on z2
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
 --- QUERY PLAN ---
  Nested Loop
    CTE q
-     ->  Seq Scan on z2
+     ->  Result
+           One-Time Filter: false
    ->  CTE Scan on q
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 1) AND f_leak(b))
+   ->  Custom Scan (ChunkAppend) on z1
+         Chunks excluded during startup: 0
+         ->  Seq Scan on z1 z1_1
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_49_chunk z1_2
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_50_chunk z1_3
+               Filter: (((a % 2) = 1) AND f_leak(b))
+         ->  Seq Scan on _hyper_9_51_chunk z1_4
+               Filter: (((a % 2) = 1) AND f_leak(b))
 
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
 --- QUERY PLAN ---
- Nested Loop
-   ->  Seq Scan on z2
-   ->  Materialize
-         ->  Custom Scan (ChunkAppend) on z1
-               Chunks excluded during startup: 0
-               ->  Seq Scan on z1 z1_1
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_49_chunk z1_2
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_50_chunk z1_3
-                     Filter: (((a % 2) = 1) AND f_leak(b))
-               ->  Seq Scan on _hyper_9_51_chunk z1_4
-                     Filter: (((a % 2) = 1) AND f_leak(b))
+ Result
+   One-Time Filter: false
 
 --
 -- Views should follow policy for view owner.
@@ -3329,24 +3239,24 @@ PREPARE role_inval AS SELECT * FROM t1;
 -- Check plan
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
 --- QUERY PLAN ---
- Seq Scan on t1
-   Filter: ((a % 2) = 0)
+ Result
+   One-Time Filter: false
 
 -- Change to regress_rls_carol
 SET ROLE regress_rls_carol;
 -- Check plan- should be different
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
 --- QUERY PLAN ---
- Seq Scan on t1
-   Filter: ((a % 4) = 0)
+ Result
+   One-Time Filter: false
 
 -- Change back to regress_rls_bob
 SET ROLE regress_rls_bob;
 -- Check plan- should be back to original
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
 --- QUERY PLAN ---
- Seq Scan on t1
-   Filter: ((a % 2) = 0)
+ Result
+   One-Time Filter: false
 
 --
 -- CTE and RLS

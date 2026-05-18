@@ -10,17 +10,20 @@
 
 extern TSDLLEXPORT void ts_debug_point_wait(const char *name, bool blocking);
 extern TSDLLEXPORT void ts_debug_point_raise_error_if_enabled(const char *name);
+extern TSDLLEXPORT void ts_debug_point_raise_error_oneshot(const char *name);
 
 #ifdef TS_DEBUG
 
 #define DEBUG_WAITPOINT(NAME) ts_debug_point_wait((NAME), true)
 #define DEBUG_RETRY_WAITPOINT(NAME) ts_debug_point_wait((NAME), false)
 #define DEBUG_ERROR_INJECTION(NAME) ts_debug_point_raise_error_if_enabled((NAME))
+#define DEBUG_ERROR_INJECTION_ONESHOT(NAME) ts_debug_point_raise_error_oneshot((NAME))
 
 #else
 
 #define DEBUG_WAITPOINT(NAME)
 #define DEBUG_RETRY_WAITPOINT(NAME)
 #define DEBUG_ERROR_INJECTION(NAME)
+#define DEBUG_ERROR_INJECTION_ONESHOT(NAME)
 
 #endif

@@ -37,7 +37,7 @@ select * from hash_pushdown_test where a = 1 and b = 2;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: ((a = 1) AND (b = 2))
    ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
-         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a_b, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a, TEST-HASHES::bigint[]))
+         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_7035_a_b, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a, TEST-HASHES::bigint[]))
          Rows Removed by Filter: 10
 
 -- saop with single bloom

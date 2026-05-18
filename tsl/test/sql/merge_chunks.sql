@@ -589,3 +589,73 @@ FROM concurrent_compressed_merge,
      show_chunks('concurrent_compressed_merge');
 
 DROP TABLE concurrent_compressed_merge;
+
+-- Test merging compressed chunks whose sparse indexes are logically the same
+-- but the JSONB entries mismatch
+CREATE TABLE merge_sparse_order(
+    time timestamptz NOT NULL,
+    device int,
+    temp float8,
+    val int
+);
+SELECT create_hypertable('merge_sparse_order', 'time', chunk_time_interval => INTERVAL '1 day');
+
+INSERT INTO merge_sparse_order
+SELECT t, (i % 10) + 1, random() * 100, (i * 7) % 13
+FROM generate_series('2024-01-01 2:00'::timestamptz, '2024-01-01 23:59', '1 minute') t,
+     generate_series(1, 5) i;
+INSERT INTO merge_sparse_order
+SELECT t, (i % 10) + 1, random() * 100, (i * 7) % 13
+FROM generate_series('2024-01-02 2:00'::timestamptz, '2024-01-02 23:59', '1 minute') t,
+     generate_series(1, 5) i;
+
+SELECT format('%I.%I', schema_name, table_name) AS mso_c1
+  FROM _timescaledb_catalog.chunk
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
+                         WHERE table_name = 'merge_sparse_order')
+ ORDER BY id LIMIT 1 \gset
+SELECT format('%I.%I', schema_name, table_name) AS mso_c2
+  FROM _timescaledb_catalog.chunk
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
+                         WHERE table_name = 'merge_sparse_order')
+ ORDER BY id OFFSET 1 LIMIT 1 \gset
+
+ALTER TABLE merge_sparse_order SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_index = 'bloom("device"), minmax("temp"), bloom("device","val")'
+);
+SELECT compress_chunk(:'mso_c1');
+
+ALTER TABLE merge_sparse_order SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_index = 'minmax("temp"), bloom("device")'
+);
+SELECT compress_chunk(:'mso_c2');
+
+-- have different sparse indexes
+SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+
+-- Merge should not succeed
+\set ON_ERROR_STOP 0
+CALL merge_chunks(:'mso_c1'::regclass, :'mso_c2'::regclass);
+\set ON_ERROR_STOP 1
+
+ALTER TABLE merge_sparse_order SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_index = 'bloom("val","device"), minmax("temp"), bloom("device")'
+);
+
+SELECT compress_chunk(decompress_chunk(:'mso_c2'));
+
+-- have different JSONB but same logical sparse indexes
+SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+
+-- Merge should succeed
+CALL merge_chunks(:'mso_c1'::regclass, :'mso_c2'::regclass);
+
+SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+
+DROP TABLE merge_sparse_order;

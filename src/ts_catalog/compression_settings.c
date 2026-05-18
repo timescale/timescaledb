@@ -27,6 +27,9 @@ static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *da
 static HeapTuple compression_settings_formdata_make_tuple(const FormData_compression_settings *fd,
 														  TupleDesc desc);
 static Bitmapset *resolve_columns_to_attnos(List *column_names, Oid relid);
+static bool sparse_index_values_equal(List *left, List *right);
+static bool sparse_index_object_equal(SparseIndexSettingsObject *left,
+									  SparseIndexSettingsObject *right);
 
 /*
  * Compare two compression settings for equality
@@ -38,7 +41,7 @@ ts_compression_settings_equal(const CompressionSettings *left, const Compression
 		   ts_array_equal(left->fd.orderby, right->fd.orderby) &&
 		   ts_array_equal(left->fd.orderby_desc, right->fd.orderby_desc) &&
 		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst) &&
-		   ts_jsonb_equal(left->fd.index, right->fd.index);
+		   ts_sparse_index_equal(left->fd.index, right->fd.index);
 }
 
 /*
@@ -62,7 +65,125 @@ ts_compression_settings_equal_with_defaults(const CompressionSettings *ht,
 			ts_array_equal(ht->fd.orderby_desc, chunk->fd.orderby_desc)) &&
 		   (ht->fd.orderby_nullsfirst == NULL ||
 			ts_array_equal(ht->fd.orderby_nullsfirst, chunk->fd.orderby_nullsfirst)) &&
-		   (ht->fd.index == NULL || ts_jsonb_equal(ht->fd.index, chunk->fd.index));
+		   (ht->fd.index == NULL || ts_sparse_index_equal(ht->fd.index, chunk->fd.index));
+}
+
+/*
+ * Compare two string value lists for equality (order-sensitive).
+ */
+static bool
+sparse_index_values_equal(List *left, List *right)
+{
+	if (list_length(left) != list_length(right))
+	{
+		return false;
+	}
+
+	ListCell *lc_left, *lc_right;
+	forboth (lc_left, left, lc_right, right)
+	{
+		if (strcmp((const char *) lfirst(lc_left), (const char *) lfirst(lc_right)) != 0)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+/*
+ * Compare two sparse index objects for equality.
+ * Two objects are equal if they have the same pairs with the same values.
+ */
+static bool
+sparse_index_object_equal(SparseIndexSettingsObject *left, SparseIndexSettingsObject *right)
+{
+	if (list_length(left->pairs) != list_length(right->pairs))
+	{
+		return false;
+	}
+
+	foreach_ptr(SparseIndexSettingsPair, lpair, left->pairs)
+	{
+		bool found = false;
+		foreach_ptr(SparseIndexSettingsPair, rpair, right->pairs)
+		{
+			if (strcmp(lpair->key, rpair->key) == 0)
+			{
+				if (!sparse_index_values_equal(lpair->values, rpair->values))
+				{
+					return false;
+				}
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+/*
+ * Compare two sparse index JSONB settings for equality, independent of
+ * the order of objects in the array. Each object is matched by its
+ * key-value pairs (type, column, source).
+ */
+bool
+ts_sparse_index_equal(const Jsonb *left, const Jsonb *right)
+{
+	if (left == right)
+	{
+		return true;
+	}
+	if (left == NULL || right == NULL)
+	{
+		return false;
+	}
+
+	SparseIndexSettings *left_settings = ts_convert_to_sparse_index_settings((Jsonb *) left);
+	SparseIndexSettings *right_settings = ts_convert_to_sparse_index_settings((Jsonb *) right);
+
+	int n_left = list_length(left_settings->objects);
+	int n_right = list_length(right_settings->objects);
+
+	if (n_left != n_right)
+	{
+		ts_free_sparse_index_settings(left_settings);
+		ts_free_sparse_index_settings(right_settings);
+		return false;
+	}
+
+	/* for tracking */
+	bool *already_found = palloc0(sizeof(bool) * n_left);
+	bool equal = true;
+
+	foreach_ptr(SparseIndexSettingsObject, lobj, left_settings->objects)
+	{
+		int ri = 0;
+		bool found = false;
+		foreach_ptr(SparseIndexSettingsObject, robj, right_settings->objects)
+		{
+			if (!already_found[ri] && sparse_index_object_equal(lobj, robj))
+			{
+				already_found[ri] = true;
+				found = true;
+				break;
+			}
+			ri++;
+		}
+		if (!found)
+		{
+			equal = false;
+			break;
+		}
+	}
+
+	pfree(already_found);
+	ts_free_sparse_index_settings(left_settings);
+	ts_free_sparse_index_settings(right_settings);
+	return equal;
 }
 
 CompressionSettings *

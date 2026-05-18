@@ -3234,13 +3234,9 @@ EXPLAIN (buffers off, costs off) SELECT * FROM f_t1_2(10);
  Subquery Scan on f_t1_2
    ->  Unique
          ->  Sort
-               Sort Key: j.a
-               ->  Nested Loop
-                     ->  Seq Scan on t1 j
-                     ->  Limit
-                           ->  Index Scan using t1_b_idx on t1
-                                 Index Cond: (b = 10)
-                                 Filter: (a = j.a)
+               Sort Key: a
+               ->  Result
+                     One-Time Filter: false
 
 EXPLAIN (buffers off, costs off) SELECT * FROM f_t1_2(10) sc, f_t2(sc.a, 10);
 --- QUERY PLAN ---
@@ -3248,21 +3244,11 @@ EXPLAIN (buffers off, costs off) SELECT * FROM f_t1_2(10) sc, f_t2(sc.a, 10);
    ->  Unique
          ->  Sort
                Sort Key: j.a
-               ->  Nested Loop
-                     ->  Seq Scan on t1 j
-                     ->  Limit
-                           ->  Index Scan using t1_b_idx on t1
-                                 Index Cond: (b = 10)
-                                 Filter: (a = j.a)
+               ->  Result
+                     One-Time Filter: false
    ->  Limit
-         ->  Nested Loop
-               ->  Limit
-                     ->  Index Scan using t1_b_idx on t1 t1_1
-                           Index Cond: (b = 10)
-                           Filter: (a = t1.a)
-               ->  Index Scan using t2_b_idx on t2 j_1
-                     Index Cond: (b = 10)
-                     Filter: (a = t1.a)
+         ->  Result
+               One-Time Filter: false
 
 CREATE TABLE metrics_int1(time int, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=1);
 INSERT INTO metrics_int1 SELECT i, i::text, i FROM generate_series(3,7) i;

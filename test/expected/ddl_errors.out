@@ -56,6 +56,10 @@ ALTER TABLE _timescaledb_internal._hyper_1_1_chunk INHERIT "Parent";
 ERROR:  operation not supported on chunk tables
 ALTER TABLE _timescaledb_internal._hyper_1_1_chunk NO INHERIT "Parent";
 ERROR:  operation not supported on chunk tables
+CREATE TABLE PUBLIC."Hyper_Child" () INHERITS ("Hypertable_1");
+ERROR:  hypertables do not support inheritance
+CREATE TABLE PUBLIC."Hyper_Child" (extra int) INHERITS (PUBLIC."Hypertable_1", PUBLIC."Parent");
+ERROR:  hypertables do not support inheritance
 \set ON_ERROR_STOP 1
 CREATE TABLE PUBLIC."Child" () INHERITS ("Parent");
 \set ON_ERROR_STOP 0

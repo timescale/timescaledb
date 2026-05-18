@@ -778,12 +778,9 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 		cagg_rewrite_ctx.eligible = (ts_guc_enable_cagg_rewrites || ts_guc_cagg_rewrites_debug_info)
 									/* Not inside Cagg query */
 									&& !OidIsValid(context->cagg_relid);
-		if (!OidIsValid(context->cagg_relid) && ts_guc_cagg_rewrites_debug_info)
-		{
-			initStringInfo(&cagg_rewrite_ctx.msg);
-		}
 		if (cagg_rewrite_ctx.eligible)
 		{
+			initStringInfo(&cagg_rewrite_ctx.msg);
 			check_query_for_cagg_rewrites(&cagg_rewrite_ctx, query);
 		}
 

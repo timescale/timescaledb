@@ -5028,7 +5028,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 
 	Oid ht_ownerid = ts_rel_get_owner(parent_ht->main_table_relid);
 
-	if (!has_privs_of_role(GetUserId(), ht_ownerid))
+	if (!ts_has_owner_privs(GetUserId(), ht_ownerid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
