@@ -1,0 +1,2 @@
+Fixes: #9799 Fix job_errors view leaking failed jobs to non-owners
+Thanks: @homanp for reporting an information leak with the job_errors view

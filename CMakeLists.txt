@@ -65,13 +65,13 @@ if(WIN32)
   find_path(
     PG_PATH postgres.exe
     PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
-    PATH_SUFFIXES bin 15/bin 16/bin
+    PATH_SUFFIXES bin 15/bin 16/bin 17/bin 18/bin
     DOC "The path to a PostgreSQL installation")
 elseif(UNIX)
   find_path(
     PG_PATH postgres
     PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
-    PATH_SUFFIXES bin 15/bin 16/bin
+    PATH_SUFFIXES bin 15/bin 16/bin 17/bin 18/bin
     DOC "The path to a PostgreSQL installation")
 endif()
 
@@ -369,8 +369,7 @@ message(
 
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
-if((${PG_VERSION_MAJOR} LESS "15")
-   OR (${PG_VERSION_MAJOR} GREATER "18")
+if(((${PG_VERSION_MAJOR} LESS "15") OR (${PG_VERSION_MAJOR} GREATER "18"))
    AND NOT (${EXPERIMENTAL}))
   message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16, 17 and 18")
 endif()
@@ -390,7 +389,6 @@ get_pg_config(PG_LDFLAGS --ldflags)
 # Strip any -Wl,-rpath,... entries that pg_config may have emitted so the
 # resulting shared modules do not bake in a hardcoded library search path.
 string(REGEX REPLACE "-Wl,-rpath,[^ ]+" "" PG_LDFLAGS "${PG_LDFLAGS}")
-get_pg_config(PG_LIBS --libs)
 
 separate_arguments(PG_CFLAGS)
 foreach(option ${PG_CFLAGS})

@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [ "x86", "ARM" ]
-        image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
+        image: [ "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04" ]
         pg: [ 15, 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
@@ -36,8 +36,8 @@ jobs:
           - arch: "ARM"
             runner: "cloud-image-runner-ubuntu-24-arm64"
         exclude:
-          - image: "debian:11-slim"
-            pg: 18
+          - image: "ubuntu:26.04"
+            pg: 15
 
 
     steps:
@@ -50,7 +50,7 @@ jobs:
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
           > /etc/apt/sources.list.d/timescaledb.list
-        if [ "${image_type}" = "ubuntu" ]; then
+        if [ "${{ matrix.image }}" = "ubuntu:22.04" ]; then
           wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
         else
           wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
@@ -95,6 +95,9 @@ jobs:
         fi
 
     - name: Test Downgrade
+      # 2.27.0 is the first release for Ubuntu 26.04 so we can't test downgrades on it.
+      # we can remove the condition with 2.27.1 release
+      if: matrix.image != 'ubuntu:26.04'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
@@ -110,6 +113,8 @@ jobs:
         fi
 
     - name: Install toolkit
+      # Ubuntu 26.04 does not yet have toolkit
+      if: matrix.image != 'ubuntu:26.04'
       timeout-minutes: 15
       run: |
         apt-get install -y --no-install-recommends \
