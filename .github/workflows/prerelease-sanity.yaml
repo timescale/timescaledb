@@ -6,19 +6,55 @@ name: Prerelease Sanity
       - trigger/prerelease-sanity
 
   pull_request:
-    branches: "?.*.x"
-    paths:
-      - version.config
-
-  pull_request:
-    paths:
-      - .github/workflows/prerelease-sanity.yaml
 
   workflow_dispatch:
 
 jobs:
+  # We need two disjoint conditions for pull requests that are combined with OR,
+  # and it impossible to set up through the "on" key, so check that in a separate
+  # step below.
+  config:
+    name: Check the configuration
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Check the configuration
+        id: check
+        run: |
+          set -xeu
+
+          if ${{ github.event_name == 'pull_request' }}
+          then
+            # PR that modifies the workflow.
+            if ! git diff --exit-code -- .github/workflows/prerelease-sanity.yaml
+            then
+              echo "should_run=true" >> ${GITHUB_OUTPUT}
+              exit 0
+            fi
+
+            # PR into a release branch that modifies the version.
+            if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
+              && ! git diff --exit-code -- version.config
+            then
+              echo "should_run=true" >> ${GITHUB_OUTPUT}
+              exit 0
+            fi
+
+            # Don't run on other PRs.
+            echo "should_run=false" >> ${GITHUB_OUTPUT}
+            exit 0
+          fi
+
+          # No additional filtering for other event types.
+          echo "should_run=true" >> ${GITHUB_OUTPUT}
+
   check_release_commit:
     name: Check Release Commit
+    needs: config
+    if: needs.config.outputs.should_run
     runs-on: timescaledb-runner-arm64
 
     steps:
