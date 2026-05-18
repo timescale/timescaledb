@@ -76,6 +76,8 @@ jobs:
     # The release commit must modify the version.config
     - name: The release commit modifies the version.config
       run: |
+        set -xeu
+
         if [[ "${{ github.event_name }}" == "pull_request" ]]
         then
             git remote set-branches origin '*'
