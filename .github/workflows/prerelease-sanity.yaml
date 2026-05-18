@@ -4,7 +4,7 @@ name: Prerelease Sanity
     branches:
       - prerelease_test
       - trigger/prerelease-sanity
-      - ?.*.x
+      - "?.*.x"
 
   pull_request:
 
@@ -20,41 +20,41 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
-      - name: Checkout TimescaleDB
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Check the configuration
-        id: check
-        run: |
-          set -xeu
+    - name: Check the configuration
+      id: check
+      run: |
+        set -xeu
 
-          if ${{ github.event_name == 'pull_request' }}
-          then
-            base=${{ github.event.pull_request.base.sha }}
-            git fetch "${base}"
+        if  [[ "${{ github.event_name }}" == "pull_request" ]]
+        then
+          base=${{ github.event.pull_request.base.sha }}
+          git fetch origin "${base}"
 
-            # PR that modifies the workflow.
-            if ! git diff "${base}" --exit-code -- .github/workflows/prerelease-sanity.yaml
-            then
-              echo "should_run=true" >> ${GITHUB_OUTPUT}
-              exit 0
-            fi
+          # PR that modifies the workflow.
+          if ! git diff "${base}" --exit-code -- .github/workflows/prerelease-sanity.yaml
+           then
+             echo "should_run=true" >> ${GITHUB_OUTPUT}
+             exit 0
+           fi
 
-            # PR into a release branch that modifies the version.
-            if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
-              && ! git diff "${base}" --exit-code -- version.config
-            then
-              echo "should_run=true" >> ${GITHUB_OUTPUT}
-              exit 0
-            fi
+           # PR into a release branch that modifies the version.
+           if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
+             && ! git diff "${base}" --exit-code -- version.config
+           then
+             echo "should_run=true" >> ${GITHUB_OUTPUT}
+             exit 0
+           fi
 
-            # Don't run on other PRs.
-            echo "should_run=false" >> ${GITHUB_OUTPUT}
-            exit 0
-          fi
+           # Don't run on other PRs.
+           echo "should_run=false" >> ${GITHUB_OUTPUT}
+          exit 0
+        fi
 
-          # No additional filtering for other event types.
-          echo "should_run=true" >> ${GITHUB_OUTPUT}
+        # No additional filtering for other event types.
+        echo "should_run=true" >> ${GITHUB_OUTPUT}
 
   check_release_commit:
     name: Check Release Commit
