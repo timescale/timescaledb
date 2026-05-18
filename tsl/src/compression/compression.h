@@ -282,7 +282,7 @@ typedef struct RowCompressor
 	int16 count_metadata_column_offset;
 
 	/* for continuous aggregate invalidation */
-	InvalidationSettings *invalidation;
+	InvalidationSettings invalidation;
 
 	/* the number of uncompressed rows compressed into the current compressed row */
 	uint32 rows_compressed_into_current_value;

@@ -1037,10 +1037,9 @@ tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht, Oid c
 	Ensure(time_dim, "Hypertable must have an open dimension");
 	AttrNumber attnum = get_attnum(chunk_relid, NameStr(time_dim->fd.column_name));
 
-	compressor->invalidation = palloc0(sizeof(InvalidationSettings));
-	compressor->invalidation->hypertable_id = ht->fd.id;
-	compressor->invalidation->chunk_relid = chunk_relid;
-	compressor->invalidation->invalidation_column_offset = AttrNumberGetAttrOffset(attnum);
+	compressor->invalidation.hypertable_id = ht->fd.id;
+	compressor->invalidation.chunk_relid = chunk_relid;
+	compressor->invalidation.invalidation_column_offset = AttrNumberGetAttrOffset(attnum);
 }
 
 void
@@ -1116,11 +1115,6 @@ tsl_compressor_close(RowCompressor *compressor, BulkWriter *bulk_writer)
 	if (compressor->sort_state)
 	{
 		tuplesort_end(compressor->sort_state);
-	}
-
-	if (compressor->invalidation)
-	{
-		pfree(compressor->invalidation);
 	}
 
 	bulk_writer_close(bulk_writer);
@@ -1723,9 +1717,9 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 	MemoryContext old_cxt = MemoryContextSwitchTo(row_compressor->per_row_ctx);
 
 	/* invalidate continuous aggregate range */
-	if (row_compressor->invalidation)
+	if (row_compressor->invalidation.hypertable_id != 0)
 	{
-		InvalidationSettings *settings = row_compressor->invalidation;
+		InvalidationSettings *settings = &row_compressor->invalidation;
 		int16 dim_offset = settings->invalidation_column_offset;
 		AttrNumber dim_attnum = AttrOffsetGetAttrNumber(dim_offset);
 
