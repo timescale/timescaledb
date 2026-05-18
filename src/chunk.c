@@ -4234,17 +4234,20 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		 * The invalidation will allow the refresh command on a continuous
 		 * aggregate to see that this region was dropped and and will
 		 * therefore be able to refresh accordingly.*/
-		for (uint64 i = 0; i < num_chunks; i++)
+		if (!ts_guc_skip_cagg_invalidation)
 		{
-			if (osm_chunk_id == chunks[i].fd.id)
+			for (uint64 i = 0; i < num_chunks; i++)
 			{
-				// we do not rebuild continuous aggs if tiered data is dropped */
-				continue;
-			}
-			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
-			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
+				if (osm_chunk_id == chunks[i].fd.id)
+				{
+					// we do not rebuild continuous aggs if tiered data is dropped */
+					continue;
+				}
+				int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
+				int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
 
-			ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
+				ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
+			}
 		}
 	}
 
