@@ -34,7 +34,7 @@ jobs:
           git fetch origin "${base}"
 
           # PR that modifies the workflow.
-          if ! git diff "${base}" --exit-code -- .github/workflows/prerelease-sanity.yaml
+          if ! git diff "${base}" --name-only --exit-code -- .github/workflows/prerelease-sanity.yaml
            then
              echo "should_run=true" >> ${GITHUB_OUTPUT}
              exit 0
@@ -42,7 +42,7 @@ jobs:
 
           # PR into a release branch that modifies the version.
           if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
-            && ! git diff "${base}" --exit-code -- version.config
+            && ! git diff "${base}" --name-only --exit-code -- version.config
           then
             echo "should_run=true" >> ${GITHUB_OUTPUT}
             exit 0
@@ -80,6 +80,32 @@ jobs:
         git log --oneline -1 @^0
         git log --oneline -1 @^0~
         ! git diff --exit-code @^0~ @^0 -- version.config
+
+    # FIXME
+    - name: The tagged release commit must belong to the corresponding release branch
+      if: github.event_name == 'push'
+      run: |
+        version=$(sed -n "s/^version = //p" version.config)
+        echo "Version ${version}"
+
+        branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
+        echo "Expected branch ${branch}"
+
+        git fetch origin ${branch}
+
+        git branch --contains @ | grep -F $branch
+
+    - name: The release PR must target the corresponding release branch
+      if: github.event_name == 'pull_request'
+      run: |
+        version=$(sed -n "s/^version = //p" version.config)
+        echo "Version ${version}"
+
+        branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
+        echo "Expected branch ${branch}"
+
+        echo "PR base: ${{ github.event.pull_request.base.ref }}"
+        [[ "${{ github.event.pull_request.base.ref }}" == "$branch" ]]
 
     - name: The release commit must not use the -dev version
       run: |
@@ -124,28 +150,3 @@ jobs:
             echo "reverse-dev.sql is not empty"
             exit 1
         fi
-
-    - name: The tagged release commit must belong to the corresponding release branch
-      if: github.event_name == 'push'
-      run: |
-        version=$(sed -n "s/^version = //p" version.config)
-        echo "Version ${version}"
-
-        branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
-        echo "Expected branch ${branch}"
-
-        git fetch origin ${branch}
-
-        git branch --contains @ | grep -F $branch
-
-    - name: The release PR must target the corresponding release branch
-      if: github.event_name == 'pull_request'
-      run: |
-        version=$(sed -n "s/^version = //p" version.config)
-        echo "Version ${version}"
-
-        branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
-        echo "Expected branch ${branch}"
-
-        echo "PR base: ${{ github.event.pull_request.base.ref }}"
-        [[ "${{ github.event.pull_request.base.ref }}" == "$branch" ]]
