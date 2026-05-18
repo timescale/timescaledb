@@ -71,7 +71,7 @@ jobs:
       # we can just work with the PR head here.
       with:
         ref: ${{ github.event.pull_request.head.sha || github.sha }}
-        fetch-depth: 2
+        fetch-depth: 0
 
     # The release commit must modify the version.config
     - name: The release commit modifies the version.config
