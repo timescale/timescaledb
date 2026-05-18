@@ -1,0 +1,16 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "grep",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^(.+):(\\d+):(.+)$",
+          "file": 1,
+          "line": 2,
+          "message": 3
+        }
+      ]
+    }
+  ]
+}
