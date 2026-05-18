@@ -905,7 +905,7 @@ ts_bgw_job_check_max_retries(BgwJob *job)
 void
 ts_bgw_job_permission_check(BgwJob *job, const char *cmd)
 {
-	if (!has_privs_of_role(GetUserId(), job->fd.owner))
+	if (!ts_has_owner_privs(GetUserId(), job->fd.owner))
 	{
 		const char *owner_name = GetUserNameFromId(job->fd.owner, false);
 		const char *user_name = GetUserNameFromId(GetUserId(), false);
