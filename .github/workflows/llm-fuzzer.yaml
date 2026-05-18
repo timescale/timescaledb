@@ -286,6 +286,7 @@ jobs:
       run: |
         set -xeu
 
+        sudo journalctl --rotate --vacuum-time=1s
         sudo rm -f /var/lib/systemd/coredump/*
 
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
