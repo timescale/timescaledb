@@ -36,7 +36,7 @@ jobs:
           # PR that modifies the workflow.
           if ! git diff "${base}" --name-only --exit-code -- .github/workflows/prerelease-sanity.yaml
            then
-             echo "should_run=true" >> ${GITHUB_OUTPUT}
+             echo "should_run=true" >> "${GITHUB_OUTPUT}"
              exit 0
           fi
 
@@ -44,17 +44,17 @@ jobs:
           if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
             && ! git diff "${base}" --name-only --exit-code -- version.config
           then
-            echo "should_run=true" >> ${GITHUB_OUTPUT}
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
           # Don't run on other PRs.
-          echo "should_run=false" >> ${GITHUB_OUTPUT}
+          echo "should_run=false" >> "${GITHUB_OUTPUT}"
           exit 0
         fi
 
         # No additional filtering for other event types.
-        echo "should_run=true" >> ${GITHUB_OUTPUT}
+        echo "should_run=true" >> "${GITHUB_OUTPUT}"
 
   check_release_commit:
     name: Check Release Commit
@@ -94,6 +94,12 @@ jobs:
         git log --oneline -1 "${base}"
         ! git diff --exit-code "${base}" @^0 -- version.config
 
+    # The combined changelog must reference all changes, and the respective
+    # change files in the .unreleased folder must be deleted.
+    - name: No .unreleased files are left behind
+      run: |
+        ! compgen -G '.unreleased/*'
+
     # FIXME
     - name: The release commit must not use the -dev versions
       run: |
@@ -107,13 +113,13 @@ jobs:
         version=$(sed -n "s/^version = //p" version.config)
         echo "Version ${version}"
 
-        branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
+        branch=$(echo "${version}" | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
         echo "Expected branch ${branch}"
 
         git remote set-branches origin '*'
-        git fetch origin ${branch}
+        git fetch origin "${branch}"
 
-        git branch --contains @ | grep -F "${branch}"
+        git branch --contains @ | grep -Fx "${branch}"
 
     - name: The release PR must target the corresponding release branch
       if: github.event_name == 'pull_request'
@@ -123,17 +129,12 @@ jobs:
         version=$(sed -n "s/^version = //p" version.config)
         echo "Version ${version}"
 
-        branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
+        branch=$(echo "${version}" | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
         echo "Expected branch ${branch}"
 
         echo "PR base: ${{ github.event.pull_request.base.ref }}"
         [[ "${{ github.event.pull_request.base.ref }}" == "${branch}" ]]
 
-    # The combined changelog must reference all changes, and the respective
-    # change files in the .unreleased folder must be deleted.
-    - name: No .unreleased files are left behind
-      run: |
-        ! compgen -G .unreleased/*
 
     # The messages of the release commit and tag must start with Release <version>.
     # If this is the release tag, it must point to the release commit
@@ -141,16 +142,16 @@ jobs:
     - name: The release commit message references the respective version
       run: |
         required_title=$(sed -n "s/^version = /Release /p" version.config)
-        echo $required_title
+        echo "Required title: $required_title"
 
         tag_title=$(git log --oneline -1 --pretty=format:%s)
-        echo $tag_title
+        echo "Tag title: $tag_title"
         grep "$required_title" <<<"$tag_title"
 
         # Our reference might be a tag, so check the pointed-to commit as well,
         # using the ^0 git path specification to find it.
         commit_title=$(git log --oneline -1 --pretty=format:%s @^0)
-        echo $commit_title
+        echo "Commit title: $commit_title"
         grep "$required_title" <<<"$commit_title"
 
     # The SQL upgrade scripts must be moved from the development files to
