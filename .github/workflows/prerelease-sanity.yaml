@@ -75,16 +75,15 @@ jobs:
 
     # The release commit must modify the version.config
     - name: The release commit modifies the version.config
-      id: check_version
       run: |
-        if [[ "${{ github.event_name }}"" == "pull_request" ]]
+        if [[ "${{ github.event_name }}" == "pull_request" ]]
         then
             git remote set-branches origin '*'
-            git fetch "${{ github.pull_request.base.ref }}"
+            git fetch "${{ github.event.pull_request.base.ref }}"
 
             # We're working with pull request head here, see the comment
             # at checkout step.
-            base="$(git merge-base "${{ github.pull_request.base.ref }}" @)"
+            base="$(git merge-base "${{ github.event.pull_request.base.ref }}" @)"
         else
             base="${{ github.sha }}~"
         fi
@@ -97,6 +96,8 @@ jobs:
     - name: The tagged release commit must belong to the corresponding release branch
       if: github.event_name == 'push'
       run: |
+        set -xeu
+
         version=$(sed -n "s/^version = //p" version.config)
         echo "Version ${version}"
 
@@ -106,11 +107,13 @@ jobs:
         git remote set-branches origin '*'
         git fetch origin ${branch}
 
-        git branch --contains @ | grep -F $branch
+        git branch --contains @ | grep -F "${branch}"
 
     - name: The release PR must target the corresponding release branch
       if: github.event_name == 'pull_request'
       run: |
+        set -xeu
+
         version=$(sed -n "s/^version = //p" version.config)
         echo "Version ${version}"
 
@@ -118,7 +121,7 @@ jobs:
         echo "Expected branch ${branch}"
 
         echo "PR base: ${{ github.event.pull_request.base.ref }}"
-        [[ "${{ github.event.pull_request.base.ref }}" == "$branch" ]]
+        [[ "${{ github.event.pull_request.base.ref }}" == "${branch}" ]]
 
     - name: The release commit must not use the -dev versions
       run: |
