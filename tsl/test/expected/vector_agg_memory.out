@@ -115,4 +115,39 @@ select * from log where (
  n | bytes | a | b | c | d | e | f 
 ---+-------+---+---+---+---+---+---
 
+-- Test body_buffer overflow for int2 type, it was flagged by LLM Fuzzer.
+CREATE TABLE t_int2_repro (
+    time timestamptz NOT NULL,
+    a int2 NOT NULL,
+    b int2 NOT NULL
+);
+SELECT table_name FROM create_hypertable('t_int2_repro', 'time', chunk_time_interval => interval '1 year');
+  table_name  
+--------------
+ t_int2_repro
+
+-- Insert exactly 30 rows into a single chunk, body_buffer will be set to 30*2 + 8(size of Datum) padded to 64 bytes.
+INSERT INTO t_int2_repro
+SELECT '2020-01-01'::timestamptz + i * '1 hour'::interval,
+       (i % 100)::int2,
+       (i % 50)::int2
+FROM generate_series(1, 30) i;
+ALTER TABLE t_int2_repro SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time'
+);
+SELECT count(compress_chunk(c)) FROM show_chunks('t_int2_repro') c;
+ count 
+-------
+     1
+
+-- This triggers vector_slot_evaluate_function with int2pl (int2 + int2 -> int2),
+-- which calls columnar_result_set_row with type=2.
+-- Should not see warning on memcpy overflow.
+SELECT sum(a + b) FROM t_int2_repro;
+ sum 
+-----
+ 930
+
+drop table t_int2_repro cascade;
 reset max_parallel_workers_per_gather;
