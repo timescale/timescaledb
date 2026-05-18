@@ -83,7 +83,7 @@ jobs:
 
             # We're working with pull request head here, see the comment
             # at checkout step.
-            base="$(git merge-base "${{ github.event.pull_request.base.ref }}" @)"
+            base="$(git merge-base "${{ github.event.pull_request.base.sha }}" @)"
         else
             base="${{ github.sha }}~"
         fi
