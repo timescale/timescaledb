@@ -28,16 +28,16 @@ jobs:
       run: |
         set -xeu
 
-        if  [[ "${{ github.event_name }}" == "pull_request" ]]
+        if [[ "${{ github.event_name }}" == "pull_request" ]]
         then
           base="${{ github.event.pull_request.base.sha }}"
           git fetch origin "${base}"
 
           # PR that modifies the workflow.
           if ! git diff "${base}" --name-only --exit-code -- .github/workflows/prerelease-sanity.yaml
-           then
-             echo "should_run=true" >> "${GITHUB_OUTPUT}"
-             exit 0
+          then
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
+            exit 0
           fi
 
           # PR into a release branch that modifies the version.
@@ -73,6 +73,30 @@ jobs:
         ref: ${{ github.event.pull_request.head.sha || github.sha }}
         fetch-depth: 0
 
+    # The combined changelog must reference all changes, and the respective
+    # change files in the .unreleased folder must be deleted.
+    - name: No .unreleased files are left behind
+      run: |
+        ! compgen -G '.unreleased/*'
+
+    # The messages of the release commit and tag must start with Release <version>.
+    # If this is the release tag, it must point to the release commit
+    # and not something else.
+    - name: The release commit message references the respective version
+      run: |
+        required_title=$(sed -n "s/^version = /Release /p" version.config)
+        echo "Required title: $required_title"
+
+        tag_title=$(git log --oneline -1 --pretty=format:%s)
+        echo "Tag title: $tag_title"
+        grep "$required_title" <<<"$tag_title"
+
+        # Our reference might be a tag, so check the pointed-to commit as well,
+        # using the ^0 git path specification to find it.
+        commit_title=$(git log --oneline -1 --pretty=format:%s @^0)
+        echo "Commit title: $commit_title"
+        grep "$required_title" <<<"$commit_title"
+
     # The release commit must modify the version.config
     - name: The release commit must modify the version.config
       run: |
@@ -93,14 +117,23 @@ jobs:
         git log --oneline -1 @^0
         git log --oneline -1 "${base}"
         ! git diff --exit-code "${base}" @^0 -- version.config
-
-    # The combined changelog must reference all changes, and the respective
-    # change files in the .unreleased folder must be deleted.
-    - name: No .unreleased files are left behind
+		
+    # The SQL upgrade scripts must be moved from the development files to
+    # the respective versioned files.
+    - name: The latest-dev.sql and the reverse-dev.sql must be empty
       run: |
-        ! compgen -G '.unreleased/*'
+        if [ -s sql/updates/latest-dev.sql ]
+        then
+            echo "latest-dev.sql is not empty"
+            exit 1
+        fi
 
-    # FIXME
+        if [ -s sql/updates/reverse-dev.sql ]
+        then
+            echo "reverse-dev.sql is not empty"
+            exit 1
+        fi
+
     - name: The release commit must not use the -dev versions
       run: |
         ! grep 'version = .*-dev$' version.config
@@ -134,38 +167,3 @@ jobs:
 
         echo "PR base: ${{ github.event.pull_request.base.ref }}"
         [[ "${{ github.event.pull_request.base.ref }}" == "${branch}" ]]
-
-
-    # The messages of the release commit and tag must start with Release <version>.
-    # If this is the release tag, it must point to the release commit
-    # and not something else.
-    - name: The release commit message references the respective version
-      run: |
-        required_title=$(sed -n "s/^version = /Release /p" version.config)
-        echo "Required title: $required_title"
-
-        tag_title=$(git log --oneline -1 --pretty=format:%s)
-        echo "Tag title: $tag_title"
-        grep "$required_title" <<<"$tag_title"
-
-        # Our reference might be a tag, so check the pointed-to commit as well,
-        # using the ^0 git path specification to find it.
-        commit_title=$(git log --oneline -1 --pretty=format:%s @^0)
-        echo "Commit title: $commit_title"
-        grep "$required_title" <<<"$commit_title"
-
-    # The SQL upgrade scripts must be moved from the development files to
-    # the respective versioned files.
-    - name: The latest-dev.sql and the reverse-dev.sql must be empty
-      run: |
-        if [ -s sql/updates/latest-dev.sql ]
-        then
-            echo "latest-dev.sql is not empty"
-            exit 1
-        fi
-
-        if [ -s sql/updates/reverse-dev.sql ]
-        then
-            echo "reverse-dev.sql is not empty"
-            exit 1
-        fi
