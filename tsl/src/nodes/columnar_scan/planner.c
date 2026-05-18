@@ -1366,7 +1366,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			}
 
 			/*
-			 * If the the compressed target list is not based on the layout of
+			 * If the compressed target list is not based on the layout of
 			 * the uncompressed chunk (see comment for physical_tlist above),
 			 * adjust the position of the attribute.
 			 */

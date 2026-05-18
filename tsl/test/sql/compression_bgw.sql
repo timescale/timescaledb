@@ -331,8 +331,23 @@ INSERT INTO metrics2 SELECT '2000-01-01';
 ---- status should be 3
 SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
 
+-- Capture relfilenode BEFORE the third run_job
+SELECT c.relfilenode AS "INDEX_RELFILENODE_BEFORE"
+FROM pg_index ix JOIN pg_class c ON c.oid = ix.indexrelid
+WHERE ix.indrelid = (:'RECOMPRESS_CHUNK_NAME')::regclass
+ORDER BY c.relfilenode LIMIT 1 \gset
+
 -- should recompress
 CALL run_job(:JOB_COMPRESS);
+
+-- Did REINDEX physically run? REINDEX changes relfilenode; VACUUM/ANALYZE don't.
+SELECT c.relfilenode != :INDEX_RELFILENODE_BEFORE AS reindex_ran
+FROM pg_index ix JOIN pg_class c ON c.oid = ix.indexrelid
+WHERE ix.indrelid = (:'RECOMPRESS_CHUNK_NAME')::regclass
+ORDER BY c.relfilenode LIMIT 1;
+
+-- Is the chunk's uncompressed heap empty?
+SELECT count(*) AS live_in_chunk_heap FROM ONLY :RECOMPRESS_CHUNK_NAME;
 
 -- chunk should be fully compressed now (status = 1) so reindex can run
 SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
