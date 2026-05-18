@@ -74,7 +74,7 @@ jobs:
         fetch-depth: 0
 
     # The release commit must modify the version.config
-    - name: The release commit modifies the version.config
+    - name: The release commit must modify the version.config
       run: |
         set -xeu
 
@@ -95,6 +95,10 @@ jobs:
         ! git diff --exit-code "${base}" @^0 -- version.config
 
     # FIXME
+    - name: The release commit must not use the -dev versions
+      run: |
+        ! grep 'version = .*-dev$' version.config
+
     - name: The tagged release commit must belong to the corresponding release branch
       if: github.event_name == 'push'
       run: |
@@ -124,10 +128,6 @@ jobs:
 
         echo "PR base: ${{ github.event.pull_request.base.ref }}"
         [[ "${{ github.event.pull_request.base.ref }}" == "${branch}" ]]
-
-    - name: The release commit must not use the -dev versions
-      run: |
-        ! grep 'version = .*-dev$' version.config
 
     # The combined changelog must reference all changes, and the respective
     # change files in the .unreleased folder must be deleted.
