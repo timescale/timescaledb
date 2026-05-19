@@ -9,22 +9,12 @@ commands from accidentally triggering the load of a previous DB version.**
 
 This release contains performance improvements and bug fixes since the 2.27.0 release. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.27.1**
-* 
-
-**Backward-Incompatible Changes**
-
-**Features**
-
 **Bugfixes**
+* [#9795](https://github.com/timescale/timescaledb/pull/9795) Delete orphaned compression_settings before migrating catalog table
+* [#9800](https://github.com/timescale/timescaledb/pull/9800) Check hypertable ownership before recompression
+* [#9801](https://github.com/timescale/timescaledb/pull/9801) Fix information leak in policy_reorder_remove
 * [#9828](https://github.com/timescale/timescaledb/pull/9828) Skip columnar index scan when grouping by an expression
 * [#9830](https://github.com/timescale/timescaledb/pull/9830) Skip ColumnarIndexScan for GROUPING SETS / ROLLUP / CUBE
-
-**New Settings**
-
-**GUCs**
-
-**Thanks**
 
 ## 2.27.0 (2026-05-12)
 
