@@ -1,1 +1,0 @@
-Fixes: #9801 Fix information leak in policy_reorder_remove
