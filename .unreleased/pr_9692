@@ -1,1 +1,0 @@
-Fixes: #9692 Fix internal "invalid perminfoindex 0 in RTE" error on MERGE NOT MATCHED INSERT into a hypertable

@@ -1,1 +1,0 @@
-Fixes: #9706 Use bigint in estimate_uncompressed_size calculations

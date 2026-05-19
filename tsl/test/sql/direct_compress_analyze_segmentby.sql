@@ -397,3 +397,37 @@ SELECT
     i
 FROM generate_series(1, 600) i;
 ROLLBACK;
+
+
+-- Check that we're properly handling the cagg invalidation with direct compress
+-- auto segmentby.
+CREATE TABLE dc_cagg_inv(time timestamptz NOT NULL, device text);
+SELECT create_hypertable('dc_cagg_inv', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE dc_cagg_inv SET (timescaledb.compress, timescaledb.compress_orderby = 'time');
+
+CREATE MATERIALIZED VIEW dc_cagg_inv_cagg WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, count(*)
+FROM dc_cagg_inv GROUP BY 1 WITH NO DATA;
+
+INSERT INTO dc_cagg_inv VALUES ('2025-01-01', 'x');
+CALL refresh_continuous_aggregate('dc_cagg_inv_cagg', NULL, '2025-01-02');
+
+SET timescaledb.enable_direct_compress_insert = on;
+SET timescaledb.enable_direct_compress_auto_segmentby = on;
+SET timescaledb.direct_compress_segmentby_min_rows = 50;
+SET timescaledb.direct_compress_segmentby_batch_size_limit = 1;
+
+INSERT INTO dc_cagg_inv
+SELECT '2025-01-01 12:00:00'::timestamptz + (i * interval '1 second'),
+ 'dev_' || (i % 3)
+FROM generate_series(1, 200) i;
+
+SELECT count(*) FROM dc_cagg_inv;
+SELECT sum(count) FROM dc_cagg_inv_cagg;
+SELECT count(*) FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+
+CALL refresh_continuous_aggregate('dc_cagg_inv_cagg', '2025-01-01', '2025-01-02');
+SELECT sum(count) FROM dc_cagg_inv_cagg;
+
+DROP TABLE dc_cagg_inv CASCADE;
+

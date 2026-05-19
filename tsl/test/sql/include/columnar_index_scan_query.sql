@@ -161,3 +161,67 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
 :PREFIX SELECT first(value, time) FROM metrics GROUP BY device ORDER BY device;
 :PREFIX SELECT last(value, time) FROM metrics GROUP BY device ORDER BY device;
 
+-- GROUPING SETS / ROLLUP / CUBE are not supported by ColumnarIndexScan
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY ROLLUP(device, sensor) ORDER BY device, sensor;
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY CUBE(device, sensor) ORDER BY device, sensor;
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY GROUPING SETS ((device), (sensor), ()) ORDER BY device, sensor;
+
+-- DISTINCT on a segmentby column (Agg with no Aggrefs)
+:PREFIX SELECT DISTINCT device FROM metrics ORDER BY device;
+
+-- count(*) without GROUP BY
+:PREFIX SELECT count(*) FROM metrics;
+
+-- aggregate only in HAVING (not in SELECT)
+:PREFIX SELECT device FROM metrics GROUP BY device HAVING min(value) > 10 ORDER BY device;
+
+-- GROUP BY ordinal position
+:PREFIX SELECT device, min(time) FROM metrics GROUP BY 1 ORDER BY 1;
+
+-- GROUP BY () empty grouping
+:PREFIX SELECT count(*) FROM metrics GROUP BY ();
+
+-- aggregate wrapped in COALESCE
+:PREFIX SELECT device, COALESCE(min(time), '2000-01-01'::timestamptz) FROM metrics GROUP BY device ORDER BY device;
+
+-- aggregate above a JOIN (Agg not directly above ColumnarScan)
+:PREFIX SELECT m.device, min(m.time) FROM metrics m JOIN (VALUES ('d1'), ('d2')) AS d(device) ON m.device = d.device GROUP BY m.device ORDER BY m.device;
+
+-- ordered-set aggregate (not supported)
+:PREFIX SELECT device, percentile_cont(0.5) WITHIN GROUP (ORDER BY value) FROM metrics GROUP BY device ORDER BY device;
+
+-- bool_and / bool_or (not supported)
+:PREFIX SELECT device, bool_and(value > 0), bool_or(value > 0) FROM metrics GROUP BY device ORDER BY device;
+
+-- partition-wise aggregate
+SET enable_partitionwise_aggregate = on;
+:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
+SET enable_partitionwise_aggregate = off;
+
+-- Aggref inside a SubLink in the outer tlist (inner aggregate belongs to a separate Agg)
+:PREFIX SELECT device, count(*), (SELECT count(*) FROM (VALUES (1),(2),(3)) v(x) WHERE x::text < device) FROM metrics GROUP BY device ORDER BY device;
+
+-- HAVING with non-pushable expression on grouping columns
+:PREFIX SELECT device, sensor, min(time) FROM metrics GROUP BY device, sensor HAVING (device || sensor) LIKE 'd1%' ORDER BY device, sensor;
+
+-- same Aggref referenced multiple times in tlist
+:PREFIX SELECT device, min(time), date_trunc('day', min(time)) FROM metrics GROUP BY device ORDER BY device;
+
+-- GROUP BY column not in SELECT (appears only as resjunk in Agg tlist)
+:PREFIX SELECT count(*) FROM metrics GROUP BY device ORDER BY count(*);
+
+-- WHERE mixes segmentby and non-segmentby column
+:PREFIX SELECT device, count(*) FROM metrics WHERE device = 'd1' AND value > 10 GROUP BY device ORDER BY device;
+
+-- HAVING with NOT around Aggref
+:PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING NOT (min(value) > 10) ORDER BY device;
+
+-- HAVING with Aggref IS NULL
+:PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING min(value) IS NULL ORDER BY device;
+
+-- GROUP BY with explicit collation (not a bare Var)
+:PREFIX SELECT device COLLATE "C", count(*) FROM metrics GROUP BY device COLLATE "C" ORDER BY 1;
+
+-- self-join on the same hypertable
+:PREFIX SELECT m1.device, min(m1.time) FROM metrics m1 JOIN metrics m2 ON m1.device = m2.device GROUP BY m1.device ORDER BY m1.device;
+
