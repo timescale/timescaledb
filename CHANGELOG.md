@@ -5,6 +5,27 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.27.1 (2026-05-19)
+
+This release contains performance improvements and bug fixes since the 2.27.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.27.1**
+* 
+
+**Backward-Incompatible Changes**
+
+**Features**
+
+**Bugfixes**
+* [#9828](https://github.com/timescale/timescaledb/pull/9828) Skip columnar index scan when grouping by an expression
+* [#9830](https://github.com/timescale/timescaledb/pull/9830) Skip ColumnarIndexScan for GROUPING SETS / ROLLUP / CUBE
+
+**New Settings**
+
+**GUCs**
+
+**Thanks**
+
 ## 2.27.0 (2026-05-12)
 
 This release contains performance improvements and bug fixes since the 2.26.4 release. We recommend that you upgrade at the next available opportunity.
