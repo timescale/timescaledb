@@ -1224,6 +1224,7 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 
 	new_compressor.tuple_sort_limit = old_compressor->tuple_sort_limit;
 	new_compressor.needs_analyze_segmentby = false;
+	new_compressor.invalidation = old_compressor->invalidation;
 
 	/* Transfer from old sort state into the new one with segmentby settings */
 	TupleTableSlot *slot = MakeTupleTableSlot(old_compressor->in_desc, &TTSOpsMinimalTuple);
