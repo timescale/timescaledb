@@ -1683,10 +1683,8 @@ LIMIT 1;
                Sort Key: metrics_compressed."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
                      Filter: (device_id = 1)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1 DESC, compress_hyper_X_X_chunk._ts_meta_max_1 DESC
-                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk (never executed)
                      Filter: (device_id = 1)
 

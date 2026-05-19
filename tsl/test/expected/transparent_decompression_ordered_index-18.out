@@ -768,7 +768,7 @@ ORDER BY 1,
                ->  Merge Append (actual rows=10.00 loops=1)
                      Sort Key: metrics_ordered_idx."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk (actual rows=9.00 loops=1)
-                           Vectorized Filter: ("time" < now())
+                           Filter: ("time" < now())
                            ->  Sort (actual rows=1.00 loops=1)
                                  Sort Key: compress_hyper_2_9_chunk._ts_meta_min_1 DESC, compress_hyper_2_9_chunk._ts_meta_max_1 DESC
                                  Sort Method: quicksort 
