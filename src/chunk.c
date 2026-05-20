@@ -1049,6 +1049,7 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 	/* Copy FK constraints after indexes are created, since FK validation
 	 * requires the supporting unique index to exist on the chunk. */
 	ts_chunk_copy_referencing_fk(ht, chunk);
+	ts_chunk_inherit_outbound_fk(ht, chunk);
 }
 
 static Oid

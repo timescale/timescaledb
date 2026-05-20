@@ -272,7 +272,7 @@ ALTER TABLE metrics ADD CONSTRAINT device_fk FOREIGN KEY(device) REFERENCES devi
 INSERT INTO metrics SELECT '2025-03-01','d2',0.3;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-03-01','d3',0.3;
-ERROR:  insert or update on table "_hyper_5_25_chunk" violates foreign key constraint "25_11_device_fk"
+ERROR:  insert or update on table "_hyper_5_25_chunk" violates foreign key constraint "device_fk"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 BEGIN;
@@ -302,7 +302,7 @@ ALTER TABLE metrics ADD CONSTRAINT device_fk FOREIGN KEY(device) REFERENCES devi
 INSERT INTO metrics SELECT '2025-03-01','d2',0.3;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-03-01','d3',0.3;
-ERROR:  insert or update on table "_hyper_5_28_chunk" violates foreign key constraint "28_15_device_fk"
+ERROR:  insert or update on table "_hyper_5_28_chunk" violates foreign key constraint "device_fk"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 BEGIN;

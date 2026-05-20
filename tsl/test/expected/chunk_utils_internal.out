@@ -1301,7 +1301,7 @@ _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc WHERE c.h
 AND c.id = cc.chunk_id;
  id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | status | osm_chunk | chunk_id | dimension_slice_id |       constraint_name       | hypertable_constraint_name 
 ----+---------------+-----------------------+--------------------+---------------------+--------+-----------+----------+--------------------+-----------------------------+----------------------------
- 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                    | 31_5_test_multicon_time_key | test_multicon_time_key
+ 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                    | 31_2_test_multicon_time_key | test_multicon_time_key
  31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                 28 | constraint_28               | 
 
 \c :TEST_DBNAME :ROLE_SUPERUSER ;

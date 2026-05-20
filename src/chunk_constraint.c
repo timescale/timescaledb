@@ -752,7 +752,10 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 static bool
 chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 {
-	if (conform->contype == CONSTRAINT_CHECK
+	/* CHECK and NOT NULL propagate via PG inheritance; FKs are linked via
+	 * pg_depend (see ts_chunk_inherit_outbound_fk_by_oid). */
+	if (conform->contype == CONSTRAINT_CHECK ||
+		conform->contype == CONSTRAINT_FOREIGN
 #if PG18_GE
 		/* Avoid NOT NULL constraints
 		 * https://github.com/postgres/postgres/commit/b0e96f31
@@ -760,25 +763,6 @@ chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 		|| conform->contype == CONSTRAINT_NOTNULL
 #endif
 	)
-	{
-		/*
-		 * check and not null constraints handled by regular inheritance (from
-		 * docs): All check constraints and not-null constraints on a parent
-		 * table are automatically inherited by its children, unless
-		 * explicitly specified otherwise with NO INHERIT clauses. Other types
-		 * of constraints (unique, primary key, and foreign key constraints)
-		 * are not inherited."
-		 */
-		return false;
-	}
-	/*
-	   Check if the foreign key constraint references a partition in a partitioned
-	   table. In that case, we shouldn't include this constraint as we will end up
-	   checking the foreign key constraint once for every partition, which obviously
-	   leads to foreign key constraint violation. Instead, we only include constraints
-	   referencing the parent table of the partitioned table.
-	*/
-	if (conform->contype == CONSTRAINT_FOREIGN && OidIsValid(conform->conparentid))
 	{
 		return false;
 	}
@@ -907,20 +891,27 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 
 	con = (Form_pg_constraint) GETSTRUCT(tuple);
 
-	if (chunk->relkind != RELKIND_FOREIGN_TABLE && chunk_constraint_need_on_chunk(con))
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
 	{
-		ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
-													   chunk->fd.id,
-													   0,
-													   NULL,
-													   NameStr(con->conname));
+		if (con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid))
+		{
+			ts_chunk_inherit_outbound_fk_by_oid(chunk, constraint_oid);
+		}
+		else if (chunk_constraint_need_on_chunk(con))
+		{
+			ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
+														   chunk->fd.id,
+														   0,
+														   NULL,
+														   NameStr(con->conname));
 
-		ts_chunk_constraint_insert(cc);
-		create_non_dimensional_constraint(cc,
-										  chunk->table_id,
-										  chunk->fd.id,
-										  ht->main_table_relid,
-										  ht->fd.id);
+			ts_chunk_constraint_insert(cc);
+			create_non_dimensional_constraint(cc,
+											  chunk->table_id,
+											  chunk->fd.id,
+											  ht->main_table_relid,
+											  ht->fd.id);
+		}
 	}
 
 	ReleaseSysCache(tuple);
@@ -1300,6 +1291,12 @@ ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 		ts_scan_iterator_close(&iterator);
 
 		return name;
+	}
+
+	/* FKs aren't in chunk_constraint; chunk-side name matches parent. */
+	if (OidIsValid(get_relation_constraint_oid(chunk_relid, hypertable_constraint_name, true)))
+	{
+		return pstrdup(hypertable_constraint_name);
 	}
 	return NULL;
 }
