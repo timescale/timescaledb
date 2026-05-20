@@ -306,11 +306,6 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	do_startup_exclusion(state);
 
 	init_subplans(state, estate, eflags);
-
-	if (state->runtime_exclusion_parent || state->runtime_exclusion_children)
-	{
-		do_runtime_exclusion(state);
-	}
 }
 
 /*
@@ -541,6 +536,13 @@ get_next_subplan(ChunkAppendState *state, int last_plan)
 		return NO_MATCHING_SUBPLANS;
 	}
 
+	if (!state->runtime_initialized &&
+		(state->runtime_exclusion_parent || state->runtime_exclusion_children))
+	{
+	    /* FIXME how to make this happen in leader only */
+		do_runtime_exclusion(state);
+	}
+
 	int next = bms_next_member(state->subplans_after_runtime, last_plan);
 	if (next < 0)
 	{
@@ -699,7 +701,7 @@ chunk_append_rescan(CustomScanState *node)
 	if ((state->runtime_exclusion_parent || state->runtime_exclusion_children) &&
 		bms_overlap(node->ss.ps.chgParam, state->params))
 	{
-		do_runtime_exclusion(state);
+		state->runtime_initialized = false;
 	}
 }
 
