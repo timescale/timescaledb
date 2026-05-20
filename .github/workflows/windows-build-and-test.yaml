@@ -196,17 +196,17 @@ jobs:
       run: |
         $version = ${{ matrix.versions.pg_version }}
         $version = $version.Replace('"', '') + "-1"
-        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} \
-          --force --accept-source-agreements --accept-package-agreements --disable-interactivity \
-          --custom "--disable-components pgAdmin,stackbuilder" \
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} `
+          --force --accept-source-agreements --accept-package-agreements --disable-interactivity `
+          --custom "--disable-components pgAdmin,stackbuilder" `
           --version $version
 
     # This is for nightly builds. Here we pick the latest version of the package.
     - name: Install PostgreSQL ${{ matrix.versions.pg }}
       if: github.event_name == 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} \
-          --force --accept-source-agreements --accept-package-agreements --disable-interactivity \
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} `
+          --force --accept-source-agreements --accept-package-agreements --disable-interactivity `
           --custom "--disable-components pgAdmin,stackbuilder"
 
     - name: Configure TimescaleDB
