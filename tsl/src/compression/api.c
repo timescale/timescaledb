@@ -17,7 +17,6 @@
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
-#include <libpq-fe.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>
@@ -886,6 +885,7 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 
 	uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 
@@ -1029,6 +1029,7 @@ tsl_rebuild_columnstore(PG_FUNCTION_ARGS)
 	}
 
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 
 	if (!ts_chunk_is_compressed(chunk) || ts_chunk_is_frozen(chunk))
 	{

@@ -1,2 +1,0 @@
-Implements: #8967 Rewriting queries with continuous aggregates exactly matching query aggregation
-Setting: `enable_cagg_rewrites`: enables rewriting queries with CAggs. Off by default. `cagg_rewrites_debug_info`: prints CAgg rewrites diagnostics. Off by default.

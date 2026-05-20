@@ -1,0 +1,2 @@
+Implements: #9821 Allow subquery results which are exec params as gapfill arguments
+Thanks: @scimad and @Nosfistis for suggesting expanding coverage for gapfill arguments

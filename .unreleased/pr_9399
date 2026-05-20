@@ -1,1 +1,0 @@
-Implements: #9399 Use bloom filters to reduce decompression during UPDATE/DELETE commands.
