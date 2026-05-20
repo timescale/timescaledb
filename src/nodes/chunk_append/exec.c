@@ -64,7 +64,7 @@ typedef struct ParallelChunkAppendState
 typedef struct ChunkAppendState
 {
 	CustomScanState csstate;
-	PlanState **subplanstates;
+	PlanState **subplan_states;
 
 	MemoryContext exclusion_ctx;
 
@@ -79,7 +79,7 @@ typedef struct ChunkAppendState
 	uint32 limit;
 
 #ifdef USE_ASSERT_CHECKING
-	bool init_done;
+	bool child_exec_nodes_initialized;
 #endif
 
 	/* list of subplans after planning */
@@ -91,11 +91,12 @@ typedef struct ChunkAppendState
 	/* List of restrictinfo clauses on the parent hypertable */
 	List *initial_parent_clauses;
 
-	/* subplans remaining after startup exclusion (into initial_subplans) */
+	/* subplans remaining after startup exclusion (indexes into initial_subplans) */
 	Bitmapset *subplans_after_startup;
 
 	/* subplans remaining after runtime exclusion (subset of above) */
 	Bitmapset *subplans_after_runtime;
+
 	Bitmapset *params;
 
 	/* sort options if this append is ordered, only used for EXPLAIN */
@@ -152,7 +153,9 @@ static void show_sort_group_keys(ChunkAppendState *planstate, List *ancestors, E
 static void show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
 								   bool nullsFirst);
 
-static void init_subplanstates(ChunkAppendState *state, EState *estate, int eflags);
+static void init_subplans(ChunkAppendState *state, EState *estate, int eflags);
+
+static void do_runtime_exclusion(ChunkAppendState *state);
 
 Node *
 ts_chunk_append_state_create(CustomScan *cscan)
@@ -195,13 +198,6 @@ ts_chunk_append_state_create(CustomScan *cscan)
 	return (Node *) state;
 }
 
-/*
- * Build the subplans_after_startup bitmap.  When startup_exclusion is
- * enabled, chunks whose constraints contradict the (now-constant)
- * restriction clauses are excluded.  Otherwise all subplans are included.
- * Parallel workers rely on this bitmap (via shared memory) to know which
- * subplans to process.
- */
 static void
 do_startup_exclusion(ChunkAppendState *state)
 {
@@ -291,17 +287,14 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	 * In parallel mode, the leader performs startup exclusion and ships the
 	 * result to workers via SUBPLAN_STATE_INCLUDED flags in shared memory.
 	 * Workers must not perform exclusion themselves because they could disagree
-	 * with the leader (e.g., due to volatile functions), causing index
-	 * mismatches in the shared subplan coordination. See PR #5857.
+	 * with the leader (e.g., due to volatile functions), causing wrong results.
 	 *
-	 * Workers defer initialization to chunk_append_initialize_worker, which
-	 * reads the exclusion result from shared memory. We store estate and eflags
-	 * here for that later initialization.
+	 * The workers later pick up these results in chunk_append_initialize_worker().
 	 *
-	 * The force_parallel_mode can run a non-parallel_aware ChunkAppend inside a
-	 * parallel worker. In that case there is no shared memory coordination, so
-	 * we fall through to the normal do_startup_exclusion + init_subplanstates
-	 * path.
+	 * The force_parallel_mode debug GUC can run a non-parallel_aware
+	 * ChunkAppend inside a parallel worker. There's no actual parallelism
+	 * happening, so we must follow the usual single-process approach. We
+	 * recognize this case by the parallel_aware flag being false.
 	 */
 	if (IsParallelWorker() && node->ss.ps.plan->parallel_aware)
 	{
@@ -311,19 +304,24 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	do_startup_exclusion(state);
-	init_subplanstates(state, estate, eflags);
+
+	init_subplans(state, estate, eflags);
+
+	if (state->runtime_exclusion_parent || state->runtime_exclusion_children)
+	{
+		do_runtime_exclusion(state);
+	}
 }
 
 /*
- * Initialize the subplanstates array from initial_subplans, skipping
- * entries not in subplans_after_startup.
+ * Initialize the child plans that were not filtered out.
  */
 static void
-init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
+init_subplans(ChunkAppendState *state, EState *estate, int eflags)
 {
 #ifdef USE_ASSERT_CHECKING
-	Assert(state->init_done == false);
-	state->init_done = true;
+	Assert(state->child_exec_nodes_initialized == false);
+	state->child_exec_nodes_initialized = true;
 #endif
 
 	if (bms_is_empty(state->subplans_after_startup))
@@ -332,7 +330,7 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 		return;
 	}
 
-	state->subplanstates =
+	state->subplan_states =
 		(PlanState **) palloc0(list_length(state->initial_subplans) * sizeof(PlanState *));
 
 	for (int i = bms_next_member(state->subplans_after_startup, -1); i >= 0;
@@ -344,12 +342,12 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 		 * we use an array for the states but put it in custom_ps as well
 		 * so explain and planstate_tree_walker can find it
 		 */
-		state->subplanstates[i] = ExecInitNode(subplan, estate, eflags);
-		state->csstate.custom_ps = lappend(state->csstate.custom_ps, state->subplanstates[i]);
+		state->subplan_states[i] = ExecInitNode(subplan, estate, eflags);
+		state->csstate.custom_ps = lappend(state->csstate.custom_ps, state->subplan_states[i]);
 
 		if (state->limit)
 		{
-			ExecSetTupleBound(state->limit, state->subplanstates[i]);
+			ExecSetTupleBound(state->limit, state->subplan_states[i]);
 		}
 	}
 
@@ -359,11 +357,14 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 	{
 		int first = bms_next_member(state->subplans_after_startup, -1);
 		Assert(first >= 0);
-		state->params = state->subplanstates[first]->plan->allParam;
+		state->params = state->subplan_states[first]->plan->allParam;
 		/*
 		 * make sure all params are initialized for runtime exclusion
+		 *
+		 * FIXME what is this? isn't our node supposed to have the same params,
+		 * why are we copying them from the first child?
 		 */
-		state->csstate.ss.ps.chgParam = bms_copy(state->subplanstates[first]->plan->allParam);
+		state->csstate.ss.ps.chgParam = bms_copy(state->subplan_states[first]->plan->allParam);
 	}
 }
 
@@ -449,7 +450,7 @@ do_runtime_exclusion(ChunkAppendState *state)
 	for (int i = bms_next_member(state->subplans_after_startup, -1); i >= 0;
 		 i = bms_next_member(state->subplans_after_startup, i))
 	{
-		PlanState *ps = state->subplanstates[i];
+		PlanState *ps = state->subplan_states[i];
 		Scan *scan = ts_chunk_append_get_scan_plan(ps->plan);
 
 		if (scan == NULL || scan->scanrelid == 0)
@@ -483,7 +484,7 @@ chunk_append_exec(CustomScanState *node)
 	ProjectionInfo *projinfo = node->ss.ps.ps_ProjInfo;
 	TupleTableSlot *subslot;
 
-	Assert(state->init_done == true);
+	Assert(state->child_exec_nodes_initialized == true);
 
 	if (state->current == INVALID_SUBPLAN_INDEX)
 	{
@@ -502,7 +503,7 @@ chunk_append_exec(CustomScanState *node)
 		}
 
 		Assert(state->current >= 0 && state->current < list_length(state->initial_subplans));
-		subnode = state->subplanstates[state->current];
+		subnode = state->subplan_states[state->current];
 
 		/*
 		 * get a tuple from the subplan
@@ -538,12 +539,6 @@ get_next_subplan(ChunkAppendState *state, int last_plan)
 	if (last_plan == NO_MATCHING_SUBPLANS)
 	{
 		return NO_MATCHING_SUBPLANS;
-	}
-
-	if (!state->runtime_initialized &&
-		(state->runtime_exclusion_parent || state->runtime_exclusion_children))
-	{
-		do_runtime_exclusion(state);
 	}
 
 	int next = bms_next_member(state->subplans_after_runtime, last_plan);
@@ -674,7 +669,7 @@ chunk_append_end(CustomScanState *node)
 	for (int i = bms_next_member(state->subplans_after_startup, -1); i >= 0;
 		 i = bms_next_member(state->subplans_after_startup, i))
 	{
-		ExecEndNode(state->subplanstates[i]);
+		ExecEndNode(state->subplan_states[i]);
 	}
 }
 
@@ -691,10 +686,10 @@ chunk_append_rescan(CustomScanState *node)
 	{
 		if (node->ss.ps.chgParam != NULL)
 		{
-			UpdateChangedParamSet(state->subplanstates[i], node->ss.ps.chgParam);
+			UpdateChangedParamSet(state->subplan_states[i], node->ss.ps.chgParam);
 		}
 
-		ExecReScan(state->subplanstates[i]);
+		ExecReScan(state->subplan_states[i]);
 	}
 	state->current = INVALID_SUBPLAN_INDEX;
 
@@ -704,7 +699,7 @@ chunk_append_rescan(CustomScanState *node)
 	if ((state->runtime_exclusion_parent || state->runtime_exclusion_children) &&
 		bms_overlap(node->ss.ps.chgParam, state->params))
 	{
-		state->runtime_initialized = false;
+		do_runtime_exclusion(state);
 	}
 }
 
@@ -834,7 +829,7 @@ chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordi
 	worker_state->current = INVALID_SUBPLAN_INDEX;
 	worker_state->parallel_state = parallel_state;
 
-	init_subplanstates(worker_state, worker_state->estate, worker_state->eflags);
+	init_subplans(worker_state, worker_state->estate, worker_state->eflags);
 }
 
 /*

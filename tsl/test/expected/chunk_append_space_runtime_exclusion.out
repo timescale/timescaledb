@@ -49,6 +49,7 @@ LATERAL (SELECT * FROM space_mixed m WHERE m.time >= d.t ORDER BY m.time LIMIT 4
    ->  Limit
          ->  Custom Scan (ChunkAppend) on space_mixed m
                Order: m."time"
+               Chunks excluded during runtime: 0
                ->  Merge Append
                      Sort Key: m."time"
                      ->  Index Scan using _hyper_1_1_chunk_space_mixed_time_idx1 on _hyper_1_1_chunk m_1
