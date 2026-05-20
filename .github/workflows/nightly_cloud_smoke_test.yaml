@@ -62,7 +62,7 @@ jobs:
         run: |
           matrix='{"version": ${{ steps.fetch-releases.outputs.releases }}}'
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
-          echo $matrix
+          echo "$matrix"
 
   test-version:
     needs: [generate-matrix, get-next-version]
