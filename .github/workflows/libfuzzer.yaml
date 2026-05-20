@@ -223,7 +223,7 @@ jobs:
         # Create the fuzzing functions
         MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
         export MODULE_NAME
-        psql -a -v module_name="$MODULE_NAME" -c "
+        psql -a -v module_name="$MODULE_NAME" <<<"
             create or replace function fuzz(algo cstring, pgtype regtype,
                 bulk bool, runs int)
             returns int as :'module_name', 'ts_fuzz_compression' language c;
