@@ -1516,10 +1516,11 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			columnar_scan_with_compressed_sort->enable_bulk_decompression)
 		{
 			/*
-			 * Try a version with row-by-row decompression too, if we care about
-			 * the startup cost. Typically it happens in ORDER BY + LIMIT
-			 * sutiation. Another condition for it to be useful is that there is
-			 * no sort above the columnar scan.
+			 * Try a version with row-by-row decompression too, if the planner
+			 * requests the paths with cheap startup. Typically it happens with
+			 * ORDER BY + LIMIT. Row-by-row decompression is only useful if
+			 * there is no sort above the columnar scan, because a sort would
+			 * require a full decompression anyway.
 			 */
 			ColumnarScanPath *path_copy =
 				copy_columnar_scan_path(columnar_scan_with_compressed_sort);
