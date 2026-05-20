@@ -188,7 +188,7 @@ jobs:
       id: cache-postgresql
       with:
         path: C:\Progra~1\PostgreSQL\${{ matrix.versions.pg }}
-        key: "${{ runner.os }}-build-pg${{ matrix.pg_version }}\
+        key: "${{ runner.os }}-build-pg${{ matrix.versions.pg_version }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Install PostgreSQL ${{ matrix.versions.pg }} (using ${{ matrix.versions.pg_version }})
