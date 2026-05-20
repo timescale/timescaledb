@@ -223,7 +223,8 @@ jobs:
         # Create the fuzzing functions
         MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
         export MODULE_NAME
-        psql -a -c "create or replace function fuzz(algo cstring, pgtype regtype,
+        psql -a -v module_name="$MODULE_NAME" -c "
+            create or replace function fuzz(algo cstring, pgtype regtype,
                 bulk bool, runs int)
             returns int as :'module_name', 'ts_fuzz_compression' language c;
 
@@ -231,8 +232,7 @@ jobs:
                 pgtype regtype, path cstring, bulk bool)
             returns table(path text, bytes int, rows int, sqlstate text, location text)
             as :'module_name', 'ts_read_compressed_data_directory' language c;
-
-            " -v module_name="$MODULE_NAME"
+            "
 
         # Start more fuzzing processes in the background. We won't even monitor
         # their progress, because the server will panic if they find an error.
