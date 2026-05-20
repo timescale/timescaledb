@@ -17,7 +17,7 @@ jobs:
       run: |
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get update
-        sudo apt-get -y install coccinelle postgresql-server-dev-all
+        sudo apt-get -y install --no-install-recommends coccinelle postgresql-server-dev-all
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
