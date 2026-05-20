@@ -15,6 +15,7 @@ jobs:
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get update
         sudo apt-get -y install coccinelle postgresql-server-dev-all
 
