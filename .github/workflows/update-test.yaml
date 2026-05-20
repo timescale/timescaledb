@@ -107,7 +107,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Coredumps update-test ${{ matrix.os }} PG${{ matrix.pg }}
+        name: Coredumps update-test PG${{ matrix.pg }}
         path: coredumps
 
     - name: Upload Artifacts

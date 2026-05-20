@@ -39,7 +39,7 @@ jobs:
       run: python .github/gh_config_reader.py
 
   abi_test:
-    name: ABI Test ${{ matrix.dir }} PG${{ matrix.pg }}
+    name: ABI Test PG${{ matrix.pg }}
     runs-on: ubuntu-latest
     needs: config
     strategy:
@@ -129,13 +129,13 @@ jobs:
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Regression diff ABI Breakage ${{ matrix.dir }} PG${{ matrix.pg }}
+        name: Regression diff ABI Breakage PG${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: PostgreSQL log ABI Breakage ${{ matrix.dir }} PG${{ matrix.pg }}
+        name: PostgreSQL log ABI Breakage PG${{ matrix.pg }}
         path: postmaster.log
 

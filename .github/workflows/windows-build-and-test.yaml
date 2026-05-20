@@ -188,7 +188,7 @@ jobs:
       id: cache-postgresql
       with:
         path: C:\Progra~1\PostgreSQL\${{ matrix.versions.pg }}
-        key: "${{ runner.os }}-build-pg${{ matrix.pkg_version }}\
+        key: "${{ runner.os }}-build-pg${{ matrix.versions.pg_version }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Install PostgreSQL ${{ matrix.versions.pg }} (using ${{ matrix.versions.pg_version }})
@@ -350,7 +350,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.os }} ${{ matrix.build_type }} Build
+        name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.build_type }} Build
         path: |
           regression.log
           installcheck.log
@@ -359,14 +359,14 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
+        name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
 
     - name: Upload CMake Logs
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
+        name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.build_type }}
         path: |
             build_win/CMakeCache.txt
             build_win/CMakeFiles/CMakeConfigureLog.yaml
@@ -390,7 +390,7 @@ jobs:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
         # duplicate it to work around this nonsense.
-        JOB_NAME: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
+        JOB_NAME: PG${{ matrix.versions.pg }} ${{ matrix.build_type }}
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_REF_NAME: ${{ github.ref_name }}

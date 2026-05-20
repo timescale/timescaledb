@@ -134,7 +134,7 @@ jobs:
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "linux-32-bit-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
+        key: "linux-32-bit-postgresql-${{ matrix.pg }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}
@@ -251,6 +251,7 @@ jobs:
         path: postmaster.*
 
     - name: Stack trace Linux
+      id: coredumps
       if: always()
       shell: bash
       run: |
@@ -303,7 +304,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: TAP test logs PG${{ matrix.pg }}
         path: |
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log
