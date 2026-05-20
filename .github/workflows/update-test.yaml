@@ -66,7 +66,7 @@ jobs:
     - name: Update diff
       if: failure()
       run: |
-        find update_test -name "*.diff" | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
+        find update_test -name "*.diff" -print0 | xargs -0 -IFILE sh -c "echo '\nFILE\n';cat FILE"
 
     - name: Postgres Errors
       if: failure()

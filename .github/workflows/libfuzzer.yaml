@@ -225,14 +225,14 @@ jobs:
         export MODULE_NAME
         psql -a -c "create or replace function fuzz(algo cstring, pgtype regtype,
                 bulk bool, runs int)
-            returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;
+            returns int as :'module_name', 'ts_fuzz_compression' language c;
 
             create or replace function ts_read_compressed_data_directory(algo cstring,
                 pgtype regtype, path cstring, bulk bool)
             returns table(path text, bytes int, rows int, sqlstate text, location text)
-            as '"$MODULE_NAME"', 'ts_read_compressed_data_directory' language c;
+            as :'module_name', 'ts_read_compressed_data_directory' language c;
 
-            "
+            " -v module_name="$MODULE_NAME"
 
         # Start more fuzzing processes in the background. We won't even monitor
         # their progress, because the server will panic if they find an error.
