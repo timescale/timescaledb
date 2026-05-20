@@ -1021,6 +1021,16 @@ SELECT * FROM test.show_constraints('child_hyper_constr');
 -------------------------+------+---------+-------+---------------------------------+------------+----------+-----------
  hyper_constr_temp_check | c    | {temp}  | -     | (temp > (10)::double precision) | f          | f        | t
 
+-- inherited CHECK constraints on OSM chunks are not tracked in chunk_constraint
+SELECT cc.constraint_name, cc.hypertable_constraint_name, cc.dimension_slice_id
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
+WHERE c.table_name = 'child_hyper_constr'
+ORDER BY cc.constraint_name;
+ constraint_name | hypertable_constraint_name | dimension_slice_id 
+-----------------+----------------------------+--------------------
+ constraint_19   |                            |                 19
+
 -- TEST foreign key trigger: deleting data from foreign table measure
 -- does not error out due to data in osm chunk
 \set ON_ERROR_STOP 0

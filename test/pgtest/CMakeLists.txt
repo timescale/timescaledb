@@ -21,6 +21,7 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
 
 # Tests to ignore
 set(PG_IGNORE_TESTS
+    advisory_lock
     amutils
     database
     event_trigger

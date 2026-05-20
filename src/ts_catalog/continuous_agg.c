@@ -1540,7 +1540,7 @@ ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 {
 	Oid ownerid = ts_rel_get_owner(cagg_oid);
 
-	if (!has_privs_of_role(userid, ownerid))
+	if (!ts_has_owner_privs(userid, ownerid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
