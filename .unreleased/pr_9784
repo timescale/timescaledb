@@ -1,0 +1,1 @@
+Implements: #9784 Use firstlast sparse index for orderby metadata on new compressed chunks
