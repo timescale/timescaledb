@@ -168,13 +168,13 @@ jobs:
     - name: Checkout TimescaleDB source
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
       shell: powershell
       run: |
-        echo "date=$(Get-Date -Format 'dd')" >> $env:GITHUB_OUTPUT
+        echo "date=$(Get-Date -UFormat '%V')" >> $env:GITHUB_OUTPUT
 
       # Use a cache for the PostgreSQL installation to speed things up
       # and avoid unnecessary package downloads. Since we only save
