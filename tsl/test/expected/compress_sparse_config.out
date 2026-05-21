@@ -25,9 +25,9 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                          index                           
----------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------
- test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+---------------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
 
 -- one sparse index
 alter table test_settings set (timescaledb.compress,
@@ -35,18 +35,18 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_index = 'bloom("u")');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                     index                                                      
----------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                       index                                                       
+---------------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'minmax("ts")');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                      index                                                       
----------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                        index                                                        
+---------------+----------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 --multi column
 alter table test_settings set (timescaledb.compress,
@@ -54,18 +54,18 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_index = 'bloom("u"), bloom("ts")');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                 index                                                                                 
----------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                  index                                                                                   
+---------------+----------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom(u), bloom(ts)');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                 index                                                                                 
----------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                  index                                                                                   
+---------------+----------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 --test errors
 \set ON_ERROR_STOP 0
@@ -221,18 +221,18 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_index = '');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                  index                                                                  
----------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {ts,x}  | {f,t}        | {f,t}              | [{"source": "config"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                     index                                                                     
+---------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {ts,x}  | {f,t}        | {f,t}              | [{"source": "config"}, {"type": "firstlast", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 -- change orderby setting (sparse index changes)
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'u');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                 index                                                                  
----------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {u,x}   | {f,t}        | {f,t}              | [{"source": "config"}, {"type": "minmax", "column": "u", "source": "orderby"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                    index                                                                     
+---------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {u,x}   | {f,t}        | {f,t}              | [{"source": "config"}, {"type": "firstlast", "column": "u", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 -- same column as orderby should succeed since minmax
 alter table test_settings set (timescaledb.compress,
@@ -240,18 +240,18 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_index = 'bloom("value"), minmax("ts")');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                   index                                                                                    
----------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {ts,x}  | {f,t}        | {f,t}              | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                     index                                                                                     
+---------------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {ts,x}  | {f,t}        | {f,t}              | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 -- change orderby setting (sparse index doesn't change)
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'u');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                               index                                                                                                                
----------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {u,x}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "u", "source": "orderby"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                  index                                                                                                                   
+---------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {u,x}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "u", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
@@ -261,9 +261,9 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'u');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                      index                                                      
----------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {u,x}   | {f,t}        | {f,t}              | [{"type": "minmax", "column": "x", "source": "config"}, {"type": "minmax", "column": "u", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                       index                                                        
+---------------+----------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {u,x}   | {f,t}        | {f,t}              | [{"type": "minmax", "column": "x", "source": "config"}, {"type": "firstlast", "column": "u", "source": "orderby"}]
 
 -- same column as orderby should fail since bloom
 \set ON_ERROR_STOP 0
@@ -303,10 +303,10 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_index = 'bloom("u"),minmax("ts")');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                 index                                                                                  
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                   index                                                                                   
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
 
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
  count 
@@ -325,6 +325,8 @@ select * from test.show_columns_ext(:'chunk'::regclass);
  _ts_meta_count       | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_min_1       | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_max_1       | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x  | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x   | integer                               |           |          |         | plain    |         1000 | 
  x                    | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
  value                | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
  regress-test-bloom_u | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
@@ -348,7 +350,7 @@ select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6
                Rows Removed by Filter: 999
                Bulk Decompression: true
                ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
+                     Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk._ts_meta_v2_first_x, compress_hyper_4_3_chunk._ts_meta_v2_last_x, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
                      Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_4_3_chunk.regress-test-bloom_u, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 9
 
@@ -366,7 +368,7 @@ select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-0
                Rows Removed by Filter: 831
                Bulk Decompression: true
                ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
+                     Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk._ts_meta_v2_first_x, compress_hyper_4_3_chunk._ts_meta_v2_last_x, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
                      Filter: ((compress_hyper_4_3_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_4_3_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
                      Rows Removed by Filter: 9
 
@@ -378,9 +380,9 @@ create table test_sparse_index(x int, value text, u uuid, ts timestamp) with (
     tsdb.order_by='x',
     tsdb.index='bloom("u"),minmax("ts")');
 select * from settings;
-       relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                 index                                                                                  
--------------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_sparse_index |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+       relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                   index                                                                                   
+-------------------+----------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_sparse_index |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 insert into test_sparse_index
 select x, md5(x::text),
@@ -405,6 +407,8 @@ select * from test.show_columns_ext(:'chunk'::regclass);
  _ts_meta_count       | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_min_1       | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_max_1       | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x  | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x   | integer                               |           |          |         | plain    |         1000 | 
  x                    | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
  value                | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
  regress-test-bloom_u | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
@@ -428,7 +432,7 @@ select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6
                Rows Removed by Filter: 999
                Bulk Decompression: true
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
+                     Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk._ts_meta_v2_first_x, compress_hyper_6_5_chunk._ts_meta_v2_last_x, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
                      Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_6_5_chunk.regress-test-bloom_u, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 9
 
@@ -446,7 +450,7 @@ select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-0
                Rows Removed by Filter: 831
                Bulk Decompression: true
                ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
+                     Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk._ts_meta_v2_first_x, compress_hyper_6_5_chunk._ts_meta_v2_last_x, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
                      Filter: ((compress_hyper_6_5_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_6_5_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
                      Rows Removed by Filter: 9
 
@@ -465,10 +469,10 @@ alter table test_sparse_index rename value to value_new;
 -- change sparse index column
 alter table test_sparse_index rename ts to ts_new;
 select * from settings;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                   index                                                                                    
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_sparse_index                      |                                                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts_new", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_6_chunk |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts_new", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                     index                                                                                     
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_sparse_index                      |                                                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts_new", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_6_chunk |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts_new", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
     where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
@@ -481,6 +485,8 @@ select * from test.show_columns_ext(:'chunk'::regclass);
  _ts_meta_count         | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_min_1         | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_max_1         | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x    | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x     | integer                               |           |          |         | plain    |         1000 | 
  x                      | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
  value_new              | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
  regress-test-bloom_u   | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
@@ -545,6 +551,8 @@ select * from test.show_columns_ext(:'chunk'::regclass);
  _ts_meta_count               | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_min_1               | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_max_1               | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x          | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x           | integer                               |           |          |         | plain    |         1000 | 
  x                            | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
  regress-test-bloom_value_new | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
  value_new                    | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
@@ -552,10 +560,10 @@ select * from test.show_columns_ext(:'chunk'::regclass);
  ts_new                       | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
 
 select * from settings;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                          index                                                          
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
- test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_8_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value_new", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                            
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------
+ test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_8_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value_new", "source": "default"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 -- Test empty sparse index
 alter table test_sparse_index set (timescaledb.compress,
@@ -575,21 +583,23 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 select * from test.show_columns_ext(:'chunk'::regclass);
-     Column     |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-----------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_min_1 | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_max_1 | integer                               |           |          |         | plain    |         1000 | 
- x              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- value_new      | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- u              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- ts_new         | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+       Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x  | integer                               |           |          |         | plain    |         1000 | 
+ x                   | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ value_new           | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ u                   | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ ts_new              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
 
 select * from settings;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                     index                                      
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------
- test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_9_chunk | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                       index                                       
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------
+ test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_9_chunk | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 -- Test default orderby without sparse index
 set timescaledb.enable_sparse_index_bloom to false;
@@ -608,21 +618,23 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 select * from test.show_columns_ext(:'chunk'::regclass);
-     Column     |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-----------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count | integer                               |           |          |         | plain    |         1000 | 
- value_new      | text                                  | default   |          |         | extended |         1000 | 
- _ts_meta_min_1 | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_max_1 | integer                               |           |          |         | plain    |         1000 | 
- x              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- u              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- ts_new         | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+       Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count      | integer                               |           |          |         | plain    |         1000 | 
+ value_new           | text                                  | default   |          |         | extended |         1000 | 
+ _ts_meta_min_1      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x  | integer                               |           |          |         | plain    |         1000 | 
+ x                   | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ u                   | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ ts_new              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
 
 select * from settings;
-                 relid                  |                 compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                          index                           
-----------------------------------------+-------------------------------------------------+-------------+---------+--------------+--------------------+----------------------------------------------------------
+                 relid                  |                 compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+----------------------------------------+-------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
  test_sparse_index                      |                                                 |             |         |              |                    | 
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_10_chunk | {value_new} | {x}     | {t}          | {t}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_10_chunk | {value_new} | {x}     | {t}          | {t}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
 
 reset timescaledb.enable_sparse_index_bloom;
 drop table test_sparse_index;
@@ -646,9 +658,9 @@ alter table test_drop_sparse set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom("u"), minmax("ts"), bloom("u","extra")');
 select * from settings;
-      relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                  index                                                                                                                  
-------------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_drop_sparse |                | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "bloom", "column": ["u", "extra"], "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+      relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
+------------------+----------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_drop_sparse |                | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "bloom", "column": ["u", "extra"], "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 select count(compress_chunk(x)) from show_chunks('test_drop_sparse') x;
  count 
@@ -667,6 +679,8 @@ select * from test.show_columns_ext(:'chunk'::regclass);
  _ts_meta_count                  | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_min_1                  | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_max_1                  | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x             | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x              | integer                               |           |          |         | plain    |         1000 | 
  x                               | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
  value                           | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
  regress-test-bloom_u            | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
@@ -680,10 +694,10 @@ select * from test.show_columns_ext(:'chunk'::regclass);
 -- Drop column with minmax sparse index
 alter table test_drop_sparse drop column ts;
 select * from settings;
-                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                      index                                                                                      
------------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_drop_sparse                        |                                                 | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": ["u", "extra"], "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_7_11_chunk | _timescaledb_internal.compress_hyper_8_12_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": ["u", "extra"], "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                       index                                                                                        
+-----------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_drop_sparse                        |                                                 | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": ["u", "extra"], "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_11_chunk | _timescaledb_internal.compress_hyper_8_12_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": ["u", "extra"], "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 select * from test.show_columns_ext(:'chunk'::regclass);
              Column              |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
@@ -691,6 +705,8 @@ select * from test.show_columns_ext(:'chunk'::regclass);
  _ts_meta_count                  | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_min_1                  | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_max_1                  | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x             | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x              | integer                               |           |          |         | plain    |         1000 | 
  x                               | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
  value                           | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
  regress-test-bloom_u            | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
@@ -707,20 +723,22 @@ select count(*) from test_drop_sparse;
 -- Drop column with bloom sparse index (also part of composite bloom)
 alter table test_drop_sparse drop column u;
 select * from settings;
-                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                          index                           
------------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------
- test_drop_sparse                        |                                                 | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_7_11_chunk | _timescaledb_internal.compress_hyper_8_12_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+-----------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
+ test_drop_sparse                        |                                                 | {}        | {x}     | {f}          | {f}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_11_chunk | _timescaledb_internal.compress_hyper_8_12_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
 
 select * from test.show_columns_ext(:'chunk'::regclass);
-     Column     |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-----------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_min_1 | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_max_1 | integer                               |           |          |         | plain    |         1000 | 
- x              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- value          | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- extra          | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+       Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x  | integer                               |           |          |         | plain    |         1000 | 
+ x                   | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ value               | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ extra               | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
 
 -- Verify data is still queryable
 select count(*) from test_drop_sparse;
@@ -743,9 +761,9 @@ alter table test_drop_sparse2 set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom("a","b","c")');
 select * from settings;
-       relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                            
--------------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------
- test_drop_sparse2 |                | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": ["a", "b", "c"], "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+       relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                             index                                                             
+-------------------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------
+ test_drop_sparse2 |                | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": ["a", "b", "c"], "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 select count(compress_chunk(x)) from show_chunks('test_drop_sparse2') x;
  count 
@@ -763,6 +781,8 @@ select * from test.show_columns_ext(:'chunk'::regclass);
  _ts_meta_count                | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_min_1                | integer                               |           |          |         | plain    |         1000 | 
  _ts_meta_max_1                | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x           | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x            | integer                               |           |          |         | plain    |         1000 | 
  x                             | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
  a                             | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
  b                             | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
@@ -772,20 +792,22 @@ select * from test.show_columns_ext(:'chunk'::regclass);
 -- Drop one column from the composite bloom
 alter table test_drop_sparse2 drop column b;
 select * from settings;
-                  relid                  |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                          index                           
------------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------
- test_drop_sparse2                       |                                                  | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_9_13_chunk | _timescaledb_internal.compress_hyper_10_14_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+                  relid                  |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+-----------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
+ test_drop_sparse2                       |                                                  | {}        | {x}     | {f}          | {f}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_9_13_chunk | _timescaledb_internal.compress_hyper_10_14_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
 
 select * from test.show_columns_ext(:'chunk'::regclass);
-     Column     |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-----------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_min_1 | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_max_1 | integer                               |           |          |         | plain    |         1000 | 
- x              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- a              | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- c              | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+       Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1      | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_first_x | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_last_x  | integer                               |           |          |         | plain    |         1000 | 
+ x                   | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ a                   | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ c                   | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
 
 select count(*) from test_drop_sparse2;
  count 
@@ -810,10 +832,10 @@ select count(compress_chunk(c)) from show_chunks('test_orderby_default_noguc') c
      1
 
 select * from settings;
-                  relid                   |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                          index                           
-------------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------
+                  relid                   |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+------------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
  test_orderby_default_noguc               |                                                  |           |         |              |                    | 
- _timescaledb_internal._hyper_11_15_chunk | _timescaledb_internal.compress_hyper_12_16_chunk |           | {x}     | {t}          | {t}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_11_15_chunk | _timescaledb_internal.compress_hyper_12_16_chunk |           | {x}     | {t}          | {t}                | [{"type": "firstlast", "column": "x", "source": "orderby"}]
 
 reset timescaledb.auto_sparse_indexes;
 drop table test_orderby_default_noguc;

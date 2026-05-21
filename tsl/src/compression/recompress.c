@@ -1224,15 +1224,21 @@ create_orderby_scankeys(CompressionSettings *settings, Relation index_rel,
 {
 	int position;
 	int num_orderby = ts_array_length(settings->fd.orderby);
-	/* Create two scankeys per orderby column, for min and max metadata columns respectively */
+	/* Two scankeys per orderby column, one for the lower-bound metadata column
+	 * and one for the upper-bound metadata column. */
 	for (int i = 0; i < num_orderby * 2; i = i + 2)
 	{
 		position = (i / 2) + 1;
-		AttrNumber first_attno =
-			get_attnum(compressed_chunk_rel->rd_id, column_segment_min_name(position));
+		AttrNumber lower_attno;
+		AttrNumber upper_attno;
+		orderby_sparse_metadata_attnos(settings,
+									   compressed_chunk_rel->rd_id,
+									   position,
+									   &lower_attno,
+									   &upper_attno);
+		AttrNumber first_attno = lower_attno;
 		StrategyNumber first_strategy = BTLessEqualStrategyNumber;
-		AttrNumber second_attno =
-			get_attnum(compressed_chunk_rel->rd_id, column_segment_max_name(position));
+		AttrNumber second_attno = upper_attno;
 		StrategyNumber second_strategy = BTGreaterEqualStrategyNumber;
 
 		Assert(first_attno != InvalidAttrNumber);

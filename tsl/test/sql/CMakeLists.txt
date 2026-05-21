@@ -108,7 +108,7 @@ set(TEST_TEMPLATES
 
 # WAL numbers will differ on 32-bit platform so we only run on 64-bit
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
-  list(APPEND TEST_FILES explain_wal.sql)
+  list(APPEND TEST_TEMPLATES explain_wal.sql.in)
 endif()
 
 if(USE_TELEMETRY)
@@ -245,7 +245,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_policy_incremental
-    explain_wal
+    explain_wal-${PG_VERSION_MAJOR}
     move
     reorder
     split_chunk

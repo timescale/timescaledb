@@ -28,7 +28,7 @@ INSERT INTO t1 SELECT 1, 1, g FROM generate_series(901,1400) g;
 SET timescaledb.debug_compression_path_info TO ON;
 SELECT compress_chunk(show_chunks('t1'), if_not_compressed => true);
 INFO:  in-memory recompression is disabled due to nullable order by, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_1_1_chunk"
-INFO:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_min_1__ts_meta_max_1__idx" for recompression
+INFO:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_v2_first_v1__ts_meta__idx" for recompression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -52,7 +52,7 @@ SELECT compress_chunk(show_chunks('t1'), if_not_compressed => true);
 LOG:  statement: SELECT compress_chunk(show_chunks('t1'), if_not_compressed => true);
 DEBUG:  in-memory recompression is disabled due to nullable order by, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_1_1_chunk"
 DEBUG:  acquiring locks for recompression: "_timescaledb_internal._hyper_1_1_chunk"
-DEBUG:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_min_1__ts_meta_max_1__idx" for recompression
+DEBUG:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_v2_first_v1__ts_meta__idx" for recompression
 DEBUG:  locks acquired for recompression: "_timescaledb_internal._hyper_1_1_chunk"
 DEBUG:  finished compressing 500 rows from "_hyper_1_1_chunk"
 DEBUG:  cleared chunk status for recompression: "_timescaledb_internal._hyper_1_1_chunk"
@@ -74,7 +74,7 @@ SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_recompress
 LOG:  statement: SELECT _timescaledb_functions.recompress_chunk_segmentwise('_timescaledb_internal._hyper_1_1_chunk');
 DEBUG:  in-memory recompression is disabled due to nullable order by, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_1_1_chunk"
 DEBUG:  acquiring locks for recompression: "_timescaledb_internal._hyper_1_1_chunk"
-DEBUG:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_min_1__ts_meta_max_1__idx" for recompression
+DEBUG:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_v2_first_v1__ts_meta__idx" for recompression
 DEBUG:  locks acquired for recompression: "_timescaledb_internal._hyper_1_1_chunk"
 DEBUG:  finished compressing 601 rows from "_hyper_1_1_chunk"
 DEBUG:  cleared chunk status for recompression: "_timescaledb_internal._hyper_1_1_chunk"
@@ -107,7 +107,7 @@ SELECT show_chunks as chunk_to_recompress FROM show_chunks('t2') LIMIT 1 \gset
 SET timescaledb.debug_compression_path_info TO ON;
 SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_recompress');
 INFO:  in-memory recompression is disabled due to nullable order by, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_3_3_chunk"
-INFO:  Using index "compress_hyper_4_4_chunk__ts_meta_min_1__ts_meta_max_1__ts__idx" for recompression
+INFO:  Using index "compress_hyper_4_4_chunk__ts_meta_v2_first_v1__ts_meta_v2_l_idx" for recompression
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_3_3_chunk

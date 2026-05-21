@@ -224,6 +224,7 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 					continue;
 				}
 
+				/* Always use minmax metadata here. */
 				int16 index = ts_array_position(settings->fd.orderby, attname);
 
 				if (create_segment_filter_scankey(in_rel,
