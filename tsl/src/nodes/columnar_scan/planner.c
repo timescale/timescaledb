@@ -1353,9 +1353,10 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			 * orderby.
 			 */
 			Assert(strategy == BTLessStrategyNumber || strategy == BTGreaterStrategyNumber);
-			char *meta_col_name = strategy == BTLessStrategyNumber ?
-									  column_segment_min_name(i + 1) :
-									  column_segment_max_name(i + 1);
+			char *lower_name;
+			char *upper_name;
+			orderby_sparse_metadata_names(dcpath->info->settings, i + 1, &lower_name, &upper_name);
+			char *meta_col_name = strategy == BTLessStrategyNumber ? lower_name : upper_name;
 
 			AttrNumber attr_position =
 				get_attnum(dcpath->info->compressed_rte->relid, meta_col_name);

@@ -12,3 +12,4 @@
 /columnar_index_scan-*.sql
 /vector_agg_planning-*.sql
 /compress_observ-*.sql
+/explain_wal-*.sql

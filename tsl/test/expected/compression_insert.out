@@ -721,7 +721,7 @@ VACUUM ANALYZE test_ordering;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
    ->  Sort
-         Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
          ->  Seq Scan on compress_hyper_14_21_chunk
 
 INSERT INTO test_ordering SELECT 1;
@@ -741,7 +741,7 @@ VACUUM ANALYZE test_ordering;
          Sort Key: test_ordering."time"
          ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
 
@@ -756,7 +756,7 @@ VACUUM ANALYZE test_ordering;
          Sort Key: test_ordering."time"
          ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
    ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
@@ -802,11 +802,11 @@ VACUUM ANALYZE test_ordering;
    Order: test_ordering."time"
    ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+               Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                ->  Seq Scan on compress_hyper_14_21_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_13_22_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_23_chunk._ts_meta_min_1, compress_hyper_14_23_chunk._ts_meta_max_1
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_v2_last_time, compress_hyper_14_23_chunk._ts_meta_v2_first_time
                ->  Seq Scan on compress_hyper_14_23_chunk
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
@@ -1612,7 +1612,7 @@ SELECT compress_chunk(show_chunks('i9314'));
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
-   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_51_104_chunk
+   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_v2_last_time__ts_meta__idx on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
              time             | value | doubled 
@@ -1631,7 +1631,7 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
    ->  Sort
-         Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+         Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
          ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1666,7 +1666,7 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
    ->  Sort
-         Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+         Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
          ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1703,11 +1703,11 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
    Order: i9314."time"
    ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
          ->  Sort
-               Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+               Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_51_104_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_50_105_chunk
          ->  Sort
-               Sort Key: compress_hyper_51_106_chunk._ts_meta_min_1
+               Sort Key: compress_hyper_51_106_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_51_106_chunk
 
 SELECT * FROM i9314 ORDER BY time;
