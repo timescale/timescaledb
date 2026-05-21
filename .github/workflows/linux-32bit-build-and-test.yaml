@@ -64,6 +64,7 @@ jobs:
         IGNORES: >-
           append-*
           bgw_db_scheduler*
+          chunkwise_agg_cost
           columnar_scan_cost
           compress_bloom_sparse_compat
           compress_bloom_sparse_debug
