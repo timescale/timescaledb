@@ -899,9 +899,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 										context,
 										true,  /* start_isnull */
 										true,  /* end_isnull */
-										true,  /* bucketing_refresh_window */
 										false, /* force */
-										false /*extend_last_bucket*/);
+										false  /* extend_last_bucket */);
 	}
 
 	return DDL_DONE;

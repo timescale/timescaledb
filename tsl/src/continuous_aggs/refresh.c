@@ -55,7 +55,6 @@ typedef struct CaggRefreshSpiContext
 	int save_nestlevel;
 } CaggRefreshSpiContext;
 
-static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
 static InternalTimeRange get_largest_bucketed_window(Oid timetype, int64 bucket_width);
 static InternalTimeRange
 compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
@@ -83,7 +82,7 @@ static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
 												   const ContinuousAggRefreshContext context,
 												   bool bucketing_refresh_window, bool force);
-static Hypertable *
+Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
 {
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
@@ -478,7 +477,7 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 				   ContinuousAggRefreshContext context)
 {
 	const char *msg = "continuous aggregate refresh (individual invalidation) on";
-	if (context.callctx == CAGG_REFRESH_POLICY_BATCHED)
+	if (context.number_of_batches > 1)
 	{
 		elog(elevel,
 			 "%s \"%s\" in window [ %s, %s ] (batch %d of %d)",
@@ -651,6 +650,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	{
 		/* get min time for a cagg depending of the primary partition type */
 		refresh_window.start = cagg_get_time_min(cagg);
+		refresh_window.start_isnull = true;
 	}
 
 	if (!PG_ARGISNULL(2))
@@ -663,15 +663,19 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	else
 	{
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
+		refresh_window.end_isnull = true;
 	}
 
-	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_WINDOW };
+	ContinuousAggRefreshContext context = {
+		.callctx = CAGG_REFRESH_WINDOW,
+		.buckets_per_batch = DEFAULT_BUCKETS_PER_BATCH,
+		.refresh_newest_first = DEFAULT_REFRESH_NEWEST_FIRST,
+	};
 	continuous_agg_refresh_internal(cagg,
 									&refresh_window,
 									context,
 									PG_ARGISNULL(1),
 									PG_ARGISNULL(2),
-									true,
 									force,
 									false /*extend_last_bucket*/);
 
@@ -840,25 +844,27 @@ rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ct
 	ThrowErrorData(edata);
 }
 
-void
-continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
-								const InternalTimeRange *refresh_window_arg,
-								const ContinuousAggRefreshContext context, const bool start_isnull,
-								const bool end_isnull, bool bucketing_refresh_window, bool force,
-								bool extend_last_bucket)
+/*
+ * Execute a single-window refresh for a continuous aggregate.
+ *
+ * This handles one batch/window: SPI setup, the 3-transaction protocol,
+ * invalidation processing, materialization, and cleanup.
+ *
+ * Returns true if any materialization was performed.
+ */
+static bool
+continuous_agg_refresh_single_window(const ContinuousAgg *cagg_arg,
+									 const InternalTimeRange *refresh_window_arg,
+									 const ContinuousAggRefreshContext context,
+									 const bool start_isnull, const bool end_isnull,
+									 bool bucketing_refresh_window, bool force,
+									 bool extend_last_bucket)
 {
 	const ContinuousAgg *volatile cagg = cagg_arg;
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
 	CaggRefreshSpiContext cagg_spi_ctx = {};
-	/* Like regular materialized views, require owner to refresh. */
-	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
-	{
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
-					   get_rel_name(cagg->relid));
-	}
 
 	continuous_agg_refresh_spi_setup_and_connect(&cagg_spi_ctx);
 	/* No bucketing when open ended */
@@ -1050,11 +1056,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	if (edata)
 	{
 		rollback_and_error(cagg, &cagg_spi_ctx, (ErrorData *) edata);
-		return;
-	}
-	if (!refreshed)
-	{
-		emit_up_to_date_notice(cagg, context);
+		return false;
 	}
 
 	cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
@@ -1064,6 +1066,113 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	if (rc != SPI_OK_FINISH)
 	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+	}
+
+	return refreshed;
+}
+
+/*
+ * Refresh a continuous aggregate with support for incremental batching.
+ *
+ * This is the unified entry point for both manual and policy-based refreshes.
+ * If context.buckets_per_batch > 0, the refresh window is split into smaller
+ * batches using continuous_agg_split_refresh_window(). Each batch runs in its
+ * own independent SPI session and commits independently (non-atomic).
+ */
+void
+continuous_agg_refresh_internal(const ContinuousAgg *cagg,
+								const InternalTimeRange *refresh_window,
+								ContinuousAggRefreshContext context, const bool start_isnull,
+								const bool end_isnull, bool force, bool extend_last_bucket)
+{
+	/* Like regular materialized views, require owner to refresh. */
+	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
+	{
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
+					   get_rel_name(cagg->relid));
+	}
+
+	/* Try to split the refresh window into batches for incremental refresh */
+	List *refresh_window_list = NIL;
+	bool bucketing_refresh_window = true;
+
+	if (context.buckets_per_batch > 0)
+	{
+		refresh_window_list =
+			continuous_agg_split_refresh_window(cagg,
+												refresh_window,
+												context.buckets_per_batch,
+												context.refresh_newest_first,
+												force);
+	}
+
+	if (refresh_window_list == NIL)
+	{
+		/* No batching: use original window as a single batch */
+		refresh_window_list = lappend(refresh_window_list, (void *) refresh_window);
+	}
+	else
+	{
+		/* Batched windows are already bucket-aligned by the split function */
+		bucketing_refresh_window = false;
+		if (context.callctx == CAGG_REFRESH_POLICY)
+			context.callctx = CAGG_REFRESH_POLICY_BATCHED;
+	}
+
+	context.number_of_batches = list_length(refresh_window_list);
+
+	bool any_refreshed = false;
+	int32 processing_batch = 0;
+	ListCell *lc;
+
+	foreach (lc, refresh_window_list)
+	{
+		InternalTimeRange *batch_window = (InternalTimeRange *) lfirst(lc);
+		context.processing_batch = ++processing_batch;
+
+		/* extend_last_bucket must only apply to the boundary batch -- the one
+		 * whose window abuts the adjacent policy.  For newest-first ordering
+		 * that is batch 1; for oldest-first it is the final batch.
+		 * In non-batched mode (single batch) the one batch is always the boundary. */
+		bool apply_extend =
+			extend_last_bucket &&
+			(context.refresh_newest_first ? processing_batch == 1 :
+											processing_batch == context.number_of_batches);
+
+		elog(DEBUG1,
+			 "refreshing continuous aggregate \"%s\" in window [ %s, %s ]",
+			 NameStr(cagg->data.user_view_name),
+			 ts_internal_to_time_string(batch_window->start, batch_window->type),
+			 ts_internal_to_time_string(batch_window->end, batch_window->type));
+
+		bool refreshed = continuous_agg_refresh_single_window(cagg,
+															  batch_window,
+															  context,
+															  batch_window->start_isnull,
+															  batch_window->end_isnull,
+															  bucketing_refresh_window,
+															  force,
+															  apply_extend);
+		any_refreshed = any_refreshed || refreshed;
+
+		DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_refresh", processing_batch));
+
+		if (context.max_batches_per_execution > 0 &&
+			processing_batch >= context.max_batches_per_execution &&
+			processing_batch < context.number_of_batches)
+		{
+			elog(LOG,
+				 "reached maximum number of batches per execution (%d), batches not processed (%d)",
+				 context.max_batches_per_execution,
+				 context.number_of_batches - processing_batch);
+			break;
+		}
+	}
+
+	if (!any_refreshed)
+	{
+		emit_up_to_date_notice(cagg, context);
 	}
 }
 
@@ -1085,8 +1194,9 @@ debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh
 }
 
 List *
-continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *original_refresh_window,
-									int32 buckets_per_batch, bool refresh_newest_first)
+continuous_agg_split_refresh_window(const ContinuousAgg *cagg,
+									const InternalTimeRange *original_refresh_window,
+									int32 buckets_per_batch, bool refresh_newest_first, bool force)
 {
 	/* Do not produce batches when the number of buckets per batch is zero (disabled) */
 	if (buckets_per_batch == 0)
@@ -1201,7 +1311,44 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	 * 6. If the batch overlaps with only one of them then it's not a valid batch to be processed
 	 * 7. If the batch does not overlap with any of them then it's not a valid batch to be processed
 	 */
-	const char *query_str_template = " \
+	/*
+	 * When force is true, skip the invalidation log filter since forced refresh
+	 * synthesizes invalidations per-window and there may be no existing log entries.
+	 * Only filter on dimension slices (chunks with data).
+	 */
+	const char *query_str_template = force ?
+		" \
+		WITH dimension_slices AS ( \
+			SELECT \
+				range_start AS start, \
+				range_end AS end \
+			FROM \
+				_timescaledb_catalog.dimension_slice \
+				JOIN _timescaledb_catalog.dimension ON dimension.id = dimension_slice.dimension_id \
+			WHERE \
+				hypertable_id = $1 \
+				AND dimension_id = $2 \
+				AND range_end >= range_start \
+			ORDER BY \
+				%s \
+		) \
+		SELECT \
+			refresh_start AS start, \
+			LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint AS end \
+		FROM \
+			pg_catalog.generate_series($5, $6, $4) AS refresh_start \
+		WHERE \
+			EXISTS ( \
+			    SELECT FROM dimension_slices \
+				WHERE \
+					pg_catalog.int8range(refresh_start, LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint) \
+					OPERATOR(pg_catalog.&&) \
+					pg_catalog.int8range(dimension_slices.start, dimension_slices.end) \
+			) \
+		ORDER BY \
+			refresh_start %s;"
+		:
+		" \
 		WITH dimension_slices AS ( \
 			SELECT \
 				range_start AS start, \
