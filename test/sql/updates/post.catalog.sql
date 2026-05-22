@@ -203,13 +203,14 @@ FROM  _timescaledb_catalog.chunk c
 INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
 ORDER BY c.id, c.hypertable_id;
 
--- Strip the legacy <chunk_id>_<seq>_ prefix so old and new naming compare equal.
+-- Strip the chunk_id prefix so old and new naming compare equal.
 SELECT chunk_constraint.chunk_id,
        chunk_constraint.dimension_slice_id,
-       regexp_replace(chunk_constraint.constraint_name, '^[0-9]+_[0-9]+_', '') AS constraint_name,
+       regexp_replace(chunk_constraint.constraint_name, '^[0-9]+_', '') AS constraint_name,
        chunk_constraint.hypertable_constraint_name
 FROM _timescaledb_catalog.chunk_constraint
 JOIN _timescaledb_catalog.chunk ON chunk.id = chunk_constraint.chunk_id
+WHERE chunk_constraint.dimension_slice_id IS NOT NULL
 ORDER BY chunk_constraint.chunk_id, chunk_constraint.dimension_slice_id, 3;
 
 -- Show attnum of all regclass objects belonging to our extension
@@ -224,9 +225,11 @@ FROM pg_depend dep
 WHERE classid='pg_class'::regclass
 ORDER BY attrelid::regclass::text,att.attnum;
 
--- Show constraints, stripping the legacy <chunk_id>_<seq>_ prefix.
+-- Show constraints, stripping numeric prefixes so the legacy
+-- "<chunk_id>_<seq>_<parent>" form (2.27.1) and the new "<chunk_id>_<parent>"
+-- form (2.28.0-dev) compare equal.
 SELECT conrelid::regclass::text,
-       regexp_replace(conname, '^[0-9]+_[0-9]+_', '') AS conname,
+       regexp_replace(conname, '^([0-9]+_){1,2}', '') AS conname,
        pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'

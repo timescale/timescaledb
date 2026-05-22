@@ -616,9 +616,8 @@ ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 }
 
 /*
- * Clone an outbound FK from the hypertable onto a chunk under the parent's
- * name. The chunk-side constraint shares the parent's name so DROP and
- * RENAME on the hypertable can locate it by name in the event-trigger hooks.
+ * Clone an outbound FK from the hypertable onto a chunk, keeping the parent's
+ * name so the DROP/RENAME hooks can find it by name.
  */
 void
 ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
@@ -640,8 +639,7 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 	child_oid = get_relation_constraint_oid(chunk->table_id, parent_name, true);
 	if (OidIsValid(child_oid))
 	{
-		/* Only adopt an existing constraint if it's a FK to the same target;
-		 * the DROP/RENAME hooks act on any FK with the matching name. */
+		/* Only adopt the existing constraint if it's a FK to the same target. */
 		HeapTuple parent_tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(parent_fk_oid));
 		HeapTuple child_tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(child_oid));
 		Oid parent_confrelid;
@@ -671,20 +669,18 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 		return;
 	}
 
-	{
-		CatalogSecurityContext sec_ctx;
+	CatalogSecurityContext sec_ctx;
 
-		/* Become DB owner so the ALTER TABLE in constraint_clone succeeds
-		 * when the calling user doesn't own the chunk. */
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-		ts_process_utility_set_expect_chunk_modification(true);
-		CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
-							 ObjectIdGetDatum(parent_fk_oid),
-							 ObjectIdGetDatum(chunk->table_id));
-		ts_process_utility_set_expect_chunk_modification(false);
-		ts_catalog_restore_user(&sec_ctx);
-		CommandCounterIncrement();
-	}
+	/* Become DB owner so the ALTER TABLE in constraint_clone succeeds when
+	 * the calling user doesn't own the chunk. */
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_process_utility_set_expect_chunk_modification(true);
+	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
+						 ObjectIdGetDatum(parent_fk_oid),
+						 ObjectIdGetDatum(chunk->table_id));
+	ts_process_utility_set_expect_chunk_modification(false);
+	ts_catalog_restore_user(&sec_ctx);
+	CommandCounterIncrement();
 }
 
 /*

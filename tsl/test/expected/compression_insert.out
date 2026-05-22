@@ -1010,13 +1010,13 @@ SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
 \set ON_ERROR_STOP 0
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_1_multi_unique_time_u1_key"
+ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u1_key"
 DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 1, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_1_multi_unique_time_u1_key"
+ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u1_key"
 DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 1, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_2_multi_unique_time_u2_key"
+ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u2_key"
 DETAIL:  Key ("time", u2)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 \set ON_ERROR_STOP 1
 DROP TABLE multi_unique;
@@ -1037,7 +1037,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
 \set ON_ERROR_STOP 0
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "77_3_unique_null_time_u1_u2_key"
+ERROR:  duplicate key value violates unique constraint "77_unique_null_time_u1_u2_key"
 \set ON_ERROR_STOP 1
 -- neither of these should need to decompress
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
