@@ -738,6 +738,14 @@ insert_columnar_index_scan(Plan *plan, void *context)
 		return plan;
 	}
 
+	/*
+	 * GROUPING SETS / ROLLUP / CUBE currently not supported.
+	 */
+	if (agg->groupingSets != NIL || agg->chain != NIL)
+	{
+		return plan;
+	}
+
 	Plan *childplan = agg->plan.lefttree;
 
 	/*

@@ -752,7 +752,10 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 static bool
 chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 {
-	if (conform->contype == CONSTRAINT_CHECK
+	/* CHECK and NOT NULL propagate via PG inheritance; FKs are linked via
+	 * pg_depend (see ts_chunk_inherit_outbound_fk_by_oid). */
+	if (conform->contype == CONSTRAINT_CHECK ||
+		conform->contype == CONSTRAINT_FOREIGN
 #if PG18_GE
 		/* Avoid NOT NULL constraints
 		 * https://github.com/postgres/postgres/commit/b0e96f31
@@ -760,25 +763,6 @@ chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 		|| conform->contype == CONSTRAINT_NOTNULL
 #endif
 	)
-	{
-		/*
-		 * check and not null constraints handled by regular inheritance (from
-		 * docs): All check constraints and not-null constraints on a parent
-		 * table are automatically inherited by its children, unless
-		 * explicitly specified otherwise with NO INHERIT clauses. Other types
-		 * of constraints (unique, primary key, and foreign key constraints)
-		 * are not inherited."
-		 */
-		return false;
-	}
-	/*
-	   Check if the foreign key constraint references a partition in a partitioned
-	   table. In that case, we shouldn't include this constraint as we will end up
-	   checking the foreign key constraint once for every partition, which obviously
-	   leads to foreign key constraint violation. Instead, we only include constraints
-	   referencing the parent table of the partitioned table.
-	*/
-	if (conform->contype == CONSTRAINT_FOREIGN && OidIsValid(conform->conparentid))
 	{
 		return false;
 	}
@@ -858,37 +842,38 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 	return ts_constraint_process(hypertable_oid, chunk_constraint_add, &cc);
 }
 
-/* check constraints have the same name as the one on the hypertable */
 static ConstraintProcessStatus
-chunk_constraint_add_check(HeapTuple constraint_tuple, void *arg)
+clone_check_constraint(HeapTuple tuple, void *arg)
 {
-	ConstraintContext *cc = arg;
-	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
+	Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(tuple);
+	Oid chunk_relid = *(Oid *) arg;
 
-	if (constraint->contype == CONSTRAINT_CHECK)
+	if (con->contype != CONSTRAINT_CHECK)
 	{
-		ts_chunk_constraints_add(cc->ccs,
-								 cc->chunk_id,
-								 0,
-								 NameStr(constraint->conname),
-								 NameStr(constraint->conname));
-		return CONSTR_PROCESSED;
+		return CONSTR_IGNORED;
 	}
 
-	return CONSTR_IGNORED;
+	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
+						 ObjectIdGetDatum(con->oid),
+						 ObjectIdGetDatum(chunk_relid));
+	return CONSTR_PROCESSED;
 }
 
-/* Adds only inheritable check constraints */
-int
-ts_chunk_constraints_add_inheritable_check_constraints(ChunkConstraints *ccs, int32 chunk_id,
-													   const char chunk_relkind, Oid hypertable_oid)
+/*
+ * Clone CHECK constraints from a hypertable onto a foreign-table chunk.
+ *
+ * Foreign tables do not inherit CHECK constraints automatically, so we
+ * have to recreate the hypertable's CHECKs on the foreign chunk under
+ * the same name before running ALTER TABLE ... INHERIT. PostgreSQL will
+ * then merge the foreign chunk's CHECKs with the parent's and propagate
+ * subsequent renames or drops via normal inheritance.
+ */
+void
+ts_chunk_clone_check_constraints(Oid chunk_relid, Oid hypertable_oid)
 {
-	ConstraintContext cc = {
-		.chunk_relkind = chunk_relkind,
-		.ccs = ccs,
-		.chunk_id = chunk_id,
-	};
-	return ts_constraint_process(hypertable_oid, chunk_constraint_add_check, &cc);
+	ts_process_utility_set_expect_chunk_modification(true);
+	ts_constraint_process(hypertable_oid, clone_check_constraint, &chunk_relid);
+	ts_process_utility_set_expect_chunk_modification(false);
 }
 
 void
@@ -906,20 +891,27 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 
 	con = (Form_pg_constraint) GETSTRUCT(tuple);
 
-	if (chunk->relkind != RELKIND_FOREIGN_TABLE && chunk_constraint_need_on_chunk(con))
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
 	{
-		ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
-													   chunk->fd.id,
-													   0,
-													   NULL,
-													   NameStr(con->conname));
+		if (con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid))
+		{
+			ts_chunk_inherit_outbound_fk_by_oid(chunk, constraint_oid);
+		}
+		else if (chunk_constraint_need_on_chunk(con))
+		{
+			ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
+														   chunk->fd.id,
+														   0,
+														   NULL,
+														   NameStr(con->conname));
 
-		ts_chunk_constraint_insert(cc);
-		create_non_dimensional_constraint(cc,
-										  chunk->table_id,
-										  chunk->fd.id,
-										  ht->main_table_relid,
-										  ht->fd.id);
+			ts_chunk_constraint_insert(cc);
+			create_non_dimensional_constraint(cc,
+											  chunk->table_id,
+											  chunk->fd.id,
+											  ht->main_table_relid,
+											  ht->fd.id);
+		}
 	}
 
 	ReleaseSysCache(tuple);
@@ -1299,6 +1291,12 @@ ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 		ts_scan_iterator_close(&iterator);
 
 		return name;
+	}
+
+	/* FKs aren't in chunk_constraint; chunk-side name matches parent. */
+	if (OidIsValid(get_relation_constraint_oid(chunk_relid, hypertable_constraint_name, true)))
+	{
+		return pstrdup(hypertable_constraint_name);
 	}
 	return NULL;
 }

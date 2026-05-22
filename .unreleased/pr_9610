@@ -1,1 +1,0 @@
-Fixes: #9610 Fix use-after-free crash in cache_destroy during transaction abort

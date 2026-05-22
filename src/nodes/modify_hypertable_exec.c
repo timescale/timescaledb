@@ -945,7 +945,7 @@ ExecInsert(ModifyTableContext *context,
 		}
 	}
 
-	if (context->ht_state->has_continuous_aggregate)
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
 	{
 		bool should_free;
 		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
@@ -1446,7 +1446,7 @@ ldelete:
 		 */
 	}
 
-	if (context->ht_state->has_continuous_aggregate)
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
 	{
 		bool should_free;
 		TupleTableSlot *cagg_slot = table_slot_create(resultRelationDesc, NULL);
@@ -1986,7 +1986,7 @@ redo_act:
 	ExecUpdateEpilogue(context, &updateCxt, resultRelInfo, tupleid, oldtuple,
 					   slot);
 
-	if (context->ht_state->has_continuous_aggregate)
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
 	{
 		TupleTableSlot *invalidation_slot = NULL;
 		bool should_free_old = false, should_free_new = false;
@@ -2485,10 +2485,13 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				/* Flush on chunk change */
 				if (ht_state->compressor && ht_state->compressor_relid != RelationGetRelid(ctr->cis->rel))
 				{
-				  ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer);
-				  ts_cm_functions->compressor_free(ht_state->compressor, ht_state->bulk_writer);
-				  ht_state->compressor = NULL;
-				  ht_state->compressor_relid = InvalidOid;
+					ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer);
+					ts_cm_functions->compressor_close(ht_state->compressor, ht_state->bulk_writer);
+					pfree(ht_state->compressor);
+					pfree(ht_state->bulk_writer);
+					ht_state->compressor = NULL;
+					ht_state->compressor_relid = InvalidOid;
+					ht_state->bulk_writer = NULL;
 				}
 
 				if (!ht_state->compressor)
@@ -2503,7 +2506,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 														 ctr->cis->created_compressed_chunk);
 					ht_state->compressor_relid = RelationGetRelid(ctr->cis->rel);
 
-					if (ht_state->has_continuous_aggregate)
+					if (ht_state->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
 					{
 						ts_cm_functions->compressor_set_invalidation(ht_state->compressor, ctr->hypertable, RelationGetRelid(ctr->cis->rel));
 					}
@@ -2511,9 +2514,13 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					/* if client does not commit to global ordering, set chunk to unordered */
 					if (!ts_guc_enable_direct_compress_insert_client_sorted)
 					{
+						MemoryContext oldctx = MemoryContextSwitchTo(estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 						Chunk *chunk = ts_chunk_get_by_id(ctr->cis->chunk_id, true);
 						if (!ts_chunk_is_unordered(chunk))
+						{
 							ts_chunk_set_unordered(chunk);
+						}
+						MemoryContextSwitchTo(oldctx);
 					}
 				}
 
@@ -2810,8 +2817,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	if (ht_state->compressor)
 	{
 		ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer);
-		ts_cm_functions->compressor_free(ht_state->compressor, ht_state->bulk_writer);
+		ts_cm_functions->compressor_close(ht_state->compressor, ht_state->bulk_writer);
+		pfree(ht_state->compressor);
+		pfree(ht_state->bulk_writer);
 		ht_state->compressor = NULL;
+		ht_state->compressor_relid = InvalidOid;
 		ht_state->bulk_writer = NULL;
 	}
 

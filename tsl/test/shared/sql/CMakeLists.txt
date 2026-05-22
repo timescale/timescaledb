@@ -37,6 +37,9 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   # Dependent on MergeAppend costs which are broken on earlier versions.
   list(APPEND TEST_FILES_SHARED bulk_decompression_limit.sql)
+
+  # The costs are different on older versions.
+  list(APPEND TEST_FILES_SHARED chunkwise_agg_cost.sql)
 endif()
 
 # Regression tests that vary with PostgreSQL version. Generated test files are

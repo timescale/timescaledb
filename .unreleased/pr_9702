@@ -1,1 +1,0 @@
-Implements: #9702 Allow Batch Sorted Merge for unordered chunks with no segmentby or when all segmentby columns are pinned to a Const
