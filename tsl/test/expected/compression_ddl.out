@@ -2328,7 +2328,7 @@ select compress_chunk(show_chunks('hyper_unique_deferred'));
 
 \set ON_ERROR_STOP 0
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
-ERROR:  duplicate key value violates unique constraint "145_2_hyper_unique_deferred_time_key"
+ERROR:  duplicate key value violates unique constraint "145_hyper_unique_deferred_time_key"
 \set ON_ERROR_STOP 1
 -- tests chunks being compressed using different segmentby settings
 -- github issue #7102

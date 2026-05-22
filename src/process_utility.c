@@ -60,6 +60,7 @@
 #include "compat/compat.h"
 #include "annotations.h"
 #include "chunk.h"
+#include "chunk_constraint.h"
 #include "chunk_index.h"
 #include "copy.h"
 #include "cross_module_fn.h"
@@ -2690,46 +2691,66 @@ rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	RenameStmt *stmt = (RenameStmt *) arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Oid chunk_con_oid = InvalidOid;
-	Oid candidate;
+	RangeVar *chunk_rel =
+		makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0);
+	char old_chunk_name[NAMEDATALEN];
+	char new_chunk_name[NAMEDATALEN];
+	Oid chunk_con_oid;
 
-	ts_chunk_constraint_rename_hypertable_constraint(chunk->fd.id, stmt->subname, stmt->newname);
-
-	/* Inherited FKs aren't tracked in chunk_constraint. The chunk-side FK
-	 * carries the parent's name, so look it up by name and only retarget
-	 * unmanaged foreign keys. */
-	candidate = get_relation_constraint_oid(chunk_relid, stmt->subname, true);
-	if (OidIsValid(candidate))
+	/* Unmanaged FKs and constraint triggers share the parent's name on the
+	 * chunk; PG handles CHECK and managed (conparentid) constraints through
+	 * inheritance. */
+	chunk_con_oid = get_relation_constraint_oid(chunk_relid, stmt->subname, true);
+	if (OidIsValid(chunk_con_oid))
 	{
-		HeapTuple tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(candidate));
+		HeapTuple tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(chunk_con_oid));
+		bool chunk_inherits_parent_name = false;
 
 		if (HeapTupleIsValid(tup))
 		{
 			Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(tup);
 
-			if (con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid))
-			{
-				chunk_con_oid = candidate;
-			}
+			chunk_inherits_parent_name =
+				(con->contype == CONSTRAINT_TRIGGER) ||
+				(con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid));
 			ReleaseSysCache(tup);
 		}
-	}
-	if (OidIsValid(chunk_con_oid))
-	{
-		char *old_name = get_constraint_name(chunk_con_oid);
 
-		if (old_name != NULL && strcmp(old_name, stmt->newname) != 0)
+		if (chunk_inherits_parent_name && strcmp(stmt->subname, stmt->newname) != 0)
 		{
 			RenameStmt rename = {
 				.type = T_RenameStmt,
 				.renameType = OBJECT_TABCONSTRAINT,
-				.relation =
-					makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
-				.subname = old_name,
+				.relation = chunk_rel,
+				.subname = stmt->subname,
 				.newname = stmt->newname,
 			};
 			RenameConstraint(&rename);
+			return;
 		}
+	}
+
+	/* Unique/PK/exclusion constraints on chunks use the deterministic "<chunk_id>_<parent>" form;
+	 * rename both sides in lockstep. */
+	ts_chunk_constraint_choose_name(old_chunk_name, chunk->fd.id, stmt->subname);
+	ts_chunk_constraint_choose_name(new_chunk_name, chunk->fd.id, stmt->newname);
+
+	if (strcmp(old_chunk_name, new_chunk_name) == 0)
+	{
+		return;
+	}
+
+	chunk_con_oid = get_relation_constraint_oid(chunk_relid, old_chunk_name, true);
+	if (OidIsValid(chunk_con_oid))
+	{
+		RenameStmt rename = {
+			.type = T_RenameStmt,
+			.renameType = OBJECT_TABCONSTRAINT,
+			.relation = chunk_rel,
+			.subname = old_chunk_name,
+			.newname = new_chunk_name,
+		};
+		RenameConstraint(&rename);
 	}
 }
 
@@ -6192,10 +6213,8 @@ process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	Oid chunk_con_oid;
 
-	/* drop both metadata and table; sql_drop won't be called recursively */
-	ts_chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id,
-															 hypertable_constraint_name);
-
+	/* Inherited FKs share the parent's name on the chunk; drop the unmanaged
+	 * ones (PG cascades the rest via conparentid). */
 	chunk_con_oid =
 		get_relation_constraint_oid(chunk_relid, hypertable_constraint_name, true /* missing_ok */);
 	if (OidIsValid(chunk_con_oid))
@@ -6218,6 +6237,19 @@ process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 				performDeletion(&conobj, DROP_RESTRICT, 0);
 			}
 		}
+	}
+
+	/* Unique/PK/exclusion/trigger use the deterministic "<chunk_id>_<parent>"
+	 * name and aren't covered by PG inheritance; recompute and drop. */
+	char chunk_con_name[NAMEDATALEN];
+	ts_chunk_constraint_choose_name(chunk_con_name, chunk->fd.id, hypertable_constraint_name);
+	chunk_con_oid = get_relation_constraint_oid(chunk_relid, chunk_con_name, true);
+	if (OidIsValid(chunk_con_oid))
+	{
+		ObjectAddress addr;
+
+		ObjectAddressSet(addr, ConstraintRelationId, chunk_con_oid);
+		performDeletion(&addr, DROP_CASCADE, 0);
 	}
 }
 

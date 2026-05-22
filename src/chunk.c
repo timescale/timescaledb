@@ -3218,11 +3218,11 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 	}
 
 	/*
-	 * Even tough we keep foreign key constraints on the chunk, we still
-	 * need to drop the referencing foreign keys since such keys are possibly
-	 * intended to reference the hypertable, not the chunk.
+	 * Drop FKs that reference this chunk. They target the chunk's PK index
+	 * directly, so without explicit removal the index would block the chunk
+	 * drop. Skip when the relation is already gone (cascade from hypertable).
 	 */
-	if (detach)
+	if (detach && OidIsValid(relid) && SearchSysCacheExists1(RELOID, ObjectIdGetDatum(relid)))
 	{
 		ts_chunk_drop_referencing_fk_by_chunk_id(form.id);
 	}
