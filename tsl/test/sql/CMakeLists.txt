@@ -14,6 +14,7 @@ set(TEST_FILES
     cagg_policy.sql
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
+    cagg_skip_invalidation.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_publication_compression.sql

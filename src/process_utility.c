@@ -72,6 +72,7 @@
 #include "extension.h"
 #include "extension_constants.h"
 #include "foreign_key.h"
+#include "guc.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -1453,10 +1454,13 @@ process_truncate(ProcessUtilityArgs *args)
 						 * longer has any data */
 						raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 						Assert(raw_ht != NULL);
-						ts_cm_functions->continuous_agg_invalidate_mat_ht(raw_ht,
-																		  mat_ht,
-																		  TS_TIME_NOBEGIN,
-																		  TS_TIME_NOEND);
+						if (!ts_guc_skip_cagg_invalidation)
+						{
+							ts_cm_functions->continuous_agg_invalidate_mat_ht(raw_ht,
+																			  mat_ht,
+																			  TS_TIME_NOBEGIN,
+																			  TS_TIME_NOEND);
+						}
 
 						/* Additionally, this cagg's materialization hypertable could be the
 						 * underlying hypertable for other caggs defined on top of it, in that case
@@ -1464,7 +1468,7 @@ process_truncate(ProcessUtilityArgs *args)
 						ContinuousAggHypertableStatus agg_status;
 
 						agg_status = ts_continuous_agg_hypertable_status(mat_ht->fd.id);
-						if (agg_status & HypertableIsRawTable)
+						if ((agg_status & HypertableIsRawTable) && !ts_guc_skip_cagg_invalidation)
 						{
 							ts_cm_functions->continuous_agg_invalidate_raw_ht(mat_ht,
 																			  TS_TIME_NOBEGIN,
@@ -1509,7 +1513,7 @@ process_truncate(ProcessUtilityArgs *args)
 									 errhint("TRUNCATE the continuous aggregate instead.")));
 						}
 
-						if (agg_status == HypertableIsRawTable)
+						if (agg_status == HypertableIsRawTable && !ts_guc_skip_cagg_invalidation)
 						{
 							/* The truncation invalidates all associated continuous aggregates */
 							ts_cm_functions->continuous_agg_invalidate_raw_ht(ht,
@@ -1553,7 +1557,9 @@ process_truncate(ProcessUtilityArgs *args)
 
 						/* If the hypertable has continuous aggregates, then invalidate
 						 * the truncated region. */
-						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+						if (ts_continuous_agg_hypertable_status(ht->fd.id) ==
+								HypertableIsRawTable &&
+							!ts_guc_skip_cagg_invalidation)
 						{
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
 						}
@@ -1736,7 +1742,8 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			/* If the hypertable has continuous aggregates, then invalidate
 			 * the dropped region. */
-			if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+			if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable &&
+				!ts_guc_skip_cagg_invalidation)
 			{
 				ts_continuous_agg_invalidate_chunk(ht, chunk);
 			}

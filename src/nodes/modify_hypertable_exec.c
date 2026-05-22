@@ -945,7 +945,7 @@ ExecInsert(ModifyTableContext *context,
 		}
 	}
 
-	if (context->ht_state->has_continuous_aggregate)
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
 	{
 		bool should_free;
 		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
@@ -1446,7 +1446,7 @@ ldelete:
 		 */
 	}
 
-	if (context->ht_state->has_continuous_aggregate)
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
 	{
 		bool should_free;
 		TupleTableSlot *cagg_slot = table_slot_create(resultRelationDesc, NULL);
@@ -1986,7 +1986,7 @@ redo_act:
 	ExecUpdateEpilogue(context, &updateCxt, resultRelInfo, tupleid, oldtuple,
 					   slot);
 
-	if (context->ht_state->has_continuous_aggregate)
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
 	{
 		TupleTableSlot *invalidation_slot = NULL;
 		bool should_free_old = false, should_free_new = false;
@@ -2506,7 +2506,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 														 ctr->cis->created_compressed_chunk);
 					ht_state->compressor_relid = RelationGetRelid(ctr->cis->rel);
 
-					if (ht_state->has_continuous_aggregate)
+					if (ht_state->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
 					{
 						ts_cm_functions->compressor_set_invalidation(ht_state->compressor, ctr->hypertable, RelationGetRelid(ctr->cis->rel));
 					}
