@@ -1350,11 +1350,13 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
 :PREFIX SELECT count(DISTINCT device) FROM metrics;
 --- QUERY PLAN ---
  Aggregate
-   ->  Sort
+   ->  Merge Append
          Sort Key: metrics.device
-         ->  Append
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk.device
                ->  Seq Scan on _hyper_1_1_chunk
 
 -- aggregates with ORDER
