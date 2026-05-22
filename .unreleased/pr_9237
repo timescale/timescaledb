@@ -1,0 +1,1 @@
+Implements: #2433 Propagate CREATE/DROP/RENAME STATISTICS to hypertable chunks

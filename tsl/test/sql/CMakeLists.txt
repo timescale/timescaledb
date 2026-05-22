@@ -66,6 +66,7 @@ set(TEST_FILES
     compression_trigger.sql
     compression_uuid.sql
     create_table_with.sql
+    create_statistics_tsl.sql
     decompress_index.sql
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
