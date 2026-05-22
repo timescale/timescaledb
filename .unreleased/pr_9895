@@ -1,0 +1,1 @@
+Fixes: #9895 Remove refresh policy check when adding columnstore policy
