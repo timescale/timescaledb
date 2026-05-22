@@ -88,12 +88,12 @@ jobs:
       if: github.event_name == 'pull_request'
       run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=50
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
 
     # Create a directory for sanitizer logs. This directory is referenced by
     # ASAN_OPTIONS, LSAN_OPTIONS, and UBSAN_OPTIONS

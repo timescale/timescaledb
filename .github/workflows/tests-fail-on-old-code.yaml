@@ -85,13 +85,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install flex bison cmake
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       if: steps.check.outputs.should_run == 'true'
       id: get-date
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
 
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
