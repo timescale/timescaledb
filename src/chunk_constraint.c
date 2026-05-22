@@ -858,37 +858,38 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 	return ts_constraint_process(hypertable_oid, chunk_constraint_add, &cc);
 }
 
-/* check constraints have the same name as the one on the hypertable */
 static ConstraintProcessStatus
-chunk_constraint_add_check(HeapTuple constraint_tuple, void *arg)
+clone_check_constraint(HeapTuple tuple, void *arg)
 {
-	ConstraintContext *cc = arg;
-	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
+	Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(tuple);
+	Oid chunk_relid = *(Oid *) arg;
 
-	if (constraint->contype == CONSTRAINT_CHECK)
+	if (con->contype != CONSTRAINT_CHECK)
 	{
-		ts_chunk_constraints_add(cc->ccs,
-								 cc->chunk_id,
-								 0,
-								 NameStr(constraint->conname),
-								 NameStr(constraint->conname));
-		return CONSTR_PROCESSED;
+		return CONSTR_IGNORED;
 	}
 
-	return CONSTR_IGNORED;
+	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
+						 ObjectIdGetDatum(con->oid),
+						 ObjectIdGetDatum(chunk_relid));
+	return CONSTR_PROCESSED;
 }
 
-/* Adds only inheritable check constraints */
-int
-ts_chunk_constraints_add_inheritable_check_constraints(ChunkConstraints *ccs, int32 chunk_id,
-													   const char chunk_relkind, Oid hypertable_oid)
+/*
+ * Clone CHECK constraints from a hypertable onto a foreign-table chunk.
+ *
+ * Foreign tables do not inherit CHECK constraints automatically, so we
+ * have to recreate the hypertable's CHECKs on the foreign chunk under
+ * the same name before running ALTER TABLE ... INHERIT. PostgreSQL will
+ * then merge the foreign chunk's CHECKs with the parent's and propagate
+ * subsequent renames or drops via normal inheritance.
+ */
+void
+ts_chunk_clone_check_constraints(Oid chunk_relid, Oid hypertable_oid)
 {
-	ConstraintContext cc = {
-		.chunk_relkind = chunk_relkind,
-		.ccs = ccs,
-		.chunk_id = chunk_id,
-	};
-	return ts_constraint_process(hypertable_oid, chunk_constraint_add_check, &cc);
+	ts_process_utility_set_expect_chunk_modification(true);
+	ts_constraint_process(hypertable_oid, clone_check_constraint, &chunk_relid);
+	ts_process_utility_set_expect_chunk_modification(false);
 }
 
 void
