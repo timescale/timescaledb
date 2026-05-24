@@ -814,7 +814,7 @@ ERROR:  insert or update on table "_hyper_19_17_chunk" violates foreign key cons
 \set ON_ERROR_STOP 1
 -- cleanup
 DROP TABLE regular cascade;
-NOTICE:  drop cascades to constraint timescale_id_fkey on table timescale
+NOTICE:  drop cascades to 4 other objects
 DROP TABLE timescale cascade;
 -- test PARTITION BY RANGE
 CREATE TABLE regular(
@@ -869,7 +869,7 @@ ERROR:  insert or update on table "_hyper_20_20_chunk" violates foreign key cons
 \set ON_ERROR_STOP 1
 -- cleanup
 DROP TABLE regular cascade;
-NOTICE:  drop cascades to constraint timescale_id_fkey on table timescale
+NOTICE:  drop cascades to 4 other objects
 DROP TABLE timescale cascade;
 -- test PARTITION BY LIST
 CREATE TABLE regular(
@@ -916,7 +916,7 @@ ERROR:  insert or update on table "_hyper_21_21_chunk" violates foreign key cons
 \set ON_ERROR_STOP 1
 -- cleanup
 DROP TABLE regular cascade;
-NOTICE:  drop cascades to constraint timescale_id_fkey on table timescale
+NOTICE:  drop cascades to 2 other objects
 DROP TABLE timescale cascade;
 -- github issue 4872
 -- If subplan of ChunkAppend is TidRangeScan, then SELECT on

@@ -2690,18 +2690,29 @@ rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	RenameStmt *stmt = (RenameStmt *) arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Oid chunk_con_oid;
-	Oid parent_con_oid;
+	Oid chunk_con_oid = InvalidOid;
+	Oid candidate;
 
 	ts_chunk_constraint_rename_hypertable_constraint(chunk->fd.id, stmt->subname, stmt->newname);
 
-	/* Inherited FKs aren't in chunk_constraint; locate the chunk-side
-	 * constraint via the pg_depend edge to handle legacy names. */
-	chunk_con_oid = InvalidOid;
-	parent_con_oid = get_relation_constraint_oid(ht->main_table_relid, stmt->subname, true);
-	if (OidIsValid(parent_con_oid))
+	/* Inherited FKs aren't tracked in chunk_constraint. The chunk-side FK
+	 * carries the parent's name, so look it up by name and only retarget
+	 * unmanaged foreign keys. */
+	candidate = get_relation_constraint_oid(chunk_relid, stmt->subname, true);
+	if (OidIsValid(candidate))
 	{
-		chunk_con_oid = ts_chunk_find_outbound_fk_by_parent(chunk_relid, parent_con_oid);
+		HeapTuple tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(candidate));
+
+		if (HeapTupleIsValid(tup))
+		{
+			Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(tup);
+
+			if (con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid))
+			{
+				chunk_con_oid = candidate;
+			}
+			ReleaseSysCache(tup);
+		}
 	}
 	if (OidIsValid(chunk_con_oid))
 	{
@@ -6179,10 +6190,35 @@ process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	const char *hypertable_constraint_name = arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Oid chunk_con_oid;
 
 	/* drop both metadata and table; sql_drop won't be called recursively */
 	ts_chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id,
 															 hypertable_constraint_name);
+
+	chunk_con_oid =
+		get_relation_constraint_oid(chunk_relid, hypertable_constraint_name, true /* missing_ok */);
+	if (OidIsValid(chunk_con_oid))
+	{
+		HeapTuple tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(chunk_con_oid));
+
+		if (HeapTupleIsValid(tup))
+		{
+			Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(tup);
+			bool drop_it = (con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid));
+
+			ReleaseSysCache(tup);
+
+			if (drop_it)
+			{
+				ObjectAddress conobj = {
+					.classId = ConstraintRelationId,
+					.objectId = chunk_con_oid,
+				};
+				performDeletion(&conobj, DROP_RESTRICT, 0);
+			}
+		}
+	}
 }
 
 static void
