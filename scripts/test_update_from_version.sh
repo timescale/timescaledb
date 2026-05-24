@@ -110,35 +110,7 @@ run_sql_file test/sql/updates/post.${TEST_VERSION}.sql updated > "${OUTPUT_DIR}/
 run_sql_file test/sql/updates/post.${TEST_VERSION}.sql restored > "${OUTPUT_DIR}/post.restored.log"
 
 sed -i -E -e 's!"*_ts_meta_v2_bl[0-9A-Za-z]+_([_0-9A-Za-z]+)"*!regress-test-bloom_\1!g' \
-    -e 's!(_timescaledb_internal\._hyper_[0-9]+_[0-9]+_chunk" CONSTRAINT ")[0-9]+_[0-9]+_!\1!g' \
     "${OUTPUT_DIR}"/post.*.log
-
-# Sort \d "Referenced by:" blocks: psql's conname-only sort leaves heap-scan
-# order as a tiebreaker, which differs between fresh and upgraded installs.
-for log in "${OUTPUT_DIR}"/post.*.log; do
-  python3 - "${log}" <<'PYEOF'
-import re, sys
-path = sys.argv[1]
-with open(path) as f:
-    lines = f.readlines()
-con_re = re.compile(r'CONSTRAINT "([^"]+)"')
-def sort_key(line):
-    m = con_re.search(line)
-    return (m.group(1) if m else "", line)
-out, buf = [], []
-for line in lines:
-    if line.startswith('    TABLE "'):
-        buf.append(line)
-    else:
-        if buf:
-            out.extend(sorted(buf, key=sort_key))
-            buf = []
-        out.append(line)
-out.extend(sorted(buf, key=sort_key))
-with open(path, "w") as f:
-    f.writelines(out)
-PYEOF
-done
 
 if [ "${TEST_REPAIR}" = "true" ]; then
   echo "Creating repair database"

@@ -425,7 +425,7 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 --test CASCADE drop behavior
 DROP TABLE devices CASCADE;
-NOTICE:  drop cascades to constraint hyper_fk_device_id_fkey on table hyper_fk
+NOTICE:  drop cascades to 2 other objects
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
        Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
 -------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------

@@ -120,7 +120,6 @@ SELECT n.nspname || '.' || c.relname AS relation,
          WHEN 'c' THEN 'composite type'
          WHEN 'f' THEN 'foreign table'
        END AS kind,
-       a.attnum,
        a.attname,
        pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
        a.attnotnull AS notnull,
@@ -152,9 +151,10 @@ SELECT
 		conrelid::regclass AS conrelid,
 		confrelid::regclass AS confrelid,
     contype,
-    pg_get_constraintdef(oid) AS def
+    pg_get_constraintdef(con.oid) AS def
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_class c ON c.oid = conrelid AND c.relnamespace = 'public'::regnamespace
+WHERE con.contype <> 'n'
 ORDER BY conrelid::regclass::text, contype, conname, confrelid::regclass::text;
 
 -- child tables

@@ -752,8 +752,9 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 static bool
 chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 {
-	/* CHECK and NOT NULL propagate via PG inheritance; FKs are linked via
-	 * pg_depend (see ts_chunk_inherit_outbound_fk_by_oid). */
+	/* CHECK and NOT NULL propagate via PG inheritance; FKs are cloned onto
+	 * the chunk by ts_chunk_inherit_outbound_fk_by_oid and propagated by
+	 * the event-trigger hooks. */
 	if (conform->contype == CONSTRAINT_CHECK ||
 		conform->contype == CONSTRAINT_FOREIGN
 #if PG18_GE

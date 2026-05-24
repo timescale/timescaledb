@@ -9,7 +9,7 @@ WHERE cc.chunk_id = c.id
   AND cc.constraint_name = cc.hypertable_constraint_name;
 
 -- Rename legacy <chunk_id>_<seq>_<parent> chunk-side FKs to the parent name
--- so the pg_depend backfill below can match them.
+-- so the event-trigger hooks can locate them by name on DROP/RENAME.
 DO $$
 DECLARE
     r RECORD;
@@ -35,34 +35,8 @@ BEGIN
 END
 $$;
 
--- Backfill DEPENDENCY_AUTO edge so DROP/RENAME cascade to chunks, then
--- drop the obsolete chunk_constraint rows.
-INSERT INTO pg_catalog.pg_depend
-    (classid, objid, objsubid, refclassid, refobjid, refobjsubid, deptype)
-SELECT 'pg_constraint'::regclass, child.oid, 0,
-       'pg_constraint'::regclass, parent.oid, 0, 'a'
-FROM _timescaledb_catalog.chunk_constraint cc
-JOIN _timescaledb_catalog.chunk c ON c.id = cc.chunk_id
-JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
-JOIN pg_constraint parent
-    ON parent.conrelid = pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass
-    AND parent.conname = cc.hypertable_constraint_name
-    AND parent.contype = 'f'
-JOIN pg_constraint child
-    ON child.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
-    AND child.conname = cc.hypertable_constraint_name
-    AND child.contype = 'f'
-WHERE cc.dimension_slice_id IS NULL
-  AND cc.hypertable_constraint_name IS NOT NULL
-  AND NOT EXISTS (
-      SELECT 1 FROM pg_depend d
-      WHERE d.classid = 'pg_constraint'::regclass
-        AND d.objid = child.oid
-        AND d.refclassid = 'pg_constraint'::regclass
-        AND d.refobjid = parent.oid
-        AND d.deptype = 'a'
-  );
-
+-- Drop the obsolete chunk_constraint rows for outbound FKs; the event-trigger
+-- hooks locate chunk-side FKs by name and no longer need this catalog.
 DELETE FROM _timescaledb_catalog.chunk_constraint cc
 USING _timescaledb_catalog.chunk c,
       _timescaledb_catalog.hypertable ht,
