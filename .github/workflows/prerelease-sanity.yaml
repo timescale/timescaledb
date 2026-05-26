@@ -22,6 +22,8 @@ jobs:
     steps:
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        fetch-depth: 0
 
     - name: Check the configuration
       id: check
@@ -30,7 +32,10 @@ jobs:
 
         if [[ "${{ github.event_name }}" == "pull_request" ]]
         then
-          base="${{ github.event.pull_request.base.sha }}"
+          # For pull request event, the default checkout HEAD is the GitHub
+          # "merge" reference for the pull request (pull/.../merge).
+          base=$(git rev-parse @^1)
+          head=$(git rev-parse @^2)
           git fetch origin "${base}"
 
           # PR that modifies the workflow.
