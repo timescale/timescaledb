@@ -158,7 +158,6 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         Filter: (sensor_id > 9)
          ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id > 9)
    ->  Index Scan using _hyper_1_1_chunk_sense_idx on _hyper_1_1_chunk
