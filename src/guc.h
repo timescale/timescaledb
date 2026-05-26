@@ -17,7 +17,7 @@ extern bool ts_function_telemetry_on(void);
 #endif
 
 extern bool ts_guc_enable_deprecation_warnings;
-extern bool ts_guc_enable_optimizations;
+extern TSDLLEXPORT bool ts_guc_enable_optimizations;
 extern bool ts_guc_enable_constraint_aware_append;
 extern bool ts_guc_enable_ordered_append;
 extern bool ts_guc_enable_chunk_append;

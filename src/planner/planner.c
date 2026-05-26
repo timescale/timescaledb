@@ -1282,6 +1282,16 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 {
 	if (!ts_guc_enable_optimizations)
 	{
+		/*
+		 * Decompression paths for compressed chunks must still be generated
+		 * here, otherwise enable_optimizations = off would silently hide the
+		 * data stored in the compressed chunk relation.
+		 */
+		if ((reltype == TS_REL_CHUNK_STANDALONE || reltype == TS_REL_CHUNK_CHILD) &&
+			ts_cm_functions->set_rel_pathlist_query != NULL)
+		{
+			ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+		}
 		return;
 	}
 
