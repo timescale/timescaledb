@@ -1094,6 +1094,15 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	decompress_plan->methods = &columnar_scan_plan_methods;
 	decompress_plan->scan.scanrelid = dcpath->info->chunk_rel->relid;
 
+	/*
+	 * `clauses` is chunk_rel->baserestrictinfo plus any parameterized join
+	 * clauses PG attached for this path.  When every baserestrictinfo entry
+	 * was pushed to the compressed scan without recheck we can skip them on
+	 * plan.qual: the compressed scan enforces them on its own, and dropping
+	 * them lets ColumnarIndexScan apply for partial chunks too.  Param
+	 * clauses are not in baserestrictinfo, so they always stay on plan.qual.
+	 */
+	List *base_clauses = dcpath->info->chunk_rel->baserestrictinfo;
 	if (IsA(compressed_path, IndexPath))
 	{
 		/*
@@ -1106,6 +1115,16 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+			/*
+			 * Since we need the original quals for partial chunks we can't remove
+			 * them while pushing down to the compressed scan and only remove them
+			 * here.
+			 */
+			if (dcpath->all_quals_pushed_down && list_member_ptr(base_clauses, rinfo))
+			{
+				continue;
+			}
 
 			ListCell *indexclause_cell = NULL;
 			if (rinfo->parent_ec != NULL)
@@ -1140,6 +1159,12 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+			if (dcpath->all_quals_pushed_down && list_member_ptr(base_clauses, rinfo))
+			{
+				continue;
+			}
+
 			decompress_plan->scan.plan.qual =
 				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
 		}

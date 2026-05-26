@@ -82,12 +82,13 @@ static Node *make_bloom1_hash_array(PlannerInfo *root, List *exprs, Oid input_co
 static FuncExpr *make_bloom1_check(Var *bloom_var, Node *hash_array);
 static List *deconstruct_array_const(Const *array_const);
 
-void
+bool
 columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
 							  RelOptInfo *chunk_rel, RelOptInfo *compressed_rel, bool chunk_partial)
 {
 	ListCell *lc;
 	List *decompress_clauses = NIL;
+	bool all_pushed_down = true;
 	QualPushdownContext base_context = {
 		.root = root,
 		.chunk_rel = chunk_rel,
@@ -154,8 +155,14 @@ columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
 		{
 			decompress_clauses = lappend(decompress_clauses, ri);
 		}
+
+		if (!clause_context.can_pushdown || clause_context.needs_recheck)
+		{
+			all_pushed_down = false;
+		}
 	}
 	chunk_rel->baserestrictinfo = decompress_clauses;
+	return all_pushed_down;
 }
 
 static OpExpr *
