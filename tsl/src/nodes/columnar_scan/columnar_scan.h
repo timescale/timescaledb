@@ -62,6 +62,14 @@ typedef struct ColumnarScanPath
 	bool batch_sorted_merge;
 	bool enable_bulk_decompression;
 	int32 chunk_status;
+
+	/*
+	 * True if every filter on the compressed chunk is checked at the compressed
+	 * scan level exactly, that is, does not have to be rechecked on decompressed data.
+	 * This allows us to answer some queries from metadata only, without decompression,
+	 * for example with ColumnarIndexScan.
+	 */
+	bool all_quals_pushed_down;
 } ColumnarScanPath;
 
 void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,

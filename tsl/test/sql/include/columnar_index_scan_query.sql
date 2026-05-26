@@ -213,6 +213,10 @@ SET enable_partitionwise_aggregate = off;
 -- WHERE mixes segmentby and non-segmentby column
 :PREFIX SELECT device, count(*) FROM metrics WHERE device = 'd1' AND value > 10 GROUP BY device ORDER BY device;
 
+-- WHERE with a SubPlan on a segmentby column (not pushable, must not be dropped)
+:PREFIX SELECT count(*) FROM metrics WHERE device NOT IN (SELECT 'd' || g FROM generate_series(1,1) g);
+:PREFIX SELECT count(*) FROM metrics WHERE device IN (SELECT 'd' || g FROM generate_series(1,2) g);
+
 -- HAVING with NOT around Aggref
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING NOT (min(value) > 10) ORDER BY device;
 
