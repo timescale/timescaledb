@@ -529,3 +529,42 @@ CREATE TABLE i9132(time timestamptz) WITH (tsdb.hypertable);
 INSERT INTO i9132 VALUES ('2024-01-01'), ('2024-02-02');
 ALTER TABLE i9132 ADD COLUMN id serial, ADD CONSTRAINT implicit_pk PRIMARY KEY (id, time);
 
+-- Renaming an outbound foreign key on the hypertable should rename the
+-- inherited foreign key on every chunk.
+CREATE TABLE fk_ref(id INTEGER PRIMARY KEY);
+INSERT INTO fk_ref VALUES (1), (2);
+CREATE TABLE fk_ht(
+    time TIMESTAMPTZ NOT NULL,
+    ref_id INTEGER,
+    CONSTRAINT fk_ht_ref_fkey FOREIGN KEY (ref_id) REFERENCES fk_ref(id)
+) WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO fk_ht VALUES ('2024-01-01', 1), ('2024-03-01', 2);
+
+-- Inherited FKs on chunks initially carry the hypertable constraint name.
+SELECT count(*) AS chunk_fks_fkey
+FROM pg_constraint pc
+JOIN pg_class c ON c.oid = pc.conrelid
+WHERE c.relname LIKE '_hyper%' AND pc.contype = 'f' AND pc.conname LIKE '%fk_ht_ref_fkey%';
+
+ALTER TABLE fk_ht RENAME CONSTRAINT fk_ht_ref_fkey TO fk_ht_ref_renamed;
+
+-- After the rename all chunk-side FKs must reference the new name and none
+-- of the old name should remain.
+SELECT count(*) AS chunk_fks_renamed
+FROM pg_constraint pc
+JOIN pg_class c ON c.oid = pc.conrelid
+WHERE c.relname LIKE '_hyper%' AND pc.contype = 'f' AND pc.conname LIKE '%fk_ht_ref_renamed%';
+
+SELECT count(*) AS chunk_fks_old
+FROM pg_constraint pc
+JOIN pg_class c ON c.oid = pc.conrelid
+WHERE c.relname LIKE '_hyper%' AND pc.contype = 'f' AND pc.conname LIKE '%fk_ht_ref_fkey%';
+
+-- The FK is still enforced.
+\set ON_ERROR_STOP 0
+INSERT INTO fk_ht VALUES ('2024-02-01', 999);
+\set ON_ERROR_STOP 1
+
+DROP TABLE fk_ht;
+DROP TABLE fk_ref;
+

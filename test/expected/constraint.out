@@ -365,7 +365,7 @@ SELECT * FROM create_hypertable('hyper_fk', 'time', chunk_time_interval => 10);
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
-ERROR:  insert or update on table "_hyper_4_7_chunk" violates foreign key constraint "7_17_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_7_chunk" violates foreign key constraint "hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO devices VALUES ('dev2');
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
@@ -400,29 +400,28 @@ FOREIGN KEY (device_id) REFERENCES devices(device_id);
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000002, 'dev3', 11);
-ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_22_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
-          Constraint          | Type |   Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
-------------------------------+------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
- 8_20_hyper_fk_pkey           | p    | {time}      | _timescaledb_internal."8_20_hyper_fk_pkey" |                                                                                          | f          | f        | t
- 8_22_hyper_fk_device_id_fkey | f    | {device_id} | devices_pkey                               |                                                                                          | f          | f        | t
- constraint_8                 | c    | {time}      | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
- hyper_fk_sensor_1_check      | c    | {sensor_1}  | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
+       Constraint        | Type |   Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
+-------------------------+------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
+ 8_18_hyper_fk_pkey      | p    | {time}      | _timescaledb_internal."8_18_hyper_fk_pkey" |                                                                                          | f          | f        | t
+ constraint_8            | c    | {time}      | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
+ hyper_fk_device_id_fkey | f    | {device_id} | devices_pkey                               |                                                                                          | f          | f        | t
+ hyper_fk_sensor_1_check | c    | {sensor_1}  | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id |       constraint_name        | hypertable_constraint_name 
-----------+--------------------+------------------------------+----------------------------
-        3 |                  3 | constraint_3                 | 
-        4 |                  4 | constraint_4                 | 
-        5 |                  5 | constraint_5                 | 
-        4 |                    | 4_10_new_name2               | new_name2
-        5 |                    | 5_11_new_name2               | new_name2
-        6 |                  6 | constraint_6                 | 
-        6 |                    | 6_16_hyper_pk_pkey           | hyper_pk_pkey
-        8 |                  8 | constraint_8                 | 
-        8 |                    | 8_20_hyper_fk_pkey           | hyper_fk_pkey
-        8 |                    | 8_22_hyper_fk_device_id_fkey | hyper_fk_device_id_fkey
+ chunk_id | dimension_slice_id |  constraint_name   | hypertable_constraint_name 
+----------+--------------------+--------------------+----------------------------
+        3 |                  3 | constraint_3       | 
+        4 |                  4 | constraint_4       | 
+        5 |                  5 | constraint_5       | 
+        4 |                    | 4_10_new_name2     | new_name2
+        5 |                    | 5_11_new_name2     | new_name2
+        6 |                  6 | constraint_6       | 
+        6 |                    | 6_16_hyper_pk_pkey | hyper_pk_pkey
+        8 |                  8 | constraint_8       | 
+        8 |                    | 8_18_hyper_fk_pkey | hyper_fk_pkey
 
 --test CASCADE drop behavior
 DROP TABLE devices CASCADE;
@@ -430,7 +429,7 @@ NOTICE:  drop cascades to 2 other objects
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
        Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
 -------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
- 8_20_hyper_fk_pkey      | p    | {time}     | _timescaledb_internal."8_20_hyper_fk_pkey" |                                                                                          | f          | f        | t
+ 8_18_hyper_fk_pkey      | p    | {time}     | _timescaledb_internal."8_18_hyper_fk_pkey" |                                                                                          | f          | f        | t
  constraint_8            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
  hyper_fk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 
@@ -445,7 +444,7 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         6 |                  6 | constraint_6       | 
         6 |                    | 6_16_hyper_pk_pkey | hyper_pk_pkey
         8 |                  8 | constraint_8       | 
-        8 |                    | 8_20_hyper_fk_pkey | hyper_fk_pkey
+        8 |                    | 8_18_hyper_fk_pkey | hyper_fk_pkey
 
 --the fk went away.
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
@@ -468,7 +467,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_23_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_fk ALTER CONSTRAINT hyper_fk_device_id_fkey NOT DEFERRABLE;
 \set ON_ERROR_STOP 0
@@ -476,7 +475,7 @@ BEGIN;
   --error detected right away
   INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
   (1257987700000000003, 'dev4', 11);
-ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_23_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "hyper_fk_device_id_fkey"
   SELECT 1;
 ERROR:  current transaction is aborted, commands ignored until end of transaction block
 COMMIT;
@@ -586,7 +585,7 @@ INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 12);
-ERROR:  conflicting key value violates exclusion constraint "11_25_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "11_19_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_ex DROP CONSTRAINT hyper_ex_time_device_id_excl;
 --can now add
@@ -599,7 +598,7 @@ ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
         time WITH =, device_id WITH =
     ) WHERE (not canceled)
 ;
-ERROR:  could not create exclusion constraint "11_26_hyper_ex_time_device_id_excl"
+ERROR:  could not create exclusion constraint "11_20_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 DELETE FROM hyper_ex WHERE sensor_1 = 12;
 ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
@@ -618,7 +617,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  conflicting key value violates exclusion constraint "11_27_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "11_21_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 --cannot add exclusion constraint without partition key.
 CREATE TABLE hyper_ex_invalid (
@@ -682,7 +681,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  duplicate key value violates unique constraint "12_28_hyper_unique_deferred_time_key"
+ERROR:  duplicate key value violates unique constraint "12_22_hyper_unique_deferred_time_key"
 \set ON_ERROR_STOP 1
 --test deferred on create table
 CREATE TABLE hyper_pk_deferred (
@@ -706,7 +705,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  duplicate key value violates unique constraint "13_29_hyper_pk_deferred_pkey"
+ERROR:  duplicate key value violates unique constraint "13_23_hyper_pk_deferred_pkey"
 \set ON_ERROR_STOP 1
 --test that deferred works on create table too
 CREATE TABLE hyper_fk_deferred (
@@ -729,7 +728,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  insert or update on table "_hyper_12_14_chunk" violates foreign key constraint "14_30_hyper_fk_deferred_device_id_fkey"
+ERROR:  insert or update on table "_hyper_12_14_chunk" violates foreign key constraint "hyper_fk_deferred_device_id_fkey"
 \set ON_ERROR_STOP 1
 CREATE TABLE hyper_ex_deferred (
     time BIGINT,
@@ -756,7 +755,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  conflicting key value violates exclusion constraint "15_33_hyper_ex_deferred_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "15_25_hyper_ex_deferred_time_device_id_excl"
 \set ON_ERROR_STOP 1
 -- Make sure renaming schemas won't break dropping constraints
 \c :TEST_DBNAME :ROLE_SUPERUSER

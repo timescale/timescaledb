@@ -91,6 +91,7 @@ TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
+TSDLLEXPORT bool ts_guc_skip_cagg_invalidation = false;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_foreign_key_propagation = true;
 #if PG16_GE
@@ -1004,6 +1005,25 @@ _guc_init(void)
 							 "Enable window functions in continuous aggregates",
 							 "Allow window functions in continuous aggregate views",
 							 &ts_guc_enable_cagg_window_functions,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("skip_cagg_invalidation"),
+							 "Skip continuous aggregate invalidation tracking",
+							 "When enabled, DML (INSERT/UPDATE/DELETE/COPY) and DDL "
+							 "(DROP CHUNK, drop_chunks, TRUNCATE) on hypertables with "
+							 "continuous aggregates will not record invalidation entries "
+							 "for the duration of the session or transaction. The caller "
+							 "must explicitly refresh affected continuous aggregates with "
+							 "force => true after the operation. Intended for bulk-migration "
+							 "tools; use with SET LOCAL inside a transaction. Misuse will "
+							 "leave continuous aggregate state out of sync with the "
+							 "underlying hypertable.",
+							 &ts_guc_skip_cagg_invalidation,
 							 false,
 							 PGC_USERSET,
 							 0,

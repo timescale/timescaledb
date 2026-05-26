@@ -641,6 +641,13 @@ SELECT * FROM hyper_constr WHERE time > 200 and time < 400 order by time;
 --TEST verify the check constraint exists on the OSM chunk
 SELECT * FROM test.show_constraints('child_hyper_constr');
 
+-- inherited CHECK constraints on OSM chunks are not tracked in chunk_constraint
+SELECT cc.constraint_name, cc.hypertable_constraint_name, cc.dimension_slice_id
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
+WHERE c.table_name = 'child_hyper_constr'
+ORDER BY cc.constraint_name;
+
 -- TEST foreign key trigger: deleting data from foreign table measure
 -- does not error out due to data in osm chunk
 \set ON_ERROR_STOP 0
