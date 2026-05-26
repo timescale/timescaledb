@@ -74,9 +74,9 @@ jobs:
           exit 0
         fi
 
-        echo "Changed tests: ${CHANGED_TESTS[@]}"
+        echo "Changed tests: ${CHANGED_TESTS[*]}"
         echo "should_run=true" >> $GITHUB_OUTPUT
-        echo "changed_tests=${CHANGED_TESTS[@]}" >> $GITHUB_OUTPUT
+        echo "changed_tests=${CHANGED_TESTS[*]}" >> $GITHUB_OUTPUT
 
     - name: Install Linux Dependencies
       if: steps.check.outputs.should_run == 'true'
@@ -183,7 +183,7 @@ jobs:
         # using a _NNN suffix (pg_regress feature).
         readarray -t FAILED_TESTS < <( \
           sed -n 's!^\+\+\+.*results/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out[[:space:]].*$!\1!gp' regression.log)
-        echo "Tests failing with the old code: ${FAILED_TESTS[@]}"
+        echo "Tests failing with the old code: ${FAILED_TESTS[*]}"
 
         # Check which changed tests did NOT fail
         PASSED_TESTS=""

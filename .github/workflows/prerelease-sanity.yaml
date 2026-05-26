@@ -41,7 +41,8 @@ jobs:
           fi
 
           # PR into a release branch that modifies the version.
-          if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
+          base_ref="${{ github.event.pull_request.base.ref }}"
+          if [[ "$base_ref" == ?.*.x ]] \
             && ! git diff "${base}" --name-only --exit-code -- version.config
           then
             echo "should_run=true" >> "${GITHUB_OUTPUT}"

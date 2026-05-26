@@ -59,7 +59,7 @@ jobs:
       run: |
         apt-get update
         apt-get install -y --no-install-recommends \
-          timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }} timescaledb-tools
+          timescaledb-2-postgresql-${{ matrix.pg }} timescaledb-tools
         timescaledb-tune --quiet --yes
 
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
