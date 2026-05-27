@@ -1,0 +1,2 @@
+Fixes: #9624 Fix HAVING clause with time_bucket_gapfill
+Thanks: @fr3aker for reporting an issue with time_bucket_gapfill and HAVING

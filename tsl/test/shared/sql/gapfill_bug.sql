@@ -279,3 +279,169 @@ DROP TABLE gf8844_table1;
 DROP TABLE gf8844_table2;
 
 RESET timezone;
+
+-- Fix for #5202: time_bucket_gapfill with HAVING clause returning incorrect rows
+-- HAVING quals must be evaluated on top of the GapFill node so they do not
+-- remove groups before gap rows have been generated.
+SET timezone TO 'UTC';
+
+CREATE TABLE gf5202(time timestamptz, device_id int, value float);
+INSERT INTO gf5202 VALUES
+    ('2023-01-03T00:00:00Z', 1, 4),
+    ('2023-01-03T01:00:00Z', 1, 4),
+    ('2023-01-03T02:00:00Z', 1, 4),
+    ('2023-01-05T00:00:00Z', 1, 6);
+
+-- Filter should appear on the Custom Scan (GapFill) node, not on the GroupAggregate.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) < 2;
+
+-- HAVING count(*) < 2: real group with count=3 (2023-01-03) is dropped.
+-- Real group with count=1 (2023-01-05) is kept. Gap rows (NULL count) are
+-- rejected by <2 (NULL<2 is UNKNOWN -> false) under SQL semantics.
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) < 2
+ORDER BY day, device_id;
+
+-- HAVING count(*) IS NULL keeps only the gap rows.
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) IS NULL
+ORDER BY day, device_id;
+
+-- HAVING predicate combining agg and group column.
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) IS NULL OR count(*) < 2
+ORDER BY day, device_id;
+
+-- HAVING that rejects every real group must still produce the gap rows when
+-- the predicate leaves room for them via IS NULL. Before the fix this
+-- returned zero rows because HAVING ran below the gapfill node.
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) > 1000 OR count(*) IS NULL
+ORDER BY day, device_id;
+
+-- Fallback: aggregate wrapped in locf is not a top-level pathtarget
+-- expression, so set_customscan_references cannot resolve a bare Aggref
+-- against it. Filter must remain on the GroupAggregate.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, locf(count(*))
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING count(*) > 1;
+
+-- Fallback: aggregate referenced only in HAVING is not in the GapFill
+-- pathtarget either, so filter again stays on the GroupAggregate.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) > 1;
+
+-- By-reference HAVING aggregate (string_agg returns text). Exercises that
+-- pass-by-reference values in the projected slot stay valid through the
+-- HAVING qual: the per-tuple memory must not be reset between projection
+-- and ExecQual.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, string_agg(value::text, ',' ORDER BY value)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING string_agg(value::text, ',' ORDER BY value) = '4,4,4';
+
+SELECT time_bucket_gapfill('1 day', time) AS day, string_agg(value::text, ',' ORDER BY value)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING string_agg(value::text, ',' ORDER BY value) = '4,4,4'
+ORDER BY day;
+
+-- COALESCE-wrapped aggregate in the SELECT list, bare aggregate in HAVING.
+-- The bare aggregate is not a top-level pathtarget expression (only the
+-- COALESCE wrapper is), so HAVING stays on the GroupAggregate. Gap rows are
+-- produced after HAVING runs and show COALESCE(NULL, 0) = 0.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, COALESCE(count(*), 0) AS c
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING count(*) > 1;
+
+SELECT time_bucket_gapfill('1 day', time) AS day, COALESCE(count(*), 0) AS c
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING count(*) > 1
+ORDER BY day;
+
+-- SELECT contains both a bare and a COALESCE-wrapped aggregate. The bare
+-- count(*) is a top-level pathtarget expression, so HAVING is lifted onto
+-- GapFill. Gap rows have NULL for count and 0 for the COALESCE projection.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, count(*) AS c, COALESCE(count(*), 0) AS c0
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING count(*) IS NULL OR count(*) > 1;
+
+SELECT time_bucket_gapfill('1 day', time) AS day, count(*) AS c, COALESCE(count(*), 0) AS c0
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING count(*) IS NULL OR count(*) > 1
+ORDER BY day;
+
+-- COALESCE wraps the aggregate in both SELECT and HAVING. The Aggref inside
+-- HAVING is the bare count(*) but only the wrapper is top-level, so HAVING
+-- stays on the GroupAggregate. Every real group has count(*) > 0, so they
+-- all pass; gap rows are added afterwards with COALESCE = 0.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, COALESCE(count(*), 0) AS c
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING COALESCE(count(*), 0) > 0;
+
+SELECT time_bucket_gapfill('1 day', time) AS day, COALESCE(count(*), 0) AS c
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING COALESCE(count(*), 0) > 0
+ORDER BY day;
+
+-- HAVING references one bare top-level aggregate and one aggregate that is
+-- only present wrapped in COALESCE. The wrapped aggregate is not top-level
+-- so HAVING remains on the GroupAggregate.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, count(*) AS c, COALESCE(sum(value), 0) AS s
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING count(*) > 1 OR COALESCE(sum(value), 0) > 5;
+
+SELECT time_bucket_gapfill('1 day', time) AS day, count(*) AS c, COALESCE(sum(value), 0) AS s
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day
+HAVING count(*) > 1 OR COALESCE(sum(value), 0) > 5
+ORDER BY day;
+
+DROP TABLE gf5202;
+RESET timezone;
