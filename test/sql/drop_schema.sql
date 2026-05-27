@@ -53,4 +53,4 @@ SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM _timescaledb_catalog.dimension_slice;
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;

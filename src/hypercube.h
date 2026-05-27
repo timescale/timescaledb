@@ -33,7 +33,6 @@ extern TSDLLEXPORT DimensionSlice *
 ts_hypercube_add_slice_from_range(Hypercube *hc, int32 dimension_id, int64 start, int64 end);
 extern TSDLLEXPORT DimensionSlice *ts_hypercube_add_slice(Hypercube *hc,
 														  const DimensionSlice *slice);
-extern int ts_hypercube_find_existing_slices(const Hypercube *cube, const ScanTupLock *tuplock);
 extern Hypercube *ts_hypercube_calculate_from_point(const Hyperspace *hs, const Point *p,
 													const ScanTupLock *tuplock);
 extern bool ts_hypercubes_collide(const Hypercube *cube1, const Hypercube *cube2);

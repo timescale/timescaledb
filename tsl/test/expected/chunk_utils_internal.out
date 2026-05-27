@@ -22,10 +22,8 @@ CREATE OR REPLACE VIEW chunk_view AS
      AS range_end
   FROM _timescaledb_catalog.chunk srcch
     INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id
-    INNER JOIN _timescaledb_catalog.chunk_constraint chcons ON srcch.id = chcons.chunk_id
-    INNER JOIN _timescaledb_catalog.dimension dim ON srcch.hypertable_id = dim.hypertable_id
-    INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dim.id = dimsl.dimension_id
-      AND chcons.dimension_slice_id = dimsl.id;
+    INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dimsl.chunk_id = srcch.id
+    INNER JOIN _timescaledb_catalog.dimension dim ON dim.id = dimsl.dimension_id;
 GRANT SELECT on chunk_view TO PUBLIC;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA test1;
@@ -588,9 +586,9 @@ BEGIN;
    ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
 
 -- range before update
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.table_name = 'child_fdw_table' AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.table_name = 'child_fdw_table' AND ds.chunk_id = c.id;
  chunk_id |   table_name    | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
 ----------+-----------------+--------+-----------+--------------------+------------------+------------------
        11 | child_fdw_table |      0 | t         |                 10 | 1577865600000000 | 1577952000000000
@@ -606,9 +604,9 @@ SELECT id, schema_name, table_name, status FROM _timescaledb_catalog.hypertable 
   5 | public      | ht_try     |      1
 
 -- verify range was updated
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.table_name = 'child_fdw_table' AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.table_name = 'child_fdw_table' AND ds.chunk_id = c.id;
  chunk_id |   table_name    | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
 ----------+-----------------+--------+-----------+--------------------+------------------+------------------
        11 | child_fdw_table |      0 | t         |                 10 | 1577869200000000 | 1577952000000000
@@ -865,8 +863,7 @@ BEGIN;
 SELECT c.id as osm_chunk_id, c.table_name as osm_chunk_name, ds.id as osm_dimension_slice
 FROM _timescaledb_catalog.chunk c
 JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
-JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
-JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.chunk_id = c.id
 WHERE ht.table_name = 'ht_try' AND osm_chunk = true \gset
 \echo :osm_chunk_id, :osm_chunk_name, :osm_dimension_slice
 11, child_fdw_table, 10
@@ -882,11 +879,8 @@ SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
 --------
       0
 
--- chunk, chunk_constraint and dimension slice should have been cleaned up
+-- chunk and dimension slice should have been cleaned up
 SELECT FROM _timescaledb_catalog.chunk WHERE id = :osm_chunk_id;
---
-
-SELECT FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :osm_chunk_id;
 --
 
 SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice;
@@ -1021,15 +1015,15 @@ SELECT * FROM test.show_constraints('child_hyper_constr');
 -------------------------+------+---------+-------+---------------------------------+------------+----------+-----------
  hyper_constr_temp_check | c    | {temp}  | -     | (temp > (10)::double precision) | f          | f        | t
 
--- inherited CHECK constraints on OSM chunks are not tracked in chunk_constraint
-SELECT cc.constraint_name, cc.hypertable_constraint_name, cc.dimension_slice_id
+-- dimension slices owned by the OSM chunk
+SELECT ds.id AS dimension_slice_id, ds.dimension_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
-JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.chunk_id = c.id
 WHERE c.table_name = 'child_hyper_constr'
-ORDER BY cc.constraint_name;
- constraint_name | hypertable_constraint_name | dimension_slice_id 
------------------+----------------------------+--------------------
- constraint_19   |                            |                 19
+ORDER BY ds.id;
+ dimension_slice_id | dimension_id |     range_start     |      range_end      
+--------------------+--------------+---------------------+---------------------
+                 19 |            9 | 9223372036854775806 | 9223372036854775807
 
 -- TEST foreign key trigger: deleting data from foreign table measure
 -- does not error out due to data in osm chunk
@@ -1282,26 +1276,26 @@ INNER JOIN _timescaledb_catalog.dimension d ON d.id=ds.dimension_id
 INNER JOIN _timescaledb_catalog.hypertable ht on ht.id=d.hypertable_id
 WHERE ht.table_name LIKE 'osm%'
 ORDER BY 2,3;
- table_name | id | dimension_id |     range_start     |      range_end      
-------------+----+--------------+---------------------+---------------------
- osm_int2   | 22 |           11 | 9223372036854775806 | 9223372036854775807
- osm_int4   | 23 |           12 | 9223372036854775806 | 9223372036854775807
- osm_int8   | 24 |           13 | 9223372036854775806 | 9223372036854775807
- osm_date   | 25 |           14 | 9223372036854775806 | 9223372036854775807
- osm_ts     | 26 |           15 | 9223372036854775806 | 9223372036854775807
- osm_tstz   | 27 |           16 | 9223372036854775806 | 9223372036854775807
+ table_name | id | chunk_id | dimension_id |     range_start     |      range_end      
+------------+----+----------+--------------+---------------------+---------------------
+ osm_int2   | 22 |       25 |           11 | 9223372036854775806 | 9223372036854775807
+ osm_int4   | 23 |       26 |           12 | 9223372036854775806 | 9223372036854775807
+ osm_int8   | 24 |       27 |           13 | 9223372036854775806 | 9223372036854775807
+ osm_date   | 25 |       28 |           14 | 9223372036854775806 | 9223372036854775807
+ osm_ts     | 26 |       29 |           15 | 9223372036854775806 | 9223372036854775807
+ osm_tstz   | 27 |       30 |           16 | 9223372036854775806 | 9223372036854775807
 
 -- test that correct slice is found and updated for table with multiple chunk constraints
 CREATE TABLE test_multicon(time timestamptz not null unique, a int);
 SELECT hypertable_id as htid FROM create_hypertable('test_multicon', 'time', chunk_time_interval => interval '1 day') \gset
 insert into test_multicon values ('2020-01-02 01:00'::timestamptz, 1);
 SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.compressed_chunk_id, c.status, c.osm_chunk,
-cc.chunk_id, cc.dimension_slice_id, cc.constraint_name, cc.hypertable_constraint_name FROM
-_timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc WHERE c.hypertable_id = :htid
-AND c.id = cc.chunk_id;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | status | osm_chunk | chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----+---------------+-----------------------+--------------------+---------------------+--------+-----------+----------+--------------------+-----------------+----------------------------
- 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                 28 | constraint_28   | 
+ds.chunk_id, ds.id AS dimension_slice_id, format('constraint_%s', ds.id)::name AS constraint_name FROM
+_timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds WHERE c.hypertable_id = :htid
+AND ds.chunk_id = c.id;
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | status | osm_chunk | chunk_id | dimension_slice_id | constraint_name 
+----+---------------+-----------------------+--------------------+---------------------+--------+-----------+----------+--------------------+-----------------
+ 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                 28 | constraint_28
 
 \c :TEST_DBNAME :ROLE_SUPERUSER ;
 UPDATE _timescaledb_catalog.chunk SET osm_chunk = true WHERE hypertable_id = :htid;
@@ -1312,9 +1306,9 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', '2020
  f
 
 -- view udpated range
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id;
  chunk_id |     table_name     | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
 ----------+--------------------+--------+-----------+--------------------+------------------+------------------
        31 | _hyper_19_31_chunk |      0 | t         |                 28 | 1577955600000000 | 1578128400000000
@@ -1337,9 +1331,9 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL:
 -----------------------------
  f
 
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id ORDER BY ds.chunk_id;
  chunk_id |     table_name     | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
 ----------+--------------------+--------+-----------+--------------------+---------------------+---------------------
        31 | _hyper_19_31_chunk |      0 | t         |                 28 | 9223372036854775806 | 9223372036854775807
@@ -1360,9 +1354,9 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('test_chunkapp','test_chunk
  t
 
 -- view range before update
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id ORDER BY ds.chunk_id;
  chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
 ----------+-------------------------+--------+-----------+--------------------+---------------------+---------------------
        32 | _hyper_20_32_chunk      |      0 | f         |                 29 |    1577836800000000 |    1577923200000000
@@ -1381,9 +1375,9 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020
  f
 
 -- view udpated range
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id ORDER BY ds.chunk_id;
  chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
 ----------+-------------------------+--------+-----------+--------------------+------------------+------------------
        32 | _hyper_20_32_chunk      |      0 | f         |                 29 | 1577836800000000 | 1577923200000000
@@ -1443,9 +1437,9 @@ SELECT * FROM test_chunkapp ORDER BY 1;
  Thu Jan 02 01:00:00 2020 PST | 2
  Fri Jan 03 02:00:00 2020 PST | 3
 
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id ORDER BY ds.chunk_id;
  chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
 ----------+-------------------------+--------+-----------+--------------------+---------------------+---------------------
        32 | _hyper_20_32_chunk      |      0 | f         |                 29 |    1577836800000000 |    1577923200000000

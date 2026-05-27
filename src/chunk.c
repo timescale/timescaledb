@@ -1197,17 +1197,20 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 	}
 	int32 chunk_id = get_next_chunk_id();
 
-	/* Stamp the new chunk id on each cube slice before inserting them. */
-	prepare_cube_slices_for_chunk(cube, chunk_id);
-	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
-
 	Chunk *chunk =
 		chunk_create_only_table_after_lock(ht, cube, schema_name, table_name, prefix, chunk_id);
+
+	/* The chunk catalog row has to land before any dimension_slice row that
+	 * references chunk_id, otherwise the new FK is transiently unsatisfied. */
+	chunk_insert_into_metadata_after_lock(chunk);
+
+	/* Stamp the new chunk id on each cube slice and insert them. */
+	prepare_cube_slices_for_chunk(cube, chunk_id);
+	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
 	/* Insert any new chunk column stats entries into the catalog */
 	ts_chunk_column_stats_insert(ht, chunk);
 
-	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_create_table_constraints(ht, chunk);
 
 	/* Add chunk to publications if hypertable is in any publications */
@@ -1337,9 +1340,6 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 
 	int32 chunk_id = get_next_chunk_id();
 
-	/* Stamp the new chunk id on each cube slice before inserting them. */
-	prepare_cube_slices_for_chunk(cube, chunk_id);
-	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, chunk_id);
 	chunk->table_id = chunk_table_relid;
 	chunk->hypertable_relid = ht->main_table_relid;
@@ -1379,7 +1379,15 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	 * and triggers if some of them already exist on the chunk table prior to
 	 * creating the chunk from it. */
 	ts_chunk_constraint_check_violated(chunk, ht->space);
+
+	/* The chunk catalog row has to land before any dimension_slice row that
+	 * references chunk_id, otherwise the new FK is transiently unsatisfied. */
 	chunk_insert_into_metadata_after_lock(chunk);
+
+	/* Stamp the new chunk id on each cube slice and insert them. */
+	prepare_cube_slices_for_chunk(cube, chunk_id);
+	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
+
 	chunk_add_inheritance(chunk, ht);
 	chunk_create_table_constraints(ht, chunk);
 
@@ -1446,15 +1454,6 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 
 		if (NULL == stub)
 		{
-			ScanTupLock tuplock = {
-				.lockmode = LockTupleKeyShare,
-				.waitpolicy = LockWaitBlock,
-			};
-
-			/* Lock all slices that already exist to ensure they remain when we
-			 * commit since we won't create those slices ourselves. */
-			ts_hypercube_find_existing_slices(hc, &tuplock);
-
 			if (OidIsValid(chunk_table_relid))
 			{
 				chunk = chunk_create_from_hypercube_and_table_after_lock(ht,
@@ -3075,11 +3074,12 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 
 	ts_chunk_formdata_fill(&form, ti);
 
-	(void) detach;
-
 	/*
 	 * Delete the chunk's dimension slices. Each chunk owns its own slice rows,
 	 * so we can scan by chunk_id and drop them directly without orphan checks.
+	 * When detaching the chunk relation stays around, so drop the dimensional
+	 * CHECKs we put on it first; when the relation itself is being dropped
+	 * Postgres takes care of that.
 	 */
 	{
 		List *chunk_slices = ts_dimension_slice_scan_by_chunk_id(form.id, CurrentMemoryContext);
@@ -3088,6 +3088,24 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		foreach (lc, chunk_slices)
 		{
 			DimensionSlice *slice = (DimensionSlice *) lfirst(lc);
+
+			if (detach && OidIsValid(relid))
+			{
+				char check_name[NAMEDATALEN];
+				Oid check_oid;
+
+				snprintf(check_name, NAMEDATALEN, "constraint_%d", slice->fd.id);
+				check_oid = get_relation_constraint_oid(relid, check_name, true);
+				if (OidIsValid(check_oid))
+				{
+					ObjectAddress addr = {
+						.classId = ConstraintRelationId,
+						.objectId = check_oid,
+					};
+					performDeletion(&addr, DROP_RESTRICT, 0);
+				}
+			}
+
 			ts_dimension_slice_delete_by_id(slice->fd.id, false);
 		}
 	}
@@ -4930,6 +4948,8 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	chunk->fd.osm_chunk = true; /* this is an OSM chunk */
 	chunk->cube = fill_hypercube_for_osm_chunk(hs);
 	chunk->hypertable_relid = parent_ht->main_table_relid;
+	chunk->table_id = relid;
+	chunk->relkind = RELKIND_FOREIGN_TABLE;
 
 	namestrcpy(&chunk->fd.schema_name, relschema);
 	namestrcpy(&chunk->fd.table_name, relname);

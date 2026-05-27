@@ -652,19 +652,33 @@ INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:00:00', 3.2) ON CONFLIC
 INSERT INTO t_hypertable AS h VALUES ( 1, '2021-01-01 00:00:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 BEGIN;
 ALTER INDEX t_hypertable_id_time_key RENAME TO t_new_constraint;
--- chunk_constraint should have updated constraint names
-SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
- hypertable_constraint_name | constraint_name 
-----------------------------+-----------------
+-- chunk-side constraints should reflect the rename
+SELECT con.conname AS constraint_name
+FROM _timescaledb_catalog.chunk c
+JOIN pg_constraint con
+  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+WHERE con.conname LIKE '%t_new_constraint%'
+ORDER BY 1;
+           constraint_name           
+-------------------------------------
+ _hyper_13_26_chunk_t_new_constraint
+ _hyper_13_27_chunk_t_new_constraint
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;
 BEGIN;
 ALTER TABLE t_hypertable RENAME CONSTRAINT t_hypertable_id_time_key TO t_new_constraint;
--- chunk_constraint should have updated constraint names
-SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
- hypertable_constraint_name | constraint_name 
-----------------------------+-----------------
+-- chunk-side constraints should reflect the rename
+SELECT con.conname AS constraint_name
+FROM _timescaledb_catalog.chunk c
+JOIN pg_constraint con
+  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+WHERE con.conname LIKE '%t_new_constraint%'
+ORDER BY 1;
+   constraint_name   
+---------------------
+ 26_t_new_constraint
+ 27_t_new_constraint
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;
@@ -691,7 +705,7 @@ Indexes:
     "_hyper_14_28_chunk_idx_ht" btree (a, c) WHERE NOT d
     "_hyper_14_28_chunk_p_hypertable_a_idx" btree (a DESC)
 Check constraints:
-    "constraint_34" CHECK (a >= 0 AND a < 3)
+    "constraint_39" CHECK (a >= 0 AND a < 3)
 Inherits: p_hypertable
 
 DROP TABLE p_hypertable;

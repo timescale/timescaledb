@@ -50,22 +50,14 @@ WHERE dimension_slice_id IS NULL
 ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
 ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
 
---
--- Rebuild the catalog table `_timescaledb_catalog.dimension_slice` so each
--- chunk owns its own slice rows. The new schema adds a chunk_id column,
--- a (chunk_id, dimension_id) UNIQUE, an FK to chunk(id), and replaces the
--- old (dim_id, range_start, range_end) UNIQUE with a plain index. The
--- chunk_constraint table is kept in place for this release; its
--- dimension_slice_id column stays as the source of truth for chunk<->slice
--- lookups until later releases migrate the readers and writers.
---
+-- Add chunk_id to `_timescaledb_catalog.dimension_slice`
 CREATE TABLE _timescaledb_internal.tmp_dimension_slice AS
     SELECT * FROM _timescaledb_catalog.dimension_slice;
 CREATE TABLE _timescaledb_internal.tmp_dimension_slice_seq_value AS
     SELECT last_value, is_called FROM _timescaledb_catalog.dimension_slice_id_seq;
 
 ALTER TABLE _timescaledb_catalog.chunk_constraint
-    DROP CONSTRAINT chunk_constraint_dimension_slice_id_fkey;
+    DROP CONSTRAINT IF EXISTS chunk_constraint_dimension_slice_id_fkey;
 
 DROP VIEW IF EXISTS timescaledb_information.chunks;
 
@@ -99,22 +91,46 @@ FROM _timescaledb_catalog.chunk_constraint cc
 JOIN _timescaledb_internal.tmp_dimension_slice tmp ON tmp.id = cc.dimension_slice_id
 WHERE cc.dimension_slice_id IS NOT NULL;
 
--- Repoint chunk_constraint at the freshly allocated slice ids using the
--- (chunk_id, dimension_id) pair as the join key.
-UPDATE _timescaledb_catalog.chunk_constraint cc
-SET dimension_slice_id = ds.id
-FROM _timescaledb_internal.tmp_dimension_slice tmp,
-     _timescaledb_catalog.dimension_slice ds
-WHERE cc.dimension_slice_id IS NOT NULL
-  AND tmp.id = cc.dimension_slice_id
-  AND ds.chunk_id = cc.chunk_id
-  AND ds.dimension_id = tmp.dimension_id;
-
 ALTER SEQUENCE _timescaledb_catalog.dimension_slice_id_seq OWNED BY _timescaledb_catalog.dimension_slice.id;
 SELECT setval('_timescaledb_catalog.dimension_slice_id_seq',
               GREATEST((SELECT last_value FROM _timescaledb_internal.tmp_dimension_slice_seq_value),
                        COALESCE((SELECT max(id) FROM _timescaledb_catalog.dimension_slice), 0)),
               true);
+
+-- Rename each chunk-side dimensional CHECK from constraint_<old_slice_id> to
+-- constraint_<new_slice_id> so the on-disk name matches the id stored in the
+-- rebuilt dimension_slice. Without this, code that derives the name from
+-- slice->fd.id (chunk_constraints_recreate, chunk detach, merge-on-dimension,
+-- the ALTER TABLE DROP CONSTRAINT guard) fails to locate the existing CHECK.
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN
+        SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
+               format('constraint_%s', cc.dimension_slice_id)::name AS old_name,
+               format('constraint_%s', ds.id)::name AS new_name
+        FROM _timescaledb_catalog.chunk_constraint cc
+        JOIN _timescaledb_internal.tmp_dimension_slice tmp
+            ON tmp.id = cc.dimension_slice_id
+        JOIN _timescaledb_catalog.chunk c ON c.id = cc.chunk_id
+        JOIN _timescaledb_catalog.dimension_slice ds
+            ON ds.chunk_id = cc.chunk_id
+           AND ds.dimension_id = tmp.dimension_id
+        WHERE cc.dimension_slice_id IS NOT NULL
+          AND cc.dimension_slice_id <> ds.id
+          AND EXISTS (
+              SELECT 1 FROM pg_constraint pc
+              WHERE pc.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
+                AND pc.conname = format('constraint_%s', cc.dimension_slice_id)::name
+                AND pc.contype = 'c'
+          )
+    LOOP
+        EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
+                                  r.chunk_table, r.old_name, r.new_name);
+    END LOOP;
+END
+$$;
 
 DROP TABLE _timescaledb_internal.tmp_dimension_slice;
 DROP TABLE _timescaledb_internal.tmp_dimension_slice_seq_value;

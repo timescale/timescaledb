@@ -135,6 +135,40 @@ WHERE cc.dimension_slice_id IS NOT NULL
   AND ds.range_start = tmp.range_start
   AND ds.range_end = tmp.range_end;
 
+-- Restore the legacy invariant constraint_name == 'constraint_<dimension_slice_id>'
+-- for rows whose dimension_slice_id was just repointed at a deduplicated slice.
+-- Rename the chunk-side CHECK on disk and update the catalog row in lockstep.
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN
+        SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
+               cc.constraint_name AS old_name,
+               format('constraint_%s', cc.dimension_slice_id)::name AS new_name,
+               cc.chunk_id,
+               cc.dimension_slice_id
+        FROM _timescaledb_catalog.chunk_constraint cc
+        JOIN _timescaledb_catalog.chunk c ON c.id = cc.chunk_id
+        WHERE cc.dimension_slice_id IS NOT NULL
+          AND cc.constraint_name <> format('constraint_%s', cc.dimension_slice_id)::name
+          AND EXISTS (
+              SELECT 1 FROM pg_constraint pc
+              WHERE pc.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
+                AND pc.conname = cc.constraint_name
+                AND pc.contype = 'c'
+          )
+    LOOP
+        EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
+                                  r.chunk_table, r.old_name, r.new_name);
+        UPDATE _timescaledb_catalog.chunk_constraint
+            SET constraint_name = r.new_name
+            WHERE chunk_id = r.chunk_id
+              AND dimension_slice_id = r.dimension_slice_id;
+    END LOOP;
+END
+$$;
+
 ALTER SEQUENCE _timescaledb_catalog.dimension_slice_id_seq OWNED BY _timescaledb_catalog.dimension_slice.id;
 SELECT setval('_timescaledb_catalog.dimension_slice_id_seq', last_value, is_called)
     FROM _timescaledb_internal.tmp_dimension_slice_seq_value;

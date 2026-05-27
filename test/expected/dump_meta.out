@@ -178,7 +178,6 @@ SELECT *,
        FROM
        _timescaledb_catalog.hypertable h,
        _timescaledb_catalog.chunk c,
-       _timescaledb_catalog.chunk_constraint cc,
        _timescaledb_catalog.dimension d,
        _timescaledb_catalog.dimension_slice ds,
        pg_class pgc,
@@ -188,8 +187,7 @@ SELECT *,
              AND pns.nspname = h.schema_name
              AND relkind = 'r'
              AND c.hypertable_id = h.id
-             AND c.id = cc.chunk_id
-             AND cc.dimension_slice_id = ds.id
+             AND c.id = ds.chunk_id
              AND ds.dimension_id = d.id
        GROUP BY c.id, pgc.reltoastrelid, pgc.oid ORDER BY c.id
        ) sub1

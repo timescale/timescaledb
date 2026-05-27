@@ -37,7 +37,7 @@ step s2_compress_chunk_1:
  <waiting ...>
 step s1_commit: COMMIT;
 step s2_compress_chunk_1: <... completed>
-ERROR:  chunk deleted by other transaction
+ERROR:  chunk not found
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 DESC LIMIT 1) AS chunk;
@@ -105,7 +105,7 @@ step s1_drop:
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
  <waiting ...>
 step s1_drop: <... completed>
-ERROR:  some chunks could not be read since they are being concurrently updated
+ERROR:  canceling statement due to lock timeout
 step s1_commit: COMMIT;
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
@@ -139,7 +139,7 @@ count
     1
 
 step s1_drop: <... completed>
-ERROR:  some chunks could not be read since they are being concurrently updated
+ERROR:  canceling statement due to lock timeout
 step s1_commit: COMMIT;
 step s2_commit: COMMIT;
 
@@ -166,10 +166,7 @@ count
 
 step s2_commit: COMMIT;
 step s1_drop: <... completed>
-count
------
-    2
-
+ERROR:  tuple concurrently updated
 step s1_commit: COMMIT;
 
 starting permutation: s2_compress_chunk_1 s2_compress_chunk_2 s1_drop s1_commit s2_commit
@@ -194,7 +191,7 @@ step s1_drop:
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
  <waiting ...>
 step s1_drop: <... completed>
-ERROR:  some chunks could not be read since they are being concurrently updated
+ERROR:  canceling statement due to lock timeout
 step s1_commit: COMMIT;
 step s2_commit: COMMIT;
 
@@ -221,10 +218,7 @@ step s1_drop:
  <waiting ...>
 step s2_commit: COMMIT;
 step s1_drop: <... completed>
-count
------
-    2
-
+ERROR:  tuple concurrently updated
 step s1_commit: COMMIT;
 
 starting permutation: s2_compress_chunk_1 s2_compress_chunk_2 s2_commit s1_drop s1_commit

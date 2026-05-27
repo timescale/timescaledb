@@ -3,20 +3,18 @@
 -- LICENSE-APACHE for a copy of the license.
 
 \echo **** Missing dimension slices ****
-SELECT hypertable_id,
-       (
-	   SELECT format('%I.%I', schema_name, table_name)::regclass
-	   FROM _timescaledb_catalog.hypertable ht
-	   WHERE ht.id = ch.hypertable_id
-       ) AS hypertable,
-       chunk_id,
-       dimension_slice_id,
-       constraint_name,
-       attname AS column_name,
-       pg_get_expr(conbin, conrelid) AS constraint_expr
-FROM _timescaledb_catalog.chunk_constraint cc
-JOIN _timescaledb_catalog.chunk ch ON cc.chunk_id = ch.id
-JOIN pg_constraint ON conname = constraint_name
-JOIN pg_namespace ns ON connamespace = ns.oid AND ns.nspname = ch.schema_name
-JOIN pg_attribute ON attnum = conkey[1] AND attrelid = conrelid
-WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
+-- Every non-OSM chunk should have one dimension_slice row per dimension and
+-- a matching constraint_<slice_id> CHECK on its relation. List any gaps.
+SELECT ht.id AS hypertable_id,
+       format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
+       ch.id AS chunk_id,
+       d.id AS dimension_id,
+       d.column_name
+FROM _timescaledb_catalog.chunk ch
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id
+JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = ht.id
+LEFT JOIN _timescaledb_catalog.dimension_slice ds
+       ON ds.chunk_id = ch.id AND ds.dimension_id = d.id
+WHERE NOT ch.osm_chunk
+  AND ds.id IS NULL
+ORDER BY ch.id, d.id;

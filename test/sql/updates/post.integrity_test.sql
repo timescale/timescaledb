@@ -12,13 +12,18 @@ CREATE OR REPLACE FUNCTION timescaledb_integrity_test()
     RETURNS VOID LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
-    dimension_slice RECORD;
+    gap RECORD;
 BEGIN
-    FOR dimension_slice IN
-    SELECT chunk_id, dimension_slice_id FROM _timescaledb_catalog.chunk_constraint
-     WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice)
+    FOR gap IN
+    SELECT ch.id AS chunk_id, d.id AS dimension_id
+    FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = ch.hypertable_id
+    LEFT JOIN _timescaledb_catalog.dimension_slice ds
+           ON ds.chunk_id = ch.id AND ds.dimension_id = d.id
+    WHERE NOT ch.osm_chunk
+      AND ds.id IS NULL
     LOOP
-      RAISE EXCEPTION 'Missing dimension slice with id % for chunk %.', dimension_slice.dimension_slice_id, dimension_slice.chunk_id;
+      RAISE EXCEPTION 'Missing dimension slice for chunk % on dimension %.', gap.chunk_id, gap.dimension_id;
     END LOOP;
 END;
 $BODY$;

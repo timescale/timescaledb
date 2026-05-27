@@ -59,8 +59,6 @@ ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_str
 									int limit, const ScanTupLock *tuplock);
 extern DimensionVec *ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start,
 															 int64 range_end, int limit);
-extern TSDLLEXPORT bool ts_dimension_slice_scan_for_existing(const DimensionSlice *slice,
-															 const ScanTupLock *tuplock);
 extern DimensionSlice *ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id,
 															  const ScanTupLock *tuplock,
 															  MemoryContext mctx,
@@ -91,8 +89,7 @@ extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n);
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_earliest_slice(int32 dimension_id, int n);
 extern TSDLLEXPORT int32 ts_dimension_slice_oldest_valid_chunk_for_reorder(
-	int32 job_id, int32 dimension_id, StrategyNumber start_strategy, int64 start_value,
-	StrategyNumber end_strategy, int64 end_value);
+	int32 job_id, int32 dimension_id, int skip_newest_distinct_buckets);
 extern TSDLLEXPORT List *ts_dimension_slice_get_chunkids_to_compress(
 	int32 dimension_id, StrategyNumber start_strategy, int64 start_value,
 	StrategyNumber end_strategy, int64 end_value, bool compress, bool recompress, int32 numchunks);

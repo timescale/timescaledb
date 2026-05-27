@@ -419,6 +419,10 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		ts_dimension_slice_insert(new_slice);
 		Assert(new_slice->fd.id > 0);
 
+		/* Reflect the new slice in the in-memory hypercube so any later read of
+		 * chunk->cube sees the fresh id and range. */
+		((Hypercube *) chunk->cube)->slices[i] = new_slice;
+
 		/* Drop the old CHECK on the chunk table and build a replacement for
 		 * the merged range. CHECK names follow the constraint_<slice_id>
 		 * pattern. */

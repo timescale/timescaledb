@@ -158,8 +158,7 @@ BEGIN
     FROM
         _chunks
         JOIN _timescaledb_catalog.chunk ON chunk.schema_name = _chunks.nspname AND chunk.table_name = _chunks.relname
-        JOIN _timescaledb_catalog.chunk_constraint ON chunk_id = chunk.id
-        JOIN _timescaledb_catalog.dimension_slice ON dimension_slice.id = dimension_slice_id;
+        JOIN _timescaledb_catalog.dimension_slice ON dimension_slice.chunk_id = chunk.id;
 
     RAISE INFO 'range_start=% range_end=%', _r.range_start::int, _r.range_end::int;
     CALL refresh_continuous_aggregate(_cagg, _r.range_start::int, _r.range_end::int + 1);

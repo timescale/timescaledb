@@ -18,6 +18,7 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
+#include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
@@ -286,10 +287,14 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 {
 	List *newconstrs = NIL;
 
-	/* Dimensional CHECKs, one per cube slice. Skip ones that already exist
-	 * on the chunk table so the merge/recreate paths can call us without
-	 * tripping a "constraint already exists" error. */
-	for (int i = 0; i < chunk->cube->num_slices; i++)
+	/* Dimensional CHECKs, one per cube slice. Foreign-table chunks (OSM
+	 * chunks) get their CHECKs cloned separately via
+	 * ts_chunk_clone_check_constraints, so we skip dim CHECKs here for
+	 * those. Skip ones that already exist on the chunk table so the
+	 * merge/recreate paths can call us without tripping a
+	 * "constraint already exists" error. */
+	bool skip_dim_checks = (chunk->relkind == RELKIND_FOREIGN_TABLE || IS_OSM_CHUNK(chunk));
+	for (int i = 0; !skip_dim_checks && i < chunk->cube->num_slices; i++)
 	{
 		const DimensionSlice *slice = chunk->cube->slices[i];
 		const Dimension *dim = ts_hyperspace_get_dimension_by_id(ht->space, slice->fd.dimension_id);

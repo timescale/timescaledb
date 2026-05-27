@@ -12,7 +12,6 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
 \d+ _timescaledb_catalog.chunk
 \d+ _timescaledb_catalog.dimension
 \d+ _timescaledb_catalog.dimension_slice
-\d+ _timescaledb_catalog.chunk_constraint
 \d+ _timescaledb_catalog.tablespace
 \endif
 
@@ -203,15 +202,15 @@ FROM  _timescaledb_catalog.chunk c
 INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
 ORDER BY c.id, c.hypertable_id;
 
--- Strip the chunk_id prefix so old and new naming compare equal.
-SELECT chunk_constraint.chunk_id,
-       chunk_constraint.dimension_slice_id,
-       regexp_replace(chunk_constraint.constraint_name, '^[0-9]+_', '') AS constraint_name,
-       chunk_constraint.hypertable_constraint_name
-FROM _timescaledb_catalog.chunk_constraint
-JOIN _timescaledb_catalog.chunk ON chunk.id = chunk_constraint.chunk_id
-WHERE chunk_constraint.dimension_slice_id IS NOT NULL
-ORDER BY chunk_constraint.chunk_id, chunk_constraint.dimension_slice_id, 3;
+-- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and differ
+-- between a fresh install and a post-upgrade catalog, so dump path-stable
+-- columns only.
+SELECT chunk_id,
+       dimension_id,
+       range_start,
+       range_end
+FROM _timescaledb_catalog.dimension_slice
+ORDER BY chunk_id, dimension_id;
 
 -- Show attnum of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken
@@ -227,9 +226,13 @@ ORDER BY attrelid::regclass::text,att.attnum;
 
 -- Show constraints, stripping numeric prefixes so the legacy
 -- "<chunk_id>_<seq>_<parent>" form (2.27.1) and the new "<chunk_id>_<parent>"
--- form (2.28.0-dev) compare equal.
+-- form (2.28.0-dev) compare equal. The dimensional CHECKs are named
+-- "constraint_<slice_id>" and slice ids are not deterministic between a
+-- fresh install and a post-upgrade catalog, so collapse the suffix too.
 SELECT conrelid::regclass::text,
-       regexp_replace(conname, '^([0-9]+_){1,2}', '') AS conname,
+       regexp_replace(
+           regexp_replace(conname, '^([0-9]+_){1,2}', ''),
+           '^constraint_[0-9]+$', 'constraint_dim') AS conname,
        pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'
