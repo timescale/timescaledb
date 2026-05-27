@@ -76,9 +76,8 @@ run_queries(
 query_generates_wal(
 	"insert into plain chunk",
 	qq/INSERT INTO metrics VALUES ('2023-07-01T00:00:00Z', 1, 1.0);/,
-	qq(table _timescaledb_catalog.dimension_slice: INSERT: id[integer]:1 dimension_id[integer]:1 range_start[bigint]:1687996800000000 range_end[bigint]:1688601600000000
-table _timescaledb_catalog.chunk: INSERT: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:null status[integer]:0 osm_chunk[boolean]:false
-table _timescaledb_catalog.chunk_constraint: INSERT: chunk_id[integer]:1 dimension_slice_id[integer]:1 constraint_name[name]:'constraint_1' hypertable_constraint_name[name]:null
+	qq(table _timescaledb_catalog.chunk: INSERT: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:null status[integer]:0 osm_chunk[boolean]:false
+table _timescaledb_catalog.dimension_slice: INSERT: id[integer]:1 chunk_id[integer]:1 dimension_id[integer]:1 range_start[bigint]:1687996800000000 range_end[bigint]:1688601600000000
 table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1)
 );
 

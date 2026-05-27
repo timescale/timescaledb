@@ -193,17 +193,17 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 
 -- Show all constraints
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        1 |                  1 | constraint_1    | 
-        1 |                  2 | constraint_2    | 
-        2 |                  3 | constraint_3    | 
-        2 |                  2 | constraint_2    | 
-        3 |                  4 | constraint_4    | 
-        3 |                  2 | constraint_2    | 
-        4 |                  1 | constraint_1    | 
-        4 |                  5 | constraint_5    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        1 |                  1 | constraint_1
+        1 |                  2 | constraint_2
+        2 |                  3 | constraint_3
+        2 |                  4 | constraint_4
+        3 |                  5 | constraint_5
+        3 |                  6 | constraint_6
+        4 |                  7 | constraint_7
+        4 |                  8 | constraint_8
 
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
 INSERT INTO _timescaledb_catalog.metadata VALUES ('metadata_test', 'FOO', false);
@@ -382,17 +382,17 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 ---------------------+-----------+----------+----------+----------+-------------
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        1 |                  1 | constraint_1    | 
-        1 |                  2 | constraint_2    | 
-        2 |                  3 | constraint_3    | 
-        2 |                  2 | constraint_2    | 
-        3 |                  4 | constraint_4    | 
-        3 |                  2 | constraint_2    | 
-        4 |                  1 | constraint_1    | 
-        4 |                  5 | constraint_5    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        1 |                  1 | constraint_1
+        1 |                  2 | constraint_2
+        2 |                  3 | constraint_3
+        2 |                  4 | constraint_4
+        3 |                  5 | constraint_5
+        3 |                  6 | constraint_6
+        4 |                  7 | constraint_7
+        4 |                  8 | constraint_8
 
 --Chunk sizing function should have been restored
 SELECT * FROM _timescaledb_catalog.hypertable;
