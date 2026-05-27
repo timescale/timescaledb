@@ -1194,33 +1194,6 @@ ts_chunk_constraint_delete_dimensional_constraints(int32 chunk_id, ChunkConstrai
 	return count;
 }
 
-/*
- * Drop a constraint using a pg_constraint heap tuple.
- */
-void
-ts_chunk_constraint_drop_from_tuple(HeapTuple constraint_tuple)
-{
-	FormData_pg_constraint *constr = (FormData_pg_constraint *) GETSTRUCT(constraint_tuple);
-	ObjectAddress constrobj = {
-		.classId = ConstraintRelationId,
-		.objectId = constr->oid,
-	};
-
-	if (OidIsValid(constr->conparentid))
-	{
-		deleteDependencyRecordsForClass(constrobj.classId,
-										constrobj.objectId,
-										ConstraintRelationId,
-										DEPENDENCY_INTERNAL);
-		CommandCounterIncrement();
-	}
-
-	if (OidIsValid(constrobj.objectId))
-	{
-		performDeletion(&constrobj, DROP_RESTRICT, 0);
-	}
-}
-
 static void
 check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const DimensionSlice *slice)
 {

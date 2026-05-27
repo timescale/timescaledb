@@ -89,6 +89,5 @@ extern void ts_chunk_constraint_scan_iterator_set_slice_id(ScanIterator *it, int
 extern void ts_chunk_constraint_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern int ts_chunk_constraint_delete_dimensional_constraints(int32 chunk_id,
 															  ChunkConstraints *ccs);
-extern TSDLLEXPORT void ts_chunk_constraint_drop_from_tuple(HeapTuple constraint_tuple);
 extern TSDLLEXPORT void ts_chunk_constraint_check_violated(const Chunk *chunk,
 														   const Hyperspace *hs);
