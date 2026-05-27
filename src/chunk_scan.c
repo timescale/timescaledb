@@ -150,46 +150,28 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	ts_scan_iterator_close(&constr_it);
 
 	/*
-	 * Build hypercubes for the chunks by finding and combining the dimension
-	 * slices that match the chunk constraints.
+	 * Build hypercubes by scanning dimension_slice directly per chunk. Each
+	 * chunk owns its slice rows so this is a one-shot index lookup per chunk
+	 * with no join through chunk_constraint.
 	 */
 	ScanIterator slice_iterator = ts_dimension_slice_scan_iterator_create(NULL, orig_mcxt);
 	for (int chunk_index = 0; chunk_index < locked_chunk_count; chunk_index++)
 	{
 		Chunk *chunk = locked_chunks[chunk_index];
-		ChunkConstraints *constraints = chunk->constraints;
 		MemoryContextSwitchTo(orig_mcxt);
-		Hypercube *cube = ts_hypercube_alloc(constraints->num_dimension_constraints);
+		Hypercube *cube = ts_hypercube_alloc(hs->num_dimensions);
 		MemoryContextSwitchTo(work_mcxt);
-		for (int constraint_index = 0; constraint_index < constraints->num_constraints;
-			 constraint_index++)
-		{
-			ChunkConstraint *constraint = &constraints->constraints[constraint_index];
-			if (!is_dimension_constraint(constraint))
-			{
-				continue;
-			}
 
-			/*
-			 * Find the slice by id. Don't have to lock it because the chunk is
-			 * locked.
-			 */
-			const int slice_id = constraint->fd.dimension_slice_id;
-			DimensionSlice *slice_ptr =
-				ts_dimension_slice_scan_iterator_get_by_id(&slice_iterator, slice_id);
-			if (slice_ptr == NULL)
-			{
-				elog(ERROR, "dimension slice %d is not found", slice_id);
-			}
-			MemoryContextSwitchTo(orig_mcxt);
-			DimensionSlice *slice_copy = ts_dimension_slice_create(slice_ptr->fd.dimension_id,
-																   slice_ptr->fd.range_start,
-																   slice_ptr->fd.range_end);
-			slice_copy->fd.id = slice_ptr->fd.id;
-			slice_copy->fd.chunk_id = slice_ptr->fd.chunk_id;
-			MemoryContextSwitchTo(work_mcxt);
+		ts_dimension_slice_scan_iterator_set_chunk_id(&slice_iterator, chunk->fd.id);
+		ts_scan_iterator_start_or_restart_scan(&slice_iterator);
+		while (ts_scan_iterator_next(&slice_iterator) != NULL)
+		{
+			TupleInfo *slice_ti = ts_scan_iterator_tuple_info(&slice_iterator);
+			MemoryContext oldctx = MemoryContextSwitchTo(orig_mcxt);
+			DimensionSlice *slice = ts_dimension_slice_from_tuple(slice_ti);
+			MemoryContextSwitchTo(oldctx);
 			Assert(cube->capacity > cube->num_slices);
-			cube->slices[cube->num_slices++] = slice_copy;
+			cube->slices[cube->num_slices++] = slice;
 		}
 
 		if (cube->num_slices == 0)

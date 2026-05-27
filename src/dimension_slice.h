@@ -101,12 +101,15 @@ extern DimensionSlice *ts_dimension_slice_from_tuple(TupleInfo *ti);
 extern TSDLLEXPORT ScanIterator ts_dimension_slice_scan_iterator_create(const ScanTupLock *tuplock,
 																		MemoryContext result_mcxt);
 extern void ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id);
+extern void ts_dimension_slice_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern DimensionSlice *ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id);
 
 extern TSDLLEXPORT int
 ts_dimension_slice_scan_iterator_set_range(ScanIterator *it, int32 dimension_id,
 										   StrategyNumber start_strategy, int64 start_value,
 										   StrategyNumber end_strategy, int64 end_value);
+
+extern List *ts_dimension_slice_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx);
 
 extern bool ts_osm_chunk_range_overlaps(int32 osm_dimension_slice_id, int32 dimension_id,
 										int64 range_start, int64 range_end);

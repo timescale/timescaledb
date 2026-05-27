@@ -1663,8 +1663,6 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 	ChunkScanCtx ctx;
 	chunk_scan_ctx_init(&ctx, ht, /* point = */ NULL);
 
-	ScanIterator iterator = ts_chunk_constraint_scan_iterator_create(CurrentMemoryContext);
-
 	ListCell *lc;
 	foreach (lc, dimension_vecs)
 	{
@@ -1702,31 +1700,12 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 		for (int i = 0; i < vec->num_slices; i++)
 		{
 			const DimensionSlice *slice = vec->slices[i];
+			int32 current_chunk_id = slice->fd.chunk_id;
 
-			ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
-			ts_scan_iterator_start_or_restart_scan(&iterator);
-
-			while (ts_scan_iterator_next(&iterator) != NULL)
-			{
-				TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-				bool PG_USED_FOR_ASSERTS_ONLY isnull = true;
-				Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull);
-				Assert(!isnull);
-				int32 current_chunk_id = DatumGetInt32(datum);
-				Assert(current_chunk_id != INVALID_CHUNK_ID);
-
-				/*
-				 * We have only the dimension constraints here, because we're searching
-				 * by dimension slice id.
-				 */
-				Assert(!slot_attisnull(ts_scan_iterator_slot(&iterator),
-									   Anum_chunk_constraint_dimension_slice_id));
-				scan_add_chunk_context(&ctx, current_chunk_id, dimension_vecs, &chunk_ids);
-			}
+			Assert(current_chunk_id != INVALID_CHUNK_ID);
+			scan_add_chunk_context(&ctx, current_chunk_id, dimension_vecs, &chunk_ids);
 		}
 	}
-
-	ts_scan_iterator_close(&iterator);
 
 	chunk_scan_ctx_destroy(&ctx);
 
@@ -1959,17 +1938,41 @@ chunk_scan_ctx_destroy(ChunkScanCtx *ctx)
 }
 
 static inline void
-dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, const DimensionVec *vec)
+dimension_slice_join_chunks(ChunkScanCtx *scanctx, const DimensionVec *vec)
 {
-	int i;
+	const Hyperspace *hs = scanctx->ht->space;
 
-	for (i = 0; i < vec->num_slices; i++)
+	for (int i = 0; i < vec->num_slices; i++)
 	{
-		/*
-		 * For each dimension slice, find matching constraints. These will be
-		 * saved in the scan context
-		 */
-		ts_chunk_constraint_scan_by_dimension_slice(vec->slices[i], scanctx, CurrentMemoryContext);
+		DimensionSlice *slice = vec->slices[i];
+		int32 chunk_id = slice->fd.chunk_id;
+		bool found;
+		ChunkScanEntry *entry = hash_search(scanctx->htab, &chunk_id, HASH_ENTER, &found);
+		ChunkStub *stub;
+
+		if (!found)
+		{
+			stub = ts_chunk_stub_create(chunk_id, hs->num_dimensions);
+			stub->cube = ts_hypercube_alloc(hs->num_dimensions);
+			entry->stub = stub;
+		}
+		else
+		{
+			stub = entry->stub;
+		}
+
+		ts_chunk_constraints_add(stub->constraints, chunk_id, slice->fd.id, NULL, NULL);
+		ts_hypercube_add_slice(stub->cube, slice);
+
+		if (chunk_stub_is_complete(stub, hs))
+		{
+			scanctx->num_complete_chunks++;
+
+			if (scanctx->early_abort)
+			{
+				break;
+			}
+		}
 	}
 }
 
@@ -2004,7 +2007,7 @@ chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube)
 											 slice->fd.range_end);
 
 		/* Add the slices to all the chunks they are associated with */
-		dimension_slice_and_chunk_constraint_join(scanctx, vec);
+		dimension_slice_join_chunks(scanctx, vec);
 	}
 }
 
@@ -2132,14 +2135,10 @@ ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_ch
  * This involves:
  *
  * 1) For each dimension:
- *	  - Find all dimension slices that match the dimension
- * 2) For each dimension slice:
- *	  - Find all chunk constraints matching the dimension slice
- * 3) For each matching chunk constraint
- *	  - Insert a chunk stub into a hash table and add the constraint to the chunk
- *	  - If chunk already exists in hash table, add the constraint to the chunk
- * 4) At the end of the scan, only one chunk in the hash table should have
- *	  N number of constraints. This is the matching chunk.
+ *	  - Find all dimension slices that match the dimension and read off the
+ *	    owning chunk_id from each slice row.
+ * 2) Tally how many dimensions each chunk matched. The chunk that matched
+ *	  every dimension is the chunk containing the point.
  *
  * NOTE: this function allocates transient data, e.g., dimension slice,
  * constraints and chunks, that in the end are not part of the returned
@@ -2169,61 +2168,33 @@ ts_chunk_point_find_chunk_id(const Hypertable *ht, const Point *p, const ScanTup
 									 slice_lock);
 	}
 
-	/* Find constraints matching dimension slices. */
-	ScanIterator iterator = ts_chunk_constraint_scan_iterator_create(CurrentMemoryContext);
-
 	ListCell *lc;
 	foreach (lc, all_slices)
 	{
 		DimensionSlice *slice = (DimensionSlice *) lfirst(lc);
+		int32 current_chunk_id = slice->fd.chunk_id;
+		Assert(current_chunk_id != INVALID_CHUNK_ID);
 
-		ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
-		ts_scan_iterator_start_or_restart_scan(&iterator);
-
-		while (ts_scan_iterator_next(&iterator) != NULL)
+		bool found = false;
+		ChunkScanEntry *entry = hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
+		if (!found)
 		{
-			TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-			bool PG_USED_FOR_ASSERTS_ONLY isnull = true;
-			Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull);
-			Assert(!isnull);
-			int32 current_chunk_id = DatumGetInt32(datum);
-			Assert(current_chunk_id != INVALID_CHUNK_ID);
-
-			bool found = false;
-			ChunkScanEntry *entry = hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
-			if (!found)
-			{
-				entry->stub = NULL;
-				entry->num_dimension_constraints = 0;
-			}
-
-			/*
-			 * We have only the dimension constraints here, because we're searching
-			 * by dimension slice id.
-			 */
-			Assert(!slot_attisnull(ts_scan_iterator_slot(&iterator),
-								   Anum_chunk_constraint_dimension_slice_id));
-			entry->num_dimension_constraints++;
-
-			/*
-			 * A chunk is complete when we've found slices for all its dimensions,
-			 * i.e., a complete hypercube. Only one chunk matches a given hyperspace
-			 * point, so we can stop early.
-			 */
-			if (entry->num_dimension_constraints == ctx.ht->space->num_dimensions)
-			{
-				matching_chunk_id = entry->chunk_id;
-				break;
-			}
+			entry->stub = NULL;
+			entry->num_dimension_constraints = 0;
 		}
 
-		if (matching_chunk_id != INVALID_CHUNK_ID)
+		entry->num_dimension_constraints++;
+
+		/*
+		 * A chunk is complete when we've matched a slice in every dimension.
+		 * Only one chunk can match a given point so we can stop early.
+		 */
+		if (entry->num_dimension_constraints == ctx.ht->space->num_dimensions)
 		{
+			matching_chunk_id = entry->chunk_id;
 			break;
 		}
 	}
-
-	ts_scan_iterator_close(&iterator);
 
 	chunk_scan_ctx_destroy(&ctx);
 
@@ -2264,7 +2235,7 @@ chunks_find_all_in_range_limit(const Hypertable *ht, const Dimension *time_dim,
 	ctx->early_abort = false;
 
 	/* Scan for chunks that are in range */
-	dimension_slice_and_chunk_constraint_join(ctx, slices);
+	dimension_slice_join_chunks(ctx, slices);
 
 	*num_found += hash_get_num_entries(ctx->htab);
 }
@@ -2634,42 +2605,42 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 															   mctx);
 
 	/*
-	 * For each slice, join with any constraints that reference the slice.
-	 * There might be multiple constraints for each slice in case of
-	 * multi-dimensional partitioning.
+	 * Each slice carries its owning chunk_id directly, so go fetch the chunk
+	 * and build its hypercube from the slice catalog.
 	 */
 	for (i = 0; i < dimvec->num_slices; i++)
 	{
 		DimensionSlice *slice = dimvec->slices[i];
-		ChunkConstraints *ccs = ts_chunk_constraints_alloc(1, mctx);
-		int j;
+		Chunk *chunk = ts_chunk_get_by_id(slice->fd.chunk_id, false);
+		MemoryContext old;
 
-		ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id, ccs, mctx);
-
-		/* For each constraint, find the corresponding chunk */
-		for (j = 0; j < ccs->num_constraints; j++)
+		/* Dropped chunks do not contain valid data and must not be returned */
+		if (!chunk)
 		{
-			ChunkConstraint *cc = &ccs->constraints[j];
-			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, false);
-			MemoryContext old;
-			ScanIterator it;
-
-			/* Dropped chunks do not contain valid data and must not be returned */
-			if (!chunk)
-			{
-				continue;
-			}
-			chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
-
-			it = ts_dimension_slice_scan_iterator_create(NULL, mctx);
-			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it);
-			ts_scan_iterator_close(&it);
-
-			/* Allocate the list on the same memory context as the chunks */
-			old = MemoryContextSwitchTo(mctx);
-			chunks = lappend(chunks, chunk);
-			MemoryContextSwitchTo(old);
+			continue;
 		}
+		chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
+
+		{
+			List *chunk_slices = ts_dimension_slice_scan_by_chunk_id(chunk->fd.id, mctx);
+			ListCell *lc;
+			int idx = 0;
+
+			old = MemoryContextSwitchTo(mctx);
+			chunk->cube = ts_hypercube_alloc(list_length(chunk_slices));
+			MemoryContextSwitchTo(old);
+			foreach (lc, chunk_slices)
+			{
+				chunk->cube->slices[idx++] = (DimensionSlice *) lfirst(lc);
+			}
+			chunk->cube->num_slices = idx;
+			ts_hypercube_slice_sort(chunk->cube);
+		}
+
+		/* Allocate the list on the same memory context as the chunks */
+		old = MemoryContextSwitchTo(mctx);
+		chunks = lappend(chunks, chunk);
+		MemoryContextSwitchTo(old);
 	}
 
 #ifdef USE_ASSERT_CHECKING
@@ -3168,7 +3139,6 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 {
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
-	int i;
 
 	ts_chunk_formdata_fill(&form, ti);
 
@@ -3182,60 +3152,18 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 	ts_chunk_constraint_delete_dimensional_constraints(form.id, ccs);
 	ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, !detach);
 
-	/* Check for dimension slices that are orphaned by the chunk deletion */
-	for (i = 0; i < ccs->num_constraints; i++)
+	/*
+	 * Delete the chunk's dimension slices. Each chunk owns its own slice rows,
+	 * so we can scan by chunk_id and drop them directly without orphan checks.
+	 */
 	{
-		ChunkConstraint *cc = &ccs->constraints[i];
+		List *chunk_slices = ts_dimension_slice_scan_by_chunk_id(form.id, CurrentMemoryContext);
+		ListCell *lc;
 
-		/*
-		 * Delete the dimension slice if there are no remaining constraints
-		 * referencing it
-		 */
-		if (is_dimension_constraint(cc))
+		foreach (lc, chunk_slices)
 		{
-			/*
-			 * Dimension slices are shared between chunk constraints and
-			 * subsequently between chunks as well. Since different chunks
-			 * can reference the same dimension slice (through the chunk
-			 * constraint), we must lock the dimension slice in FOR UPDATE
-			 * mode *prior* to scanning the chunk constraints table. If we
-			 * do not do that, we can have the following scenario:
-			 *
-			 * - T1: Prepares to create a chunk that uses an existing dimension slice X
-			 * - T2: Deletes a chunk and dimension slice X because it is not
-			 *   references by a chunk constraint.
-			 * - T1: Adds a chunk constraint referencing dimension
-			 *   slice X (which is about to be deleted by T2).
-			 */
-			ScanTupLock tuplock = { .lockmode = LockTupleExclusive, .waitpolicy = LockWaitBlock };
-			DimensionSlice *slice =
-				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-													   &tuplock,
-													   CurrentMemoryContext,
-													   AccessShareLock);
-			/* If the slice is not found in the scan above, the table is
-			 * broken so we do not delete the slice. We proceed
-			 * anyway since users need to be able to drop broken tables or
-			 * remove broken chunks. */
-			if (!slice)
-			{
-				const Hypertable *const ht = ts_hypertable_get_by_id(form.hypertable_id);
-				ereport(WARNING,
-						(errmsg("unexpected state for chunk %s.%s, dropping anyway",
-								quote_identifier(NameStr(form.schema_name)),
-								quote_identifier(NameStr(form.table_name))),
-						 errdetail("The integrity of hypertable %s.%s might be "
-								   "compromised "
-								   "since one of its chunks lacked a dimension slice.",
-								   quote_identifier(NameStr(ht->fd.schema_name)),
-								   quote_identifier(NameStr(ht->fd.table_name)))));
-			}
-			else if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
-																	NULL,
-																	CurrentMemoryContext) == 0)
-			{
-				ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
-			}
+			DimensionSlice *slice = (DimensionSlice *) lfirst(lc);
+			ts_dimension_slice_delete_by_id(slice->fd.id, false);
 		}
 	}
 
@@ -3536,7 +3464,6 @@ ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_
 {
 	DimensionVec *slices;
 	ChunkScanCtx chunkctx;
-	int i;
 
 	slices = ts_dimension_slice_scan_by_dimension(dimension_id, 0);
 
@@ -3547,12 +3474,7 @@ ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_
 
 	chunk_scan_ctx_init(&chunkctx, ht, NULL);
 
-	for (i = 0; i < slices->num_slices; i++)
-	{
-		ts_chunk_constraint_scan_by_dimension_slice(slices->slices[i],
-													&chunkctx,
-													CurrentMemoryContext);
-	}
+	dimension_slice_join_chunks(&chunkctx, slices);
 
 	chunk_scan_ctx_foreach_chunk_stub(&chunkctx, chunk_recreate_constraint, 0);
 	chunk_scan_ctx_destroy(&chunkctx);

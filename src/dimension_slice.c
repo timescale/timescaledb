@@ -715,6 +715,37 @@ ts_dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 }
 
 /*
+ * Return every slice that belongs to the given chunk, one per dimension.
+ *
+ * The result is a List of DimensionSlice* because the slices span multiple
+ * dimensions, which violates the single-dimension invariant of DimensionVec.
+ */
+List *
+ts_dimension_slice_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
+{
+	List *slices = NIL;
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_chunk_id_dimension_id_idx_chunk_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(chunk_id));
+
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_CHUNK_ID_DIMENSION_ID_IDX,
+										scankey,
+										1,
+										dimension_vec_tuple_found_list,
+										(void *) &slices,
+										0,
+										AccessShareLock,
+										NULL,
+										mctx);
+
+	return slices;
+}
+
+/*
  * Return slices that occur "before" the given point.
  *
  * The slices will be allocated on the given memory context. Note, however, that
@@ -993,6 +1024,20 @@ ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id)
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(slice_id));
+}
+
+void
+ts_dimension_slice_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
+{
+	it->ctx.index = catalog_get_index(ts_catalog_get(),
+									  DIMENSION_SLICE,
+									  DIMENSION_SLICE_CHUNK_ID_DIMENSION_ID_IDX);
+	ts_scan_iterator_scan_key_reset(it);
+	ts_scan_iterator_scan_key_init(it,
+								   Anum_dimension_slice_chunk_id_dimension_id_idx_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
 }
 
 DimensionSlice *
@@ -1293,9 +1338,9 @@ ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_
 	while (!done)
 	{
 		const TupleInfo *ti = ts_scan_iterator_next(&it);
-		ListCell *lc;
 		DimensionSlice *slice;
-		List *chunk_ids = NIL;
+		int32 chunk_id;
+		BgwPolicyChunkStats *chunk_stat;
 
 		if (NULL == ti)
 		{
@@ -1303,25 +1348,17 @@ ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_
 		}
 
 		slice = dimension_slice_from_slot(ti->slot);
-		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
-															&chunk_ids,
-															CurrentMemoryContext);
+		chunk_id = slice->fd.chunk_id;
 
-		foreach (lc, chunk_ids)
+		/* Look for a chunk that a) doesn't have a job stat (reorder ) and b) is not compressed
+		 * (should not reorder a compressed chunk) */
+		chunk_stat = ts_bgw_policy_chunk_stats_find(job_id, chunk_id);
+
+		if ((chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0) &&
+			ts_chunk_get_compression_status(chunk_id) == CHUNK_COMPRESS_NONE)
 		{
-			/* Look for a chunk that a) doesn't have a job stat (reorder ) and b) is not compressed
-			 * (should not reorder a compressed chunk) */
-			int32 chunk_id = lfirst_int(lc);
-			BgwPolicyChunkStats *chunk_stat = ts_bgw_policy_chunk_stats_find(job_id, chunk_id);
-
-			if ((chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0) &&
-				ts_chunk_get_compression_status(chunk_id) == CHUNK_COMPRESS_NONE)
-			{
-				/* Save the chunk_id */
-				result_chunk_id = chunk_id;
-				done = true;
-				break;
-			}
+			result_chunk_id = chunk_id;
+			done = true;
 		}
 	}
 
@@ -1353,8 +1390,8 @@ ts_dimension_slice_get_chunkids_to_compress(int32 dimension_id, StrategyNumber s
 	{
 		DimensionSlice *slice;
 		TupleInfo *ti;
-		ListCell *lc;
-		List *slice_chunk_ids = NIL;
+		int32 chunk_id;
+		ChunkCompressionStatus st;
 
 		ti = ts_scan_iterator_next(&it);
 
@@ -1364,27 +1401,19 @@ ts_dimension_slice_get_chunkids_to_compress(int32 dimension_id, StrategyNumber s
 		}
 
 		slice = dimension_slice_from_slot(ti->slot);
-		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
-															&slice_chunk_ids,
-															CurrentMemoryContext);
-		foreach (lc, slice_chunk_ids)
+		chunk_id = slice->fd.chunk_id;
+		st = ts_chunk_get_compression_status(chunk_id);
+
+		if ((compress && st == CHUNK_COMPRESS_NONE) ||
+			(recompress && st == CHUNK_COMPRESS_UNORDERED))
 		{
-			int32 chunk_id = lfirst_int(lc);
-			ChunkCompressionStatus st = ts_chunk_get_compression_status(chunk_id);
+			/* found a chunk that is not compressed or needs recompress;
+			 * caller needs to check the correct chunk status */
+			chunk_ids = lappend_int(chunk_ids, chunk_id);
 
-			if ((compress && st == CHUNK_COMPRESS_NONE) ||
-				(recompress && st == CHUNK_COMPRESS_UNORDERED))
+			if (maxchunks > 0 && list_length(chunk_ids) >= maxchunks)
 			{
-				/* found a chunk that is not compressed or needs recompress
-				 * caller needs to check the correct chunk status
-				 */
-				chunk_ids = lappend_int(chunk_ids, chunk_id);
-
-				if (maxchunks > 0 && list_length(chunk_ids) >= maxchunks)
-				{
-					done = true;
-					break;
-				}
+				done = true;
 			}
 		}
 	}
