@@ -51,15 +51,6 @@ INSERT INTO repair_test_date VALUES
        ('2020-01-01 10:11:13', 24.3, 2, 1),
        ('2020-01-02 10:11:14', 24.3, 2, 1);
 
--- We always drop the constraint and restore it in the
--- post.repair.sql.
---
--- This way if there are constraint violations remaining that wasn't
--- repaired properly, we will notice them when restoring the
--- constraint.
-ALTER TABLE _timescaledb_catalog.chunk_constraint
-      DROP CONSTRAINT chunk_constraint_dimension_slice_id_fkey;
-
 -- Grant privileges to some tables above. All should be repaired.
 GRANT ALL ON repair_test_int TO wizard;
 GRANT ALL ON repair_test_extra TO wizard;

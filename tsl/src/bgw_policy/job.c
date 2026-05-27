@@ -98,36 +98,16 @@ enable_fast_restart(int32 job_id, const char *job_name)
 	elog(DEBUG1, "the %s job is scheduled to run again immediately", job_name);
 }
 
-/*
- * Returns the ID of a chunk to reorder. Eligible chunks must be at least the
- * 3rd newest chunk in the hypertable (not entirely exact because we use the number
- * of dimension slices as a proxy for the number of chunks),
- * not compressed, not dropped and hasn't been reordered recently.
- * For this version of automatic reordering, "not reordered
- * recently" means the chunk has not been reordered at all. This information
- * is available in the bgw_policy_chunk_stats metadata table.
- */
+/* Return a chunk id to reorder, or -1 if none qualifies. */
 static int
 get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 {
 	const Dimension *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-	const DimensionSlice *nth_dimension =
-		ts_dimension_slice_nth_latest_slice(time_dimension->fd.id,
-											REORDER_SKIP_RECENT_DIM_SLICES_N);
-
-	if (!nth_dimension)
-	{
-		return -1;
-	}
-
 	Assert(time_dimension != NULL);
 
 	return ts_dimension_slice_oldest_valid_chunk_for_reorder(job_id,
 															 time_dimension->fd.id,
-															 BTLessEqualStrategyNumber,
-															 nth_dimension->fd.range_start,
-															 InvalidStrategy,
-															 -1);
+															 REORDER_SKIP_RECENT_DIM_SLICES_N);
 }
 
 /*

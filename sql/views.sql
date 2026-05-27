@@ -175,7 +175,7 @@ FROM (
     srcch.table_name AS chunk_name,
     dim.column_name AS primary_dimension,
     dim.column_type AS primary_dimension_type,
-    row_number() OVER (PARTITION BY chcons.chunk_id ORDER BY dim.id) AS chunk_dimension_num,
+    row_number() OVER (PARTITION BY dimsl.chunk_id ORDER BY dim.id) AS chunk_dimension_num,
     CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_start)
     ELSE
@@ -204,10 +204,8 @@ FROM (
 	srcch.creation_time AS creation_time
   FROM _timescaledb_catalog.chunk srcch
     INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id
-    INNER JOIN _timescaledb_catalog.chunk_constraint chcons ON srcch.id = chcons.chunk_id
-    INNER JOIN _timescaledb_catalog.dimension dim ON srcch.hypertable_id = dim.hypertable_id
-    INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dim.id = dimsl.dimension_id
-      AND chcons.dimension_slice_id = dimsl.id
+    INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dimsl.chunk_id = srcch.id
+    INNER JOIN _timescaledb_catalog.dimension dim ON dim.id = dimsl.dimension_id
     INNER JOIN (
       SELECT relname,
         reltablespace,

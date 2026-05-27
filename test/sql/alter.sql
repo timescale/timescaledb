@@ -399,8 +399,13 @@ INSERT INTO t_hypertable AS h VALUES ( 1, '2021-01-01 00:00:00', 3.2) ON CONFLIC
 BEGIN;
 ALTER INDEX t_hypertable_id_time_key RENAME TO t_new_constraint;
 
--- chunk_constraint should have updated constraint names
-SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
+-- chunk-side constraints should reflect the rename
+SELECT con.conname AS constraint_name
+FROM _timescaledb_catalog.chunk c
+JOIN pg_constraint con
+  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+WHERE con.conname LIKE '%t_new_constraint%'
+ORDER BY 1;
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;
@@ -408,8 +413,13 @@ ROLLBACK;
 BEGIN;
 ALTER TABLE t_hypertable RENAME CONSTRAINT t_hypertable_id_time_key TO t_new_constraint;
 
--- chunk_constraint should have updated constraint names
-SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
+-- chunk-side constraints should reflect the rename
+SELECT con.conname AS constraint_name
+FROM _timescaledb_catalog.chunk c
+JOIN pg_constraint con
+  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+WHERE con.conname LIKE '%t_new_constraint%'
+ORDER BY 1;
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;

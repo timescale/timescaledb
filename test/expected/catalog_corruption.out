@@ -16,7 +16,7 @@ SELECT id AS dim_slice_id FROM _timescaledb_catalog.dimension_slice
   ORDER BY id DESC LIMIT 1
   \gset
 -- Delete the dimension slice for the second chunk
-DELETE FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id = :dim_slice_id;
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = :dim_slice_id;
 \set ON_ERROR_STOP 0
 -- Select data
 SELECT * FROM dim_test;

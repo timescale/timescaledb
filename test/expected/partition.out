@@ -23,8 +23,8 @@ SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_1_%_chunk');
 ----------------------------------------+--------------+------+----------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  _timescaledb_internal._hyper_1_1_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
  _timescaledb_internal._hyper_1_1_chunk | constraint_2 | c    | {device} | -     | (_timescaledb_functions.get_partition_for_key(device) >= 1073741823)                                                                           | f          | f        | t
- _timescaledb_internal._hyper_1_2_chunk | constraint_1 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
- _timescaledb_internal._hyper_1_2_chunk | constraint_3 | c    | {device} | -     | (_timescaledb_functions.get_partition_for_key(device) < 1073741823)                                                                            | f          | f        | t
+ _timescaledb_internal._hyper_1_2_chunk | constraint_3 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_1_2_chunk | constraint_4 | c    | {device} | -     | (_timescaledb_functions.get_partition_for_key(device) < 1073741823)                                                                            | f          | f        | t
 
 -- Make sure constraint exclusion works on device column
 BEGIN;
@@ -60,10 +60,10 @@ VACUUM part_new;
 SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_2_%_chunk');
                  Table                  |  Constraint  | Type | Columns  | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 ----------------------------------------+--------------+------+----------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- _timescaledb_internal._hyper_2_3_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
- _timescaledb_internal._hyper_2_3_chunk | constraint_5 | c    | {device} | -     | (_timescaledb_functions.get_partition_hash(device) < 1073741823)                                                                               | f          | f        | t
- _timescaledb_internal._hyper_2_4_chunk | constraint_4 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
- _timescaledb_internal._hyper_2_4_chunk | constraint_6 | c    | {device} | -     | (_timescaledb_functions.get_partition_hash(device) >= 1073741823)                                                                              | f          | f        | t
+ _timescaledb_internal._hyper_2_3_chunk | constraint_5 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_2_3_chunk | constraint_6 | c    | {device} | -     | (_timescaledb_functions.get_partition_hash(device) < 1073741823)                                                                               | f          | f        | t
+ _timescaledb_internal._hyper_2_4_chunk | constraint_7 | c    | {time}   | -     | (("time" >= 'Wed Mar 15 17:00:00 2017 PDT'::timestamp with time zone) AND ("time" < 'Wed Mar 22 17:00:00 2017 PDT'::timestamp with time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_2_4_chunk | constraint_8 | c    | {device} | -     | (_timescaledb_functions.get_partition_hash(device) >= 1073741823)                                                                              | f          | f        | t
 
 -- Make sure constraint exclusion works on device column
 BEGIN;
@@ -395,8 +395,8 @@ SELECT (test.show_constraints("Child")).*
 FROM test.show_subtables('part_time_func');
   Constraint   | Type | Columns | Index |                                                                                     Expr                                                                                     | Deferrable | Deferred | Validated 
 ---------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- constraint_18 | c    | {time}  | -     | ((time_partfunc("time") >= 'Wed Jun 27 17:00:00 2018 PDT'::timestamp with time zone) AND (time_partfunc("time") < 'Wed Jul 04 17:00:00 2018 PDT'::timestamp with time zone)) | f          | f        | t
- constraint_19 | c    | {time}  | -     | ((time_partfunc("time") >= 'Wed Aug 01 17:00:00 2018 PDT'::timestamp with time zone) AND (time_partfunc("time") < 'Wed Aug 08 17:00:00 2018 PDT'::timestamp with time zone)) | f          | f        | t
+ constraint_21 | c    | {time}  | -     | ((time_partfunc("time") >= 'Wed Jun 27 17:00:00 2018 PDT'::timestamp with time zone) AND (time_partfunc("time") < 'Wed Jul 04 17:00:00 2018 PDT'::timestamp with time zone)) | f          | f        | t
+ constraint_22 | c    | {time}  | -     | ((time_partfunc("time") >= 'Wed Aug 01 17:00:00 2018 PDT'::timestamp with time zone) AND (time_partfunc("time") < 'Wed Aug 08 17:00:00 2018 PDT'::timestamp with time zone)) | f          | f        | t
 
 SELECT (test.show_indexes("Child")).*
 FROM test.show_subtables('part_time_func');

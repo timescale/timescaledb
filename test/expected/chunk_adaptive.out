@@ -503,123 +503,115 @@ range_end   | Sat Sep 17 02:40:49.182352 2016 PDT
 -[ RECORD 9 ]------------------------------------
 chunk_name  | _hyper_5_51_chunk
 range_start | Sat Sep 17 02:40:49.182352 2016 PDT
-range_end   | Sun Sep 18 17:33:46.890944 2016 PDT
+range_end   | Sun Sep 18 22:12:53.63722 2016 PDT
 -[ RECORD 10 ]-----------------------------------
 chunk_name  | _hyper_5_52_chunk
 range_start | Sat Sep 17 02:40:49.182352 2016 PDT
-range_end   | Sun Sep 18 17:33:46.890944 2016 PDT
+range_end   | Sun Sep 18 22:12:53.63722 2016 PDT
 -[ RECORD 11 ]-----------------------------------
 chunk_name  | _hyper_5_53_chunk
-range_start | Sun Sep 18 17:33:46.890944 2016 PDT
-range_end   | Sun Sep 18 20:35:55.67676 2016 PDT
+range_start | Sun Sep 18 22:12:53.63722 2016 PDT
+range_end   | Sat Sep 24 08:25:31.44201 2016 PDT
 -[ RECORD 12 ]-----------------------------------
 chunk_name  | _hyper_5_54_chunk
-range_start | Sun Sep 18 17:33:46.890944 2016 PDT
-range_end   | Sun Sep 18 20:35:55.67676 2016 PDT
+range_start | Sun Sep 18 22:12:53.63722 2016 PDT
+range_end   | Sat Sep 24 08:25:31.44201 2016 PDT
 -[ RECORD 13 ]-----------------------------------
 chunk_name  | _hyper_5_55_chunk
-range_start | Sun Sep 18 20:35:55.67676 2016 PDT
-range_end   | Tue Sep 20 18:46:40.16883 2016 PDT
+range_start | Sat Sep 24 08:25:31.44201 2016 PDT
+range_end   | Wed Sep 28 03:30:49.208219 2016 PDT
 -[ RECORD 14 ]-----------------------------------
 chunk_name  | _hyper_5_56_chunk
-range_start | Sun Sep 18 20:35:55.67676 2016 PDT
-range_end   | Tue Sep 20 18:46:40.16883 2016 PDT
+range_start | Sat Sep 24 08:25:31.44201 2016 PDT
+range_end   | Wed Sep 28 03:30:49.208219 2016 PDT
 -[ RECORD 15 ]-----------------------------------
 chunk_name  | _hyper_5_57_chunk
-range_start | Tue Sep 20 18:46:40.16883 2016 PDT
-range_end   | Sun Oct 02 16:44:29.071032 2016 PDT
+range_start | Wed Sep 28 03:30:49.208219 2016 PDT
+range_end   | Sun Oct 16 04:11:01.298196 2016 PDT
 -[ RECORD 16 ]-----------------------------------
 chunk_name  | _hyper_5_58_chunk
-range_start | Tue Sep 20 18:46:40.16883 2016 PDT
-range_end   | Sun Oct 02 16:44:29.071032 2016 PDT
+range_start | Wed Sep 28 03:30:49.208219 2016 PDT
+range_end   | Sun Oct 16 04:11:01.298196 2016 PDT
 -[ RECORD 17 ]-----------------------------------
 chunk_name  | _hyper_5_59_chunk
-range_start | Sun Oct 02 16:44:29.071032 2016 PDT
-range_end   | Tue Oct 11 00:37:03.738979 2016 PDT
+range_start | Sun Oct 16 04:11:01.298196 2016 PDT
+range_end   | Thu Nov 03 04:51:13.388173 2016 PDT
 -[ RECORD 18 ]-----------------------------------
 chunk_name  | _hyper_5_60_chunk
-range_start | Sun Oct 02 16:44:29.071032 2016 PDT
-range_end   | Tue Oct 11 00:37:03.738979 2016 PDT
+range_start | Sun Oct 16 04:11:01.298196 2016 PDT
+range_end   | Thu Nov 03 04:51:13.388173 2016 PDT
 -[ RECORD 19 ]-----------------------------------
 chunk_name  | _hyper_5_61_chunk
-range_start | Tue Oct 11 00:37:03.738979 2016 PDT
-range_end   | Thu Oct 27 03:05:25.740618 2016 PDT
+range_start | Thu Nov 03 04:51:13.388173 2016 PDT
+range_end   | Mon Nov 21 04:31:25.47815 2016 PST
 -[ RECORD 20 ]-----------------------------------
 chunk_name  | _hyper_5_62_chunk
-range_start | Tue Oct 11 00:37:03.738979 2016 PDT
-range_end   | Thu Oct 27 03:05:25.740618 2016 PDT
+range_start | Thu Nov 03 04:51:13.388173 2016 PDT
+range_end   | Mon Nov 21 04:31:25.47815 2016 PST
 -[ RECORD 21 ]-----------------------------------
 chunk_name  | _hyper_5_63_chunk
-range_start | Thu Oct 27 03:05:25.740618 2016 PDT
-range_end   | Sun Nov 13 12:38:49.541703 2016 PST
+range_start | Mon Nov 21 04:31:25.47815 2016 PST
+range_end   | Fri Dec 09 05:11:37.568127 2016 PST
 -[ RECORD 22 ]-----------------------------------
 chunk_name  | _hyper_5_64_chunk
-range_start | Thu Oct 27 03:05:25.740618 2016 PDT
-range_end   | Sun Nov 13 12:38:49.541703 2016 PST
+range_start | Mon Nov 21 04:31:25.47815 2016 PST
+range_end   | Fri Dec 09 05:11:37.568127 2016 PST
 -[ RECORD 23 ]-----------------------------------
 chunk_name  | _hyper_5_65_chunk
-range_start | Sun Nov 13 12:38:49.541703 2016 PST
-range_end   | Fri Dec 02 17:45:40.237036 2016 PST
+range_start | Fri Dec 09 05:11:37.568127 2016 PST
+range_end   | Tue Dec 27 05:51:49.658104 2016 PST
 -[ RECORD 24 ]-----------------------------------
 chunk_name  | _hyper_5_66_chunk
-range_start | Sun Nov 13 12:38:49.541703 2016 PST
-range_end   | Fri Dec 02 17:45:40.237036 2016 PST
+range_start | Fri Dec 09 05:11:37.568127 2016 PST
+range_end   | Tue Dec 27 05:51:49.658104 2016 PST
 -[ RECORD 25 ]-----------------------------------
 chunk_name  | _hyper_5_67_chunk
-range_start | Fri Dec 02 17:45:40.237036 2016 PST
-range_end   | Wed Dec 21 22:52:30.932369 2016 PST
+range_start | Tue Dec 27 05:51:49.658104 2016 PST
+range_end   | Sat Jan 14 06:32:01.748081 2017 PST
 -[ RECORD 26 ]-----------------------------------
 chunk_name  | _hyper_5_68_chunk
-range_start | Fri Dec 02 17:45:40.237036 2016 PST
-range_end   | Wed Dec 21 22:52:30.932369 2016 PST
+range_start | Tue Dec 27 05:51:49.658104 2016 PST
+range_end   | Sat Jan 14 06:32:01.748081 2017 PST
 -[ RECORD 27 ]-----------------------------------
 chunk_name  | _hyper_5_69_chunk
-range_start | Wed Dec 21 22:52:30.932369 2016 PST
-range_end   | Tue Jan 10 03:59:21.627702 2017 PST
+range_start | Sat Jan 14 06:32:01.748081 2017 PST
+range_end   | Wed Feb 01 07:12:13.838058 2017 PST
 -[ RECORD 28 ]-----------------------------------
 chunk_name  | _hyper_5_70_chunk
-range_start | Wed Dec 21 22:52:30.932369 2016 PST
-range_end   | Tue Jan 10 03:59:21.627702 2017 PST
+range_start | Sat Jan 14 06:32:01.748081 2017 PST
+range_end   | Wed Feb 01 07:12:13.838058 2017 PST
 -[ RECORD 29 ]-----------------------------------
 chunk_name  | _hyper_5_71_chunk
-range_start | Tue Jan 10 03:59:21.627702 2017 PST
-range_end   | Sun Jan 29 09:06:12.323035 2017 PST
+range_start | Wed Feb 01 07:12:13.838058 2017 PST
+range_end   | Sun Feb 19 07:52:25.928035 2017 PST
 -[ RECORD 30 ]-----------------------------------
 chunk_name  | _hyper_5_72_chunk
-range_start | Tue Jan 10 03:59:21.627702 2017 PST
-range_end   | Sun Jan 29 09:06:12.323035 2017 PST
+range_start | Wed Feb 01 07:12:13.838058 2017 PST
+range_end   | Sun Feb 19 07:52:25.928035 2017 PST
 -[ RECORD 31 ]-----------------------------------
 chunk_name  | _hyper_5_73_chunk
-range_start | Sun Jan 29 09:06:12.323035 2017 PST
-range_end   | Fri Feb 17 14:13:03.018368 2017 PST
+range_start | Sun Feb 19 07:52:25.928035 2017 PST
+range_end   | Thu Mar 09 08:32:38.018012 2017 PST
 -[ RECORD 32 ]-----------------------------------
 chunk_name  | _hyper_5_74_chunk
-range_start | Sun Jan 29 09:06:12.323035 2017 PST
-range_end   | Fri Feb 17 14:13:03.018368 2017 PST
--[ RECORD 33 ]-----------------------------------
-chunk_name  | _hyper_5_75_chunk
-range_start | Fri Feb 17 14:13:03.018368 2017 PST
-range_end   | Wed Mar 08 19:19:53.713701 2017 PST
--[ RECORD 34 ]-----------------------------------
-chunk_name  | _hyper_5_76_chunk
-range_start | Fri Feb 17 14:13:03.018368 2017 PST
-range_end   | Wed Mar 08 19:19:53.713701 2017 PST
+range_start | Sun Feb 19 07:52:25.928035 2017 PST
+range_end   | Thu Mar 09 08:32:38.018012 2017 PST
 
 SELECT *
 FROM  timescaledb_information.dimensions
 WHERE hypertable_name = 'test_adaptive_space' ORDER BY dimension_number;
--[ RECORD 1 ]-----+----------------------------------------
+-[ RECORD 1 ]-----+---------------------------------
 hypertable_schema | public
 hypertable_name   | test_adaptive_space
 dimension_number  | 1
 column_name       | time
 column_type       | timestamp with time zone
 dimension_type    | Time
-time_interval     | @ 19 days 5 hours 6 mins 50.695333 secs
+time_interval     | @ 18 days 40 mins 12.089977 secs
 integer_interval  | 
 integer_now_func  | 
 num_partitions    | 
--[ RECORD 2 ]-----+----------------------------------------
+-[ RECORD 2 ]-----+---------------------------------
 hypertable_schema | public
 hypertable_name   | test_adaptive_space
 dimension_number  | 2
@@ -644,32 +636,30 @@ FROM chunks_detailed_size('test_adaptive_space') ORDER BY chunk_name;
  _timescaledb_internal | _hyper_5_48_chunk |       40960 |       32768 |           0 |       73728 | 
  _timescaledb_internal | _hyper_5_49_chunk |       57344 |       81920 |           0 |      139264 | 
  _timescaledb_internal | _hyper_5_50_chunk |       57344 |       81920 |           0 |      139264 | 
- _timescaledb_internal | _hyper_5_51_chunk |       57344 |       81920 |           0 |      139264 | 
+ _timescaledb_internal | _hyper_5_51_chunk |       65536 |      106496 |           0 |      172032 | 
  _timescaledb_internal | _hyper_5_52_chunk |       57344 |       81920 |           0 |      139264 | 
- _timescaledb_internal | _hyper_5_53_chunk |        8192 |       32768 |           0 |       40960 | 
- _timescaledb_internal | _hyper_5_54_chunk |        8192 |       32768 |           0 |       40960 | 
- _timescaledb_internal | _hyper_5_55_chunk |       65536 |      106496 |           0 |      172032 | 
- _timescaledb_internal | _hyper_5_56_chunk |       65536 |       98304 |           0 |      163840 | 
- _timescaledb_internal | _hyper_5_57_chunk |      253952 |      360448 |           0 |      614400 | 
- _timescaledb_internal | _hyper_5_58_chunk |      253952 |      368640 |           0 |      622592 | 
- _timescaledb_internal | _hyper_5_59_chunk |      180224 |      303104 |           0 |      483328 | 
- _timescaledb_internal | _hyper_5_60_chunk |      188416 |      303104 |           0 |      491520 | 
- _timescaledb_internal | _hyper_5_61_chunk |      327680 |      540672 |           0 |      868352 | 
- _timescaledb_internal | _hyper_5_62_chunk |      327680 |      532480 |           0 |      860160 | 
- _timescaledb_internal | _hyper_5_63_chunk |      360448 |      581632 |           0 |      942080 | 
- _timescaledb_internal | _hyper_5_64_chunk |      352256 |      589824 |           0 |      942080 | 
- _timescaledb_internal | _hyper_5_65_chunk |      385024 |      598016 |           0 |      983040 | 
- _timescaledb_internal | _hyper_5_66_chunk |      393216 |      614400 |           0 |     1007616 | 
- _timescaledb_internal | _hyper_5_67_chunk |      385024 |      598016 |           0 |      983040 | 
- _timescaledb_internal | _hyper_5_68_chunk |      393216 |      598016 |           0 |      991232 | 
- _timescaledb_internal | _hyper_5_69_chunk |      393216 |      622592 |           0 |     1015808 | 
- _timescaledb_internal | _hyper_5_70_chunk |      385024 |      606208 |           0 |      991232 | 
- _timescaledb_internal | _hyper_5_71_chunk |      385024 |      614400 |           0 |      999424 | 
- _timescaledb_internal | _hyper_5_72_chunk |      393216 |      622592 |           0 |     1015808 | 
- _timescaledb_internal | _hyper_5_73_chunk |      393216 |      614400 |           0 |     1007616 | 
- _timescaledb_internal | _hyper_5_74_chunk |      385024 |      614400 |           0 |      999424 | 
- _timescaledb_internal | _hyper_5_75_chunk |      360448 |      581632 |           0 |      942080 | 
- _timescaledb_internal | _hyper_5_76_chunk |      368640 |      598016 |           0 |      966656 | 
+ _timescaledb_internal | _hyper_5_53_chunk |      122880 |      188416 |           0 |      311296 | 
+ _timescaledb_internal | _hyper_5_54_chunk |      131072 |      188416 |           0 |      319488 | 
+ _timescaledb_internal | _hyper_5_55_chunk |       98304 |      163840 |           0 |      262144 | 
+ _timescaledb_internal | _hyper_5_56_chunk |       98304 |      155648 |           0 |      253952 | 
+ _timescaledb_internal | _hyper_5_57_chunk |      368640 |      598016 |           0 |      966656 | 
+ _timescaledb_internal | _hyper_5_58_chunk |      360448 |      589824 |           0 |      950272 | 
+ _timescaledb_internal | _hyper_5_59_chunk |      368640 |      581632 |           0 |      950272 | 
+ _timescaledb_internal | _hyper_5_60_chunk |      368640 |      573440 |           0 |      942080 | 
+ _timescaledb_internal | _hyper_5_61_chunk |      368640 |      598016 |           0 |      966656 | 
+ _timescaledb_internal | _hyper_5_62_chunk |      368640 |      598016 |           0 |      966656 | 
+ _timescaledb_internal | _hyper_5_63_chunk |      368640 |      581632 |           0 |      950272 | 
+ _timescaledb_internal | _hyper_5_64_chunk |      368640 |      581632 |           0 |      950272 | 
+ _timescaledb_internal | _hyper_5_65_chunk |      360448 |      581632 |           0 |      942080 | 
+ _timescaledb_internal | _hyper_5_66_chunk |      368640 |      598016 |           0 |      966656 | 
+ _timescaledb_internal | _hyper_5_67_chunk |      368640 |      581632 |           0 |      950272 | 
+ _timescaledb_internal | _hyper_5_68_chunk |      368640 |      589824 |           0 |      958464 | 
+ _timescaledb_internal | _hyper_5_69_chunk |      368640 |      598016 |           0 |      966656 | 
+ _timescaledb_internal | _hyper_5_70_chunk |      368640 |      589824 |           0 |      958464 | 
+ _timescaledb_internal | _hyper_5_71_chunk |      360448 |      589824 |           0 |      950272 | 
+ _timescaledb_internal | _hyper_5_72_chunk |      368640 |      606208 |           0 |      974848 | 
+ _timescaledb_internal | _hyper_5_73_chunk |      327680 |      540672 |           0 |      868352 | 
+ _timescaledb_internal | _hyper_5_74_chunk |      335872 |      548864 |           0 |      884736 | 
 
 SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
  id | hypertable_id | interval_length 
@@ -677,7 +667,7 @@ SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
   2 |             2 |   1277664162704
   3 |             3 |   2315350169045
   6 |             5 |                
-  5 |             5 |   1660010695333
+  5 |             5 |   1557612089977
 
 -- A previous version stopped working as soon as hypertable_id stopped being
 -- equal to dimension_id (i.e., there was a hypertable with more than 1 dimension).
