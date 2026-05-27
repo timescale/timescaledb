@@ -50,3 +50,8 @@ WHERE dimension_slice_id IS NULL
 ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
 ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.decompress_batch(record)
+   RETURNS SETOF record
+   AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+   LANGUAGE C STRICT;
+

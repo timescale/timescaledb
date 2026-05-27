@@ -1,0 +1,71 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- _timescaledb_functions.decompress_batch(record) RETURNS SETOF record
+-- expands a single row of a compressed chunk into the user-visible rows it
+-- was compressed from.
+SET datestyle TO ISO;
+CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, value float)
+    WITH (tsdb.hypertable, tsdb.orderby = 'time', tsdb.segmentby = 'device_id');
+NOTICE:  using column "time" as partitioning column
+-- Populate with test data
+INSERT INTO metrics
+SELECT '2025-01-01'::timestamptz + (g || ' minute')::interval, g % 3, g::float
+FROM generate_series(1, 30) g;
+INSERT INTO metrics VALUES ('2025-01-01 02:00', NULL, NULL);
+SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+-- Capture the compressed chunk relation name
+SELECT format('%I.%I', cc.schema_name, cc.table_name) AS compressed_chunk
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk cc ON c.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id
+WHERE h.table_name = 'metrics' \gset
+-- Verify set equality: no source row missing, no extra row introduced
+SELECT count(*) AS missing FROM (
+    TABLE metrics
+    EXCEPT ALL
+    SELECT decomp.time, decomp.device_id, decomp.value
+    FROM :compressed_chunk t,
+         LATERAL _timescaledb_functions.decompress_batch(t)
+             AS decomp(time timestamptz, device_id int, value float)
+) m;
+ missing 
+---------
+       0
+
+SELECT count(*) AS extras FROM (
+    SELECT decomp.time, decomp.device_id, decomp.value
+    FROM :compressed_chunk t,
+         LATERAL _timescaledb_functions.decompress_batch(t)
+             AS decomp(time timestamptz, device_id int, value float)
+    EXCEPT ALL
+    TABLE metrics
+) e;
+ extras 
+--------
+      0
+
+-- Decompressing a single batch yields exactly that batch.
+SELECT decomp.time, decomp.device_id, decomp.value
+FROM (SELECT t FROM :compressed_chunk t WHERE t.device_id = 1) comp,
+     LATERAL _timescaledb_functions.decompress_batch(comp.t)
+         AS decomp(time timestamptz, device_id int, value float)
+ORDER BY decomp.time;
+          time          | device_id | value 
+------------------------+-----------+-------
+ 2025-01-01 00:01:00-08 |         1 |     1
+ 2025-01-01 00:04:00-08 |         1 |     4
+ 2025-01-01 00:07:00-08 |         1 |     7
+ 2025-01-01 00:10:00-08 |         1 |    10
+ 2025-01-01 00:13:00-08 |         1 |    13
+ 2025-01-01 00:16:00-08 |         1 |    16
+ 2025-01-01 00:19:00-08 |         1 |    19
+ 2025-01-01 00:22:00-08 |         1 |    22
+ 2025-01-01 00:25:00-08 |         1 |    25
+ 2025-01-01 00:28:00-08 |         1 |    28
+
+DROP TABLE metrics CASCADE;

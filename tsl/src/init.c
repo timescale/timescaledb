@@ -140,6 +140,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
 	.compressed_data_column_size = tsl_compressed_data_column_size,
 	.compressed_data_to_array = tsl_compressed_data_to_array,
+	.decompress_batch = tsl_decompress_batch,
 	.compressed_data_send = tsl_compressed_data_send,
 	.compressed_data_recv = tsl_compressed_data_recv,
 	.compressed_data_in = tsl_compressed_data_in,

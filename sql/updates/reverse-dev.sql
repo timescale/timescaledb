@@ -44,3 +44,4 @@ ON CONFLICT DO NOTHING;
 ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
 ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.decompress_batch(record);
