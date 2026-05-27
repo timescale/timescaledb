@@ -116,10 +116,6 @@ SELECT setval('_timescaledb_catalog.dimension_slice_id_seq',
                        COALESCE((SELECT max(id) FROM _timescaledb_catalog.dimension_slice), 0)),
               true);
 
-ALTER TABLE _timescaledb_catalog.chunk_constraint
-    ADD CONSTRAINT chunk_constraint_dimension_slice_id_fkey
-        FOREIGN KEY (dimension_slice_id) REFERENCES _timescaledb_catalog.dimension_slice (id);
-
 DROP TABLE _timescaledb_internal.tmp_dimension_slice;
 DROP TABLE _timescaledb_internal.tmp_dimension_slice_seq_value;
 
@@ -129,4 +125,20 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 GRANT SELECT ON _timescaledb_catalog.dimension_slice TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.dimension_slice_id_seq TO PUBLIC;
 -- end rebuild _timescaledb_catalog.dimension_slice table --
+
+-- Drop the chunk_constraint catalog. Dimensional ownership lives on
+-- dimension_slice.chunk_id now and non-dimensional constraints are
+-- located by name on the chunk relation. The PL/pgSQL helper that
+-- took a chunk_constraint row gets replaced by one with scalar args.
+DROP FUNCTION _timescaledb_functions.chunk_constraint_add_table_constraint(
+    _timescaledb_catalog.chunk_constraint);
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_constraint_add_table_constraint(
+    _timescaledb_catalog.chunk_constraint);
+DROP VIEW IF EXISTS timescaledb_information.chunks;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_constraint;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_constraint_name;
+
+DROP TABLE _timescaledb_catalog.chunk_constraint;
+DROP SEQUENCE _timescaledb_catalog.chunk_constraint_name;
 

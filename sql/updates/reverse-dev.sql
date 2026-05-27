@@ -1,3 +1,36 @@
+-- The PL/pgSQL helper switched to scalar args in the forward direction;
+-- drop it so the target version's chunk_constraint.sql can restore the
+-- row-typed signature.
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint(
+    integer, name, name);
+
+-- Recreate the chunk_constraint catalog table.
+CREATE TABLE _timescaledb_catalog.chunk_constraint (
+  chunk_id integer NOT NULL,
+  dimension_slice_id integer NULL,
+  constraint_name name NOT NULL,
+  hypertable_constraint_name name NULL,
+  CONSTRAINT chunk_constraint_chunk_id_constraint_name_key UNIQUE (chunk_id, constraint_name),
+  CONSTRAINT chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id)
+);
+
+CREATE INDEX chunk_constraint_dimension_slice_id_idx
+    ON _timescaledb_catalog.chunk_constraint (dimension_slice_id);
+
+CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint_name', '');
+
+GRANT SELECT ON _timescaledb_catalog.chunk_constraint TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.chunk_constraint_name TO PUBLIC;
+
+-- Restore the dimensional rows from the per-chunk slice rows.
+INSERT INTO _timescaledb_catalog.chunk_constraint
+    (chunk_id, dimension_slice_id, constraint_name, hypertable_constraint_name)
+SELECT chunk_id, id, format('constraint_%s', id)::name, ''::name
+FROM _timescaledb_catalog.dimension_slice;
+
 -- Restore chunk_constraint rows for CHECK constraints on OSM chunks.
 INSERT INTO _timescaledb_catalog.chunk_constraint
     (chunk_id, dimension_slice_id, constraint_name, hypertable_constraint_name)

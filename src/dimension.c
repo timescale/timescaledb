@@ -1814,13 +1814,6 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 																  DIMENSION_SLICE_MAXVALUE);
 				slice->fd.chunk_id = chunk->fd.id;
 				ts_dimension_slice_insert_multi(&slice, 1);
-
-				ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
-															   chunk->fd.id,
-															   slice->fd.id,
-															   NULL,
-															   NULL);
-				ts_chunk_constraint_insert(cc);
 			}
 		}
 	}

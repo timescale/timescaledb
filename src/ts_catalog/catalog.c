@@ -41,10 +41,6 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CHUNK_TABLE_NAME,
 	},
-	[CHUNK_CONSTRAINT] = {
-		.schema_name = CATALOG_SCHEMA_NAME,
-		.table_name = CHUNK_CONSTRAINT_TABLE_NAME,
-	},
 	[CHUNK_REWRITE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CHUNK_REWRITE_TABLE_NAME,
@@ -168,13 +164,6 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX] = "chunk_hypertable_id_creation_time_idx",
 		},
 	},
-	[CHUNK_CONSTRAINT] = {
-		.length = _MAX_CHUNK_CONSTRAINT_INDEX,
-		.names = (char *[]) {
-			[CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX] = "chunk_constraint_chunk_id_constraint_name_key",
-			[CHUNK_CONSTRAINT_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_dimension_slice_id_idx",
-		},
-	},
 	[CHUNK_REWRITE] = {
 		.length = _MAX_CHUNK_REWRITE_INDEX,
 		.names = (char *[]) {
@@ -290,7 +279,6 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[DIMENSION] = CATALOG_SCHEMA_NAME ".dimension_id_seq",
 	[DIMENSION_SLICE] = CATALOG_SCHEMA_NAME ".dimension_slice_id_seq",
 	[CHUNK] = CATALOG_SCHEMA_NAME ".chunk_id_seq",
-	[CHUNK_CONSTRAINT] = CATALOG_SCHEMA_NAME ".chunk_constraint_name",
 	[CHUNK_REWRITE] = NULL,
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CATALOG_SCHEMA_NAME ".bgw_job_id_seq",
@@ -313,7 +301,7 @@ typedef struct InternalFunctionDef
 static const InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUNCTIONS] = {
 	[DDL_ADD_CHUNK_CONSTRAINT] = {
 		.name = "chunk_constraint_add_table_constraint",
-		.args = 1,
+		.args = 3,
 	},
 	[DDL_CONSTRAINT_CLONE] = {
 		.name = "constraint_clone",
@@ -782,7 +770,6 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 	switch (table)
 	{
 		case CHUNK:
-		case CHUNK_CONSTRAINT:
 		case DIMENSION_SLICE:
 			if (operation == CMD_UPDATE || operation == CMD_DELETE)
 			{

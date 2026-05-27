@@ -104,7 +104,6 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 
 		ts_chunk_formdata_fill(&chunk->fd, ti);
 
-		chunk->constraints = NULL;
 		chunk->cube = NULL;
 		chunk->hypertable_relid = hs->main_table_relid;
 		chunk->table_id = chunk_reloid;
@@ -129,30 +128,8 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	}
 
 	/*
-	 * Fetch the chunk constraints.
-	 */
-	ScanIterator constr_it = ts_chunk_constraint_scan_iterator_create(orig_mcxt);
-
-	for (int i = 0; i < locked_chunk_count; i++)
-	{
-		Chunk *chunk = locked_chunks[i];
-		chunk->constraints = ts_chunk_constraints_alloc(/* size_hint = */ 0, orig_mcxt);
-
-		ts_chunk_constraint_scan_iterator_set_chunk_id(&constr_it, chunk->fd.id);
-		ts_scan_iterator_start_or_restart_scan(&constr_it);
-
-		while (ts_scan_iterator_next(&constr_it) != NULL)
-		{
-			TupleInfo *constr_ti = ts_scan_iterator_tuple_info(&constr_it);
-			ts_chunk_constraints_add_from_tuple(chunk->constraints, constr_ti);
-		}
-	}
-	ts_scan_iterator_close(&constr_it);
-
-	/*
 	 * Build hypercubes by scanning dimension_slice directly per chunk. Each
-	 * chunk owns its slice rows so this is a one-shot index lookup per chunk
-	 * with no join through chunk_constraint.
+	 * chunk owns its slice rows so this is a one-shot index lookup per chunk.
 	 */
 	ScanIterator slice_iterator = ts_dimension_slice_scan_iterator_create(NULL, orig_mcxt);
 	for (int chunk_index = 0; chunk_index < locked_chunk_count; chunk_index++)

@@ -173,27 +173,6 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice', 'id'), '');
 
--- A chunk constraint maps a dimension slice to a chunk. Each
--- constraint associated with a chunk will also be a table constraint
--- on the chunk's data table.
-CREATE TABLE _timescaledb_catalog.chunk_constraint (
-  chunk_id integer NOT NULL,
-  dimension_slice_id integer NULL,
-  constraint_name name NOT NULL,
-  hypertable_constraint_name name NULL,
-  -- table constraints
-  CONSTRAINT chunk_constraint_chunk_id_constraint_name_key UNIQUE (chunk_id, constraint_name),
-  CONSTRAINT chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id),
-  CONSTRAINT chunk_constraint_dimension_slice_id_fkey FOREIGN KEY (dimension_slice_id) REFERENCES _timescaledb_catalog.dimension_slice (id)
-);
-
-CREATE INDEX chunk_constraint_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (dimension_slice_id);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
-
-CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint_name', '');
-
 -- Track statistics for columns of chunks from a hypertable.
 -- Currently, we track the min/max range for a given column across chunks.
 -- More statistics (like bloom filters) can be added in the future.

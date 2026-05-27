@@ -818,16 +818,11 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 		}
 	}
 
-	bool *delete_constraints = data;
 	CatalogSecurityContext sec_ctx;
 
+	(void) data;
+	(void) dimension_slice_id;
 	Assert(!isnull);
-
-	/* delete chunk constraints */
-	if (NULL != delete_constraints && *delete_constraints)
-	{
-		ts_chunk_constraint_delete_by_dimension_slice_id(DatumGetInt32(dimension_slice_id));
-	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));

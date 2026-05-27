@@ -204,17 +204,17 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 								 errmsg("operation not supported on OSM chunk tables")));
 					}
 
-					ChunkConstraints *ccs =
-						ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id,
-															 10,
-															 CurrentMemoryContext);
 					Assert(cmd->name);
 
-					for (int i = 0; i < ccs->num_constraints; i++)
+					for (int i = 0; i < chunk->cube->num_slices; i++)
 					{
-						ChunkConstraint *cc = &ccs->constraints[i];
+						char dim_check_name[NAMEDATALEN];
 
-						if (namestrcmp(&cc->fd.constraint_name, cmd->name) == 0)
+						snprintf(dim_check_name,
+								 NAMEDATALEN,
+								 "constraint_%d",
+								 chunk->cube->slices[i]->fd.id);
+						if (strcmp(dim_check_name, cmd->name) == 0)
 						{
 							ereport(ERROR,
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -6274,17 +6274,6 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 		foreach_chunk(ht, process_drop_constraint_on_chunk, (void *) constraint->constraint_name);
 
 		ts_catalog_restore_user(&sec_ctx);
-	}
-	else
-	{
-		/* Cannot get the full chunk here because it's table might be dropped */
-		int32 chunk_id;
-		bool found = ts_chunk_get_id(constraint->schema, constraint->table, &chunk_id, true);
-
-		if (found)
-		{
-			ts_chunk_constraint_delete_by_constraint_name(chunk_id, constraint->constraint_name);
-		}
 	}
 }
 

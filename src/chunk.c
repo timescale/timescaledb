@@ -604,23 +604,6 @@ chunk_collision_resolve(const Hypertable *ht, Hypercube *cube, const Point *p)
 	chunk_scan_ctx_destroy(&scanctx);
 }
 
-static int
-chunk_add_constraints(const Chunk *chunk)
-{
-	int num_added;
-
-	num_added = ts_chunk_constraints_add_dimension_constraints(chunk->constraints,
-															   chunk->fd.id,
-															   chunk->cube);
-	num_added += ts_chunk_constraints_add_inheritable_constraints(chunk->constraints,
-																  chunk->fd.id,
-																  chunk->relkind,
-																  chunk->hypertable_relid,
-																  chunk->table_id);
-
-	return num_added;
-}
-
 /* applies the attributes and statistics target for columns on the hypertable
    to columns on the chunk */
 static void
@@ -1224,7 +1207,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 	/* Insert any new chunk column stats entries into the catalog */
 	ts_chunk_column_stats_insert(ht, chunk);
 
-	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_create_table_constraints(ht, chunk);
 
@@ -1396,7 +1378,6 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	 * created. However, for the latter case, we risk duplicating constraints
 	 * and triggers if some of them already exist on the chunk table prior to
 	 * creating the chunk from it. */
-	chunk_add_constraints(chunk);
 	ts_chunk_constraint_check_violated(chunk, ht->space);
 	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_add_inheritance(chunk, ht);
@@ -1708,13 +1689,9 @@ ts_chunk_stub_create(int32 id, int16 num_constraints)
 {
 	ChunkStub *stub;
 
+	(void) num_constraints;
 	stub = palloc0(sizeof(*stub));
 	stub->id = id;
-
-	if (num_constraints > 0)
-	{
-		stub->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
-	}
 
 	return stub;
 }
@@ -1724,16 +1701,12 @@ ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind)
 {
 	Chunk *chunk;
 
+	(void) num_constraints;
 	chunk = palloc0(sizeof(Chunk));
 	chunk->fd.id = id;
 	chunk->fd.compressed_chunk_id = INVALID_CHUNK_ID;
 	chunk->relkind = relkind;
 	chunk->fd.creation_time = GetCurrentTimestamp();
-
-	if (num_constraints > 0)
-	{
-		chunk->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
-	}
 
 	return chunk;
 }
@@ -1750,7 +1723,9 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 								   const ScanTupLock *slice_lock)
 {
 	Chunk *chunk = NULL;
-	int num_constraints_hint = stub ? stub->constraints->num_constraints : 2;
+
+	(void) stub;
+	(void) slice_lock;
 
 	if (chunkptr == NULL)
 	{
@@ -1765,14 +1740,6 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 	chunk = *chunkptr;
 	ts_chunk_formdata_fill(&chunk->fd, ti);
 
-	/*
-	 * When searching for the chunk stub matching the dimensional point, we
-	 * only scanned for dimensional constraints. We now need to rescan the
-	 * constraints to also get the inherited constraints.
-	 */
-	chunk->constraints =
-		ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints_hint, ti->mctx);
-
 	/* Build the cube directly from dimension_slice rows owned by this chunk. */
 	{
 		List *slices = ts_dimension_slice_scan_by_chunk_id(chunk->fd.id, ti->mctx);
@@ -1786,8 +1753,6 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 			chunk->cube->slices[chunk->cube->num_slices++] = (DimensionSlice *) lfirst(lc);
 		}
 		ts_hypercube_slice_sort(chunk->cube);
-		(void) stub;
-		(void) slice_lock;
 	}
 
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
@@ -1943,7 +1908,6 @@ dimension_slice_join_chunks(ChunkScanCtx *scanctx, const DimensionVec *vec)
 			stub = entry->stub;
 		}
 
-		ts_chunk_constraints_add(stub->constraints, chunk_id, slice->fd.id, NULL, NULL);
 		ts_hypercube_add_slice(stub->cube, slice);
 
 		if (chunk_stub_is_complete(stub, hs))
@@ -2505,11 +2469,6 @@ ts_chunk_copy(const Chunk *chunk)
 	copy = palloc(sizeof(Chunk));
 	memcpy(copy, chunk, sizeof(Chunk));
 
-	if (NULL != chunk->constraints)
-	{
-		copy->constraints = ts_chunk_constraints_copy(chunk->constraints);
-	}
-
 	if (NULL != chunk->cube)
 	{
 		copy->cube = ts_hypercube_copy(chunk->cube);
@@ -2601,7 +2560,6 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 		{
 			continue;
 		}
-		chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
 
 		{
 			List *chunk_slices = ts_dimension_slice_scan_by_chunk_id(chunk->fd.id, mctx);
@@ -2827,13 +2785,6 @@ ts_chunk_free(Chunk *chunk)
 	if (chunk->cube)
 	{
 		ts_hypercube_free(chunk->cube);
-	}
-
-	if (chunk->constraints)
-	{
-		ChunkConstraints *c = chunk->constraints;
-		pfree(c->constraints);
-		pfree(c);
 	}
 
 	pfree(chunk);
@@ -3124,14 +3075,7 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 
 	ts_chunk_formdata_fill(&form, ti);
 
-	ChunkConstraints *ccs;
-
-	/*
-	 * Drop the chunk's remaining chunk_constraint rows (none for dimensions
-	 * anymore; this only catches anything legacy).
-	 */
-	ccs = ts_chunk_constraints_alloc(2, ti->mctx);
-	ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, !detach);
+	(void) detach;
 
 	/*
 	 * Delete the chunk's dimension slices. Each chunk owns its own slice rows,
@@ -4986,7 +4930,6 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	chunk->fd.osm_chunk = true; /* this is an OSM chunk */
 	chunk->cube = fill_hypercube_for_osm_chunk(hs);
 	chunk->hypertable_relid = parent_ht->main_table_relid;
-	chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
 
 	namestrcpy(&chunk->fd.schema_name, relschema);
 	namestrcpy(&chunk->fd.table_name, relname);
@@ -5003,9 +4946,6 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	 */
 	ts_chunk_clone_check_constraints(relid, chunk->hypertable_relid);
 	chunk_create_table_constraints(parent_ht, chunk);
-	/* Build the in-memory dimension constraints from the cube; nothing is
-	 * persisted to chunk_constraint anymore. */
-	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
 	chunk_add_inheritance(chunk, parent_ht);
 	/*
 	 * Update hypertable entry with tiering status information.
@@ -5122,16 +5062,10 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	/* Build an in-memory constraint entry for the new slice and let the
 	 * existing helper create the CHECK on the chunk table. */
-	ChunkConstraints *ccs = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
-	ts_chunk_constraints_add(ccs, chunk->fd.id, new_slice->fd.id, NULL, NULL);
-
-	ChunkConstraints *oldccs = chunk->constraints;
-	chunk->constraints = ccs;
 	ts_process_utility_set_expect_chunk_modification(true);
 	ts_chunk_constraints_create(ht, chunk);
 	ts_chunk_copy_referencing_fk(ht, chunk);
 	ts_process_utility_set_expect_chunk_modification(false);
-	chunk->constraints = oldccs;
 
 	ts_chunk_drop(merge_chunk, DROP_RESTRICT, 1);
 }
@@ -5304,11 +5238,8 @@ ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti)
 {
 	Chunk *chunkptr = NULL;
 	ChunkVec *vec;
-	int num_constraints_hint;
-	ScanIterator it;
 
 	vec = *chunks;
-	num_constraints_hint = 2;
 
 	if (vec->num_chunks + 1 > vec->capacity)
 	{
@@ -5318,15 +5249,20 @@ ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti)
 	chunkptr = &vec->chunks[vec->num_chunks++];
 	ts_chunk_formdata_fill(&chunkptr->fd, ti);
 
-	/*
-	 * Get the chunk constraints, hypercube slices and relation details.
-	 */
-	chunkptr->constraints =
-		ts_chunk_constraint_scan_by_chunk_id(chunkptr->fd.id, num_constraints_hint, ti->mctx);
+	/* Build the cube from dimension_slice rows owned by this chunk. */
+	{
+		List *slices = ts_dimension_slice_scan_by_chunk_id(chunkptr->fd.id, ti->mctx);
+		ListCell *lc;
+		MemoryContext oldctx = MemoryContextSwitchTo(ti->mctx);
 
-	it = ts_dimension_slice_scan_iterator_create(NULL, ti->mctx);
-	chunkptr->cube = ts_hypercube_from_constraints(chunkptr->constraints, &it);
-	ts_scan_iterator_close(&it);
+		chunkptr->cube = ts_hypercube_alloc(list_length(slices));
+		MemoryContextSwitchTo(oldctx);
+		foreach (lc, slices)
+		{
+			chunkptr->cube->slices[chunkptr->cube->num_slices++] = (DimensionSlice *) lfirst(lc);
+		}
+		ts_hypercube_slice_sort(chunkptr->cube);
+	}
 
 	chunkptr->table_id = ts_get_relation_relid(NameStr(chunkptr->fd.schema_name),
 											   NameStr(chunkptr->fd.table_name),

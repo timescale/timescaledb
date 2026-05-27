@@ -36,7 +36,6 @@ typedef enum CatalogTable
 	DIMENSION,
 	DIMENSION_SLICE,
 	CHUNK,
-	CHUNK_CONSTRAINT,
 	CHUNK_REWRITE,
 	TABLESPACE,
 	BGW_JOB,
@@ -448,56 +447,6 @@ enum Anum_chunk_hypertable_id_creation_time_idx
 {
 	Anum_chunk_hypertable_id_creation_time_idx_hypertable_id = 1,
 	Anum_chunk_hypertable_id_creation_time_idx_creation_time,
-};
-
-/************************************
- *
- * Chunk constraint table definitions
- *
- ************************************/
-
-#define CHUNK_CONSTRAINT_TABLE_NAME "chunk_constraint"
-
-enum Anum_chunk_constraint
-{
-	Anum_chunk_constraint_chunk_id = 1,
-	Anum_chunk_constraint_dimension_slice_id,
-	Anum_chunk_constraint_constraint_name,
-	Anum_chunk_constraint_hypertable_constraint_name,
-	_Anum_chunk_constraint_max,
-};
-
-#define Natts_chunk_constraint (_Anum_chunk_constraint_max - 1)
-
-/* Do Not use GET_STRUCT with FormData_chunk_constraint. It contains NULLS */
-typedef struct FormData_chunk_constraint
-{
-	int32 chunk_id;
-	int32 dimension_slice_id;
-	NameData constraint_name;
-	NameData hypertable_constraint_name;
-} FormData_chunk_constraint;
-
-typedef FormData_chunk_constraint *Form_chunk_constraint;
-
-enum
-{
-	CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX = 0,
-	CHUNK_CONSTRAINT_DIMENSION_SLICE_ID_IDX,
-	_MAX_CHUNK_CONSTRAINT_INDEX,
-};
-
-enum Anum_chunk_constraint_dimension_slice_id_idx
-{
-	Anum_chunk_constraint_dimension_slice_id_idx_dimension_slice_id = 1,
-	_Anum_chunk_constraint_dimension_slice_id_idx_max,
-};
-
-enum Anum_chunk_constraint_chunk_id_constraint_name_idx
-{
-	Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id = 1,
-	Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
-	_Anum_chunk_constraint_chunk_id_constraint_name_idx_max,
 };
 
 /************************************

@@ -205,55 +205,6 @@ ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
 }
 
 /*
- * Given a set of constraints, build the corresponding hypercube.
- */
-Hypercube *
-ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator *slice_it)
-{
-	Hypercube *hc;
-	int i;
-	MemoryContext old;
-
-	old = MemoryContextSwitchTo(ts_scan_iterator_get_result_memory_context(slice_it));
-	hc = ts_hypercube_alloc(constraints->num_dimension_constraints);
-	MemoryContextSwitchTo(old);
-
-	for (i = 0; i < constraints->num_constraints; i++)
-	{
-		ChunkConstraint *cc = chunk_constraints_get(constraints, i);
-
-		if (is_dimension_constraint(cc))
-		{
-			DimensionSlice *slice;
-
-			Assert(hc->num_slices < constraints->num_dimension_constraints);
-
-			/* When building the hypercube, we reference the dimension slices
-			 * to construct the hypercube.
-			 *
-			 * However, we cannot add a tuple lock when running in recovery
-			 * mode since that prevents SELECT statements (which reach this
-			 * point) from running on a read-only secondary (which runs in
-			 * ephemeral recovery mode), so we only take the lock if we are not
-			 * in recovery mode.
-			 */
-			slice = ts_dimension_slice_scan_iterator_get_by_id(slice_it, cc->fd.dimension_slice_id);
-			if (!slice)
-			{
-				elog(ERROR, "could not find dimension slice with id %d", cc->fd.dimension_slice_id);
-			}
-			hc->slices[hc->num_slices++] = slice;
-		}
-	}
-
-	ts_hypercube_slice_sort(hc);
-
-	Assert(hypercube_is_sorted(hc));
-
-	return hc;
-}
-
-/*
  * Find slices in the hypercube that already exists in metadata.
  *
  * If a slice exists in metadata, the slice ID will be filled in on the
