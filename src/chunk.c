@@ -133,13 +133,6 @@ typedef struct ChunkStubScanCtx
 	const ScanTupLock *slice_lock;
 } ChunkStubScanCtx;
 
-static bool
-chunk_stub_is_valid(const ChunkStub *stub, int16 expected_slices)
-{
-	return stub && stub->id > 0 && stub->constraints && expected_slices == stub->cube->num_slices &&
-		   stub->cube->num_slices == stub->constraints->num_dimension_constraints;
-}
-
 typedef ChunkResult (*on_chunk_stub_func)(ChunkScanCtx *ctx, ChunkStub *stub);
 static void chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hypertable *ht, const Point *point);
 static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
@@ -976,11 +969,9 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 static void
 chunk_insert_into_metadata_after_lock(const Chunk *chunk)
 {
-	/* Insert chunk */
+	/* Insert chunk. Dimensional ownership lives on dimension_slice.chunk_id
+	 * now, so there is no separate chunk_constraint row to write here. */
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
-
-	/* Add metadata for dimensional and inheritable constraints */
-	ts_chunk_constraints_insert_metadata(chunk->constraints);
 }
 
 /*
@@ -1782,30 +1773,21 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 	chunk->constraints =
 		ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints_hint, ti->mctx);
 
-	/* If a stub is provided then reuse its hypercube. Note that stubs that
-	 * are results of a point or range scan might be incomplete (in terms of
-	 * number of slices and constraints). Only a chunk stub that matches in
-	 * all dimensions will have a complete hypercube. Thus, we need to check
-	 * the validity of the stub before we can reuse it.
-	 */
-	if (chunk_stub_is_valid(stub, chunk->constraints->num_dimension_constraints))
+	/* Build the cube directly from dimension_slice rows owned by this chunk. */
 	{
+		List *slices = ts_dimension_slice_scan_by_chunk_id(chunk->fd.id, ti->mctx);
+		ListCell *lc;
 		MemoryContext oldctx = MemoryContextSwitchTo(ti->mctx);
 
-		chunk->cube = ts_hypercube_copy(stub->cube);
+		chunk->cube = ts_hypercube_alloc(list_length(slices));
 		MemoryContextSwitchTo(oldctx);
-
-		/*
-		 * The hypercube slices were filled in during the scan. Now we need to
-		 * sort them in dimension order.
-		 */
+		foreach (lc, slices)
+		{
+			chunk->cube->slices[chunk->cube->num_slices++] = (DimensionSlice *) lfirst(lc);
+		}
 		ts_hypercube_slice_sort(chunk->cube);
-	}
-	else
-	{
-		ScanIterator it = ts_dimension_slice_scan_iterator_create(slice_lock, ti->mctx);
-		chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it);
-		ts_scan_iterator_close(&it);
+		(void) stub;
+		(void) slice_lock;
 	}
 
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
@@ -3145,11 +3127,10 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 	ChunkConstraints *ccs;
 
 	/*
-	 * Do not drop any constraint if detaching
-	 * We will still need to delete dimension slices for the chunk
+	 * Drop the chunk's remaining chunk_constraint rows (none for dimensions
+	 * anymore; this only catches anything legacy).
 	 */
 	ccs = ts_chunk_constraints_alloc(2, ti->mctx);
-	ts_chunk_constraint_delete_dimensional_constraints(form.id, ccs);
 	ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, !detach);
 
 	/*
@@ -5022,9 +5003,9 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	 */
 	ts_chunk_clone_check_constraints(relid, chunk->hypertable_relid);
 	chunk_create_table_constraints(parent_ht, chunk);
-	/* Add dimension constraints for the chunk */
+	/* Build the in-memory dimension constraints from the cube; nothing is
+	 * persisted to chunk_constraint anymore. */
 	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
-	ts_chunk_constraints_insert_metadata(chunk->constraints);
 	chunk_add_inheritance(chunk, parent_ht);
 	/*
 	 * Update hypertable entry with tiering status information.
@@ -5047,7 +5028,6 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 							int32 dimension_id)
 {
 	const DimensionSlice *slice, *merge_slice;
-	int num_ccs = 0;
 	bool dimension_slice_found = false;
 
 	if (chunk->hypertable_relid != merge_chunk->hypertable_relid)
@@ -5106,71 +5086,17 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 						 dimension_id)));
 	}
 
-	num_ccs =
-		ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id, NULL, CurrentMemoryContext);
-
-	/* There should always be an associated chunk constraint to a dimension slice.
-	 * This can only occur when the catalog metadata is corrupt.
-	 */
-	if (num_ccs <= 0)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("missing chunk constraint for dimension slice"),
-				 errhint("chunk: \"%s\", slice ID %d",
-						 get_rel_name(chunk->table_id),
-						 slice->fd.id)));
-	}
-
+	int32 old_slice_id = slice->fd.id;
 	DimensionSlice *new_slice =
 		ts_dimension_slice_create(dimension_id, slice->fd.range_start, merge_slice->fd.range_end);
 
-	/* Only if there is exactly one chunk constraint for the merged dimension slice
-	 * we can go ahead and delete it since we are dropping the chunk.
-	 */
-	if (num_ccs == 1)
-	{
-		ts_dimension_slice_delete_by_id(slice->fd.id, false);
-	}
-
-	/* Each chunk owns its own slice rows; always insert a fresh row with the
-	 * kept chunk's id rather than reusing one that already belongs to another
-	 * chunk. */
+	/* Replace the kept chunk's slice with the merged range. */
+	ts_dimension_slice_delete_by_id(old_slice_id, false);
 	new_slice->fd.chunk_id = chunk->fd.id;
 	ts_dimension_slice_insert(new_slice);
 
-	ts_chunk_constraint_update_slice_id(chunk->fd.id, slice->fd.id, new_slice->fd.id);
-	ChunkConstraints *ccs = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, CurrentMemoryContext);
-
-	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, new_slice->fd.id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool isnull;
-		Datum d;
-
-		d = slot_getattr(ts_scan_iterator_slot(&iterator), Anum_chunk_constraint_chunk_id, &isnull);
-
-		if (!isnull && DatumGetInt32(d) == chunk->fd.id)
-		{
-			num_ccs++;
-			ts_chunk_constraints_add_from_tuple(ccs, ts_scan_iterator_tuple_info(&iterator));
-		}
-	}
-
-	if (num_ccs <= 0)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("missing chunk constraint for merged dimension slice"),
-				 errhint("chunk: \"%s\", slice ID %d",
-						 get_rel_name(chunk->table_id),
-						 new_slice->fd.id)));
-	}
-
-	/* Update the slice in the chunk's hypercube. Needed to make recreate constraints work. */
+	/* Reflect the new slice in the in-memory hypercube so the recreate path
+	 * below builds the right CHECK. */
 	for (int i = 0; i < chunk->cube->num_slices; i++)
 	{
 		if (chunk->cube->slices[i]->fd.dimension_id == dimension_id)
@@ -5180,28 +5106,25 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 		}
 	}
 
-	/* Delete the old constraint */
-	for (int i = 0; i < chunk->constraints->num_constraints; i++)
+	/* Drop the CHECK on the chunk table that came from the old slice. Its name
+	 * is derived from the slice id. */
+	char old_check_name[NAMEDATALEN];
+	snprintf(old_check_name, NAMEDATALEN, "constraint_%d", old_slice_id);
+	Oid old_check_oid = get_relation_constraint_oid(chunk->table_id, old_check_name, true);
+	if (OidIsValid(old_check_oid))
 	{
-		const ChunkConstraint *cc = &chunk->constraints->constraints[i];
-
-		if (cc->fd.dimension_slice_id == slice->fd.id)
-		{
-			ObjectAddress constrobj = {
-				.classId = ConstraintRelationId,
-				.objectId = get_relation_constraint_oid(chunk->table_id,
-														NameStr(cc->fd.constraint_name),
-														false),
-			};
-
-			performDeletion(&constrobj, DROP_RESTRICT, 0);
-			break;
-		}
+		ObjectAddress constrobj = {
+			.classId = ConstraintRelationId,
+			.objectId = old_check_oid,
+		};
+		performDeletion(&constrobj, DROP_RESTRICT, 0);
 	}
 
-	/* We have to recreate the chunk constraints since we are changing
-	 * table constraints when updating the slice.
-	 */
+	/* Build an in-memory constraint entry for the new slice and let the
+	 * existing helper create the CHECK on the chunk table. */
+	ChunkConstraints *ccs = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
+	ts_chunk_constraints_add(ccs, chunk->fd.id, new_slice->fd.id, NULL, NULL);
+
 	ChunkConstraints *oldccs = chunk->constraints;
 	chunk->constraints = ccs;
 	ts_process_utility_set_expect_chunk_modification(true);

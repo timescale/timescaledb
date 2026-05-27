@@ -388,22 +388,6 @@ validate_merge_possible(const Hypercube *cube1, const Hypercube *cube2)
 	}
 }
 
-static const ChunkConstraint *
-get_chunk_constraint_by_slice_id(const ChunkConstraints *ccs, int32 slice_id)
-{
-	for (int i = 0; i < ccs->num_constraints; i++)
-	{
-		const ChunkConstraint *cc = &ccs->constraints[i];
-
-		if (cc->fd.dimension_slice_id == slice_id)
-		{
-			return cc;
-		}
-	}
-
-	return NULL;
-}
-
 void
 chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 {
@@ -416,41 +400,11 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 	{
 		const DimensionSlice *old_slice = chunk->cube->slices[i];
 		DimensionSlice *new_slice = new_cube->slices[i];
-		const ChunkConstraint *cc;
 
 		/* If nothing changed in this dimension, move on to the next */
 		if (ts_dimension_slices_equal(old_slice, new_slice))
 		{
 			continue;
-		}
-
-		cc = get_chunk_constraint_by_slice_id(chunk->constraints, old_slice->fd.id);
-
-		if (cc)
-		{
-			ObjectAddress constrobj = {
-				.classId = ConstraintRelationId,
-				.objectId = get_relation_constraint_oid(chunk->table_id,
-														NameStr(cc->fd.constraint_name),
-														false),
-			};
-
-			performDeletion(&constrobj, DROP_RESTRICT, PERFORM_DELETION_INTERNAL);
-
-			/* Create the new check constraint */
-			const Dimension *dim =
-				ts_hyperspace_get_dimension_by_id(ht->space, old_slice->fd.dimension_id);
-			Constraint *constr =
-				ts_chunk_constraint_dimensional_create(dim,
-													   new_slice,
-													   NameStr(cc->fd.constraint_name));
-
-			/* Constraint could be NULL, e.g., if the merged chunk covers the
-			 * entire range in a space dimension it needs no constraint. */
-			if (constr != NULL)
-			{
-				new_constraints = lappend(new_constraints, constr);
-			}
 		}
 
 		/* Each chunk owns its own slice rows; replace the kept chunk's slice
@@ -465,9 +419,30 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		ts_dimension_slice_insert(new_slice);
 		Assert(new_slice->fd.id > 0);
 
-		/* Repoint the chunk_constraint row from the deleted slice to the
-		 * freshly inserted one. */
-		ts_chunk_constraint_update_slice_id(chunk->fd.id, old_slice_id, new_slice->fd.id);
+		/* Drop the old CHECK on the chunk table and build a replacement for
+		 * the merged range. CHECK names follow the constraint_<slice_id>
+		 * pattern. */
+		char old_check_name[NAMEDATALEN];
+		snprintf(old_check_name, NAMEDATALEN, "constraint_%d", old_slice_id);
+		Oid old_check_oid = get_relation_constraint_oid(chunk->table_id, old_check_name, true);
+		if (OidIsValid(old_check_oid))
+		{
+			ObjectAddress constrobj = {
+				.classId = ConstraintRelationId,
+				.objectId = old_check_oid,
+			};
+			performDeletion(&constrobj, DROP_RESTRICT, PERFORM_DELETION_INTERNAL);
+		}
+
+		char new_check_name[NAMEDATALEN];
+		snprintf(new_check_name, NAMEDATALEN, "constraint_%d", new_slice->fd.id);
+		const Dimension *dim =
+			ts_hyperspace_get_dimension_by_id(ht->space, old_slice->fd.dimension_id);
+		Constraint *constr = ts_chunk_constraint_dimensional_create(dim, new_slice, new_check_name);
+		if (constr != NULL)
+		{
+			new_constraints = lappend(new_constraints, constr);
+		}
 	}
 
 	/* Add new check constraints, if any */
