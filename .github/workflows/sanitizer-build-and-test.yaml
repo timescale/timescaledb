@@ -125,7 +125,9 @@ jobs:
         # Add instrumentation to the Postgres memory contexts. For more details, see
         # https://github.com/timescale/eng-database/wiki/Using-Address-Sanitizer#adding-more-instrumentation
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-        if [ ${PG_MAJOR} -lt 18 ]; then
+        if [ ${PG_MAJOR} -lt 16 ]; then
+          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG15.patch
+        elif [ ${PG_MAJOR} -lt 18 ]; then
           patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
         else
           patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG18GE.patch
