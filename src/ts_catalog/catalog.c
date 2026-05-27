@@ -146,7 +146,8 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_DIMENSION_SLICE_INDEX,
 		.names = (char *[]) {
 			[DIMENSION_SLICE_ID_IDX] = "dimension_slice_pkey",
-			[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX] = "dimension_slice_dimension_id_range_start_range_end_key",
+			[DIMENSION_SLICE_CHUNK_ID_DIMENSION_ID_IDX] = "dimension_slice_chunk_id_dimension_id_key",
+			[DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX] = "dimension_slice_dimension_id_range_start_range_end_idx",
 		},
 	},
 	[CHUNK_COLUMN_STATS] = {

@@ -186,6 +186,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 																   slice_ptr->fd.range_start,
 																   slice_ptr->fd.range_end);
 			slice_copy->fd.id = slice_ptr->fd.id;
+			slice_copy->fd.chunk_id = slice_ptr->fd.chunk_id;
 			MemoryContextSwitchTo(work_mcxt);
 			Assert(cube->capacity > cube->num_slices);
 			cube->slices[cube->num_slices++] = slice_copy;

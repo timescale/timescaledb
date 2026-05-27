@@ -249,6 +249,7 @@ enum
 enum Anum_dimension_slice
 {
 	Anum_dimension_slice_id = 1,
+	Anum_dimension_slice_chunk_id,
 	Anum_dimension_slice_dimension_id,
 	Anum_dimension_slice_range_start,
 	Anum_dimension_slice_range_end,
@@ -260,6 +261,7 @@ enum Anum_dimension_slice
 typedef struct FormData_dimension_slice
 {
 	int32 id;
+	int32 chunk_id;
 	int32 dimension_id;
 	int64 range_start;
 	int64 range_end;
@@ -275,6 +277,16 @@ enum Anum_dimension_slice_id_idx
 
 #define Natts_dimension_slice_id_idx (_Anum_dimension_slice_id_idx_max - 1)
 
+enum Anum_dimension_slice_chunk_id_dimension_id_idx
+{
+	Anum_dimension_slice_chunk_id_dimension_id_idx_chunk_id = 1,
+	Anum_dimension_slice_chunk_id_dimension_id_idx_dimension_id,
+	_Anum_dimension_slice_chunk_id_dimension_id_idx_max,
+};
+
+#define Natts_dimension_slice_chunk_id_dimension_id_idx                                            \
+	(_Anum_dimension_slice_chunk_id_dimension_id_idx_max - 1)
+
 enum Anum_dimension_slice_dimension_id_range_start_range_end_idx
 {
 	Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id = 1,
@@ -289,6 +301,7 @@ enum Anum_dimension_slice_dimension_id_range_start_range_end_idx
 enum
 {
 	DIMENSION_SLICE_ID_IDX = 0,
+	DIMENSION_SLICE_CHUNK_ID_DIMENSION_ID_IDX,
 	DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
 	_MAX_DIMENSION_SLICE_INDEX,
 };

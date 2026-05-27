@@ -50,3 +50,83 @@ WHERE dimension_slice_id IS NULL
 ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
 ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
 
+--
+-- Rebuild the catalog table `_timescaledb_catalog.dimension_slice` so each
+-- chunk owns its own slice rows. The new schema adds a chunk_id column,
+-- a (chunk_id, dimension_id) UNIQUE, an FK to chunk(id), and replaces the
+-- old (dim_id, range_start, range_end) UNIQUE with a plain index. The
+-- chunk_constraint table is kept in place for this release; its
+-- dimension_slice_id column stays as the source of truth for chunk<->slice
+-- lookups until later releases migrate the readers and writers.
+--
+CREATE TABLE _timescaledb_internal.tmp_dimension_slice AS
+    SELECT * FROM _timescaledb_catalog.dimension_slice;
+CREATE TABLE _timescaledb_internal.tmp_dimension_slice_seq_value AS
+    SELECT last_value, is_called FROM _timescaledb_catalog.dimension_slice_id_seq;
+
+ALTER TABLE _timescaledb_catalog.chunk_constraint
+    DROP CONSTRAINT chunk_constraint_dimension_slice_id_fkey;
+
+DROP VIEW IF EXISTS timescaledb_information.chunks;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_slice;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.dimension_slice_id_seq;
+
+DROP TABLE _timescaledb_catalog.dimension_slice;
+
+CREATE TABLE _timescaledb_catalog.dimension_slice (
+  id serial NOT NULL,
+  chunk_id integer NOT NULL,
+  dimension_id integer NOT NULL,
+  range_start bigint NOT NULL,
+  range_end bigint NOT NULL,
+  CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
+  CONSTRAINT dimension_slice_chunk_id_dimension_id_key UNIQUE (chunk_id, dimension_id),
+  CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
+  CONSTRAINT dimension_slice_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
+);
+
+CREATE INDEX dimension_slice_dimension_id_range_start_range_end_idx
+    ON _timescaledb_catalog.dimension_slice (dimension_id, range_start, range_end);
+
+-- One fresh slice row per (chunk_id, old_slice) pair, derived from the
+-- existing chunk_constraint mapping. Slices that were shared across
+-- chunks become per-chunk duplicates here.
+INSERT INTO _timescaledb_catalog.dimension_slice (chunk_id, dimension_id, range_start, range_end)
+SELECT cc.chunk_id, tmp.dimension_id, tmp.range_start, tmp.range_end
+FROM _timescaledb_catalog.chunk_constraint cc
+JOIN _timescaledb_internal.tmp_dimension_slice tmp ON tmp.id = cc.dimension_slice_id
+WHERE cc.dimension_slice_id IS NOT NULL;
+
+-- Repoint chunk_constraint at the freshly allocated slice ids using the
+-- (chunk_id, dimension_id) pair as the join key.
+UPDATE _timescaledb_catalog.chunk_constraint cc
+SET dimension_slice_id = ds.id
+FROM _timescaledb_internal.tmp_dimension_slice tmp,
+     _timescaledb_catalog.dimension_slice ds
+WHERE cc.dimension_slice_id IS NOT NULL
+  AND tmp.id = cc.dimension_slice_id
+  AND ds.chunk_id = cc.chunk_id
+  AND ds.dimension_id = tmp.dimension_id;
+
+ALTER SEQUENCE _timescaledb_catalog.dimension_slice_id_seq OWNED BY _timescaledb_catalog.dimension_slice.id;
+SELECT setval('_timescaledb_catalog.dimension_slice_id_seq',
+              GREATEST((SELECT last_value FROM _timescaledb_internal.tmp_dimension_slice_seq_value),
+                       COALESCE((SELECT max(id) FROM _timescaledb_catalog.dimension_slice), 0)),
+              true);
+
+ALTER TABLE _timescaledb_catalog.chunk_constraint
+    ADD CONSTRAINT chunk_constraint_dimension_slice_id_fkey
+        FOREIGN KEY (dimension_slice_id) REFERENCES _timescaledb_catalog.dimension_slice (id);
+
+DROP TABLE _timescaledb_internal.tmp_dimension_slice;
+DROP TABLE _timescaledb_internal.tmp_dimension_slice_seq_value;
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice', 'id'), '');
+
+GRANT SELECT ON _timescaledb_catalog.dimension_slice TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.dimension_slice_id_seq TO PUBLIC;
+-- end rebuild _timescaledb_catalog.dimension_slice table --
+

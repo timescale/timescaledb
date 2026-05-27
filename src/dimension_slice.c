@@ -70,6 +70,7 @@ dimension_slice_formdata_make_tuple(const FormData_dimension_slice *fd, TupleDes
 	memset(values, 0, sizeof(Datum) * Natts_dimension_slice);
 
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)] = Int32GetDatum(fd->id);
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_chunk_id)] = Int32GetDatum(fd->chunk_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)] =
 		Int32GetDatum(fd->dimension_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)] =
@@ -91,11 +92,13 @@ dimension_slice_formdata_fill(FormData_dimension_slice *fd, const TupleInfo *ti)
 	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_id)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_chunk_id)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_range_end)]);
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)]);
+	fd->chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_slice_chunk_id)]);
 	fd->dimension_id =
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)]);
 	fd->range_start =
@@ -1122,10 +1125,16 @@ dimension_slice_insert_relation(const Relation rel, DimensionSlice *slice)
 		return false;
 	}
 
+	Ensure(slice->fd.chunk_id > 0,
+		   "dimension slice insert requires a valid chunk id (dimension_id=%d)",
+		   slice->fd.dimension_id);
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	memset(values, 0, sizeof(values));
 	slice->fd.id = ts_catalog_table_next_seq_id(ts_catalog_get(), DIMENSION_SLICE);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)] = Int32GetDatum(slice->fd.id);
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_chunk_id)] =
+		Int32GetDatum(slice->fd.chunk_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)] =
 		Int32GetDatum(slice->fd.dimension_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)] =

@@ -894,6 +894,25 @@ get_next_chunk_id()
 }
 
 /*
+ * Stamp the chunk_id on every cube slice and force fresh inserts.
+ *
+ * Each chunk owns its own dimension_slice rows now, so slices that came back
+ * from a "scan for existing" lookup (and therefore have a non-zero id) get
+ * their id reset to 0 so ts_dimension_slice_insert_multi inserts a new row.
+ */
+static void
+prepare_cube_slices_for_chunk(Hypercube *cube, int32 chunk_id)
+{
+	Assert(chunk_id > 0);
+
+	for (int i = 0; i < cube->num_slices; i++)
+	{
+		cube->slices[i]->fd.id = 0;
+		cube->slices[i]->fd.chunk_id = chunk_id;
+	}
+}
+
+/*
  * Create a chunk object from the dimensional constraints in the given hypercube.
  *
  * The chunk object is then used to create the actual chunk table and update the
@@ -1202,15 +1221,14 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 						 "Hypertable has tiered data with time range that overlaps the insert")));
 		}
 	}
-	/* Insert any new dimension slices into metadata */
+	int32 chunk_id = get_next_chunk_id();
+
+	/* Stamp the new chunk id on each cube slice before inserting them. */
+	prepare_cube_slices_for_chunk(cube, chunk_id);
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
-	Chunk *chunk = chunk_create_only_table_after_lock(ht,
-													  cube,
-													  schema_name,
-													  table_name,
-													  prefix,
-													  get_next_chunk_id());
+	Chunk *chunk =
+		chunk_create_only_table_after_lock(ht, cube, schema_name, table_name, prefix, chunk_id);
 
 	/* Insert any new chunk column stats entries into the catalog */
 	ts_chunk_column_stats_insert(ht, chunk);
@@ -1344,9 +1362,12 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	}
 	table_close(ht_rel, NoLock);
 
-	/* Insert any new dimension slices into metadata */
+	int32 chunk_id = get_next_chunk_id();
+
+	/* Stamp the new chunk id on each cube slice before inserting them. */
+	prepare_cube_slices_for_chunk(cube, chunk_id);
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
-	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, get_next_chunk_id());
+	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, chunk_id);
 	chunk->table_id = chunk_table_relid;
 	chunk->hypertable_relid = ht->main_table_relid;
 
@@ -5070,8 +5091,8 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	/* Insert chunk */
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
 
-	/* insert dimension slices if they do not exist.
-	 */
+	/* Stamp the new chunk id on each cube slice before inserting them. */
+	prepare_cube_slices_for_chunk(chunk->cube, chunk->fd.id);
 	ts_dimension_slice_insert_multi(chunk->cube->slices, chunk->cube->num_slices);
 	/* CHECK constraints are not inherited automatically by foreign tables, so
 	 * clone them from the hypertable onto the foreign chunk before running
@@ -5125,9 +5146,11 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 			merge_slice = merge_chunk->cube->slices[i];
 			dimension_slice_found = true;
 		}
-		else if (chunk->cube->slices[i]->fd.id != merge_chunk->cube->slices[i]->fd.id)
+		else if (!ts_dimension_slices_equal(chunk->cube->slices[i], merge_chunk->cube->slices[i]))
 		{
-			/* If the slices do not match (except on time dimension), we cannot merge the chunks. */
+			/* If the slices do not match (except on time dimension), we cannot
+			 * merge the chunks. Slice ids differ per chunk now, so we compare
+			 * the ranges instead. */
 			ereport(ERROR,
 					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 					 errmsg("cannot merge chunks with different partitioning schemas"),
@@ -5188,15 +5211,11 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 		ts_dimension_slice_delete_by_id(slice->fd.id, false);
 	}
 
-	/* Check for dimension slice already exists, if not create a new one. */
-	ScanTupLock tuplock = {
-		.lockmode = LockTupleKeyShare,
-		.waitpolicy = LockWaitBlock,
-	};
-	if (!ts_dimension_slice_scan_for_existing(new_slice, &tuplock))
-	{
-		ts_dimension_slice_insert(new_slice);
-	}
+	/* Each chunk owns its own slice rows; always insert a fresh row with the
+	 * kept chunk's id rather than reusing one that already belongs to another
+	 * chunk. */
+	new_slice->fd.chunk_id = chunk->fd.id;
+	ts_dimension_slice_insert(new_slice);
 
 	ts_chunk_constraint_update_slice_id(chunk->fd.id, slice->fd.id, new_slice->fd.id);
 	ChunkConstraints *ccs = ts_chunk_constraints_alloc(1, CurrentMemoryContext);

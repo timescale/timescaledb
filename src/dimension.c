@@ -1805,16 +1805,16 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 			ListCell *lc;
 			List *chunk_id_list = ts_chunk_get_chunk_ids_by_hypertable_id(info->ht->fd.id);
 
-			DimensionSlice *slice;
-			slice = ts_dimension_slice_create(dimension_id,
-											  DIMENSION_SLICE_MINVALUE,
-											  DIMENSION_SLICE_MAXVALUE);
-			ts_dimension_slice_insert_multi(&slice, 1);
-
 			foreach (lc, chunk_id_list)
 			{
 				int32 chunk_id = lfirst_int(lc);
 				Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+				DimensionSlice *slice = ts_dimension_slice_create(dimension_id,
+																  DIMENSION_SLICE_MINVALUE,
+																  DIMENSION_SLICE_MAXVALUE);
+				slice->fd.chunk_id = chunk->fd.id;
+				ts_dimension_slice_insert_multi(&slice, 1);
+
 				ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
 															   chunk->fd.id,
 															   slice->fd.id,

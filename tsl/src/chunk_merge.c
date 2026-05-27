@@ -417,10 +417,6 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		const DimensionSlice *old_slice = chunk->cube->slices[i];
 		DimensionSlice *new_slice = new_cube->slices[i];
 		const ChunkConstraint *cc;
-		ScanTupLock tuplock = {
-			.waitpolicy = LockWaitBlock,
-			.lockmode = LockTupleShare,
-		};
 
 		/* If nothing changed in this dimension, move on to the next */
 		if (ts_dimension_slices_equal(old_slice, new_slice))
@@ -457,26 +453,21 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 			}
 		}
 
-		/* Check if there's already a slice with the new range. If so, avoid
-		 * inserting a new slice. */
-		if (!ts_dimension_slice_scan_for_existing(new_slice, &tuplock))
-		{
-			new_slice->fd.id = -1;
-			ts_dimension_slice_insert(new_slice);
-			/* A new Id should be assigned */
-			Assert(new_slice->fd.id > 0);
-		}
+		/* Each chunk owns its own slice rows; replace the kept chunk's slice
+		 * for this dimension with a fresh row carrying the merged range.
+		 * Delete the old slice first so the (chunk_id, dimension_id) UNIQUE
+		 * does not fire on insert. */
+		int32 old_slice_id = old_slice->fd.id;
+		ts_dimension_slice_delete_by_id(old_slice_id, false);
 
-		/* Update the chunk constraint to point to the new slice ID */
-		ts_chunk_constraint_update_slice_id(chunk->fd.id, old_slice->fd.id, new_slice->fd.id);
+		new_slice->fd.id = 0;
+		new_slice->fd.chunk_id = chunk->fd.id;
+		ts_dimension_slice_insert(new_slice);
+		Assert(new_slice->fd.id > 0);
 
-		/* Delete the old slice if it is orphaned now */
-		if (ts_chunk_constraint_scan_by_dimension_slice_id(old_slice->fd.id,
-														   NULL,
-														   CurrentMemoryContext) == 0)
-		{
-			ts_dimension_slice_delete_by_id(old_slice->fd.id, false);
-		}
+		/* Repoint the chunk_constraint row from the deleted slice to the
+		 * freshly inserted one. */
+		ts_chunk_constraint_update_slice_id(chunk->fd.id, old_slice_id, new_slice->fd.id);
 	}
 
 	/* Add new check constraints, if any */

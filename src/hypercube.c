@@ -157,6 +157,7 @@ ts_hypercube_add_slice(Hypercube *hc, const DimensionSlice *slice)
 												  slice->fd.range_start,
 												  slice->fd.range_end);
 	new_slice->fd.id = slice->fd.id;
+	new_slice->fd.chunk_id = slice->fd.chunk_id;
 
 	return new_slice;
 }
