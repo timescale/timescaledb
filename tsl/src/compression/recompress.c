@@ -9,6 +9,7 @@
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
+#include <utils/datum.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
@@ -56,9 +57,11 @@ static void create_segmentby_scankeys(CompressionSettings *settings, Relation in
 static void create_orderby_scankeys(CompressionSettings *settings, Relation index_rel,
 									Relation compressed_chunk_rel, ScanKeyData *orderby_scankeys);
 static void update_segmentby_scankeys(Datum *values, bool *isnulls, int num_segmentby,
-									  ScanKey index_scankeys);
+									  ScanKey index_scankeys, bool *key_byval, int16 *key_typlen);
 static void update_orderby_scankeys(Datum *values, bool *isnulls, int num_segmentby,
-									int num_orderby, ScanKey orderby_scankeys);
+									int num_orderby, ScanKey orderby_scankeys, bool *key_byval,
+									int16 *key_typlen);
+
 static enum Batch_match_result match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby,
 												 ScanKey orderby_scankeys, bool *nulls_first);
 static bool check_changed_group(CompressedSegmentInfo *current_segment, Datum *values,
@@ -150,19 +153,12 @@ compress_chunk_populate_recompress_ctx(CompressionSettings *settings,
 	recompress_ctx->n_keys = recompress_ctx->num_segmentby + recompress_ctx->num_orderby;
 
 	/* Allocate arrays */
-	recompress_ctx->sort_keys = palloc(sizeof(*recompress_ctx->sort_keys) * recompress_ctx->n_keys);
-	recompress_ctx->sort_operators =
-		palloc(sizeof(*recompress_ctx->sort_operators) * recompress_ctx->n_keys);
-	recompress_ctx->sort_collations =
-		palloc(sizeof(*recompress_ctx->sort_collations) * recompress_ctx->n_keys);
-	recompress_ctx->nulls_first =
-		palloc(sizeof(*recompress_ctx->nulls_first) * recompress_ctx->n_keys);
-	recompress_ctx->current_segment =
-		palloc0(sizeof(CompressedSegmentInfo) * recompress_ctx->n_keys);
+	Assert(recompress_ctx->n_keys <= INDEX_MAX_KEYS);
 
 	/* Populate sort information for each column */
 	for (n = 0; n < recompress_ctx->n_keys; n++)
 	{
+		Form_pg_attribute attr;
 		if (n < recompress_ctx->num_segmentby)
 		{
 			position = n + 1;
@@ -180,6 +176,10 @@ compress_chunk_populate_recompress_ctx(CompressionSettings *settings,
 			col_attno = get_attnum(chunk_rel->rd_id, attname);
 			recompress_ctx->current_segment[n].chunk_offset = AttrNumberGetAttrOffset(col_attno);
 		}
+		attr = TupleDescAttr(RelationGetDescr(chunk_rel),
+							 recompress_ctx->current_segment[n].chunk_offset);
+		recompress_ctx->key_byval[n] = attr->attbyval;
+		recompress_ctx->key_typlen[n] = attr->attlen;
 		compress_chunk_populate_sort_info_for_column(settings,
 													 RelationGetRelid(uncompressed_chunk_rel),
 													 attname,
@@ -188,11 +188,6 @@ compress_chunk_populate_recompress_ctx(CompressionSettings *settings,
 													 &recompress_ctx->sort_collations[n],
 													 &recompress_ctx->nulls_first[n]);
 	}
-
-	/* Allocate scankeys */
-	recompress_ctx->index_scankeys = palloc(sizeof(ScanKeyData) * recompress_ctx->num_segmentby);
-	recompress_ctx->orderby_scankeys =
-		palloc(sizeof(ScanKeyData) * recompress_ctx->num_orderby * 2);
 
 	/* Populate scankeys */
 	create_segmentby_scankeys(settings,
@@ -215,34 +210,28 @@ free_chunk_recompress_ctx(RecompressContext *recompress_ctx)
 		return;
 	}
 
-	if (recompress_ctx->sort_keys)
+	for (int i = 0; i < recompress_ctx->num_segmentby; i++)
 	{
-		pfree(recompress_ctx->sort_keys);
+		ScanKey key = &recompress_ctx->index_scankeys[i];
+		if (!(key->sk_flags & SK_ISNULL) && !recompress_ctx->key_byval[i] &&
+			PointerIsValid(DatumGetPointer(key->sk_argument)))
+		{
+			pfree(DatumGetPointer(key->sk_argument));
+		}
 	}
-	if (recompress_ctx->sort_operators)
+
+	/* Free orderby scankey datums (min only — max shares the same pointer). */
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
-		pfree(recompress_ctx->sort_operators);
+		int key_idx = recompress_ctx->num_segmentby + i;
+		ScanKey key = &recompress_ctx->orderby_scankeys[i * 2];
+		if (!(key->sk_flags & SK_ISNULL) && !recompress_ctx->key_byval[key_idx] &&
+			PointerIsValid(DatumGetPointer(key->sk_argument)))
+		{
+			pfree(DatumGetPointer(key->sk_argument));
+		}
 	}
-	if (recompress_ctx->sort_collations)
-	{
-		pfree(recompress_ctx->sort_collations);
-	}
-	if (recompress_ctx->nulls_first)
-	{
-		pfree(recompress_ctx->nulls_first);
-	}
-	if (recompress_ctx->current_segment)
-	{
-		pfree(recompress_ctx->current_segment);
-	}
-	if (recompress_ctx->index_scankeys)
-	{
-		pfree(recompress_ctx->index_scankeys);
-	}
-	if (recompress_ctx->orderby_scankeys)
-	{
-		pfree(recompress_ctx->orderby_scankeys);
-	}
+
 	pfree(recompress_ctx);
 }
 
@@ -453,7 +442,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 		update_segmentby_scankeys(values,
 								  isnulls,
 								  recompress_ctx->num_segmentby,
-								  recompress_ctx->index_scankeys);
+								  recompress_ctx->index_scankeys,
+								  recompress_ctx->key_byval,
+								  recompress_ctx->key_typlen);
 
 		/* We do not match orderby boundaries for full recompress,
 		 * so do not need orderby scankeys */
@@ -463,7 +454,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 									isnulls,
 									recompress_ctx->num_segmentby,
 									recompress_ctx->num_orderby,
-									recompress_ctx->orderby_scankeys);
+									recompress_ctx->orderby_scankeys,
+									recompress_ctx->key_byval,
+									recompress_ctx->key_typlen);
 		}
 		index_rescan(index_scan,
 					 recompress_ctx->index_scankeys,
@@ -540,7 +533,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 										isnulls,
 										recompress_ctx->num_segmentby,
 										recompress_ctx->num_orderby,
-										recompress_ctx->orderby_scankeys);
+										recompress_ctx->orderby_scankeys,
+										recompress_ctx->key_byval,
+										recompress_ctx->key_typlen);
 				result =
 					match_tuple_batch(compressed_slot,
 									  recompress_ctx->num_orderby,
@@ -1018,24 +1013,36 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 }
 
 static void
-update_scankey(ScanKey index_scankey, Datum val, bool is_null)
+update_scankey(ScanKey index_scankey, Datum val, bool is_null, bool typByVal, int16 typLen)
 {
+	/* Free previous pass-by-reference datum to prevent memory leaks. */
+	if (!(index_scankey->sk_flags & SK_ISNULL) && !typByVal &&
+		PointerIsValid(DatumGetPointer(index_scankey->sk_argument)))
+	{
+		pfree(DatumGetPointer(index_scankey->sk_argument));
+	}
+
 	index_scankey->sk_flags = is_null ? SK_ISNULL | SK_SEARCHNULL : 0;
-	index_scankey->sk_argument = val;
+	/*
+	 * Deep-copy the value because the tuplesort owns the slot memory
+	 * and advancing the tuplesort can invalidate it (use-after-free).
+	 */
+	index_scankey->sk_argument = is_null ? (Datum) 0 : datumCopy(val, typByVal, typLen);
 }
 
 static void
-update_segmentby_scankeys(Datum *values, bool *isnulls, int num_segmentby, ScanKey index_scankeys)
+update_segmentby_scankeys(Datum *values, bool *isnulls, int num_segmentby, ScanKey index_scankeys,
+						  bool *key_byval, int16 *key_typlen)
 {
 	for (int i = 0; i < num_segmentby; i++)
 	{
-		update_scankey(&index_scankeys[i], values[i], isnulls[i]);
+		update_scankey(&index_scankeys[i], values[i], isnulls[i], key_byval[i], key_typlen[i]);
 	}
 }
 
 static void
 update_orderby_scankeys(Datum *values, bool *isnulls, int num_segmentby, int num_orderby,
-						ScanKey orderby_scankeys)
+						ScanKey orderby_scankeys, bool *key_byval, int16 *key_typlen)
 {
 	int min_index, max_index;
 	for (int i = 0; i < num_orderby; i++)
@@ -1044,10 +1051,14 @@ update_orderby_scankeys(Datum *values, bool *isnulls, int num_segmentby, int num
 		max_index = min_index + 1;
 		update_scankey(&orderby_scankeys[min_index],
 					   values[num_segmentby + i],
-					   isnulls[num_segmentby + i]);
+					   isnulls[num_segmentby + i],
+					   key_byval[num_segmentby + i],
+					   key_typlen[num_segmentby + i]);
 		update_scankey(&orderby_scankeys[max_index],
 					   values[num_segmentby + i],
-					   isnulls[num_segmentby + i]);
+					   isnulls[num_segmentby + i],
+					   key_byval[num_segmentby + i],
+					   key_typlen[num_segmentby + i]);
 	}
 }
 
