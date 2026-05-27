@@ -29,7 +29,6 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
-#include "chunk_constraint.h"
 #include "foreign_key.h"
 #include "hypertable.h"
 #include "process_utility.h"
@@ -40,6 +39,7 @@ static List *relation_get_referencing_fk(Oid reloid);
 static Oid get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys);
 static void constraint_get_trigger(Oid conoid, Oid *updtrigoid, Oid *deltrigoid);
 static char *ChooseForeignKeyConstraintNameAddition(int numkeys, AttrNumber *keys, Oid relid);
+static void drop_fk_constraint(HeapTuple constraint_tuple);
 static void createForeignKeyActionTriggers(Form_pg_constraint fk, Oid relid, Oid refRelOid,
 										   Oid constraintOid, Oid indexOid, Oid parentDelTrigger,
 										   Oid parentUpdTrigger);
@@ -601,6 +601,36 @@ get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys)
 	return indexoid;
 }
 
+/*
+ * Drop a pg_constraint given its heap tuple.
+ *
+ * If the constraint inherits from a partitioned-parent constraint, break that
+ * internal dependency first so performDeletion is allowed to remove it.
+ */
+static void
+drop_fk_constraint(HeapTuple constraint_tuple)
+{
+	FormData_pg_constraint *constr = (FormData_pg_constraint *) GETSTRUCT(constraint_tuple);
+	ObjectAddress constrobj = {
+		.classId = ConstraintRelationId,
+		.objectId = constr->oid,
+	};
+
+	if (OidIsValid(constr->conparentid))
+	{
+		deleteDependencyRecordsForClass(constrobj.classId,
+										constrobj.objectId,
+										ConstraintRelationId,
+										DEPENDENCY_INTERNAL);
+		CommandCounterIncrement();
+	}
+
+	if (OidIsValid(constrobj.objectId))
+	{
+		performDeletion(&constrobj, DROP_RESTRICT, 0);
+	}
+}
+
 void
 ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 {
@@ -611,7 +641,7 @@ ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 	foreach (lc, fks)
 	{
 		HeapTuple fk_tuple = lfirst(lc);
-		ts_chunk_constraint_drop_from_tuple(fk_tuple);
+		drop_fk_constraint(fk_tuple);
 	}
 }
 
