@@ -1196,9 +1196,12 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 
 	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
 
-	/* check whether a skip var is declared NOT NULL
-	 *  it's enough to check hypertable for NOT NULL
-	 *  as NOT NULL constraint will be propagated to and checked on all chunks
+	/*
+	 * Check whether a skip var is declared NOT NULL. It's enough to check
+	 * hypertable for NOT NULL, because the NOT NULL constraint will be
+	 * propagated to and checked on all chunks. Postgres doesn't set
+	 * RelOptInfo.notnullattnums for hypertable because it's an inheritance
+	 * parent, so check it against the catalog.
 	 */
 	skinfo->notnull = ts_get_attnotnull(ht_rte->relid, var->varattno);
 
