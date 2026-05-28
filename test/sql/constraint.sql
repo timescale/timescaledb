@@ -184,8 +184,15 @@ RENAME CONSTRAINT new_name2 TO check_2;
 ALTER TABLE ONLY hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 RENAME CONSTRAINT new_name2 TO new_name;
 ALTER TABLE _timescaledb_internal._hyper_2_4_chunk
-RENAME CONSTRAINT "4_10_new_name2" TO new_name;
+RENAME CONSTRAINT "4_new_name2" TO new_name;
 \set ON_ERROR_STOP 1
+
+-- Renaming then dropping a unique constraint should remove it from chunks
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+RENAME CONSTRAINT new_name2 TO renamed_unique;
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+DROP CONSTRAINT renamed_unique;
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 ----------------------- PRIMARY KEY  ------------------
 

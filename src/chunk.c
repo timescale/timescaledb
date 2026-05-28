@@ -40,6 +40,7 @@
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <tcop/tcopprot.h>
+#include <ts_stats/ts_stats_record.h>
 #include <utils/acl.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
@@ -1049,6 +1050,7 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 	/* Copy FK constraints after indexes are created, since FK validation
 	 * requires the supporting unique index to exist on the chunk. */
 	ts_chunk_copy_referencing_fk(ht, chunk);
+	ts_chunk_inherit_outbound_fk(ht, chunk);
 }
 
 static Oid
@@ -3217,11 +3219,11 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 	}
 
 	/*
-	 * Even tough we keep foreign key constraints on the chunk, we still
-	 * need to drop the referencing foreign keys since such keys are possibly
-	 * intended to reference the hypertable, not the chunk.
+	 * Drop FKs that reference this chunk. They target the chunk's PK index
+	 * directly, so without explicit removal the index would block the chunk
+	 * drop. Skip when the relation is already gone (cascade from hypertable).
 	 */
-	if (detach)
+	if (detach && OidIsValid(relid) && SearchSysCacheExists1(RELOID, ObjectIdGetDatum(relid)))
 	{
 		ts_chunk_drop_referencing_fk_by_chunk_id(form.id);
 	}
@@ -4073,6 +4075,9 @@ ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
+
+	/* Evict the chunk stats from the shared memory */
+	ts_stats_chunk_evict(chunk->table_id);
 }
 
 static void
@@ -4234,17 +4239,20 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		 * The invalidation will allow the refresh command on a continuous
 		 * aggregate to see that this region was dropped and and will
 		 * therefore be able to refresh accordingly.*/
-		for (uint64 i = 0; i < num_chunks; i++)
+		if (!ts_guc_skip_cagg_invalidation)
 		{
-			if (osm_chunk_id == chunks[i].fd.id)
+			for (uint64 i = 0; i < num_chunks; i++)
 			{
-				// we do not rebuild continuous aggs if tiered data is dropped */
-				continue;
-			}
-			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
-			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
+				if (osm_chunk_id == chunks[i].fd.id)
+				{
+					// we do not rebuild continuous aggs if tiered data is dropped */
+					continue;
+				}
+				int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
+				int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
 
-			ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
+				ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
+			}
 		}
 	}
 

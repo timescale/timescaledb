@@ -17,12 +17,12 @@ INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1);
 -- should fail due to multiple entries with same time value
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1);
-ERROR:  duplicate key value violates unique constraint "1_1_comp_conflicts_1_pkey"
+ERROR:  duplicate key value violates unique constraint "1_comp_conflicts_1_pkey"
 INSERT INTO comp_conflicts_1 VALUES
 ('2020-01-01','d1',0.1),
 ('2020-01-01','d2',0.2),
 ('2020-01-01','d3',0.3);
-ERROR:  duplicate key value violates unique constraint "1_1_comp_conflicts_1_pkey"
+ERROR:  duplicate key value violates unique constraint "1_comp_conflicts_1_pkey"
 \set ON_ERROR_STOP 1
 -- should succeed since there are no conflicts in the values
 BEGIN;
@@ -45,13 +45,13 @@ SELECT count(*) FROM ONLY :CHUNK;
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1);
 INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
-ERROR:  duplicate key value violates unique constraint "1_1_comp_conflicts_1_pkey"
+ERROR:  duplicate key value violates unique constraint "1_comp_conflicts_1_pkey"
 INSERT INTO comp_conflicts_1 VALUES
 ('2020-01-01','d1',0.1),
 ('2020-01-01','d2',0.2),
 ('2020-01-01','d3',0.3);
 INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
-ERROR:  duplicate key value violates unique constraint "1_1_comp_conflicts_1_pkey"
+ERROR:  duplicate key value violates unique constraint "1_comp_conflicts_1_pkey"
 \set ON_ERROR_STOP 1
 -- no data should be in uncompressed chunk since the inserts failed and their transaction rolled back
 SELECT count(*) FROM ONLY :CHUNK;
@@ -89,7 +89,7 @@ SELECT count(*) FROM ONLY :CHUNK;
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1);
 INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
-ERROR:  duplicate key value violates unique constraint "1_1_comp_conflicts_1_pkey"
+ERROR:  duplicate key value violates unique constraint "1_comp_conflicts_1_pkey"
 \set ON_ERROR_STOP 1
 INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHING;
 INFO:  Using table scan with scan keys: index 0, heap 2, memory 1. 
@@ -123,16 +123,16 @@ SELECT count(*) FROM ONLY :CHUNK;
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
-ERROR:  duplicate key value violates unique constraint "3_2_comp_conflicts_2_time_device_key"
+ERROR:  duplicate key value violates unique constraint "3_comp_conflicts_2_time_device_key"
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d2',0.2);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
-ERROR:  duplicate key value violates unique constraint "3_2_comp_conflicts_2_time_device_key"
+ERROR:  duplicate key value violates unique constraint "3_comp_conflicts_2_time_device_key"
 INSERT INTO comp_conflicts_2 VALUES
 ('2020-01-01','d1',0.1),
 ('2020-01-01','d2',0.2),
 ('2020-01-01','d3',0.3);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
-ERROR:  duplicate key value violates unique constraint "3_2_comp_conflicts_2_time_device_key"
+ERROR:  duplicate key value violates unique constraint "3_comp_conflicts_2_time_device_key"
 \set ON_ERROR_STOP 1
 -- no data should be in uncompressed chunk since the inserts failed and their transaction rolled back
 SELECT count(*) FROM ONLY :CHUNK;
@@ -170,7 +170,7 @@ SELECT count(*) FROM ONLY :CHUNK;
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
-ERROR:  duplicate key value violates unique constraint "3_2_comp_conflicts_2_time_device_key"
+ERROR:  duplicate key value violates unique constraint "3_comp_conflicts_2_time_device_key"
 \set ON_ERROR_STOP 1
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHING;
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
@@ -205,28 +205,28 @@ SELECT count(*) FROM ONLY :CHUNK;
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 INSERT INTO comp_conflicts_3 VALUES
 ('2020-01-01','d1', 'label', 0.1),
 ('2020-01-01','d2', 'label', 0.2),
 ('2020-01-01','d3', 'label', 0.3);
 INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 -- should work the same without the index present
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 BEGIN;
   DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
@@ -235,7 +235,7 @@ BEGIN;
   ('2020-01-01','d2', 'label', 0.2),
   ('2020-01-01','d3', 'label', 0.3);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- using superuser to create indexes on compressed chunks
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -247,7 +247,7 @@ BEGIN;
 	WHERE label LIKE 'missing';
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- ignore matching covering index
 BEGIN;
@@ -255,7 +255,7 @@ BEGIN;
   CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using index scan with scan keys: index 1, heap 3, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- out of order segmentby index, index is still usable
 BEGIN;
@@ -263,7 +263,7 @@ BEGIN;
   CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- index with sequence number in the middle, index should be usable with single index scan key
 BEGIN;
@@ -271,7 +271,7 @@ BEGIN;
   CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, label);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using index scan with scan keys: index 1, heap 3, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- ignore expression index
 BEGIN;
@@ -279,7 +279,7 @@ BEGIN;
   CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 -- ignore non-btree index
 BEGIN;
@@ -287,7 +287,7 @@ BEGIN;
   CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 ROLLBACK;
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -411,7 +411,7 @@ SELECT count(*) FROM ONLY :CHUNK;
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
-ERROR:  duplicate key value violates unique constraint "5_3_comp_conflicts_3_time_device_label_key"
+ERROR:  duplicate key value violates unique constraint "5_comp_conflicts_3_time_device_label_key"
 \set ON_ERROR_STOP 1
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1) ON CONFLICT DO NOTHING;
 INFO:  Using index scan with scan keys: index 2, heap 2, memory 1. 
@@ -507,7 +507,7 @@ SELECT count(*) FROM ONLY :CHUNK;
 \set ON_ERROR_STOP 0
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01','d1',0.1);
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
-ERROR:  duplicate key value violates unique constraint "7_4_comp_conflicts_4_time_device_key"
+ERROR:  duplicate key value violates unique constraint "7_comp_conflicts_4_time_device_key"
 \set ON_ERROR_STOP 1
 -- data not should have move into uncompressed chunk for conflict check
 SELECT count(*) FROM ONLY :CHUNK;

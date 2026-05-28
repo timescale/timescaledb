@@ -14,6 +14,7 @@
 
 #include "batch_array.h"
 #include "detoaster.h"
+#include "ts_stats/ts_stats_record.h"
 
 typedef enum CompressionColumnType
 {
@@ -97,6 +98,12 @@ typedef struct DecompressContext
 	Detoaster detoaster;
 
 	int32 chunk_status;
+
+	/* Stats */
+	Oid compressed_relid;
+	uint64 batches_decompressed;
+	uint64 tuples_decompressed;
+	CompressionStatsAccumulator observ_acc;
 
 } DecompressContext;
 

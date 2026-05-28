@@ -39,25 +39,25 @@ BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk PRIMARY KEY(time);
 INSERT INTO metrics SELECT '2025-01-02', 'd1', 0.1;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', 0.1;
-ERROR:  duplicate key value violates unique constraint "1_1_metrics_pk"
+ERROR:  duplicate key value violates unique constraint "1_metrics_pk"
 ROLLBACK;
 BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk PRIMARY KEY(time, device);
 INSERT INTO metrics SELECT '2025-01-02', 'd1', 0.1;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', 0.1;
-ERROR:  duplicate key value violates unique constraint "1_3_metrics_pk"
+ERROR:  duplicate key value violates unique constraint "1_metrics_pk"
 ROLLBACK;
 BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk UNIQUE(time);
 INSERT INTO metrics SELECT '2025-01-02', 'd1', 0.1;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', 0.1;
-ERROR:  duplicate key value violates unique constraint "1_5_metrics_pk"
+ERROR:  duplicate key value violates unique constraint "1_metrics_pk"
 ROLLBACK;
 BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk UNIQUE(time, device);
 INSERT INTO metrics SELECT '2025-01-02', 'd1', 0.1;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', 0.1;
-ERROR:  duplicate key value violates unique constraint "1_7_metrics_pk"
+ERROR:  duplicate key value violates unique constraint "1_metrics_pk"
 ROLLBACK;
 BEGIN;
 CREATE UNIQUE INDEX metrics_pk ON metrics(time);
@@ -272,7 +272,7 @@ ALTER TABLE metrics ADD CONSTRAINT device_fk FOREIGN KEY(device) REFERENCES devi
 INSERT INTO metrics SELECT '2025-03-01','d2',0.3;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-03-01','d3',0.3;
-ERROR:  insert or update on table "_hyper_5_25_chunk" violates foreign key constraint "25_11_device_fk"
+ERROR:  insert or update on table "_hyper_5_25_chunk" violates foreign key constraint "device_fk"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 BEGIN;
@@ -302,7 +302,7 @@ ALTER TABLE metrics ADD CONSTRAINT device_fk FOREIGN KEY(device) REFERENCES devi
 INSERT INTO metrics SELECT '2025-03-01','d2',0.3;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-03-01','d3',0.3;
-ERROR:  insert or update on table "_hyper_5_28_chunk" violates foreign key constraint "28_15_device_fk"
+ERROR:  insert or update on table "_hyper_5_28_chunk" violates foreign key constraint "device_fk"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 BEGIN;

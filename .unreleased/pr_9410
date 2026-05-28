@@ -1,0 +1,1 @@
+Implements: #9410 Mark `hypertable` and `chunk` as user catalog tables

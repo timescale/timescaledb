@@ -1,0 +1,2 @@
+Implements: #9735 Improve GapFill row count estimate 
+Thanks: @Fabian-2596 for suggesting more accurate GapFill row count estimate

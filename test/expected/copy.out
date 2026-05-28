@@ -74,9 +74,9 @@ INSERT INTO "meta" ("id") values (1);
 COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
 \set ON_ERROR_STOP 0
 \copy hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
-ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "6_1_hyper_meta_id_fkey"
+ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "hyper_meta_id_fkey"
 COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
-ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "6_1_hyper_meta_id_fkey"
+ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "hyper_meta_id_fkey"
 \set ON_ERROR_STOP 1
 COPY (SELECT * FROM hyper ORDER BY time, meta_id) TO STDOUT;
 1	1	1

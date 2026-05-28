@@ -1113,12 +1113,8 @@ SELECT remove_continuous_aggregate_policy('metrics_cagg');
 ------------------------------------
  
 
---can set compression policy only after setting up refresh policy --
+--can set columnstore policy only after enabling columnstore --
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
-ERROR:  setup a refresh policy for "metrics_cagg" before setting up a columnstore policy
---can set compression policy only after enabling compression --
-SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
-SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
 ERROR:  columnstore not enabled on continuous aggregate "metrics_cagg"
 ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
 NOTICE:  defaulting compress_orderby to dayb,device_id
@@ -1126,16 +1122,14 @@ NOTICE:  defaulting compress_orderby to dayb,device_id
 SELECT add_compression_policy('metrics_cagg', compress_created_before => '8 day'::interval) AS "COMP_JOB" ;
 ERROR:  cannot use "compress_created_before" with continuous aggregate "metrics_cagg" 
 \set ON_ERROR_STOP 1
-SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
- COMP_JOB 
-----------
-     1061
-
+--can set columnstore policy without setting up a refresh policy --
+CALL add_columnstore_policy('metrics_cagg', after => '8 day'::interval);
 SELECT remove_compression_policy('metrics_cagg');
  remove_compression_policy 
 ---------------------------
  t
 
+SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset
 --verify that jobs were added for the policies ---
 SELECT materialization_hypertable_name AS "MAT_TABLE_NAME",
