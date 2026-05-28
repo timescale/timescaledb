@@ -319,7 +319,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 				return;
 			}
 
-			/* If we are unable to reserve a worker go back to the scheduled state */
+			/* If no worker is available, stay scheduled and keep the existing start time. */
 			sjob->reserved_worker = ts_bgw_worker_reserve();
 			if (!sjob->reserved_worker)
 			{
@@ -327,8 +327,6 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 					 "failed to launch job %d \"%s\": out of background workers",
 					 sjob->job.fd.id,
 					 NameStr(sjob->job.fd.application_name));
-				sjob->consecutive_failed_launches++;
-				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
 				PopActiveSnapshot();
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(scratch_mctx);
