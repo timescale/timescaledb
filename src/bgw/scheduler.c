@@ -100,6 +100,7 @@ typedef struct ScheduledBgwJob
 	BackgroundWorkerHandle *handle;
 
 	bool reserved_worker;
+	bool worker_unavailable_logged;
 
 	/*
 	 * We say "may" here since under normal circumstances the job itself will
@@ -323,21 +324,25 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			sjob->reserved_worker = ts_bgw_worker_reserve();
 			if (!sjob->reserved_worker)
 			{
-				elog(WARNING,
-					 "failed to launch job %d \"%s\": out of background workers",
-					 sjob->job.fd.id,
-					 NameStr(sjob->job.fd.application_name));
+				if (!sjob->worker_unavailable_logged)
+				{
+					elog(WARNING,
+						 "failed to launch job %d \"%s\": out of background workers",
+						 sjob->job.fd.id,
+						 NameStr(sjob->job.fd.application_name));
+					sjob->worker_unavailable_logged = true;
+				}
 				PopActiveSnapshot();
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(scratch_mctx);
 				return;
 			}
-
 			/*
 			 * start the job before you can encounter any errors so that they
 			 * are always registered
 			 */
 			mark_job_as_started(sjob);
+			sjob->worker_unavailable_logged = false;
 			if (ts_bgw_job_has_timeout(&sjob->job))
 			{
 				sjob->timeout_at =
