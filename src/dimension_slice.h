@@ -68,9 +68,8 @@ extern DimensionVec *ts_dimension_slice_scan_by_dimension_before_point(int32 dim
 																	   int64 point, int limit,
 																	   ScanDirection scandir,
 																	   MemoryContext mctx);
-extern int ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints);
-extern TSDLLEXPORT int ts_dimension_slice_delete_by_id(int32 dimension_slice_id,
-													   bool delete_constraints);
+extern int ts_dimension_slice_delete_by_dimension_id(int32 dimension_id);
+extern TSDLLEXPORT int ts_dimension_slice_delete_by_id(int32 dimension_slice_id);
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_create(int dimension_id, int64 range_start,
 															 int64 range_end);
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_copy(const DimensionSlice *original);

@@ -723,7 +723,7 @@ dimension_tuple_delete(TupleInfo *ti, void *data)
 	/* delete dimension slices */
 	if (NULL != delete_slices && *delete_slices)
 	{
-		ts_dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id), false);
+		ts_dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id));
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);

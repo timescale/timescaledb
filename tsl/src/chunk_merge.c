@@ -412,7 +412,7 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		 * Delete the old slice first so the (chunk_id, dimension_id) UNIQUE
 		 * does not fire on insert. */
 		int32 old_slice_id = old_slice->fd.id;
-		ts_dimension_slice_delete_by_id(old_slice_id, false);
+		ts_dimension_slice_delete_by_id(old_slice_id);
 
 		new_slice->fd.id = 0;
 		new_slice->fd.chunk_id = chunk->fd.id;

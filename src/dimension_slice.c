@@ -828,7 +828,7 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints)
+ts_dimension_slice_delete_by_dimension_id(int32 dimension_id)
 {
 	ScanKeyData scankey[1];
 
@@ -848,7 +848,7 @@ ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constr
 		scankey,
 		1,
 		dimension_slice_tuple_delete,
-		(void *) &delete_constraints,
+		NULL,
 		0,
 		RowExclusiveLock,
 		&scantuplock,
@@ -856,7 +856,7 @@ ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constr
 }
 
 int
-ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints)
+ts_dimension_slice_delete_by_id(int32 dimension_slice_id)
 {
 	FormData_dimension_slice form;
 	ItemPointerData tid;

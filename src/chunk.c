@@ -1419,12 +1419,12 @@ chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const c
 
 	/* Calculate the hypercube for a new chunk that covers the tuple's point.
 	 *
-	 * We lock the tuple in KEY SHARE mode since we are concerned with
-	 * ensuring that it is not deleted (or the key value changed) while we are
-	 * adding chunk constraints (in `ts_chunk_constraints_insert_metadata`
-	 * called in `chunk_create_metadata_after_lock`). The range of a dimension
-	 * slice does not change, but we should use the weakest lock possible to
-	 * not unnecessarily block other operations. */
+	 * For an aligned dimension we copy the range of an existing slice that
+	 * covers the point into the new chunk's slice. We lock that existing
+	 * slice in KEY SHARE mode so it is not deleted (or its key changed)
+	 * before we commit. The range of a dimension slice does not change, but
+	 * we use the weakest lock possible to not unnecessarily block other
+	 * operations. */
 	cube = ts_hypercube_calculate_from_point(hs, p, &tuplock);
 
 	/* Resolve collisions with other chunks by cutting the new hypercube */
@@ -3106,7 +3106,7 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 				}
 			}
 
-			ts_dimension_slice_delete_by_id(slice->fd.id, false);
+			ts_dimension_slice_delete_by_id(slice->fd.id);
 		}
 	}
 
@@ -5051,7 +5051,7 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 		ts_dimension_slice_create(dimension_id, slice->fd.range_start, merge_slice->fd.range_end);
 
 	/* Replace the kept chunk's slice with the merged range. */
-	ts_dimension_slice_delete_by_id(old_slice_id, false);
+	ts_dimension_slice_delete_by_id(old_slice_id);
 	new_slice->fd.chunk_id = chunk->fd.id;
 	ts_dimension_slice_insert(new_slice);
 
