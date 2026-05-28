@@ -2957,9 +2957,7 @@ BEGIN; :EXPLAIN EXECUTE q1('not here'); ROLLBACK;
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                Filter: (device = 'not here'::text)
 
--- test prepared statement under a generic plan: $1 stays a PARAM_EXTERN in the
--- chunk-scan qual, so process_predicates must constify it from the executor's
--- bound params to keep segmentby pruning working (issue #9916).
+-- prepared statement with generic plan (param should be constified)
 SET plan_cache_mode = force_generic_plan;
 BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
 --- QUERY PLAN ---
@@ -2984,20 +2982,13 @@ BEGIN; :EXPLAIN EXECUTE q1('not here'); ROLLBACK;
                      Filter: (device = $1)
 
 RESET plan_cache_mode;
--- NestLoop with the join clause pushed onto the inner chunk scan as an Index
--- Cond produces a PARAM_EXEC qual whose value is only known per outer row.
--- estimate_expression_value cannot fold PARAM_EXEC (the value lives in
--- es_param_exec_vals, not boundParams), so the predicate stays a Param and
--- every batch of the chunk is decompressed before the join iterates. The
--- primary key on (device, time) gives the planner an index path it can
--- parameterize over device.
+-- ensure that we're not incorrectly constifying the nestloop join params
 CREATE TABLE nl_param(time timestamptz NOT NULL, device int, PRIMARY KEY(device, time));
 SELECT table_name FROM create_hypertable('nl_param', 'time', chunk_time_interval => INTERVAL '10 years');
  table_name 
 ------------
  nl_param
 
--- Compressed rows
 INSERT INTO nl_param
 SELECT '2020-01-01'::timestamptz + (i || ' seconds')::interval, (i % 100) + 1
 FROM generate_series(1, 50000) i;
