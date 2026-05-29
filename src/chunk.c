@@ -3072,6 +3072,37 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
 
+	/*
+	 * chunk_delete locked this chunk row for us. Check the lock result before
+	 * touching the tuple: in read committed mode the lock followed any
+	 * concurrent update to the latest version, so the only remaining conflict
+	 * is a chunk that was deleted by another transaction.
+	 */
+	switch (ti->lockresult)
+	{
+		case TM_Ok:
+		case TM_SelfModified:
+			break;
+		case TM_Deleted:
+		case TM_Updated:
+		case TM_BeingModified:
+			if (IsolationUsesXactSnapshot())
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			}
+			ereport(ERROR,
+					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+					 errmsg("chunk %s by other transaction",
+							ti->lockresult == TM_Deleted ? "deleted" : "updated"),
+					 errhint("Retry the operation again.")));
+			break;
+		default:
+			elog(ERROR, "unexpected chunk tuple lock result %d", ti->lockresult);
+			break;
+	}
+
 	ts_chunk_formdata_fill(&form, ti);
 
 	/*
@@ -3197,6 +3228,24 @@ static int
 chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior, bool detach)
 {
 	int count = 0;
+	ScanTupLock tuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+		.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS,
+	};
+
+	/*
+	 * Lock each chunk row before deleting it. In read committed mode we follow
+	 * the update chain to the latest version, so a concurrent compress_chunk
+	 * (which updates the chunk row) does not turn the catalog delete into a raw
+	 * "tuple concurrently updated" error. A concurrent delete is reported
+	 * cleanly in chunk_tuple_delete instead.
+	 */
+	if (!IsolationUsesXactSnapshot())
+	{
+		tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
+	iterator->ctx.tuplock = &tuplock;
 
 	ts_scanner_foreach(iterator)
 	{

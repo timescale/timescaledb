@@ -166,7 +166,10 @@ count
 
 step s2_commit: COMMIT;
 step s1_drop: <... completed>
-ERROR:  tuple concurrently updated
+count
+-----
+    2
+
 step s1_commit: COMMIT;
 
 starting permutation: s2_compress_chunk_1 s2_compress_chunk_2 s1_drop s1_commit s2_commit
@@ -218,7 +221,10 @@ step s1_drop:
  <waiting ...>
 step s2_commit: COMMIT;
 step s1_drop: <... completed>
-ERROR:  tuple concurrently updated
+count
+-----
+    2
+
 step s1_commit: COMMIT;
 
 starting permutation: s2_compress_chunk_1 s2_compress_chunk_2 s2_commit s1_drop s1_commit
