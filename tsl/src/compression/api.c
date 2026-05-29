@@ -448,7 +448,20 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 * already performed the compression while we were waiting for the locks to be
 	 * acquired.
 	 */
-	Chunk *chunk_state_after_lock = ts_chunk_get_by_relid(chunk_relid, true);
+	Chunk *chunk_state_after_lock = ts_chunk_get_by_relid(chunk_relid, false);
+
+	/*
+	 * The chunk may have been dropped by a concurrent drop_chunks or DROP TABLE
+	 * while we were waiting for the locks. Report it as a clean concurrency
+	 * error instead of a bare "chunk not found".
+	 */
+	if (chunk_state_after_lock == NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+				 errmsg("chunk deleted by other transaction"),
+				 errhint("Retry the operation again.")));
+	}
 
 	/* Throw error if chunk has invalid status for operation */
 	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_COMPRESS, true);

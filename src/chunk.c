@@ -3576,6 +3576,61 @@ lock_chunk_tuple(int32 chunk_id, ItemPointer tid, FormData_chunk *form)
 	return success;
 }
 
+/*
+ * Lock a chunk catalog row before dropping the chunk.
+ *
+ * compress_chunk locks and updates the chunk row and holds that lock until it
+ * commits. Taking the lock here lets drop_chunks detect the conflict up front
+ * and report it as a clean "concurrently updated" error (see the caller's
+ * PG_CATCH) instead of failing later in the catalog delete. In read committed
+ * mode we follow the row to its latest version, so an already-committed
+ * compress does not block the drop. A concurrent delete is reported with the
+ * same lock error so the caller can rewrite it uniformly.
+ */
+static void
+lock_chunk_for_drop(int32 chunk_id)
+{
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+		.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS,
+	};
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
+	iterator.ctx.tuplock = &scantuplock;
+
+	if (!IsolationUsesXactSnapshot())
+	{
+		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		if (ti->lockresult != TM_Ok && ti->lockresult != TM_SelfModified)
+		{
+			if (IsolationUsesXactSnapshot())
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			}
+			ereport(ERROR,
+					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+					 errmsg("chunk %s by other transaction",
+							ti->lockresult == TM_Deleted ? "deleted" : "updated")));
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
 bool
 ts_chunk_set_name(Chunk *chunk, const char *newname)
 {
@@ -4126,6 +4181,17 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 												  &num_chunks,
 												  &tuplock);
 			}
+		}
+
+		/*
+		 * Lock the chunk rows before dropping them so a concurrent
+		 * compress_chunk on the same chunk is reported here as a clean
+		 * "concurrently updated" error rather than failing later in the
+		 * catalog delete.
+		 */
+		for (uint64 i = 0; i < num_chunks; i++)
+		{
+			lock_chunk_for_drop(chunks[i].fd.id);
 		}
 	}
 	PG_CATCH();
