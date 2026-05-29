@@ -40,7 +40,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
 
@@ -74,7 +74,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
@@ -146,7 +146,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
 
@@ -166,7 +166,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
 
@@ -188,7 +188,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2' OR h.table_name = 'drop_chunk_test3')
 ORDER BY c.id;
 
@@ -206,7 +206,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
 
@@ -224,7 +224,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1')
 ORDER BY c.id;
 
@@ -243,7 +243,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1')
 ORDER BY c.id;
 
@@ -254,7 +254,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public'
 ORDER BY c.id;
 

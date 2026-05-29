@@ -14,17 +14,30 @@ $BODY$
 DECLARE
     gap RECORD;
 BEGIN
-    FOR gap IN
-    SELECT ch.id AS chunk_id, d.id AS dimension_id
-    FROM _timescaledb_catalog.chunk ch
-    JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = ch.hypertable_id
-    LEFT JOIN _timescaledb_catalog.dimension_slice ds
-           ON ds.chunk_id = ch.id AND ds.dimension_id = d.id
-    WHERE NOT ch.osm_chunk
-      AND ds.id IS NULL
-    LOOP
-      RAISE EXCEPTION 'Missing dimension slice for chunk % on dimension %.', gap.chunk_id, gap.dimension_id;
-    END LOOP;
+    IF (SELECT extversion >= '2.28.0' FROM pg_extension WHERE extname = 'timescaledb') THEN
+        FOR gap IN
+        SELECT ch.id AS chunk_id, d.id AS dimension_id
+        FROM _timescaledb_catalog.chunk ch
+        JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = ch.hypertable_id
+        WHERE NOT ch.osm_chunk
+          AND NOT EXISTS (SELECT 1 FROM _timescaledb_catalog.dimension_slice ds
+                          WHERE ds.chunk_id = ch.id AND ds.dimension_id = d.id)
+        LOOP
+          RAISE EXCEPTION 'Missing dimension slice for chunk % on dimension %.', gap.chunk_id, gap.dimension_id;
+        END LOOP;
+    ELSE
+        FOR gap IN
+        SELECT ch.id AS chunk_id, d.id AS dimension_id
+        FROM _timescaledb_catalog.chunk ch
+        JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = ch.hypertable_id
+        WHERE NOT ch.osm_chunk
+          AND NOT EXISTS (SELECT 1 FROM _timescaledb_catalog.chunk_constraint cc
+                          JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+                          WHERE cc.chunk_id = ch.id AND ds.dimension_id = d.id)
+        LOOP
+          RAISE EXCEPTION 'Missing dimension slice for chunk % on dimension %.', gap.chunk_id, gap.dimension_id;
+        END LOOP;
+    END IF;
 END;
 $BODY$;
 

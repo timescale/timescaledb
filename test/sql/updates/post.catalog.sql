@@ -6,6 +6,9 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
+SELECT (extversion >= '2.28.0') AS has_chunk_owned_slices
+  FROM pg_extension WHERE extname = 'timescaledb' \gset
+
 \if :PG_UPGRADE_TEST
 \else
 \d+ _timescaledb_catalog.hypertable
@@ -205,12 +208,16 @@ ORDER BY c.id, c.hypertable_id;
 -- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and differ
 -- between a fresh install and a post-upgrade catalog, so dump path-stable
 -- columns only.
-SELECT chunk_id,
-       dimension_id,
-       range_start,
-       range_end
-FROM _timescaledb_catalog.dimension_slice
-ORDER BY chunk_id, dimension_id;
+\if :has_chunk_owned_slices
+SELECT ds.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.dimension_slice ds
+ORDER BY ds.chunk_id, ds.dimension_id;
+\else
+SELECT cc.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk_constraint cc
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+ORDER BY cc.chunk_id, ds.dimension_id;
+\endif
 
 -- Show attnum of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken
@@ -226,7 +233,7 @@ ORDER BY attrelid::regclass::text,att.attnum;
 
 -- Show constraints, stripping numeric prefixes so the legacy
 -- "<chunk_id>_<seq>_<parent>" form (2.27.1) and the new "<chunk_id>_<parent>"
--- form (2.28.0-dev) compare equal. The dimensional CHECKs are named
+-- form (2.28.0) compare equal. The dimensional CHECKs are named
 -- "constraint_<slice_id>" and slice ids are not deterministic between a
 -- fresh install and a post-upgrade catalog, so collapse the suffix too.
 SELECT conrelid::regclass::text,

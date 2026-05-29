@@ -58,7 +58,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
  chunk_id | hypertable_id | chunk_schema | chunk_table | range_start | range_end 
@@ -100,83 +100,23 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           1 |         2
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           2 |         3
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           3 |         4
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           4 |         5
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           5 |         6
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           6 |         7
         2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           2 |         3
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           4 |         5
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           6 |         7
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           1 |         2
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           3 |         4
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           5 |         6
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           6 |         7
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           5 |         6
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           4 |         5
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           1 |         2
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           2 |         3
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           2 |         3
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           3 |         4
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           6 |         7
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           5 |         6
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           1 |         2
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           1 |         2
         5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           2 |         3
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           3 |         4
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           6 |         7
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           4 |         5
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           3 |         4
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           5 |         6
         6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           2 |         3
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           1 |         2
         7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |           1 |         2
-        7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |           2 |         3
-        7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |           3 |         4
-        7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |           4 |         5
-        7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |           5 |         6
-        7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |           6 |         7
         8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           6 |         7
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           1 |         2
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           3 |         4
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           5 |         6
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           6 |         7
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           5 |         6
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           4 |         5
         9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           1 |         2
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           2 |         3
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           2 |         3
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           6 |         7
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           5 |         6
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           1 |         2
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           1 |         2
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           2 |         3
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           3 |         4
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           6 |         7
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           4 |         5
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           3 |         4
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           5 |         6
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           2 |         3
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           1 |         2
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name        | type  |       owner       
@@ -510,61 +450,21 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           5 |         6
         2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           2 |         3
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           6 |         7
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           3 |         4
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           4 |         5
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           5 |         6
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           4 |         5
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           6 |         7
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           2 |         3
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           2 |         3
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           3 |         4
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           5 |         6
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           6 |         7
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           6 |         7
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           2 |         3
         5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           3 |         4
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           4 |         5
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           5 |         6
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           2 |         3
         6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           3 |         4
         8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           3 |         4
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           5 |         6
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           6 |         7
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           6 |         7
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           5 |         6
         9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           4 |         5
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           2 |         3
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           6 |         7
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           5 |         6
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           2 |         3
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           6 |         7
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           3 |         4
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           4 |         5
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           2 |         3
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           4 |         5
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           3 |         4
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           2 |         3
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           5 |         6
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -616,52 +516,20 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           4 |         5
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           5 |         6
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           6 |         7
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           5 |         6
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           6 |         7
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           3 |         4
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           3 |         4
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           6 |         7
         5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
         6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           5 |         6
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           3 |         4
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           6 |         7
         8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           3 |         4
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           5 |         6
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           6 |         7
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           4 |         5
         9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           5 |         6
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           5 |         6
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           6 |         7
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           2 |         3
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           6 |         7
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           3 |         4
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           2 |         3
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           2 |         3
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           3 |         4
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           4 |         5
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           5 |         6
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name        | type  |       owner       
@@ -712,52 +580,20 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2' OR h.table_name = 'drop_chunk_test3')
 ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           4 |         5
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           5 |         6
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           6 |         7
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           5 |         6
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           6 |         7
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           3 |         4
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           3 |         4
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           6 |         7
         5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
         6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           5 |         6
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           3 |         4
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           6 |         7
         8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           3 |         4
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           5 |         6
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           6 |         7
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           4 |         5
         9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           5 |         6
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           5 |         6
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           6 |         7
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           2 |         3
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           6 |         7
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           3 |         4
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           2 |         3
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           2 |         3
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           3 |         4
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           4 |         5
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           5 |         6
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name        | type  |       owner       
@@ -786,45 +622,19 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           5 |         6
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           4 |         5
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           5 |         6
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           3 |         4
         5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           3 |         4
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           6 |         7
         8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           3 |         4
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           5 |         6
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           5 |         6
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           4 |         5
         9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           6 |         7
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           6 |         7
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           5 |         6
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           2 |         3
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           3 |         4
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           2 |         3
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           4 |         5
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           6 |         7
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           4 |         5
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           3 |         4
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           2 |         3
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           5 |         6
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name        | type  |       owner       
@@ -852,14 +662,12 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1')
 ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |   chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+------------------+-------------+-----------
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |           3 |         4
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |           4 |         5
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |           3 |         4
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |           4 |         5
 
 SELECT show_chunks('drop_chunk_test1');
@@ -891,7 +699,7 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1')
 ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |   chunk_table    | range_start | range_end 
@@ -908,37 +716,17 @@ SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
-INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_dimension.id)
+INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public'
 ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+-------------------+-------------+-----------
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           5 |         6
         8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           6 |         7
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           3 |         4
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           4 |         5
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           5 |         6
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           4 |         5
         9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           6 |         7
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           2 |         3
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           2 |         3
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           5 |         6
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           6 |         7
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           6 |         7
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           2 |         3
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           3 |         4
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           4 |         5
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           5 |         6
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           2 |         3
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           3 |         4
 
 -- We support show/drop chunks using timestamps/interval even with integer partitioning
 -- the chunk creation time gets used for these. But we need to use "created_before, created_after"

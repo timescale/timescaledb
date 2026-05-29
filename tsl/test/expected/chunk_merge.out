@@ -79,7 +79,7 @@ SELECT compress_chunk(i) FROM show_chunks('test1') i;
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
- _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_5_chunk
 
 \set ON_ERROR_STOP 0

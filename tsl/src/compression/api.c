@@ -41,6 +41,7 @@
 #include "compression_storage.h"
 #include "create.h"
 #include "debug_point.h"
+#include "dimension_slice.h"
 #include "error_utils.h"
 #include "errors.h"
 #include "guc.h"
@@ -332,7 +333,8 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 
 	for (int i = 1; i < previous_chunk->cube->num_slices; i++)
 	{
-		if (previous_chunk->cube->slices[i]->fd.id != current_chunk->cube->slices[i]->fd.id)
+		if (!ts_dimension_slices_equal(previous_chunk->cube->slices[i],
+									   current_chunk->cube->slices[i]))
 		{
 			return NULL;
 		}
