@@ -1,0 +1,2 @@
+Implements: #9842 Suppress continuous aggregate invalidation tracking during bulk loads
+Setting: `skip_cagg_invalidation`: skip continuous aggregate invalidation tracking for DML and DDL in the current session/transaction. Off by default.

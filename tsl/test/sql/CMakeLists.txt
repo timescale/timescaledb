@@ -14,6 +14,7 @@ set(TEST_FILES
     cagg_policy.sql
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
+    cagg_skip_invalidation.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_publication_compression.sql
@@ -97,6 +98,7 @@ set(TEST_TEMPLATES
     cagg_permissions.sql.in
     columnar_index_scan.sql.in
     compress_bloom_sparse.sql.in
+    compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
     modify_exclusion.sql.in

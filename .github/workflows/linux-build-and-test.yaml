@@ -110,12 +110,12 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
 
     # on macOS the path used is depending on the runner version leading to cache failure
     # when the runner version changes so we extract runner version from path and add it
@@ -228,7 +228,7 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
+      uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./build/coverage/timescaledb-coverage.info
