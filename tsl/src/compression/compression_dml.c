@@ -1769,7 +1769,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 				/*
 				 * Segmentby columns are checked as part of batch scan so no need to redo the check.
 				 */
-				if (ts_guc_enable_dml_decompression_tuple_filtering)
+				if (ts_guc_enable_optimizations && ts_guc_enable_dml_decompression_tuple_filtering)
 				{
 					ScanKeyEntryInitialize(&(*mem_scankeys)[(*num_mem_scankeys)++],
 										   arg_value->constisnull ? SK_ISNULL : 0,
