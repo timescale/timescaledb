@@ -2,9 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Test for body_buffer overflow in columnar_result_set_row with
+-- Tests for body buffer overflow in columnar_result_set_row with
 -- DT_ArrowText type. When vectorized text functions produce large
--- results, the body buffer growth computation could overflow int32.
+-- results, the body buffer growth computation could overflow int32,
+-- and the total buffer size can exceed MaxAllocSize.
 
 set max_parallel_workers_per_gather to 0;
 
@@ -29,5 +30,28 @@ select sum(length(a || a)) from t_textoverflow;
 reset timescaledb.debug_require_vector_agg;
 
 drop table t_textoverflow cascade;
+
+-- When the actual data doesn't fit into MaxAllocSize, produce an error message
+-- instead of erroring out in palloc.
+create table t_text_overflow (time timestamptz not null, text_col text not null);
+
+select table_name from create_hypertable('t_text_overflow', 'time',
+    chunk_time_interval => interval '1 year');
+
+insert into t_text_overflow
+select '2020-01-01'::timestamptz + i * interval '1 hour', 'a'
+from generate_series(1, 1000) i;
+
+alter table t_text_overflow set (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time'
+);
+select count(compress_chunk(c)) from show_chunks('t_text_overflow') c;
+
+set timescaledb.debug_require_vector_agg to 'require';
+select count(text_col || repeat('x', 2000000)) from t_text_overflow;
+reset timescaledb.debug_require_vector_agg;
+
+drop table t_text_overflow cascade;
 
 reset max_parallel_workers_per_gather;

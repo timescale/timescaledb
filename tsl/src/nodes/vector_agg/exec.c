@@ -174,6 +174,16 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 			const Size result_bytes = VARSIZE_ANY_EXHDR(datum);
 			const Size required_body_bytes =
 				pad_to_multiple(64, columnar_result->current_offset + result_bytes);
+			if (required_body_bytes > MaxAllocSize)
+			{
+				/*
+				 * The body buffer is allocated through palloc, so it cannot
+				 * exceed MaxAllocSize.
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+						 errmsg("vectorized text result exceeds %zu bytes", (Size) MaxAllocSize)));
+			}
 			if (required_body_bytes > columnar_result->allocated_body_bytes)
 			{
 				/*
@@ -183,10 +193,9 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 				 * tuned manually on a few real data sets until this balance
 				 * looked somewhat acceptable.
 				 */
-				const Size new_body_bytes =
-					(Size) (required_body_bytes *
-							Min(10, Max(1.2, 1.2 * nrows / ((double) row + 1)))) +
-					1;
+				const double desired_growth_factor = 1.2 * nrows / ((double) row + 1);
+				const double growth_factor = Min(10, Max(1.2, desired_growth_factor));
+				Size new_body_bytes = Min(MaxAllocSize, (Size) required_body_bytes * growth_factor);
 				Assert(new_body_bytes >= required_body_bytes);
 				columnar_result->body_buffer =
 					repalloc(columnar_result->body_buffer, new_body_bytes);
