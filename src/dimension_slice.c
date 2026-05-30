@@ -514,7 +514,7 @@ ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **matchi
 										CurrentMemoryContext);
 }
 
-int
+TSDLLEXPORT int
 ts_dimension_slice_scan_iterator_set_range(ScanIterator *it, int32 dimension_id,
 										   StrategyNumber start_strategy, int64 start_value,
 										   StrategyNumber end_strategy, int64 end_value)
@@ -970,7 +970,7 @@ ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, const ScanTupLo
 	return slice;
 }
 
-ScanIterator
+TSDLLEXPORT ScanIterator
 ts_dimension_slice_scan_iterator_create(const ScanTupLock *tuplock, MemoryContext result_mcxt)
 {
 	ScanIterator it = ts_scan_iterator_create(DIMENSION_SLICE, AccessShareLock, result_mcxt);

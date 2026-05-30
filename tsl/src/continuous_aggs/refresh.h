@@ -21,8 +21,7 @@ extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 											bool extend_last_bucket);
 extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
 												 InternalTimeRange *original_refresh_window,
-												 int32 buckets_per_batch,
-												 bool refresh_newest_first);
+												 int32 buckets_per_batch);
 InternalTimeRange
 compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
 											  const ContinuousAggBucketFunction *bucket_function);

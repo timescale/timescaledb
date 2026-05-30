@@ -326,16 +326,13 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                                                            msg                                                            
---------+-----------+--------------------------------------------+---------------------------------------------------------------------------------------------------------------------------
+ msg_no | mock_time |              application_name              |                                                    msg                                                     
+--------+-----------+--------------------------------------------+------------------------------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 |         0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 10, 12 ] (batch 1 of 2)
+      0 |         0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ -90, 12 ]
       1 |         0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      2 |         0 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-      3 |         0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ -10, 10 ] (batch 2 of 2)
-      4 |         0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      5 |         0 | Refresh Continuous Aggregate Policy [1001] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+      2 |         0 | Refresh Continuous Aggregate Policy [1001] | inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
 
 -- job ran once, successfully
 SELECT job_id, last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
@@ -371,24 +368,18 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
  
 
 SELECT * FROM sorted_bgw_log;
- msg_no |  mock_time  |              application_name              |                                                            msg                                                            
---------+-------------+--------------------------------------------+---------------------------------------------------------------------------------------------------------------------------
+ msg_no |  mock_time  |              application_name              |                                                    msg                                                     
+--------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------------------------
       0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |           0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 |           0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 10, 12 ] (batch 1 of 2)
+      0 |           0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ -90, 12 ]
       1 |           0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      2 |           0 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-      3 |           0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ -10, 10 ] (batch 2 of 2)
-      4 |           0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      5 |           0 | Refresh Continuous Aggregate Policy [1001] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+      2 |           0 | Refresh Continuous Aggregate Policy [1001] | inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
       0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ -90, -10 ]
-      1 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      2 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-      3 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 6, 8 ]
-      4 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      5 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 6, 8 ]
+      1 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
+      2 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
 
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
@@ -451,24 +442,18 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50, 50);
  
 
 SELECT * FROM sorted_bgw_log;
- msg_no |  mock_time  |              application_name              |                                                            msg                                                            
---------+-------------+--------------------------------------------+---------------------------------------------------------------------------------------------------------------------------
+ msg_no |  mock_time  |              application_name              |                                                    msg                                                     
+--------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------------------------
       0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |           0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 |           0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 10, 12 ] (batch 1 of 2)
+      0 |           0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ -90, 12 ]
       1 |           0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      2 |           0 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-      3 |           0 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ -10, 10 ] (batch 2 of 2)
-      4 |           0 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      5 |           0 | Refresh Continuous Aggregate Policy [1001] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+      2 |           0 | Refresh Continuous Aggregate Policy [1001] | inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
       0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ -90, -10 ]
-      1 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      2 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-      3 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 6, 8 ]
-      4 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
-      5 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 6, 8 ]
+      1 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
+      2 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
       0 | 86400000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 86400000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 0, 12 ]
