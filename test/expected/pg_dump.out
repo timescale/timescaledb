@@ -55,36 +55,10 @@ BEGIN
     RETURN NEW;
 END
 $BODY$;
--- Test that a custom chunk sizing function is restored
-CREATE OR REPLACE FUNCTION custom_calculate_chunk_interval(
-        dimension_id INTEGER,
-        dimension_coord BIGINT,
-        chunk_target_size BIGINT
-)
-    RETURNS BIGINT LANGUAGE PLPGSQL AS
-$BODY$
-DECLARE
-BEGIN
-    RETURN -1;
-END
-$BODY$;
-SELECT * FROM set_adaptive_chunking('"test_schema"."two_Partitions"', '1 MB', 'custom_calculate_chunk_interval');
-WARNING:  target chunk size for adaptive chunking is less than 10 MB
-        chunk_sizing_func        | chunk_target_size 
----------------------------------+-------------------
- custom_calculate_chunk_interval |           1048576
-
--- Chunk sizing func set
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |     chunk_sizing_func_name      | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+---------------------------------+-------------------+-------------------+--------------------------+--------
-  1 | test_schema | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | public                   | custom_calculate_chunk_interval |           1048576 |                 0 |                          |      0
-
-SELECT proname, pronamespace, pronargs
-FROM pg_proc WHERE proname = 'custom_calculate_chunk_interval';
-             proname             | pronamespace | pronargs 
----------------------------------+--------------+----------
- custom_calculate_chunk_interval |         2200 |        3
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
+----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
+  1 | test_schema | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
 CREATE TRIGGER restore_trigger BEFORE INSERT ON "test_schema"."two_Partitions"
 FOR EACH ROW EXECUTE FUNCTION test_trigger();
@@ -394,17 +368,11 @@ SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS 
         4 |                  7 | constraint_7
         4 |                  8 | constraint_8
 
---Chunk sizing function should have been restored
+-- hypertable catalog should have been restored
 SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |     chunk_sizing_func_name      | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+---------------------------------+-------------------+-------------------+--------------------------+--------
-  1 | test_schema | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | public                   | custom_calculate_chunk_interval |           1048576 |                 0 |                          |      0
-
-SELECT proname, pronamespace, pronargs
-FROM pg_proc WHERE proname = 'custom_calculate_chunk_interval';
-             proname             | pronamespace | pronargs 
----------------------------------+--------------+----------
- custom_calculate_chunk_interval |         2200 |        3
+ id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
+----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
+  1 | test_schema | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
 --check simple ddl still works
 ALTER TABLE "test_schema"."two_Partitions" ADD COLUMN series_3 integer;

@@ -184,3 +184,9 @@ GRANT SELECT ON _timescaledb_catalog.dimension_slice TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.dimension_slice_id_seq TO PUBLIC;
 -- end rebuild _timescaledb_catalog.dimension_slice table --
 
+DROP FUNCTION IF EXISTS @extschema@.create_hypertable(relation REGCLASS, time_column_name NAME, partitioning_column NAME, number_partitions INTEGER, associated_schema_name NAME, associated_table_prefix NAME, chunk_time_interval ANYELEMENT, create_default_indexes BOOLEAN, if_not_exists BOOLEAN, partitioning_func REGPROC, migrate_data BOOLEAN, time_partitioning_func REGPROC);
+
+
+-- Restore the chunk_target_size check constraint dropped in the forward path.
+ALTER TABLE _timescaledb_catalog.hypertable
+    ADD CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0);
