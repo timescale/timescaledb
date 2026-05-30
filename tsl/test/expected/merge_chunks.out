@@ -19,7 +19,7 @@ join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
 join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
 join _timescaledb_catalog.dimension d on (d.id = ds.dimension_id)
 where h.table_name = 'mergeme'
-order by d.id, ds.range_start, ds.range_end;
+order by d.id, c.id, ds.range_start, ds.range_end;
 create view orphaned_slices as
 select ds.id, format('constraint_%s', ds.id)::name as constraint_name
 from _timescaledb_catalog.dimension_slice ds
@@ -207,16 +207,16 @@ insert into mergeme values ('2024-01-02', 1, 4.0), ('2024-01-04', 1, 5.0);
 select * from partitions;
     table_name    | column_name |     range_start      |      range_end      
 ------------------+-------------+----------------------+---------------------
- _hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
  _hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
  _hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
  _hyper_1_4_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_5_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_5_chunk | device      | -9223372036854775808 |           715827882
  _hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
- _hyper_1_4_chunk | device      | -9223372036854775808 |           715827882
  _hyper_1_2_chunk | device      |            715827882 |          1431655764
  _hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_4_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_5_chunk | device      | -9223372036854775808 |           715827882
 
 \set ON_ERROR_STOP 0
 -- can't merge 3 and 4
@@ -568,30 +568,30 @@ select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 select * from partitions;
     table_name     | column_name |     range_start      |      range_end      
 -------------------+-------------+----------------------+---------------------
- _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_1_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_4_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
- _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_12_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_5_chunk  | time        |     1704326400000000 |    1704412800000000
- _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_12_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_12_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_2_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
  _hyper_1_4_chunk  | device      | -9223372036854775808 |           715827882
  _hyper_1_5_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
  _hyper_1_10_chunk | device      |            715827882 |          1431655764
- _hyper_1_15_chunk | device      |            715827882 |          1431655764
- _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_13_chunk | device      |            715827882 |          1431655764
- _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
  _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_12_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_13_chunk | device      |            715827882 |          1431655764
+ _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_15_chunk | device      |            715827882 |          1431655764
+ _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
 
 -- Show which chunks are compressed. Their compression_chunk_size
 -- metadata should be merged.
@@ -670,24 +670,24 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
     table_name     | column_name |     range_start      |      range_end      
 -------------------+-------------+----------------------+---------------------
+ _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
- _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
  _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_15_chunk | device      |            715827882 |          1431655764
- _hyper_1_10_chunk | device      |            715827882 |          1431655764
- _hyper_1_13_chunk | device      |            715827882 |          1431655764
- _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
  _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+ _hyper_1_10_chunk | device      |            715827882 |          1431655764
  _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_13_chunk | device      |            715827882 |          1431655764
  _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_15_chunk | device      |            715827882 |          1431655764
+ _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
@@ -698,17 +698,17 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
     table_name     | column_name |     range_start      |      range_end      
 -------------------+-------------+----------------------+---------------------
- _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
  _hyper_1_2_chunk  | device      |            715827882 |          1431655764
+ _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
  _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
  _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
  _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_11_chunk','_timescaledb_internal._hyper_1_14_chunk', '_timescaledb_internal._hyper_1_16_chunk']);

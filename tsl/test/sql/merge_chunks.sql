@@ -22,7 +22,7 @@ join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
 join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
 join _timescaledb_catalog.dimension d on (d.id = ds.dimension_id)
 where h.table_name = 'mergeme'
-order by d.id, ds.range_start, ds.range_end;
+order by d.id, c.id, ds.range_start, ds.range_end;
 
 create view orphaned_slices as
 select ds.id, format('constraint_%s', ds.id)::name as constraint_name
