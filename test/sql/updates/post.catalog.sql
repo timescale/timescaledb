@@ -238,14 +238,8 @@ AND pg_get_constraintdef(oid) NOT LIKE 'NOT NULL %'
 \endif
 ORDER BY 1, 2, 3;
 
--- Orderby fix was introduced in 2.26.4.
--- Fresh installations of versions below 2.26.3 and below will show output mismatch
-SELECT (extversion >= '2.26.4') AS has_fixed_sparse_index
-FROM pg_extension
-WHERE extname = 'timescaledb' \gset
-
-\if :has_fixed_sparse_index
-SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
-\else
+-- The index column depends on the version that compressed each chunk (the
+-- orderby sparse index type changed across releases and existing chunks are
+-- not rewritten on upgrade), so it differs between a fresh install and a
+-- post-upgrade catalog. Skip it and compare the remaining columns.
 SELECT relid, compress_relid, segmentby, orderby, orderby_desc, orderby_nullsfirst FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
-\endif
