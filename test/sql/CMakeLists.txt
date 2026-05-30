@@ -4,7 +4,6 @@ set(TEST_FILES
     alter.sql
     alternate_users.sql
     baserel_cache.sql
-    chunk_adaptive.sql
     chunk_publication.sql
     chunk_utils.sql
     chunks.sql

@@ -270,27 +270,19 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 	int flags = 0;
 	NameData mat_tbltimecol;
 	DimensionInfo *time_dim_info;
-	ChunkSizingInfo *chunk_sizing_info;
 	namestrcpy(&mat_tbltimecol, matpartcolname);
 	time_dim_info = ts_dimension_info_create_open(mat_tbloid,
 												  &mat_tbltimecol,
 												  Int64GetDatum(mat_tbltimecol_interval),
 												  INT8OID,
 												  InvalidOid);
-	/*
-	 * Ideally would like to change/expand the API so setting the column name manually is
-	 * unnecessary, but not high priority.
-	 */
-	chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(mat_tbloid);
-	chunk_sizing_info->colname = matpartcolname;
 	created = ts_hypertable_create_from_info(mat_tbloid,
 											 hypertable_id,
 											 flags,
 											 time_dim_info,
 											 NULL,
 											 NULL,
-											 NULL,
-											 chunk_sizing_info);
+											 NULL);
 	if (!created)
 	{
 		ereport(ERROR,

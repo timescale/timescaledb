@@ -374,65 +374,6 @@ do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
 }
 
 /*
- * Calculate, and potentially set, a new chunk interval for an open dimension.
- */
-static bool
-calculate_and_set_new_chunk_interval(const Hypertable *ht, const Point *p)
-{
-	Hyperspace *hs = ht->space;
-	Dimension *dim = NULL;
-	Datum datum;
-	int64 chunk_interval, coord;
-	int i;
-
-	if (!OidIsValid(ht->chunk_sizing_func) || ht->fd.chunk_target_size <= 0)
-	{
-		return false;
-	}
-
-	/* Find first open dimension */
-	for (i = 0; i < hs->num_dimensions; i++)
-	{
-		dim = &hs->dimensions[i];
-
-		if (IS_OPEN_DIMENSION(dim))
-		{
-			break;
-		}
-
-		dim = NULL;
-	}
-
-	/* Nothing to do if no open dimension */
-	if (NULL == dim)
-	{
-		elog(WARNING,
-			 "adaptive chunking enabled on hypertable \"%s\" without an open (time) dimension",
-			 get_rel_name(ht->main_table_relid));
-
-		return false;
-	}
-
-	coord = p->coordinates[i];
-	datum = OidFunctionCall3(ht->chunk_sizing_func,
-							 Int32GetDatum(dim->fd.id),
-							 Int64GetDatum(coord),
-							 Int64GetDatum(ht->fd.chunk_target_size));
-	chunk_interval = DatumGetInt64(datum);
-
-	/* Check if the function didn't set and interval or nothing changed */
-	if (chunk_interval <= 0 || chunk_interval == dim->fd.interval_length)
-	{
-		return false;
-	}
-
-	/* Update the dimension */
-	ts_dimension_set_chunk_interval(dim, chunk_interval);
-
-	return true;
-}
-
-/*
  * Resolve chunk collisions.
  *
  * After a chunk collision scan, this function is called for each chunk in the
@@ -1390,12 +1331,6 @@ chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const c
 		.lockmode = LockTupleKeyShare,
 		.waitpolicy = LockWaitBlock,
 	};
-
-	/*
-	 * If the user has enabled adaptive chunking, call the function to
-	 * calculate and set the new chunk time interval.
-	 */
-	calculate_and_set_new_chunk_interval(ht, p);
 
 	/* Calculate the hypercube for a new chunk that covers the tuple's point. */
 	cube = ts_hypercube_calculate_from_point(hs, p, &tuplock);
@@ -2469,99 +2404,6 @@ chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_f
 	};
 
 	return ts_scanner_scan(&ctx);
-}
-
-/*
- * Get a window of chunks that "precedes" the given dimensional point.
- *
- * For instance, if the dimension is "time", then given a point in time the
- * function returns the recent chunks that come before the chunk that includes
- * that point. The count parameter determines the number or slices the window
- * should include in the given dimension. Note, that with multi-dimensional
- * partitioning, there might be multiple chunks in each dimensional slice that
- * all precede the given point. For instance, the example below shows two
- * different situations that each go "back" two slices (count = 2) in the
- * x-dimension, but returns two vs. eight chunks due to different
- * partitioning.
- *
- * '_____________
- * '|   |   | * |
- * '|___|___|___|
- * '
- * '
- * '____ ________
- * '|   |   | * |
- * '|___|___|___|
- * '|   |   |   |
- * '|___|___|___|
- * '|   |   |   |
- * '|___|___|___|
- * '|   |   |   |
- * '|___|___|___|
- *
- * Note that the returned chunks will be allocated on the given memory
- * context, including the list itself. So, beware of not leaking the list if
- * the chunks are later cached somewhere else.
- */
-List *
-ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx)
-{
-	List *chunks = NIL;
-	DimensionVec *dimvec;
-	int i;
-
-	/* Scan for "count" slices that precede the point in the given dimension */
-	dimvec = ts_dimension_slice_scan_by_dimension_before_point(dimension_id,
-															   point,
-															   count,
-															   BackwardScanDirection,
-															   mctx);
-
-	/*
-	 * Each slice carries its owning chunk_id directly, so go fetch the chunk
-	 * and build its hypercube from the slice catalog.
-	 */
-	for (i = 0; i < dimvec->num_slices; i++)
-	{
-		DimensionSlice *slice = dimvec->slices[i];
-		Chunk *chunk = ts_chunk_get_by_id(slice->fd.chunk_id, true);
-		MemoryContext old;
-
-		List *chunk_slices = ts_dimension_slice_scan_by_chunk_id(chunk->fd.id, mctx);
-		ListCell *lc;
-		int idx = 0;
-
-		old = MemoryContextSwitchTo(mctx);
-		chunk->cube = ts_hypercube_alloc(list_length(chunk_slices));
-		MemoryContextSwitchTo(old);
-		foreach (lc, chunk_slices)
-		{
-			chunk->cube->slices[idx++] = (DimensionSlice *) lfirst(lc);
-		}
-		chunk->cube->num_slices = idx;
-		ts_hypercube_slice_sort(chunk->cube);
-
-		/* Allocate the list on the same memory context as the chunks */
-		old = MemoryContextSwitchTo(mctx);
-		chunks = lappend(chunks, chunk);
-		MemoryContextSwitchTo(old);
-	}
-
-#ifdef USE_ASSERT_CHECKING
-	/* Assert that we never return dropped chunks */
-	do
-	{
-		ListCell *lc;
-
-		foreach (lc, chunks)
-		{
-			Chunk *chunk = lfirst(lc);
-			ASSERT_IS_VALID_CHUNK(chunk);
-		}
-	} while (false);
-#endif
-
-	return chunks;
 }
 
 static Chunk *
