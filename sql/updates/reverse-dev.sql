@@ -188,3 +188,4 @@ DROP FUNCTION IF EXISTS @extschema@.create_hypertable(relation REGCLASS, time_co
 -- Restore the chunk_target_size check constraint dropped in the forward path.
 ALTER TABLE _timescaledb_catalog.hypertable
     ADD CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0);
+DROP FUNCTION IF EXISTS _timescaledb_functions.rebuild_sparse_index(REGCLASS, BOOLEAN);

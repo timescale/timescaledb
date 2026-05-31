@@ -28,8 +28,6 @@ static HeapTuple compression_settings_formdata_make_tuple(const FormData_compres
 														  TupleDesc desc);
 static Bitmapset *resolve_columns_to_attnos(List *column_names, Oid relid);
 static bool sparse_index_values_equal(List *left, List *right);
-static bool sparse_index_object_equal(SparseIndexSettingsObject *left,
-									  SparseIndexSettingsObject *right);
 
 /*
  * Compare two compression settings for equality
@@ -90,12 +88,56 @@ sparse_index_values_equal(List *left, List *right)
 	return true;
 }
 
+bool
+ts_sparse_index_object_get_type_and_columns(SparseIndexSettingsObject *obj, const char **type_out,
+											List **columns_out)
+{
+	const char *type = NULL;
+	List *columns = NIL;
+
+	foreach_ptr(SparseIndexSettingsPair, pair, obj->pairs)
+	{
+		if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyType]) == 0)
+		{
+			Assert(list_length(pair->values) == 1);
+			type = (const char *) lfirst(list_head(pair->values));
+		}
+		else if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyCol]) == 0)
+		{
+			columns = pair->values;
+		}
+	}
+
+	if (!type || !columns)
+	{
+		return false;
+	}
+
+	*type_out = type;
+	*columns_out = columns;
+	return true;
+}
+
+bool
+ts_sparse_index_is_orderby_source(SparseIndexSettingsObject *obj)
+{
+	foreach_ptr(SparseIndexSettingsPair, pair, obj->pairs)
+	{
+		if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeySource]) == 0)
+		{
+			const char *source = (const char *) lfirst(list_head(pair->values));
+			return strcmp(source, ts_sparse_index_source_names[_SparseIndexSourceEnumOrderby]) == 0;
+		}
+	}
+	return false;
+}
+
 /*
  * Compare two sparse index objects for equality.
  * Two objects are equal if they have the same pairs with the same values.
  */
-static bool
-sparse_index_object_equal(SparseIndexSettingsObject *left, SparseIndexSettingsObject *right)
+bool
+ts_sparse_index_object_equal(SparseIndexSettingsObject *left, SparseIndexSettingsObject *right)
 {
 	if (list_length(left->pairs) != list_length(right->pairs))
 	{
@@ -165,7 +207,7 @@ ts_sparse_index_equal(const Jsonb *left, const Jsonb *right)
 		bool found = false;
 		foreach_ptr(SparseIndexSettingsObject, robj, right_settings->objects)
 		{
-			if (!already_found[ri] && sparse_index_object_equal(lobj, robj))
+			if (!already_found[ri] && ts_sparse_index_object_equal(lobj, robj))
 			{
 				already_found[ri] = true;
 				found = true;
