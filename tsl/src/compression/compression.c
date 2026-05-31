@@ -1652,7 +1652,9 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 	foreach (lc, row_compressor->metadata_builders)
 	{
 		BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
-		builder->insert_to_compressed_row(builder, row_compressor);
+		builder->insert_to_compressed_row(builder,
+										  row_compressor->compressed_values,
+										  row_compressor->compressed_is_null);
 	}
 
 	row_compressor->compressed_values[row_compressor->count_metadata_column_offset] =
@@ -1709,7 +1711,9 @@ row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups)
 	foreach (lc, row_compressor->metadata_builders)
 	{
 		BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
-		builder->reset(builder, row_compressor);
+		builder->reset(builder,
+					   row_compressor->compressed_values,
+					   row_compressor->compressed_is_null);
 	}
 
 	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;

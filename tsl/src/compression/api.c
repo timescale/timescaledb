@@ -1071,6 +1071,74 @@ tsl_rebuild_columnstore(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+Datum
+tsl_rebuild_sparse_index(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	bool force = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (!OidIsValid(chunk_relid))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk OID")));
+	}
+
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+
+	if (!ts_chunk_is_compressed(chunk) || ts_chunk_is_frozen(chunk))
+	{
+		ereport(NOTICE,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s.%s\" is uncompressed or frozen, skipping",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name))));
+		PG_RETURN_VOID();
+	}
+
+	CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
+	CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
+
+	if (ht_settings->fd.index == NULL)
+	{
+		ereport(NOTICE,
+				(errmsg("no sparse index configured on hypertable \"%s\" for chunk \"%s.%s\", "
+						"skipping",
+						get_rel_name(chunk->hypertable_relid),
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name))));
+		PG_RETURN_VOID();
+	}
+
+	/* Orderby changes require recompression since batch data is physically sorted by orderby */
+	if (!ts_array_equal(chunk_settings->fd.orderby, ht_settings->fd.orderby))
+	{
+		ereport(NOTICE,
+				(errmsg("orderby settings for chunk \"%s.%s\" differ from hypertable \"%s\"",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name),
+						get_rel_name(chunk->hypertable_relid)),
+				 errhint("Use compress_chunk(chunk, recompress => true) to recompress.")));
+		PG_RETURN_VOID();
+	}
+
+	if (!force && ts_sparse_index_equal(chunk_settings->fd.index, ht_settings->fd.index))
+	{
+		ereport(NOTICE,
+				(errmsg("sparse index settings for chunk \"%s.%s\" already match hypertable, "
+						"skipping (use force => true to override)",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name))));
+		PG_RETURN_VOID();
+	}
+
+	rebuild_sparse_index_impl(chunk, force);
+	PG_RETURN_VOID();
+}
+
 /*
  * This is hacky but it doesn't matter. We just want to check for the existence of such an index
  * on the compressed chunk.

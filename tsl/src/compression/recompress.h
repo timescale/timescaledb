@@ -32,6 +32,7 @@ extern Datum tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS);
 
 Oid recompress_chunk_segmentwise_impl(Chunk *chunk, bool fullrecompress);
 bool recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk);
+void rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force);
 
 /* Result of matching an uncompressed tuple against a compressed batch */
 enum Batch_match_result

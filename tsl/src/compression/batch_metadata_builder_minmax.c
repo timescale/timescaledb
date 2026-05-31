@@ -15,8 +15,9 @@
 #include "compression.h"
 
 static void minmax_update_row(void *builder_, TupleTableSlot *slot);
-static void minmax_insert_to_compressed_row(void *builder_, RowCompressor *compressor);
-static void minmax_reset(void *builder_, RowCompressor *compressor);
+static void minmax_insert_to_compressed_row(void *builder_, Datum *compressed_values,
+											bool *compressed_is_null);
+static void minmax_reset(void *builder_, Datum *compressed_values, bool *compressed_is_null);
 
 BatchMetadataBuilder *
 batch_metadata_builder_minmax_create(Oid type_oid, Oid collation, AttrNumber attnum,
@@ -104,7 +105,7 @@ minmax_update_row(void *builder_, TupleTableSlot *slot)
 }
 
 static void
-minmax_reset(void *builder_, RowCompressor *compressor)
+minmax_reset(void *builder_, Datum *compressed_values, bool *compressed_is_null)
 {
 	BatchMetadataBuilderMinMax *builder = (BatchMetadataBuilderMinMax *) builder_;
 	if (!builder->empty)
@@ -120,10 +121,10 @@ minmax_reset(void *builder_, RowCompressor *compressor)
 	builder->empty = true;
 	builder->has_null = false;
 
-	compressor->compressed_is_null[builder->max_metadata_attr_offset] = true;
-	compressor->compressed_is_null[builder->min_metadata_attr_offset] = true;
-	compressor->compressed_values[builder->min_metadata_attr_offset] = 0;
-	compressor->compressed_values[builder->max_metadata_attr_offset] = 0;
+	compressed_is_null[builder->max_metadata_attr_offset] = true;
+	compressed_is_null[builder->min_metadata_attr_offset] = true;
+	compressed_values[builder->min_metadata_attr_offset] = 0;
+	compressed_values[builder->max_metadata_attr_offset] = 0;
 }
 
 Datum
@@ -174,7 +175,7 @@ batch_metadata_builder_minmax_empty(void *builder_)
 }
 
 static void
-minmax_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
+minmax_insert_to_compressed_row(void *builder_, Datum *compressed_values, bool *compressed_is_null)
 {
 	BatchMetadataBuilderMinMax *builder = (BatchMetadataBuilderMinMax *) builder_;
 	Assert(builder->min_metadata_attr_offset >= 0);
@@ -182,17 +183,17 @@ minmax_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 
 	if (!batch_metadata_builder_minmax_empty(builder))
 	{
-		compressor->compressed_is_null[builder->min_metadata_attr_offset] = false;
-		compressor->compressed_is_null[builder->max_metadata_attr_offset] = false;
+		compressed_is_null[builder->min_metadata_attr_offset] = false;
+		compressed_is_null[builder->max_metadata_attr_offset] = false;
 
-		compressor->compressed_values[builder->min_metadata_attr_offset] =
+		compressed_values[builder->min_metadata_attr_offset] =
 			batch_metadata_builder_minmax_min(builder);
-		compressor->compressed_values[builder->max_metadata_attr_offset] =
+		compressed_values[builder->max_metadata_attr_offset] =
 			batch_metadata_builder_minmax_max(builder);
 	}
 	else
 	{
-		compressor->compressed_is_null[builder->min_metadata_attr_offset] = true;
-		compressor->compressed_is_null[builder->max_metadata_attr_offset] = true;
+		compressed_is_null[builder->min_metadata_attr_offset] = true;
+		compressed_is_null[builder->max_metadata_attr_offset] = true;
 	}
 }
