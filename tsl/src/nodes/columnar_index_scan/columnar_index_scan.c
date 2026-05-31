@@ -469,6 +469,8 @@ validate_entries_walker(Node *node, void *context)
 typedef struct RewriteContext
 {
 	Agg *agg;
+	/* Original grpColIdx, matched against so rewritten entries don't collide. */
+	AttrNumber *old_grpColIdx;
 	List *custom_scan_tlist;
 	AttrNumber next_resno;
 } RewriteContext;
@@ -496,7 +498,7 @@ rewrite_agg_tlist_mutator(Node *node, void *context)
 		/* Update grpColIdx for GROUP BY Vars */
 		for (int k = 0; k < ctx->agg->numCols; k++)
 		{
-			if (ctx->agg->grpColIdx[k] == var->varattno)
+			if (ctx->old_grpColIdx[k] == var->varattno)
 			{
 				ctx->agg->grpColIdx[k] = resno;
 			}
@@ -663,8 +665,16 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *rtable)
 	 * Rewrite pass: walk the Agg's targetlist with a mutator that rewrites
 	 * Var and Aggref nodes to reference ColumnarIndexScan output columns.
 	 */
+	AttrNumber *old_grpColIdx = NULL;
+	if (agg->numCols > 0)
+	{
+		old_grpColIdx = palloc(sizeof(AttrNumber) * agg->numCols);
+		memcpy(old_grpColIdx, agg->grpColIdx, sizeof(AttrNumber) * agg->numCols);
+	}
+
 	RewriteContext rewrite_ctx = {
 		.agg = agg,
+		.old_grpColIdx = old_grpColIdx,
 		.custom_scan_tlist = custom_scan_tlist,
 		.next_resno = 1,
 	};
