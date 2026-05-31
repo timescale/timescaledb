@@ -146,3 +146,11 @@ SET timescaledb.enable_columnarindexscan = on;
 EXPLAIN (costs off) SELECT count(*) FROM :CAST_CHUNK GROUP BY (device_id)::text;
 SELECT count(*) FROM :CAST_CHUNK GROUP BY (device_id)::text ORDER BY 1;
 
+-- Multiple GROUP BY columns not in SELECT must map to the right output columns.
+SET timescaledb.enable_columnarindexscan = off;
+SELECT count(*) FROM (SELECT count(*) FROM metrics GROUP BY device, sensor) g;
+SELECT count(*) FROM (SELECT count(*) FROM metrics GROUP BY sensor, device) g;
+SET timescaledb.enable_columnarindexscan = on;
+SELECT count(*) FROM (SELECT count(*) FROM metrics GROUP BY device, sensor) g;
+SELECT count(*) FROM (SELECT count(*) FROM metrics GROUP BY sensor, device) g;
+
