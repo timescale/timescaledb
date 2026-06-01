@@ -2,25 +2,12 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
-## 2.27.2 (2026-06-01)
+## 2.27.2 (2026-06-02)
 
-This release contains performance improvements and bug fixes since the 2.27.1 release. We recommend that you upgrade at the next available opportunity.
-
-**Highlighted features in TimescaleDB v2.27.2**
-* 
-
-**Backward-Incompatible Changes**
-
-**Features**
+This release contains bug fixes since the 2.27.1 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
-* 
-
-**New Settings**
-
-**GUCs**
-
-**Thanks**
+* [#9895](https://github.com/timescale/timescaledb/pull/9895) Remove refresh policy check when adding columnstore policy
 
 ## 2.27.1 (2026-05-19)
 
