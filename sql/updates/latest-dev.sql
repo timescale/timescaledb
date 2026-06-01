@@ -270,3 +270,8 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
 
 ANALYZE _timescaledb_catalog.continuous_agg;
 -- end rebuild _timescaledb_catalog.continuous_agg --
+
+-- drop telemetry_event
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.telemetry_event;
+DROP TABLE _timescaledb_catalog.telemetry_event;
+

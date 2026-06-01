@@ -274,3 +274,11 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
 ANALYZE _timescaledb_catalog.continuous_agg;
 -- end rebuild _timescaledb_catalog.continuous_agg --
 
+-- restore telemetry_event
+CREATE TABLE _timescaledb_catalog.telemetry_event (
+       created timestamptz NOT NULL DEFAULT current_timestamp,
+       tag name NOT NULL,
+       body jsonb NOT NULL
+);
+GRANT SELECT ON _timescaledb_catalog.telemetry_event TO PUBLIC;
+
