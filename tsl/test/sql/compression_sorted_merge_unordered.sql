@@ -478,7 +478,7 @@ SELECT * FROM test_segby ORDER BY time DESC NULLS LAST;
 :PREFIX
 SELECT * FROM test_segby ORDER BY time ASC NULLS FIRST;
 
--- Should not be optimized (using segmentby)
+-- Should not be optimized (using segmentby with "time" order wrong)
 :PREFIX
 SELECT * FROM test_segby ORDER BY segby, time;
 
@@ -612,10 +612,98 @@ SELECT * FROM test_nosegby ORDER BY segby, time DESC NULLS LAST;
 :PREFIX
 SELECT * FROM test_nosegby ORDER BY segby DESC NULLS LAST;
 
+
+-- Tests for BatchSortedMerge over multi-segment data
+--------------------------------------
+set timescaledb.debug_require_batch_sorted_merge to 'force';
+
+-- Should be optimized (segmentby + orderby matches)
+:PREFIX
+SELECT * FROM test_segby ORDER BY segby, time DESC;
+
+-- Table with overlapping batches
+CREATE TABLE t2(time int NOT NULL, dev int NOT NULL, v int);
+SELECT create_hypertable('t2', 'time', chunk_time_interval => 10000);
+ALTER TABLE t2 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='dev');
+
+INSERT INTO t2 (time, dev, v) values
+(1, 1, 20),
+(1, 2, 300),
+(2, 3, 3000),
+(3, 1, 40),
+(4, 1, 10),
+(4, 2, 100),
+(6, 3, 2000),
+(6, 1, 10),
+(6, 2, 300),
+(8, 1, 60),
+(8, 2, 100),
+(8, 3, 7000);
+
+INSERT INTO t2 (time, dev, v) values
+(3, 1, 20),
+(3, 2, 300),
+(3, 3, 3000),
+(5, 1, 40),
+(5, 2, 100),
+(5, 3, 1000),
+(6, 1, 2000),
+(6, 1, 10),
+(6, 1, 200),
+(7, 1, 60),
+(7, 2, 100),
+(7, 3, 7000);
+
+INSERT INTO t2 (time, dev, v) values
+(5, 1, 20),
+(5, 3, 3000),
+(5, 2, 300),
+(7, 2, 400),
+(8, 1, 10),
+(8, 2, 100),
+(8, 3, 2000),
+(10, 1, 10),
+(11, 1, 300),
+(14, 1, 60),
+(14, 2, 100),
+(14, 3, 7000);
+
+INSERT INTO t2 (time, dev, v) values
+(9, 1, 20),
+(9, 3, 300),
+(9, 2, 30),
+(9, 2, 40),
+(10, 1, 10),
+(10, 2, 100),
+(10, 3, 2000),
+(11, 1, 10),
+(12, 1, 300),
+(13, 1, 60),
+(13, 2, 100),
+(13, 3, 7000);
+
+-- matches (segmentby + orderby) order
+:PREFIX
+SELECT * FROM t2 ORDER BY dev, time DESC;
+
+SELECT * FROM t2 ORDER BY dev, time DESC;
+
+-- matches (segmentby + orderby) reverse order
+:PREFIX
+SELECT * FROM t2 ORDER BY dev DESC, time;
+
+-- Predicates on segmentby, orderby and other columns are dealt with correctly
+SELECT * FROM t2 WHERE dev > 1 ORDER BY dev, time DESC;
+
+SELECT * FROM t2 WHERE time > 8 ORDER BY dev, time DESC;
+
+SELECT * FROM t2 WHERE v >= 1000 ORDER BY dev, time DESC;
+
 drop table test1 cascade;
 drop table test2 cascade;
 drop table test_segby cascade;
 drop table test_nosegby cascade;
+drop table t2 cascade;
 
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.debug_require_batch_sorted_merge;

@@ -668,3 +668,7 @@ LockHeldByMeCompat(const LOCKTAG *locktag, LOCKMODE lockmode, bool orstronger)
 #else
 #define TS_MODULE_MAGIC(extname) PG_MODULE_MAGIC
 #endif
+
+#ifdef PG17_LT
+#define binaryheap_size(h) ((h)->bh_size)
+#endif
