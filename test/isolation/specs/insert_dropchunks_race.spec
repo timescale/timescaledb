@@ -4,17 +4,11 @@
 
 # Race condition between insert and drop_chunks
 #
-# If an insert need to create a new chunk, it will look for existing
-# dimension slices to see if any need to be added: if slices already
-# exist, they do not need to be re-constructed and constraints can be
-# added that reference these slices. If chunks are dropped, there is a
-# cleanup of unreferenced dimension slices which can possibly remove
-# unreferenced dimension slices if transactions creating new chunks do
-# not lock the dimension slices for read.
-#
-# This isolation test check that a concurrent insert and drop_chunks
-# do not accidentally create a broken state by adding chunk
-# constraints that reference non-existing dimension slices.
+# An insert that creates a new chunk inserts dimension_slice rows
+# owned by that chunk. A concurrent drop_chunks cascades dimension_slice
+# rows for the dropped chunks via FK ON DELETE CASCADE. This isolation
+# test checks that the two paths do not leave any chunk lacking a
+# dimension_slice row for any of its dimensions.
 
 setup {
   DROP TABLE IF EXISTS insert_dropchunks_race_t1;
@@ -31,7 +25,14 @@ session "s1"
 setup		{ BEGIN; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; }
 step "s1a"	{ INSERT INTO insert_dropchunks_race_t1 VALUES ('2020-01-03 10:30', 3, 33.4); }
 step "s1b" 	{ COMMIT; }
-step "s1c" 	{ SELECT COUNT(*) FROM _timescaledb_catalog.chunk_constraint LEFT JOIN _timescaledb_catalog.dimension_slice sl ON dimension_slice_id = sl.id WHERE sl.id IS NULL; }
+step "s1c" 	{
+	SELECT COUNT(*)
+	FROM _timescaledb_catalog.chunk c
+	JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = c.hypertable_id
+	LEFT JOIN _timescaledb_catalog.dimension_slice ds
+	       ON ds.chunk_id = c.id AND ds.dimension_id = d.id
+	WHERE NOT c.osm_chunk AND ds.id IS NULL;
+}
 
 session "s2"
 setup	        { BEGIN; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; }

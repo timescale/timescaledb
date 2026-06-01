@@ -854,8 +854,8 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the min/max values for column \"%s\" of chunk \"%s.%s\"",
 						 col_name,
-						 chunk->fd.schema_name.data,
-						 chunk->fd.table_name.data))));
+						 NameStr(chunk->fd.schema_name),
+						 NameStr(chunk->fd.table_name)))));
 	}
 
 	pfree(command.data);

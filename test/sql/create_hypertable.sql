@@ -131,12 +131,11 @@ CREATE TABLE dim_test(time TIMESTAMPTZ, device int);
 SELECT create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');
 
 CREATE VIEW dim_test_slices AS
-SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, cc.dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, ds.id AS dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
-INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
-INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id AND ds.chunk_id = c.id)
 WHERE h.table_name = 'dim_test'
 ORDER BY c.id, ds.dimension_id;
 
@@ -168,12 +167,11 @@ CREATE TABLE dim_test(time TIMESTAMPTZ, device int, data int);
 SELECT create_hypertable('dim_test', 'time', 'device', 2, chunk_time_interval => INTERVAL '1 day');
 
 CREATE VIEW dim_test_slices AS
-SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, cc.dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, ds.id AS dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
-INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
-INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id AND ds.chunk_id = c.id)
 WHERE h.table_name = 'dim_test'
 ORDER BY c.id, ds.dimension_id;
 

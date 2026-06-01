@@ -401,3 +401,23 @@ COPY transition_drop (time, name, c1) FROM STDIN;
 \.
 DROP TABLE transition_drop;
 
+-- Renaming a constraint trigger via ALTER TABLE propagates the new conname
+-- to chunks (pg_trigger.tgname is kept by PG; only pg_constraint is renamed).
+-- Dropping the original trigger then removes both sides via the dependency.
+SELECT conrelid::regclass, conname FROM pg_constraint
+WHERE contype = 't' AND conname LIKE '%trigger_constraint_insert%'
+ORDER BY conrelid::regclass::text COLLATE "C";
+
+ALTER TABLE hyper RENAME CONSTRAINT _0_test_trigger_constraint_insert
+    TO _0_test_trigger_constraint_insert_renamed;
+
+SELECT conrelid::regclass, conname FROM pg_constraint
+WHERE contype = 't' AND conname LIKE '%trigger_constraint_insert%'
+ORDER BY conrelid::regclass::text COLLATE "C";
+
+DROP TRIGGER _0_test_trigger_constraint_insert ON hyper;
+
+SELECT conrelid::regclass, conname FROM pg_constraint
+WHERE contype = 't' AND conname LIKE '%trigger_constraint_insert%'
+ORDER BY conrelid::regclass::text COLLATE "C";
+

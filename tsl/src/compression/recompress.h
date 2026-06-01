@@ -17,13 +17,15 @@ typedef struct RecompressContext
 	int num_segmentby;
 	int num_orderby;
 	int n_keys;
-	AttrNumber *sort_keys;
-	Oid *sort_operators;
-	Oid *sort_collations;
-	bool *nulls_first;
-	CompressedSegmentInfo *current_segment;
-	ScanKeyData *index_scankeys;
-	ScanKeyData *orderby_scankeys;
+	AttrNumber sort_keys[INDEX_MAX_KEYS];
+	Oid sort_operators[INDEX_MAX_KEYS];
+	Oid sort_collations[INDEX_MAX_KEYS];
+	bool nulls_first[INDEX_MAX_KEYS];
+	CompressedSegmentInfo current_segment[INDEX_MAX_KEYS];
+	ScanKeyData index_scankeys[INDEX_MAX_KEYS];
+	ScanKeyData orderby_scankeys[INDEX_MAX_KEYS * 2]; /* for min and max */
+	bool key_byval[INDEX_MAX_KEYS];
+	int16 key_typlen[INDEX_MAX_KEYS];
 } RecompressContext;
 
 extern Datum tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS);

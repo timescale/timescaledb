@@ -20,7 +20,7 @@ jobs:
 
       - name: Check sql file contents
         run: |
-          find sql -name '*.sql' -not -path 'sql/updates/*' -not -path 'sql/compat.sql' | xargs -IFILE python scripts/check_updates.py FILE
+          find sql -name '*.sql' -not -path 'sql/updates/*' -not -path 'sql/compat.sql' -exec python scripts/check_updates.py {} \;
 
       - name: Check latest-dev contents
         run: |

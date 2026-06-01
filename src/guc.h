@@ -17,7 +17,7 @@ extern bool ts_function_telemetry_on(void);
 #endif
 
 extern bool ts_guc_enable_deprecation_warnings;
-extern bool ts_guc_enable_optimizations;
+extern TSDLLEXPORT bool ts_guc_enable_optimizations;
 extern bool ts_guc_enable_constraint_aware_append;
 extern bool ts_guc_enable_ordered_append;
 extern bool ts_guc_enable_chunk_append;
@@ -29,6 +29,7 @@ extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
+extern TSDLLEXPORT bool ts_guc_skip_cagg_invalidation;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
@@ -160,6 +161,13 @@ extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_batch_sorted_merge;
 
 extern bool ts_guc_enable_partitioned_hypertables;
+extern TSDLLEXPORT int ts_guc_stats_max_chunks;
+
+#define TS_STATS_MAX_CHUNKS_DEFAULT 1024
+#define TS_STATS_MAX_CHUNKS_MIN 256
+#define TS_STATS_MAX_CHUNKS_MAX 262144
+
+#define IS_STATS_CHUNKS_ENABLED() (ts_guc_stats_max_chunks > 0)
 
 void _guc_init(void);
 

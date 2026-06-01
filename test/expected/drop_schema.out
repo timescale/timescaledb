@@ -89,10 +89,10 @@ SELECT * FROM _timescaledb_catalog.dimension;
 ----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;
- id | dimension_id | range_start | range_end 
-----+--------------+-------------+-----------
+ id | chunk_id | dimension_id | range_start | range_end 
+----+----------+--------------+-------------+-----------
 
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
 

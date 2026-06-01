@@ -89,6 +89,7 @@ jobs:
         compress_bloom_sparse_debug
         compress_compbloom_hash_pushdown
         compress_composite_bloom_debug
+        compress_observ-*
         compress_qualpushdown_saop
         compress_sort_transform
         compression_algos
@@ -168,13 +169,13 @@ jobs:
     - name: Checkout TimescaleDB source
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
       shell: powershell
       run: |
-        echo "date=$(Get-Date -Format 'dd')" >> $env:GITHUB_OUTPUT
+        echo "date=$(Get-Date -UFormat '%V')" >> $env:GITHUB_OUTPUT
 
       # Use a cache for the PostgreSQL installation to speed things up
       # and avoid unnecessary package downloads. Since we only save
@@ -188,7 +189,7 @@ jobs:
       id: cache-postgresql
       with:
         path: C:\Progra~1\PostgreSQL\${{ matrix.versions.pg }}
-        key: "${{ runner.os }}-build-pg${{ matrix.pkg_version }}\
+        key: "${{ runner.os }}-build-pg${{ matrix.versions.pg_version }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Install PostgreSQL ${{ matrix.versions.pg }} (using ${{ matrix.versions.pg_version }})
@@ -196,13 +197,18 @@ jobs:
       run: |
         $version = ${{ matrix.versions.pg_version }}
         $version = $version.Replace('"', '') + "-1"
-        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} --version $version --force --accept-source-agreements --accept-package-agreements --disable-interactivity
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} `
+          --force --accept-source-agreements --accept-package-agreements --disable-interactivity `
+          --custom "--disable-components pgAdmin,stackbuilder" `
+          --version $version
 
     # This is for nightly builds. Here we pick the latest version of the package.
     - name: Install PostgreSQL ${{ matrix.versions.pg }}
       if: github.event_name == 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} --force --accept-source-agreements --accept-package-agreements --disable-interactivity
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} `
+          --force --accept-source-agreements --accept-package-agreements --disable-interactivity `
+          --custom "--disable-components pgAdmin,stackbuilder"
 
     - name: Configure TimescaleDB
       run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
@@ -350,7 +356,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.os }} ${{ matrix.build_type }} Build
+        name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.build_type }} Build
         path: |
           regression.log
           installcheck.log
@@ -359,14 +365,14 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
+        name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
 
     - name: Upload CMake Logs
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
+        name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.build_type }}
         path: |
             build_win/CMakeCache.txt
             build_win/CMakeFiles/CMakeConfigureLog.yaml
@@ -390,7 +396,7 @@ jobs:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
         # duplicate it to work around this nonsense.
-        JOB_NAME: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
+        JOB_NAME: PG${{ matrix.versions.pg }} ${{ matrix.build_type }}
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_REF_NAME: ${{ github.ref_name }}

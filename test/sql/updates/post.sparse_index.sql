@@ -23,10 +23,19 @@ WHERE id = (
 )
 \gset
 
--- Note: we can't use \d+ here because it prevents changing the TOAST storage flag
---   if we do, like in the UUID compression changes from external to extended, then
---   the upgrade tests fail
+-- This test checks that the bloom sparse indexes survive the upgrade, so only
+-- look at the bloom columns of the compressed chunk. Dumping the whole chunk
+-- would also pull in the orderby sparse metadata, whose layout depends on the
+-- version that compressed the chunk (minmax vs firstlast) and is not rewritten
+-- on upgrade, which would cause a spurious diff unrelated to bloom indexes.
 \a
-\d :chunk
+SELECT a.attname, format_type(a.atttypid, a.atttypmod) AS type
+FROM pg_attribute a
+JOIN pg_type t ON t.oid = a.atttypid
+WHERE a.attrelid = :'chunk'::regclass
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+  AND t.typname = 'bloom1'
+ORDER BY a.attnum;
 \a
 

@@ -721,7 +721,7 @@ VACUUM ANALYZE test_ordering;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
    ->  Sort
-         Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
          ->  Seq Scan on compress_hyper_14_21_chunk
 
 INSERT INTO test_ordering SELECT 1;
@@ -741,7 +741,7 @@ VACUUM ANALYZE test_ordering;
          Sort Key: test_ordering."time"
          ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
 
@@ -756,7 +756,7 @@ VACUUM ANALYZE test_ordering;
          Sort Key: test_ordering."time"
          ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
    ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
@@ -802,11 +802,11 @@ VACUUM ANALYZE test_ordering;
    Order: test_ordering."time"
    ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+               Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                ->  Seq Scan on compress_hyper_14_21_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_13_22_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_23_chunk._ts_meta_min_1, compress_hyper_14_23_chunk._ts_meta_max_1
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_v2_last_time, compress_hyper_14_23_chunk._ts_meta_v2_first_time
                ->  Seq Scan on compress_hyper_14_23_chunk
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
@@ -1010,13 +1010,13 @@ SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
 \set ON_ERROR_STOP 0
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_1_multi_unique_time_u1_key"
+ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u1_key"
 DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 1, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_1_multi_unique_time_u1_key"
+ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u1_key"
 DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 1, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_2_multi_unique_time_u2_key"
+ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u2_key"
 DETAIL:  Key ("time", u2)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 \set ON_ERROR_STOP 1
 DROP TABLE multi_unique;
@@ -1037,7 +1037,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
 \set ON_ERROR_STOP 0
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "77_3_unique_null_time_u1_u2_key"
+ERROR:  duplicate key value violates unique constraint "77_unique_null_time_u1_u2_key"
 \set ON_ERROR_STOP 1
 -- neither of these should need to decompress
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
@@ -1612,7 +1612,7 @@ SELECT compress_chunk(show_chunks('i9314'));
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
-   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_51_104_chunk
+   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_v2_last_time__ts_meta__idx on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
              time             | value | doubled 
@@ -1631,7 +1631,7 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
    ->  Sort
-         Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+         Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
          ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1666,7 +1666,7 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
    ->  Sort
-         Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+         Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
          ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1703,11 +1703,11 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
    Order: i9314."time"
    ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
          ->  Sort
-               Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+               Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_51_104_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_50_105_chunk
          ->  Sort
-               Sort Key: compress_hyper_51_106_chunk._ts_meta_min_1
+               Sort Key: compress_hyper_51_106_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_51_106_chunk
 
 SELECT * FROM i9314 ORDER BY time;

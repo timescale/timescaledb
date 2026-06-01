@@ -1,0 +1,1 @@
+Fixes: #9914 Fix use-after-free in segmentwise recompression

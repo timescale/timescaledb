@@ -4,7 +4,6 @@ set(TEST_FILES
     alter.sql
     alternate_users.sql
     baserel_cache.sql
-    catalog_corruption.sql
     chunk_adaptive.sql
     chunk_publication.sql
     chunk_utils.sql
@@ -39,6 +38,7 @@ set(TEST_FILES
     insert_single.sql
     lateral.sql
     merge.sql
+    observ_funcs.sql
     partition.sql
     partition_coercion.sql
     partitioning.sql

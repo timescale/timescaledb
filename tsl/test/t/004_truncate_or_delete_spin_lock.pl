@@ -120,7 +120,7 @@ $result = $s2->query_safe("COMMIT");
 
 # No AccessExclusiveLock on the uncompressed chunk
 $result = $s1->query_safe(
-	"SELECT relation::regclass::text FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' AND locktype = 'relation' AND mode = 'AccessExclusiveLock' ORDER BY relation, locktype;"
+	"SELECT relation::regclass::text FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' AND locktype = 'relation' AND mode = 'AccessExclusiveLock' ORDER BY relation::regclass::text COLLATE \"C\", locktype;"
 );
 $expected = "_timescaledb_internal.compress_hyper_2_2_chunk";
 is($result, $expected, "verify AccessExclusiveLock was not taken");
@@ -160,7 +160,7 @@ is($result, 'Compressed|1', "verify chunks are compressed");
 
 # AccessExclusiveLock taken on the uncompressed chunk
 $result = $s1->query_safe(
-	"SELECT relation::regclass::text FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' AND locktype = 'relation' AND mode = 'AccessExclusiveLock' ORDER BY relation, locktype;"
+	"SELECT relation::regclass::text FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' AND locktype = 'relation' AND mode = 'AccessExclusiveLock' ORDER BY relation::regclass::text COLLATE \"C\", locktype;"
 );
 
 $expected = "_timescaledb_internal._hyper_1_1_chunk

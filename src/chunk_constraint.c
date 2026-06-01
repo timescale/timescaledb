@@ -12,13 +12,10 @@
 #include <catalog/objectaddress.h>
 #include <catalog/pg_constraint.h>
 #include <commands/tablecmds.h>
-#include <funcapi.h>
 #include <nodes/makefuncs.h>
 #include <storage/lockdefs.h>
 #include <utils/builtins.h>
-#include <utils/hsearch.h>
 #include <utils/lsyscache.h>
-#include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
@@ -27,11 +24,10 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
-#include "chunk_index.h"
 #include "constraint.h"
 #include "debug_assert.h"
+#include "dimension.h"
 #include "dimension_slice.h"
-#include "dimension_vector.h"
 #include "errors.h"
 #include "export.h"
 #include "foreign_key.h"
@@ -39,257 +35,31 @@
 #include "hypertable.h"
 #include "partitioning.h"
 #include "process_utility.h"
-#include "scan_iterator.h"
-#include "scanner.h"
+#include "ts_catalog/catalog.h"
 
-#define DEFAULT_EXTRA_CONSTRAINTS_SIZE 4
-
-#define CHUNK_CONSTRAINTS_SIZE(num_constraints) (sizeof(ChunkConstraint) * (num_constraints))
-
-ChunkConstraints *
-ts_chunk_constraints_alloc(int size_hint, MemoryContext mctx)
+/*
+ * Build the deterministic "<chunk_id>_<parent>" chunk-side name so DROP/RENAME
+ * paths can recompute it without consulting any metadata table.
+ */
+void
+ts_chunk_constraint_choose_name(char *dst, int32 chunk_id, const char *hypertable_constraint_name)
 {
-	ChunkConstraints *ccs = MemoryContextAlloc(mctx, sizeof(ChunkConstraints));
-
-	ccs->mctx = mctx;
-	ccs->capacity = size_hint + DEFAULT_EXTRA_CONSTRAINTS_SIZE;
-	ccs->num_constraints = 0;
-	ccs->num_dimension_constraints = 0;
-	ccs->constraints = MemoryContextAllocZero(mctx, CHUNK_CONSTRAINTS_SIZE(ccs->capacity));
-
-	return ccs;
-}
-
-ChunkConstraints *
-ts_chunk_constraints_copy(ChunkConstraints *chunk_constraints)
-{
-	ChunkConstraints *copy = palloc(sizeof(ChunkConstraints));
-
-	memcpy(copy, chunk_constraints, sizeof(ChunkConstraints));
-	copy->constraints = palloc0(CHUNK_CONSTRAINTS_SIZE(chunk_constraints->capacity));
-	memcpy(copy->constraints,
-		   chunk_constraints->constraints,
-		   CHUNK_CONSTRAINTS_SIZE(chunk_constraints->num_constraints));
-
-	return copy;
-}
-
-static void
-chunk_constraints_expand(ChunkConstraints *ccs, int16 new_capacity)
-{
-	MemoryContext old;
-
-	if (new_capacity <= ccs->capacity)
-	{
-		return;
-	}
-
-	old = MemoryContextSwitchTo(ccs->mctx);
-	ccs->capacity = new_capacity;
-	Assert(ccs->constraints); /* repalloc() does not work with NULL argument */
-	ccs->constraints = repalloc(ccs->constraints, CHUNK_CONSTRAINTS_SIZE(new_capacity));
-	MemoryContextSwitchTo(old);
-}
-
-static void
-chunk_constraint_dimension_choose_name(Name dst, int32 dimension_slice_id)
-{
-	snprintf(NameStr(*dst), NAMEDATALEN, "constraint_%d", dimension_slice_id);
-}
-
-static void
-chunk_constraint_choose_name(Name dst, const char *hypertable_constraint_name, int32 chunk_id)
-{
-	char constrname[NAMEDATALEN];
-	CatalogSecurityContext sec_ctx;
-
 	Assert(hypertable_constraint_name != NULL);
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	snprintf(constrname,
-			 NAMEDATALEN,
-			 "%d_" INT64_FORMAT "_%s",
-			 chunk_id,
-			 ts_catalog_table_next_seq_id(ts_catalog_get(), CHUNK_CONSTRAINT),
-			 hypertable_constraint_name);
-	ts_catalog_restore_user(&sec_ctx);
-
-	namestrcpy(dst, constrname);
-}
-
-ChunkConstraint *
-ts_chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id, int32 dimension_slice_id,
-						 const char *constraint_name, const char *hypertable_constraint_name)
-{
-	ChunkConstraint *cc;
-
-	chunk_constraints_expand(ccs, ccs->num_constraints + 1);
-	cc = &ccs->constraints[ccs->num_constraints++];
-	cc->fd.chunk_id = chunk_id;
-	cc->fd.dimension_slice_id = dimension_slice_id;
-
-	if (NULL == constraint_name)
-	{
-		if (is_dimension_constraint(cc))
-		{
-			chunk_constraint_dimension_choose_name(&cc->fd.constraint_name,
-												   cc->fd.dimension_slice_id);
-			namestrcpy(&cc->fd.hypertable_constraint_name, "");
-		}
-		else
-		{
-			chunk_constraint_choose_name(&cc->fd.constraint_name,
-										 hypertable_constraint_name,
-										 cc->fd.chunk_id);
-		}
-	}
-	else
-	{
-		namestrcpy(&cc->fd.constraint_name, constraint_name);
-	}
-
-	if (NULL != hypertable_constraint_name)
-	{
-		namestrcpy(&cc->fd.hypertable_constraint_name, hypertable_constraint_name);
-	}
-
-	if (is_dimension_constraint(cc))
-	{
-		ccs->num_dimension_constraints++;
-	}
-
-	return cc;
-}
-
-static void
-chunk_constraint_fill_tuple_values(const ChunkConstraint *cc, Datum values[Natts_chunk_constraint],
-								   bool nulls[Natts_chunk_constraint])
-{
-	memset(values, 0, sizeof(Datum) * Natts_chunk_constraint);
-	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)] =
-		Int32GetDatum(cc->fd.chunk_id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] =
-		Int32GetDatum(cc->fd.dimension_slice_id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] =
-		NameGetDatum(&cc->fd.constraint_name);
-	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
-		NameGetDatum(&cc->fd.hypertable_constraint_name);
-
-	if (is_dimension_constraint(cc))
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
-	}
-	else
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] = true;
-	}
-}
-
-static void
-chunk_constraint_insert_relation(const Relation rel, const ChunkConstraint *cc)
-{
-	TupleDesc desc = RelationGetDescr(rel);
-	Datum values[Natts_chunk_constraint];
-	bool nulls[Natts_chunk_constraint] = { false };
-
-	chunk_constraint_fill_tuple_values(cc, values, nulls);
-	ts_catalog_insert_values(rel, desc, values, nulls);
+	snprintf(dst, NAMEDATALEN, "%d_%s", chunk_id, hypertable_constraint_name);
 }
 
 /*
- * Insert multiple chunk constraints into the metadata catalog.
+ * Build the CHECK constraint name a dim CHECK uses on the chunk table.
  */
-void
-ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs)
+static inline void
+dimension_constraint_choose_name(char *dst, int32 dimension_slice_id)
 {
-	Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
-	Relation rel;
-	int i;
-
-	rel = table_open(catalog_get_table_id(catalog, CHUNK_CONSTRAINT), RowExclusiveLock);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
-	for (i = 0; i < ccs->num_constraints; i++)
-	{
-		chunk_constraint_insert_relation(rel, &ccs->constraints[i]);
-	}
-
-	ts_catalog_restore_user(&sec_ctx);
-	table_close(rel, RowExclusiveLock);
+	snprintf(dst, NAMEDATALEN, "constraint_%d", dimension_slice_id);
 }
 
 /*
- * Insert a single chunk constraints into the metadata catalog.
- */
-void
-ts_chunk_constraint_insert(ChunkConstraint *constraint)
-{
-	Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
-	Relation rel;
-
-	rel = table_open(catalog_get_table_id(catalog, CHUNK_CONSTRAINT), RowExclusiveLock);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	chunk_constraint_insert_relation(rel, constraint);
-	ts_catalog_restore_user(&sec_ctx);
-	table_close(rel, RowExclusiveLock);
-}
-
-ChunkConstraint *
-ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs, const TupleInfo *ti)
-{
-	bool nulls[Natts_chunk_constraint];
-	Datum values[Natts_chunk_constraint];
-	ChunkConstraint *constraints;
-	int32 dimension_slice_id;
-	Name constraint_name;
-	Name hypertable_constraint_name;
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	MemoryContext oldcxt;
-
-	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
-
-	oldcxt = MemoryContextSwitchTo(ccs->mctx);
-
-	constraint_name =
-		DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]);
-
-	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)])
-	{
-		dimension_slice_id = 0;
-		hypertable_constraint_name = DatumGetName(
-			values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)]);
-	}
-	else
-	{
-		dimension_slice_id = DatumGetInt32(
-			values[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)]);
-		hypertable_constraint_name = DatumGetName(DirectFunctionCall1(namein, CStringGetDatum("")));
-	}
-
-	constraints = ts_chunk_constraints_add(ccs,
-										   DatumGetInt32(values[AttrNumberGetAttrOffset(
-											   Anum_chunk_constraint_chunk_id)]),
-										   dimension_slice_id,
-										   NameStr(*constraint_name),
-										   NameStr(*hypertable_constraint_name));
-
-	MemoryContextSwitchTo(oldcxt);
-
-	if (should_free)
-	{
-		heap_freetuple(tuple);
-	}
-
-	return constraints;
-}
-
-/*
- * Create a dimensional CHECK constraint for a partitioning dimension.
+ * Create a dimensional CHECK constraint node for a partitioning dimension.
  */
 Constraint *
 ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlice *slice,
@@ -397,122 +167,152 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 }
 
 /*
- * Add a constraint to a chunk table.
+ * Decide whether a hypertable-side constraint needs to be copied to a chunk.
+ *
+ * CHECK and NOT NULL propagate via PG inheritance, and FKs are handled
+ * separately by the chunk inheritance code. Everything else (PK, UNIQUE,
+ * EXCLUSION, TRIGGER) we have to copy ourselves.
+ */
+static bool
+chunk_constraint_need_on_chunk(Form_pg_constraint conform)
+{
+	if (conform->contype == CONSTRAINT_CHECK ||
+		conform->contype == CONSTRAINT_FOREIGN
+#if PG18_GE
+		/* Avoid NOT NULL constraints
+		 * https://github.com/postgres/postgres/commit/b0e96f31
+		 */
+		|| conform->contype == CONSTRAINT_NOTNULL
+#endif
+	)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * Add a single non-dimensional chunk-side constraint by replicating the
+ * hypertable's definition. Delegates to a PL/pgSQL helper that pulls the
+ * constraint definition with pg_get_constraintdef and runs ALTER TABLE.
  */
 static Oid
-chunk_constraint_create_on_table(const ChunkConstraint *cc, Oid chunk_oid)
+create_non_dimensional_constraint(int32 chunk_id, const char *chunk_constraint_name,
+								  const char *hypertable_constraint_name, Oid chunk_oid)
 {
-	HeapTuple tuple;
-	Datum values[Natts_chunk_constraint];
-	bool nulls[Natts_chunk_constraint] = { false };
+	NameData chunk_name_data;
+	NameData hypertable_name_data;
 	CatalogSecurityContext sec_ctx;
-	Relation rel;
 
-	chunk_constraint_fill_tuple_values(cc, values, nulls);
+	if (ConstraintNameIsUsed(CONSTRAINT_RELATION, chunk_oid, chunk_constraint_name))
+	{
+		return get_relation_constraint_oid(chunk_oid, chunk_constraint_name, true);
+	}
 
-	rel = RelationIdGetRelation(catalog_get_table_id(ts_catalog_get(), CHUNK_CONSTRAINT));
-	tuple = heap_form_tuple(RelationGetDescr(rel), values, nulls);
-	RelationClose(rel);
+	namestrcpy(&chunk_name_data, chunk_constraint_name);
+	namestrcpy(&hypertable_name_data, hypertable_constraint_name);
 
+	ts_process_utility_set_expect_chunk_modification(true);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	CatalogInternalCall1(DDL_ADD_CHUNK_CONSTRAINT, HeapTupleGetDatum(tuple));
+	CatalogInternalCall3(DDL_ADD_CHUNK_CONSTRAINT,
+						 Int32GetDatum(chunk_id),
+						 NameGetDatum(&chunk_name_data),
+						 NameGetDatum(&hypertable_name_data));
 	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(tuple);
+	ts_process_utility_set_expect_chunk_modification(false);
 
-	return get_relation_constraint_oid(chunk_oid, NameStr(cc->fd.constraint_name), true);
+	return get_relation_constraint_oid(chunk_oid, chunk_constraint_name, true);
 }
 
+typedef struct InheritableContext
+{
+	const Hypertable *ht;
+	const Chunk *chunk;
+} InheritableContext;
+
 /*
- * Create a non-dimensional constraint on a chunk table (foreign key, trigger
- * constraint, etc.), including adding relevant metadata to the catalog.
+ * Callback invoked for each hypertable constraint. For non-dim constraints
+ * that need replication on the chunk side, create them via the PL/pgSQL
+ * helper.
  */
-static Oid
-create_non_dimensional_constraint(const ChunkConstraint *cc, Oid chunk_oid, int32 chunk_id,
-								  Oid hypertable_oid, int32 hypertable_id)
+static ConstraintProcessStatus
+inheritable_constraint_create(HeapTuple constraint_tuple, void *arg)
 {
-	Oid chunk_constraint_oid;
+	InheritableContext *ctx = arg;
+	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
+	const char *hypertable_constraint_name;
+	char chunk_constraint_name[NAMEDATALEN];
+	Form_pg_constraint matching_const;
+	Relation chunk_rel;
 
-	Assert(!is_dimension_constraint(cc));
-
-	/*
-	 * If we're creating constraints for a new chunk from an existing
-	 * table or attaching a chunk to an existing hypertable, we might
-	 * have constraints already created. If so, skip creating
-	 * such constraints, we only needed their metadata to be added.
-	 */
-	if (ConstraintNameIsUsed(CONSTRAINT_RELATION, chunk_oid, NameStr(cc->fd.constraint_name)))
+	if (ctx->chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
-		chunk_constraint_oid =
-			get_relation_constraint_oid(chunk_oid, NameStr(cc->fd.constraint_name), true);
-	}
-	else
-	{
-		ts_process_utility_set_expect_chunk_modification(true);
-		chunk_constraint_oid = chunk_constraint_create_on_table(cc, chunk_oid);
-		ts_process_utility_set_expect_chunk_modification(false);
+		return CONSTR_IGNORED;
 	}
 
-	return chunk_constraint_oid;
-}
-
-static const DimensionSlice *
-get_slice_with_id(const Hypercube *cube, int32 id)
-{
-	int i;
-
-	for (i = 0; i < cube->num_slices; i++)
+	if (!chunk_constraint_need_on_chunk(constraint))
 	{
-		const DimensionSlice *slice = cube->slices[i];
-
-		if (slice->fd.id == id)
-		{
-			return slice;
-		}
+		return CONSTR_IGNORED;
 	}
 
-	return NULL;
+	hypertable_constraint_name = NameStr(constraint->conname);
+
+	/* If the chunk already has an equivalent constraint, reuse it under its
+	 * existing name. */
+	chunk_rel = table_open(ctx->chunk->table_id, AccessShareLock);
+	matching_const = ts_constraint_find_matching(constraint_tuple, chunk_rel);
+	table_close(chunk_rel, NoLock);
+
+	if (matching_const != NULL)
+	{
+		return CONSTR_PROCESSED;
+	}
+
+	ts_chunk_constraint_choose_name(chunk_constraint_name,
+									ctx->chunk->fd.id,
+									hypertable_constraint_name);
+	create_non_dimensional_constraint(ctx->chunk->fd.id,
+									  chunk_constraint_name,
+									  hypertable_constraint_name,
+									  ctx->chunk->table_id);
+	return CONSTR_PROCESSED;
 }
 
 /*
- * Create a set of constraints on a chunk table.
+ * Create all of a chunk's constraints (dim CHECKs + inheritable non-dim).
  */
 void
 ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 {
-	const ChunkConstraints *ccs = chunk->constraints;
 	List *newconstrs = NIL;
-	int i;
 
-	for (i = 0; i < ccs->num_constraints; i++)
+	/* Dimensional CHECKs, one per cube slice. Foreign-table chunks (OSM
+	 * chunks) get their CHECKs cloned separately via
+	 * ts_chunk_clone_check_constraints, so we skip dim CHECKs here for
+	 * those. Skip ones that already exist on the chunk table so the
+	 * merge/recreate paths can call us without tripping a
+	 * "constraint already exists" error. */
+	bool skip_dim_checks = (chunk->relkind == RELKIND_FOREIGN_TABLE || IS_OSM_CHUNK(chunk));
+	for (int i = 0; !skip_dim_checks && i < chunk->cube->num_slices; i++)
 	{
-		const ChunkConstraint *cc = &ccs->constraints[i];
+		const DimensionSlice *slice = chunk->cube->slices[i];
+		const Dimension *dim = ts_hyperspace_get_dimension_by_id(ht->space, slice->fd.dimension_id);
+		char name[NAMEDATALEN];
+		Constraint *constr;
 
-		if (is_dimension_constraint(cc))
+		Assert(dim != NULL);
+		dimension_constraint_choose_name(name, slice->fd.id);
+
+		if (OidIsValid(get_relation_constraint_oid(chunk->table_id, name, true)))
 		{
-			const DimensionSlice *slice = get_slice_with_id(chunk->cube, cc->fd.dimension_slice_id);
-			const Dimension *dim;
-			Constraint *constr;
-
-			dim = ts_hyperspace_get_dimension_by_id(ht->space, slice->fd.dimension_id);
-			Assert(dim);
-
-			constr =
-				ts_chunk_constraint_dimensional_create(dim, slice, NameStr(cc->fd.constraint_name));
-
-			/* In some cases, a CHECK constraint is not needed. For instance,
-			 * if the range is -INF to +INF. */
-			if (constr != NULL)
-			{
-				newconstrs = lappend(newconstrs, constr);
-			}
+			continue;
 		}
-		else
+
+		constr = ts_chunk_constraint_dimensional_create(dim, slice, name);
+		if (constr != NULL)
 		{
-			create_non_dimensional_constraint(cc,
-											  chunk->table_id,
-											  chunk->fd.id,
-											  ht->main_table_relid,
-											  ht->fd.id);
+			newconstrs = lappend(newconstrs, constr);
 		}
 	}
 
@@ -531,366 +331,55 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 		Assert(list_length(cookedconstrs) == list_length(newconstrs));
 		CommandCounterIncrement();
 	}
-}
 
-ScanIterator
-ts_chunk_constraint_scan_iterator_create(MemoryContext result_mcxt)
-{
-	ScanIterator it = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, result_mcxt);
-	it.ctx.flags |= SCANNER_F_NOEND_AND_NOCLOSE;
-
-	return it;
-}
-
-void
-ts_chunk_constraint_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id)
-{
-	it->ctx.index = catalog_get_index(ts_catalog_get(),
-									  CHUNK_CONSTRAINT,
-									  CHUNK_CONSTRAINT_DIMENSION_SLICE_ID_IDX);
-	ts_scan_iterator_scan_key_reset(it);
-	ts_scan_iterator_scan_key_init(it,
-								   Anum_chunk_constraint_dimension_slice_id_idx_dimension_slice_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(slice_id));
-}
-
-void
-ts_chunk_constraint_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
-{
-	it->ctx.index = catalog_get_index(ts_catalog_get(),
-									  CHUNK_CONSTRAINT,
-									  CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX);
-	ts_scan_iterator_scan_key_reset(it);
-	ts_scan_iterator_scan_key_init(it,
-								   Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(chunk_id));
-}
-
-static void
-init_scan_by_chunk_id_constraint_name(ScanIterator *iterator, int32 chunk_id,
-									  const char *constraint_name)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
-											CHUNK_CONSTRAINT,
-											CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX);
-
-	ts_scan_iterator_scan_key_reset(iterator);
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(chunk_id));
-
-	ts_scan_iterator_scan_key_init(
-		iterator,
-		Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
-		BTEqualStrategyNumber,
-		F_NAMEEQ,
-		CStringGetDatum(constraint_name));
-}
-
-/*
- * Scan all the chunk's constraints given its chunk ID.
- *
- * Returns a set of chunk constraints.
- */
-ChunkConstraints *
-ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, MemoryContext mctx)
-{
-	ChunkConstraints *constraints = ts_chunk_constraints_alloc(num_constraints_hint, mctx);
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
-	int num_found = 0;
-
-	ts_chunk_constraint_scan_iterator_set_chunk_id(&iterator, chunk_id);
-	ts_scanner_foreach(&iterator)
+	/* Non-dim inheritable constraints (PK, UNIQUE, EXCLUSION, TRIGGER). */
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
 	{
-		num_found++;
-		ts_chunk_constraints_add_from_tuple(constraints, ts_scan_iterator_tuple_info(&iterator));
+		InheritableContext ctx = {
+			.ht = ht,
+			.chunk = chunk,
+		};
+		ts_constraint_process(ht->main_table_relid, inheritable_constraint_create, &ctx);
 	}
-
-	if (num_found != constraints->num_constraints)
-	{
-		elog(ERROR, "unexpected number of constraints found for chunk ID %d", chunk_id);
-	}
-
-	return constraints;
 }
-
-/*
- * Scan for all chunk constraints that match the given slice ID. The chunk
- * constraints are saved in the chunk scan context.
- */
-int
-ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice, ChunkScanCtx *ctx,
-											MemoryContext mctx)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
-	int count = 0;
-
-	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		const Hyperspace *hs = ctx->ht->space;
-		ChunkStub *stub;
-		ChunkScanEntry *entry;
-		bool found;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &found);
-		int32 chunk_id = DatumGetInt32(datum);
-
-		if (slot_attisnull(ts_scan_iterator_slot(&iterator),
-						   Anum_chunk_constraint_dimension_slice_id))
-		{
-			continue;
-		}
-
-		count++;
-
-		Assert(!slot_attisnull(ti->slot, Anum_chunk_constraint_dimension_slice_id));
-
-		entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
-
-		if (!found)
-		{
-			stub = ts_chunk_stub_create(chunk_id, hs->num_dimensions);
-			stub->cube = ts_hypercube_alloc(hs->num_dimensions);
-			entry->stub = stub;
-		}
-		else
-		{
-			stub = entry->stub;
-		}
-
-		ts_chunk_constraints_add_from_tuple(stub->constraints, ti);
-
-		ts_hypercube_add_slice(stub->cube, slice);
-
-		/* A stub is complete when we've added slices for all its dimensions,
-		 * i.e., a complete hypercube */
-		if (chunk_stub_is_complete(stub, ctx->ht->space))
-		{
-			ctx->num_complete_chunks++;
-
-			if (ctx->early_abort)
-			{
-				ts_scan_iterator_close(&iterator);
-				break;
-			}
-		}
-	}
-	return count;
-}
-
-/*
- * Similar to chunk_constraint_scan_by_dimension_slice, but stores only chunk_ids
- * in a list, which is easier to traverse and provides deterministic chunk selection.
- */
-int
-ts_chunk_constraint_scan_by_dimension_slice_to_list(const DimensionSlice *slice, List **list,
-													MemoryContext mctx)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
-	int count = 0;
-
-	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool is_null;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		Datum chunk_id;
-
-		if (slot_attisnull(ti->slot, Anum_chunk_constraint_dimension_slice_id))
-		{
-			continue;
-		}
-
-		count++;
-		chunk_id = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &is_null);
-		Assert(!is_null);
-		*list = lappend_int(*list, DatumGetInt32(chunk_id));
-	}
-	return count;
-}
-
-/*
- * Scan for chunk constraints given a dimension slice ID.
- *
- * Optionally, collect all chunk constraints if ChunkConstraints is non-NULL.
- */
-int
-ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkConstraints *ccs,
-											   MemoryContext mctx)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
-	int count = 0;
-
-	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, dimension_slice_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		if (slot_attisnull(ts_scan_iterator_slot(&iterator),
-						   Anum_chunk_constraint_dimension_slice_id))
-		{
-			continue;
-		}
-
-		count++;
-		if (ccs != NULL)
-		{
-			ts_chunk_constraints_add_from_tuple(ccs, ts_scan_iterator_tuple_info(&iterator));
-		}
-	}
-	return count;
-}
-
-static bool
-chunk_constraint_need_on_chunk(Form_pg_constraint conform)
-{
-	if (conform->contype == CONSTRAINT_CHECK
-#if PG18_GE
-		/* Avoid NOT NULL constraints
-		 * https://github.com/postgres/postgres/commit/b0e96f31
-		 */
-		|| conform->contype == CONSTRAINT_NOTNULL
-#endif
-	)
-	{
-		/*
-		 * check and not null constraints handled by regular inheritance (from
-		 * docs): All check constraints and not-null constraints on a parent
-		 * table are automatically inherited by its children, unless
-		 * explicitly specified otherwise with NO INHERIT clauses. Other types
-		 * of constraints (unique, primary key, and foreign key constraints)
-		 * are not inherited."
-		 */
-		return false;
-	}
-	/*
-	   Check if the foreign key constraint references a partition in a partitioned
-	   table. In that case, we shouldn't include this constraint as we will end up
-	   checking the foreign key constraint once for every partition, which obviously
-	   leads to foreign key constraint violation. Instead, we only include constraints
-	   referencing the parent table of the partitioned table.
-	*/
-	if (conform->contype == CONSTRAINT_FOREIGN && OidIsValid(conform->conparentid))
-	{
-		return false;
-	}
-
-	return true;
-}
-
-int
-ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id,
-											   const Hypercube *cube)
-{
-	int i;
-
-	for (i = 0; i < cube->num_slices; i++)
-	{
-		ts_chunk_constraints_add(ccs, chunk_id, cube->slices[i]->fd.id, NULL, NULL);
-	}
-
-	return cube->num_slices;
-}
-
-typedef struct ConstraintContext
-{
-	int num_added;
-	char chunk_relkind;
-	ChunkConstraints *ccs;
-	int32 chunk_id;
-	Oid chunk_relid;
-} ConstraintContext;
 
 static ConstraintProcessStatus
-chunk_constraint_add(HeapTuple constraint_tuple, void *arg)
+clone_check_constraint(HeapTuple tuple, void *arg)
 {
-	ConstraintContext *cc = arg;
-	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
+	Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(tuple);
+	Oid chunk_relid = *(Oid *) arg;
 
-	if (cc->chunk_relkind != RELKIND_FOREIGN_TABLE && chunk_constraint_need_on_chunk(constraint))
+	if (con->contype != CONSTRAINT_CHECK)
 	{
-		/* If the chunk already has an equivalent constraint, use the existing one. */
-		Relation chunk = table_open(cc->chunk_relid, AccessShareLock);
-		Form_pg_constraint matching_const = ts_constraint_find_matching(constraint_tuple, chunk);
-		table_close(chunk, NoLock);
-
-		if (matching_const != NULL)
-		{
-			ts_chunk_constraints_add(cc->ccs,
-									 cc->chunk_id,
-									 0,
-									 NameStr(matching_const->conname),
-									 NameStr(constraint->conname));
-		}
-		else
-		{
-			ts_chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
-		}
-		return CONSTR_PROCESSED;
+		return CONSTR_IGNORED;
 	}
 
-	return CONSTR_IGNORED;
+	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
+						 ObjectIdGetDatum(con->oid),
+						 ObjectIdGetDatum(chunk_relid));
+	return CONSTR_PROCESSED;
 }
 
-int
-ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id,
-												 const char chunk_relkind, Oid hypertable_oid,
-												 Oid table_id)
+/*
+ * Clone CHECK constraints from a hypertable onto a foreign-table chunk.
+ *
+ * Foreign tables do not inherit CHECK constraints automatically, so we
+ * have to recreate the hypertable's CHECKs on the foreign chunk under
+ * the same name before running ALTER TABLE ... INHERIT. PostgreSQL will
+ * then merge the foreign chunk's CHECKs with the parent's and propagate
+ * subsequent renames or drops via normal inheritance.
+ */
+void
+ts_chunk_clone_check_constraints(Oid chunk_relid, Oid hypertable_oid)
 {
-	/* This should never be called with NULL ccs.  */
-	Ensure(ccs, "ccs must not be NULL");
-
-	ConstraintContext cc = {
-		.chunk_relkind = chunk_relkind,
-		.ccs = ccs,
-		.chunk_id = chunk_id,
-		.chunk_relid = table_id,
-	};
-
-	return ts_constraint_process(hypertable_oid, chunk_constraint_add, &cc);
+	ts_process_utility_set_expect_chunk_modification(true);
+	ts_constraint_process(hypertable_oid, clone_check_constraint, &chunk_relid);
+	ts_process_utility_set_expect_chunk_modification(false);
 }
 
-/* check constraints have the same name as the one on the hypertable */
-static ConstraintProcessStatus
-chunk_constraint_add_check(HeapTuple constraint_tuple, void *arg)
-{
-	ConstraintContext *cc = arg;
-	Form_pg_constraint constraint = (Form_pg_constraint) GETSTRUCT(constraint_tuple);
-
-	if (constraint->contype == CONSTRAINT_CHECK)
-	{
-		ts_chunk_constraints_add(cc->ccs,
-								 cc->chunk_id,
-								 0,
-								 NameStr(constraint->conname),
-								 NameStr(constraint->conname));
-		return CONSTR_PROCESSED;
-	}
-
-	return CONSTR_IGNORED;
-}
-
-/* Adds only inheritable check constraints */
-int
-ts_chunk_constraints_add_inheritable_check_constraints(ChunkConstraints *ccs, int32 chunk_id,
-													   const char chunk_relkind, Oid hypertable_oid)
-{
-	ConstraintContext cc = {
-		.chunk_relkind = chunk_relkind,
-		.ccs = ccs,
-		.chunk_id = chunk_id,
-	};
-	return ts_constraint_process(hypertable_oid, chunk_constraint_add_check, &cc);
-}
-
+/*
+ * Propagate a freshly-added hypertable constraint to a single chunk.
+ */
 void
 ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oid constraint_oid)
 {
@@ -906,458 +395,82 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 
 	con = (Form_pg_constraint) GETSTRUCT(tuple);
 
-	if (chunk->relkind != RELKIND_FOREIGN_TABLE && chunk_constraint_need_on_chunk(con))
+	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
 	{
-		ChunkConstraint *cc = ts_chunk_constraints_add(chunk->constraints,
-													   chunk->fd.id,
-													   0,
-													   NULL,
-													   NameStr(con->conname));
+		if (con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid))
+		{
+			ts_chunk_inherit_outbound_fk_by_oid(chunk, constraint_oid);
+		}
+		else if (chunk_constraint_need_on_chunk(con))
+		{
+			char chunk_constraint_name[NAMEDATALEN];
 
-		ts_chunk_constraint_insert(cc);
-		create_non_dimensional_constraint(cc,
-										  chunk->table_id,
-										  chunk->fd.id,
-										  ht->main_table_relid,
-										  ht->fd.id);
+			ts_chunk_constraint_choose_name(chunk_constraint_name,
+											chunk->fd.id,
+											NameStr(con->conname));
+			create_non_dimensional_constraint(chunk->fd.id,
+											  chunk_constraint_name,
+											  NameStr(con->conname),
+											  chunk->table_id);
+		}
 	}
 
 	ReleaseSysCache(tuple);
 }
 
-static bool
-hypertable_constraint_matches_tuple(TupleInfo *ti, const char *hypertable_constraint_name)
-{
-	bool isnull;
-	Datum name = slot_getattr(ti->slot, Anum_chunk_constraint_hypertable_constraint_name, &isnull);
-
-	return !isnull && namestrcmp(DatumGetName(name), hypertable_constraint_name) == 0;
-}
-
-static void
-chunk_constraint_drop_constraint(TupleInfo *ti)
-{
-	bool isnull;
-	Datum constrname = slot_getattr(ti->slot, Anum_chunk_constraint_constraint_name, &isnull);
-	int32 chunk_id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull));
-	/* Get the chunk relid. Note that, at this point, the chunk table can be
-	 * deleted already. */
-	Oid chunk_relid = ts_chunk_get_relid(chunk_id, true);
-
-	if (OidIsValid(chunk_relid))
-	{
-		ObjectAddress constrobj = {
-			.classId = ConstraintRelationId,
-			.objectId =
-				get_relation_constraint_oid(chunk_relid, NameStr(*DatumGetName(constrname)), true),
-		};
-
-		if (OidIsValid(constrobj.objectId))
-		{
-			/* must use DROP_CASCADE if regular table references a hypertable */
-			performDeletion(&constrobj, DROP_CASCADE, 0);
-		}
-	}
-}
-
-int
-ts_chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
-														 const char *hypertable_constraint_name)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	ts_chunk_constraint_scan_iterator_set_chunk_id(&iterator, chunk_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator),
-												 hypertable_constraint_name))
-		{
-			continue;
-		}
-
-		count++;
-
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-		chunk_constraint_drop_constraint(ti);
-	}
-	return count;
-}
-
-int
-ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constraint_name)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, constraint_name);
-	ts_scanner_foreach(&iterator)
-	{
-		count++;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
-	return count;
-}
-
 /*
- * Delete all constraints for a chunk. Optionally, collect the deleted constraints.
+ * Drop the chunk's dimensional CHECK constraints and recreate them. Used
+ * after a slice's range has been adjusted (for instance during chunk merge).
  */
-int
-ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs, bool drop_constraint)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	ts_chunk_constraint_scan_iterator_set_chunk_id(&iterator, chunk_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		count++;
-
-		ts_chunk_constraints_add_from_tuple(ccs, ts_scan_iterator_tuple_info(&iterator));
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-
-		if (drop_constraint)
-		{
-			chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
-		}
-	}
-	return count;
-}
-
-int
-ts_chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, dimension_slice_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		count++;
-
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-		chunk_constraint_drop_constraint(ti);
-	}
-	return count;
-}
-
 void
 ts_chunk_constraints_recreate(const Hypertable *ht, const Chunk *chunk)
 {
-	const ChunkConstraints *ccs = chunk->constraints;
-	int i;
-
-	for (i = 0; i < ccs->num_constraints; i++)
+	for (int i = 0; i < chunk->cube->num_slices; i++)
 	{
-		const ChunkConstraint *cc = &ccs->constraints[i];
-		ObjectAddress constrobj = {
-			.classId = ConstraintRelationId,
-			.objectId = get_relation_constraint_oid(chunk->table_id,
-													NameStr(cc->fd.constraint_name),
-													false),
-		};
+		const DimensionSlice *slice = chunk->cube->slices[i];
+		char name[NAMEDATALEN];
+		Oid constraint_oid;
 
-		performDeletion(&constrobj, DROP_RESTRICT, 0);
+		dimension_constraint_choose_name(name, slice->fd.id);
+		constraint_oid = get_relation_constraint_oid(chunk->table_id, name, true);
+		if (OidIsValid(constraint_oid))
+		{
+			ObjectAddress addr = {
+				.classId = ConstraintRelationId,
+				.objectId = constraint_oid,
+			};
+			performDeletion(&addr, DROP_RESTRICT, 0);
+		}
 	}
 
 	ts_chunk_constraints_create(ht, chunk);
 	ts_chunk_copy_referencing_fk(ht, chunk);
 }
 
-static void
-chunk_constraint_rename_on_chunk_table(int32 chunk_id, const char *old_name, const char *new_name)
-{
-	Oid chunk_relid = ts_chunk_get_relid(chunk_id, false);
-	Oid nspid = get_rel_namespace(chunk_relid);
-	RenameStmt rename = {
-		.renameType = OBJECT_TABCONSTRAINT,
-		.relation = makeRangeVar(get_namespace_name(nspid), get_rel_name(chunk_relid), 0),
-		.subname = pstrdup(old_name),
-		.newname = pstrdup(new_name),
-	};
-
-	RenameConstraint(&rename);
-}
-
-static void
-chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *new_name)
-{
-	bool nulls[Natts_chunk_constraint];
-	Datum values[Natts_chunk_constraint];
-	bool doReplace[Natts_chunk_constraint] = { false };
-	HeapTuple tuple, new_tuple;
-	TupleDesc tupdesc = ts_scanner_get_tupledesc(ti);
-	NameData new_hypertable_constraint_name;
-	NameData new_chunk_constraint_name;
-	Name old_chunk_constraint_name;
-	int32 chunk_id;
-	bool should_free;
-
-	tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	heap_deform_tuple(tuple, tupdesc, values, nulls);
-
-	chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]);
-	namestrcpy(&new_hypertable_constraint_name, new_name);
-	chunk_constraint_choose_name(&new_chunk_constraint_name, new_name, chunk_id);
-
-	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
-		NameGetDatum(&new_hypertable_constraint_name);
-	doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
-	old_chunk_constraint_name =
-		DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]);
-	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] =
-		NameGetDatum(&new_chunk_constraint_name);
-	doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
-
-	chunk_constraint_rename_on_chunk_table(chunk_id,
-										   NameStr(*old_chunk_constraint_name),
-										   NameStr(new_chunk_constraint_name));
-
-	new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
-	ts_catalog_update(ti->scanrel, new_tuple);
-	heap_freetuple(new_tuple);
-
-	if (should_free)
-	{
-		heap_freetuple(tuple);
-	}
-}
-
-/*
- * Adjust internal metadata after index/constraint rename
- */
-int
-ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_name, const char *chunk_old_name,
-								const char *chunk_new_name)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, chunk_old_name);
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool nulls[Natts_chunk_constraint];
-		bool doReplace[Natts_chunk_constraint] = { false };
-		Datum values[Natts_chunk_constraint];
-		bool should_free;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-		HeapTuple new_tuple;
-
-		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
-
-		/*
-		 * The constraint names are of Postgres type 'name' which is fixed-width
-		 * 64-byte type. The input strings might not have the necessary padding
-		 * after them.
-		 */
-		NameData ht_constraint_namedata;
-		namestrcpy(&ht_constraint_namedata, ht_name);
-		NameData new_namedata;
-		namestrcpy(&new_namedata, chunk_new_name);
-
-		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
-			NameGetDatum(&ht_constraint_namedata);
-		doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
-		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] =
-			NameGetDatum(&new_namedata);
-		doReplace[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
-
-		new_tuple =
-			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, doReplace);
-
-		ts_catalog_update(ti->scanrel, new_tuple);
-		heap_freetuple(new_tuple);
-
-		if (should_free)
-		{
-			heap_freetuple(tuple);
-		}
-
-		count++;
-	}
-
-	return count;
-}
-
-bool
-ts_chunk_constraint_update_slice_id(int32 chunk_id, int32 old_slice_id, int32 new_slice_id)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-
-	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, old_slice_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool replIsnull[Natts_chunk_constraint];
-		bool repl[Natts_chunk_constraint] = { false };
-		Datum values[Natts_chunk_constraint];
-		bool should_free, isnull;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		int32 current_chunk_id =
-			DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull));
-
-		if (isnull || current_chunk_id != chunk_id)
-		{
-			continue;
-		}
-
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-		HeapTuple new_tuple;
-
-		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull);
-
-		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] =
-			Int32GetDatum(new_slice_id);
-		repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] = true;
-
-		new_tuple =
-			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull, repl);
-
-		ts_catalog_update(ti->scanrel, new_tuple);
-		heap_freetuple(new_tuple);
-
-		if (should_free)
-		{
-			heap_freetuple(tuple);
-		}
-
-		ts_scan_iterator_close(&iterator);
-		return true;
-	}
-
-	return false;
-}
-
-int
-ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old_name,
-												 const char *new_name)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	ts_chunk_constraint_scan_iterator_set_chunk_id(&iterator, chunk_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator), old_name))
-		{
-			continue;
-		}
-
-		count++;
-		chunk_constraint_rename_hypertable_from_tuple(ts_scan_iterator_tuple_info(&iterator),
-													  new_name);
-	}
-	return count;
-}
-
 char *
 ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 														const char *hypertable_constraint_name)
 {
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-	Datum chunk_id = DirectFunctionCall1(ts_chunk_id_from_relid, ObjectIdGetDatum(chunk_relid));
-
-	ts_chunk_constraint_scan_iterator_set_chunk_id(&iterator, DatumGetInt32(chunk_id));
-
-	ts_scanner_foreach(&iterator)
+	/* CHECK and FK chunk-side constraints keep the parent's name. */
+	if (OidIsValid(get_relation_constraint_oid(chunk_relid, hypertable_constraint_name, true)))
 	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		MemoryContext oldmctx;
-		bool isnull;
-		Datum datum;
-		char *name;
-
-		if (!hypertable_constraint_matches_tuple(ti, hypertable_constraint_name))
-		{
-			continue;
-		}
-
-		datum = slot_getattr(ti->slot, Anum_chunk_constraint_constraint_name, &isnull);
-		Assert(!isnull);
-
-		oldmctx = MemoryContextSwitchTo(ti->mctx);
-		name = pstrdup(NameStr(*DatumGetName(datum)));
-		MemoryContextSwitchTo(oldmctx);
-		ts_scan_iterator_close(&iterator);
-
-		return name;
+		return pstrdup(hypertable_constraint_name);
 	}
+
+	/* Unique/PK/exclusion/trigger use the deterministic "<chunk_id>_<parent>"
+	 * form. */
+	int32 chunk_id =
+		DatumGetInt32(DirectFunctionCall1(ts_chunk_id_from_relid, ObjectIdGetDatum(chunk_relid)));
+
+	char chunk_con_name[NAMEDATALEN];
+	ts_chunk_constraint_choose_name(chunk_con_name, chunk_id, hypertable_constraint_name);
+	Oid chunk_con_oid = get_relation_constraint_oid(chunk_relid, chunk_con_name, true);
+	if (OidIsValid(chunk_con_oid))
+	{
+		return pstrdup(chunk_con_name);
+	}
+
 	return NULL;
-}
-
-int
-ts_chunk_constraint_delete_dimensional_constraints(int32 chunk_id, ChunkConstraints *ccs)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	ts_chunk_constraint_scan_iterator_set_chunk_id(&iterator, chunk_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool isnull;
-		int32 slice_id = DatumGetInt32(
-			slot_getattr(ti->slot, Anum_chunk_constraint_dimension_slice_id, &isnull));
-
-		if (isnull || slice_id == 0)
-		{
-			continue;
-		}
-
-		count++;
-
-		ts_chunk_constraints_add_from_tuple(ccs, ti);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-		chunk_constraint_drop_constraint(ti);
-	}
-	return count;
-}
-
-/*
- * Drop a constraint using a pg_constraint heap tuple.
- */
-void
-ts_chunk_constraint_drop_from_tuple(HeapTuple constraint_tuple)
-{
-	FormData_pg_constraint *constr = (FormData_pg_constraint *) GETSTRUCT(constraint_tuple);
-	ObjectAddress constrobj = {
-		.classId = ConstraintRelationId,
-		.objectId = constr->oid,
-	};
-
-	if (OidIsValid(constr->conparentid))
-	{
-		deleteDependencyRecordsForClass(constrobj.classId,
-										constrobj.objectId,
-										ConstraintRelationId,
-										DEPENDENCY_INTERNAL);
-		CommandCounterIncrement();
-	}
-
-	if (OidIsValid(constrobj.objectId))
-	{
-		performDeletion(&constrobj, DROP_RESTRICT, 0);
-	}
 }
 
 static void
@@ -1424,22 +537,12 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 void
 ts_chunk_constraint_check_violated(const Chunk *chunk, const Hyperspace *hs)
 {
-	const ChunkConstraints *ccs = chunk->constraints;
-
-	for (int i = 0; i < ccs->num_constraints; i++)
+	for (int i = 0; i < chunk->cube->num_slices; i++)
 	{
-		const ChunkConstraint *cc = &ccs->constraints[i];
+		const DimensionSlice *slice = chunk->cube->slices[i];
+		const Dimension *dim = ts_hyperspace_get_dimension_by_id(hs, slice->fd.dimension_id);
 
-		if (is_dimension_constraint(cc))
-		{
-			const DimensionSlice *slice = get_slice_with_id(chunk->cube, cc->fd.dimension_slice_id);
-			const Dimension *dim;
-
-			dim = ts_hyperspace_get_dimension_by_id(hs, slice->fd.dimension_id);
-			Assert(dim);
-
-			/* Check if the chunk has any row that violates the constraint */
-			check_chunk_constraint_violated(chunk->table_id, dim, slice);
-		}
+		Assert(dim);
+		check_chunk_constraint_violated(chunk->table_id, dim, slice);
 	}
 }

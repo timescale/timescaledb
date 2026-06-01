@@ -9,6 +9,7 @@ name: LLM fuzzer
   push:
     branches:
       - main
+      - trigger/llm-fuzzer
   pull_request:
 
 env:
@@ -88,12 +89,12 @@ jobs:
       if: github.event_name == 'pull_request'
       run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=50
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
 
     # Create a directory for sanitizer logs. This directory is referenced by
     # ASAN_OPTIONS, LSAN_OPTIONS, and UBSAN_OPTIONS
@@ -172,6 +173,9 @@ jobs:
       id: llm-fuzzing
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        EVENT_WHAT: ${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
+        EVENT_BRANCH: ${{ github.head_ref || github.ref_name }}
+        EVENT_BASE: ${{ github.base_ref || github.ref_name }}
       run: |
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
         export PGDATABASE=postgres
@@ -180,7 +184,7 @@ jobs:
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 5.00 --dangerously-skip-permissions \
           --model opus --effort high \
-          "$(cat <<'PROMPT'
+          "$(cat <<PROMPT
         Find bugs in the TimescaleDB code modified in this change set. Focus
         on crashes, assertion failures, sanitizer errors, and internal errors
         (SQLSTATE XX000) -- these are detected automatically from server
@@ -210,9 +214,9 @@ jobs:
         against a fresh server.
 
         Some details about the GitHub Actions event that triggered this workflow
-        what=${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
-        branch=${{ github.head_ref || github.ref_name }}
-        base=${{ github.base_ref || github.ref_name }}
+        what=$EVENT_WHAT
+        branch=$EVENT_BRANCH
+        base=$EVENT_BASE
         event=${{ github.event_name }}
         sha=${{ github.event.pull_request.head.sha || github.sha }}
         PROMPT

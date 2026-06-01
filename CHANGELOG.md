@@ -1,9 +1,22 @@
 # TimescaleDB Changelog
 
-**Please note: When updating your database, you should connect using
-This page lists all the latest features and updates to TimescaleDB. When
-you use psql to update your database, use the -X flag and prevent any .psqlrc
-commands from accidentally triggering the load of a previous DB version.**
+**Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
+
+## 2.27.1 (2026-05-19)
+
+This release contains performance improvements and bug fixes since the 2.27.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#9795](https://github.com/timescale/timescaledb/pull/9795) Delete orphaned `compression_settings` before migrating catalog table
+* [#9799](https://github.com/timescale/timescaledb/pull/9799) Fix `job_errors` view leaking failed jobs to non-owners
+* [#9800](https://github.com/timescale/timescaledb/pull/9800) Check hypertable ownership before recompression
+* [#9801](https://github.com/timescale/timescaledb/pull/9801) Fix information leak in `policy_reorder_remove`
+* [#9824](https://github.com/timescale/timescaledb/pull/9824) Adding migration scripts for composite bloom filters
+* [#9828](https://github.com/timescale/timescaledb/pull/9828) Skip columnar index scan when grouping by an expression
+* [#9830](https://github.com/timescale/timescaledb/pull/9830) Skip `ColumnarIndexScan` for GROUPING SETS / ROLLUP / CUBE
+
+**Thanks**
+* @homanp for reporting an information leak with the job_errors view
 
 ## 2.27.0 (2026-05-12)
 
