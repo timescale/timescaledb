@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- When changing the signature of these views remember to also
+-- adjust views_detached.sql to match the new signature.
+
 -- Convenience view to list all hypertables
 CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
 WITH

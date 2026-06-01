@@ -202,6 +202,11 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
   set(START_VERSION ${CMAKE_MATCH_1})
   set(END_VERSION ${CMAKE_MATCH_2})
   set(PRE_FILES ${PRE_UPDATE_FILES_VERSIONED})
+  # 2.24.0 was last time we changed view signatures any version past that we can
+  # support extension updates while user view dependencies exist
+  if(START_VERSION VERSION_GREATER "2.24.0")
+    set(PRE_FILES ${PRE_FILES};views_detached.sql)
+  endif()
   # Check for version-specific update code with fixes
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/updates/${START_VERSION}.sql)
     version_files("updates/${START_VERSION}.sql" ORIGIN_MOD_FILE)
