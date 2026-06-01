@@ -103,8 +103,7 @@ select
     _timescaledb_functions.to_timestamp(ds.range_start) as range_start,
     _timescaledb_functions.to_timestamp(ds.range_end) as range_end
 from _timescaledb_catalog.chunk c
-join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id)
-join _timescaledb_catalog.dimension_slice ds on (ds.id = cc.dimension_slice_id)
+join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
 join _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
 order by range_start, range_end;
 

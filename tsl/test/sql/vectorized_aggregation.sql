@@ -47,6 +47,14 @@ SELECT sum(segment_by_value) FROM testtable;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable;
 
+-- Should be disabled when disabling optimizations.
+SET timescaledb.enable_optimizations TO false;
+
+:EXPLAIN
+SELECT sum(segment_by_value) FROM testtable;
+
+RESET timescaledb.enable_optimizations;
+
 -- Vectorization possible - filter on segment_by
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;

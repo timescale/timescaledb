@@ -6,13 +6,15 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
+SELECT (extversion >= '2.28.0') AS has_chunk_owned_slices
+  FROM pg_extension WHERE extname = 'timescaledb' \gset
+
 \if :PG_UPGRADE_TEST
 \else
 \d+ _timescaledb_catalog.hypertable
 \d+ _timescaledb_catalog.chunk
 \d+ _timescaledb_catalog.dimension
 \d+ _timescaledb_catalog.dimension_slice
-\d+ _timescaledb_catalog.chunk_constraint
 \d+ _timescaledb_catalog.tablespace
 \endif
 
@@ -109,9 +111,60 @@ WHERE n.nspname OPERATOR(pg_catalog.~) '^(_timescaledb_internal|_timescaledb_fun
 ORDER BY 1, 2, 4;
 
 \dy
-\a
-\d public.*
-\a
+
+-- Relations in the public schema and their columns
+SELECT n.nspname || '.' || c.relname AS relation,
+       CASE c.relkind
+         WHEN 'r' THEN 'table'
+         WHEN 'p' THEN 'partitioned table'
+         WHEN 'v' THEN 'view'
+         WHEN 'm' THEN 'materialized view'
+         WHEN 'c' THEN 'composite type'
+         WHEN 'f' THEN 'foreign table'
+       END AS kind,
+       a.attname,
+       pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+       a.attnotnull AS notnull,
+       pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS "default"
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
+WHERE n.nspname = 'public'
+  AND c.relkind IN ('r', 'p', 'v', 'm', 'c', 'f')
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+ORDER BY relation, a.attnum;
+
+-- indexes on public tables
+SELECT c.relname AS table_name,
+       i.relname AS index_name,
+       pg_catalog.pg_get_indexdef(idx.indexrelid) AS definition
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_index idx ON idx.indrelid = c.oid
+JOIN pg_catalog.pg_class i ON i.oid = idx.indexrelid
+WHERE n.nspname = 'public'
+ORDER BY 1, 2;
+
+-- constraints on public tables
+SELECT
+    conname AS constraint_name,
+		conrelid::regclass AS conrelid,
+		confrelid::regclass AS confrelid,
+    contype,
+    pg_get_constraintdef(con.oid) AS def
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class c ON c.oid = conrelid AND c.relnamespace = 'public'::regnamespace
+WHERE con.contype <> 'n'
+ORDER BY conrelid::regclass::text, contype, conname, confrelid::regclass::text;
+
+-- child tables
+SELECT parent.relname AS table_name,
+    i.inhrelid::regclass AS child_table
+FROM pg_catalog.pg_inherits i
+JOIN pg_catalog.pg_class parent ON parent.oid = i.inhparent AND parent.relnamespace = 'public'::regnamespace
+ORDER BY parent.relname, i.inhrelid::regclass::text;
 
 -- Keep the output backward compatible
 \if :PG_UPGRADE_TEST
@@ -152,9 +205,19 @@ FROM  _timescaledb_catalog.chunk c
 INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
 ORDER BY c.id, c.hypertable_id;
 
-SELECT chunk_constraint.* FROM _timescaledb_catalog.chunk_constraint
-JOIN _timescaledb_catalog.chunk ON chunk.id = chunk_constraint.chunk_id
-ORDER BY chunk_constraint.chunk_id, chunk_constraint.dimension_slice_id, chunk_constraint.constraint_name;
+-- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and differ
+-- between a fresh install and a post-upgrade catalog, so dump path-stable
+-- columns only.
+\if :has_chunk_owned_slices
+SELECT ds.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.dimension_slice ds
+ORDER BY ds.chunk_id, ds.dimension_id;
+\else
+SELECT cc.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk_constraint cc
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+ORDER BY cc.chunk_id, ds.dimension_id;
+\endif
 
 -- Show attnum of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken
@@ -168,8 +231,16 @@ FROM pg_depend dep
 WHERE classid='pg_class'::regclass
 ORDER BY attrelid::regclass::text,att.attnum;
 
--- Show constraints
-SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
+-- Show constraints, stripping numeric prefixes so the legacy
+-- "<chunk_id>_<seq>_<parent>" form (2.27.1) and the new "<chunk_id>_<parent>"
+-- form (2.28.0) compare equal. The dimensional CHECKs are named
+-- "constraint_<slice_id>" and slice ids are not deterministic between a
+-- fresh install and a post-upgrade catalog, so collapse the suffix too.
+SELECT conrelid::regclass::text,
+       regexp_replace(
+           regexp_replace(conname, '^([0-9]+_){1,2}', ''),
+           '^constraint_[0-9]+$', 'constraint_dim') AS conname,
+       pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'
 \if :PG_UPGRADE_TEST
@@ -177,14 +248,8 @@ AND pg_get_constraintdef(oid) NOT LIKE 'NOT NULL %'
 \endif
 ORDER BY 1, 2, 3;
 
--- Orderby fix was introduced in 2.26.4.
--- Fresh installations of versions below 2.26.3 and below will show output mismatch
-SELECT (extversion >= '2.26.4') AS has_fixed_sparse_index
-FROM pg_extension
-WHERE extname = 'timescaledb' \gset
-
-\if :has_fixed_sparse_index
-SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
-\else
+-- The index column depends on the version that compressed each chunk (the
+-- orderby sparse index type changed across releases and existing chunks are
+-- not rewritten on upgrade), so it differs between a fresh install and a
+-- post-upgrade catalog. Skip it and compare the remaining columns.
 SELECT relid, compress_relid, segmentby, orderby, orderby_desc, orderby_nullsfirst FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
-\endif

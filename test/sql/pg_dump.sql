@@ -78,7 +78,7 @@ SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", devi
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 
 -- Show all constraints
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
 
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
 INSERT INTO _timescaledb_catalog.metadata VALUES ('metadata_test', 'FOO', false);
@@ -140,7 +140,7 @@ SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id, s
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
 
 --Chunk sizing function should have been restored
 SELECT * FROM _timescaledb_catalog.hypertable;

@@ -1,0 +1,29 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Check that in chunkwise grouping, the cardinality for individual chunks is
+-- estimated properly, by comparing it to the direct chunk query.
+explain (buffers off)
+select count(*) from metrics group by v0;
+--- QUERY PLAN ---
+ Finalize HashAggregate  (cost=1530.85..1530.92 rows=7 width=12)
+   Group Key: metrics.v0
+   ->  Append  (cost=402.85..1530.77 rows=15 width=12)
+         ->  Partial HashAggregate  (cost=402.85..402.90 rows=5 width=12)
+               Group Key: _hyper_X_X_chunk.v0
+               ->  Seq Scan on _hyper_X_X_chunk  (cost=0.00..312.90 rows=17990 width=4)
+         ->  Partial HashAggregate  (cost=563.85..563.90 rows=5 width=12)
+               Group Key: _hyper_X_X_chunk.v0
+               ->  Seq Scan on _hyper_X_X_chunk  (cost=0.00..437.90 rows=25190 width=4)
+         ->  Partial HashAggregate  (cost=563.85..563.90 rows=5 width=12)
+               Group Key: _hyper_X_X_chunk.v0
+               ->  Seq Scan on _hyper_X_X_chunk  (cost=0.00..437.90 rows=25190 width=4)
+
+select chunk from show_chunks('metrics') chunk order by chunk limit 1 \gset
+explain (buffers off)
+select count(*) from :chunk group by v0;
+--- QUERY PLAN ---
+ HashAggregate  (cost=402.85..402.90 rows=5 width=12)
+   Group Key: v0
+   ->  Seq Scan on _hyper_X_X_chunk  (cost=0.00..312.90 rows=17990 width=4)
+

@@ -1,1 +1,0 @@
-Fixes: #9795 Delete orphaned compression_settings before migrating catalog table

@@ -430,9 +430,9 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
          Grouping Policy: all compressed batches
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_34_chunk
                Filter: ((_hyper_5_34_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_5_34_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
-               ->  Index Scan using compress_hyper_6_39_chunk__ts_meta_min_1__ts_meta_max_1_idx on _timescaledb_internal.compress_hyper_6_39_chunk
-                     Output: compress_hyper_6_39_chunk._ts_meta_count, compress_hyper_6_39_chunk._ts_meta_min_1, compress_hyper_6_39_chunk._ts_meta_max_1, compress_hyper_6_39_chunk.id, compress_hyper_6_39_chunk.value
-                     Index Cond: ((compress_hyper_6_39_chunk._ts_meta_min_1 < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (compress_hyper_6_39_chunk._ts_meta_max_1 >= '0198a23a-8180-7000-8000-000000000000'::uuid))
+               ->  Index Scan using compress_hyper_6_39_chunk__ts_meta_v2_first_id__ts_meta_v2__idx on _timescaledb_internal.compress_hyper_6_39_chunk
+                     Output: compress_hyper_6_39_chunk._ts_meta_count, compress_hyper_6_39_chunk._ts_meta_min_1, compress_hyper_6_39_chunk._ts_meta_max_1, compress_hyper_6_39_chunk._ts_meta_v2_first_id, compress_hyper_6_39_chunk._ts_meta_v2_last_id, compress_hyper_6_39_chunk.id, compress_hyper_6_39_chunk.value
+                     Index Cond: ((compress_hyper_6_39_chunk._ts_meta_v2_first_id < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (compress_hyper_6_39_chunk._ts_meta_v2_last_id >= '0198a23a-8180-7000-8000-000000000000'::uuid))
 
 -- Calling compressed_data_to_array / compressed_data_column_size on a
 -- uuid-compressed value with a non-uuid element type must raise a clean

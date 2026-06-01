@@ -25,10 +25,8 @@ CREATE OR REPLACE VIEW chunk_view AS
      AS range_end
   FROM _timescaledb_catalog.chunk srcch
     INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id
-    INNER JOIN _timescaledb_catalog.chunk_constraint chcons ON srcch.id = chcons.chunk_id
-    INNER JOIN _timescaledb_catalog.dimension dim ON srcch.hypertable_id = dim.hypertable_id
-    INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dim.id = dimsl.dimension_id
-      AND chcons.dimension_slice_id = dimsl.id;
+    INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dimsl.chunk_id = srcch.id
+    INNER JOIN _timescaledb_catalog.dimension dim ON dim.id = dimsl.dimension_id;
 GRANT SELECT on chunk_view TO PUBLIC;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -379,16 +377,16 @@ BEGIN;
 -- before updating the ranges
 :EXPLAIN SELECT * FROM ht_try ORDER BY 1;
 -- range before update
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.table_name = 'child_fdw_table' AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.table_name = 'child_fdw_table' AND ds.chunk_id = c.id;
 
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-01 01:00'::timestamptz, '2020-01-02');
 SELECT id, schema_name, table_name, status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
 -- verify range was updated
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.table_name = 'child_fdw_table' AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.table_name = 'child_fdw_table' AND ds.chunk_id = c.id;
 -- should be ordered append now
 :EXPLAIN SELECT * FROM ht_try ORDER BY 1;
 SELECT * FROM ht_try ORDER BY 1;
@@ -536,8 +534,7 @@ BEGIN;
 SELECT c.id as osm_chunk_id, c.table_name as osm_chunk_name, ds.id as osm_dimension_slice
 FROM _timescaledb_catalog.chunk c
 JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
-JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
-JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.chunk_id = c.id
 WHERE ht.table_name = 'ht_try' AND osm_chunk = true \gset
 \echo :osm_chunk_id, :osm_chunk_name, :osm_dimension_slice
 
@@ -547,9 +544,8 @@ SELECT _timescaledb_functions.drop_osm_chunk('ht_try');
 -- status should be 0 meaning hypertable doesn't have an OSM chunk
 SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
 
--- chunk, chunk_constraint and dimension slice should have been cleaned up
+-- chunk and dimension slice should have been cleaned up
 SELECT FROM _timescaledb_catalog.chunk WHERE id = :osm_chunk_id;
-SELECT FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :osm_chunk_id;
 SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice;
 
 -- foreign chunk no longer appears in the inheritance hierarchy
@@ -640,6 +636,13 @@ SELECT * FROM hyper_constr WHERE time > 200 and time < 400 order by time;
 
 --TEST verify the check constraint exists on the OSM chunk
 SELECT * FROM test.show_constraints('child_hyper_constr');
+
+-- dimension slices owned by the OSM chunk
+SELECT ds.id AS dimension_slice_id, ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.chunk_id = c.id
+WHERE c.table_name = 'child_hyper_constr'
+ORDER BY ds.id;
 
 -- TEST foreign key trigger: deleting data from foreign table measure
 -- does not error out due to data in osm chunk

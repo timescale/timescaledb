@@ -964,27 +964,41 @@ ts_add_orderby_sparse_index(CompressionSettings *settings)
 		}
 	}
 
-	/* add orderby sparse settings */
+	/*
+	 * For each orderby column, record both the minmax and firstlast sparse
+	 * indexes that the compressed chunk carries by default. The physical
+	 * columns are always created for orderby columns, so the index
+	 * configuration should reflect that.
+	 *
+	 * If the column already appears anywhere in the user-supplied index
+	 * configuration, leave it alone so user intent wins.
+	 */
 	ArrayIterator it = array_create_iterator(settings->fd.orderby, 0, NULL);
 	while (array_iterate(it, &datum, &isnull))
 	{
-		/*
-		 * check if sparse index for column already exists
-		 * Validation is done by ts_compression_settings_update
-		 */
+		char *col_name = TextDatumGetCString(datum);
+
 		if (settings->fd.index &&
 			ts_jsonb_has_key_value_str_field(settings->fd.index,
 											 ts_sparse_index_common_keys[SparseIndexKeyCol],
-											 TextDatumGetCString(datum)))
+											 col_name))
 		{
 			continue;
 		}
 
-		MinmaxIndexColumnConfig config;
-		config.base.type = _SparseIndexTypeEnumMinmax;
-		config.col = TextDatumGetCString(datum);
-		config.base.source = _SparseIndexSourceEnumOrderby;
-		ts_convert_sparse_index_config_to_jsonb(parse_state, (SparseIndexConfigBase *) &config);
+		MinmaxIndexColumnConfig minmax_config;
+		minmax_config.base.type = _SparseIndexTypeEnumMinmax;
+		minmax_config.base.source = _SparseIndexSourceEnumOrderby;
+		minmax_config.col = col_name;
+		ts_convert_sparse_index_config_to_jsonb(parse_state,
+												(SparseIndexConfigBase *) &minmax_config);
+
+		FirstLastIndexColumnConfig firstlast_config;
+		firstlast_config.base.type = _SparseIndexTypeEnumFirstLast;
+		firstlast_config.base.source = _SparseIndexSourceEnumOrderby;
+		firstlast_config.col = col_name;
+		ts_convert_sparse_index_config_to_jsonb(parse_state,
+												(SparseIndexConfigBase *) &firstlast_config);
 	}
 
 	return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL));

@@ -38,6 +38,16 @@ select device, time_bucket('1 minute', time), count(*)
 from ht_metrics_partially_compressed
 group by 1, 2 order by 1, 2 limit 1;
 
+-- Should be disabled when disabling optimizations.
+SET timescaledb.enable_optimizations TO false;
+
+:PREFIX
+select device, time_bucket('1 minute', time), count(*)
+from ht_metrics_partially_compressed
+group by 1, 2 order by 1, 2 limit 1;
+
+RESET timescaledb.enable_optimizations;
+
 -- Batch sorted merge.
 :PREFIX
 select time_bucket('1 minute', time), count(*)
