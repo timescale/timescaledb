@@ -387,16 +387,20 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 			}
 		}
 
-		const bool is_segment = ts_array_is_member(info->settings->fd.segmentby, column_name);
-
-		/*
-		 * Determine if we can use bulk decompression for this column.
-		 */
-		Oid typoid = get_atttype(info->chunk_rte->relid, uncompressed_chunk_attno);
-		const bool bulk_decompression_possible =
-			!is_segment && destination_attno > 0 &&
-			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
-				NULL;
+		bool is_segment = false;
+		bool bulk_decompression_possible = false;
+		if (destination_attno > 0)
+		{
+			is_segment = ts_array_is_member(info->settings->fd.segmentby, column_name);
+			/*
+			 * Determine if we can use bulk decompression for this column.
+			 */
+			Oid typoid = get_atttype(info->chunk_rte->relid, uncompressed_chunk_attno);
+			bulk_decompression_possible =
+				!is_segment &&
+				tsl_get_decompress_all_function(compression_get_default_algorithm(typoid),
+												typoid) != NULL;
+		}
 		bulk_decompression_possible_for_some_columns |= bulk_decompression_possible;
 
 		/*
@@ -584,39 +588,6 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 		return (Node *) new_var;
 	}
 	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
-}
-
-/*
- * Find the resno of the given attribute in the provided target list
- */
-static AttrNumber
-find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
-{
-	ListCell *lc;
-
-	Assert(targetlist != NIL);
-	Assert(pos > 0 && pos != InvalidAttrNumber);
-
-	foreach (lc, targetlist)
-	{
-		TargetEntry *target = (TargetEntry *) lfirst(lc);
-
-		if (!IsA(target->expr, Var))
-		{
-			elog(ERROR, "compressed scan targetlist entries must be Vars");
-		}
-
-		Var *var = castNode(Var, target->expr);
-		AttrNumber compressed_attno = var->varattno;
-
-		if (compressed_attno == pos)
-		{
-			return target->resno;
-		}
-	}
-
-	elog(ERROR, "Unable to locate var %d in targetlist", pos);
-	pg_unreachable();
 }
 
 static bool
@@ -1133,7 +1104,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	 * paths of the Custom path, so we won't automatically get a physical tlist
 	 * here.
 	 */
-	bool target_list_compressed_is_physical = false;
 	if (compressed_path->pathtype == T_IndexOnlyScan)
 	{
 		compressed_scan->plan.targetlist = ((IndexPath *) compressed_path)->indexinfo->indextlist;
@@ -1145,7 +1115,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		if (physical_tlist)
 		{
 			compressed_scan->plan.targetlist = physical_tlist;
-			target_list_compressed_is_physical = true;
 		}
 	}
 
@@ -1189,15 +1158,14 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		 * we must match the pathkeys to the decompressed chunk tupdesc.
 		 */
 
-		int numsortkeys = list_length(dcpath->custom_path.path.pathkeys);
+		int numsegkeys = 0;
+		char *column_name;
 
 		List *sort_col_idx = NIL;
 		List *sort_ops = NIL;
 		List *sort_collations = NIL;
 		List *sort_nulls = NIL;
 
-		/*
-		 */
 		ListCell *lc;
 		foreach (lc, dcpath->custom_path.path.pathkeys)
 		{
@@ -1227,7 +1195,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			{
 				em = lfirst(membercell);
 #endif
-
 				if (em->em_is_const)
 				{
 					continue;
@@ -1254,6 +1221,12 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 					   "non-Var pathkey not expected for compressed batch sorted merge");
 
 				Assert((Index) var->varno == (Index) em_relid);
+
+				column_name = get_attname(dcpath->info->chunk_rte->relid, var->varattno, false);
+				if (ts_array_is_member(dcpath->info->settings->fd.segmentby, column_name))
+				{
+					numsegkeys++;
+				}
 
 				/*
 				 * Convert its varattno which is the varattno of the
@@ -1290,86 +1263,24 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				found = true;
 				break;
 			}
-
 			Ensure(found,
 				   "could not find matching decompressed chunk column for batch sorted merge "
 				   "pathkey");
 		}
+		List *sort_numsegkeys = list_make1_int(numsegkeys);
+		sort_options =
+			list_make5(sort_col_idx, sort_ops, sort_collations, sort_nulls, sort_numsegkeys);
+	}
 
-		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
-
-		/*
-		 * Build a sort node for the compressed batches. The sort function is
-		 * derived from the sort function of the pathkeys, except that it refers
-		 * to the min and max metadata columns of the batches. We have already
-		 * verified that the pathkeys match the compression order_by, so this
-		 * mapping is possible.
-		 */
-		AttrNumber *sortColIdx = palloc(sizeof(AttrNumber) * numsortkeys);
-		Oid *sortOperators = palloc(sizeof(Oid) * numsortkeys);
-		Oid *collations = palloc(sizeof(Oid) * numsortkeys);
-		bool *nullsFirst = palloc(sizeof(bool) * numsortkeys);
-		for (int i = 0; i < numsortkeys; i++)
-		{
-			Oid sortop = list_nth_oid(sort_ops, i);
-
-			/* Find the operator in pg_amop --- failure shouldn't happen */
-			Oid opfamily, opcintype;
-			CompareType strategy;
-			if (!get_ordering_op_properties(list_nth_oid(sort_ops, i),
-											&opfamily,
-											&opcintype,
-											&strategy))
-			{
-				elog(ERROR, "operator %u is not a valid ordering operator", sortOperators[i]);
-			}
-
-			/*
-			 * This way to determine the matching metadata column works, because
-			 * we have already verified that the pathkeys match the compression
-			 * orderby.
-			 */
-			Assert(strategy == BTLessStrategyNumber || strategy == BTGreaterStrategyNumber);
-			char *lower_name;
-			char *upper_name;
-			orderby_sparse_metadata_names(dcpath->info->settings, i + 1, &lower_name, &upper_name);
-			char *meta_col_name = strategy == BTLessStrategyNumber ? lower_name : upper_name;
-
-			AttrNumber attr_position =
-				get_attnum(dcpath->info->compressed_rte->relid, meta_col_name);
-
-			if (attr_position == InvalidAttrNumber)
-			{
-				elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
-			}
-
-			/*
-			 * If the compressed target list is not based on the layout of
-			 * the uncompressed chunk (see comment for physical_tlist above),
-			 * adjust the position of the attribute.
-			 */
-			if (target_list_compressed_is_physical)
-			{
-				sortColIdx[i] = attr_position;
-			}
-			else
-			{
-				sortColIdx[i] =
-					find_attr_pos_in_tlist(compressed_scan->plan.targetlist, attr_position);
-			}
-
-			sortOperators[i] = sortop;
-			collations[i] = list_nth_oid(sort_collations, i);
-			nullsFirst[i] = list_nth_oid(sort_nulls, i);
-		}
-
-		/* Now build the compressed batches sort node */
-		Sort *sort = ts_make_sort((Plan *) compressed_scan,
-								  numsortkeys,
-								  sortColIdx,
-								  sortOperators,
-								  collations,
-								  nullsFirst);
+	/*
+	 * Add a sort if the compressed scan is not ordered appropriately.
+	 */
+	if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
+	{
+		List *compressed_pks = dcpath->required_compressed_pathkeys;
+		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
+												compressed_pks,
+												bms_make_singleton(compressed_scan->scanrelid));
 
 		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ -1.0);
 
@@ -1377,24 +1288,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	}
 	else
 	{
-		/*
-		 * Add a sort if the compressed scan is not ordered appropriately.
-		 */
-		if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
-		{
-			List *compressed_pks = dcpath->required_compressed_pathkeys;
-			Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
-													compressed_pks,
-													bms_make_singleton(compressed_scan->scanrelid));
-
-			ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ -1.0);
-
-			decompress_plan->custom_plans = list_make1(sort);
-		}
-		else
-		{
-			decompress_plan->custom_plans = custom_plans;
-		}
+		decompress_plan->custom_plans = custom_plans;
 	}
 
 	Assert(list_length(custom_plans) == 1);
