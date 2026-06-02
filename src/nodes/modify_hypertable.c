@@ -103,10 +103,10 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	state->has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(state->ht->fd.id);
 
-    /*
+	/*
 	 * The actual initialization of the child plan states is deferred until after
 	 * we decompress the data that might potentially be involved in DML operations.
-     */
+	 */
 	state->deferred_eflags = eflags;
 	node->custom_ps = NIL;
 }
