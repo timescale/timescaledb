@@ -66,7 +66,8 @@ set(MOD_FILES
     updates/2.26.2--2.26.3.sql
     updates/2.26.3--2.26.4.sql
     updates/2.26.4--2.27.0.sql
-    updates/2.27.0--2.27.1.sql)
+    updates/2.27.0--2.27.1.sql
+    updates/2.27.1--2.27.2.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
