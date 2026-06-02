@@ -20,8 +20,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          echo "$BODY" | egrep -qsi '^disable-check:.*\<loader-change\>'
-          if [[ $? -ne 0 ]]; then
+          if ! echo "$BODY" | grep -Eqsi '^disable-check:.*\<loader-change\>'; then
             # Get the list of modified files in this pull request
             files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path')
 
