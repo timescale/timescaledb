@@ -69,7 +69,8 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const SortInfo *sort_info);
 
 static ColumnarScanPath *columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info,
-												   Path *compressed_path);
+												   Path *compressed_path,
+												   bool all_quals_pushed_down);
 
 static void columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 										  const Chunk *chunk, RelOptInfo *chunk_rel,
@@ -1157,12 +1158,10 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	return sorted_path;
 }
 
-static List *build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk,
-											 RelOptInfo *chunk_rel, Path *compressed_path,
-											 bool add_uncompressed_part,
-											 List *uncompressed_table_pathlist,
-											 const SortInfo *sort_info,
-											 const CompressionInfo *compression_info);
+static List *build_on_single_compressed_path(
+	PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel, Path *compressed_path,
+	bool add_uncompressed_part, List *uncompressed_table_pathlist, const SortInfo *sort_info,
+	const CompressionInfo *compression_info, bool all_quals_pushed_down);
 
 void
 ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
@@ -1253,13 +1252,14 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	RelOptInfo *compressed_rel = compression_info->compressed_rel;
 
 	/* translate chunk_rel->baserestrictinfo */
+	bool all_quals_pushed_down = false;
 	if (ts_guc_enable_optimizations && ts_guc_enable_columnar_scan_filter_pushdown)
 	{
-		columnar_scan_filter_pushdown(root,
-									  compression_info->settings,
-									  chunk_rel,
-									  compressed_rel,
-									  add_uncompressed_part);
+		all_quals_pushed_down = columnar_scan_filter_pushdown(root,
+															  compression_info->settings,
+															  chunk_rel,
+															  compressed_rel,
+															  add_uncompressed_part);
 	}
 	/*
 	 * Estimate the size of the compressed chunk table.
@@ -1322,7 +1322,8 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 																   add_uncompressed_part,
 																   uncompressed_table_pathlist,
 																   &sort_info,
-																   compression_info);
+																   compression_info,
+																   all_quals_pushed_down);
 
 		/*
 		 * Add the paths to the chunk relation.
@@ -1350,7 +1351,8 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 																   add_uncompressed_part,
 																   uncompressed_paths_with_parallel,
 																   &sort_info,
-																   compression_info);
+																   compression_info,
+																   all_quals_pushed_down);
 		/*
 		 * Add the paths to the chunk relation.
 		 */
@@ -1386,7 +1388,7 @@ static List *
 build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 								Path *compressed_path, bool add_uncompressed_part,
 								List *uncompressed_table_pathlist, const SortInfo *sort_info,
-								const CompressionInfo *compression_info)
+								const CompressionInfo *compression_info, bool all_quals_pushed_down)
 {
 	/*
 	 * We skip any BitmapScan parameterized paths here as supporting
@@ -1432,8 +1434,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		}
 	}
 
-	Path *chunk_path_no_sort =
-		(Path *) columnar_scan_path_create(root, compression_info, compressed_path);
+	Path *chunk_path_no_sort = (Path *)
+		columnar_scan_path_create(root, compression_info, compressed_path, all_quals_pushed_down);
 	List *decompressed_paths = list_make1(chunk_path_no_sort);
 
 	/*
@@ -2464,7 +2466,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 
 static ColumnarScanPath *
 columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_info,
-						  Path *compressed_path)
+						  Path *compressed_path, bool all_quals_pushed_down)
 {
 	ColumnarScanPath *path;
 
@@ -2527,6 +2529,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
 	path->chunk_status = compression_info->chunk_status;
+	path->all_quals_pushed_down = all_quals_pushed_down;
 	path->required_compressed_pathkeys = NIL;
 	cost_columnar_scan(compression_info, path, compressed_path);
 

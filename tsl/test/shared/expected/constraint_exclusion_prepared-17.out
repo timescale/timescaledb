@@ -1426,7 +1426,6 @@ LIMIT 100;
                ->  Merge Append (actual rows=100.00 loops=1)
                      Sort Key: m1."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1_1 (actual rows=100.00 loops=1)
-                           Filter: (device_id = 2)
                            ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                                  Index Cond: (device_id = 2)
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=0.00 loops=1)
@@ -1465,7 +1464,6 @@ LIMIT 100;
                ->  Merge Append (actual rows=100.00 loops=1)
                      Sort Key: m1."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1_1 (actual rows=100.00 loops=1)
-                           Filter: (device_id = 2)
                            ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                                  Index Cond: (device_id = 2)
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=0.00 loops=1)
@@ -1504,7 +1502,6 @@ LIMIT 100;
                ->  Merge Append (actual rows=100.00 loops=1)
                      Sort Key: m1."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1_1 (actual rows=100.00 loops=1)
-                           Filter: (device_id = 2)
                            ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                                  Index Cond: (device_id = 2)
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=0.00 loops=1)
@@ -1543,7 +1540,6 @@ LIMIT 100;
                ->  Merge Append (actual rows=100.00 loops=1)
                      Sort Key: m1."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1_1 (actual rows=100.00 loops=1)
-                           Filter: (device_id = 2)
                            ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                                  Index Cond: (device_id = 2)
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=0.00 loops=1)
@@ -1582,7 +1578,6 @@ LIMIT 100;
                ->  Merge Append (actual rows=100.00 loops=1)
                      Sort Key: m1."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1_1 (actual rows=100.00 loops=1)
-                           Filter: (device_id = 2)
                            ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                                  Index Cond: (device_id = 2)
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m1_1 (actual rows=0.00 loops=1)
