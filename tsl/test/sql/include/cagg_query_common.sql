@@ -54,7 +54,7 @@ group by time_bucket('1day', timec), location WITH NO DATA;
 --compute time_bucketted max+bucket_width for the materialized view
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
 FROM ( select max(timec)as timeval from conditions ) as q;
-CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 
 --test first/last
 create materialized view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
@@ -66,7 +66,7 @@ group by time_bucket('1day', timec), location WITH NO DATA;
 --time that refresh assumes as now() for repeatability
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
 FROM ( select max(timec)as timeval from conditions ) as q;
-CALL refresh_continuous_aggregate('mat_m2', NULL, NULL);
+CALL refresh_continuous_aggregate('mat_m2', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 
 --normal view --
 create or replace view regview( location, timec, minl, sumt , sumh)
@@ -563,7 +563,7 @@ SET ROLE :ROLE_SUPERUSER;
 BEGIN;
 UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';
 -- should error because function does not exist
-CALL refresh_continuous_aggregate('cagg_bigint_offset2', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_bigint_offset2', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 ROLLBACK;
 \set ON_ERROR_STOP 1
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -644,9 +644,9 @@ SELECT * FROM cagg_4_hours_origin;
 -- Update the last bucket and re-materialize
 INSERT INTO temperature values('2020-01-01 23:55:00 PST', 10);
 
-CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 
 SELECT * FROM cagg_4_hours;
 SELECT * FROM cagg_4_hours_offset;
@@ -680,9 +680,9 @@ SELECT * FROM cagg_4_hours_origin;
 
 -- Update materialized data
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
 
 -- Query the CAggs and check that all buckets are materialized
@@ -703,9 +703,9 @@ SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(
 
 -- Test invalidations
 TRUNCATE temperature;
-CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 
 INSERT INTO temperature
   SELECT time, 5
@@ -722,9 +722,9 @@ INSERT INTO temperature values('2020-01-02 01:35:00+01', 5555);
 INSERT INTO temperature values('2020-01-02 05:05:00+01', 8888);
 
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
 
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=true);
@@ -780,7 +780,7 @@ WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.
                              WHERE user_view_name = 'cagg_4_hours')
 ORDER BY 1, 2, 3;
 
-CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz);
+CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz, options => '{"buckets_per_batch": 0}'::jsonb);
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
@@ -823,12 +823,12 @@ INSERT INTO table_int VALUES(100, 555);
 -- Compare bucketing results
 SELECT time_bucket('10', time), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
 SELECT * FROM cagg_int;
-CALL refresh_continuous_aggregate('cagg_int', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_int', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 SELECT * FROM cagg_int;
 
 SELECT time_bucket('10', time, "offset"=>5), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
 SELECT * FROM cagg_int_offset;  -- the value 100 is part of the already serialized bucket, so it should not be visible
-CALL refresh_continuous_aggregate('cagg_int_offset', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_int_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 SELECT * FROM cagg_int_offset;
 
 -- Ensure everything was materialized
@@ -842,7 +842,7 @@ SELECT * FROM cagg_int_offset;
 INSERT INTO table_int VALUES(114, 0);
 
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130);
+CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
 
 SELECT * FROM cagg_int_offset;
@@ -982,8 +982,8 @@ SELECT * FROM cagg_1_week_offset;
 SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
 
 -- Test refresh
-CALL refresh_continuous_aggregate('cagg_1_hour_offset', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_1_week_offset', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_1_hour_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_1_week_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 
 -- Everything should be now materailized
 ALTER MATERIALIZED VIEW cagg_1_hour_offset SET (timescaledb.materialized_only=false);

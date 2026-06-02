@@ -509,7 +509,8 @@ step chk_hyper_invals:
 
 source |lowest                      |greatest                    
 -------+----------------------------+----------------------------
-cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 06:00:00 2026 UTC
+cagg_6h|Sat Jan 03 12:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
 
 step lock_L2_source: 
     BEGIN;
@@ -631,7 +632,8 @@ step chk_hyper_invals:
 
 source |lowest                      |greatest                    
 -------+----------------------------+----------------------------
-cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 06:00:00 2026 UTC
+cagg_6h|Sat Jan 03 12:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
 
 step lock_L2_source: 
     BEGIN;
@@ -908,7 +910,8 @@ step chk_hyper_invals:
 
 source |lowest                      |greatest                    
 -------+----------------------------+----------------------------
-cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 06:00:00 2026 UTC
+cagg_6h|Sat Jan 03 12:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
 
 step lock_L2_source: 
     BEGIN;

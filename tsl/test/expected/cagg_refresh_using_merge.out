@@ -813,7 +813,8 @@ WITH NO DATA;
 SET client_min_messages TO LOG;
 CALL refresh_continuous_aggregate('conditions_daily', NULL, '2018-11-01 23:59:59-08');
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, '2018-11-01 23:59:59-08');
-LOG:  inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
+LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
+LOG:  inserted 4 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
 LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
             bucket            | location | avg | max | min 
@@ -843,7 +844,7 @@ LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 N
 -- All data should be in the materialization hypertable
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
-NOTICE:  continuous aggregate "conditions_daily" is already up-to-date
+LOG:  inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
 LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
             bucket            | location | avg | max | min 
