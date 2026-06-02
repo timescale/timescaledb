@@ -6,3 +6,5 @@ module_pathname = '$libdir/timescaledb-@PROJECT_VERSION_MOD@'
 #(though this extension is relocatable during installation).
 relocatable = false
 trusted = true
+
+#FIXME
