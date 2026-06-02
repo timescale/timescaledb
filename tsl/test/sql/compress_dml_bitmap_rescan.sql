@@ -24,8 +24,15 @@ SELECT 1, '2026-04-15 06:00'::timestamptz + (g * interval '5 min')
 FROM generate_series(0, 11) g;
 
 -- used to crash
+SET enable_indexscan = off;
+SET enable_seqscan = off;
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, BUFFERS OFF, SUMMARY OFF)
 DELETE FROM partial_bhs_delete_returning_crash
- WHERE id = 1
-   AND ts >= '2026-04-15 06:00'
-   AND ts <  '2026-04-15 07:00'
-RETURNING id, ts;
+WHERE id = 1 AND ts >= '2026-04-15 06:00' AND ts <  '2026-04-15 07:00'
+RETURNING id, ts
+;
+
+SELECT COUNT(*) FROM partial_bhs_delete_returning_crash
+WHERE id = 1 AND ts >= '2026-04-15 06:00' AND ts <  '2026-04-15 07:00'
+;
