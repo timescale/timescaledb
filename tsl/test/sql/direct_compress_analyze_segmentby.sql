@@ -23,7 +23,7 @@ ANALYZE test_segmentby_stats;
 SELECT compress_chunk(c) FROM show_chunks('test_segmentby_stats') c;
 
 -- will have devide_id as default segmentby for compressed chunk;
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 
 SET timescaledb.enable_direct_compress_insert = true;
 INSERT INTO test_segmentby_stats
@@ -32,7 +32,7 @@ FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 mi
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
 -- will have default segmentby set for a newly created direct compressed chunk (should observe a skipped chunk id);
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test default segmentby GUC for direct compress is off
@@ -50,7 +50,7 @@ FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 mi
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
 -- will have device_id by as configured segmentby for direct compressed chunk (should not observe skipped chunk id);
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test too few rows for analysis
@@ -68,7 +68,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 3) i;
 
 -- segmentby should be NULL — not enough rows to trigger analysis
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test no candidate columns (only orderby, float, and jsonb columns present)
@@ -85,7 +85,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 5) i;
 
 -- segmentby should be NULL — no candidates passed ts_accept_for_segmentby
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test text column as segmentby candidate
@@ -102,7 +102,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 5) i;
 
 -- segmentby should be region — text column with low cardinality qualifies
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test all candidates rejected (more than 20 distinct values triggers early termination)
@@ -120,7 +120,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 25) i;
 
 -- segmentby should be NULL — only candidate has too many distinct values
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test candidate not qualified (low cardinality but one value has fewer than 500 rows)
@@ -144,7 +144,7 @@ FROM (
 ) sub;
 
 -- segmentby should be NULL — device_id=5 has ~6 rows, below segmentby_batch_size_limit
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test multiple candidate columns (first qualifying column wins)
@@ -164,7 +164,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 10) i;
 
 -- segmentby should be region_id (first qualifying candidate by attribute order)
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test NULL values in candidate column (should be treated as a distinct group)
@@ -183,7 +183,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
 SELECT count(*) from test_null_candidate WHERE device_id = NULL;
 
 -- segmentby should be device_id — NULLs are treated as a distinct group
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test boundary cases
@@ -200,7 +200,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 20) i;
 
 -- segmentby should be category_id — exactly at the limit, not over
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 BEGIN;
@@ -211,7 +211,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 21) i;
 
 -- segmentby should be NULL — 21 distinct values exceeds MAX_SEGMENTBY_DISTINCT
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 DROP TABLE test_boundary_distinct;
 
@@ -228,7 +228,7 @@ SELECT t, (i % 5), random()
 FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 
 INSERT INTO test_second_insert
 SELECT t, (i % 5), random()
@@ -251,7 +251,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 25) i;
 
 -- segmentby should be low_card_id (high_card_id rejected)
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test partial chunk (small insert below sort limit, then large insert triggers analysis)
@@ -280,7 +280,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 5) i;
 
 -- segmentby should now be device_id — analysis ran on the new compressed chunk
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_partial') chunk;
 ROLLBACK;
 
@@ -304,7 +304,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 25) i;
 
 -- segmentby should be NULL — good_candidate is beyond the 10-column analysis cap
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test recompress preserves auto-discovered segmentby
@@ -323,7 +323,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
      generate_series(1, 5) i;
 
 -- device_id should be auto-selected as segmentby
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 
 -- Small insert into the same chunk range makes it partial
 INSERT INTO test_recompress_segmentby VALUES
@@ -334,18 +334,18 @@ INSERT INTO test_recompress_segmentby VALUES
 -- Recompress should preserve the auto-discovered segmentby
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- unordered, partial
 SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- unordered
 SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- compressed
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 
 -- Recompress should overwrite settings
 ALTER TABLE test_recompress_segmentby SET (tsdb.segment_by = '', tsdb.order_by = 'time2');
 SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
 
 
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test default segmentby gets set via COPY path
@@ -367,7 +367,7 @@ ANALYZE test_copy_segmentby;
 SELECT compress_chunk(c) FROM show_chunks('test_copy_segmentby') c;
 
 -- should have device_id as default segmentby
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 
 SET timescaledb.enable_direct_compress_copy = true;
 -- 7205 rows with 5 device_ids into a new chunk range via COPY
@@ -375,7 +375,7 @@ SET timescaledb.enable_direct_compress_copy = true;
 
 ANALYZE test_copy_segmentby;
 -- should have default segmentby set for the new direct compressed chunk
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 ROLLBACK;
 
 -- Test NULL values in pass-by-reference column during auto segmentby analysis
