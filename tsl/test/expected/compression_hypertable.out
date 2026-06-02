@@ -130,15 +130,17 @@ SELECT DISTINCT attname, attstattarget
   WHERE attrelid in (SELECT format('%I.%I', schema_name, table_name)::regclass FROM _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = 2)
     AND attnum > 0
   ORDER BY attname;
-    attname     | attstattarget 
-----------------+---------------
- Time           |             0
- _ts_meta_count |          1000
- _ts_meta_max_1 |          1000
- _ts_meta_min_1 |          1000
- b              |             0
- i              |             0
- t              |             0
+        attname         | attstattarget 
+------------------------+---------------
+ Time                   |             0
+ _ts_meta_count         |          1000
+ _ts_meta_max_1         |          1000
+ _ts_meta_min_1         |          1000
+ _ts_meta_v2_first_Time |          1000
+ _ts_meta_v2_last_Time  |          1000
+ b                      |             0
+ i                      |             0
+ t                      |             0
 
 -- Test that the GUC to disable bulk decompression works.
 vacuum analyze test1;
@@ -149,7 +151,7 @@ select * from _timescaledb_internal._hyper_1_10_chunk;
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: true
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t
+         Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk."_ts_meta_v2_first_Time", compress_hyper_2_55_chunk."_ts_meta_v2_last_Time", compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t
 
 set timescaledb.enable_bulk_decompression to false;
 explain (analyze, verbose, timing off, buffers off, costs off, summary off)
@@ -159,7 +161,7 @@ select * from _timescaledb_internal._hyper_1_10_chunk;
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: false
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t
+         Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk."_ts_meta_v2_first_Time", compress_hyper_2_55_chunk."_ts_meta_v2_last_Time", compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t
 
 reset timescaledb.enable_bulk_decompression;
 TRUNCATE test1;
@@ -361,16 +363,18 @@ SELECT DISTINCT attname, attstattarget
   WHERE attrelid in (SELECT format('%I.%I', schema_name, table_name)::regclass FROM _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = 6)
     AND attnum > 0
   ORDER BY attname;
-    attname     | attstattarget 
-----------------+---------------
- _ts_meta_count |          1000
- _ts_meta_max_1 |          1000
- _ts_meta_min_1 |          1000
- humidity       |             0
- location       |          1000
- location2      |             0
- temperature    |             0
- timec          |             0
+         attname         | attstattarget 
+-------------------------+---------------
+ _ts_meta_count          |          1000
+ _ts_meta_max_1          |          1000
+ _ts_meta_min_1          |          1000
+ _ts_meta_v2_first_timec |          1000
+ _ts_meta_v2_last_timec  |          1000
+ humidity                |             0
+ location                |          1000
+ location2               |             0
+ temperature             |             0
+ timec                   |             0
 
 --add hypertable with order by a non by-val type with NULLs
 CREATE TABLE test5 (

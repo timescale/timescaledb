@@ -31,6 +31,7 @@ tags
 /compile_commands.json
 /.DS_Store
 /.clangd
+/.claude
 /.cache
 
 /CMakeSettings.json
