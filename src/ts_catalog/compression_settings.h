@@ -142,6 +142,8 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 							   ArrayType *orderby_nullsfirst, Jsonb *sparse_index);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get(Oid relid);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get_by_compress_relid(Oid relid);
+TSDLLEXPORT bool ts_relation_is_compressed_chunk_relation(Oid relid);
+TSDLLEXPORT Oid ts_relation_get_uncompressed_relid(Oid compress_relid);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_materialize(const CompressionSettings *src,
 																	 Oid relid, Oid compress_relid);
 TSDLLEXPORT bool ts_compression_settings_delete(Oid relid);
