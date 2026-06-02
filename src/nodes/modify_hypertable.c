@@ -64,6 +64,8 @@ should_use_direct_compress(ModifyHypertableState *state)
 	return true;
 }
 
+static void modify_hypertable_init_child_plan_states(CustomScanState *node);
+
 /*
  * ModifyHypertable is a plan node that implements DML for hypertables.
  * It is a wrapper around the ModifyTable plan node that calls the wrapped ModifyTable
@@ -109,6 +111,15 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	 */
 	state->deferred_eflags = eflags;
 	node->custom_ps = NIL;
+
+	/*
+	 * With plain EXPLAIN, the node is not actually executed, so we have to
+	 * finish the child plan state initialization now.
+	 */
+	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
+	{
+		modify_hypertable_init_child_plan_states(node);
+	}
 }
 
 /*
@@ -116,7 +127,7 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
  * potentially be involved in DML operations.
  */
 static void
-modify_hypertable_finish_init(CustomScanState *node)
+modify_hypertable_init_child_plan_states(CustomScanState *node)
 {
 	ModifyHypertableState *state = (ModifyHypertableState *) node;
 	EState *estate = node->ss.ps.state;
@@ -220,7 +231,7 @@ modify_hypertable_exec(CustomScanState *node)
 			}
 		}
 
-		modify_hypertable_finish_init(node);
+		modify_hypertable_init_child_plan_states(node);
 	}
 
 	mtstate = linitial_node(ModifyTableState, node->custom_ps);
@@ -316,7 +327,7 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 
 	if (node->custom_ps == NIL)
 	{
-		modify_hypertable_finish_init(node);
+		modify_hypertable_init_child_plan_states(node);
 	}
 
 	mtstate = linitial_node(ModifyTableState, node->custom_ps);
