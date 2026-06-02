@@ -533,15 +533,9 @@ ts_chunk_index_rename(Hypertable *ht, Oid hypertable_indexrelid, const char *ht_
 		if (OidIsValid(chunk_indexrelid))
 		{
 			Oid chunk_schemaoid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
-			const char *chunk_old_name = get_rel_name(chunk_indexrelid);
 			const char *chunk_new_name =
 				chunk_index_choose_name(NameStr(chunk->fd.table_name), ht_name, chunk_schemaoid);
 
-			/*
-			 * Index might also have a constraint which we track separately in our catalog
-			 * and needs to be updated too
-			 */
-			ts_chunk_constraint_adjust_meta(chunk->fd.id, ht_name, chunk_old_name, chunk_new_name);
 			RenameRelationInternal(chunk_indexrelid, chunk_new_name, false, true);
 		}
 	}

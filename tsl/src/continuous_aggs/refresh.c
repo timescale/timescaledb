@@ -7,6 +7,7 @@
 
 #include <access/xact.h>
 #include <executor/spi.h>
+#include <executor/tuptable.h>
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <storage/lmgr.h>
@@ -17,6 +18,7 @@
 #include <utils/guc.h>
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
+#include <utils/tuplestore.h>
 
 #include "debug_point.h"
 #include "dimension.h"
@@ -1086,7 +1088,7 @@ debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh
 
 List *
 continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *original_refresh_window,
-									int32 buckets_per_batch, bool refresh_newest_first)
+									int32 buckets_per_batch)
 {
 	/* Do not produce batches when the number of buckets per batch is zero (disabled) */
 	if (buckets_per_batch == 0)
@@ -1130,7 +1132,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				 NameStr(cagg->data.user_view_name));
 			return NIL;
 		}
-		refresh_window.start = slice->fd.range_start;
+		refresh_window.start = cagg_current_bucket_start(slice->fd.range_start,
+														 refresh_window.type,
+														 cagg->bucket_function);
 		refresh_window.start_isnull = false;
 	}
 
@@ -1150,7 +1154,11 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				 NameStr(cagg->data.user_view_name));
 			return NIL;
 		}
-		refresh_window.end = slice->fd.range_end;
+		/* range_end is exclusive; subtract 1 to get the last internal value in the chunk,
+		 * then find the end of the bucket that contains it. */
+		refresh_window.end = cagg_next_bucket_start(slice->fd.range_end - 1,
+													refresh_window.type,
+													cagg->bucket_function);
 		refresh_window.end_isnull = false;
 	}
 
@@ -1179,106 +1187,28 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	debug_refresh_window(cagg, &refresh_window, "before produce batches");
 
-	/*
-	 * Produce the batches to be processed
-	 *
-	 * The refresh window is split into multiple batches of size `batch_size` each. The batches are
-	 * produced in reverse order so that the first range produced is the last range to be processed.
-	 *
-	 * The batches are produced in reverse order because the most recent data should be the first to
-	 * be processed and be visible for the users.
-	 *
-	 * It takes in account the invalidation logs (hypertable and materialization hypertable) to
-	 * avoid producing wholes that have no data to be processed.
-	 *
-	 * The logic is something like the following:
-	 * 1. Get dimension slices from the original hypertables
-	 * 2. Get either hypertable and materialization hypertable invalidation logs
-	 * 3. Produce the batches in reverse order
-	 * 4. Check if the produced batch overlaps either with dimension slices #1 and invalidation logs
-	 * #2
-	 * 5. If the batch overlaps with both then it's a valid batch to be processed
-	 * 6. If the batch overlaps with only one of them then it's not a valid batch to be processed
-	 * 7. If the batch does not overlap with any of them then it's not a valid batch to be processed
-	 */
-	const char *query_str_template = " \
-		WITH dimension_slices AS ( \
-			SELECT \
-				range_start AS start, \
-				range_end AS end \
-			FROM \
-				_timescaledb_catalog.dimension_slice \
-				JOIN _timescaledb_catalog.dimension ON dimension.id = dimension_slice.dimension_id \
-			WHERE \
-				hypertable_id = $1 \
-				AND dimension_id = $2 \
-				AND range_end >= range_start \
-			ORDER BY \
-				%s \
-		), \
-		invalidation_logs AS ( \
-			SELECT \
-				lowest_modified_value, \
-				greatest_modified_value \
-			FROM \
-				_timescaledb_catalog.continuous_aggs_materialization_invalidation_log \
-			WHERE \
-				materialization_id = $3 \
-				AND greatest_modified_value >= lowest_modified_value \
-			UNION ALL \
-			SELECT \
-				pg_catalog.min(lowest_modified_value) AS lowest_modified_value, \
-				pg_catalog.max(greatest_modified_value) AS greatest_modified_value \
-			FROM \
-				_timescaledb_catalog.continuous_aggs_hypertable_invalidation_log \
-			WHERE \
-				hypertable_id = $1 \
-				AND greatest_modified_value >= lowest_modified_value \
-		) \
-		SELECT \
-			refresh_start AS start, \
-			LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint AS end \
-		FROM \
-			pg_catalog.generate_series($5, $6, $4) AS refresh_start \
-		WHERE \
-			EXISTS ( \
-			    SELECT FROM dimension_slices \
-				WHERE \
-					pg_catalog.int8range(refresh_start, LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint) \
-					OPERATOR(pg_catalog.&&) \
-					pg_catalog.int8range(dimension_slices.start, dimension_slices.end) \
-			) \
-			AND EXISTS ( \
-				SELECT FROM \
-					invalidation_logs \
-				WHERE \
-					pg_catalog.int8range(refresh_start, LEAST($6::numeric, refresh_start::numeric + $4::numeric)::bigint) \
-					OPERATOR(pg_catalog.&&) \
-					pg_catalog.int8range(lowest_modified_value, greatest_modified_value) \
-					AND lowest_modified_value IS NOT NULL \
-					AND (greatest_modified_value IS NOT NULL AND greatest_modified_value != $7) \
-			) \
-		ORDER BY \
-			refresh_start %s;";
+	/* $3 = CAGG_INVALIDATION_WRONG_GREATEST_VALUE sentinel, $4/$5 = refresh window bounds */
+	static const char *inval_query =
+		"SELECT lowest_modified_value, greatest_modified_value FROM ("
+		"  SELECT lowest_modified_value, greatest_modified_value"
+		"    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log"
+		"   WHERE materialization_id = $1"
+		"     AND greatest_modified_value >= lowest_modified_value"
+		"  UNION ALL"
+		"  SELECT pg_catalog.min(lowest_modified_value), pg_catalog.max(greatest_modified_value)"
+		"    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log"
+		"   WHERE hypertable_id = $2"
+		"     AND greatest_modified_value >= lowest_modified_value"
+		") t"
+		" WHERE lowest_modified_value IS NOT NULL"
+		"   AND greatest_modified_value IS NOT NULL"
+		"   AND greatest_modified_value != $3"
+		"   AND greatest_modified_value >= $4"
+		"   AND lowest_modified_value < $5"
+		" ORDER BY 1 ASC";
 
-	const char *query_str = psprintf(query_str_template,
-									 refresh_newest_first ? "range_end DESC" : "range_start ASC",
-									 refresh_newest_first ? "DESC" : "ASC");
-
-	/* List of InternalTimeRange elements to be returned */
 	List *refresh_window_list = NIL;
-
-	/* Prepare for SPI call */
 	int res;
-	Oid types[] = { INT4OID, INT4OID, INT4OID, INT8OID, INT8OID, INT8OID, INT8OID };
-	Datum values[] = { Int32GetDatum(ht->fd.id),
-					   Int32GetDatum(time_dim->fd.id),
-					   Int32GetDatum(cagg->data.mat_hypertable_id),
-					   Int64GetDatum(batch_size),
-					   Int64GetDatum(refresh_window.start),
-					   Int64GetDatum(refresh_window.end),
-					   Int64GetDatum(CAGG_INVALIDATION_WRONG_GREATEST_VALUE) };
-	char nulls[] = { false, false, false, false, false, false, false };
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -1286,119 +1216,223 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		elog(ERROR, "could not connect to SPI");
 	}
 
-	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 
-	res = SPI_execute_with_args(query_str,
-								7,
-								types,
-								values,
-								nulls,
-								false /* read_only */,
-								0 /* count */);
+	Oid inval_types[] = { INT4OID, INT4OID, INT8OID, INT8OID, INT8OID };
+	Datum inval_values[] = { Int32GetDatum(cagg->data.mat_hypertable_id),
+							 Int32GetDatum(ht->fd.id),
+							 Int64GetDatum(CAGG_INVALIDATION_WRONG_GREATEST_VALUE),
+							 Int64GetDatum(refresh_window.start),
+							 Int64GetDatum(refresh_window.end) };
+	char inval_nulls[] = { false, false, false, false, false };
 
+	res = SPI_execute_with_args(inval_query,
+								5,
+								inval_types,
+								inval_values,
+								inval_nulls,
+								true /* read_only */,
+								0);
 	if (res < 0)
 	{
-		elog(ERROR, "%s: could not produce batches for the policy cagg refresh", __func__);
+		elog(ERROR, "%s: could not fetch invalidation ranges for cagg refresh", __func__);
 	}
 
-	if (SPI_processed == 1)
+	Assert(SPI_processed <= INT_MAX);
+	int inval_count = (int) SPI_processed;
+	Assert(SPI_tuptable != NULL);
+	TupleDesc inval_tupdesc = SPI_tuptable->tupdesc;
+
+	/*
+	 * Open a streaming catalog scan for dimension slices overlapping the refresh
+	 * window.
+	 * Filter to slices overlapping [refresh_window.start, refresh_window.end):
+	 *   range_start < refresh_window.end   (BTLessStrategyNumber)
+	 *   range_end   > refresh_window.start (BTGreaterStrategyNumber; subtract 1 to
+	 *                                       offset the +1 adjustment in set_range)
+	 */
+	ScanIterator dim_it = ts_dimension_slice_scan_iterator_create(NULL, CurrentMemoryContext);
+	ts_dimension_slice_scan_iterator_set_range(&dim_it,
+											   time_dim->fd.id,
+											   BTLessStrategyNumber,
+											   refresh_window.end,
+											   BTGreaterStrategyNumber,
+											   (refresh_window.start > PG_INT64_MIN) ?
+												   refresh_window.start - 1 :
+												   PG_INT64_MIN);
+	ts_scan_iterator_start_or_restart_scan(&dim_it);
+
+	/*
+	 * Merge scan: walk oldest-first through the dimension slice cursor and the
+	 * SPI invalidations result. Note that the invalidations are ordered by lowest_modified_value
+	 * ascending, and dimension slices are ordered by range_start ascending).
+	 *
+	 * Rather than stepping through every bucket boundary, we skip ahead to the
+	 * bucket containing max(dim_low, inval_low) whenever cur is in a gap before
+	 * either source's next range.
+	 *
+	 * A batch is emitted only when it overlaps both an active dimension slice and
+	 * an active invalidation range.
+	 */
+	const ContinuousAggBucketFunction *bf = cagg->bucket_function;
+	int64 fixed_batch_size = bf->bucket_fixed_interval ? ts_continuous_agg_fixed_bucket_width(bf) *
+															 (int64) buckets_per_batch :
+														 0;
+	bool dim_has_more;
+	int64 dim_low = 0, dim_high = 0;
 	{
-		elog(DEBUG1,
-			 "only one batch produced for continuous aggregate \"%s.%s\", falling back to single "
-			 "batch processing",
-			 NameStr(cagg->data.user_view_schema),
-			 NameStr(cagg->data.user_view_name));
-
-		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
-
-		res = SPI_finish();
-		if (res != SPI_OK_FINISH)
+		TupleInfo *ti = ts_scan_iterator_next(&dim_it);
+		dim_has_more = (ti != NULL);
+		if (dim_has_more)
 		{
-			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+			bool isnull;
+			dim_low =
+				DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
+			dim_high =
+				DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_end, &isnull));
+		}
+	}
+
+	int inval_idx = 0;
+	int64 inval_low = 0, inval_high = 0;
+	if (inval_idx < inval_count)
+	{
+		bool isnull;
+		inval_low =
+			DatumGetInt64(SPI_getbinval(SPI_tuptable->vals[inval_idx], inval_tupdesc, 1, &isnull));
+		inval_high =
+			DatumGetInt64(SPI_getbinval(SPI_tuptable->vals[inval_idx], inval_tupdesc, 2, &isnull));
+	}
+
+	int64 cur = refresh_window.start;
+	while (cur < refresh_window.end)
+	{
+		/* Advance past dim slices that end at or before cur */
+		while (dim_has_more && dim_high <= cur)
+		{
+			TupleInfo *ti = ts_scan_iterator_next(&dim_it);
+			dim_has_more = (ti != NULL);
+			if (dim_has_more)
+			{
+				bool isnull;
+				dim_low = DatumGetInt64(
+					slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
+				dim_high =
+					DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_end, &isnull));
+			}
 		}
 
-		return NIL;
-	}
+		/* Advance past invalidations that end at or before cur.
+		 * This is correct because we are reading invalidation entries already ordered by
+		 * lowest_modified_value.
+		 */
+		while (inval_idx < inval_count && inval_high <= cur)
+		{
+			inval_idx++;
+			if (inval_idx < inval_count)
+			{
+				bool isnull;
+				inval_low = DatumGetInt64(
+					SPI_getbinval(SPI_tuptable->vals[inval_idx], inval_tupdesc, 1, &isnull));
+				inval_high = DatumGetInt64(
+					SPI_getbinval(SPI_tuptable->vals[inval_idx], inval_tupdesc, 2, &isnull));
+			}
+		}
 
-	/* Build the batches list */
-	for (uint64 batch = 0; batch < SPI_processed; batch++)
-	{
-		bool range_start_isnull, range_end_isnull;
-		Datum range_start =
-			SPI_getbinval(SPI_tuptable->vals[batch], SPI_tuptable->tupdesc, 1, &range_start_isnull);
-		Datum range_end =
-			SPI_getbinval(SPI_tuptable->vals[batch], SPI_tuptable->tupdesc, 2, &range_end_isnull);
+		if (!dim_has_more || inval_idx >= inval_count)
+		{
+			break;
+		}
 
-		/* We need to allocate the list in the old memory context because here we're in the SPI
-		 * context */
-		MemoryContext saved_context = MemoryContextSwitchTo(oldcontext);
+		/*
+		 * If cur is before the start of either source, jump ahead to the bucket
+		 * containing max(dim_low, inval_low), skipping the empty gap entirely.
+		 * Guard new_cur > cur to avoid an infinite loop when the jump target falls
+		 * inside the current bucket (fall through to the emit check in that case).
+		 */
+		int64 jump_target = Max(dim_low, inval_low);
+		if (jump_target > cur)
+		{
+			int64 new_cur =
+				cagg_current_bucket_start(jump_target, original_refresh_window->type, bf);
+			if (new_cur > cur)
+			{
+				cur = new_cur;
+				continue;
+			}
+		}
+
+		/* Compute the end of this batch */
+		int64 next;
+		if (bf->bucket_fixed_interval)
+		{
+			next = cur + fixed_batch_size;
+		}
+		else
+		{
+			next = cur;
+			for (int32 i = 0; i < buckets_per_batch; i++)
+			{
+				next = ts_cagg_variable_next_bucket_start(next, bf);
+			}
+		}
+		if (next > refresh_window.end)
+		{
+			next = refresh_window.end;
+		}
+
+		/* Emit the batch */
+		MemoryContext spi_context = MemoryContextSwitchTo(oldcontext);
 		InternalTimeRange *range = palloc0(sizeof(InternalTimeRange));
-		range->start = DatumGetInt64(range_start);
-		range->start_isnull = range_start_isnull;
-		range->end = DatumGetInt64(range_end);
-		range->end_isnull = range_end_isnull;
+		range->start = cur;
+		range->end = next;
 		range->type = original_refresh_window->type;
-
-		/* For variable-length buckets, circumscribe the batch to bucket boundaries.
-		 * The batch size calculation uses a 30-day approximation for months, so we need
-		 * to expand batches to cover complete buckets.*/
-		if (cagg->bucket_function->bucket_fixed_interval == false)
-		{
-			ts_compute_circumscribed_bucketed_refresh_window_variable(&range->start,
-																	  &range->end,
-																	  cagg->bucket_function);
-		}
-		/*
-		 * To make sure that the first range (or last range in case of refreshing from oldest to
-		 * newest) is aligned with the end of the refresh window we need to set the end to the
-		 * maximum value of the time type if the original refresh window end is NULL.
-		 */
-		if (((batch == 0 && refresh_newest_first) ||
-			 (batch == (SPI_processed - 1) && !refresh_newest_first)) &&
-			original_refresh_window->end_isnull)
-		{
-			range->end = ts_time_get_noend_or_max(range->type);
-			range->end_isnull = true;
-		}
-
-		/*
-		 * To make sure that the last range (or first range in case of refreshing from oldest to
-		 * newest) is aligned with the start of the refresh window we need to set the start to the
-		 * maximum value of the time type if the original refresh window start is NULL.
-		 */
-		if (((batch == (SPI_processed - 1) && refresh_newest_first) ||
-			 (batch == 0 && !refresh_newest_first)) &&
-			original_refresh_window->start_isnull)
-		{
-			range->start = cagg_get_time_min(cagg);
-			range->start_isnull = true;
-		}
-
 		refresh_window_list = lappend(refresh_window_list, range);
-		MemoryContextSwitchTo(saved_context);
-
+		MemoryContextSwitchTo(spi_context);
 		debug_refresh_window(cagg, range, "batch produced");
+
+		cur = next;
 	}
 
+	ts_scan_iterator_close(&dim_it);
+
+	/* Done with SPI */
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
-
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
 	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 	}
 
-	if (refresh_window_list == NIL)
+	/*
+	 * Apply null restoration to the first and last batch if needed
+	 */
+	if (list_length(refresh_window_list) >= 2)
+	{
+		if (original_refresh_window->start_isnull)
+		{
+			InternalTimeRange *oldest = linitial(refresh_window_list);
+			oldest->start = cagg_get_time_min(cagg);
+			oldest->start_isnull = true;
+		}
+		if (original_refresh_window->end_isnull)
+		{
+			InternalTimeRange *newest = llast(refresh_window_list);
+			newest->end = ts_time_get_noend_or_max(original_refresh_window->type);
+			newest->end_isnull = true;
+		}
+	}
+	else
 	{
 		elog(DEBUG1,
-			 "no valid batches produced for continuous aggregate \"%s.%s\", falling back to single "
-			 "batch processing",
+			 "only %d batch(es) produced for continuous aggregate \"%s.%s\", "
+			 "falling back to single batch processing",
+			 list_length(refresh_window_list),
 			 NameStr(cagg->data.user_view_schema),
 			 NameStr(cagg->data.user_view_name));
+		refresh_window_list = NIL;
 	}
 
 	return refresh_window_list;

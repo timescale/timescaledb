@@ -557,6 +557,8 @@ mark_partial_aggref_mutator(Node *node, void *context)
 typedef struct MakeFinalizeAggContext
 {
 	Agg *agg;
+	/* Original grpColIdx, matched against so rewritten entries don't collide. */
+	AttrNumber *old_grpColIdx;
 	List *vector_agg_targetlist;
 } MakeFinalizeAggContext;
 
@@ -581,7 +583,7 @@ make_finalize_agg_mutator(Node *node, void *context)
 			var->varattno = tle->resno;
 			for (int k = 0; k < ctx->agg->numCols; k++)
 			{
-				if (ctx->agg->grpColIdx[k] == old_attno)
+				if (ctx->old_grpColIdx[k] == old_attno)
 				{
 					ctx->agg->grpColIdx[k] = tle->resno;
 				}
@@ -813,8 +815,16 @@ insert_vector_agg(Plan *plan, void *context)
 		agg->aggsplit = AGGSPLIT_FINAL_DESERIAL;
 		agg->plan.lefttree = vector_agg_plan;
 
+		AttrNumber *old_grpColIdx = NULL;
+		if (agg->numCols > 0)
+		{
+			old_grpColIdx = palloc(sizeof(AttrNumber) * agg->numCols);
+			memcpy(old_grpColIdx, agg->grpColIdx, sizeof(AttrNumber) * agg->numCols);
+		}
+
 		MakeFinalizeAggContext finalize_ctx = {
 			.agg = agg,
+			.old_grpColIdx = old_grpColIdx,
 			.vector_agg_targetlist = vector_agg->scan.plan.targetlist,
 		};
 		agg->plan.targetlist = (List *) expression_tree_mutator((Node *) agg->plan.targetlist,

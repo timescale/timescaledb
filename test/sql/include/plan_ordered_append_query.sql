@@ -9,8 +9,7 @@ SELECT
   ds.range_start
 FROM
   _timescaledb_catalog.chunk c
-  INNER JOIN LATERAL(SELECT * FROM _timescaledb_catalog.chunk_constraint cc WHERE c.id = cc.chunk_id ORDER BY cc.dimension_slice_id LIMIT 1) cc ON true
-  INNER JOIN _timescaledb_catalog.dimension_slice ds ON ds.id=cc.dimension_slice_id
+  INNER JOIN LATERAL(SELECT * FROM _timescaledb_catalog.dimension_slice ds WHERE ds.chunk_id = c.id ORDER BY ds.id LIMIT 1) ds ON true
   INNER JOIN _timescaledb_catalog.dimension d ON ds.dimension_id = d.id
   INNER JOIN _timescaledb_catalog.hypertable ht ON d.hypertable_id = ht.id
 ORDER BY ht.table_name, range_start, chunk;

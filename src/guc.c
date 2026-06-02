@@ -78,7 +78,7 @@ int ts_guc_direct_compress_insert_tuple_sort_limit = 30000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows = 5000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit = 500;
 bool ts_guc_enable_deprecation_warnings = true;
-bool ts_guc_enable_optimizations = true;
+TSDLLEXPORT bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
 bool ts_guc_enable_constraint_aware_append = true;
 bool ts_guc_enable_ordered_append = true;
@@ -91,6 +91,7 @@ TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
+TSDLLEXPORT bool ts_guc_skip_cagg_invalidation = false;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_foreign_key_propagation = true;
 #if PG16_GE
@@ -153,6 +154,8 @@ TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
 bool ts_guc_enable_partitioned_hypertables = false;
+TSDLLEXPORT int ts_guc_stats_max_chunks = TS_STATS_MAX_CHUNKS_DEFAULT;
+
 #if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_cagg_rewrites = false;
 TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info = false;
@@ -491,6 +494,46 @@ static void
 assign_default_chunk_time_interval(const char *newval, void *extra)
 {
 	default_chunk_time_interval = extra;
+}
+
+/*
+ * check_hook: accept 0 (feature disabled) or a power of two in [MIN, MAX].
+ * Non-power-of-two values are rejected with a hint listing valid sizes.
+ */
+static bool
+stats_max_chunks_check_hook(int *newval, void **extra, GucSource source)
+{
+	int v = *newval;
+
+	if (v == 0)
+	{
+		return true; /* 0 = disabled, explicitly allowed */
+	}
+
+	if (v < TS_STATS_MAX_CHUNKS_MIN)
+	{
+		GUC_check_errdetail("Minimum cache capacity is %d chunks. "
+							"Set to 0 to disable the observability feature.",
+							TS_STATS_MAX_CHUNKS_MIN);
+		return false;
+	}
+
+	if (v > TS_STATS_MAX_CHUNKS_MAX)
+	{
+		GUC_check_errdetail("Maximum cache capacity is %d chunks "
+							"(largest power of 2 within the slot index space).",
+							TS_STATS_MAX_CHUNKS_MAX);
+		return false;
+	}
+
+	if ((v & (v - 1)) != 0)
+	{
+		GUC_check_errdetail("timescaledb.stats_max_chunks must be 0 (disabled) or a power of 2.");
+		GUC_check_errhint("Valid values: 0, 256, 512, 1024, 2048, "
+						  "4096, 8192, 16384, 32768, 65536, 131072, 262144.");
+		return false;
+	}
+	return true;
 }
 
 void
@@ -1011,6 +1054,25 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("skip_cagg_invalidation"),
+							 "Skip continuous aggregate invalidation tracking",
+							 "When enabled, DML (INSERT/UPDATE/DELETE/COPY) and DDL "
+							 "(DROP CHUNK, drop_chunks, TRUNCATE) on hypertables with "
+							 "continuous aggregates will not record invalidation entries "
+							 "for the duration of the session or transaction. The caller "
+							 "must explicitly refresh affected continuous aggregates with "
+							 "force => true after the operation. Intended for bulk-migration "
+							 "tools; use with SET LOCAL inside a transaction. Misuse will "
+							 "leave continuous aggregate state out of sync with the "
+							 "underlying hypertable.",
+							 &ts_guc_skip_cagg_invalidation,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_now_constify"),
 							 "Enable now() constify",
 							 "Enable constifying now() in query constraints",
@@ -1422,6 +1484,21 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("stats_max_chunks"),
+							"Per-database statistics cache capacity, "
+							"in chunks. 0 disables the feature.",
+							"Must be 0 or a power of 2. "
+							"Takes effect only after server restart.",
+							&ts_guc_stats_max_chunks,
+							TS_STATS_MAX_CHUNKS_DEFAULT, /* default */
+							0,							 /* min: 0 = disabled */
+							TS_STATS_MAX_CHUNKS_MAX,	 /* max: 2^18 = 262144 chunks */
+							PGC_SIGHUP,
+							0,
+							stats_max_chunks_check_hook,
+							NULL,
+							NULL);
 
 #ifdef USE_TELEMETRY
 	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),

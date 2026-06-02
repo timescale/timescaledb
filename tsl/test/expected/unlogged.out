@@ -16,14 +16,14 @@ SELECT count(compress_chunk(chunk)) FROM show_chunks('t1') chunk;
 
 -- check that all objects related to hypertable are unlogged
 SELECT oid::regclass,relpersistence from pg_class where relpersistence = 'u' AND relnamespace <> 'pg_toast'::regnamespace ORDER BY oid::regclass;
-                                       oid                                        | relpersistence 
-----------------------------------------------------------------------------------+----------------
- t1                                                                               | u
- t1_time_idx                                                                      | u
- _timescaledb_internal._hyper_1_1_chunk                                           | u
- _timescaledb_internal._hyper_1_1_chunk_t1_time_idx                               | u
- _timescaledb_internal.compress_hyper_2_2_chunk                                   | u
- _timescaledb_internal.compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx | u
+                                          oid                                          | relpersistence 
+---------------------------------------------------------------------------------------+----------------
+ t1                                                                                    | u
+ t1_time_idx                                                                           | u
+ _timescaledb_internal._hyper_1_1_chunk                                                | u
+ _timescaledb_internal._hyper_1_1_chunk_t1_time_idx                                    | u
+ _timescaledb_internal.compress_hyper_2_2_chunk                                        | u
+ _timescaledb_internal.compress_hyper_2_2_chunk__ts_meta_v2_last_time__ts_meta_v2__idx | u
 
 ALTER TABLE t1 SET LOGGED;
 SELECT oid::regclass,relpersistence from pg_class where relpersistence = 'u' AND relnamespace <> 'pg_toast'::regnamespace ORDER BY oid::regclass;
@@ -34,12 +34,12 @@ SELECT show_chunks('t1') AS "CHUNK" \gset
 ALTER TABLE :CHUNK SET UNLOGGED;
 -- only chunk and compressed chunk should be unlogged now but not hypertable
 SELECT oid::regclass,relpersistence from pg_class where relpersistence = 'u' AND relnamespace <> 'pg_toast'::regnamespace ORDER BY oid::regclass;
-                                       oid                                        | relpersistence 
-----------------------------------------------------------------------------------+----------------
- _timescaledb_internal._hyper_1_1_chunk                                           | u
- _timescaledb_internal._hyper_1_1_chunk_t1_time_idx                               | u
- _timescaledb_internal.compress_hyper_2_2_chunk                                   | u
- _timescaledb_internal.compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx | u
+                                          oid                                          | relpersistence 
+---------------------------------------------------------------------------------------+----------------
+ _timescaledb_internal._hyper_1_1_chunk                                                | u
+ _timescaledb_internal._hyper_1_1_chunk_t1_time_idx                                    | u
+ _timescaledb_internal.compress_hyper_2_2_chunk                                        | u
+ _timescaledb_internal.compress_hyper_2_2_chunk__ts_meta_v2_last_time__ts_meta_v2__idx | u
 
 ALTER TABLE t1 SET LOGGED;
 -- all objects should be logged now

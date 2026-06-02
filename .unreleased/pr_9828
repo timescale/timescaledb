@@ -1,1 +1,0 @@
-Fixes: #9828 Skip columnar index scan when grouping by an expression

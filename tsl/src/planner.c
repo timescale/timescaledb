@@ -56,19 +56,17 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
 							void *extra)
 {
-	switch (stage)
+	if (ts_guc_enable_optimizations)
 	{
+
+		switch (stage)
+		{
 		case UPPERREL_GROUP_AGG:
 			if (ts_guc_enable_chunkwise_aggregation && input_rel != NULL &&
-				!IS_DUMMY_REL(input_rel) && output_rel != NULL &&
-				involves_hypertable(root, input_rel))
+					!IS_DUMMY_REL(input_rel) && output_rel != NULL &&
+					involves_hypertable(root, input_rel))
 			{
 				tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
-			}
-
-			if (input_reltype != TS_REL_HYPERTABLE_CHILD)
-			{
-				plan_add_gapfill(root, output_rel);
 			}
 
 			if (root->numOrderedAggs && !IS_DUMMY_REL(input_rel) && output_rel != NULL)
@@ -76,14 +74,31 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 				tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
 			}
 			break;
+		case UPPERREL_DISTINCT:
+			tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
+			break;
+		default:
+			break;
+		}
+	}
+
+	/*
+	 * Gapfill node cannot be disabled if the query specifies it, so it runs
+	 * regardless of the timescaledb.enable_optimizations GUC.
+	 */
+	switch (stage)
+	{
+		case UPPERREL_GROUP_AGG:
+			if (input_reltype != TS_REL_HYPERTABLE_CHILD)
+			{
+				plan_add_gapfill(root, output_rel);
+			}
+			break;
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))
 			{
 				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 			}
-			break;
-		case UPPERREL_DISTINCT:
-			tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
 			break;
 		default:
 			break;
@@ -286,6 +301,11 @@ tsl_preprocess_query(Query *parse, int *cursor_opts)
 void
 tsl_postprocess_plan(PlannedStmt *stmt)
 {
+	if (!ts_guc_enable_optimizations)
+	{
+		return;
+	}
+
 	if (ts_guc_enable_columnarindexscan)
 	{
 		stmt->planTree = try_insert_columnar_index_scan_node(stmt->planTree, stmt->rtable);

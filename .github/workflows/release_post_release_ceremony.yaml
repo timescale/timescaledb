@@ -54,7 +54,7 @@ jobs:
           git commit -m "forward port release artefacts of ${{ github.event.release.tag_name }} to main"
           git push origin $BRANCH
 
-          printf '%b- CHANGELOG\n- set previous_version in version.config\n- adjust CMakeList.txt with up & down grade files\n- removed .unreleased files' > $BODY
+          printf -v BODY '%b' '- CHANGELOG\n- set previous_version in version.config\n- adjust CMakeList.txt with up & down grade files\n- removed .unreleased files'
 
           PR_URL=$(gh pr create \
             --title "Forwardport ${{ github.event.release.tag_name }}" \

@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include "ts_stats/ts_stats_defs.h"
 #include <access/sysattr.h>
 #include <executor/executor.h>
 #include <miscadmin.h>
@@ -31,6 +32,7 @@
 #include "nodes/columnar_scan/exec.h"
 #include "nodes/columnar_scan/planner.h"
 #include "ts_catalog/array_utils.h"
+#include "ts_stats/ts_stats_record.h"
 
 #if PG18_GE
 #include <commands/explain_format.h>
@@ -197,6 +199,8 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	Plan *compressed_scan = linitial(cscan->custom_plans);
 	Assert(list_length(cscan->custom_plans) == 1);
+
+	ts_stats_compression_acc_init(&dcontext->observ_acc);
 
 	PlanState *ps = &node->ss.ps;
 	if (ps->ps_ProjInfo)
@@ -504,11 +508,24 @@ columnar_scan_end(CustomScanState *node)
 {
 	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	BatchQueue *bq = chunk_state->batch_queue;
+	DecompressContext *dcontext = &chunk_state->decompress_context;
 
 	bq->funcs->free(bq);
 	ExecEndNode(linitial(node->custom_ps));
 
 	detoaster_close(&chunk_state->decompress_context.detoaster);
+
+	/* Finish the observability aggregates. */
+	SharedCounters sc = { 0 };
+	sc.tuples_decompressed = dcontext->tuples_decompressed;
+	sc.batches_decompressed = dcontext->batches_decompressed;
+	TsStatsRelids relids = {
+		.compressed_relid = dcontext->compressed_relid,
+		.uncompressed_relid = chunk_state->chunk_relid,
+	};
+	ts_stats_chunk_record_cmd(relids, CMD_SELECT, &sc);
+
+	ts_stats_chunk_record_decompression(relids, &dcontext->observ_acc);
 }
 
 /*

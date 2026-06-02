@@ -214,3 +214,25 @@ select sum(t), a, b from groupnull group by b, a order by 1;
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 
+
+-- Grouping columns not in the output targetlist must map to the right output
+-- positions, even when one column's input position equals another's output.
+create table groupnotinto(t int, a int, b int);
+select create_hypertable('groupnotinto', 't', chunk_time_interval => 1000000);
+insert into groupnotinto select g, g % 100, g % 5 from generate_series(1, 1000) g;
+alter table groupnotinto set (timescaledb.compress, timescaledb.compress_segmentby = 'b');
+select count(compress_chunk(x)) from show_chunks('groupnotinto') x;
+
+set timescaledb.debug_require_vector_agg = 'require';
+-- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+
+-- Expecting 100 distinct (a, b) groups.
+select count(*) from (select count(*) from groupnotinto group by a, b) g;
+select count(*) from (select count(*) from groupnotinto group by b, a) g;
+-- A grouping column also used in the output is handled the same way.
+select count(*) from (select b, count(*) from groupnotinto group by a, b) g;
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
+

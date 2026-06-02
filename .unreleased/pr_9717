@@ -1,1 +1,0 @@
-Fixes: #9717 Reject non-positive time bucket width on cagg creation

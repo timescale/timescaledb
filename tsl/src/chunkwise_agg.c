@@ -7,10 +7,12 @@
 
 #include <optimizer/appendinfo.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/prep.h>
 #include <optimizer/tlist.h>
+#include <utils/selfuncs.h>
 
 #include "chunkwise_agg.h"
 
@@ -273,11 +275,13 @@ create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
  */
 static void
 add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
-								  PathTarget *partial_grouping_target, double d_num_groups,
+								  PathTarget *partial_grouping_target,
 								  GroupPathExtraData *extra_data, Path *subpath,
 								  List **sorted_paths, List **hashed_paths)
 {
-	/* Translate targetlist for partition */
+	/*
+	 * Translate the targetlist after grouping for the chunk.
+	 */
 	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, subpath->parent->relid, false);
 	PathTarget *chunk_grouped_target = copy_pathtarget(partial_grouping_target);
 	chunk_grouped_target->exprs =
@@ -298,6 +302,38 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 										(Node *) chunk_target_before_grouping->exprs,
 										/* nappinfos = */ 1,
 										&appinfo));
+
+	/*
+	 * Estimate the number of groups produced by this chunk's subpath using
+	 * its own row count and statistics.
+	 */
+	double d_num_groups;
+	if (root->parse->groupClause)
+	{
+		List *group_exprs = NIL;
+		ListCell *lc;
+		int i = 0;
+		foreach (lc, chunk_grouped_target->exprs)
+		{
+			Index sgref = get_pathtarget_sortgroupref(chunk_grouped_target, i++);
+			if (sgref && get_sortgroupref_clause_noerr(sgref,
+#if PG16_LT
+													   root->parse->groupClause
+#else
+													   root->processed_groupClause
+#endif
+													   ) != NULL)
+			{
+				group_exprs = lappend(group_exprs, lfirst(lc));
+			}
+		}
+		d_num_groups = estimate_num_groups(root, group_exprs, subpath->rows, NULL, NULL);
+	}
+	else
+	{
+		d_num_groups = 1;
+	}
+
 	/*
 	 * Note that we cannot use apply_projection_to_path() here, because it might
 	 * modify the targetlist of the projection-capable paths in place, which
@@ -359,7 +395,7 @@ static void
 generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptInfo *input_rel,
 						   RelOptInfo *output_rel, RelOptInfo *partially_grouped_rel,
 						   PathTarget *grouping_target, PathTarget *partial_grouping_target,
-						   double d_num_groups, GroupPathExtraData *extra_data)
+						   GroupPathExtraData *extra_data)
 {
 	/* Get subpaths */
 	List *subpaths = NIL;
@@ -422,7 +458,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 				add_partially_aggregated_subpaths(root,
 												  input_rel->reltarget,
 												  partial_grouping_target,
-												  d_num_groups,
 												  extra_data,
 												  partially_compressed_path,
 												  &partially_compressed_sorted /* Result path */,
@@ -452,7 +487,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 			add_partially_aggregated_subpaths(root,
 											  input_rel->reltarget,
 											  partial_grouping_target,
-											  d_num_groups,
 											  extra_data,
 											  subpath,
 											  &sorted_subpaths /* Result paths */,
@@ -630,9 +664,6 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		return;
 	}
 
-	double d_num_groups = existing_agg_path->numGroups;
-	Assert(d_num_groups > 0);
-
 	/* Construct partial group agg upper relation */
 	RelOptInfo *partially_grouped_rel =
 		fetch_upper_rel(root, UPPERREL_PARTIAL_GROUP_AGG, input_rel->relids);
@@ -691,7 +722,6 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 								   partially_grouped_rel,
 								   grouping_target,
 								   partial_grouping_target,
-								   d_num_groups,
 								   extra_data);
 	}
 
@@ -783,6 +813,6 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 #endif
 										  (List *) parse->havingQual,
 										  agg_final_costs,
-										  d_num_groups));
+										  existing_agg_path->numGroups));
 	}
 }

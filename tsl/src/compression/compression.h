@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include "ts_stats/ts_stats_defs.h"
 #include <access/attnum.h>
 #include <catalog/indexing.h>
 #include <executor/tuptable.h>
@@ -20,6 +21,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 #include "hypertable.h"
 #include "nodes/columnar_scan/detoaster.h"
 #include "ts_catalog/compression_settings.h"
+#include "ts_stats/ts_stats_record.h"
 
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
@@ -179,6 +181,10 @@ typedef struct RowDecompressor
 	AttrMap *attrmap;
 
 	Detoaster detoaster;
+
+	TsStatsRelids cached_relids;
+	CmdType cmd_type;
+	SharedCounters observ_counters;
 } RowDecompressor;
 
 /*
@@ -254,6 +260,9 @@ typedef struct InvalidationSettings
 
 typedef struct RowCompressor
 {
+	/* memory context for row compressor parts */
+	MemoryContext row_compressor_context;
+
 	/* memory context reset per-row is stored */
 	MemoryContext per_row_ctx;
 
@@ -279,7 +288,7 @@ typedef struct RowCompressor
 	int16 count_metadata_column_offset;
 
 	/* for continuous aggregate invalidation */
-	InvalidationSettings *invalidation;
+	InvalidationSettings invalidation;
 
 	/* the number of uncompressed rows compressed into the current compressed row */
 	uint32 rows_compressed_into_current_value;
@@ -303,6 +312,10 @@ typedef struct RowCompressor
 	bool needs_analyze_segmentby;
 
 	List *metadata_builders; /* List of BatchMetadataBuilder */
+
+	TsStatsRelids cached_relids;
+	CompressionStatsAccumulator observ_acc;
+
 } RowCompressor;
 
 /*
@@ -403,14 +416,12 @@ extern void row_compressor_init(RowCompressor *row_compressor, const Compression
 
 extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort,
 										  int tuple_sort_limit, bool created_compressed_chunk);
-extern void tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor,
-													   BulkWriter *bulk_writer);
 extern void tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht,
 											Oid chunk_relid);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
 									TupleTableSlot *slot);
 extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer);
-extern void tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer);
+extern void tsl_compressor_close(RowCompressor *compressor, BulkWriter *bulk_writer);
 
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
@@ -428,10 +439,14 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 extern BulkWriter bulk_writer_build(Relation out_rel, int insert_options);
 extern BulkWriter *bulk_writer_alloc(Relation out_rel, int insert_options);
 extern void bulk_writer_close(BulkWriter *writer);
-extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc);
+extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc,
+										  Oid in_oid, Oid out_oid);
 
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
+extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compressed_relid,
+										Oid uncompressed_relid, CmdType cmd_type);
+extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
 extern int decompress_batch(RowDecompressor *decompressor);
 extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
 									  int num_attnos);

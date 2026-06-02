@@ -26,9 +26,9 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 
 \set ON_ERROR_STOP 0
 \copy cdmlcopy from stdin
-ERROR:  duplicate key value violates unique constraint "1_1_cdmlcopy_metric_ts_key"
+ERROR:  duplicate key value violates unique constraint "1_cdmlcopy_metric_ts_key"
 \copy cdmlcopy from stdin
-ERROR:  duplicate key value violates unique constraint "3_2_cdmlcopy_metric_ts_key"
+ERROR:  duplicate key value violates unique constraint "3_cdmlcopy_metric_ts_key"
 \set ON_ERROR_STOP 1
 -- Also test the code path where the chunk insert state goes out of cache.
 set timescaledb.max_open_chunks_per_insert = 1;

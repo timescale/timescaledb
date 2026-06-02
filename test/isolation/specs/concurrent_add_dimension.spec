@@ -34,8 +34,7 @@ step "s3_query"            {
 	FROM _timescaledb_catalog.chunk c
 	INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 	INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
-	INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
-	INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+	INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id AND ds.chunk_id = c.id)
 	WHERE h.table_name = 'dim_test';
 }
 

@@ -303,7 +303,7 @@ SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
   FROM _timescaledb_catalog.chunk ch
   JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
   JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test5' \gset
-SELECT schemaname || '.' || indexname AS "INDEXNAME"
+SELECT format('%I.%I', schemaname, indexname) AS "INDEXNAME"
 FROM pg_indexes i
 INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name
 INNER JOIN _timescaledb_catalog.chunk c ON (cc.id = c.compressed_chunk_id)
