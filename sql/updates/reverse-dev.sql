@@ -1,8 +1,6 @@
--- The PL/pgSQL helper switched to scalar args in the forward direction;
--- drop it so the target version's chunk_constraint.sql can restore the
--- row-typed signature.
-DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint(
-    integer, name, name);
+
+DROP VIEW IF EXISTS _timescaledb_catalog.chunk_constraint;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint( integer, name, name);
 
 -- Recreate the chunk_constraint catalog table.
 CREATE TABLE _timescaledb_catalog.chunk_constraint (
