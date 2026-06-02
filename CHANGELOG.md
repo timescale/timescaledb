@@ -2,7 +2,7 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
-## 2.27.2 (2026-06-03)
+## 2.27.2 (2026-06-02)
 
 This release contains bug fixes since the 2.27.1 release. We recommend that you upgrade at the next available opportunity.
 
