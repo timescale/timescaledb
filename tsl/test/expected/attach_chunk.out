@@ -65,11 +65,6 @@ WHERE hypertable_id = :'HYPERTABLE_ID' AND table_name = 'regular_table_to_attach
               4
 
 -- Verify that each constraint/index on a auto-created chunk is also present on the attached chunk
-SELECT hypertable_constraint_name FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID'
-EXCEPT SELECT hypertable_constraint_name FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'ATTACHED_CHUNK';
- hypertable_constraint_name 
-----------------------------
-
 SELECT * FROM test.show_indexesp('regular_table_to_attach');
           Table          |                    Index                     |  Columns  | Expr | Unique | Primary | Exclusion | Tablespace 
 -------------------------+----------------------------------------------+-----------+------+--------+---------+-----------+------------
@@ -77,13 +72,11 @@ SELECT * FROM test.show_indexesp('regular_table_to_attach');
  regular_table_to_attach | pre_attach_id_time_unique                    | {id,time} |      | t      | f       | f         | 
  regular_table_to_attach | regular_table_to_attach_attach_test_time_idx | {time}    |      | f      | f       | f         | 
 
-SELECT * FROM _timescaledb_catalog.dimension_slice ds
-JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id
-WHERE cc.chunk_id = :'ATTACHED_CHUNK';
- id | dimension_id |     range_start      |    range_end     | chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----+--------------+----------------------+------------------+----------+--------------------+-----------------+----------------------------
-  2 |            2 | -9223372036854775808 |       1073741823 |        4 |                  2 | constraint_2    | 
-  6 |            1 |     1751335200000000 | 1751853600000000 |        4 |                  6 | constraint_6    | 
+SELECT * FROM _timescaledb_catalog.dimension_slice WHERE chunk_id = :'ATTACHED_CHUNK';
+ id | chunk_id | dimension_id |     range_start      |    range_end     
+----+----------+--------------+----------------------+------------------
+  7 |        4 |            1 |     1751335200000000 | 1751853600000000
+  8 |        4 |            2 | -9223372036854775808 |       1073741823
 
 -- Verify that the chunk is a child of the hypertable
 SELECT count(*) > 0 FROM pg_inherits
@@ -133,19 +126,11 @@ SELECT count(*) > 0 FROM pg_inherits WHERE inhrelid = :'CHUNK_NAME'::regclass::o
  t
 
 -- Verify constraints and indexes are restored
-SELECT * FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID';
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        5 |                  2 | constraint_2    | 
-        5 |                  7 | constraint_7    | 
-
-SELECT * FROM _timescaledb_catalog.dimension_slice ds
-JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id
-WHERE cc.chunk_id = :'CHUNK_ID';
- id | dimension_id |     range_start      |    range_end     | chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----+--------------+----------------------+------------------+----------+--------------------+-----------------+----------------------------
-  2 |            2 | -9223372036854775808 |       1073741823 |        5 |                  2 | constraint_2    | 
-  7 |            1 |     1748476800000000 | 1749081600000000 |        5 |                  7 | constraint_7    | 
+SELECT * FROM _timescaledb_catalog.dimension_slice WHERE chunk_id = :'CHUNK_ID';
+ id | chunk_id | dimension_id |     range_start      |    range_end     
+----+----------+--------------+----------------------+------------------
+  9 |        5 |            1 |     1748476800000000 | 1749081600000000
+ 10 |        5 |            2 | -9223372036854775808 |       1073741823
 
 -- Attach a chunk to another hypertable with a different dimension
 CALL detach_chunk('regular_table_to_attach');

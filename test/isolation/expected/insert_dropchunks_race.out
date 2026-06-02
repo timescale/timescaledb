@@ -10,7 +10,14 @@ count
     2
 
 step s2b: COMMIT;
-step s1c: SELECT COUNT(*) FROM _timescaledb_catalog.chunk_constraint LEFT JOIN _timescaledb_catalog.dimension_slice sl ON dimension_slice_id = sl.id WHERE sl.id IS NULL;
+step s1c: 
+	SELECT COUNT(*)
+	FROM _timescaledb_catalog.chunk c
+	JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = c.hypertable_id
+	LEFT JOIN _timescaledb_catalog.dimension_slice ds
+	       ON ds.chunk_id = c.id AND ds.dimension_id = d.id
+	WHERE NOT c.osm_chunk AND ds.id IS NULL;
+
 count
 -----
     0

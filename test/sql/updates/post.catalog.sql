@@ -6,13 +6,15 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
+SELECT (extversion >= '2.28.0') AS has_chunk_owned_slices
+  FROM pg_extension WHERE extname = 'timescaledb' \gset
+
 \if :PG_UPGRADE_TEST
 \else
 \d+ _timescaledb_catalog.hypertable
 \d+ _timescaledb_catalog.chunk
 \d+ _timescaledb_catalog.dimension
 \d+ _timescaledb_catalog.dimension_slice
-\d+ _timescaledb_catalog.chunk_constraint
 \d+ _timescaledb_catalog.tablespace
 \endif
 
@@ -203,15 +205,19 @@ FROM  _timescaledb_catalog.chunk c
 INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
 ORDER BY c.id, c.hypertable_id;
 
--- Strip the chunk_id prefix so old and new naming compare equal.
-SELECT chunk_constraint.chunk_id,
-       chunk_constraint.dimension_slice_id,
-       regexp_replace(chunk_constraint.constraint_name, '^[0-9]+_', '') AS constraint_name,
-       chunk_constraint.hypertable_constraint_name
-FROM _timescaledb_catalog.chunk_constraint
-JOIN _timescaledb_catalog.chunk ON chunk.id = chunk_constraint.chunk_id
-WHERE chunk_constraint.dimension_slice_id IS NOT NULL
-ORDER BY chunk_constraint.chunk_id, chunk_constraint.dimension_slice_id, 3;
+-- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and differ
+-- between a fresh install and a post-upgrade catalog, so dump path-stable
+-- columns only.
+\if :has_chunk_owned_slices
+SELECT ds.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.dimension_slice ds
+ORDER BY ds.chunk_id, ds.dimension_id;
+\else
+SELECT cc.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk_constraint cc
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+ORDER BY cc.chunk_id, ds.dimension_id;
+\endif
 
 -- Show attnum of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken
@@ -227,9 +233,13 @@ ORDER BY attrelid::regclass::text,att.attnum;
 
 -- Show constraints, stripping numeric prefixes so the legacy
 -- "<chunk_id>_<seq>_<parent>" form (2.27.1) and the new "<chunk_id>_<parent>"
--- form (2.28.0-dev) compare equal.
+-- form (2.28.0) compare equal. The dimensional CHECKs are named
+-- "constraint_<slice_id>" and slice ids are not deterministic between a
+-- fresh install and a post-upgrade catalog, so collapse the suffix too.
 SELECT conrelid::regclass::text,
-       regexp_replace(conname, '^([0-9]+_){1,2}', '') AS conname,
+       regexp_replace(
+           regexp_replace(conname, '^([0-9]+_){1,2}', ''),
+           '^constraint_[0-9]+$', 'constraint_dim') AS conname,
        pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'
@@ -238,14 +248,8 @@ AND pg_get_constraintdef(oid) NOT LIKE 'NOT NULL %'
 \endif
 ORDER BY 1, 2, 3;
 
--- Orderby fix was introduced in 2.26.4.
--- Fresh installations of versions below 2.26.3 and below will show output mismatch
-SELECT (extversion >= '2.26.4') AS has_fixed_sparse_index
-FROM pg_extension
-WHERE extname = 'timescaledb' \gset
-
-\if :has_fixed_sparse_index
-SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
-\else
+-- The index column depends on the version that compressed each chunk (the
+-- orderby sparse index type changed across releases and existing chunks are
+-- not rewritten on upgrade), so it differs between a fresh install and a
+-- post-upgrade catalog. Skip it and compare the remaining columns.
 SELECT relid, compress_relid, segmentby, orderby, orderby_desc, orderby_nullsfirst FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
-\endif

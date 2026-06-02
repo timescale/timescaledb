@@ -114,25 +114,6 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '')
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension', 'id'), '');
 
--- A dimension slice defines a keyspace range along a dimension
--- axis. A chunk references a slice in each of its dimensions, forming
--- a hypercube.
-CREATE TABLE _timescaledb_catalog.dimension_slice (
-  id serial NOT NULL,
-  dimension_id integer NOT NULL,
-  range_start bigint NOT NULL,
-  range_end bigint NOT NULL,
-  -- table constraints
-  CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
-  CONSTRAINT dimension_slice_dimension_id_range_start_range_end_key UNIQUE (dimension_id, range_start, range_end),
-  CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
-  CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
-);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
-
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice', 'id'), '');
-
 -- A chunk is a partition (hypercube) in an N-dimensional
 -- hyperspace. Each chunk is associated with N constraints that define
 -- the chunk's hypercube. Tuples that fall within the chunk's
@@ -168,26 +149,29 @@ CREATE INDEX chunk_hypertable_id_creation_time_idx ON _timescaledb_catalog.chunk
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
 
--- A chunk constraint maps a dimension slice to a chunk. Each
--- constraint associated with a chunk will also be a table constraint
--- on the chunk's data table.
-CREATE TABLE _timescaledb_catalog.chunk_constraint (
+-- A dimension slice defines a keyspace range along a dimension
+-- axis for a single chunk. Each chunk owns exactly one slice per
+-- dimension, and together those slices form the chunk's hypercube.
+CREATE TABLE _timescaledb_catalog.dimension_slice (
+  id serial NOT NULL,
   chunk_id integer NOT NULL,
-  dimension_slice_id integer NULL,
-  constraint_name name NOT NULL,
-  hypertable_constraint_name name NULL,
+  dimension_id integer NOT NULL,
+  range_start bigint NOT NULL,
+  range_end bigint NOT NULL,
   -- table constraints
-  CONSTRAINT chunk_constraint_chunk_id_constraint_name_key UNIQUE (chunk_id, constraint_name),
-  CONSTRAINT chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id),
-  CONSTRAINT chunk_constraint_dimension_slice_id_fkey FOREIGN KEY (dimension_slice_id) REFERENCES _timescaledb_catalog.dimension_slice (id)
+  CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
+  CONSTRAINT dimension_slice_chunk_id_dimension_id_key UNIQUE (chunk_id, dimension_id),
+  CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
+  CONSTRAINT dimension_slice_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
 );
 
-CREATE INDEX chunk_constraint_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (dimension_slice_id);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
+CREATE INDEX dimension_slice_dimension_id_range_start_range_end_idx
+  ON _timescaledb_catalog.dimension_slice (dimension_id, range_start, range_end);
 
-CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint_name', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice', 'id'), '');
 
 -- Track statistics for columns of chunks from a hypertable.
 -- Currently, we track the min/max range for a given column across chunks.

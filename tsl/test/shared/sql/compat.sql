@@ -11,7 +11,6 @@ SELECT _timescaledb_internal.attach_osm_table_chunk(0,0);
 SELECT _timescaledb_internal.cagg_watermark(0);
 SELECT _timescaledb_internal.cagg_watermark_materialized(0);
 SELECT _timescaledb_internal.calculate_chunk_interval(0,0,0);
-SELECT _timescaledb_internal.chunk_constraint_add_table_constraint(NULL);
 SELECT _timescaledb_internal.chunk_id_from_relid(0);
 SELECT _timescaledb_internal.chunk_status(0);
 SELECT _timescaledb_internal.chunks_local_size(NULL,NULL);

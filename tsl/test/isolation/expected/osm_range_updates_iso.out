@@ -4,11 +4,11 @@ starting permutation: LockDimSliceTuple UR1b UR1u UR2b UR2u UnlockDimSliceTuple 
 step LockDimSliceTuple: 
   BEGIN;
   SELECT range_start, range_end FROM _timescaledb_catalog.dimension_slice
-  WHERE id IN ( SELECT ds.id FROM 
-    _timescaledb_catalog.chunk ch, _timescaledb_catalog.chunk_constraint cc,
+  WHERE id IN ( SELECT ds.id FROM
+    _timescaledb_catalog.chunk ch,
     _timescaledb_catalog.dimension_slice ds, _timescaledb_catalog.hypertable ht
-    WHERE ht.table_name like 'osm_test' AND cc.chunk_id = ch.id AND ht.id = ch.hypertable_id
-    AND ds.id = cc.dimension_slice_id AND ch.osm_chunk = true
+    WHERE ht.table_name like 'osm_test' AND ds.chunk_id = ch.id AND ht.id = ch.hypertable_id
+    AND ch.osm_chunk = true
     ) FOR UPDATE;
 
         range_start|          range_end
@@ -37,11 +37,11 @@ starting permutation: LockDimSliceTuple DTb UR1b DropOsmChunk UR1u UnlockDimSlic
 step LockDimSliceTuple: 
   BEGIN;
   SELECT range_start, range_end FROM _timescaledb_catalog.dimension_slice
-  WHERE id IN ( SELECT ds.id FROM 
-    _timescaledb_catalog.chunk ch, _timescaledb_catalog.chunk_constraint cc,
+  WHERE id IN ( SELECT ds.id FROM
+    _timescaledb_catalog.chunk ch,
     _timescaledb_catalog.dimension_slice ds, _timescaledb_catalog.hypertable ht
-    WHERE ht.table_name like 'osm_test' AND cc.chunk_id = ch.id AND ht.id = ch.hypertable_id
-    AND ds.id = cc.dimension_slice_id AND ch.osm_chunk = true
+    WHERE ht.table_name like 'osm_test' AND ds.chunk_id = ch.id AND ht.id = ch.hypertable_id
+    AND ch.osm_chunk = true
     ) FOR UPDATE;
 
         range_start|          range_end
@@ -74,11 +74,11 @@ starting permutation: LockDimSliceTuple DTb UR1b UR1u DropOsmChunk UnlockDimSlic
 step LockDimSliceTuple: 
   BEGIN;
   SELECT range_start, range_end FROM _timescaledb_catalog.dimension_slice
-  WHERE id IN ( SELECT ds.id FROM 
-    _timescaledb_catalog.chunk ch, _timescaledb_catalog.chunk_constraint cc,
+  WHERE id IN ( SELECT ds.id FROM
+    _timescaledb_catalog.chunk ch,
     _timescaledb_catalog.dimension_slice ds, _timescaledb_catalog.hypertable ht
-    WHERE ht.table_name like 'osm_test' AND cc.chunk_id = ch.id AND ht.id = ch.hypertable_id
-    AND ds.id = cc.dimension_slice_id AND ch.osm_chunk = true
+    WHERE ht.table_name like 'osm_test' AND ds.chunk_id = ch.id AND ht.id = ch.hypertable_id
+    AND ch.osm_chunk = true
     ) FOR UPDATE;
 
         range_start|          range_end
