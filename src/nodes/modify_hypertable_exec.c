@@ -2330,54 +2330,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	context.estate = estate;
 
 	/*
-	 * For UPDATE/DELETE/MERGE on compressed hypertable, decompress chunks and
-	 * move rows to uncompressed chunks. For MERGE, decompression is needed
-	 * even for DO NOTHING or INSERT-only actions because the join evaluation
-	 * must see the actual rows to correctly determine matched vs not-matched.
-	 */
-	if ((operation == CMD_DELETE || operation == CMD_UPDATE || operation == CMD_MERGE) &&
-		!ht_state->comp_chunks_processed)
-	{
-		/* Modify snapshot only if something got decompressed */
-		if (ts_cm_functions->decompress_target_segments &&
-			ts_cm_functions->decompress_target_segments(ht_state))
-		{
-			ht_state->comp_chunks_processed = true;
-			/*
-			 * save snapshot set during ExecutorStart(), since this is the same
-			 * snapshot used to SeqScan of uncompressed chunks
-			 */
-			ht_state->snapshot = estate->es_snapshot;
-
-			CommandCounterIncrement();
-			/* use a static copy of current transaction snapshot
-			 * this needs to be a copy so we don't read trigger updates
-			 */
-			estate->es_snapshot = RegisterSnapshot(GetTransactionSnapshot());
-			/* mark rows visible */
-			estate->es_output_cid = GetCurrentCommandId(true);
-
-			if (ts_guc_max_tuples_decompressed_per_dml > 0)
-			{
-				if (ht_state->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-							 errmsg("tuple decompression limit exceeded by operation"),
-							 errdetail("current limit: %d, tuples decompressed: %lld",
-									   ts_guc_max_tuples_decompressed_per_dml,
-									   (long long int) ht_state->tuples_decompressed),
-							 errhint("Consider increasing "
-									 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
-									 "set to 0 (unlimited).")));
-				}
-			}
-		}
-		/* Account for tuples deleted via batch DELETE in compressed chunks */
-		if (operation == CMD_DELETE && ht_state->tuples_deleted > 0)
-			estate->es_processed += ht_state->tuples_deleted;
-	}
-	/*
 	 * Fetch rows from subplan, and execute the required table modification
 	 * for each row.
 	 */
