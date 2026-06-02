@@ -4336,6 +4336,15 @@ Datum
 ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 {
 	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	if (ts_relation_is_compressed_chunk_relation(chunk_relid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("dropping compressed chunks not supported"),
+				 errhint("Please drop the corresponding chunk on the uncompressed hypertable "
+						 "instead.")));
+	}
+
 	char *chunk_table_name = get_rel_name(chunk_relid);
 	char *chunk_schema_name = get_namespace_name(get_rel_namespace(chunk_relid));
 	ScanTupLock tuplock = {
@@ -4351,15 +4360,6 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   true);
 	Assert(ch != NULL);
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
-
-	if (ts_chunk_contains_compressed_data(ch))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("dropping compressed chunks not supported"),
-				 errhint("Please drop the corresponding chunk on the uncompressed hypertable "
-						 "instead.")));
-	}
 
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
