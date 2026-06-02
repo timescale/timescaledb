@@ -34,7 +34,7 @@ select sum(abs(v - 500)), count(abs(v - 500)) from cse_explain;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.v
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
 
 -- Two distinct shared expressions cached simultaneously.
 explain (verbose, costs off)
@@ -50,7 +50,7 @@ select sum(abs(v - 500)), count(abs(v - 500)),
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.v, _hyper_1_1_chunk.x
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
 
 -- Shared expression with segmentby grouping column.
 explain (verbose, costs off)
@@ -67,10 +67,10 @@ select b, sum(abs(v - 500)), count(abs(v - 500))
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.b, _hyper_1_1_chunk.v
                ->  Sort
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
                      Sort Key: compress_hyper_2_2_chunk.b
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
-                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
 
 -- FILTER aggregate excluded from CSE, but non-FILTER aggregates still share.
 explain (verbose, costs off)
@@ -88,7 +88,7 @@ select sum(abs(v - 500)) filter (where b),
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.v, _hyper_1_1_chunk.b
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
 
 -- No common subexpressions: no "Cached Subexpressions" line.
 explain (verbose, costs off)
@@ -102,7 +102,7 @@ select sum(v), count(i) from cse_explain;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.v, _hyper_1_1_chunk.i
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
 
 -- Two shared sibling subexpressions in a single expression argument.
 explain (verbose, costs off)
@@ -118,7 +118,7 @@ select sum(abs(v - 500) + length(x)), sum(abs(v - 500) - length(x))
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.v, _hyper_1_1_chunk.x
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
 
 -- Three aggregates sharing one expression (refcount = 3).
 explain (verbose, costs off)
@@ -134,7 +134,7 @@ select sum(abs(v - 500)), count(abs(v - 500)), min(abs(v - 500))
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.v
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
 
 -- Cached boolean subexpression consumed as function argument.
 explain (verbose, costs off)
@@ -149,7 +149,7 @@ select sum((b = (i > 0))::int), count(b = (i > 0)) from cse_explain;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.b, _hyper_1_1_chunk.i
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
 
 reset timescaledb.debug_require_vector_agg;
 drop table cse_explain;
