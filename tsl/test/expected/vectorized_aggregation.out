@@ -105,6 +105,44 @@ SELECT sum(segment_by_value) FROM testtable;
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.segment_by_value
 
+-- Should be disabled when disabling optimizations.
+SET timescaledb.enable_optimizations TO false;
+:EXPLAIN
+SELECT sum(segment_by_value) FROM testtable;
+--- QUERY PLAN ---
+ Aggregate
+   Output: sum(testtable.segment_by_value)
+   ->  Append
+         ->  Seq Scan on public.testtable testtable_1
+               Output: testtable_1.segment_by_value
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk testtable_2
+               Output: testtable_2.segment_by_value
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                     Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk testtable_3
+               Output: testtable_3.segment_by_value
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                     Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk testtable_4
+               Output: testtable_4.segment_by_value
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                     Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+         ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk testtable_5
+               Output: testtable_5.segment_by_value
+         ->  Seq Scan on _timescaledb_internal._hyper_1_5_chunk testtable_6
+               Output: testtable_6.segment_by_value
+         ->  Seq Scan on _timescaledb_internal._hyper_1_6_chunk testtable_7
+               Output: testtable_7.segment_by_value
+         ->  Seq Scan on _timescaledb_internal._hyper_1_7_chunk testtable_8
+               Output: testtable_8.segment_by_value
+         ->  Seq Scan on _timescaledb_internal._hyper_1_8_chunk testtable_9
+               Output: testtable_9.segment_by_value
+         ->  Seq Scan on _timescaledb_internal._hyper_1_9_chunk testtable_10
+               Output: testtable_10.segment_by_value
+         ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk testtable_11
+               Output: testtable_11.segment_by_value
+
+RESET timescaledb.enable_optimizations;
 -- Vectorization possible - filter on segment_by
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;

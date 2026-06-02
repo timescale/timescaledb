@@ -1021,6 +1021,16 @@ SELECT * FROM test.show_constraints('child_hyper_constr');
 -------------------------+------+---------+-------+---------------------------------+------------+----------+-----------
  hyper_constr_temp_check | c    | {temp}  | -     | (temp > (10)::double precision) | f          | f        | t
 
+-- inherited CHECK constraints on OSM chunks are not tracked in chunk_constraint
+SELECT cc.constraint_name, cc.hypertable_constraint_name, cc.dimension_slice_id
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
+WHERE c.table_name = 'child_hyper_constr'
+ORDER BY cc.constraint_name;
+ constraint_name | hypertable_constraint_name | dimension_slice_id 
+-----------------+----------------------------+--------------------
+ constraint_19   |                            |                 19
+
 -- TEST foreign key trigger: deleting data from foreign table measure
 -- does not error out due to data in osm chunk
 \set ON_ERROR_STOP 0
@@ -1289,10 +1299,9 @@ SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.compressed_chunk_id
 cc.chunk_id, cc.dimension_slice_id, cc.constraint_name, cc.hypertable_constraint_name FROM
 _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc WHERE c.hypertable_id = :htid
 AND c.id = cc.chunk_id;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | status | osm_chunk | chunk_id | dimension_slice_id |       constraint_name       | hypertable_constraint_name 
-----+---------------+-----------------------+--------------------+---------------------+--------+-----------+----------+--------------------+-----------------------------+----------------------------
- 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                    | 31_5_test_multicon_time_key | test_multicon_time_key
- 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                 28 | constraint_28               | 
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | status | osm_chunk | chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----+---------------+-----------------------+--------------------+---------------------+--------+-----------+----------+--------------------+-----------------+----------------------------
+ 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                 28 | constraint_28   | 
 
 \c :TEST_DBNAME :ROLE_SUPERUSER ;
 UPDATE _timescaledb_catalog.chunk SET osm_chunk = true WHERE hypertable_id = :htid;

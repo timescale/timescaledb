@@ -160,12 +160,12 @@ SELECT * FROM chunkapi ORDER BY 1,2,3;
 -- are specific to the chunk.  Currently, foreign key, unique, and
 -- primary key constraints are not inherited or auto-created.
 SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
-        Constraint        | Type | Columns  |                   Index                   |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
---------------------------+------+----------+-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- 5_5_chunkapi_device_fkey | f    | {device} | devices_pkey                              |                                                                                                                                                | f          | f        | t
- 5_6_chunkapi_pkey        | p    | {time}   | _timescaledb_internal."5_6_chunkapi_pkey" |                                                                                                                                                | f          | f        | t
- chunkapi_temp_check      | c    | {temp}   | -                                         | (temp > (0)::double precision)                                                                                                                 | f          | f        | t
- constraint_6             | c    | {time}   | -                                         | (("time" >= 'Wed Dec 27 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2018 PST'::timestamp with time zone)) | f          | f        | t
+      Constraint      | Type | Columns  |                  Index                  |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
+----------------------+------+----------+-----------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 5_chunkapi_pkey      | p    | {time}   | _timescaledb_internal."5_chunkapi_pkey" |                                                                                                                                                | f          | f        | t
+ chunkapi_device_fkey | f    | {device} | devices_pkey                            |                                                                                                                                                | f          | f        | t
+ chunkapi_temp_check  | c    | {temp}   | -                                       | (temp > (0)::double precision)                                                                                                                 | f          | f        | t
+ constraint_6         | c    | {time}   | -                                       | (("time" >= 'Wed Dec 27 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2018 PST'::timestamp with time zone)) | f          | f        | t
 
 TRUNCATE chunkapi;
 -- Create a table with extra columns

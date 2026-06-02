@@ -129,7 +129,7 @@ SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
                                        Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
- _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
+ _timescaledb_internal."1_timecustom_device_id_series_2_key"                        | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
@@ -144,11 +144,11 @@ SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');
  timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | test_schema.timecustom_device_id_series_2_key |      | f          | f        | t
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-              Constraint               | Type |             Columns             |                             Index                             |                                                 Expr                                                 | Deferrable | Deferred | Validated 
----------------------------------------+------+---------------------------------+---------------------------------------------------------------+------------------------------------------------------------------------------------------------------+------------+----------+-----------
- 1_1_timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | _timescaledb_internal."1_1_timecustom_device_id_series_2_key" |                                                                                                      | f          | f        | t
- constraint_1                          | c    | {timeCustom}                    | -                                                             | (("timeCustom" >= '1257892416000000000'::bigint) AND ("timeCustom" < '1257895008000000000'::bigint)) | f          | f        | t
- constraint_2                          | c    | {device_id}                     | -                                                             | (_timescaledb_functions.get_partition_hash(device_id) >= 1073741823)                                 | f          | f        | t
+             Constraint              | Type |             Columns             |                            Index                            |                                                 Expr                                                 | Deferrable | Deferred | Validated 
+-------------------------------------+------+---------------------------------+-------------------------------------------------------------+------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 1_timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | _timescaledb_internal."1_timecustom_device_id_series_2_key" |                                                                                                      | f          | f        | t
+ constraint_1                        | c    | {timeCustom}                    | -                                                           | (("timeCustom" >= '1257892416000000000'::bigint) AND ("timeCustom" < '1257895008000000000'::bigint)) | f          | f        | t
+ constraint_2                        | c    | {device_id}                     | -                                                           | (_timescaledb_functions.get_partition_hash(device_id) >= 1073741823)                                 | f          | f        | t
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
      Trigger     | Type |   Function   
@@ -194,20 +194,16 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 
 -- Show all constraints
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name     
-----------+--------------------+---------------------------------------+-----------------------------------
-        1 |                  1 | constraint_1                          | 
-        1 |                  2 | constraint_2                          | 
-        2 |                  3 | constraint_3                          | 
-        2 |                  2 | constraint_2                          | 
-        3 |                  4 | constraint_4                          | 
-        3 |                  2 | constraint_2                          | 
-        4 |                  1 | constraint_1                          | 
-        4 |                  5 | constraint_5                          | 
-        1 |                    | 1_1_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
-        2 |                    | 2_2_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
-        3 |                    | 3_3_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
-        4 |                    | 4_4_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+ chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----------+--------------------+-----------------+----------------------------
+        1 |                  1 | constraint_1    | 
+        1 |                  2 | constraint_2    | 
+        2 |                  3 | constraint_3    | 
+        2 |                  2 | constraint_2    | 
+        3 |                  4 | constraint_4    | 
+        3 |                  2 | constraint_2    | 
+        4 |                  1 | constraint_1    | 
+        4 |                  5 | constraint_5    | 
 
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
 INSERT INTO _timescaledb_catalog.metadata VALUES ('metadata_test', 'FOO', false);
@@ -322,7 +318,7 @@ SELECT * FROM test.show_indexes('"test_schema"."two_Partitions"');
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
                                        Index                                        |             Columns             | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------------------------------------------------+---------------------------------+------+--------+---------+-----------+------------
- _timescaledb_internal."1_1_timecustom_device_id_series_2_key"                      | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
+ _timescaledb_internal."1_timecustom_device_id_series_2_key"                        | {timeCustom,device_id,series_2} |      | t      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   | {device_id,timeCustom}          |      | f      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   | {timeCustom,device_id}          |      | f      | f       | f         | 
  _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             | {timeCustom}                    |      | f      | f       | f         | 
@@ -337,11 +333,11 @@ SELECT * FROM test.show_constraints('"test_schema"."two_Partitions"');
  timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | test_schema.timecustom_device_id_series_2_key |      | f          | f        | t
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
-              Constraint               | Type |             Columns             |                             Index                             |                                                 Expr                                                 | Deferrable | Deferred | Validated 
----------------------------------------+------+---------------------------------+---------------------------------------------------------------+------------------------------------------------------------------------------------------------------+------------+----------+-----------
- 1_1_timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | _timescaledb_internal."1_1_timecustom_device_id_series_2_key" |                                                                                                      | f          | f        | t
- constraint_1                          | c    | {timeCustom}                    | -                                                             | (("timeCustom" >= '1257892416000000000'::bigint) AND ("timeCustom" < '1257895008000000000'::bigint)) | f          | f        | t
- constraint_2                          | c    | {device_id}                     | -                                                             | (_timescaledb_functions.get_partition_hash(device_id) >= 1073741823)                                 | f          | f        | t
+             Constraint              | Type |             Columns             |                            Index                            |                                                 Expr                                                 | Deferrable | Deferred | Validated 
+-------------------------------------+------+---------------------------------+-------------------------------------------------------------+------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 1_timecustom_device_id_series_2_key | u    | {timeCustom,device_id,series_2} | _timescaledb_internal."1_timecustom_device_id_series_2_key" |                                                                                                      | f          | f        | t
+ constraint_1                        | c    | {timeCustom}                    | -                                                           | (("timeCustom" >= '1257892416000000000'::bigint) AND ("timeCustom" < '1257895008000000000'::bigint)) | f          | f        | t
+ constraint_2                        | c    | {device_id}                     | -                                                           | (_timescaledb_functions.get_partition_hash(device_id) >= 1073741823)                                 | f          | f        | t
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
      Trigger     | Type |   Function   
@@ -387,20 +383,16 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name     
-----------+--------------------+---------------------------------------+-----------------------------------
-        1 |                  1 | constraint_1                          | 
-        1 |                  2 | constraint_2                          | 
-        2 |                  3 | constraint_3                          | 
-        2 |                  2 | constraint_2                          | 
-        3 |                  4 | constraint_4                          | 
-        3 |                  2 | constraint_2                          | 
-        4 |                  1 | constraint_1                          | 
-        4 |                  5 | constraint_5                          | 
-        1 |                    | 1_1_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
-        2 |                    | 2_2_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
-        3 |                    | 3_3_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
-        4 |                    | 4_4_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
+ chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----------+--------------------+-----------------+----------------------------
+        1 |                  1 | constraint_1    | 
+        1 |                  2 | constraint_2    | 
+        2 |                  3 | constraint_3    | 
+        2 |                  2 | constraint_2    | 
+        3 |                  4 | constraint_4    | 
+        3 |                  2 | constraint_2    | 
+        4 |                  1 | constraint_1    | 
+        4 |                  5 | constraint_5    | 
 
 --Chunk sizing function should have been restored
 SELECT * FROM _timescaledb_catalog.hypertable;
@@ -462,6 +454,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  timescaledb_information.job_history
  timescaledb_information.job_stats
  timescaledb_information.jobs
+ timescaledb_information.stat_chunk_activity
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

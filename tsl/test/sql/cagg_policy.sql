@@ -567,21 +567,18 @@ SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, 
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true); -- same param values, so we get a NOTICE
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
---can set compression policy only after setting up refresh policy --
+--can set columnstore policy only after enabling columnstore --
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
-
---can set compression policy only after enabling compression --
-SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
-SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
 ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
 
 --cannot use compress_created_before with cagg
 SELECT add_compression_policy('metrics_cagg', compress_created_before => '8 day'::interval) AS "COMP_JOB" ;
 \set ON_ERROR_STOP 1
 
-
-SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
+--can set columnstore policy without setting up a refresh policy --
+CALL add_columnstore_policy('metrics_cagg', after => '8 day'::interval);
 SELECT remove_compression_policy('metrics_cagg');
+SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset
 
 --verify that jobs were added for the policies ---
@@ -746,4 +743,3 @@ CREATE TABLE m(time timestamptz) WITH (tsdb.hypertable);
 CREATE MATERIALIZED VIEW cagg_error WITH (tsdb.continuous)
 AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1;
 SELECT timescaledb_experimental.add_policies('cagg_error', drop_after => '20 days');
-

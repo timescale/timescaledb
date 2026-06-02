@@ -14,7 +14,7 @@ ALTER TABLE ht_with_fk SET (timescaledb.compress,timescaledb.compress_segmentby=
 -- no keys added yet so any insert into ht_with_fk should fail
 \set ON_ERROR_STOP 0
 INSERT INTO ht_with_fk SELECT '2000-01-01';
-ERROR:  insert or update on table "_hyper_1_1_chunk" violates foreign key constraint "1_1_keys"
+ERROR:  insert or update on table "_hyper_1_1_chunk" violates foreign key constraint "keys"
 \set ON_ERROR_STOP 1
 -- create a key in the referenced table
 INSERT INTO keys SELECT '2000-01-01';
@@ -30,11 +30,11 @@ INSERT INTO ht_with_fk SELECT '2000-01-01';
 -- inserting key not present in keys should fail
 \set ON_ERROR_STOP 0
 INSERT INTO ht_with_fk SELECT '2000-01-01 0:00:01';
-ERROR:  insert or update on table "_hyper_1_2_chunk" violates foreign key constraint "2_2_keys"
+ERROR:  insert or update on table "_hyper_1_2_chunk" violates foreign key constraint "keys"
 \set ON_ERROR_STOP 1
 SELECT conrelid::regclass,conname,confrelid::regclass FROM pg_constraint WHERE contype = 'f' AND confrelid = 'keys'::regclass ORDER BY conrelid::regclass::text COLLATE "C",conname;
-                conrelid                | conname  | confrelid 
-----------------------------------------+----------+-----------
- _timescaledb_internal._hyper_1_2_chunk | 2_2_keys | keys
- ht_with_fk                             | keys     | keys
+                conrelid                | conname | confrelid 
+----------------------------------------+---------+-----------
+ _timescaledb_internal._hyper_1_2_chunk | keys    | keys
+ ht_with_fk                             | keys    | keys
 

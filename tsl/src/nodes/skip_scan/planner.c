@@ -1188,7 +1188,7 @@ static Var *
 get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *child_path,
 				 SkipKeyInfo *skinfo)
 {
-	RelOptInfo *rel = child_path->parent;
+	RelOptInfo *chunk_rel = child_path->parent;
 	RelOptInfo *indexed_rel = index_path->path.parent;
 
 	Assert(tlexpr && IsA(tlexpr, Var));
@@ -1196,33 +1196,32 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 
 	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
 
-	/* check whether a skip var is declared NOT NULL
-	 *  it's enough to check hypertable for NOT NULL
-	 *  as NOT NULL constraint will be propagated to and checked on all chunks
+	/*
+	 * Check whether a skip var is declared NOT NULL. It's enough to check
+	 * hypertable for NOT NULL, because the NOT NULL constraint will be
+	 * propagated to and checked on all chunks. Postgres doesn't set
+	 * RelOptInfo.notnullattnums for hypertable because it's an inheritance
+	 * parent, so check it against the catalog.
 	 */
-#if PG17_LT
 	skinfo->notnull = ts_get_attnotnull(ht_rte->relid, var->varattno);
-#else
-	RelOptInfo *baserel = ((Index) var->varno == rel->relid ? rel : rel->parent);
-	skinfo->notnull = bms_is_member(var->varattno, baserel->notnullattnums);
-#endif
 
 	/* If we are dealing with a hypertable Var extracted from distinctClause will point to
 	 * the parent hypertable while the IndexPath will be on a Chunk.
 	 * For a normal PG table they point to the same relation and we are done here. */
-	if ((Index) var->varno == rel->relid)
+	if ((Index) var->varno == chunk_rel->relid)
 	{
 		/* Get attribute number for distinct column on a normal PG table */
 		skinfo->indexed_column_attno = var->varattno;
 		return var;
 	}
 
-	RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
+	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 	RangeTblEntry *indexed_rte =
-		(indexed_rel == rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));
+		(indexed_rel == chunk_rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));
 
 	/* Check for hypertable */
-	if (!ts_is_hypertable(ht_rte->relid) || !bms_is_member(var->varno, rel->top_parent_relids))
+	if (!ts_is_hypertable(ht_rte->relid) ||
+		!bms_is_member(var->varno, chunk_rel->top_parent_relids))
 	{
 		return NULL;
 	}
@@ -1248,7 +1247,7 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 		skinfo->indexed_column_attno = var->varattno;
 	}
 
-	var->varno = rel->relid;
+	var->varno = chunk_rel->relid;
 
 	return var;
 }

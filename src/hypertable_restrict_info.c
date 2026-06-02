@@ -727,6 +727,48 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 			{
 				const DimensionRestrictInfoOpen *open = (const DimensionRestrictInfoOpen *) dri;
 
+				/*
+				 * If the WHERE clause contains contradictory qualifiers, we can
+				 * arrive at a degenerate dimension restriction where
+				 * upper_bound < lower_bound. No row can match such restriction,
+				 * but some slices still can, because we're checking the slice
+				 * ends separately:
+				 * slice_start <= upper_bound < lower_bound <= slice_end
+				 * The chunk will pass our hypertable expansion and will later
+				 * be excluded by the Postgres constraint exclusion that handles
+				 * contradictory clauses. We can easily avoid this unneeded work
+				 * now. Return early when the lower bound is strictly above the
+				 * upper bound.
+				 */
+				if (open->upper_strategy != InvalidStrategy &&
+					open->lower_strategy != InvalidStrategy)
+				{
+					Assert(open->upper_strategy == BTLessEqualStrategyNumber ||
+						   open->upper_strategy == BTLessStrategyNumber);
+					Assert(open->lower_strategy == BTGreaterEqualStrategyNumber ||
+						   open->lower_strategy == BTGreaterStrategyNumber);
+
+					if (open->lower_bound > open->upper_bound)
+					{
+						/* No rows can match. */
+						break;
+					}
+					else if (open->lower_bound == open->upper_bound)
+					{
+						/*
+						 * Some rows can match if both intervals are inclusive.
+						 */
+						if (open->upper_strategy != BTLessEqualStrategyNumber ||
+							open->lower_strategy != BTGreaterEqualStrategyNumber)
+						{
+							break;
+						}
+					}
+				}
+
+				/*
+				 * Find the slices matching the dimension restriction.
+				 */
 				ts_dimension_slice_scan_iterator_set_range(&it,
 														   open->base.dimension->fd.id,
 														   open->upper_strategy,

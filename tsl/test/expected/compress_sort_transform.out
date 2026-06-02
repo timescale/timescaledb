@@ -84,6 +84,33 @@ group by 1, 2 order by 1, 2 limit 1;
                            Sort Method: quicksort 
                            ->  Seq Scan on _hyper_1_3_chunk (actual rows=339.00 loops=1)
 
+-- Should be disabled when disabling optimizations.
+SET timescaledb.enable_optimizations TO false;
+:PREFIX
+select device, time_bucket('1 minute', time), count(*)
+from ht_metrics_partially_compressed
+group by 1, 2 order by 1, 2 limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  GroupAggregate (actual rows=1.00 loops=1)
+         Group Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+         ->  Sort (actual rows=3.00 loops=1)
+               Sort Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+               Sort Method: quicksort 
+               ->  Result (actual rows=5766.00 loops=1)
+                     ->  Append (actual rows=5766.00 loops=1)
+                           ->  Seq Scan on ht_metrics_partially_compressed ht_metrics_partially_compressed_1 (actual rows=0.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk ht_metrics_partially_compressed_2 (actual rows=1440.00 loops=1)
+                                 ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+                           ->  Seq Scan on _hyper_1_1_chunk ht_metrics_partially_compressed_2 (actual rows=960.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk ht_metrics_partially_compressed_3 (actual rows=1512.00 loops=1)
+                                 ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
+                           ->  Seq Scan on _hyper_1_2_chunk ht_metrics_partially_compressed_3 (actual rows=1008.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk ht_metrics_partially_compressed_4 (actual rows=507.00 loops=1)
+                                 ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
+                           ->  Seq Scan on _hyper_1_3_chunk ht_metrics_partially_compressed_4 (actual rows=339.00 loops=1)
+
+RESET timescaledb.enable_optimizations;
 -- Batch sorted merge.
 :PREFIX
 select time_bucket('1 minute', time), count(*)

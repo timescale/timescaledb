@@ -39,6 +39,7 @@ set(TEST_FILES
     insert_single.sql
     lateral.sql
     merge.sql
+    observ_funcs.sql
     partition.sql
     partition_coercion.sql
     partitioning.sql

@@ -1,104 +1,52 @@
+-- Drop obsolete chunk_constraint rows for inherited CHECK constraints on
+-- OSM chunks; PG inheritance handles propagation now.
+DELETE FROM _timescaledb_catalog.chunk_constraint cc
+USING _timescaledb_catalog.chunk c
+WHERE cc.chunk_id = c.id
+  AND c.osm_chunk
+  AND cc.dimension_slice_id IS NULL
+  AND cc.hypertable_constraint_name IS NOT NULL
+  AND cc.constraint_name = cc.hypertable_constraint_name;
 
--- The naming scheme for the composite bloom filter metadata columns has changed in 2.27.
--- See the commit message for more details and the bug report here:
---
--- See bug report here: https://github.com/timescale/timescaledb/issues/9578
---
-
+-- Rename legacy chunk-side constraints to the names the new code recomputes:
+-- FKs use the parent's name; unique/PK/exclusion/trigger use the deterministic
+-- "<chunk_id>_<parent>" form
 DO $$
 DECLARE
-    rename_data RECORD;
+    r RECORD;
 BEGIN
-    FOR rename_data IN
-        --
-        -- Make sure the old meta name actually exists for the compressed chunk
-        -- relation, so the renaming that follows only impact real columns not
-        -- some hallucinated ones.
-        --
-        SELECT
-            att.attrelid::regclass,
-            e.old_meta_name,
-            e.new_meta_name
-        FROM
-            pg_attribute att,
-            (
-            --
-            -- Calculate the old and new metadata column names of the composite bloom filters.
-            -- Note that the new scheme always use a hash string to distinguish between the
-            -- composite columns, but the old one only used the hash if the concatenated column
-            -- names were too long.
-            --
-            SELECT
-                compress_relid,
-                CASE
-                    WHEN length(joined_cols_underscores) > 39
-                        THEN '_ts_meta_v2_bloomh_' || hash_underscores || '_' || joined_cols_underscores
-                ELSE '_ts_meta_v2_bloomh_' || joined_cols_underscores
-                END as old_meta_name,
-                '_ts_meta_v2_bloomh_' || hash_zeroes || '_' || joined_cols_underscores as new_meta_name
-            FROM
-                (
-                --
-                -- Calculate the first 4 characters of the md5 hashes of both the
-                -- zero and underscore concatenated column names of the composite
-                -- bloom filters.
-                --
-                SELECT
-                    compress_relid,
-                    substr(md5(joined_cols_zeroes),1,4) as hash_zeroes,
-                    substr(md5(joined_cols_underscores),1,4) as hash_underscores,
-                    joined_cols_underscores
-                FROM (
-                    --
-                    -- Select the compression settings objects that are actually a
-                    -- a 'bloom' filter, out of the already selected 'column' arrays
-                    -- and return the compressed chunk relation along with the column
-                    -- names concatenated with underscores as well as zeroes.
-                    --
-                    SELECT
-                        compress_relid,
-                        (SELECT string_agg(value::bytea, '\x00'::bytea) FROM jsonb_array_elements_text(cols::jsonb)) as joined_cols_zeroes,
-                        array_to_string(array(select jsonb_array_elements_text(cols::jsonb)), '_') as joined_cols_underscores
-                    FROM (
-                        --
-                        -- Select the settings where the column field is an array
-                        -- which is a must for the composite bloom filters
-                        --
-                        SELECT
-                            *,
-                            ae->>'column' cols
-                        FROM (
-                            --
-                            -- Capture the compression settings for the compressed
-                            -- tables, and separate the individual settings along
-                            -- with their types
-                            --
-                            SELECT
-                                compress_relid::text,
-                                jsonb_array_elements(index) ae,
-                                jsonb_array_elements(index)->>'type' ty
-                            FROM _timescaledb_catalog.compression_settings
-                            WHERE compress_relid IS NOT NULL
-                        ) a
-                    WHERE jsonb_typeof(ae->'column') = 'array'
-                    ) b
-                 WHERE ty = 'bloom'
-                ) c
-            ) d
-        ) e
-        WHERE att.attrelid = e.compress_relid::regclass AND att.attname = e.old_meta_name
+    FOR r IN
+        SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
+               cc.constraint_name AS old_name,
+               CASE WHEN parent.contype = 'f' THEN cc.hypertable_constraint_name
+                    ELSE format('%s_%s', c.id, cc.hypertable_constraint_name)
+               END AS new_name
+        FROM _timescaledb_catalog.chunk_constraint cc
+        JOIN _timescaledb_catalog.chunk c ON c.id = cc.chunk_id
+        JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
+        JOIN pg_constraint parent
+            ON parent.conrelid = pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass
+            AND parent.conname = cc.hypertable_constraint_name
+            AND parent.contype IN ('f', 'u', 'p', 'x', 't')
+        WHERE cc.dimension_slice_id IS NULL
+          AND cc.hypertable_constraint_name IS NOT NULL
     LOOP
-        RAISE NOTICE 'RENAMING: %s.% to %',
-            rename_data.attrelid,
-            rename_data.old_meta_name,
-            rename_data.new_meta_name;
-
-        EXECUTE format(
-            'ALTER TABLE %s RENAME COLUMN %I TO %I',
-            rename_data.attrelid,
-            rename_data.old_meta_name,
-            rename_data.new_meta_name
-        );
+        IF r.old_name <> r.new_name THEN
+            EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
+                                      r.chunk_table, r.old_name, r.new_name);
+        END IF;
     END LOOP;
-END;
+END
 $$;
+
+-- Remove the chunk_constraint rows that mirrored non-dimensional constraints.
+-- FK chunk-side constraints are now located by name through the event-trigger
+-- hooks; unique/PK/exclusion/trigger constraints through the deterministic
+-- "<chunk_id>_<parent>" name pattern.
+DELETE FROM _timescaledb_catalog.chunk_constraint
+WHERE dimension_slice_id IS NULL
+  AND hypertable_constraint_name IS NOT NULL;
+
+ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
+ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
+

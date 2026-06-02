@@ -946,9 +946,9 @@ SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_
 FROM information_schema.table_constraints
 WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
-   constraint_schema   |      constraint_name      |     table_schema      |     table_name     | constraint_type 
------------------------+---------------------------+-----------------------+--------------------+-----------------
- _timescaledb_internal | 42_6_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
+   constraint_schema   |   constraint_name    |     table_schema      |     table_name     | constraint_type 
+-----------------------+----------------------+-----------------------+--------------------+-----------------
+ _timescaledb_internal | hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
 
 SELECT compress_chunk(:'CHUNK_FULL_NAME');
               compress_chunk              
@@ -959,9 +959,9 @@ SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_
 FROM information_schema.table_constraints
 WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
-   constraint_schema   |      constraint_name      |     table_schema      |     table_name     | constraint_type 
------------------------+---------------------------+-----------------------+--------------------+-----------------
- _timescaledb_internal | 42_6_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
+   constraint_schema   |   constraint_name    |     table_schema      |     table_name     | constraint_type 
+-----------------------+----------------------+-----------------------+--------------------+-----------------
+ _timescaledb_internal | hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
 
 -- Delete data from compressed chunk directly fails
 \set ON_ERROR_STOP 0
@@ -994,9 +994,9 @@ SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_
 FROM information_schema.table_constraints
 WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
-   constraint_schema   |      constraint_name      |     table_schema      |     table_name     | constraint_type 
------------------------+---------------------------+-----------------------+--------------------+-----------------
- _timescaledb_internal | 42_6_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
+   constraint_schema   |   constraint_name    |     table_schema      |     table_name     | constraint_type 
+-----------------------+----------------------+-----------------------+--------------------+-----------------
+ _timescaledb_internal | hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
 
 -- create hypertable with 2 chunks
 CREATE TABLE ht5(time TIMESTAMPTZ NOT NULL);
