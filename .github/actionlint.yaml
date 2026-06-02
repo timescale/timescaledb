@@ -1,0 +1,11 @@
+self-hosted-runner:
+  labels:
+    - timescaledb-runner-arm64
+    - cloud-image-runner-ubuntu-24-arm64
+
+config-variables: null
+
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      - 'invalid glob pattern\. unexpected character ''\?'''

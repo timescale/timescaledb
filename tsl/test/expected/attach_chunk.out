@@ -134,11 +134,10 @@ SELECT count(*) > 0 FROM pg_inherits WHERE inhrelid = :'CHUNK_NAME'::regclass::o
 
 -- Verify constraints and indexes are restored
 SELECT * FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID';
- chunk_id | dimension_slice_id |        constraint_name         | hypertable_constraint_name 
-----------+--------------------+--------------------------------+----------------------------
-        5 |                    | 1_1_attach_test_id_time_unique | attach_test_id_time_unique
-        5 |                  2 | constraint_2                   | 
-        5 |                  7 | constraint_7                   | 
+ chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
+----------+--------------------+-----------------+----------------------------
+        5 |                  2 | constraint_2    | 
+        5 |                  7 | constraint_7    | 
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ds
 JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id

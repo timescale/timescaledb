@@ -1695,7 +1695,7 @@ USING source AS s
 ON t.tid = s.sid
 WHEN NOT MATCHED THEN
   INSERT VALUES (4, NULL);
-psql:include/ts_merge_query.sql:265: ERROR:  duplicate key value violates unique constraint "2_2_target_pkey"
+psql:include/ts_merge_query.sql:265: ERROR:  duplicate key value violates unique constraint "2_target_pkey"
 DETAIL:  Key (tid)=(4) already exists.
 SELECT * FROM target ORDER BY tid;
 psql:include/ts_merge_query.sql:266: ERROR:  current transaction is aborted, commands ignored until end of transaction block

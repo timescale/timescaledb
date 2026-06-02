@@ -50,19 +50,19 @@ jobs:
 
           # Get the list of modified files as a bash array. Exclude the
           # development-related files because they don't require a changelog.
-          mapfile -t modified_files < <(gh pr view $PR_NUMBER --json files --jq '
+          mapfile -t modified_files < <(gh pr view "$PR_NUMBER" --json files --jq '
             [.files.[].path | select(
                     (startswith(".github") or startswith("test")
                         or startswith("tsl/test") or startswith("scripts"))
                 | not)] | .[]')
-          echo "Modified files: ${modified_files[@]}"
+          echo "Modified files: ${modified_files[*]}"
 
           # Get the changelog files as a bash array
-          mapfile -t changelog_files < <(gh pr view $PR_NUMBER --json files --jq "
+          mapfile -t changelog_files < <(gh pr view "$PR_NUMBER" --json files --jq "
             [.files.[].path | select(startswith(\"${folder}\"))] | .[]")
-          echo "Changelog files: ${changelog_files[@]}"
+          echo "Changelog files: ${changelog_files[*]}"
 
-          if echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"
+          if echo "$BODY" | grep -E -qsi "Disable-check:[[:space:]]*force-changelog-file"
           then
             # skip changelog checks if forced
             :

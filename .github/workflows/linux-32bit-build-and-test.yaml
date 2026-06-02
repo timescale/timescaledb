@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [config, check_paths]
     container:
-      image: i386/debian:bookworm-slim@sha256:78db3d04276373ba96e129d5bdf46c25619a9dbd6a1ce74858ac50cab29d01cc
+      image: i386/debian:bookworm-slim@sha256:25df630e1c5d15797330d33e1cf3df6a20017c52eed3798109c7deb17d1a3d4a
       options: --privileged --ulimit core=-1:-1 --ulimit fsize=-1:-1
       env:
         PG_SRC_DIR: pgbuild
@@ -70,6 +70,7 @@ jobs:
           compress_bloom_sparse_debug
           compress_compbloom_hash_pushdown
           compress_composite_bloom_debug
+          compress_observ-*
           compress_qualpushdown_saop
           compress_sort_transform
           compression_allocation
@@ -110,7 +111,6 @@ jobs:
     - name: Install build dependencies
       timeout-minutes: 15
       run: |
-        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
         apt-get install -y gcc make cmake libssl-dev libipc-run-perl \
           libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
@@ -120,12 +120,12 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
 
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
@@ -135,7 +135,7 @@ jobs:
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "linux-32-bit-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
+        key: "linux-32-bit-postgresql-${{ matrix.pg }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}
@@ -252,13 +252,13 @@ jobs:
         path: postmaster.*
 
     - name: Stack trace Linux
+      id: coredumps
       if: always()
       shell: bash
       run: |
         # wait in case there are in-progress coredumps
         sleep 10
         if compgen -G "/tmp/core*" > /dev/null; then
-          PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
           for file in /tmp/core*
           do
             gdb "${HOME}/${PG_INSTALL_DIR}/bin/postgres" -c $file <<<"
@@ -304,7 +304,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: TAP test logs PG${{ matrix.pg }}
         path: |
           build/test/tmp_check/log
           build/tsl/test/tmp_check/log

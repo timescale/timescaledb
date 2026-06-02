@@ -34,6 +34,7 @@
 
 #include "allpaths.h"
 #include "chunk.h"
+#include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "planner/planner.h"
 
@@ -223,6 +224,37 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		if (child_rel->consider_startup)
 			parent_rel->consider_startup = true;
 	}
+
+#if PG16_LT
+	/*
+	 * On PG15, create_append_path() calls get_appendrel_parampathinfo() instead
+	 * of the get_baserel_parampathinfo() like the later versions. The appendrel
+	 * parameterization info is not build for hypertable because of how we're
+	 * disabling the PG inheritance expansion, so here we have to compensate for
+	 * it. Fetch the parameterization info from the chunks here, following the
+	 * logic similar to add_paths_to_append_rel().
+	 */
+	if (parent_rel->reloptkind == RELOPT_BASEREL)
+	{
+		foreach (l, live_childrels)
+		{
+			RelOptInfo *child_rel = (RelOptInfo *) lfirst(l);
+			ListCell *lcp;
+
+			foreach (lcp, child_rel->pathlist)
+			{
+				Path *child_path = (Path *) lfirst(lcp);
+
+				if (child_path->param_info == NULL)
+					continue;
+
+				get_baserel_parampathinfo(root,
+										  parent_rel,
+										  child_path->param_info->ppi_req_outer);
+			}
+		}
+	}
+#endif
 
 	/* Add paths to the append relation. */
 	add_paths_to_append_rel(root, parent_rel, live_childrels);

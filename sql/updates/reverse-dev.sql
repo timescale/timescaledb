@@ -10,40 +10,42 @@ JOIN pg_constraint con
 WHERE c.osm_chunk
 ON CONFLICT DO NOTHING;
 
--- Restore chunk_constraint rows for outbound FKs, derived from the
--- DEPENDENCY_AUTO edge that replaced them.
+-- Drop chunk stats related objects
+DROP VIEW IF EXISTS timescaledb_information.stat_chunk_activity;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics(regclass, regclass, timestamptz);
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics_reset();
+
+-- Restore chunk_constraint rows for outbound FKs by matching chunk-side
+-- FKs to their hypertable-side counterpart by name.
 INSERT INTO _timescaledb_catalog.chunk_constraint
     (chunk_id, dimension_slice_id, constraint_name, hypertable_constraint_name)
 SELECT c.id, NULL, child.conname, parent.conname
 FROM _timescaledb_catalog.chunk c
 JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
+JOIN pg_constraint parent
+    ON parent.conrelid = pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass
+    AND parent.contype = 'f'
 JOIN pg_constraint child
     ON child.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
     AND child.contype = 'f'
-JOIN pg_depend d
-    ON d.classid = 'pg_constraint'::regclass
-    AND d.objid = child.oid
-    AND d.refclassid = 'pg_constraint'::regclass
-    AND d.deptype = 'a'
-JOIN pg_constraint parent
-    ON parent.oid = d.refobjid
-    AND parent.conrelid = pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass
-    AND parent.contype = 'f'
+    AND child.conname = parent.conname
 ON CONFLICT DO NOTHING;
 
-DELETE FROM pg_catalog.pg_depend d
-USING pg_constraint child,
-      pg_constraint parent,
-      _timescaledb_catalog.chunk c,
-      _timescaledb_catalog.hypertable ht
-WHERE d.classid = 'pg_constraint'::regclass
-  AND d.objid = child.oid
-  AND d.refclassid = 'pg_constraint'::regclass
-  AND d.refobjid = parent.oid
-  AND d.deptype = 'a'
-  AND child.contype = 'f'
-  AND parent.contype = 'f'
-  AND ht.id = c.hypertable_id
-  AND child.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
-  AND parent.conrelid = pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass;
+-- Restore chunk_constraint rows for unique/PK/exclusion/trigger constraints.
+-- The chunk-side conname is the deterministic "<chunk_id>_<parent>" form
+INSERT INTO _timescaledb_catalog.chunk_constraint
+    (chunk_id, dimension_slice_id, constraint_name, hypertable_constraint_name)
+SELECT c.id, NULL, child.conname, parent.conname
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
+JOIN pg_constraint parent
+    ON parent.conrelid = pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass
+    AND parent.contype IN ('u', 'p', 'x', 't')
+JOIN pg_constraint child
+    ON child.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
+    AND child.conname = format('%s_%s', c.id, parent.conname)
+ON CONFLICT DO NOTHING;
+
+ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
+ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);
 

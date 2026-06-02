@@ -110,7 +110,7 @@ jobs:
       if: always()
       run: |
         echo '::add-matcher::.github/problem-matchers/grep.json'
-        ! grep [f]ixme -niR ./* .github/workflows/*
+        ! grep '[f]ixme' -niR ./* .github/workflows/*
 
   python_checks:
     name: Check Python code in tree

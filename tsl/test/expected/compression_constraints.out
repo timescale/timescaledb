@@ -39,25 +39,25 @@ BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk PRIMARY KEY(time);
 INSERT INTO metrics SELECT '2025-01-02', 'd1', 0.1;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', 0.1;
-ERROR:  duplicate key value violates unique constraint "1_1_metrics_pk"
+ERROR:  duplicate key value violates unique constraint "1_metrics_pk"
 ROLLBACK;
 BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk PRIMARY KEY(time, device);
 INSERT INTO metrics SELECT '2025-01-02', 'd1', 0.1;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', 0.1;
-ERROR:  duplicate key value violates unique constraint "1_3_metrics_pk"
+ERROR:  duplicate key value violates unique constraint "1_metrics_pk"
 ROLLBACK;
 BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk UNIQUE(time);
 INSERT INTO metrics SELECT '2025-01-02', 'd1', 0.1;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', 0.1;
-ERROR:  duplicate key value violates unique constraint "1_5_metrics_pk"
+ERROR:  duplicate key value violates unique constraint "1_metrics_pk"
 ROLLBACK;
 BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk UNIQUE(time, device);
 INSERT INTO metrics SELECT '2025-01-02', 'd1', 0.1;
 INSERT INTO metrics SELECT '2025-01-01', 'd1', 0.1;
-ERROR:  duplicate key value violates unique constraint "1_7_metrics_pk"
+ERROR:  duplicate key value violates unique constraint "1_metrics_pk"
 ROLLBACK;
 BEGIN;
 CREATE UNIQUE INDEX metrics_pk ON metrics(time);

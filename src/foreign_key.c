@@ -20,7 +20,6 @@
 #include "access/table.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
-#include "catalog/pg_depend.h"
 #include "catalog/pg_trigger.h"
 #include "commands/trigger.h"
 #include "parser/parser.h"
@@ -30,7 +29,6 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
-#include "chunk_constraint.h"
 #include "foreign_key.h"
 #include "hypertable.h"
 #include "process_utility.h"
@@ -41,6 +39,7 @@ static List *relation_get_referencing_fk(Oid reloid);
 static Oid get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys);
 static void constraint_get_trigger(Oid conoid, Oid *updtrigoid, Oid *deltrigoid);
 static char *ChooseForeignKeyConstraintNameAddition(int numkeys, AttrNumber *keys, Oid relid);
+static void drop_fk_constraint(HeapTuple constraint_tuple);
 static void createForeignKeyActionTriggers(Form_pg_constraint fk, Oid relid, Oid refRelOid,
 										   Oid constraintOid, Oid indexOid, Oid parentDelTrigger,
 										   Oid parentUpdTrigger);
@@ -602,6 +601,36 @@ get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys)
 	return indexoid;
 }
 
+/*
+ * Drop a pg_constraint given its heap tuple.
+ *
+ * If the constraint inherits from a partitioned-parent constraint, break that
+ * internal dependency first so performDeletion is allowed to remove it.
+ */
+static void
+drop_fk_constraint(HeapTuple constraint_tuple)
+{
+	FormData_pg_constraint *constr = (FormData_pg_constraint *) GETSTRUCT(constraint_tuple);
+	ObjectAddress constrobj = {
+		.classId = ConstraintRelationId,
+		.objectId = constr->oid,
+	};
+
+	if (OidIsValid(constr->conparentid))
+	{
+		deleteDependencyRecordsForClass(constrobj.classId,
+										constrobj.objectId,
+										ConstraintRelationId,
+										DEPENDENCY_INTERNAL);
+		CommandCounterIncrement();
+	}
+
+	if (OidIsValid(constrobj.objectId))
+	{
+		performDeletion(&constrobj, DROP_RESTRICT, 0);
+	}
+}
+
 void
 ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 {
@@ -612,21 +641,19 @@ ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 	foreach (lc, fks)
 	{
 		HeapTuple fk_tuple = lfirst(lc);
-		ts_chunk_constraint_drop_from_tuple(fk_tuple);
+		drop_fk_constraint(fk_tuple);
 	}
 }
 
 /*
- * Clone an outbound FK from the hypertable onto a chunk under the parent's
- * name and link it with DEPENDENCY_AUTO so DROP CONSTRAINT cascades.
+ * Clone an outbound FK from the hypertable onto a chunk, keeping the parent's
+ * name so the DROP/RENAME hooks can find it by name.
  */
 void
 ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 {
 	char *parent_name;
 	Oid child_oid;
-	ObjectAddress child_addr;
-	ObjectAddress parent_addr;
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE || IS_OSM_CHUNK(chunk))
 	{
@@ -642,9 +669,7 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 	child_oid = get_relation_constraint_oid(chunk->table_id, parent_name, true);
 	if (OidIsValid(child_oid))
 	{
-		/* Only adopt an existing constraint if it's a FK to the same target;
-		 * otherwise the AUTO edge would later cascade-drop an unrelated
-		 * constraint. */
+		/* Only adopt the existing constraint if it's a FK to the same target. */
 		HeapTuple parent_tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(parent_fk_oid));
 		HeapTuple child_tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(child_oid));
 		Oid parent_confrelid;
@@ -671,90 +696,21 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 
 		ReleaseSysCache(child_tup);
 		ReleaseSysCache(parent_tup);
-	}
-	else
-	{
-		CatalogSecurityContext sec_ctx;
-
-		/* Become DB owner so the ALTER TABLE in constraint_clone succeeds
-		 * when the calling user doesn't own the chunk. */
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-		ts_process_utility_set_expect_chunk_modification(true);
-		CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
-							 ObjectIdGetDatum(parent_fk_oid),
-							 ObjectIdGetDatum(chunk->table_id));
-		ts_process_utility_set_expect_chunk_modification(false);
-		ts_catalog_restore_user(&sec_ctx);
-		CommandCounterIncrement();
-		child_oid = get_relation_constraint_oid(chunk->table_id, parent_name, false);
+		return;
 	}
 
-	/* Drop any prior edge so re-attach doesn't accumulate duplicates. */
-	deleteDependencyRecordsForClass(ConstraintRelationId,
-									child_oid,
-									ConstraintRelationId,
-									DEPENDENCY_AUTO);
-	ObjectAddressSet(child_addr, ConstraintRelationId, child_oid);
-	ObjectAddressSet(parent_addr, ConstraintRelationId, parent_fk_oid);
-	recordDependencyOn(&child_addr, &parent_addr, DEPENDENCY_AUTO);
-}
+	CatalogSecurityContext sec_ctx;
 
-/*
- * Find the chunk-side FK linked to parent_fk_oid via DEPENDENCY_AUTO.
- * Needed because chunks created before 2.28 use the legacy
- * <ht_id>_<chunk_id>_<parent> name, so we can't look up by name.
- */
-Oid
-ts_chunk_find_outbound_fk_by_parent(Oid chunk_relid, Oid parent_fk_oid)
-{
-	Relation chunk_rel = table_open(chunk_relid, AccessShareLock);
-	Relation depRel = table_open(DependRelationId, AccessShareLock);
-	Oid result = InvalidOid;
-	ListCell *lc;
-
-	foreach (lc, RelationGetFKeyList(chunk_rel))
-	{
-		Oid child_oid = ((ForeignKeyCacheInfo *) lfirst(lc))->conoid;
-		ScanKeyData key[2];
-		SysScanDesc scan;
-		HeapTuple tup;
-
-		ScanKeyInit(&key[0],
-					Anum_pg_depend_classid,
-					BTEqualStrategyNumber,
-					F_OIDEQ,
-					ObjectIdGetDatum(ConstraintRelationId));
-		ScanKeyInit(&key[1],
-					Anum_pg_depend_objid,
-					BTEqualStrategyNumber,
-					F_OIDEQ,
-					ObjectIdGetDatum(child_oid));
-
-		scan = systable_beginscan(depRel, DependDependerIndexId, true, NULL, 2, key);
-
-		while (HeapTupleIsValid(tup = systable_getnext(scan)))
-		{
-			Form_pg_depend dep = (Form_pg_depend) GETSTRUCT(tup);
-
-			if (dep->refclassid == ConstraintRelationId && dep->refobjid == parent_fk_oid &&
-				dep->deptype == DEPENDENCY_AUTO)
-			{
-				result = child_oid;
-				break;
-			}
-		}
-
-		systable_endscan(scan);
-
-		if (OidIsValid(result))
-		{
-			break;
-		}
-	}
-
-	table_close(depRel, AccessShareLock);
-	table_close(chunk_rel, AccessShareLock);
-	return result;
+	/* Become DB owner so the ALTER TABLE in constraint_clone succeeds when
+	 * the calling user doesn't own the chunk. */
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_process_utility_set_expect_chunk_modification(true);
+	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
+						 ObjectIdGetDatum(parent_fk_oid),
+						 ObjectIdGetDatum(chunk->table_id));
+	ts_process_utility_set_expect_chunk_modification(false);
+	ts_catalog_restore_user(&sec_ctx);
+	CommandCounterIncrement();
 }
 
 /*

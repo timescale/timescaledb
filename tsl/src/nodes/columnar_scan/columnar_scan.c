@@ -1215,7 +1215,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	RelOptInfo *compressed_rel = compression_info->compressed_rel;
 
 	/* translate chunk_rel->baserestrictinfo */
-	if (ts_guc_enable_columnar_scan_filter_pushdown)
+	if (ts_guc_enable_optimizations && ts_guc_enable_columnar_scan_filter_pushdown)
 	{
 		columnar_scan_filter_pushdown(root,
 									  compression_info->settings,
@@ -2466,7 +2466,8 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
-	path->enable_bulk_decompression = ts_guc_enable_bulk_decompression;
+	path->enable_bulk_decompression =
+		ts_guc_enable_optimizations && ts_guc_enable_bulk_decompression;
 
 	/*
 	 * ColumnarScan doesn't manage any parallelism itself.
@@ -2955,6 +2956,15 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	SortInfo sort_info = { 0 };
 
 	if (pathkeys == NIL)
+	{
+		return sort_info;
+	}
+
+	/*
+	 * With optimizations disabled we do not push sort below the ColumnarScan
+	 * nor enable batch sorted merge.
+	 */
+	if (!ts_guc_enable_optimizations)
 	{
 		return sort_info;
 	}
