@@ -8,6 +8,8 @@ This release contains bug fixes since the 2.27.1 release. We recommend that you 
 
 **Bugfixes**
 * [#9895](https://github.com/timescale/timescaledb/pull/9895) Remove refresh policy check when adding columnstore policy
+* [#9902](https://github.com/timescale/timescaledb/pull/9902) Fix wrong results and crashes when grouping by columns that are not in the SELECT list with vectorized aggregation or columnar index scan
+* [#9908](https://github.com/timescale/timescaledb/pull/9908) Skip `ColumnarIndexScan` when the qual contains a SubPlan
 
 ## 2.27.1 (2026-05-19)
 

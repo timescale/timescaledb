@@ -1,1 +1,0 @@
-Fixes: #9902 Fix wrong results and crashes when grouping by columns that are not in the SELECT list with vectorized aggregation or columnar index scan
