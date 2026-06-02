@@ -710,6 +710,29 @@ SET enable_partitionwise_aggregate = off;
                Index Cond: (device = 'd1'::text)
                Filter: (_ts_meta_v2_max_value > '10'::double precision)
 
+-- WHERE with a SubPlan on a segmentby column (not pushable, must not be dropped)
+:PREFIX SELECT count(*) FROM metrics WHERE device NOT IN (SELECT 'd' || g FROM generate_series(1,1) g);
+--- QUERY PLAN ---
+ Aggregate
+   ->  Custom Scan (ChunkAppend) on metrics
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (NOT (hashed SubPlan 1))
+               ->  Seq Scan on compress_hyper_2_2_chunk
+               SubPlan 1
+                 ->  Function Scan on generate_series g
+
+:PREFIX SELECT count(*) FROM metrics WHERE device IN (SELECT 'd' || g FROM generate_series(1,2) g);
+--- QUERY PLAN ---
+ Aggregate
+   ->  Nested Loop
+         ->  Unique
+               ->  Sort
+                     Sort Key: (('d'::text || (g.g)::text))
+                     ->  Function Scan on generate_series g
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+                     Index Cond: (device = ('d'::text || (g.g)::text))
+
 -- HAVING with NOT around Aggref
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING NOT (min(value) > 10) ORDER BY device;
 --- QUERY PLAN ---
@@ -1896,6 +1919,33 @@ SET enable_partitionwise_aggregate = off;
          ->  Partial GroupAggregate
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: ((value > '10'::double precision) AND (device = 'd1'::text))
+
+-- WHERE with a SubPlan on a segmentby column (not pushable, must not be dropped)
+:PREFIX SELECT count(*) FROM metrics WHERE device NOT IN (SELECT 'd' || g FROM generate_series(1,1) g);
+--- QUERY PLAN ---
+ Finalize Aggregate
+   ->  Custom Scan (ChunkAppend) on metrics
+         ->  Partial Aggregate
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     Filter: (NOT (hashed SubPlan 1))
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+                     SubPlan 1
+                       ->  Function Scan on generate_series g
+         ->  Partial Aggregate
+               ->  Seq Scan on _hyper_1_1_chunk
+                     Filter: (NOT (hashed SubPlan 1))
+
+:PREFIX SELECT count(*) FROM metrics WHERE device IN (SELECT 'd' || g FROM generate_series(1,2) g);
+--- QUERY PLAN ---
+ Aggregate
+   ->  Hash Semi Join
+         Hash Cond: (metrics.device = ('d'::text || (g.g)::text))
+         ->  Append
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Seq Scan on _hyper_1_1_chunk
+         ->  Hash
+               ->  Function Scan on generate_series g
 
 -- HAVING with NOT around Aggref
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING NOT (min(value) > 10) ORDER BY device;
@@ -3208,6 +3258,38 @@ SET enable_partitionwise_aggregate = off;
                      ->  Index Scan using compress_hyper_2_4_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_4_chunk
                            Index Cond: (device = 'd1'::text)
                            Filter: (_ts_meta_v2_max_value > '10'::double precision)
+
+-- WHERE with a SubPlan on a segmentby column (not pushable, must not be dropped)
+:PREFIX SELECT count(*) FROM metrics WHERE device NOT IN (SELECT 'd' || g FROM generate_series(1,1) g);
+--- QUERY PLAN ---
+ Finalize Aggregate
+   ->  Custom Scan (ChunkAppend) on metrics
+         ->  Partial Aggregate
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     Filter: (NOT (hashed SubPlan 1))
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+                     SubPlan 1
+                       ->  Function Scan on generate_series g
+         ->  Partial Aggregate
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                     Filter: (NOT (hashed SubPlan 1))
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+
+:PREFIX SELECT count(*) FROM metrics WHERE device IN (SELECT 'd' || g FROM generate_series(1,2) g);
+--- QUERY PLAN ---
+ Aggregate
+   ->  Nested Loop
+         ->  Unique
+               ->  Sort
+                     Sort Key: (('d'::text || (g.g)::text))
+                     ->  Function Scan on generate_series g
+         ->  Append
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+                           Index Cond: (device = ('d'::text || (g.g)::text))
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                     ->  Index Scan using compress_hyper_2_4_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_4_chunk
+                           Index Cond: (device = ('d'::text || (g.g)::text))
 
 -- HAVING with NOT around Aggref
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING NOT (min(value) > 10) ORDER BY device;
