@@ -41,17 +41,17 @@ CREATE TABLE test_multicon(time timestamptz not null unique, a int);
 SELECT hypertable_id as htid FROM create_hypertable('test_multicon', 'time', chunk_time_interval => interval '1 day') \gset
 insert into test_multicon values ('2020-01-02 01:00'::timestamptz, 1);
 SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.compressed_chunk_id, c.status, c.osm_chunk,
-cc.chunk_id, cc.dimension_slice_id, cc.constraint_name, cc.hypertable_constraint_name FROM
-_timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc WHERE c.hypertable_id = :htid
-AND c.id = cc.chunk_id;
+ds.chunk_id, ds.id AS dimension_slice_id, format('constraint_%s', ds.id)::name AS constraint_name FROM
+_timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds WHERE c.hypertable_id = :htid
+AND ds.chunk_id = c.id;
 \c :TEST_DBNAME :ROLE_SUPERUSER ;
 UPDATE _timescaledb_catalog.chunk SET osm_chunk = true WHERE hypertable_id = :htid;
 \c :TEST_DBNAME :ROLE_4;
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', '2020-01-02 01:00'::timestamptz, '2020-01-04 01:00');
 -- view udpated range
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id;
 -- check that range was reset to default - infinity
 \set ON_ERROR_STOP 0
 -- both range_start and range_end must be NULL, or non-NULL
@@ -60,9 +60,9 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL,
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon');
 \set ON_ERROR_STOP 1
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL::timestamptz, NULL);
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id ORDER BY ds.chunk_id;
 
 -- TEST for orderedappend that depends on hypertable_osm_range_update functionality
 -- test further with ordered append
@@ -78,9 +78,9 @@ INSERT INTO test_chunkapp (time, a) VALUES ('2020-01-01 01:00'::timestamptz, 1),
 CREATE FOREIGN TABLE test_chunkapp_fdw_child(time timestamptz NOT NULL, a int) SERVER s3_server OPTIONS (schema_name 'public', table_name 'test_chunkapp_fdw');;
 SELECT _timescaledb_functions.attach_osm_table_chunk('test_chunkapp','test_chunkapp_fdw_child');
 -- view range before update
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id ORDER BY ds.chunk_id;
 -- attempt to update overlapping range, should fail
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020-01-02 01:00'::timestamptz, '2020-01-04 01:00');
@@ -88,9 +88,9 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020
 -- update actual range of OSM chunk, should work
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020-01-03 00:00'::timestamptz, '2020-01-04 00:00');
 -- view udpated range
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id ORDER BY ds.chunk_id;
 -- ordered append should be possible as ranges do not overlap
 :EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
@@ -105,9 +105,9 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp',empty:
 -- ordered append not possible because range is invalid and empty was not specified
 :EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
-SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
-WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND ds.chunk_id = c.id ORDER BY ds.chunk_id;
 -- but also, OSM chunk should be included in the scan, since range is invalid and chunk is not empty
 :EXPLAIN SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
 SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;

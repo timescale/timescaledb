@@ -70,7 +70,7 @@ SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 -- Constraints are added to chunk_constraint table.
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
 
 DROP TABLE index_test;
 

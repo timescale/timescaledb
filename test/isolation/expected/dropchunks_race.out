@@ -23,7 +23,14 @@ count
 -----
     0
 
-step s3_show_missing_slices: SELECT count(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
+step s3_show_missing_slices: 
+	SELECT count(*)
+	FROM _timescaledb_catalog.chunk c
+	JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = c.hypertable_id
+	LEFT JOIN _timescaledb_catalog.dimension_slice ds
+	       ON ds.chunk_id = c.id AND ds.dimension_id = d.id
+	WHERE NOT c.osm_chunk AND ds.id IS NULL;
+
 count
 -----
     0
@@ -45,7 +52,7 @@ debug_waitpoint_enable
                       
 
 step s1_drop_chunks: SELECT count(*) FROM drop_chunks('dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); <waiting ...>
-step s5_insert_new_chunk: INSERT INTO dropchunks_race_t1 VALUES ('2020-03-01 10:30', 1, 2.2); <waiting ...>
+step s5_insert_new_chunk: INSERT INTO dropchunks_race_t1 VALUES ('2020-03-01 10:30', 1, 2.2);
 step s4_chunks_dropped_release: SELECT debug_waitpoint_release('drop_chunks_end');
 debug_waitpoint_release
 -----------------------
@@ -56,8 +63,14 @@ count
 -----
     1
 
-step s5_insert_new_chunk: <... completed>
-step s3_show_missing_slices: SELECT count(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
+step s3_show_missing_slices: 
+	SELECT count(*)
+	FROM _timescaledb_catalog.chunk c
+	JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = c.hypertable_id
+	LEFT JOIN _timescaledb_catalog.dimension_slice ds
+	       ON ds.chunk_id = c.id AND ds.dimension_id = d.id
+	WHERE NOT c.osm_chunk AND ds.id IS NULL;
+
 count
 -----
     0
@@ -92,7 +105,14 @@ count
     1
 
 step s5_insert_old_chunk: <... completed>
-step s3_show_missing_slices: SELECT count(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
+step s3_show_missing_slices: 
+	SELECT count(*)
+	FROM _timescaledb_catalog.chunk c
+	JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = c.hypertable_id
+	LEFT JOIN _timescaledb_catalog.dimension_slice ds
+	       ON ds.chunk_id = c.id AND ds.dimension_id = d.id
+	WHERE NOT c.osm_chunk AND ds.id IS NULL;
+
 count
 -----
     0

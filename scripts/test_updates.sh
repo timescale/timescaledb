@@ -91,13 +91,6 @@ if [ -n "${VERSIONS}" ]; then
   for version in ${VERSIONS}; do
     ts_minor_version=$(echo "${version}" | awk -F. '{print $2}')
 
-    if [ "${ts_minor_version}" -ge 10 ]; then
-      TEST_REPAIR=true
-    else
-      TEST_REPAIR=false
-    fi
-
-
     if [ "${ts_minor_version}" -ge 22 ]; then
         TEST_VERSION=v11
     elif [ "${ts_minor_version}" -ge 20 ]; then
@@ -108,7 +101,7 @@ if [ -n "${VERSIONS}" ]; then
         TEST_VERSION=v8
     fi
 
-    export TEST_VERSION TEST_REPAIR
+    export TEST_VERSION
 
     FROM_VERSION=${version} "${SCRIPT_DIR}/test_update_from_version.sh"
     return_code=$?

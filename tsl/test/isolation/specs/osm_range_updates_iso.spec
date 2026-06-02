@@ -13,8 +13,8 @@ setup
   UPDATE _timescaledb_catalog.hypertable set status = 3 WHERE table_name IN ('osm_test', 'osm_test2');
   UPDATE _timescaledb_catalog.chunk set osm_chunk = true WHERE hypertable_id IN (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name IN ('osm_test', 'osm_test2'));
   UPDATE _timescaledb_catalog.dimension_slice set range_start = 9223372036854775806, range_end = 9223372036854775807
-  WHERE id IN (SELECT cc.dimension_slice_id FROM _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.chunk ch,
-    _timescaledb_catalog.hypertable ht WHERE ht.id = ch.hypertable_id AND cc.chunk_id = ch.id AND ht.table_name IN ('osm_test', 'osm_test2'));
+  WHERE chunk_id IN (SELECT ch.id FROM _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+    WHERE ht.id = ch.hypertable_id AND ht.table_name IN ('osm_test', 'osm_test2'));
 
   CREATE TABLE test_drop(time INTEGER, a INTEGER);
   SELECT create_hypertable('test_drop', 'time', chunk_time_interval => 10);
@@ -46,11 +46,11 @@ session "LDST"
 step "LockDimSliceTuple" {
   BEGIN;
   SELECT range_start, range_end FROM _timescaledb_catalog.dimension_slice
-  WHERE id IN ( SELECT ds.id FROM 
-    _timescaledb_catalog.chunk ch, _timescaledb_catalog.chunk_constraint cc,
+  WHERE id IN ( SELECT ds.id FROM
+    _timescaledb_catalog.chunk ch,
     _timescaledb_catalog.dimension_slice ds, _timescaledb_catalog.hypertable ht
-    WHERE ht.table_name like 'osm_test' AND cc.chunk_id = ch.id AND ht.id = ch.hypertable_id
-    AND ds.id = cc.dimension_slice_id AND ch.osm_chunk = true
+    WHERE ht.table_name like 'osm_test' AND ds.chunk_id = ch.id AND ht.id = ch.hypertable_id
+    AND ch.osm_chunk = true
     ) FOR UPDATE;
   }
 step "UnlockDimSliceTuple" { ROLLBACK; }

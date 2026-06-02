@@ -14,7 +14,7 @@ jobs:
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
-          || (steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
+          || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

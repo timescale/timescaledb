@@ -4,14 +4,12 @@
 # - baseline: fresh installation of $TO_VERSION
 # - updated: install $FROM_VERSION, update to $TO_VERSION
 # - restored: restore from updated dump
-# - repair: install $FROM_VERSION, update to $TO_VERSION and run integrity tests
 
 set -xeu
 
 FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{ print $3 }')}
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
 
-TEST_REPAIR=${TEST_REPAIR:-false}
 TEST_VERSION=${TEST_VERSION:-v10}
 
 OUTPUT_DIR=${OUTPUT_DIR:-update_test/${FROM_VERSION}_to_${TO_VERSION}}
@@ -111,19 +109,6 @@ run_sql_file test/sql/updates/post.${TEST_VERSION}.sql restored > "${OUTPUT_DIR}
 
 sed -i -E -e 's!"*_ts_meta_v2_bl[0-9A-Za-z]+_([_0-9A-Za-z]+)"*!regress-test-bloom_\1!g' \
     "${OUTPUT_DIR}"/post.*.log
-
-if [ "${TEST_REPAIR}" = "true" ]; then
-  echo "Creating repair database"
-  {
-    run_sql "CREATE DATABASE repair;"
-    PGDATABASE=repair
-    run_sql "CREATE EXTENSION timescaledb VERSION \"${FROM_VERSION}\";"
-    run_sql_file test/sql/updates/setup.repair.sql baseline
-    run_sql "ALTER EXTENSION timescaledb UPDATE TO \"${TO_VERSION}\";"
-    run_sql_file test/sql/updates/post.repair.sql baseline
-    run_sql_file test/sql/updates/post.integrity_test.sql baseline
-  } > "${OUTPUT_DIR}/repair.log" 2>&1
-fi
 
 diff -u "${OUTPUT_DIR}/post.baseline.log" "${OUTPUT_DIR}/post.updated.log" | tee "${OUTPUT_DIR}/baseline_vs_updated.diff"
 if [ ! -s "${OUTPUT_DIR}/baseline_vs_updated.diff" ]; then

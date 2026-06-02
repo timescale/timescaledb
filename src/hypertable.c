@@ -2585,44 +2585,42 @@ DimensionSlice *
 ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTupleMode tuplockmode,
 								LOCKMODE tablelockmode)
 {
-	ChunkConstraints *constraints =
-		ts_chunk_constraint_scan_by_chunk_id(osm_chunk_id, 1, CurrentMemoryContext);
+	List *slices = ts_dimension_slice_scan_by_chunk_id(osm_chunk_id, CurrentMemoryContext);
+	ListCell *lc;
 
-	for (int i = 0; i < constraints->num_constraints; i++)
+	foreach (lc, slices)
 	{
-		ChunkConstraint *cc = chunk_constraints_get(constraints, i);
-		if (is_dimension_constraint(cc))
+		DimensionSlice *slice = (DimensionSlice *) lfirst(lc);
+
+		if (slice->fd.dimension_id != time_dim_id)
 		{
-			ScanTupLock tuplock = {
-				.lockmode = tuplockmode,
-				.waitpolicy = LockWaitBlock,
-			};
-			/*
-			 * We cannot acquire a tuple lock when running in recovery mode
-			 * since that prevents scans on tiered hypertables from running
-			 * on a read-only secondary. Acquiring a tuple lock requires
-			 * assigning a transaction id for the current transaction state
-			 * which is not possible in recovery mode. So we only acquire the
-			 * lock if we are not in recovery mode.
-			 */
-			ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
-
-			if (!IsolationUsesXactSnapshot())
-			{
-				/* in read committed mode, we follow all updates to this tuple */
-				tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
-			}
-
-			DimensionSlice *dimslice =
-				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-													   tuplock_ptr,
-													   CurrentMemoryContext,
-													   tablelockmode);
-			if (dimslice->fd.dimension_id == time_dim_id)
-			{
-				return dimslice;
-			}
+			continue;
 		}
+
+		ScanTupLock tuplock = {
+			.lockmode = tuplockmode,
+			.waitpolicy = LockWaitBlock,
+		};
+		/*
+		 * We cannot acquire a tuple lock when running in recovery mode
+		 * since that prevents scans on tiered hypertables from running
+		 * on a read-only secondary. Acquiring a tuple lock requires
+		 * assigning a transaction id for the current transaction state
+		 * which is not possible in recovery mode. So we only acquire the
+		 * lock if we are not in recovery mode.
+		 */
+		ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
+
+		if (!IsolationUsesXactSnapshot())
+		{
+			/* in read committed mode, we follow all updates to this tuple */
+			tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+		}
+
+		return ts_dimension_slice_scan_by_id_and_lock(slice->fd.id,
+													  tuplock_ptr,
+													  CurrentMemoryContext,
+													  tablelockmode);
 	}
 	return NULL;
 }

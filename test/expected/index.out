@@ -255,13 +255,13 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal."4_index_test_time_device_key"              | {time,device} |      | t      | f       | f         | 
 
 -- Constraints are added to chunk_constraint table.
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        3 |                  3 | constraint_3    | 
-        3 |                  4 | constraint_4    | 
-        4 |                  5 | constraint_5    | 
-        4 |                  4 | constraint_4    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        3 |                  3 | constraint_3
+        3 |                  4 | constraint_4
+        4 |                  5 | constraint_5
+        4 |                  6 | constraint_6
 
 DROP TABLE index_test;
 -- Create table in a tablespace
@@ -493,15 +493,15 @@ SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_12%');
                   Table                   |      Constraint      | Type |   Columns   |                    Index                     |                                                                     Expr                                                                     | Deferrable | Deferred | Validated 
 ------------------------------------------+----------------------+------+-------------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  _timescaledb_internal._hyper_12_12_chunk | 12_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."12_reindex_test_pkey" |                                                                                                                                              | f          | f        | t
- _timescaledb_internal._hyper_12_12_chunk | constraint_13        | c    | {time}      | -                                            | (("time" >= 'Thu Jan 19 10:00:00 2017'::timestamp without time zone) AND ("time" < 'Sat Feb 18 20:00:00 2017'::timestamp without time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_12_12_chunk | constraint_14        | c    | {time}      | -                                            | (("time" >= 'Thu Jan 19 10:00:00 2017'::timestamp without time zone) AND ("time" < 'Sat Feb 18 20:00:00 2017'::timestamp without time zone)) | f          | f        | t
  _timescaledb_internal._hyper_12_13_chunk | 13_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."13_reindex_test_pkey" |                                                                                                                                              | f          | f        | t
- _timescaledb_internal._hyper_12_13_chunk | constraint_14        | c    | {time}      | -                                            | (("time" >= 'Tue Mar 21 06:00:00 2017'::timestamp without time zone) AND ("time" < 'Thu Apr 20 16:00:00 2017'::timestamp without time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_12_13_chunk | constraint_15        | c    | {time}      | -                                            | (("time" >= 'Tue Mar 21 06:00:00 2017'::timestamp without time zone) AND ("time" < 'Thu Apr 20 16:00:00 2017'::timestamp without time zone)) | f          | f        | t
  _timescaledb_internal._hyper_12_14_chunk | 14_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."14_reindex_test_pkey" |                                                                                                                                              | f          | f        | t
- _timescaledb_internal._hyper_12_14_chunk | constraint_15        | c    | {time}      | -                                            | (("time" >= 'Thu Apr 20 16:00:00 2017'::timestamp without time zone) AND ("time" < 'Sun May 21 02:00:00 2017'::timestamp without time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_12_14_chunk | constraint_16        | c    | {time}      | -                                            | (("time" >= 'Thu Apr 20 16:00:00 2017'::timestamp without time zone) AND ("time" < 'Sun May 21 02:00:00 2017'::timestamp without time zone)) | f          | f        | t
  _timescaledb_internal._hyper_12_15_chunk | 15_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."15_reindex_test_pkey" |                                                                                                                                              | f          | f        | t
- _timescaledb_internal._hyper_12_15_chunk | constraint_16        | c    | {time}      | -                                            | (("time" >= 'Sun May 21 02:00:00 2017'::timestamp without time zone) AND ("time" < 'Tue Jun 20 12:00:00 2017'::timestamp without time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_12_15_chunk | constraint_17        | c    | {time}      | -                                            | (("time" >= 'Sun May 21 02:00:00 2017'::timestamp without time zone) AND ("time" < 'Tue Jun 20 12:00:00 2017'::timestamp without time zone)) | f          | f        | t
  _timescaledb_internal._hyper_12_16_chunk | 16_reindex_test_pkey | p    | {time,temp} | _timescaledb_internal."16_reindex_test_pkey" |                                                                                                                                              | f          | f        | t
- _timescaledb_internal._hyper_12_16_chunk | constraint_17        | c    | {time}      | -                                            | (("time" >= 'Tue Jun 20 12:00:00 2017'::timestamp without time zone) AND ("time" < 'Thu Jul 20 22:00:00 2017'::timestamp without time zone)) | f          | f        | t
+ _timescaledb_internal._hyper_12_16_chunk | constraint_18        | c    | {time}      | -                                            | (("time" >= 'Tue Jun 20 12:00:00 2017'::timestamp without time zone) AND ("time" < 'Thu Jul 20 22:00:00 2017'::timestamp without time zone)) | f          | f        | t
 
 SELECT * FROM reindex_norm;
            time           | temp 
