@@ -18,7 +18,7 @@ jobs:
       - name: Run format on CMake files
         run: |
           git reset --hard
-          find  -name CMakeLists.txt  -exec cmake-format -i {} +
+          find . -name CMakeLists.txt -exec cmake-format -i {} +
           find src test tsl -name '*.cmake' -exec cmake-format -i {} +
           git diff --exit-code
 

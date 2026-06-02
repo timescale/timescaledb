@@ -103,8 +103,8 @@ jobs:
         make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
         mkdir -p build/install_ext build/install_lib
-        cp `pg_config --sharedir`/extension/timescaledb*.{control,sql} build/install_ext
-        cp `pg_config --pkglibdir`/timescaledb*.so build/install_lib
+        cp $(pg_config --sharedir)/extension/timescaledb*.{control,sql} build/install_ext
+        cp $(pg_config --pkglibdir)/timescaledb*.so build/install_lib
 
     - name: Download Postgres ${{ matrix.pg }}-snapshot
       run: |
@@ -135,8 +135,8 @@ jobs:
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR-snapshot -DPG_PATH=~/$PG_INSTALL_DIR-snapshot \
           -DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        cp build/install_ext/* `pg_config --sharedir`/extension/
-        cp build/install_lib/* `pg_config --pkglibdir`
+        cp build/install_ext/* $(pg_config --sharedir)/extension/
+        cp build/install_lib/* $(pg_config --pkglibdir)
 
     - name: make regresscheck
       id: regresscheck
