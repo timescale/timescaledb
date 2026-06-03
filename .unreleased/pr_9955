@@ -1,0 +1,1 @@
+Fixes: #9955 Fix wrong results when using Batch Sorted Merge with no first-last index on a non-leading order by column
