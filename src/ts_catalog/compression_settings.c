@@ -504,6 +504,41 @@ ts_relation_get_uncompressed_relid(Oid compress_relid)
 }
 
 /*
+ * Get the OID of the relation holding the compressed data given the OID of the
+ * uncompressed relation.
+ *
+ * Returns InvalidOid if relid is not compressed.
+ */
+TSDLLEXPORT Oid
+ts_relation_get_compressed_relid(Oid relid)
+{
+	if (!OidIsValid(relid))
+	{
+		return InvalidOid;
+	}
+
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_SETTINGS, AccessShareLock, CurrentMemoryContext);
+	init_scan_by_relid(&iterator, relid);
+
+	Oid compress_relid = InvalidOid;
+	ts_scanner_start_scan(&iterator.ctx);
+	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
+	if (ti)
+	{
+		bool isnull;
+		Datum datum = slot_getattr(ti->slot, Anum_compression_settings_compress_relid, &isnull);
+		if (!isnull)
+		{
+			compress_relid = DatumGetObjectId(datum);
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return compress_relid;
+}
+
+/*
  * Delete entries matching the non-compressed relation.
  */
 TSDLLEXPORT bool

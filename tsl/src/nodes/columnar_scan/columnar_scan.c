@@ -1205,7 +1205,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	SortInfo sort_info =
 		build_sortinfo(root, chunk, chunk_rel, compression_info, root->query_pathkeys);
 
-	Assert(chunk->fd.compressed_chunk_id > 0);
+	Assert(ts_chunk_is_compressed(chunk));
 
 	List *uncompressed_table_pathlist = chunk_rel->pathlist;
 	List *uncompressed_table_parallel_pathlist = chunk_rel->partial_pathlist;
