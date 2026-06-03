@@ -293,3 +293,13 @@ CREATE TABLE _timescaledb_catalog.telemetry_event (
 );
 GRANT SELECT ON _timescaledb_catalog.telemetry_event TO PUBLIC;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_hypertable_info;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_hypertable_info_by_id;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_primary_dimension;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_info;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_info_by_id;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_primary_range;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_primary_range_by_id;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_integer_now_func;
+DROP FUNCTION IF EXISTS _timescaledb_functions.lock_osm_chunk_dimension_slice(regclass);
+
