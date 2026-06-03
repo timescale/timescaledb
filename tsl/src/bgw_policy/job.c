@@ -98,36 +98,16 @@ enable_fast_restart(int32 job_id, const char *job_name)
 	elog(DEBUG1, "the %s job is scheduled to run again immediately", job_name);
 }
 
-/*
- * Returns the ID of a chunk to reorder. Eligible chunks must be at least the
- * 3rd newest chunk in the hypertable (not entirely exact because we use the number
- * of dimension slices as a proxy for the number of chunks),
- * not compressed, not dropped and hasn't been reordered recently.
- * For this version of automatic reordering, "not reordered
- * recently" means the chunk has not been reordered at all. This information
- * is available in the bgw_policy_chunk_stats metadata table.
- */
+/* Return a chunk id to reorder, or -1 if none qualifies. */
 static int
 get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 {
 	const Dimension *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-	const DimensionSlice *nth_dimension =
-		ts_dimension_slice_nth_latest_slice(time_dimension->fd.id,
-											REORDER_SKIP_RECENT_DIM_SLICES_N);
-
-	if (!nth_dimension)
-	{
-		return -1;
-	}
-
 	Assert(time_dimension != NULL);
 
 	return ts_dimension_slice_oldest_valid_chunk_for_reorder(job_id,
 															 time_dimension->fd.id,
-															 BTLessEqualStrategyNumber,
-															 nth_dimension->fd.range_start,
-															 InvalidStrategy,
-															 -1);
+															 REORDER_SKIP_RECENT_DIM_SLICES_N);
 }
 
 /*
@@ -445,11 +425,9 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY, .job_id = job_id };
 
 	/* Try to split window range into a list of ranges */
-	List *refresh_window_list =
-		continuous_agg_split_refresh_window(policy_data.cagg,
-											&policy_data.refresh_window,
-											policy_data.buckets_per_batch,
-											policy_data.refresh_newest_first);
+	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
+																	&policy_data.refresh_window,
+																	policy_data.buckets_per_batch);
 	if (refresh_window_list == NIL)
 	{
 		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
@@ -461,11 +439,20 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 
 	context.number_of_batches = list_length(refresh_window_list);
 
-	ListCell *lc;
+	/*
+	 * The list is always built oldest-first. When refresh_newest_first is true we
+	 * iterate from the last element down to the first using index-based access so
+	 * that no reversal copy of the list is needed.
+	 */
 	int32 processing_batch = 0;
-	foreach (lc, refresh_window_list)
+	int32 nbatches = list_length(refresh_window_list);
+	int32 batch_start = policy_data.refresh_newest_first ? nbatches - 1 : 0;
+	int32 batch_end = policy_data.refresh_newest_first ? -1 : nbatches;
+	int32 batch_step = policy_data.refresh_newest_first ? -1 : 1;
+	for (int32 batch_idx = batch_start; batch_idx != batch_end; batch_idx += batch_step)
 	{
-		InternalTimeRange *refresh_window = (InternalTimeRange *) lfirst(lc);
+		InternalTimeRange *refresh_window =
+			(InternalTimeRange *) list_nth(refresh_window_list, batch_idx);
 		elog(DEBUG1,
 			 "refreshing continuous aggregate \"%s\" from %s to %s",
 			 NameStr(policy_data.cagg->data.user_view_name),
@@ -553,6 +540,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 			}
 
 			/* Process each chunk in its own transaction */
+			ListCell *lc;
 			foreach (lc, chunkid_lst)
 			{
 				PushActiveSnapshot(GetTransactionSnapshot());

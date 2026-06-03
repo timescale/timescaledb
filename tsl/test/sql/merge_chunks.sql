@@ -19,16 +19,16 @@ create view partitions as
 select c.table_name, d.column_name, ds.range_start, ds.range_end
 from _timescaledb_catalog.hypertable h
 join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
-join _timescaledb_catalog.dimension d on (d.hypertable_id = h.id)
-join _timescaledb_catalog.dimension_slice ds on (d.id = ds.dimension_id)
-join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id and cc.dimension_slice_id = ds.id)
+join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
+join _timescaledb_catalog.dimension d on (d.id = ds.dimension_id)
 where h.table_name = 'mergeme'
-order by d.id, ds.range_start, ds.range_end;
+order by d.id, c.id, ds.range_start, ds.range_end;
 
 create view orphaned_slices as
-select ds.id, cc.constraint_name from _timescaledb_catalog.dimension_slice ds
-left join _timescaledb_catalog.chunk_constraint cc on (ds.id = cc.dimension_slice_id)
-where cc.constraint_name is null;
+select ds.id, format('constraint_%s', ds.id)::name as constraint_name
+from _timescaledb_catalog.dimension_slice ds
+left join _timescaledb_catalog.chunk c on (c.id = ds.chunk_id)
+where c.id is null;
 
 
 -----------------

@@ -64,12 +64,12 @@ INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time
 ERROR:  duplicate key value violates unique constraint "4_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_k"
 \set ON_ERROR_STOP 1
 -- Show constraints on main tables
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        3 |                  3 | constraint_3    | 
-        4 |                  4 | constraint_4    | 
-        5 |                  5 | constraint_5    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        3 |                  3 | constraint_3
+        4 |                  4 | constraint_4
+        5 |                  5 | constraint_5
 
 SELECT * FROM test.show_constraints('hyper');
       Constraint      | Type |  Columns   | Index |            Expr             | Deferrable | Deferred | Validated 
@@ -93,12 +93,12 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key;
 -- The constraint should have been removed from the chunk as well
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        3 |                  3 | constraint_3    | 
-        4 |                  4 | constraint_4    | 
-        5 |                  5 | constraint_5    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        3 |                  3 | constraint_3
+        4 |                  4 | constraint_4
+        5 |                  5 | constraint_5
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
                            Constraint                            | Type |  Columns   | Index |                                           Expr                                           | Deferrable | Deferred | Validated 
@@ -132,12 +132,12 @@ SELECT 1;
 COMMIT;
 ERROR:  duplicate key value violates unique constraint "4_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_k"
 \set ON_ERROR_STOP 1
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        3 |                  3 | constraint_3    | 
-        4 |                  4 | constraint_4    | 
-        5 |                  5 | constraint_5    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        3 |                  3 | constraint_3
+        4 |                  4 | constraint_4
+        5 |                  5 | constraint_5
 
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
                            Constraint                            | Type |  Columns   |                              Index                              |            Expr            | Deferrable | Deferred | Validated 
@@ -157,12 +157,12 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 ALTER TABLE  hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key,
 DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooo_time_check;
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        3 |                  3 | constraint_3    | 
-        4 |                  4 | constraint_4    | 
-        5 |                  5 | constraint_5    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        3 |                  3 | constraint_3
+        4 |                  4 | constraint_4
+        5 |                  5 | constraint_5
 
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
                            Constraint                            | Type |  Columns   | Index |            Expr            | Deferrable | Deferred | Validated 
@@ -241,12 +241,12 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
  check_2      | c    | {sensor_1} | -                                   | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
  constraint_4 | c    | {time}     | -                                   | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
 
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        3 |                  3 | constraint_3    | 
-        4 |                  4 | constraint_4    | 
-        5 |                  5 | constraint_5    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        3 |                  3 | constraint_3
+        4 |                  4 | constraint_4
+        5 |                  5 | constraint_5
 
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
@@ -415,14 +415,14 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
  hyper_fk_device_id_fkey | f    | {device_id} | devices_pkey                            |                                                                                          | f          | f        | t
  hyper_fk_sensor_1_check | c    | {sensor_1}  | -                                       | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        3 |                  3 | constraint_3    | 
-        4 |                  4 | constraint_4    | 
-        5 |                  5 | constraint_5    | 
-        6 |                  6 | constraint_6    | 
-        8 |                  8 | constraint_8    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        3 |                  3 | constraint_3
+        4 |                  4 | constraint_4
+        5 |                  5 | constraint_5
+        6 |                  6 | constraint_6
+        8 |                  8 | constraint_8
 
 --test CASCADE drop behavior
 DROP TABLE devices CASCADE;
@@ -434,14 +434,14 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
  constraint_8            | c    | {time}     | -                                       | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
  hyper_fk_sensor_1_check | c    | {sensor_1} | -                                       | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
-----------+--------------------+-----------------+----------------------------
-        3 |                  3 | constraint_3    | 
-        4 |                  4 | constraint_4    | 
-        5 |                  5 | constraint_5    | 
-        6 |                  6 | constraint_6    | 
-        8 |                  8 | constraint_8    | 
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        3 |                  3 | constraint_3
+        4 |                  4 | constraint_4
+        5 |                  5 | constraint_5
+        6 |                  6 | constraint_6
+        8 |                  8 | constraint_8
 
 --the fk went away.
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES

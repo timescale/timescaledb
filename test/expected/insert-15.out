@@ -649,8 +649,8 @@ NOTICE:  trigger called
 ERROR:  duplicate key value violates unique constraint "231_direct_insert_pkey"
 INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = '2000-01-01' RETURNING *;
 NOTICE:  trigger called
-ERROR:  new row for relation "_hyper_14_231_chunk" violates check constraint "constraint_237"
+ERROR:  new row for relation "_hyper_14_231_chunk" violates check constraint "constraint_246"
 INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = EXCLUDED.time + '1 year' RETURNING *;
 NOTICE:  trigger called
-ERROR:  new row for relation "_hyper_14_231_chunk" violates check constraint "constraint_237"
+ERROR:  new row for relation "_hyper_14_231_chunk" violates check constraint "constraint_246"
 \set ON_ERROR_STOP 1

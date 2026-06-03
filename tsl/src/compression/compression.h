@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include "ts_stats/ts_stats_defs.h"
 #include <access/attnum.h>
 #include <catalog/indexing.h>
 #include <executor/tuptable.h>
@@ -20,6 +21,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 #include "hypertable.h"
 #include "nodes/columnar_scan/detoaster.h"
 #include "ts_catalog/compression_settings.h"
+#include "ts_stats/ts_stats_record.h"
 
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
@@ -179,6 +181,10 @@ typedef struct RowDecompressor
 	AttrMap *attrmap;
 
 	Detoaster detoaster;
+
+	TsStatsRelids cached_relids;
+	CmdType cmd_type;
+	SharedCounters observ_counters;
 } RowDecompressor;
 
 /*
@@ -306,6 +312,10 @@ typedef struct RowCompressor
 	bool needs_analyze_segmentby;
 
 	List *metadata_builders; /* List of BatchMetadataBuilder */
+
+	TsStatsRelids cached_relids;
+	CompressionStatsAccumulator observ_acc;
+
 } RowCompressor;
 
 /*
@@ -429,10 +439,14 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 extern BulkWriter bulk_writer_build(Relation out_rel, int insert_options);
 extern BulkWriter *bulk_writer_alloc(Relation out_rel, int insert_options);
 extern void bulk_writer_close(BulkWriter *writer);
-extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc);
+extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc,
+										  Oid in_oid, Oid out_oid);
 
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
+extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compressed_relid,
+										Oid uncompressed_relid, CmdType cmd_type);
+extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
 extern int decompress_batch(RowDecompressor *decompressor);
 extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
 									  int num_attnos);

@@ -517,3 +517,77 @@ SELECT count(*) AS desc_violations FROM (
 ) lagged WHERE prev IS NOT NULL AND prev < series_id;
 
 DROP TABLE segwise_no_overlap CASCADE;
+
+-- github issue #9836
+-- Use-after-free on scankey datums during segmentwise recompression. Detectable under ASAN builds.
+
+-- 64kB work_mem triggers ASAN detection; PG16 minimum is 1024kB.
+DO $$
+BEGIN
+  IF current_setting('server_version_num')::int >= 170000 THEN
+    PERFORM set_config('maintenance_work_mem', '64kB', false);
+  ELSE
+    PERFORM set_config('maintenance_work_mem', '1024kB', false);
+  END IF;
+END $$;
+
+CREATE TABLE segwise_uaf_scankeys(
+  ts timestamptz NOT NULL,
+  seg text NOT NULL,
+  pad text
+);
+
+SELECT create_hypertable(
+  'segwise_uaf_scankeys', 'ts',
+  chunk_time_interval => INTERVAL '7 days'
+);
+
+ALTER TABLE segwise_uaf_scankeys SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'seg',
+  timescaledb.compress_orderby = 'ts'
+);
+
+INSERT INTO segwise_uaf_scankeys
+SELECT '2024-01-01'::timestamptz + (i || 's')::interval,
+       seg, repeat('x', 1200)
+FROM generate_series(1, 12000) i,
+     (VALUES
+       ('aaaa_segment_alpha_' || repeat('A', 180)),
+       ('bbbb_segment_bravo_' || repeat('B', 180)),
+       ('cccc_segment_charlie_' || repeat('C', 180))
+     ) AS segs(seg);
+
+SELECT compress_chunk(c)
+FROM show_chunks('segwise_uaf_scankeys') c;
+
+INSERT INTO segwise_uaf_scankeys
+SELECT '2024-01-01'::timestamptz + ((i + 1000) || 's')::interval + '1us'::interval,
+       seg, repeat('y', 1200)
+FROM generate_series(1, 4000) i,
+     (VALUES
+       ('aaaa_segment_alpha_' || repeat('A', 180)),
+       ('bbbb_segment_bravo_' || repeat('B', 180)),
+       ('cccc_segment_charlie_' || repeat('C', 180))
+     ) AS segs(seg);
+
+SELECT compress_chunk(c)
+FROM show_chunks('segwise_uaf_scankeys') c;
+
+INSERT INTO segwise_uaf_scankeys
+SELECT '2024-01-01'::timestamptz + ((i + 3000) || 's')::interval + '2us'::interval,
+       seg, repeat('z', 1200)
+FROM generate_series(1, 8000) i,
+     (VALUES
+       ('aaaa_segment_alpha_' || repeat('A', 180)),
+       ('bbbb_segment_bravo_' || repeat('B', 180)),
+       ('cccc_segment_charlie_' || repeat('C', 180))
+     ) AS segs(seg);
+
+SELECT compress_chunk(c)
+FROM show_chunks('segwise_uaf_scankeys') c; -- should not segfault
+
+RESET maintenance_work_mem;
+DROP TABLE segwise_uaf_scankeys;
+
+

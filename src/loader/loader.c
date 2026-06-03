@@ -41,6 +41,7 @@
 #include "loader/function_telemetry.h"
 #include "loader/loader.h"
 #include "loader/lwlocks.h"
+#include "loader/ts_stats_handles.h"
 
 /*
  * Loading process:
@@ -623,6 +624,9 @@ timescaledb_shmem_startup_hook(void)
 	ts_bgw_message_queue_shmem_startup();
 	ts_lwlocks_shmem_startup();
 	ts_function_telemetry_shmem_startup();
+#if PG17_LT
+	ts_stats_shmem_startup();
+#endif
 }
 
 /*
@@ -642,6 +646,9 @@ timescaledb_shmem_request_hook(void)
 	ts_bgw_message_queue_alloc();
 	ts_lwlocks_shmem_alloc();
 	ts_function_telemetry_shmem_alloc();
+#if PG17_LT
+	ts_stats_shmem_request();
+#endif
 }
 
 static void

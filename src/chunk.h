@@ -13,6 +13,7 @@
 
 #include "chunk_constraint.h"
 #include "export.h"
+#include "hypercube.h"
 #include "hypertable.h"
 #include "ts_catalog/catalog.h"
 
@@ -68,12 +69,10 @@ typedef struct Chunk
 
 	/*
 	 * The hypercube defines the chunks position in the N-dimensional space.
-	 * Each of the N slices in the cube corresponds to a constraint on the
-	 * chunk table.
+	 * Each of the N slices in the cube corresponds to a CHECK constraint on
+	 * the chunk table.
 	 */
 	Hypercube *cube;
-	ChunkConstraints *constraints;
-
 } Chunk;
 
 /* This structure is used during the join of the chunk constraints to find
@@ -83,7 +82,6 @@ typedef struct ChunkStub
 {
 	int32 id;
 	Hypercube *cube;
-	ChunkConstraints *constraints;
 } ChunkStub;
 
 /*
@@ -107,13 +105,11 @@ typedef struct ChunkScanCtx
 	void *data;
 } ChunkScanCtx;
 
-/* Returns true if the stub has a full set of constraints, otherwise
- * false. Used to find a stub matching a point in an N-dimensional
- * hyperspace. */
+/* Returns true if the stub has a slice in every dimension. */
 static inline bool
 chunk_stub_is_complete(const ChunkStub *stub, const Hyperspace *space)
 {
-	return space->num_dimensions == stub->constraints->num_dimension_constraints;
+	return space->num_dimensions == stub->cube->num_slices;
 }
 
 /* The hash table entry for the ChunkScanCtx */
