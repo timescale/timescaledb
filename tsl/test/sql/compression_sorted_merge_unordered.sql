@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
 -- Increase the working memory limit slightly, otherwise the batch sorted merge
 -- will be penalized for segmentby cardinalities larger than 100, where it is
 -- still faster than sort.
@@ -384,12 +386,13 @@ SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 
--- Test with null values in x2
-set timescaledb.debug_require_batch_sorted_merge to 'forbid';
-
+-- Test with null values in x2: batch sorted merge supported with firstlast indexes
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
 
+-- Should not be optimized (NULL order wrong)
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
@@ -479,7 +482,7 @@ SELECT * FROM test_segby ORDER BY time ASC NULLS FIRST;
 :PREFIX
 SELECT * FROM test_segby ORDER BY segby, time;
 
--- Tests for #9445: forbid BatchSortedMerge on nullable orderby columns
+-- Tests for #9445: forbid BatchSortedMerge on nullable orderby columns with no firstlast index
 CREATE TABLE t(time int NOT NULL, device int, val int);
 SELECT create_hypertable('t', 'time', chunk_time_interval => 10000);
 ALTER TABLE t SET (timescaledb.compress,
@@ -498,10 +501,38 @@ SET timescaledb.enable_direct_compress_insert = true;
 INSERT INTO t SELECT 1, 1, g FROM generate_series(500, 800) g;
 INSERT INTO t SELECT 1, 1, g FROM generate_series(900, 1000) g;
 
+-- Batches with NULLs in orderby columns are correctly sorted with firstlast:
+-- Batch Sorted Merge is allowed
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
+
+-- Should return 0
+SELECT count(*) AS wrong_rows FROM (
+    SELECT val, lag(val) OVER (ORDER BY val DESC) AS prev FROM t
+) t WHERE val IS NULL AND prev IS NOT NULL;
+
+-- Remove firstlast index from order by columns
+update _timescaledb_catalog.compression_settings
+set index = '[{"type": "minmax", "column": "val", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]'
+where relid = 't'::regclass;
+
+update _timescaledb_catalog.compression_settings
+set index = '[{"type": "minmax", "column": "val", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]'
+where compress_relid = (select format('%I.%I', schema_name, table_name)::regclass AS chunk_regclass from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id  from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 't') limit 1));
+
+-- Use minmax index on (val DESC, time DESC) instead
+select schema_name || '.' || table_name comp_chunk  from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 't') limit 1)
+\gset
+create index compressed_index_minmax on :comp_chunk (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, _ts_meta_min_2 DESC, _ts_meta_max_2 DESC);
+
+-- Should not use BatchSortedMerge here, should return 0
 SET timescaledb.debug_require_batch_sorted_merge = 'forbid';
 
--- In DESC order NULLs come first; a NULL after a non-NULL is wrong.
--- Should not use BatchSortedMerge here, should return 0
 SELECT count(*) AS wrong_rows FROM (
     SELECT val, lag(val) OVER (ORDER BY val DESC) AS prev FROM t
 ) t WHERE val IS NULL AND prev IS NOT NULL;
@@ -509,6 +540,8 @@ SELECT count(*) AS wrong_rows FROM (
 -- Can use BatchSortedMerge if we can exclude NULLs from val
 SET timescaledb.debug_require_batch_sorted_merge = 'force';
 SELECT val, lag(val) OVER (ORDER BY val DESC NULLS FIRST) AS prev FROM t where val > 995;
+
+drop table t cascade;
 
 -- Tests for BatchSortedMerge over one-segment data
 --------------------------------------
@@ -583,7 +616,6 @@ drop table test1 cascade;
 drop table test2 cascade;
 drop table test_segby cascade;
 drop table test_nosegby cascade;
-drop table t cascade;
 
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.debug_require_batch_sorted_merge;

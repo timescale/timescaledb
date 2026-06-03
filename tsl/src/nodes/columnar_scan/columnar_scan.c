@@ -2865,6 +2865,8 @@ is_var_notnull(const CompressionInfo *compression_info, Var *var)
 #if PG17_LT
 	notnull = ts_get_attnotnull(compression_info->chunk_rte->relid, var->varattno);
 #else
+	/* Since PG18 "notnullattnums" contain only NOT NULL columns with validated NOT NULL constraints
+	 */
 	notnull = bms_is_member(var->varattno, compression_info->chunk_rel->notnullattnums);
 #endif
 
@@ -2916,8 +2918,8 @@ is_var_notnull(const CompressionInfo *compression_info, Var *var)
 static bool
 match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 									  int starting_pathkey_offset,
-									  const CompressionInfo *compression_info, bool for_bsm,
-									  bool *out_reverse)
+									  const CompressionInfo *compression_info,
+									  bool for_batch_sorted_merge, bool *out_reverse)
 {
 	int compressed_pk_index = 0;
 	for (int i = starting_pathkey_offset; i < list_length(pathkeys); i++)
@@ -2946,13 +2948,13 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			return false;
 		}
 
-		if (for_bsm)
+		/* Special handling for Batch Sorted Merge with minmax-only index */
+		if (for_batch_sorted_merge &&
+			orderby_sparse_kind(compression_info->settings, orderby_index) !=
+				ORDERBY_SPARSE_FIRSTLAST)
 		{
-			/* Bail out on Batch Sorted Merge if orderby column is nullable,
-			 * as at the moment the minmax metadata we have doesn't include NULLs,
-			 * so it's difficult to use it for null-sensitive ordering.
-			 * But this restriction can be lifted in the future on new type of chunks
-			 * with NULL-handling metadata.
+			/* Bail out on Batch Sorted Merge if orderby column is nullable
+			 * and does not have firstlast index
 			 */
 			if (!is_var_notnull(compression_info, var))
 			{
@@ -2967,9 +2969,7 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			 * will be sorted before  [(1,1) ..  (1,19)] with min(1),(1)
 			 * but it should be sorted after as (1,20) > (1,1): correct with firstlast index.
 			 */
-			if (compressed_pk_index > 1 &&
-				orderby_sparse_kind(compression_info->settings, orderby_index) !=
-					ORDERBY_SPARSE_FIRSTLAST)
+			if (compressed_pk_index > 1)
 			{
 				return false;
 			}
@@ -3199,7 +3199,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 														  chunk_em_exprs,
 														  /* starting_pathkey_offset = */ 0,
 														  compression_info,
-														  /* for_bsm = */ true,
+														  /* for_batch_sorted_merge = */ true,
 														  &sort_info.reverse);
 			}
 			return sort_info;
@@ -3231,7 +3231,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 													  chunk_em_exprs,
 													  /* starting_pathkey_offset = */ 0,
 													  compression_info,
-													  /* for_bsm = */ true,
+													  /* for_batch_sorted_merge = */ true,
 													  &sort_info.reverse);
 		}
 		return sort_info;
@@ -3247,12 +3247,13 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	 * loop over the rest of pathkeys
 	 * this needs to exactly match the configured compress_orderby
 	 */
-	sort_info.use_compressed_sort = match_pathkeys_to_compression_orderby(pathkeys,
-																		  chunk_em_exprs,
-																		  i,
-																		  compression_info,
-																		  /* for_bsm = */ false,
-																		  &sort_info.reverse);
+	sort_info.use_compressed_sort =
+		match_pathkeys_to_compression_orderby(pathkeys,
+											  chunk_em_exprs,
+											  i,
+											  compression_info,
+											  /* for_batch_sorted_merge = */ false,
+											  &sort_info.reverse);
 
 	return sort_info;
 }
