@@ -2853,15 +2853,33 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			return false;
 		}
 
-		/* Bail out on BSM if orderby column is nullable,
-		 * as at the moment the minmax metadata we have doesn't include NULLs,
-		 * so it's difficult to use it for null-sensitive ordering.
-		 * But this restriction can be lifted in the future on new type of chunks
-		 * with NULL-handling metadata.
-		 */
-		if (for_bsm && !is_var_notnull(compression_info, var))
+		if (for_bsm)
 		{
-			return false;
+			/* Bail out on Batch Sorted Merge if orderby column is nullable,
+			 * as at the moment the minmax metadata we have doesn't include NULLs,
+			 * so it's difficult to use it for null-sensitive ordering.
+			 * But this restriction can be lifted in the future on new type of chunks
+			 * with NULL-handling metadata.
+			 */
+			if (!is_var_notnull(compression_info, var))
+			{
+				return false;
+			}
+
+			/* Bail out on Batch Sorted Merge with multiple order by keys
+			 * if non-leading keys don't use firstlast index.
+			 * Batches can be sorted incorrectly on multikey minmax index,
+			 * for example
+			 * [(1, 20) .. (1, 30), (2,0)...(2,30)] with min(1),(0)
+			 * will be sorted before  [(1,1) ..  (1,19)] with min(1),(1)
+			 * but it should be sorted after as (1,20) > (1,1): correct with firstlast index.
+			 */
+			if (compressed_pk_index > 1 &&
+				orderby_sparse_kind(compression_info->settings, orderby_index) !=
+					ORDERBY_SPARSE_FIRSTLAST)
+			{
+				return false;
+			}
 		}
 
 		bool orderby_desc =
