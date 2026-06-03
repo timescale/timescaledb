@@ -20,8 +20,6 @@ $$;
 DROP VIEW IF EXISTS _timescaledb_catalog.chunk_constraint;
 DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint( integer, name, name);
 
-DROP FUNCTION IF EXISTS _timescaledb_functions.lock_osm_chunk_dimension_slice(regclass);
-
 ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
 ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);
 
@@ -193,7 +191,7 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics_reset();
 
 DROP FUNCTION IF EXISTS @extschema@.create_hypertable(relation REGCLASS, time_column_name NAME, partitioning_column NAME, number_partitions INTEGER, associated_schema_name NAME, associated_table_prefix NAME, chunk_time_interval ANYELEMENT, create_default_indexes BOOLEAN, if_not_exists BOOLEAN, partitioning_func REGPROC, migrate_data BOOLEAN, time_partitioning_func REGPROC);
 
--- Restore the chunk_target_size check constraint dropped in the forward path.
+-- Restore the chunk_target_size check constraint
 ALTER TABLE _timescaledb_catalog.hypertable
     ADD CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0);
 
@@ -293,4 +291,15 @@ CREATE TABLE _timescaledb_catalog.telemetry_event (
 );
 GRANT SELECT ON _timescaledb_catalog.telemetry_event TO PUBLIC;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_hypertable_info;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_hypertable_info_by_id;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_primary_dimension;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_info;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_info_by_id;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_primary_range;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_primary_range_by_id;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_integer_now_func;
+DROP FUNCTION IF EXISTS _timescaledb_functions.lock_osm_chunk_dimension_slice(regclass);
+
 DROP FUNCTION IF EXISTS _timescaledb_functions.decompress_batch(record);
+
