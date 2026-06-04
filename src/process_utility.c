@@ -5,8 +5,10 @@
  */
 
 #include <postgres.h>
+#include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/table.h>
+#include <access/transam.h>
 #include <access/xact.h>
 #include <catalog/heap.h>
 #include <catalog/index.h>
@@ -113,6 +115,7 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 static bool expect_chunk_modification = false;
 static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
+static void error_if_logical_slot_blocks_extension_drop(void);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
 static void ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc,
@@ -614,6 +617,22 @@ process_drop_procedure_start(DropStmt *stmt)
 					ts_catalog_restore_user(&sec_ctx);
 				}
 			}
+		}
+	}
+}
+
+static void
+process_drop_extension_start(DropStmt *stmt)
+{
+	ListCell *lc;
+
+	foreach (lc, stmt->objects)
+	{
+		char *extname = strVal(lfirst(lc));
+
+		if (strcmp(extname, EXTENSION_NAME) == 0)
+		{
+			error_if_logical_slot_blocks_extension_drop();
 		}
 	}
 }
@@ -2306,39 +2325,6 @@ process_drop_role(ProcessUtilityArgs *args)
 }
 
 /*
- * Compute the maximum page LSN across all pages of a relation.
- *
- * The caller must hold a lock strong enough to fence concurrent writers; we
- * take AccessExclusiveLock here so the value is stable through the end of the
- * transaction.
- */
-static XLogRecPtr
-ts_relation_max_page_lsn(Oid relid)
-{
-	Relation rel;
-	BlockNumber nblocks;
-	XLogRecPtr maxlsn = InvalidXLogRecPtr;
-
-	rel = table_open(relid, AccessExclusiveLock);
-	nblocks = RelationGetNumberOfBlocks(rel);
-	for (BlockNumber blk = 0; blk < nblocks; blk++)
-	{
-		Buffer buf;
-		XLogRecPtr lsn;
-
-		buf = ReadBuffer(rel, blk);
-		LockBuffer(buf, BUFFER_LOCK_SHARE);
-		lsn = BufferGetLSNAtomic(buf);
-		UnlockReleaseBuffer(buf);
-		if (lsn > maxlsn)
-			maxlsn = lsn;
-	}
-	/* keep AccessExclusiveLock until end of transaction */
-	table_close(rel, NoLock);
-	return maxlsn;
-}
-
-/*
  * Block DROP EXTENSION timescaledb when a local logical replication slot
  * still has WAL to decode that references _timescaledb_catalog.hypertable or
  * _timescaledb_catalog.chunk.
@@ -2353,21 +2339,22 @@ ts_relation_max_page_lsn(Oid relid)
  * The slot is unrecoverable at that point, so refuse the drop and let the
  * operator drain or remove the slot first.
  *
- * We compare the maximum page LSN across both tables against each slot's
- * confirmed_flush_lsn. If max page LSN > confirmed_flush, the slot still has
- * modifications to these tables in its pending decoding window.
+ * A slot's catalog_xmin is the oldest transaction whose (user) catalog changes
+ * it may still decode. If the newest XID that modified either table is at or
+ * after a slot's catalog_xmin, that slot still has pending changes against
+ * them.
+ *
+ * Caveat: a pending TRUNCATE leaves no tuple carrying the truncating XID, so
+ * it is not detected here. Nothing in TimescaleDB truncates these internal
+ * catalog tables, so we accept that gap.
  */
 static void
-error_if_logical_slot_blocks_extension_drop(const char *extname)
+error_if_logical_slot_blocks_extension_drop(void)
 {
 	Oid catalog_ns;
-	Oid hypertable_oid;
-	Oid chunk_oid;
-	XLogRecPtr max_lsn;
-	XLogRecPtr chunk_lsn;
-
-	if (strcmp(extname, EXTENSION_NAME) != 0)
-		return;
+	NameData slot_name;
+	TransactionId catalog_xmin;
+    char *catalog[] = {HYPERTABLE_TABLE_NAME, CHUNK_TABLE_NAME};
 
 	if (max_replication_slots == 0 || ReplicationSlotCtl == NULL)
 		return;
@@ -2376,61 +2363,41 @@ error_if_logical_slot_blocks_extension_drop(const char *extname)
 	if (!OidIsValid(catalog_ns))
 		return;
 
-	hypertable_oid = get_relname_relid(HYPERTABLE_TABLE_NAME, catalog_ns);
-	chunk_oid = get_relname_relid(CHUNK_TABLE_NAME, catalog_ns);
-	if (!OidIsValid(hypertable_oid) || !OidIsValid(chunk_oid))
-		return;
+    for (int i = 0; i < 2; i++)
+    {
+		TransactionId max_xid;
+		Oid catalog_oid = get_relname_relid(catalog[i], catalog_ns);
 
-	max_lsn = ts_relation_max_page_lsn(hypertable_oid);
-	chunk_lsn = ts_relation_max_page_lsn(chunk_oid);
-	if (chunk_lsn > max_lsn)
-		max_lsn = chunk_lsn;
-
-	if (XLogRecPtrIsInvalid(max_lsn))
-		return;
-
-	LWLockAcquire(ReplicationSlotControlLock, LW_SHARED);
-	for (int i = 0; i < max_replication_slots; i++)
-	{
-		ReplicationSlot *slot = &ReplicationSlotCtl->replication_slots[i];
-		NameData slot_name;
-		bool is_logical;
-		XLogRecPtr confirmed_flush;
-
-		if (!slot->in_use)
+		if (!OidIsValid(catalog_oid))
+		{
 			continue;
+		}
 
-		SpinLockAcquire(&slot->mutex);
-		slot_name = slot->data.name;
-		is_logical = OidIsValid(slot->data.database);
-		confirmed_flush = slot->data.confirmed_flush;
-		SpinLockRelease(&slot->mutex);
-
-		if (!is_logical)
+		max_xid = ts_relation_max_modifying_xid(catalog_oid);
+		if (!ts_relation_xid_blocks_logical_slot(max_xid, &slot_name, &catalog_xmin))
+		{
 			continue;
-		if (confirmed_flush >= max_lsn)
-			continue;
+		}
 
-		LWLockRelease(ReplicationSlotControlLock);
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_IN_USE),
 				 errmsg("cannot drop extension \"%s\" while logical replication slot "
-						"\"%s\" still has pending changes against TimescaleDB catalog tables",
-						extname,
-						NameStr(slot_name)),
-				 errdetail("Slot \"%s\" has confirmed_flush_lsn %X/%X but "
-						   "_timescaledb_catalog.hypertable / chunk were modified through %X/%X. "
-						   "Decoding the pending WAL after the extension is dropped would fail "
-						   "with \"could not find pg_class entry\".",
+						"\"%s\" still has pending changes against TimescaleDB catalog "
+						"table \"%s\"",
+						EXTENSION_NAME,
+						NameStr(slot_name),
+						catalog[i]),
+				 errdetail("Slot \"%s\" has catalog_xmin %u but TimescaleDB catalog "
+						   "table \"%s\" was modified by transaction %u. Decoding "
+                           "the pending WAL after the extension is dropped would "
+                           "not be possible",
 						   NameStr(slot_name),
-						   LSN_FORMAT_ARGS(confirmed_flush),
-						   LSN_FORMAT_ARGS(max_lsn)),
-				 errhint("Advance the slot past LSN %X/%X (e.g. by consuming with "
-						 "pg_logical_slot_get_changes()), or drop it with "
-						 "pg_drop_replication_slot(), before dropping the extension.",
-						 LSN_FORMAT_ARGS(max_lsn))));
-	}
-	LWLockRelease(ReplicationSlotControlLock);
+						   catalog_xmin,
+						   catalog[i],
+						   max_xid),
+				 errhint("Advance the slot past those changes or drop it before dropping "
+						 "the extension.")));
+    }
 }
 
 static DDLResult
@@ -2466,10 +2433,7 @@ process_drop_start(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_EXTENSION:
 		{
-			ListCell *lc;
-
-			foreach (lc, stmt->objects)
-				error_if_logical_slot_blocks_extension_drop(strVal(lfirst(lc)));
+			process_drop_extension_start(stmt);
 			break;
 		}
 		default:
