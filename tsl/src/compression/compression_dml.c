@@ -1534,6 +1534,14 @@ decompress_chunk_plan_walker(Plan *plan, EState *estate, struct decompress_chunk
 							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 				}
 
+				if (ts_chunk_is_frozen(current_chunk))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							 errmsg("cannot update/delete rows from chunk \"%s\" as it is frozen",
+									get_rel_name(rte->relid))));
+				}
+
 				ctx->batches_decompressed |= decompress_batches_for_update_delete(ctx->ht_state,
 																				  current_chunk,
 																				  predicates,
