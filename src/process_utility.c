@@ -4427,9 +4427,6 @@ process_create_table_end(Node *parsetree)
 										  InvalidOid		 /* partitioning func */
 			);
 
-		ChunkSizingInfo *csi = ts_chunk_sizing_info_get_default_disabled(table_relid);
-		csi->colname = time_column;
-
 		CatalogSecurityContext sec_ctx;
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
@@ -4445,8 +4442,8 @@ process_create_table_end(Node *parsetree)
 											   NULL, /* associated_schema_name */
 										   has_associated_table_prefix ?
 											   &associated_table_prefix :
-											   NULL, /* associated_table_prefix */
-										   csi))
+											   NULL /* associated_table_prefix */
+										   ))
 		{
 			bool enable_columnstore;
 			if (ts_license_is_apache() &&

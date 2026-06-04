@@ -1,8 +1,6 @@
--- The PL/pgSQL helper switched to scalar args in the forward direction;
--- drop it so the target version's chunk_constraint.sql can restore the
--- row-typed signature.
-DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint(
-    integer, name, name);
+
+DROP VIEW IF EXISTS _timescaledb_catalog.chunk_constraint;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint( integer, name, name);
 
 -- Recreate the chunk_constraint catalog table.
 CREATE TABLE _timescaledb_catalog.chunk_constraint (
@@ -184,3 +182,10 @@ GRANT SELECT ON _timescaledb_catalog.dimension_slice TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.dimension_slice_id_seq TO PUBLIC;
 -- end rebuild _timescaledb_catalog.dimension_slice table --
 
+DROP FUNCTION IF EXISTS @extschema@.create_hypertable(relation REGCLASS, time_column_name NAME, partitioning_column NAME, number_partitions INTEGER, associated_schema_name NAME, associated_table_prefix NAME, chunk_time_interval ANYELEMENT, create_default_indexes BOOLEAN, if_not_exists BOOLEAN, partitioning_func REGPROC, migrate_data BOOLEAN, time_partitioning_func REGPROC);
+
+
+-- Restore the chunk_target_size check constraint dropped in the forward path.
+ALTER TABLE _timescaledb_catalog.hypertable
+    ADD CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0);
+DROP FUNCTION IF EXISTS _timescaledb_functions.rebuild_sparse_index(REGCLASS, BOOLEAN);

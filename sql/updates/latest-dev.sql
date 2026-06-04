@@ -1,3 +1,16 @@
+
+-- block when adaptive chunking is in use
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM _timescaledb_catalog.hypertable WHERE chunk_target_size > 0) THEN
+    RAISE EXCEPTION 'cannot upgrade because there are hypertables using adaptive chunking'
+      USING
+        ERRCODE = 'object_not_in_prerequisite_state',
+        DETAIL = format('Please disable adaptive chunking.');
+  END IF;
+END;
+$$;
+
 -- Drop obsolete chunk_constraint rows for inherited CHECK constraints on
 -- OSM chunks; PG inheritance handles propagation now.
 DELETE FROM _timescaledb_catalog.chunk_constraint cc
@@ -158,3 +171,13 @@ ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_constraint_
 DROP TABLE _timescaledb_catalog.chunk_constraint;
 DROP SEQUENCE _timescaledb_catalog.chunk_constraint_name;
 
+-- remove adaptive chunking
+DROP FUNCTION IF EXISTS @extschema@.set_adaptive_chunking(regclass, text, regproc);
+DROP FUNCTION IF EXISTS @extschema@.create_hypertable(relation REGCLASS, time_column_name NAME, partitioning_column NAME, number_partitions INTEGER, associated_schema_name NAME, associated_table_prefix NAME, chunk_time_interval ANYELEMENT, create_default_indexes BOOLEAN, if_not_exists BOOLEAN, partitioning_func REGPROC, migrate_data BOOLEAN, chunk_target_size TEXT, chunk_sizing_func REGPROC, time_partitioning_func REGPROC);
+DROP FUNCTION IF EXISTS _timescaledb_internal.calculate_chunk_interval(integer, bigint, bigint);
+DROP FUNCTION IF EXISTS _timescaledb_functions.calculate_chunk_interval(integer, bigint, bigint);
+
+
+-- chunk_target_size is no longer used, so its check constraint is dropped.
+ALTER TABLE _timescaledb_catalog.hypertable
+    DROP CONSTRAINT IF EXISTS hypertable_chunk_target_size_check;

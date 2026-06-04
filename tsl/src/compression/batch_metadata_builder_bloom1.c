@@ -217,7 +217,7 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 }
 
 static void
-bloom1_reset(void *builder_, RowCompressor *compressor)
+bloom1_reset(void *builder_, Datum *compressed_values, bool *compressed_is_null)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 	Assert(builder->functions.builder_type == METADATA_BUILDER_BLOOM1);
@@ -226,8 +226,8 @@ bloom1_reset(void *builder_, RowCompressor *compressor)
 	memset(bloom, 0, builder->allocated_varlena_bytes);
 	SET_VARSIZE(bloom, builder->allocated_varlena_bytes);
 
-	compressor->compressed_is_null[builder->bloom_attr_offset] = true;
-	compressor->compressed_values[builder->bloom_attr_offset] = 0;
+	compressed_is_null[builder->bloom_attr_offset] = true;
+	compressed_values[builder->bloom_attr_offset] = 0;
 }
 
 static char *
@@ -245,7 +245,8 @@ bloom1_num_bits(const struct varlena *bloom)
 void
 batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *bloom_varlena,
 																	int16 bloom_attr_offset,
-																	RowCompressor *compressor)
+																	Datum *compressed_values,
+																	bool *compressed_is_null)
 {
 	struct varlena *bloom = (struct varlena *) bloom_varlena;
 	char *restrict words_buf = bloom1_words_buf(bloom);
@@ -267,8 +268,8 @@ batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *bloom_
 		 * but technically possible, and the following calculations will
 		 * segfault in this case.
 		 */
-		compressor->compressed_is_null[bloom_attr_offset] = true;
-		compressor->compressed_values[bloom_attr_offset] = PointerGetDatum(NULL);
+		compressed_is_null[bloom_attr_offset] = true;
+		compressed_values[bloom_attr_offset] = PointerGetDatum(NULL);
 		return;
 	}
 
@@ -330,17 +331,18 @@ batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *bloom_
 	Assert(bloom1_num_bits(bloom) % (sizeof(*words_buf) * 8) == 0);
 	Assert(bloom1_num_bits(bloom) % 64 == 0);
 
-	compressor->compressed_is_null[bloom_attr_offset] = false;
-	compressor->compressed_values[bloom_attr_offset] = PointerGetDatum(bloom);
+	compressed_is_null[bloom_attr_offset] = false;
+	compressed_values[bloom_attr_offset] = PointerGetDatum(bloom);
 }
 
 static void
-bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
+bloom1_insert_to_compressed_row(void *builder_, Datum *compressed_values, bool *compressed_is_null)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 	batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(builder->bloom_varlena,
 																		builder->bloom_attr_offset,
-																		compressor);
+																		compressed_values,
+																		compressed_is_null);
 }
 
 /*

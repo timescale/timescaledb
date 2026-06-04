@@ -124,6 +124,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	PGFunction rebuild_columnstore;
+	PGFunction rebuild_sparse_index;
 	void (*decompress_batches_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);

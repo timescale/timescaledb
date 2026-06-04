@@ -142,6 +142,8 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 							   ArrayType *orderby_nullsfirst, Jsonb *sparse_index);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get(Oid relid);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get_by_compress_relid(Oid relid);
+TSDLLEXPORT bool ts_relation_is_compressed_chunk_relation(Oid relid);
+TSDLLEXPORT Oid ts_relation_get_uncompressed_relid(Oid compress_relid);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_materialize(const CompressionSettings *src,
 																	 Oid relid, Oid compress_relid);
 TSDLLEXPORT bool ts_compression_settings_delete(Oid relid);
@@ -152,6 +154,12 @@ TSDLLEXPORT bool ts_compression_settings_equal(const CompressionSettings *left,
 TSDLLEXPORT bool ts_compression_settings_equal_with_defaults(const CompressionSettings *ht,
 															 const CompressionSettings *chunk);
 TSDLLEXPORT bool ts_sparse_index_equal(const Jsonb *left, const Jsonb *right);
+TSDLLEXPORT bool ts_sparse_index_object_equal(SparseIndexSettingsObject *left,
+											  SparseIndexSettingsObject *right);
+TSDLLEXPORT bool ts_sparse_index_object_get_type_and_columns(SparseIndexSettingsObject *obj,
+															 const char **type_out,
+															 List **columns_out);
+TSDLLEXPORT bool ts_sparse_index_is_orderby_source(SparseIndexSettingsObject *obj);
 
 TSDLLEXPORT int ts_compression_settings_update(CompressionSettings *settings);
 TSDLLEXPORT void ts_compression_settings_rename_column_cascade(Oid parent_relid, const char *old,

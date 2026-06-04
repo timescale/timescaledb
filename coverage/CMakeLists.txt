@@ -72,7 +72,7 @@ else()
       --rc
       lcov_branch_coverage=1
       --rc
-      "lcov_excl_br_line=Assert\\(|Ensure\\(|ereport\\("
+      "lcov_excl_br_line=TestAssert(Int64Eq|True)\\(|Assert\\(|Ensure\\(|ereport\\("
       --no-external
       --base-directory
       ${CMAKE_SOURCE_DIR}

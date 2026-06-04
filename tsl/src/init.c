@@ -169,6 +169,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.rebuild_columnstore = tsl_rebuild_columnstore,
+	.rebuild_sparse_index = tsl_rebuild_sparse_index,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,

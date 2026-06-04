@@ -242,6 +242,16 @@ SELECT count(*) FROM hyper_copy;
 -------
    154
 
+-- Disabled by the debug GUC
+SET timescaledb.enable_optimizations TO OFF;
+\copy hyper_copy FROM data/copy_data.csv WITH csv header;
+DEBUG:  Using normal unbuffered copy operation (TS_CIM_SINGLE) because the optimizations are disabled.
+RESET timescaledb.enable_optimizations;
+SELECT count(*) FROM hyper_copy;
+ count 
+-------
+   179
+
 RESET client_min_messages;
 RESET timescaledb.max_open_chunks_per_insert;
 ----------------------------------------------------------------
