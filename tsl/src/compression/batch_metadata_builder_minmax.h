@@ -33,8 +33,6 @@ typedef struct BatchMetadataBuilderMinMax
 
 typedef struct BatchMetadataBuilderMinMax BatchMetadataBuilderMinMax;
 
-typedef struct RowCompressor RowCompressor;
-
 /*
  * This is exposed only for the old unit tests. Ideally they should be replaced
  * with functional tests inspecting the compressed chunk table, and this

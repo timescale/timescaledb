@@ -633,50 +633,6 @@ ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension
 	return space;
 }
 
-static ScanTupleResult
-dimension_find_hypertable_id_tuple_found(TupleInfo *ti, void *data)
-{
-	int32 *hypertable_id = data;
-	bool isnull = false;
-	Datum datum = slot_getattr(ti->slot, Anum_dimension_hypertable_id, &isnull);
-
-	Assert(!isnull);
-	*hypertable_id = DatumGetInt32(datum);
-
-	return SCAN_DONE;
-}
-
-int32
-ts_dimension_get_hypertable_id(int32 dimension_id)
-{
-	int32 hypertable_id;
-	ScanKeyData scankey[1];
-	int ret;
-
-	/* Perform an index scan dimension_id. */
-	ScanKeyInit(&scankey[0],
-				Anum_dimension_id_idx_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(dimension_id));
-
-	ret = dimension_scan_internal(scankey,
-								  1,
-								  dimension_find_hypertable_id_tuple_found,
-								  &hypertable_id,
-								  1,
-								  DIMENSION_ID_IDX,
-								  AccessShareLock,
-								  CurrentMemoryContext);
-
-	if (ret == 1)
-	{
-		return hypertable_id;
-	}
-
-	return -1;
-}
-
 DimensionVec *
 ts_dimension_get_slices(const Dimension *dim)
 {
@@ -1103,7 +1059,7 @@ extern Interval *default_chunk_time_interval;
  * Get the default chunk interval based on dimension type.
  */
 static ChunkInterval
-get_default_interval(Oid dimtype, bool adaptive_chunking)
+get_default_interval(Oid dimtype)
 {
 	ChunkInterval chunk_interval = {
 		.type = InvalidOid,
@@ -1135,15 +1091,7 @@ get_default_interval(Oid dimtype, bool adaptive_chunking)
 			else
 			{
 				chunk_interval.type = INT8OID;
-
-				if (adaptive_chunking)
-				{
-					chunk_interval.integer_interval = DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE;
-				}
-				else
-				{
-					chunk_interval.integer_interval = DEFAULT_CHUNK_TIME_INTERVAL;
-				}
+				chunk_interval.integer_interval = DEFAULT_CHUNK_TIME_INTERVAL;
 			}
 			break;
 		default:
@@ -1159,7 +1107,7 @@ get_default_interval(Oid dimtype, bool adaptive_chunking)
 
 static int64
 dimension_interval_to_internal(const char *colname, Oid dimtype,
-							   const ChunkInterval *chunk_interval, bool adaptive_chunking)
+							   const ChunkInterval *chunk_interval)
 {
 	int64 interval;
 
@@ -1236,14 +1184,14 @@ ts_dimension_interval_to_internal_test(PG_FUNCTION_ARGS)
 
 	if (!OidIsValid(argtype))
 	{
-		chunk_interval = get_default_interval(dimtype, false);
+		chunk_interval = get_default_interval(dimtype);
 	}
 	else
 	{
 		chunk_interval_set(&chunk_interval, PG_GETARG_DATUM(1), argtype);
 	}
 
-	PG_RETURN_INT64(dimension_interval_to_internal("testcol", dimtype, &chunk_interval, false));
+	PG_RETURN_INT64(dimension_interval_to_internal("testcol", dimtype, &chunk_interval));
 }
 
 static void
@@ -1316,10 +1264,7 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 
 		chunk_interval_set(&chunk_interval, *interval, *intervaltype);
 		dim->fd.interval_length =
-			dimension_interval_to_internal(NameStr(dim->fd.column_name),
-										   dimtype,
-										   &chunk_interval,
-										   hypertable_adaptive_chunking_enabled(ht));
+			dimension_interval_to_internal(NameStr(dim->fd.column_name), dimtype, &chunk_interval);
 	}
 
 	if (num_slices)
@@ -1502,13 +1447,11 @@ dimension_info_validate_open(DimensionInfo *info)
 
 	if (!OidIsValid(info->chunk_interval.type))
 	{
-		info->chunk_interval = get_default_interval(dimtype, info->adaptive_chunking);
+		info->chunk_interval = get_default_interval(dimtype);
 	}
 
-	info->interval = dimension_interval_to_internal(NameStr(info->colname),
-													dimtype,
-													&info->chunk_interval,
-													info->adaptive_chunking);
+	info->interval =
+		dimension_interval_to_internal(NameStr(info->colname), dimtype, &info->chunk_interval);
 }
 
 /* Validate the configuration of a closed ("space") dimension */

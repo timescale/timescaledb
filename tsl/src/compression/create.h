@@ -32,6 +32,7 @@ char *column_segment_max_name(int16 column_index);
 char *compressed_column_metadata_name_v2(const char *metadata_type, const char **column_names,
 										 int num_columns);
 char *compressed_column_metadata_name_list_v2(const char *metadata_type, List *column_names_list);
+ColumnDef *create_sparse_index_column_def(List *attributes, const char *metadata_type);
 
 int compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
 									 AttrNumber chunk_attno, Oid compressed_reloid,

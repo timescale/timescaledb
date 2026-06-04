@@ -25,6 +25,11 @@
 static bool
 should_use_direct_compress(ModifyHypertableState *state)
 {
+	if (!ts_guc_enable_optimizations)
+	{
+		return false;
+	}
+
 	if (!ts_guc_enable_direct_compress_insert)
 	{
 		return false;

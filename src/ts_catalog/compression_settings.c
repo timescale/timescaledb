@@ -28,8 +28,6 @@ static HeapTuple compression_settings_formdata_make_tuple(const FormData_compres
 														  TupleDesc desc);
 static Bitmapset *resolve_columns_to_attnos(List *column_names, Oid relid);
 static bool sparse_index_values_equal(List *left, List *right);
-static bool sparse_index_object_equal(SparseIndexSettingsObject *left,
-									  SparseIndexSettingsObject *right);
 
 /*
  * Compare two compression settings for equality
@@ -90,12 +88,56 @@ sparse_index_values_equal(List *left, List *right)
 	return true;
 }
 
+bool
+ts_sparse_index_object_get_type_and_columns(SparseIndexSettingsObject *obj, const char **type_out,
+											List **columns_out)
+{
+	const char *type = NULL;
+	List *columns = NIL;
+
+	foreach_ptr(SparseIndexSettingsPair, pair, obj->pairs)
+	{
+		if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyType]) == 0)
+		{
+			Assert(list_length(pair->values) == 1);
+			type = (const char *) lfirst(list_head(pair->values));
+		}
+		else if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyCol]) == 0)
+		{
+			columns = pair->values;
+		}
+	}
+
+	if (!type || !columns)
+	{
+		return false;
+	}
+
+	*type_out = type;
+	*columns_out = columns;
+	return true;
+}
+
+bool
+ts_sparse_index_is_orderby_source(SparseIndexSettingsObject *obj)
+{
+	foreach_ptr(SparseIndexSettingsPair, pair, obj->pairs)
+	{
+		if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeySource]) == 0)
+		{
+			const char *source = (const char *) lfirst(list_head(pair->values));
+			return strcmp(source, ts_sparse_index_source_names[_SparseIndexSourceEnumOrderby]) == 0;
+		}
+	}
+	return false;
+}
+
 /*
  * Compare two sparse index objects for equality.
  * Two objects are equal if they have the same pairs with the same values.
  */
-static bool
-sparse_index_object_equal(SparseIndexSettingsObject *left, SparseIndexSettingsObject *right)
+bool
+ts_sparse_index_object_equal(SparseIndexSettingsObject *left, SparseIndexSettingsObject *right)
 {
 	if (list_length(left->pairs) != list_length(right->pairs))
 	{
@@ -165,7 +207,7 @@ ts_sparse_index_equal(const Jsonb *left, const Jsonb *right)
 		bool found = false;
 		foreach_ptr(SparseIndexSettingsObject, robj, right_settings->objects)
 		{
-			if (!already_found[ri] && sparse_index_object_equal(lobj, robj))
+			if (!already_found[ri] && ts_sparse_index_object_equal(lobj, robj))
 			{
 				already_found[ri] = true;
 				found = true;
@@ -326,34 +368,40 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 }
 
 static void
-compression_settings_iterator_init(ScanIterator *iterator, Oid relid, bool by_compress_relid)
+init_scan_by_relid(ScanIterator *iterator, Oid relid)
 {
-	int indexid =
-		by_compress_relid ? COMPRESSION_SETTINGS_COMPRESS_RELID_IDX : COMPRESSION_SETTINGS_PKEY;
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(), COMPRESSION_SETTINGS, indexid);
+	iterator->ctx.index =
+		catalog_get_index(ts_catalog_get(), COMPRESSION_SETTINGS, COMPRESSION_SETTINGS_PKEY);
 	ts_scan_iterator_scan_key_init(iterator,
-								   by_compress_relid ?
-									   Anum_compression_settings_compress_relid_idx_relid :
-									   Anum_compression_settings_pkey_relid,
+								   Anum_compression_settings_pkey_relid,
 								   BTEqualStrategyNumber,
 								   F_OIDEQ,
 								   ObjectIdGetDatum(relid));
 }
 
+static void
+init_scan_by_compress_relid(ScanIterator *iterator, Oid compress_relid)
+{
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
+											COMPRESSION_SETTINGS,
+											COMPRESSION_SETTINGS_COMPRESS_RELID_IDX);
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_compression_settings_compress_relid_idx_relid,
+								   BTEqualStrategyNumber,
+								   F_OIDEQ,
+								   ObjectIdGetDatum(compress_relid));
+}
+
 /*
- * Get compression settings for a relation.
- *
- * When 'by_compress_relid' is false, the 'relid' refers to the "main"
- * relation being compressed. When it is true the 'relid' refers to the
- * relation containing the associated compressed data.
+ * Get the compression settings for the relation referred to by 'relid'.
  */
-static CompressionSettings *
-compression_settings_get(Oid relid, bool by_compress_relid)
+TSDLLEXPORT CompressionSettings *
+ts_compression_settings_get(Oid relid)
 {
 	CompressionSettings *settings = NULL;
 	ScanIterator iterator =
 		ts_scan_iterator_create(COMPRESSION_SETTINGS, AccessShareLock, CurrentMemoryContext);
-	compression_settings_iterator_init(&iterator, relid, by_compress_relid);
+	init_scan_by_relid(&iterator, relid);
 
 	ts_scanner_start_scan(&iterator.ctx);
 	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
@@ -369,39 +417,97 @@ compression_settings_get(Oid relid, bool by_compress_relid)
 }
 
 /*
- * Get the compression settings for the relation referred to by 'relid'.
- */
-TSDLLEXPORT CompressionSettings *
-ts_compression_settings_get(Oid relid)
-{
-	return compression_settings_get(relid, false);
-}
-
-/*
  * Get the compression settings for a relation given its associated compressed
  * relation.
- *
- * Ideally, settings should only be looked up by "primary key", i.e., the
- * non-compressed chunk's 'relid', and in that case this function wouldn't be
- * needed. It might be possible to remove this function in the future.
  */
 TSDLLEXPORT CompressionSettings *
-ts_compression_settings_get_by_compress_relid(Oid relid)
+ts_compression_settings_get_by_compress_relid(Oid compress_relid)
 {
-	CompressionSettings *settings = compression_settings_get(relid, true);
-	Ensure(settings, "compression settings not found for %s", get_rel_name(relid));
+	CompressionSettings *settings = NULL;
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_SETTINGS, AccessShareLock, CurrentMemoryContext);
+	init_scan_by_compress_relid(&iterator, compress_relid);
+
+	ts_scanner_start_scan(&iterator.ctx);
+	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
+	if (!ti)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("compression settings not found for relation \"%s\"",
+						get_rel_name(compress_relid))));
+	}
+
+	settings = palloc0(sizeof(CompressionSettings));
+	compression_settings_fill_from_tuple(settings, ti);
+	ts_scan_iterator_close(&iterator);
 	return settings;
 }
 
 /*
- * Delete compression settings for a relation.
- *
- * When 'by_compress_relid' is false, the 'relid' refers to the "main"
- * relation being compressed. When it is true the 'relid' refers to the
- * relation containing the associated compressed data.
+ * Check whether 'relid' is the relation holding the compressed data of a
+ * compressed chunk.
  */
-static bool
-compression_settings_delete(Oid relid, bool by_compress_relid)
+TSDLLEXPORT bool
+ts_relation_is_compressed_chunk_relation(Oid compress_relid)
+{
+	if (!OidIsValid(compress_relid))
+	{
+		return false;
+	}
+
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_SETTINGS, AccessShareLock, CurrentMemoryContext);
+	init_scan_by_compress_relid(&iterator, compress_relid);
+
+	ts_scanner_start_scan(&iterator.ctx);
+	bool found = ts_scanner_next(&iterator.ctx) != NULL;
+	ts_scan_iterator_close(&iterator);
+
+	return found;
+}
+
+/*
+ * Get the OID of the uncompressed relation given the OID of the relation
+ * holding its compressed data.
+ *
+ * Returns InvalidOid if 'compress_relid' is not the compressed-data relation
+ * of any compressed chunk.
+ */
+TSDLLEXPORT Oid
+ts_relation_get_uncompressed_relid(Oid compress_relid)
+{
+	if (!OidIsValid(compress_relid))
+	{
+		return InvalidOid;
+	}
+
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_SETTINGS, AccessShareLock, CurrentMemoryContext);
+	init_scan_by_compress_relid(&iterator, compress_relid);
+
+	Oid relid = InvalidOid;
+	ts_scanner_start_scan(&iterator.ctx);
+	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
+	if (ti)
+	{
+		bool isnull;
+		Datum datum = slot_getattr(ti->slot, Anum_compression_settings_relid, &isnull);
+		if (!isnull)
+		{
+			relid = DatumGetObjectId(datum);
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return relid;
+}
+
+/*
+ * Delete entries matching the non-compressed relation.
+ */
+TSDLLEXPORT bool
+ts_compression_settings_delete(Oid relid)
 {
 	if (!OidIsValid(relid))
 	{
@@ -411,7 +517,7 @@ compression_settings_delete(Oid relid, bool by_compress_relid)
 	int count = 0;
 	ScanIterator iterator =
 		ts_scan_iterator_create(COMPRESSION_SETTINGS, RowExclusiveLock, CurrentMemoryContext);
-	compression_settings_iterator_init(&iterator, relid, by_compress_relid);
+	init_scan_by_relid(&iterator, relid);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -423,21 +529,28 @@ compression_settings_delete(Oid relid, bool by_compress_relid)
 }
 
 /*
- * Delete entries matching the non-compressed relation.
- */
-TSDLLEXPORT bool
-ts_compression_settings_delete(Oid relid)
-{
-	return compression_settings_delete(relid, false);
-}
-
-/*
  * Delete entries matching a compressed relation.
  */
 TSDLLEXPORT bool
 ts_compression_settings_delete_by_compress_relid(Oid relid)
 {
-	return compression_settings_delete(relid, true);
+	if (!OidIsValid(relid))
+	{
+		return false;
+	}
+
+	int count = 0;
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_SETTINGS, RowExclusiveLock, CurrentMemoryContext);
+	init_scan_by_compress_relid(&iterator, relid);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+		count++;
+	}
+	return count > 0;
 }
 
 /*

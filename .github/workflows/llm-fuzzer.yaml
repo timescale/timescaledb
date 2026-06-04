@@ -342,7 +342,7 @@ jobs:
         sudo journalctl --system -q --facility=kern --grep "Killed process" || true
 
     - name: Stack trace
-      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      if: always() && steps.collectlogs.outputs.coredumps == 'true' && steps.repro.outputs.found == 'true'
       run: |
         sudo coredumpctl gdb <<<"
           set verbose on

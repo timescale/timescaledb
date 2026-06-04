@@ -94,10 +94,6 @@ ERROR:  cannot execute set_chunk_time_interval() in a read-only transaction
 --
 SELECT * FROM set_number_partitions('test_table', 2);
 ERROR:  cannot execute set_number_partitions() in a read-only transaction
--- set_adaptive_chunking()
---
-SELECT * FROM set_adaptive_chunking('test_table', '2MB');
-ERROR:  cannot execute set_adaptive_chunking() in a read-only transaction
 -- drop_chunks()
 --
 SELECT * FROM drop_chunks('test_table', older_than => 10);

@@ -1,1 +1,0 @@
-Fixes: #9908 Skip `ColumnarIndexScan` when the qual contains a SubPlan

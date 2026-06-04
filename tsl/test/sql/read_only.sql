@@ -84,10 +84,6 @@ SELECT * FROM set_chunk_time_interval('test_table', 2000000000::bigint);
 --
 SELECT * FROM set_number_partitions('test_table', 2);
 
--- set_adaptive_chunking()
---
-SELECT * FROM set_adaptive_chunking('test_table', '2MB');
-
 -- drop_chunks()
 --
 SELECT * FROM drop_chunks('test_table', older_than => 10);
