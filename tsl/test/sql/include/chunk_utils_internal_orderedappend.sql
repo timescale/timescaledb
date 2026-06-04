@@ -40,7 +40,7 @@ ORDER BY 2,3;
 CREATE TABLE test_multicon(time timestamptz not null unique, a int);
 SELECT hypertable_id as htid FROM create_hypertable('test_multicon', 'time', chunk_time_interval => interval '1 day') \gset
 insert into test_multicon values ('2020-01-02 01:00'::timestamptz, 1);
-SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.compressed_chunk_id, c.status, c.osm_chunk,
+SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.status, c.osm_chunk,
 ds.chunk_id, ds.id AS dimension_slice_id, format('constraint_%s', ds.id)::name AS constraint_name FROM
 _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds WHERE c.hypertable_id = :htid
 AND ds.chunk_id = c.id;

@@ -17,8 +17,10 @@ SELECT
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
+   LEFT JOIN _timescaledb_catalog.compression_settings cs
+ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
    LEFT JOIN _timescaledb_catalog.chunk comp
-ON comp.id = c.compressed_chunk_id
+ON cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass
 ;
 
 CREATE OR REPLACE VIEW compression_rowcnt_view AS
@@ -490,9 +492,9 @@ FROM generate_series(1, 500) t;
 SELECT compress_chunk(c) FROM show_chunks('segwise_no_overlap') c;
 
 -- Locate the compressed chunk for the metadata check.
-SELECT cc.schema_name || '.' || cc.table_name AS comp_table_segwise
+SELECT cs.compress_relid AS comp_table_segwise
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.chunk cc      ON cc.id = uc.compressed_chunk_id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 JOIN _timescaledb_catalog.hypertable h  ON h.id  = uc.hypertable_id
 WHERE h.table_name = 'segwise_no_overlap' \gset
 

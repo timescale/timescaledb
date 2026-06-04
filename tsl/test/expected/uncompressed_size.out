@@ -19,11 +19,11 @@ SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
 ----------------------------------------
  _timescaledb_internal._hyper_3_2_chunk
 
-SELECT ccs.compressed_chunk_id, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk ch ON ch.id=ccs.compressed_chunk_id JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(format('%I.%I',ch.schema_name,ch.table_name))) l ON true;
- compressed_chunk_id | relation_size | index_size | total_size 
----------------------+---------------+------------+------------
-                   3 |       5980000 |    2000000 |    7980000
-                   4 |       5520000 |    2000000 |    7520000
+SELECT cs.compress_relid, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk uc ON uc.id=ccs.chunk_id JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=format('%I.%I',uc.schema_name,uc.table_name)::regclass JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(cs.compress_relid)) l ON true;
+                 compress_relid                 | relation_size | index_size | total_size 
+------------------------------------------------+---------------+------------+------------
+ _timescaledb_internal.compress_hyper_2_3_chunk |       5980000 |    2000000 |    7980000
+ _timescaledb_internal.compress_hyper_4_4_chunk |       5520000 |    2000000 |    7520000
 
 -- test NULL compression does not error and returns NULL
 INSERT INTO t1 SELECT '2026-01-01'::timestamptz + format('%s ms', i)::interval, NULL, NULL FROM generate_series(1, 3000) i;

@@ -2991,9 +2991,9 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		ts_chunk_rewrite_delete(relid, false);
 	}
 
-	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
+	if (ts_flags_are_set_32(DatumGetInt32(form.status), CHUNK_STATUS_COMPRESSED))
 	{
-		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false);
+		Oid compressed_relid = ts_relation_get_compressed_relid(relid);
 
 		if (OidIsValid(relid))
 		{
@@ -3001,11 +3001,11 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		}
 
 		/* The chunk may have been deleted by a CASCADE */
-		if (compressed_chunk != NULL)
+		if (OidIsValid(compressed_relid))
 		{
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
-			ts_chunk_drop(compressed_chunk, behavior, DEBUG1);
+			ts_chunk_drop_by_relid(compressed_relid, behavior, DEBUG1);
 		}
 	}
 	else if (OidIsValid(relid))
@@ -3823,6 +3823,32 @@ ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 
 	/* Evict the chunk stats from the shared memory */
 	ts_stats_chunk_evict(chunk->table_id);
+}
+
+void
+ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level)
+{
+	ObjectAddress objaddr = {
+		.classId = RelationRelationId,
+		.objectId = relid,
+	};
+
+	const char *schema_name = get_namespace_name(get_rel_namespace(relid));
+	const char *table_name = get_rel_name(relid);
+
+	if (log_level >= 0)
+	{
+		elog(log_level, "dropping chunk %s.%s", schema_name, table_name);
+	}
+
+	/* Remove the chunk from the chunk table */
+	ts_chunk_delete_by_relid_and_relname(relid, schema_name, table_name, behavior);
+
+	/* Drop the table */
+	performDeletion(&objaddr, behavior, 0);
+
+	/* Evict the chunk stats from the shared memory */
+	ts_stats_chunk_evict(relid);
 }
 
 static void

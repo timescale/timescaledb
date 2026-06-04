@@ -327,7 +327,6 @@ from _timescaledb_catalog.compression_chunk_size ccs \gset
 create view compression_size_fraction as
 select
     ccs.chunk_id,
-    ccs.compressed_chunk_id,
     round(ccs.uncompressed_heap_size::numeric / :total_uncompressed_heap_size, 1) as uncompressed_heap_size_fraction,
     ccs.uncompressed_toast_size::numeric as uncompressed_toast_size_fraction,
     round(ccs.uncompressed_index_size::numeric / :total_uncompressed_index_size, 1) as uncompressed_index_size_fraction,

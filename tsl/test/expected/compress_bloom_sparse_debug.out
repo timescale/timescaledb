@@ -32,10 +32,11 @@ create or replace function ts_bloom1_debug_info(in _timescaledb_internal.bloom1,
     out detoasted_bytes int, out bits_total int, out bits_set int,
     out estimated_elements int)
 as :TSL_MODULE_PATHNAME, 'ts_bloom1_debug_info' language c immutable parallel safe;
-select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test') limit 1)
+select cs.compress_relid::regclass chunk, 'c' column from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test') limit 1
 \gset
 with col as (
     select _ts_meta_count rows, _ts_meta_v2_bloomh_:column f, :column cc
@@ -176,12 +177,15 @@ select count(compress_chunk(x)) from show_chunks('detoaster') x;
 
 with chunks as (
   select
-    row_number() over (order by table_name) index,
-    schema_name || '.' || table_name chunk
-  from _timescaledb_catalog.chunk
-    where id in (select compressed_chunk_id from _timescaledb_catalog.chunk
-      where hypertable_id = (select id from _timescaledb_catalog.hypertable
-        where table_name = 'detoaster'))
+    row_number() over (order by cc.table_name) index,
+    cc.schema_name || '.' || cc.table_name chunk
+  from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+      on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    join _timescaledb_catalog.chunk cc
+      on cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
+  where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'detoaster')
 )
 select max(chunk) filter (where index = 1) chunk1,
     max(chunk) filter (where index = 2) chunk2

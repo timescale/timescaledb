@@ -24,9 +24,10 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 ORDER BY ch1.id
 LIMIT 1 \gset
 
-select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
-from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
-where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+select  cs.compress_relid as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.compression_settings cs
+where cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  AND uncompressed.id = :'CHUNK_ID' \gset
 
 -- Confirm we have multiple batches
 SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 ASC;

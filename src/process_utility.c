@@ -1728,14 +1728,11 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			if (stmt->behavior == DROP_CASCADE && ts_chunk_is_compressed(chunk))
 			{
 				Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
-				Chunk *compressed_chunk = ts_chunk_get_by_relid_locked(compressed_relid,
-																	   AccessExclusiveLock,
-																	   &slice_lock,
-																	   false);
 				/* The chunk may have been delete by a CASCADE */
-				if (compressed_chunk != NULL)
+				if (OidIsValid(compressed_relid))
 				{
-					ts_chunk_drop(compressed_chunk, stmt->behavior, DEBUG1);
+					LockRelationOid(compressed_relid, AccessExclusiveLock);
+					ts_chunk_drop_by_relid(compressed_relid, stmt->behavior, DEBUG1);
 				}
 			}
 

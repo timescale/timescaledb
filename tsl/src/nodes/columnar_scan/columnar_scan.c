@@ -2382,14 +2382,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	 * Ensure we do not grab a slice lock because that will assign a transaction ID that could
 	 * unnecessarily block other operations.
 	 */
-	const Chunk *compressed_chunk = ts_chunk_get_by_relid_locked(info->settings->fd.compress_relid,
-																 AccessShareLock,
-																 NULL,
-																 true);
-	ts_add_baserel_cache_entry_for_chunk(info->settings->fd.compress_relid,
-										 ts_planner_get_hypertable(compressed_chunk
-																	   ->hypertable_relid,
-																   CACHE_FLAG_NONE));
+	LockRelationOid(info->settings->fd.compress_relid, AccessShareLock);
 
 	expand_planner_arrays(root, 1);
 	info->compressed_rte = columnar_scan_make_rte(info->settings->fd.compress_relid,
