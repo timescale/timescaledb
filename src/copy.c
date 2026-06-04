@@ -794,6 +794,14 @@ copy_table_to_chunk_error_callback(void *arg)
 static TSCopyInsertMethod
 choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resultRelInfo)
 {
+	if (!ts_guc_enable_optimizations)
+	{
+		ereport(DEBUG1,
+				(errmsg("Using normal unbuffered copy operation (TS_CIM_SINGLE) "
+						"because the optimizations are disabled.")));
+		return TS_CIM_SINGLE;
+	}
+
 	/*
 	 * Multi-insert buffers (TS_CIM_MULTI_CONDITIONAL) can only be used if no triggers are
 	 * defined on the target table. Otherwise, the tuples may be inserted in an out-of-order
