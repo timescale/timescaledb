@@ -53,8 +53,8 @@ order by chunk_id;
 \x
 select  ch1.id, ch1.schema_name, ch1.table_name ,  ch2.table_name as compress_table
 from
-_timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2
-where ch1.compressed_chunk_id = ch2.id;
+_timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2, _timescaledb_catalog.compression_settings cs
+where cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass AND cs.compress_relid = format('%I.%I', ch2.schema_name, ch2.table_name)::regclass;
 
 \set ON_ERROR_STOP 0
 --cannot compress the chunk the second time around
@@ -155,9 +155,9 @@ SELECT compress_chunk(ch, true) FROM show_chunks('conditions') ch ORDER BY ch::t
 
 select tableoid::regclass, count(*) from conditions group by tableoid order by tableoid;
 
-select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
-from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
-where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+select  cs.compress_relid as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.compression_settings cs
+where cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass AND uncompressed.id = :'CHUNK_ID' \gset
 
 SELECT count(*) from :CHUNK_NAME;
 SELECT count(*) from :COMPRESSED_CHUNK_NAME;
@@ -205,8 +205,8 @@ _timescaledb_catalog.compression_chunk_size map
 where ch1.hypertable_id = ht.id and ht.table_name like 'conditions'
 and map.chunk_id = ch1.id;
 
---make sure  compressed_chunk_id  is reset to NULL
-select ch1.compressed_chunk_id IS NULL
+--make sure the chunk is no longer linked to a compressed chunk
+select NOT EXISTS (SELECT 1 FROM _timescaledb_catalog.compression_settings cs WHERE cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass AND cs.compress_relid IS NOT NULL)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
 
 -- test plans get invalidated when chunks get compressed
@@ -535,9 +535,9 @@ SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples 
 
 SELECT compch.table_name  as "STAT_COMP_CHUNK_NAME"
 FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
-       , _timescaledb_catalog.chunk compch
+       , _timescaledb_catalog.chunk compch, _timescaledb_catalog.compression_settings cs
   WHERE ht.table_name = 'stattest' AND ch.hypertable_id = ht.id
-        AND compch.id = ch.compressed_chunk_id AND ch.compressed_chunk_id > 0  \gset
+        AND cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass AND cs.compress_relid = format('%I.%I', compch.schema_name, compch.table_name)::regclass  \gset
 
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
@@ -616,7 +616,7 @@ SET reltuples = 0, relpages = 0
     _timescaledb_catalog.chunk ch,
     _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id
-        AND ch.compressed_chunk_id > 0 );
+        AND format('%I.%I', ch.schema_name, ch.table_name)::regclass IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 SET timezone TO 'America/Los_Angeles';
@@ -684,7 +684,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 SELECT drop_chunks('metrics', older_than=>'1 day'::interval);
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.compressed_chunk_id as comp_id
+   c.status as chunk_status
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
@@ -696,7 +696,7 @@ INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.compressed_chunk_id as comp_id
+   c.status as chunk_status
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
@@ -1075,20 +1075,20 @@ SELECT compress_chunk(:'CHUNK', false);
 \set ON_ERROR_STOP 1
 
 ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='device');
-SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+SELECT compress_relid from _timescaledb_catalog.compression_settings cs INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
 -- changing compression settings will not recompress the chunk by default
 SELECT compress_chunk(:'CHUNK');
 -- unless we specify recompress := true
 SELECT compress_chunk(:'CHUNK', recompress := true);
--- compressed_chunk_id should be different now
-SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+-- compressed chunk should be different now
+SELECT compress_relid from _timescaledb_catalog.compression_settings cs INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
 
 --test partial handling
 INSERT INTO compress_chunk_test SELECT '2020-01-01', 'c3po', 3.14;
 -- should result in merging uncompressed data into compressed chunk
 SELECT compress_chunk(:'CHUNK');
--- compressed_chunk_id should not have changed
-SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+-- compressed chunk should not have changed
+SELECT compress_relid from _timescaledb_catalog.compression_settings cs INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
 -- should return no rows
 SELECT * FROM ONLY :CHUNK;
 
@@ -1201,9 +1201,9 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 ORDER BY ch1.id
 LIMIT 1 \gset
 
-select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
-from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
-where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+select  cs.compress_relid as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.compression_settings cs
+where cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass AND uncompressed.id = :'CHUNK_ID' \gset
 
 SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
 ROLLBACK;
@@ -1218,9 +1218,9 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 ORDER BY ch1.id
 LIMIT 1 \gset
 
-select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
-from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
-where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+select  cs.compress_relid as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.compression_settings cs
+where cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass AND uncompressed.id = :'CHUNK_ID' \gset
 
 SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
 ROLLBACK;
@@ -1236,9 +1236,9 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 ORDER BY ch1.id
 LIMIT 1 \gset
 
-select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
-from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
-where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+select  cs.compress_relid as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.compression_settings cs
+where cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass AND uncompressed.id = :'CHUNK_ID' \gset
 
 SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
 

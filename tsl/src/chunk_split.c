@@ -1175,8 +1175,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		new_compressed_chunk =
 			create_compress_chunk(ht_compressed, new_chunk, InvalidOid, false, NULL);
-		ts_trigger_create_all_on_chunk(new_compressed_chunk);
-		ts_chunk_set_compressed_chunk(new_chunk, new_compressed_chunk->fd.id);
 	}
 
 	CommandCounterIncrement();

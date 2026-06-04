@@ -12,7 +12,8 @@ RETURNS TABLE(attname name, typname name) AS $$
     WHERE a.attrelid = (
         SELECT format('%I.%I', cc.schema_name, cc.table_name)::regclass
         FROM _timescaledb_catalog.chunk uc
-        JOIN _timescaledb_catalog.chunk cc ON uc.compressed_chunk_id = cc.id
+        JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+        JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
         WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = chunk_regclass
     )
     AND a.attname LIKE '_ts_meta_%'
@@ -155,7 +156,8 @@ DECLARE
 BEGIN
     SELECT format('%I.%I', cc.schema_name, cc.table_name)::regclass INTO compressed_relid
     FROM _timescaledb_catalog.chunk uc
-    JOIN _timescaledb_catalog.chunk cc ON uc.compressed_chunk_id = cc.id
+    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+    JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
     WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = chunk_regclass;
 
     SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY a.attname) INTO col_list
@@ -183,12 +185,14 @@ SELECT compress_chunk(:'ichunk2');
 
 SELECT cc.schema_name AS ic_schema1, cc.table_name AS ic_table1
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.chunk cc ON uc.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
 WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk1'::regclass \gset
 
 SELECT cc.schema_name AS ic_schema2, cc.table_name AS ic_table2
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.chunk cc ON uc.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
 WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk2'::regclass \gset
 
 \o :ORIGINAL
@@ -239,12 +243,14 @@ SELECT compress_chunk(:'ichunk2');
 -- re-fetch compressed chunk names after recompress
 SELECT cc.schema_name AS ic_schema1, cc.table_name AS ic_table1
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.chunk cc ON uc.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
 WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk1'::regclass \gset
 
 SELECT cc.schema_name AS ic_schema2, cc.table_name AS ic_table2
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.chunk cc ON uc.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
 WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk2'::regclass \gset
 
 \o :ORIGINAL
@@ -293,7 +299,8 @@ SELECT compress_chunk(:'ichunk1');
 
 SELECT cc.schema_name AS ic_schema1, cc.table_name AS ic_table1
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.chunk cc ON uc.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
 WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk1'::regclass \gset
 
 ALTER TABLE rsi_integrity SET (
@@ -365,7 +372,8 @@ SELECT compress_chunk(:'ichunk1');
 
 SELECT cc.schema_name AS ic_schema1, cc.table_name AS ic_table1
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.chunk cc ON uc.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
 WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk1'::regclass \gset
 
 ALTER TABLE rsi_integrity SET (
