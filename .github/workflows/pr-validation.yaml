@@ -1,7 +1,7 @@
 name: Pull Request Validation
 "on":
   pull_request:
-    types: [opened, synchronize, reopened, edited, auto_merge_enabled, auto_merge_disabled]
+    types: [opened, synchronize, reopened, edited, milestoned, demilestoned, auto_merge_enabled, auto_merge_disabled]
     branches: [main]
 jobs:
   # Count the number of commits in a pull request. This can be
@@ -64,3 +64,40 @@ jobs:
             exit 1
           fi
         fi
+
+  # Enforce that pull requests have a milestone set. This can be
+  # disabled by adding a trailer line of the following form to the
+  # pull request message:
+  #
+  #    Disable-Check: milestone
+  #
+  # The check is also skipped for pull requests opened by bots (e.g.
+  # dependabot, renovate).
+  check_milestone:
+    name: Enforce milestone is set
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+    - name: Check milestone
+      shell: bash --norc --noprofile {0}
+      env:
+        BODY: ${{ github.event.pull_request.body }}
+        MILESTONE: ${{ github.event.pull_request.milestone.title }}
+      run: |
+        echo "$BODY" | egrep -qsi '^disable-check:.*\<milestone\>'
+        if [[ $? -eq 0 ]]; then
+          echo "Milestone check disabled via Disable-check trailer."
+          exit 0
+        fi
+
+        if [[ -z "$MILESTONE" ]]; then
+          echo "Pull request must have a milestone set."
+          echo
+          echo "Please assign a milestone to this pull request."
+          echo
+          echo "To disable the milestone check, add this trailer to pull request message:"
+          echo
+          echo "Disable-check: milestone"
+          exit 1
+        fi
+        echo "Milestone: $MILESTONE"
