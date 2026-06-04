@@ -20,6 +20,8 @@ $$;
 DROP VIEW IF EXISTS _timescaledb_catalog.chunk_constraint;
 DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint( integer, name, name);
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.lock_osm_chunk_dimension_slice(regclass);
+
 ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
 ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);
 
