@@ -544,7 +544,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 											slot,
 											branch_filter,
 											value_expression,
-											branch_filter == batch_state->vector_qual_result ?
+											branch_filter == top_filter ?
 												expr_cache :
 												NULL);
 
@@ -665,8 +665,6 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 		 * broader result is safe to cache, because it has the correct values
 		 * for all rows of a narrower result.
 		 */
-		Assert(filter == ((const DecompressBatchState *) slot)->vector_qual_result);
-
 		cache_entry = expr_cache_lookup(expr_cache, (Expr *) argument);
 	}
 

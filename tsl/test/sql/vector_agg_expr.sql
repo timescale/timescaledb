@@ -222,6 +222,9 @@ select sum(abs(v - 500)), count(abs(v - 500)), min(abs(v - 500)) from aggexpr;
 -- the int4 cast consumes it via compressed_columns_to_postgres_data.
 select sum((b = (i > 0))::int), count(b = (i > 0)) from aggexpr;
 
+-- Multiple qual evaluation with caching.
+select sum(abs(v - 500)), count(abs(v - 500)) from aggexpr where abs(v) > 3 AND abs(v) < 9;
+
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 
