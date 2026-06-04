@@ -118,10 +118,16 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = NIL;
 
 	/*
-	 * With plain EXPLAIN, the node is not actually executed, so we have to
-	 * finish the child plan state initialization now.
+	 * In some cases, we have to initialize the child plan states now w/o
+	 * deferral.
+	 *
+	 * 1) With plain EXPLAIN, when the node is not actually executed.
+	 *
+	 * 2) For data-modifying CTEs that are not used by the main query. These are
+	 * only executed as ExecPostprocessPlan step, after the main query finishes,
+	 * and need to be initialized before that.
 	 */
-	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
+	if ((eflags & EXEC_FLAG_EXPLAIN_ONLY) || !mt->canSetTag)
 	{
 		modify_hypertable_init_child_plan_states(node);
 	}
