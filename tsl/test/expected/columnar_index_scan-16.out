@@ -1590,7 +1590,7 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
          Sort Key: metrics.device
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Sort
                Sort Key: _hyper_1_1_chunk.device
                ->  Seq Scan on _hyper_1_1_chunk
@@ -2009,9 +2009,7 @@ SET enable_partitionwise_aggregate = off;
          ->  Merge Append
                Sort Key: m1.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m1_1
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
                ->  Sort
                      Sort Key: m1_1.device
                      ->  Seq Scan on _hyper_1_1_chunk m1_1
@@ -2019,9 +2017,7 @@ SET enable_partitionwise_aggregate = off;
                ->  Merge Append
                      Sort Key: m2.device
                      ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2_1
-                           ->  Sort
-                                 Sort Key: compress_hyper_2_2_chunk_1.device
-                                 ->  Seq Scan on compress_hyper_2_2_chunk compress_hyper_2_2_chunk_1
+                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk compress_hyper_2_2_chunk_1
                      ->  Sort
                            Sort Key: m2_1.device
                            ->  Seq Scan on _hyper_1_1_chunk m2_1
