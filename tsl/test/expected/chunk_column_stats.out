@@ -775,3 +775,17 @@ SELECT * FROM attno WHERE id = 1 AND start > '2025-02-02T11:53:28Z'::date ORDER 
   1 | Thu Jan 01 00:01:00 2026 PST
   1 | Thu Jan 01 00:06:00 2026 PST
 
+-- Test for wrong allocation size of chunk stats storage
+CREATE TABLE sensor_readings(measured_at timestamptz NOT NULL, temperature int, humidity int);
+SELECT create_hypertable('sensor_readings', 'measured_at');
+       create_hypertable       
+-------------------------------
+ (10,public,sensor_readings,t)
+
+SELECT enable_chunk_skipping('sensor_readings', 'temperature');
+ enable_chunk_skipping 
+-----------------------
+ (17,t)
+
+RESET timescaledb.enable_chunk_skipping;
+RESET timescaledb.enable_chunk_skipping;
