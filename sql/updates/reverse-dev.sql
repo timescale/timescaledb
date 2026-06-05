@@ -2,6 +2,87 @@
 DROP VIEW IF EXISTS _timescaledb_catalog.chunk_constraint;
 DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint( integer, name, name);
 
+ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
+ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);
+
+--
+-- Rebuild the catalog table `_timescaledb_catalog.dimension_slice` back to
+-- the pre-chunk_id schema. Per-chunk slice duplicates are collapsed back
+-- into one shared row per (dimension_id, range_start, range_end), and the
+-- old UNIQUE on that triple is restored.
+--
+CREATE TABLE _timescaledb_internal.tmp_dimension_slice AS
+    SELECT * FROM _timescaledb_catalog.dimension_slice;
+CREATE TABLE _timescaledb_internal.tmp_dimension_slice_seq_value AS
+    SELECT last_value, is_called FROM _timescaledb_catalog.dimension_slice_id_seq;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_slice;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.dimension_slice_id_seq;
+
+DROP TABLE _timescaledb_catalog.dimension_slice;
+
+CREATE TABLE _timescaledb_catalog.dimension_slice (
+  id serial NOT NULL,
+  dimension_id integer NOT NULL,
+  range_start bigint NOT NULL,
+  range_end bigint NOT NULL,
+  CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
+  CONSTRAINT dimension_slice_dimension_id_range_start_range_end_key UNIQUE (dimension_id, range_start, range_end),
+  CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
+  CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
+);
+
+-- One row per unique (dimension_id, range_start, range_end), reusing the
+-- lowest old id so the chunk-side CHECK named constraint_<min_id> keeps the
+-- correct name without renaming.
+INSERT INTO _timescaledb_catalog.dimension_slice (id, dimension_id, range_start, range_end)
+SELECT min(id), dimension_id, range_start, range_end
+FROM _timescaledb_internal.tmp_dimension_slice
+GROUP BY dimension_id, range_start, range_end;
+
+-- Rename chunk-side CHECK constraints from constraint_<old_id> to
+-- constraint_<kept_id> for chunks whose per-chunk slice was collapsed onto
+-- a shared row. Keeps the legacy invariant
+-- constraint_name == 'constraint_<dimension_slice_id>'.
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN
+        SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
+               format('constraint_%s', tmp.id)::name AS old_name,
+               format('constraint_%s', ds.id)::name AS new_name
+        FROM _timescaledb_internal.tmp_dimension_slice tmp
+        JOIN _timescaledb_catalog.chunk c ON c.id = tmp.chunk_id
+        JOIN _timescaledb_catalog.dimension_slice ds
+            ON ds.dimension_id = tmp.dimension_id
+           AND ds.range_start = tmp.range_start
+           AND ds.range_end = tmp.range_end
+        WHERE tmp.id <> ds.id
+          AND EXISTS (
+              SELECT 1 FROM pg_constraint pc
+              WHERE pc.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
+                AND pc.conname = format('constraint_%s', tmp.id)::name
+                AND pc.contype = 'c'
+          )
+    LOOP
+        EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
+                                  r.chunk_table, r.old_name, r.new_name);
+    END LOOP;
+END
+$$;
+
+ALTER SEQUENCE _timescaledb_catalog.dimension_slice_id_seq OWNED BY _timescaledb_catalog.dimension_slice.id;
+SELECT setval('_timescaledb_catalog.dimension_slice_id_seq', last_value, is_called)
+    FROM _timescaledb_internal.tmp_dimension_slice_seq_value;
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice', 'id'), '');
+
+GRANT SELECT ON _timescaledb_catalog.dimension_slice TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.dimension_slice_id_seq TO PUBLIC;
+-- end rebuild _timescaledb_catalog.dimension_slice table --
+
 -- Recreate the chunk_constraint catalog table.
 CREATE TABLE _timescaledb_catalog.chunk_constraint (
   chunk_id integer NOT NULL,
@@ -23,11 +104,17 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constrain
 GRANT SELECT ON _timescaledb_catalog.chunk_constraint TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk_constraint_name TO PUBLIC;
 
--- Restore the dimensional rows from the per-chunk slice rows.
+-- Restore dimensional rows. Join the per-chunk snapshot to the rebuilt
+-- (deduplicated) dimension_slice so each chunk_constraint row points
+-- directly at the kept slice id.
 INSERT INTO _timescaledb_catalog.chunk_constraint
     (chunk_id, dimension_slice_id, constraint_name, hypertable_constraint_name)
-SELECT chunk_id, id, format('constraint_%s', id)::name, ''::name
-FROM _timescaledb_catalog.dimension_slice;
+SELECT tmp.chunk_id, ds.id, format('constraint_%s', ds.id)::name, ''::name
+FROM _timescaledb_internal.tmp_dimension_slice tmp
+JOIN _timescaledb_catalog.dimension_slice ds
+    ON ds.dimension_id = tmp.dimension_id
+   AND ds.range_start = tmp.range_start
+   AND ds.range_end = tmp.range_end;
 
 -- Restore chunk_constraint rows for CHECK constraints on OSM chunks.
 INSERT INTO _timescaledb_catalog.chunk_constraint
@@ -40,11 +127,6 @@ JOIN pg_constraint con
     AND con.contype = 'c'
 WHERE c.osm_chunk
 ON CONFLICT DO NOTHING;
-
--- Drop chunk stats related objects
-DROP VIEW IF EXISTS timescaledb_information.stat_chunk_activity;
-DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics(regclass, regclass, timestamptz);
-DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics_reset();
 
 -- Restore chunk_constraint rows for outbound FKs by matching chunk-side
 -- FKs to their hypertable-side counterpart by name.
@@ -77,95 +159,6 @@ JOIN pg_constraint child
     AND child.conname = format('%s_%s', c.id, parent.conname)
 ON CONFLICT DO NOTHING;
 
-ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
-ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);
-
---
--- Rebuild the catalog table `_timescaledb_catalog.dimension_slice` back to
--- the pre-chunk_id schema. Per-chunk slice duplicates are collapsed back
--- into one shared row per (dimension_id, range_start, range_end), and the
--- old UNIQUE on that triple is restored.
---
-CREATE TABLE _timescaledb_internal.tmp_dimension_slice AS
-    SELECT * FROM _timescaledb_catalog.dimension_slice;
-CREATE TABLE _timescaledb_internal.tmp_dimension_slice_seq_value AS
-    SELECT last_value, is_called FROM _timescaledb_catalog.dimension_slice_id_seq;
-
-ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_slice;
-ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.dimension_slice_id_seq;
-
-DROP TABLE _timescaledb_catalog.dimension_slice;
-
-CREATE TABLE _timescaledb_catalog.dimension_slice (
-  id serial NOT NULL,
-  dimension_id integer NOT NULL,
-  range_start bigint NOT NULL,
-  range_end bigint NOT NULL,
-  CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
-  CONSTRAINT dimension_slice_dimension_id_range_start_range_end_key UNIQUE (dimension_id, range_start, range_end),
-  CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
-  CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
-);
-
--- One row per unique (dimension_id, range_start, range_end), reusing the
--- lowest old id so existing chunk_constraint rows that already point at
--- it don't need repointing.
-INSERT INTO _timescaledb_catalog.dimension_slice (id, dimension_id, range_start, range_end)
-SELECT min(id), dimension_id, range_start, range_end
-FROM _timescaledb_internal.tmp_dimension_slice
-GROUP BY dimension_id, range_start, range_end;
-
--- Repoint chunk_constraint rows that referenced one of the deduplicated
--- (now deleted) slice ids at the kept slice with the same range.
-UPDATE _timescaledb_catalog.chunk_constraint cc
-SET dimension_slice_id = ds.id
-FROM _timescaledb_internal.tmp_dimension_slice tmp,
-     _timescaledb_catalog.dimension_slice ds
-WHERE cc.dimension_slice_id IS NOT NULL
-  AND tmp.id = cc.dimension_slice_id
-  AND tmp.id <> ds.id
-  AND ds.dimension_id = tmp.dimension_id
-  AND ds.range_start = tmp.range_start
-  AND ds.range_end = tmp.range_end;
-
--- Restore the legacy invariant constraint_name == 'constraint_<dimension_slice_id>'
--- for rows whose dimension_slice_id was just repointed at a deduplicated slice.
--- Rename the chunk-side CHECK on disk and update the catalog row in lockstep.
-DO $$
-DECLARE
-    r RECORD;
-BEGIN
-    FOR r IN
-        SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
-               cc.constraint_name AS old_name,
-               format('constraint_%s', cc.dimension_slice_id)::name AS new_name,
-               cc.chunk_id,
-               cc.dimension_slice_id
-        FROM _timescaledb_catalog.chunk_constraint cc
-        JOIN _timescaledb_catalog.chunk c ON c.id = cc.chunk_id
-        WHERE cc.dimension_slice_id IS NOT NULL
-          AND cc.constraint_name <> format('constraint_%s', cc.dimension_slice_id)::name
-          AND EXISTS (
-              SELECT 1 FROM pg_constraint pc
-              WHERE pc.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
-                AND pc.conname = cc.constraint_name
-                AND pc.contype = 'c'
-          )
-    LOOP
-        EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
-                                  r.chunk_table, r.old_name, r.new_name);
-        UPDATE _timescaledb_catalog.chunk_constraint
-            SET constraint_name = r.new_name
-            WHERE chunk_id = r.chunk_id
-              AND dimension_slice_id = r.dimension_slice_id;
-    END LOOP;
-END
-$$;
-
-ALTER SEQUENCE _timescaledb_catalog.dimension_slice_id_seq OWNED BY _timescaledb_catalog.dimension_slice.id;
-SELECT setval('_timescaledb_catalog.dimension_slice_id_seq', last_value, is_called)
-    FROM _timescaledb_internal.tmp_dimension_slice_seq_value;
-
 ALTER TABLE _timescaledb_catalog.chunk_constraint
     ADD CONSTRAINT chunk_constraint_dimension_slice_id_fkey
         FOREIGN KEY (dimension_slice_id) REFERENCES _timescaledb_catalog.dimension_slice (id);
@@ -173,19 +166,17 @@ ALTER TABLE _timescaledb_catalog.chunk_constraint
 DROP TABLE _timescaledb_internal.tmp_dimension_slice;
 DROP TABLE _timescaledb_internal.tmp_dimension_slice_seq_value;
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice', 'id'), '');
-
-GRANT SELECT ON _timescaledb_catalog.dimension_slice TO PUBLIC;
-GRANT SELECT ON _timescaledb_catalog.dimension_slice_id_seq TO PUBLIC;
--- end rebuild _timescaledb_catalog.dimension_slice table --
+-- Drop chunk stats related objects
+DROP VIEW IF EXISTS timescaledb_information.stat_chunk_activity;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics(regclass, regclass, timestamptz);
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics_reset();
 
 DROP FUNCTION IF EXISTS @extschema@.create_hypertable(relation REGCLASS, time_column_name NAME, partitioning_column NAME, number_partitions INTEGER, associated_schema_name NAME, associated_table_prefix NAME, chunk_time_interval ANYELEMENT, create_default_indexes BOOLEAN, if_not_exists BOOLEAN, partitioning_func REGPROC, migrate_data BOOLEAN, time_partitioning_func REGPROC);
-
 
 -- Restore the chunk_target_size check constraint dropped in the forward path.
 ALTER TABLE _timescaledb_catalog.hypertable
     ADD CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0);
+
 DROP FUNCTION IF EXISTS _timescaledb_functions.rebuild_sparse_index(REGCLASS, BOOLEAN);
 
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_agg` to drop the
