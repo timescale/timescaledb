@@ -91,8 +91,6 @@ CREATE TABLE _timescaledb_internal.tmp_dimension_slice AS
 CREATE TABLE _timescaledb_internal.tmp_dimension_slice_seq_value AS
     SELECT last_value, is_called FROM _timescaledb_catalog.dimension_slice_id_seq;
 
-DROP VIEW IF EXISTS timescaledb_information.chunks;
-
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_slice;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.dimension_slice_id_seq;
 
@@ -193,9 +191,6 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.rebuild_sparse_index(REGCLASS, BO
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_agg` to drop the
 -- `schema_change_timestamp` column.
 DROP VIEW IF EXISTS timescaledb_experimental.policies;
-DROP VIEW IF EXISTS timescaledb_information.hypertables;
-DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
-DROP VIEW IF EXISTS timescaledb_information.jobs;
 
 ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
     DROP CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey;

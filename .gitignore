@@ -8,6 +8,7 @@
 /sql/pre_install/*.gen
 /sql/updates/*.gen
 /sql/updates/header.sql
+/sql/updates/views_detached.sql
 /data/
 /src/*.o
 /src/*.so
