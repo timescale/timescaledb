@@ -143,18 +143,9 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 						"are required")));
 	}
 
-	chunk = ts_chunk_get_by_relid(chunk_id, false);
-
-	if (NULL == chunk)
+	if (ts_relation_is_compressed_chunk_relation(chunk_id))
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
-	}
-
-	if (ts_chunk_contains_compressed_data(chunk))
-	{
-		Chunk *chunk_parent = ts_chunk_get_compressed_chunk_parent(chunk);
+		Oid uncompressed_relid = ts_relation_get_uncompressed_relid(chunk_id);
 
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -162,15 +153,24 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 				 errdetail("Chunk \"%s\" contains columnstore data for chunk \"%s\" and cannot be "
 						   "moved directly.",
 						   get_rel_name(chunk_id),
-						   get_rel_name(chunk_parent->table_id)),
+						   get_rel_name(uncompressed_relid)),
 				 errhint("Moving chunk \"%s\" will also move the columnstore data.",
-						 get_rel_name(chunk_parent->table_id))));
+						 get_rel_name(uncompressed_relid))));
+	}
+
+	chunk = ts_chunk_get_by_relid(chunk_id, false);
+
+	if (!chunk)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
 	}
 
 	/* If chunk is compressed move it by altering tablespace on both chunks */
 	if (ts_chunk_is_compressed(chunk))
 	{
-		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk_id);
 		AlterTableCmd cmd = { .type = T_AlterTableCmd,
 							  .subtype = AT_SetTableSpace,
 							  .name = get_tablespace_name(destination_tablespace) };
@@ -184,13 +184,13 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 		}
 
 		ts_alter_table_with_event_trigger(chunk_id, fcinfo->context, list_make1(&cmd), false);
-		ts_alter_table_with_event_trigger(settings->fd.compress_relid,
+		ts_alter_table_with_event_trigger(compressed_relid,
 										  fcinfo->context,
 										  list_make1(&cmd),
 										  false);
 		/* move indexes on original and compressed chunk */
 		ts_chunk_index_move_all(chunk_id, index_destination_tablespace);
-		ts_chunk_index_move_all(settings->fd.compress_relid, index_destination_tablespace);
+		ts_chunk_index_move_all(compressed_relid, index_destination_tablespace);
 	}
 	else
 	{

@@ -39,13 +39,22 @@ jobs:
             # Get the number of approvals in this pull request
             echo "Reviews: "
             gh pr view $PR_NUMBER --json reviews
-            approvals=$(
-                gh pr view $PR_NUMBER --json reviews --jq '
-                    [
-                        .reviews.[]
-                        | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
-                    ] | length
-                  '
+            approvals=$(gh api graphql -F owner=${{ github.repository_owner }} \
+               -F name=${{ github.event.repository.name }} -F number=$PR_NUMBER \
+               -f query='
+                  query($owner:String!, $name:String!, $number:Int!) {
+                    repository(owner:$owner, name:$name) {
+                      pullRequest(number:$number) {
+                        latestOpinionatedReviews(first: 100) {
+                          nodes { state authorAssociation }
+                        }
+                      }
+                    }
+                  }
+              ' --jq '[
+                  .data.repository.pullRequest.latestOpinionatedReviews.nodes[]
+                  | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
+                ] | length'
             )
             echo "approvals: $approvals, files: $files"
             if [[ $approvals -lt 2 && $files -gt 0 ]] ; then

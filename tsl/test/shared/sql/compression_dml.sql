@@ -173,6 +173,11 @@ SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
 RESET timescaledb.enable_dml_decompression_tuple_filtering;
 
+-- Same for the debug GUC
+SET timescaledb.enable_optimizations TO off;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+RESET timescaledb.enable_optimizations;
+
 -- no decompression cause no match in batch
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;

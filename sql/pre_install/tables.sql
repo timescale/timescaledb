@@ -46,9 +46,9 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   associated_schema_name name NOT NULL,
   associated_table_prefix name NOT NULL,
   num_dimensions smallint NOT NULL,
-  chunk_sizing_func_schema name NOT NULL,
-  chunk_sizing_func_name name NOT NULL,
-  chunk_target_size bigint NOT NULL, -- size in bytes
+  chunk_sizing_func_schema name NOT NULL, -- unused
+  chunk_sizing_func_name name NOT NULL, -- unused
+  chunk_target_size bigint NOT NULL, -- unused
   compression_state smallint NOT NULL DEFAULT 0,
   compressed_hypertable_id integer,
   status int NOT NULL DEFAULT 0,
@@ -59,7 +59,6 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   CONSTRAINT hypertable_schema_name_check CHECK (schema_name != '_timescaledb_catalog'),
   -- internal compressed hypertables have compression state = 2
   CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
-  CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0),
   CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL))
 ) WITH (user_catalog_table = true);
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
@@ -341,6 +340,7 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   direct_view_schema name NOT NULL,
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
+  schema_change_timestamp bigint,
   -- table constraints
   CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
   CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),

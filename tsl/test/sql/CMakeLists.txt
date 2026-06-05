@@ -75,6 +75,7 @@ set(TEST_FILES
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
+    rebuild_sparse_index.sql
     recompression_integrity_tests.sql
     recompression_integrity_unordered.sql
     recompression_nullable_orderby.sql
@@ -92,6 +93,7 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_add_column.sql.in
     cagg_query.sql.in
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in

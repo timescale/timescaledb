@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- When changing the signature of these views remember to also
+-- adjust views_detached.sql to match the new signature.
+
 -- Convenience view to list all hypertables
 CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
 WITH
@@ -424,10 +427,6 @@ AS SELECT * FROM timescaledb_information.hypertable_compression_settings;
 CREATE OR REPLACE VIEW timescaledb_information.chunk_columnstore_settings AS
 SELECT * FROM timescaledb_information.chunk_compression_settings;
 
---temporary alias for bgw_job
-CREATE OR REPLACE VIEW _timescaledb_config.bgw_job AS
-SELECT * from _timescaledb_catalog.bgw_job;
-
 -- chunk statistics view
 CREATE OR REPLACE VIEW timescaledb_information.stat_chunk_activity AS
 SELECT
@@ -496,6 +495,4 @@ LEFT JOIN _timescaledb_catalog.chunk c
        ON format('%I.%I', c.schema_name, c.table_name)::regclass = o.uncompressed_relid
 LEFT JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id;
 
-
-GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

@@ -6,7 +6,6 @@ set(SOURCES
     cache.c
     cache_invalidate.c
     chunk.c
-    chunk_adaptive.c
     chunk_constraint.c
     chunk_index.c
     chunk_insert_state.c
