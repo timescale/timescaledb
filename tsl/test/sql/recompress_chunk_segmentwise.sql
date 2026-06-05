@@ -590,4 +590,13 @@ FROM show_chunks('segwise_uaf_scankeys') c; -- should not segfault
 RESET maintenance_work_mem;
 DROP TABLE segwise_uaf_scankeys;
 
+-- get_compressed_chunk_index_for_recompression on an uncompressed chunk
+-- returns NULL instead of raising an internal error
+CREATE TABLE uncompressed_index (time timestamptz not null, a int);
+SELECT create_hypertable('uncompressed_index', 'time');
+INSERT INTO uncompressed_index VALUES ('2024-01-01', 1);
+SELECT _timescaledb_functions.get_compressed_chunk_index_for_recompression(c)
+FROM show_chunks('uncompressed_index') c;
+DROP TABLE uncompressed_index;
+
 

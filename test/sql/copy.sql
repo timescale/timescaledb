@@ -214,6 +214,14 @@ COPY hyper_copy FROM STDIN DELIMITER ',' NULL AS 'null';
 
 SELECT count(*) FROM hyper_copy;
 
+-- Disabled by the debug GUC
+SET timescaledb.enable_optimizations TO OFF;
+\copy hyper_copy FROM data/copy_data.csv WITH csv header;
+RESET timescaledb.enable_optimizations;
+
+SELECT count(*) FROM hyper_copy;
+
+
 RESET client_min_messages;
 RESET timescaledb.max_open_chunks_per_insert;
 

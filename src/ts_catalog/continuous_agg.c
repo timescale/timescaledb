@@ -263,6 +263,16 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(fd->materialized_only);
 
+	if (fd->schema_change_timestamp == TS_TIME_NOBEGIN)
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)] = true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)] =
+			Int64GetDatum(fd->schema_change_timestamp);
+	}
+
 	return heap_form_tuple(desc, values, nulls);
 }
 
@@ -315,6 +325,17 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)])
+	{
+		fd->schema_change_timestamp = TS_TIME_NOBEGIN;
+	}
+	else
+	{
+		fd->schema_change_timestamp = DatumGetInt64(
+			values[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)]);
+	}
+
 	if (should_free)
 	{
 		heap_freetuple(tuple);
@@ -625,6 +646,42 @@ ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id, bool missin
 	}
 
 	return ca;
+}
+
+/*
+ * Record the threshold below which a newly added column is not yet materialized,
+ * so the planner rewrite can avoid serving for the cagg. The threshold only ever moves
+ * forward, so we keep the highest value across multiple ADD COLUMN operations.
+ */
+void
+ts_continuous_agg_set_schema_change_timestamp(int32 mat_hypertable_id, int64 threshold)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+	CatalogSecurityContext sec_ctx;
+
+	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		FormData_continuous_agg form;
+
+		continuous_agg_formdata_fill(&form, ti);
+
+		if (form.schema_change_timestamp == TS_TIME_NOBEGIN ||
+			threshold > form.schema_change_timestamp)
+		{
+			form.schema_change_timestamp = threshold;
+
+			HeapTuple new_tuple =
+				continuous_agg_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
+			ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+			ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
+			ts_catalog_restore_user(&sec_ctx);
+			heap_freetuple(new_tuple);
+		}
+	}
+	ts_scan_iterator_close(&iterator);
 }
 
 static bool

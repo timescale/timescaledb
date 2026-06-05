@@ -334,3 +334,13 @@ SELECT * FROM (VALUES (1), (1)) a(v),
 ORDER BY 1,2,3,4
 LIMIT 2;
 
+-- A column added via ALTER ... ADD COLUMN makes the cagg ineligible for rewrite
+ALTER MATERIALIZED VIEW cagg_added_col
+   ADD COLUMN max_temp int GENERATED ALWAYS AS (max(temperature)) STORED;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions_addcol
+GROUP BY bucket
+ORDER BY 1 LIMIT 1;
+

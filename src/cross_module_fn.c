@@ -82,6 +82,7 @@ CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(rebuild_columnstore);
+CROSSMODULE_WRAPPER(rebuild_sparse_index);
 CROSSMODULE_WRAPPER(bloom1_contains);
 CROSSMODULE_WRAPPER(bloom1_contains_any);
 CROSSMODULE_WRAPPER(bloom1_contains_any_hashes);
@@ -230,6 +231,13 @@ continuous_agg_update_options_default(ContinuousAgg *cagg, WithClauseResult *wit
 }
 
 static void
+continuous_agg_add_column_default(ContinuousAgg *cagg, AlterTableStmt *stmt)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
+static void
 continuous_agg_invalidate_raw_ht_all_default(const Hypertable *raw_ht, int64 start, int64 end)
 {
 	error_no_default_fn_community();
@@ -337,6 +345,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
+	.continuous_agg_add_column = continuous_agg_add_column_default,
 	.continuous_agg_apply_rewrites_tsl = NULL,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
@@ -353,6 +362,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.compress_chunk = error_no_default_fn_pg_community,
 	.decompress_chunk = error_no_default_fn_pg_community,
 	.rebuild_columnstore = error_no_default_fn_pg_community,
+	.rebuild_sparse_index = error_no_default_fn_pg_community,
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.compressed_data_column_size = error_no_default_fn_pg_community,

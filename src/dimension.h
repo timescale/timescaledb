@@ -112,10 +112,7 @@ typedef struct Point
 
 #define POINT_SIZE(cardinality) (sizeof(Point) + (sizeof(int64) * (cardinality)))
 
-#define DEFAULT_CHUNK_TIME_INTERVAL (USECS_PER_DAY * 7) /* 7 days w/o adaptive */
-#define DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE                                                       \
-	(USECS_PER_DAY) /* 1 day with adaptive                                                         \
-					 * chunking enabled */
+#define DEFAULT_CHUNK_TIME_INTERVAL (USECS_PER_DAY * 7) /* 7 days */
 
 /* Default intervals for integer types */
 #define DEFAULT_SMALLINT_INTERVAL 10000
@@ -154,7 +151,6 @@ typedef struct DimensionInfo
 	bool skip;
 	bool set_not_null;
 	bool num_slices_is_set;
-	bool adaptive_chunking; /* True if adaptive chunking is enabled */
 	Hypertable *ht;
 } DimensionInfo;
 
@@ -178,7 +174,6 @@ ts_hyperspace_get_dimension_by_name(const Hyperspace *hs, DimensionType type, co
 extern TSDLLEXPORT Dimension *
 ts_hyperspace_get_mutable_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
 extern DimensionVec *ts_dimension_get_slices(const Dimension *dim);
-extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
 extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(const Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);

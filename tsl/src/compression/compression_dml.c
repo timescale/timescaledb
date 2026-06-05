@@ -350,7 +350,7 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		Bitmapset *index_columns = NULL;
 		Relation index_rel = NULL;
 
-		if (ts_guc_enable_dml_decompression_tuple_filtering)
+		if (ts_guc_enable_optimizations && ts_guc_enable_dml_decompression_tuple_filtering)
 		{
 			cdst->mem_scankeys.scankeys =
 				build_mem_scankeys_from_slot(cis->hypertable_relid,
@@ -1769,7 +1769,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 				/*
 				 * Segmentby columns are checked as part of batch scan so no need to redo the check.
 				 */
-				if (ts_guc_enable_dml_decompression_tuple_filtering)
+				if (ts_guc_enable_optimizations && ts_guc_enable_dml_decompression_tuple_filtering)
 				{
 					ScanKeyEntryInitialize(&(*mem_scankeys)[(*num_mem_scankeys)++],
 										   arg_value->constisnull ? SK_ISNULL : 0,
@@ -2025,7 +2025,8 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 	 * equality predicates, compute hashes, and collect matches.
 	 * Results are sorted by selectivity (most columns first).
 	 */
-	if (eq_preds != NIL && settings->fd.index != NULL && ts_guc_enable_dml_bloom_filter)
+	if (eq_preds != NIL && settings->fd.index != NULL && ts_guc_enable_dml_bloom_filter &&
+		ts_guc_enable_optimizations)
 	{
 		SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
 		TsBmsList per_column_attnos =
@@ -2358,7 +2359,7 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 {
 	ListCell *lc;
 
-	if (!ts_guc_enable_compressed_direct_batch_delete)
+	if (!ts_guc_enable_compressed_direct_batch_delete || !ts_guc_enable_optimizations)
 	{
 		return false;
 	}

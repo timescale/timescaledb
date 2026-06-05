@@ -867,24 +867,15 @@ process_copy(ProcessUtilityArgs *args)
 
 		if (!ht)
 		{
-			Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-			/* target is neither hypertable nor chunk so let postgres handle it */
-			if (!chunk)
+			/*
+			 * For operations on internal compressed chunks we block modifications
+			 * if the chunk belongs to a frozen chunk otherwise let postgres handle it.
+			 * Uncompressed frozen chunks are intercepted as part of tuple routing.
+			 */
+			Oid uncompressed_relid = ts_relation_get_uncompressed_relid(relid);
+			if (OidIsValid(uncompressed_relid))
 			{
-				ts_cache_release(&hcache);
-				return DDL_CONTINUE;
-			}
-
-			ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
-			if (ht->fd.compression_state == HypertableInternalCompressionTable)
-			{
-				/*
-				 * For operations on internal compressed chunks we block modifications
-				 * if the chunk belongs to a frozen chunk otherwise let postgres handle it.
-				 * Uncompressed frozen chunks are intercepted as part of tuple routing.
-				 */
-				Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
+				Chunk *uncompressed = ts_chunk_get_by_relid(uncompressed_relid, true);
 				if (ts_chunk_is_frozen(uncompressed))
 				{
 					ereport(ERROR,
@@ -896,6 +887,16 @@ process_copy(ProcessUtilityArgs *args)
 				ts_cache_release(&hcache);
 				return DDL_CONTINUE;
 			}
+
+			/* target is neither hypertable nor chunk so let postgres handle it */
+			int32 hypertable_id = ts_chunk_get_hypertable_id_by_reloid(relid);
+			if (hypertable_id == INVALID_HYPERTABLE_ID)
+			{
+				ts_cache_release(&hcache);
+				return DDL_CONTINUE;
+			}
+
+			ht = ts_hypertable_get_by_id(hypertable_id);
 		}
 	}
 
@@ -1154,13 +1155,13 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 
 	/* If we have a compressed chunk make sure to analyze it as well */
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+	if (ts_chunk_is_compressed(chunk))
 	{
-		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
 		/* Compressed chunk might be missing due to concurrent operations */
-		if (comp_chunk)
+		if (OidIsValid(compressed_relid))
 		{
-			chunk_vacuum_rel = makeVacuumRelation(NULL, comp_chunk->table_id, NIL);
+			chunk_vacuum_rel = makeVacuumRelation(NULL, compressed_relid, NIL);
 			ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 		}
 	}
@@ -1565,17 +1566,18 @@ process_truncate(ProcessUtilityArgs *args)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
 						}
 						/* Truncate the compressed chunk too */
-						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+						if (ts_chunk_is_compressed(chunk))
 						{
-							Chunk *compressed_chunk =
-								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-							if (compressed_chunk != NULL)
+							Oid compressed_relid =
+								ts_relation_get_compressed_relid(chunk->table_id);
+							if (OidIsValid(compressed_relid))
 							{
 								/* Create list item into the same context of the list. */
 								oldctx = MemoryContextSwitchTo(parsetreectx);
-								rv = makeRangeVar(NameStr(compressed_chunk->fd.schema_name),
-												  NameStr(compressed_chunk->fd.table_name),
-												  -1);
+								char *schema_name =
+									get_namespace_name(get_rel_namespace(compressed_relid));
+								char *table_name = get_rel_name(compressed_relid);
+								rv = makeRangeVar(schema_name, table_name, -1);
 								MemoryContextSwitchTo(oldctx);
 								list_changed = true;
 							}
@@ -1712,7 +1714,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		{
 			Hypertable *ht;
 
-			if (ts_chunk_contains_compressed_data(chunk))
+			if (ts_relation_is_compressed_chunk_relation(chunk->table_id))
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1723,13 +1725,13 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
 			 *  it would be blocked if there are dependent objects */
-			if (stmt->behavior == DROP_CASCADE && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+			if (stmt->behavior == DROP_CASCADE && ts_chunk_is_compressed(chunk))
 			{
-				Chunk *compressed_chunk =
-					ts_chunk_get_by_id_with_slice_lock(chunk->fd.compressed_chunk_id,
-													   AccessExclusiveLock,
-													   &slice_lock,
-													   false);
+				Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+				Chunk *compressed_chunk = ts_chunk_get_by_relid_locked(compressed_relid,
+																	   AccessExclusiveLock,
+																	   &slice_lock,
+																	   false);
 				/* The chunk may have been delete by a CASCADE */
 				if (compressed_chunk != NULL)
 				{
@@ -4427,9 +4429,6 @@ process_create_table_end(Node *parsetree)
 										  InvalidOid		 /* partitioning func */
 			);
 
-		ChunkSizingInfo *csi = ts_chunk_sizing_info_get_default_disabled(table_relid);
-		csi->colname = time_column;
-
 		CatalogSecurityContext sec_ctx;
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
@@ -4445,8 +4444,8 @@ process_create_table_end(Node *parsetree)
 											   NULL, /* associated_schema_name */
 										   has_associated_table_prefix ?
 											   &associated_table_prefix :
-											   NULL, /* associated_table_prefix */
-										   csi))
+											   NULL /* associated_table_prefix */
+										   ))
 		{
 			bool enable_columnstore;
 			if (ts_license_is_apache() &&
@@ -4765,14 +4764,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 static void
 process_altertable_chunk_propagate_to_compressed(AlterTableCmd *cmd, Oid relid)
 {
-	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-	if (chunk == NULL)
-	{
-		return;
-	}
-
-	if (ts_chunk_contains_compressed_data(chunk))
+	if (ts_relation_is_compressed_chunk_relation(relid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -4781,12 +4773,12 @@ process_altertable_chunk_propagate_to_compressed(AlterTableCmd *cmd, Oid relid)
 						 "instead.")));
 	}
 
-	/* set tablespace for compressed chunk */
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-	{
-		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+	Oid compressed_relid = ts_relation_get_compressed_relid(relid);
 
-		AlterTableInternal(compressed_chunk->table_id, list_make1(cmd), false);
+	/* set tablespace for compressed chunk */
+	if (OidIsValid(compressed_relid))
+	{
+		AlterTableInternal(compressed_relid, list_make1(cmd), false);
 	}
 }
 
@@ -5079,6 +5071,40 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 	}
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
+
+	/*
+	 * CAgg add column handler.
+	 * Split `stmt->cmds` into the GENERATED ALWAYS AS and everything else
+	 * (handled by the switch below). Process all ADD COLUMNs at once since
+	 * they require a rewrite of the view, and doing them one by one would
+	 * be inefficient.
+	 */
+	{
+		List *addcol_cmds = NIL;
+		List *other_cmds = NIL;
+		foreach (lc, stmt->cmds)
+		{
+			AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+			if (cmd->subtype == AT_AddColumn)
+			{
+				addcol_cmds = lappend(addcol_cmds, cmd);
+			}
+			else
+			{
+				other_cmds = lappend(other_cmds, cmd);
+			}
+		}
+
+		if (addcol_cmds != NIL)
+		{
+			AlterTableStmt addcol_stmt = *stmt;
+			addcol_stmt.cmds = addcol_cmds;
+			ts_cm_functions->continuous_agg_add_column(cagg, &addcol_stmt);
+			CommandCounterIncrement();
+
+			stmt->cmds = other_cmds;
+		}
+	}
 
 	foreach (lc, stmt->cmds)
 	{

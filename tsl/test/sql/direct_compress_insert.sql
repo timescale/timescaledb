@@ -21,6 +21,11 @@ EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) INSERT INTO metrics SE
 -- EXPLAIN with large enough batch
 EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) INSERT INTO metrics SELECT '2025-01-01'::timestamptz, 'd1', i::float FROM generate_series(0,500) i;
 
+-- EXPLAIN with debug GUC disabled
+SET timescaledb.enable_optimizations TO OFF;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) INSERT INTO metrics SELECT '2025-01-01'::timestamptz, 'd1', i::float FROM generate_series(0,500) i;
+RESET timescaledb.enable_optimizations;
+
 -- simple test with compressed insert enabled
 BEGIN;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
