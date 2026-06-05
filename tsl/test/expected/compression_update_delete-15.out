@@ -1708,8 +1708,10 @@ EXPLAIN (buffers off, costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
          Delete on _hyper_21_40_chunk tab1_2
          Delete on _hyper_21_41_chunk tab1_3
          ->  Append
-               ->  Seq Scan on _hyper_21_39_chunk tab1_1
-                     Filter: (device_id = 1)
+               ->  Bitmap Heap Scan on _hyper_21_39_chunk tab1_1
+                     Recheck Cond: (device_id = 1)
+                     ->  Bitmap Index Scan on _hyper_21_39_chunk_tab1_device_id_time_idx
+                           Index Cond: (device_id = 1)
                ->  Seq Scan on _hyper_21_40_chunk tab1_2
                      Filter: (device_id = 1)
                ->  Seq Scan on _hyper_21_41_chunk tab1_3
@@ -1746,16 +1748,20 @@ WHERE repeat('t', device_id) = devices.repeat;
          Update on _hyper_21_40_chunk tab1_2
          Update on _hyper_21_41_chunk tab1_3
          ->  Nested Loop
-               Join Filter: (repeat('t'::text, tab1.device_id) = devices.repeat)
                ->  Subquery Scan on devices
                      ->  HashAggregate
                            Group Key: repeat
                            ->  Result
                                  One-Time Filter: false
                ->  Append
-                     ->  Index Scan using _hyper_21_39_chunk_test on _hyper_21_39_chunk tab1_1
+                     ->  Bitmap Heap Scan on _hyper_21_39_chunk tab1_1
+                           Recheck Cond: (repeat('t'::text, device_id) = devices.repeat)
+                           ->  Bitmap Index Scan on _hyper_21_39_chunk_test
+                                 Index Cond: (repeat('t'::text, device_id) = devices.repeat)
                      ->  Seq Scan on _hyper_21_40_chunk tab1_2
+                           Filter: (devices.repeat = repeat('t'::text, device_id))
                      ->  Seq Scan on _hyper_21_41_chunk tab1_3
+                           Filter: (devices.repeat = repeat('t'::text, device_id))
 
 UPDATE tab1
 SET v0 = 0 FROM

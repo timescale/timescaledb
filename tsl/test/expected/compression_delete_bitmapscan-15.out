@@ -118,8 +118,10 @@ DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
  Custom Scan (ModifyHypertable)
    ->  Delete on test_bitmap_delete
          Delete on _hyper_1_1_chunk test_bitmap_delete_1
-         ->  Seq Scan on _hyper_1_1_chunk test_bitmap_delete_1
-               Filter: ((device_id = 1) AND (status = 'delete_me'::text))
+         ->  Bitmap Heap Scan on _hyper_1_1_chunk test_bitmap_delete_1
+               Recheck Cond: ((device_id = 1) AND (status = 'delete_me'::text))
+               ->  Bitmap Index Scan on _hyper_1_1_chunk_idx_device_status
+                     Index Cond: ((device_id = 1) AND (status = 'delete_me'::text))
 
 DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
 -- Verify all rows were deleted (must be 0)
