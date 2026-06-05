@@ -27,6 +27,7 @@
 #include "compression/create.h"
 #include "compression/recompress.h"
 #include "compression/sparse_index_bloom1.h"
+#include "continuous_aggs/add_column.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
@@ -127,6 +128,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
+	.continuous_agg_add_column = continuous_agg_add_column,
 #if PG16_GE
 	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
 #endif

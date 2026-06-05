@@ -815,6 +815,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
+	Anum_continuous_agg_schema_change_timestamp,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -832,6 +833,7 @@ typedef struct FormData_continuous_agg
 	NameData direct_view_schema;
 	NameData direct_view_name;
 	bool materialized_only;
+	int64 schema_change_timestamp;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
