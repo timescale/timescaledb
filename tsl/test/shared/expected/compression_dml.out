@@ -323,6 +323,22 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND devi
                      Rows Removed by Filter: 6000
 
 RESET timescaledb.enable_dml_decompression_tuple_filtering;
+-- Same for the debug GUC
+SET timescaledb.enable_optimizations TO off;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
+   Batches decompressed: 6
+   Tuples decompressed: 6000
+   ->  Update on lazy_decompress (actual rows=0.00 loops=1)
+         Update on _hyper_X_X_chunk lazy_decompress_1
+         ->  Result (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0.00 loops=1)
+                     Filter: ((value = '0'::double precision) AND (device = 'd1'::text))
+                     Rows Removed by Filter: 6000
+
+RESET timescaledb.enable_optimizations;
 -- no decompression cause no match in batch
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
 --- QUERY PLAN ---

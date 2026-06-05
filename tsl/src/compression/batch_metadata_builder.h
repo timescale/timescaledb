@@ -8,8 +8,6 @@
 #include <postgres.h>
 #include "funcapi.h" /* for PGFunction, FmgrInfo */
 
-typedef struct RowCompressor RowCompressor;
-
 enum BatchMetadataBuilderType
 {
 	METADATA_BUILDER_MINMAX,
@@ -20,8 +18,9 @@ enum BatchMetadataBuilderType
 typedef struct BatchMetadataBuilder
 {
 	void (*update_row)(void *builder, TupleTableSlot *slot);
-	void (*insert_to_compressed_row)(void *builder, RowCompressor *compressor);
-	void (*reset)(void *builder, RowCompressor *compressor);
+	void (*insert_to_compressed_row)(void *builder, Datum *compressed_values,
+									 bool *compressed_is_null);
+	void (*reset)(void *builder, Datum *compressed_values, bool *compressed_is_null);
 	enum BatchMetadataBuilderType builder_type;
 } BatchMetadataBuilder;
 
@@ -54,7 +53,8 @@ uint64 batch_metadata_builder_bloom1_calculate_hash(PGFunction hash_function, Fm
 void batch_metadata_builder_bloom1_update_bloom_filter_with_hash(void *varlena_ptr, uint64 hash);
 void batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *bloom_varlena,
 																		 int16 bloom_attr_offset,
-																		 RowCompressor *compressor);
+																		 Datum *compressed_values,
+																		 bool *compressed_is_null);
 
 /* Returns true if the hash is maybe present in a bloom filter, if the bloom filter data is
  * NULL, it returns true, because we cannot be sure if the hash is present or not. */

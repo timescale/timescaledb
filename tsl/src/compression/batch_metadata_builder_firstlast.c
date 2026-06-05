@@ -12,8 +12,9 @@
 #include "compression.h"
 
 static void firstlast_update_row(void *builder_, TupleTableSlot *slot);
-static void firstlast_insert_to_compressed_row(void *builder_, RowCompressor *compressor);
-static void firstlast_reset(void *builder_, RowCompressor *compressor);
+static void firstlast_insert_to_compressed_row(void *builder_, Datum *compressed_values,
+											   bool *compressed_is_null);
+static void firstlast_reset(void *builder_, Datum *compressed_values, bool *compressed_is_null);
 
 BatchMetadataBuilder *
 batch_metadata_builder_firstlast_create(Oid type_oid, AttrNumber attnum, int first_attr_offset,
@@ -87,7 +88,7 @@ firstlast_update_row(void *builder_, TupleTableSlot *slot)
 }
 
 static void
-firstlast_reset(void *builder_, RowCompressor *compressor)
+firstlast_reset(void *builder_, Datum *compressed_values, bool *compressed_is_null)
 {
 	BatchMetadataBuilderFirstLast *builder = (BatchMetadataBuilderFirstLast *) builder_;
 
@@ -108,14 +109,15 @@ firstlast_reset(void *builder_, RowCompressor *compressor)
 	builder->first_is_null = true;
 	builder->last_is_null = true;
 
-	compressor->compressed_is_null[builder->first_metadata_attr_offset] = true;
-	compressor->compressed_is_null[builder->last_metadata_attr_offset] = true;
-	compressor->compressed_values[builder->first_metadata_attr_offset] = (Datum) 0;
-	compressor->compressed_values[builder->last_metadata_attr_offset] = (Datum) 0;
+	compressed_is_null[builder->first_metadata_attr_offset] = true;
+	compressed_is_null[builder->last_metadata_attr_offset] = true;
+	compressed_values[builder->first_metadata_attr_offset] = (Datum) 0;
+	compressed_values[builder->last_metadata_attr_offset] = (Datum) 0;
 }
 
 static void
-firstlast_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
+firstlast_insert_to_compressed_row(void *builder_, Datum *compressed_values,
+								   bool *compressed_is_null)
 {
 	BatchMetadataBuilderFirstLast *builder = (BatchMetadataBuilderFirstLast *) builder_;
 	Assert(builder->first_metadata_attr_offset >= 0);
@@ -123,15 +125,15 @@ firstlast_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 
 	if (builder->empty)
 	{
-		compressor->compressed_is_null[builder->first_metadata_attr_offset] = true;
-		compressor->compressed_is_null[builder->last_metadata_attr_offset] = true;
+		compressed_is_null[builder->first_metadata_attr_offset] = true;
+		compressed_is_null[builder->last_metadata_attr_offset] = true;
 		return;
 	}
 
 	/* First value */
 	if (builder->first_is_null)
 	{
-		compressor->compressed_is_null[builder->first_metadata_attr_offset] = true;
+		compressed_is_null[builder->first_metadata_attr_offset] = true;
 	}
 	else
 	{
@@ -146,14 +148,14 @@ firstlast_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 			first = unpacked;
 			builder->first = first;
 		}
-		compressor->compressed_is_null[builder->first_metadata_attr_offset] = false;
-		compressor->compressed_values[builder->first_metadata_attr_offset] = first;
+		compressed_is_null[builder->first_metadata_attr_offset] = false;
+		compressed_values[builder->first_metadata_attr_offset] = first;
 	}
 
 	/* Last value */
 	if (builder->last_is_null)
 	{
-		compressor->compressed_is_null[builder->last_metadata_attr_offset] = true;
+		compressed_is_null[builder->last_metadata_attr_offset] = true;
 	}
 	else
 	{
@@ -168,7 +170,7 @@ firstlast_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 			last = unpacked;
 			builder->last = last;
 		}
-		compressor->compressed_is_null[builder->last_metadata_attr_offset] = false;
-		compressor->compressed_values[builder->last_metadata_attr_offset] = last;
+		compressed_is_null[builder->last_metadata_attr_offset] = false;
+		compressed_values[builder->last_metadata_attr_offset] = last;
 	}
 }

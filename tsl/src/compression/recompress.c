@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include "debug_point.h"
+#include <access/tableam.h>
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
@@ -19,18 +20,22 @@
 #include <utils/typcache.h>
 
 #include "api.h"
+#include "batch_metadata_builder.h"
 #include "compression.h"
 #include "compression_dml.h"
 #include "create.h"
 #include "debug_assert.h"
+#include "foreach_ptr.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "indexing.h"
 #include "recompress.h"
+#include "sparse_index_bloom1.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
+#include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
 
 /*
@@ -75,18 +80,18 @@ static void try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncomp
  * that are affected by the addition of newer data. The existing
  * compressed chunk will not be recreated but modified in place.
  *
- * 0 uncompressed_chunk_id REGCLASS
+ * 0 uncompressed_relid REGCLASS
  * 1 if_not_compressed BOOL = false
  */
 Datum
 tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 {
-	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Oid uncompressed_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
-	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
 	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 
 	if (!ts_chunk_is_partial(chunk))
@@ -108,7 +113,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							"enable it by first setting "
 							"timescaledb.enable_segmentwise_recompression to on")));
 		}
-		CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk_id);
+		CompressionSettings *settings = ts_compression_settings_get(uncompressed_relid);
 		if (!settings->fd.orderby)
 		{
 			ereport(ERROR,
@@ -126,10 +131,10 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 				 NameStr(chunk->fd.schema_name),
 				 NameStr(chunk->fd.table_name));
 		}
-		uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
+		recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
 	}
 
-	PG_RETURN_OID(uncompressed_chunk_id);
+	PG_RETURN_OID(uncompressed_relid);
 }
 
 static RecompressContext *
@@ -235,11 +240,11 @@ free_chunk_recompress_ctx(RecompressContext *recompress_ctx)
 	pfree(recompress_ctx);
 }
 
-Oid
+void
 recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 								  bool fullrecompress /* do full decompress/compress segmentwise */)
 {
-	Oid uncompressed_chunk_id = uncompressed_chunk->table_id;
+	Oid uncompressed_relid = uncompressed_chunk->table_id;
 
 	/*
 	 * only proceed if status in (3, 9, 11)
@@ -259,7 +264,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 	}
 
 	/* need it to find the segby cols from the catalog */
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
 
 	/* We should not do segment-wise recompression with empty orderby, see #7748
@@ -276,13 +280,13 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 	/* lock both chunks, compressed and uncompressed */
 	Relation uncompressed_chunk_rel =
 		table_open(uncompressed_chunk->table_id, recompression_lockmode);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, recompression_lockmode);
+	Relation compressed_chunk_rel = table_open(settings->fd.compress_relid, recompression_lockmode);
 
 	bool has_unique_constraints =
 		ts_indexing_relation_has_primary_or_unique_index(uncompressed_chunk_rel);
 	int count;
 	LOCKTAG locktag;
-	SET_LOCKTAG_RELATION(locktag, MyDatabaseId, uncompressed_chunk_id);
+	SET_LOCKTAG_RELATION(locktag, MyDatabaseId, uncompressed_relid);
 
 	/*
 	 * Recompression does not block inserts but it can interfere with
@@ -308,7 +312,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 			table_close(uncompressed_chunk_rel, NoLock);
 			table_close(compressed_chunk_rel, NoLock);
 
-			PG_RETURN_OID(uncompressed_chunk_id);
+			return;
 		}
 	}
 
@@ -740,8 +744,6 @@ finish:
 
 	table_close(uncompressed_chunk_rel, NoLock);
 	table_close(compressed_chunk_rel, NoLock);
-
-	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
 /*
@@ -1358,4 +1360,499 @@ try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk
 		/* changed chunk status, so invalidate any plans involving this chunk */
 		CacheInvalidateRelcacheByRelid(uncompressed_chunk->table_id);
 	}
+}
+
+/*
+ * Drop the physical metadata columns for a list of sparse index objects
+ * from the compressed chunk table in a single ALTER TABLE.
+ */
+static void
+drop_sparse_index_columns(Oid compressed_relid, List *index_objs)
+{
+	List *cmds = NIL;
+
+	foreach_ptr(SparseIndexSettingsObject, index_obj, index_objs)
+	{
+		const char *type;
+		List *columns;
+		if (!ts_sparse_index_object_get_type_and_columns(index_obj, &type, &columns))
+		{
+			continue;
+		}
+
+		if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumMinmax]) == 0)
+		{
+			const char *colname = (const char *) lfirst(list_head(columns));
+			static const char *minmax_prefixes[] = { "min", "max" };
+			for (size_t i = 0; i < sizeof(minmax_prefixes) / sizeof(minmax_prefixes[0]); i++)
+			{
+				char *meta_name =
+					compressed_column_metadata_name_v2(minmax_prefixes[i], &colname, 1);
+				Assert(get_attnum(compressed_relid, meta_name) != InvalidAttrNumber);
+				AlterTableCmd *cmd = makeNode(AlterTableCmd);
+				cmd->subtype = AT_DropColumn;
+				cmd->name = meta_name;
+				cmd->missing_ok = true;
+				cmds = lappend(cmds, cmd);
+			}
+		}
+		else if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumFirstLast]) == 0)
+		{
+			const char *colname = (const char *) lfirst(list_head(columns));
+			static const char *firstlast_prefixes[] = { "first", "last" };
+			for (size_t i = 0; i < sizeof(firstlast_prefixes) / sizeof(firstlast_prefixes[0]); i++)
+			{
+				char *meta_name =
+					compressed_column_metadata_name_v2(firstlast_prefixes[i], &colname, 1);
+				Assert(get_attnum(compressed_relid, meta_name) != InvalidAttrNumber);
+				AlterTableCmd *cmd = makeNode(AlterTableCmd);
+				cmd->subtype = AT_DropColumn;
+				cmd->name = meta_name;
+				cmd->missing_ok = true;
+				cmds = lappend(cmds, cmd);
+			}
+		}
+		else if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumBloom]) == 0)
+		{
+			char *meta_name =
+				compressed_column_metadata_name_list_v2(bloom1_column_prefix, columns);
+			Assert(get_attnum(compressed_relid, meta_name) != InvalidAttrNumber);
+			AlterTableCmd *cmd = makeNode(AlterTableCmd);
+			cmd->subtype = AT_DropColumn;
+			cmd->name = meta_name;
+			cmd->missing_ok = true;
+			cmds = lappend(cmds, cmd);
+		}
+	}
+
+	if (cmds != NIL)
+	{
+		ts_alter_table_with_event_trigger(compressed_relid, NULL, cmds, true);
+	}
+}
+
+/*
+ * Add physical metadata columns for a list of sparse index objects
+ * to the compressed chunk table in a single ALTER TABLE.
+ */
+static void
+add_sparse_index_columns(Chunk *chunk, Oid compressed_relid, List *index_objs)
+{
+	List *col_defs = NIL;
+	Relation uncompressed_rel = table_open(chunk->table_id, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(uncompressed_rel);
+
+	foreach_ptr(SparseIndexSettingsObject, index_obj, index_objs)
+	{
+		const char *type;
+		List *columns;
+		if (!ts_sparse_index_object_get_type_and_columns(index_obj, &type, &columns))
+		{
+			continue;
+		}
+
+		List *attrs = NIL;
+		foreach_ptr(const char, colname, columns)
+		{
+			AttrNumber attno = get_attnum(chunk->table_id, colname);
+			Ensure(AttributeNumberIsValid(attno),
+				   "column \"%s\" not found on chunk \"%s.%s\"",
+				   colname,
+				   NameStr(chunk->fd.schema_name),
+				   NameStr(chunk->fd.table_name));
+			attrs = lappend(attrs, TupleDescAttr(tupdesc, attno - 1));
+		}
+
+		if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumMinmax]) == 0)
+		{
+			col_defs = lappend(col_defs, create_sparse_index_column_def(attrs, "min"));
+			col_defs = lappend(col_defs, create_sparse_index_column_def(attrs, "max"));
+		}
+		else if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumFirstLast]) == 0)
+		{
+			col_defs = lappend(col_defs, create_sparse_index_column_def(attrs, "first"));
+			col_defs = lappend(col_defs, create_sparse_index_column_def(attrs, "last"));
+		}
+		else if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumBloom]) == 0)
+		{
+			col_defs =
+				lappend(col_defs, create_sparse_index_column_def(attrs, bloom1_column_prefix));
+		}
+	}
+
+	table_close(uncompressed_rel, AccessShareLock);
+
+	if (col_defs != NIL)
+	{
+		List *cmds = NIL;
+		foreach_ptr(ColumnDef, coldef, col_defs)
+		{
+			AlterTableCmd *cmd = makeNode(AlterTableCmd);
+			cmd->subtype = AT_AddColumn;
+			cmd->def = (Node *) coldef;
+			cmd->missing_ok = false;
+			cmds = lappend(cmds, cmd);
+		}
+		ts_alter_table_with_event_trigger(compressed_relid, NULL, cmds, true);
+	}
+}
+
+/*
+ * Create BatchMetadataBuilders for the sparse index objects in to_add.
+ * Must be called after add_sparse_index_columns so the compressed chunk
+ * already has the metadata columns.
+ */
+static List *
+create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, List *index_objs,
+							 bool *repl)
+{
+	List *builders = NIL;
+	TupleDesc tupdesc = RelationGetDescr(uncompressed_rel);
+	Oid chunk_relid = RelationGetRelid(uncompressed_rel);
+
+	foreach_ptr(SparseIndexSettingsObject, index_obj, index_objs)
+	{
+		const char *type;
+		List *columns;
+		if (!ts_sparse_index_object_get_type_and_columns(index_obj, &type, &columns))
+		{
+			continue;
+		}
+
+		if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumBloom]) == 0)
+		{
+			int num_columns = list_length(columns);
+			Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+			AttrNumber attnums[MAX_BLOOM_FILTER_COLUMNS];
+			int col_idx = 0;
+
+			foreach_ptr(const char, colname, columns)
+			{
+				AttrNumber attno = get_attnum(chunk_relid, colname);
+				attnums[col_idx] = attno;
+				type_oids[col_idx] = TupleDescAttr(tupdesc, attno - 1)->atttypid;
+				col_idx++;
+			}
+
+			char *meta_name =
+				compressed_column_metadata_name_list_v2(bloom1_column_prefix, columns);
+			AttrNumber compressed_attno = get_attnum(compressed_relid, meta_name);
+			int bloom_offset = AttrNumberGetAttrOffset(compressed_attno);
+
+			repl[bloom_offset] = true;
+
+			builders = lappend(builders,
+							   batch_metadata_builder_bloom1_create(num_columns,
+																	type_oids,
+																	attnums,
+																	bloom_offset));
+		}
+		else if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumMinmax]) == 0)
+		{
+			const char *colname = (const char *) lfirst(list_head(columns));
+			AttrNumber attno = get_attnum(chunk_relid, colname);
+			Form_pg_attribute attr = TupleDescAttr(tupdesc, attno - 1);
+
+			char *min_name = compressed_column_metadata_name_v2("min", &colname, 1);
+			char *max_name = compressed_column_metadata_name_v2("max", &colname, 1);
+			int min_offset = AttrNumberGetAttrOffset(get_attnum(compressed_relid, min_name));
+			int max_offset = AttrNumberGetAttrOffset(get_attnum(compressed_relid, max_name));
+
+			repl[min_offset] = true;
+			repl[max_offset] = true;
+
+			builders = lappend(builders,
+							   batch_metadata_builder_minmax_create(attr->atttypid,
+																	attr->attcollation,
+																	attno,
+																	min_offset,
+																	max_offset));
+		}
+		else if (strcmp(type, ts_sparse_index_type_names[_SparseIndexTypeEnumFirstLast]) == 0)
+		{
+			const char *colname = (const char *) lfirst(list_head(columns));
+			AttrNumber attno = get_attnum(chunk_relid, colname);
+
+			char *first_name = compressed_column_metadata_name_v2("first", &colname, 1);
+			char *last_name = compressed_column_metadata_name_v2("last", &colname, 1);
+			int first_offset = AttrNumberGetAttrOffset(get_attnum(compressed_relid, first_name));
+			int last_offset = AttrNumberGetAttrOffset(get_attnum(compressed_relid, last_name));
+
+			repl[first_offset] = true;
+			repl[last_offset] = true;
+
+			builders =
+				lappend(builders,
+						batch_metadata_builder_firstlast_create(TupleDescAttr(tupdesc, attno - 1)
+																	->atttypid,
+																attno,
+																first_offset,
+																last_offset));
+		}
+	}
+
+	return builders;
+}
+
+static List *
+modify_compressed_table(Chunk *chunk, bool force)
+{
+	CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
+	CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
+
+	SparseIndexSettings *ht_index = ts_convert_to_sparse_index_settings(ht_settings->fd.index);
+	SparseIndexSettings *chunk_index =
+		ts_convert_to_sparse_index_settings(chunk_settings->fd.index);
+
+	/* Step 1: collect sparse index objects to drop, then drop all at once */
+	List *to_drop = NIL;
+	foreach_ptr(SparseIndexSettingsObject, chunk_obj, chunk_index->objects)
+	{
+		/* ignore orderby sparse indexes */
+		if (ts_sparse_index_is_orderby_source(chunk_obj))
+		{
+			continue;
+		}
+
+		if (force)
+		{
+			to_drop = lappend(to_drop, chunk_obj);
+			continue;
+		}
+
+		bool found = false;
+		foreach_ptr(SparseIndexSettingsObject, ht_obj, ht_index->objects)
+		{
+			if (ts_sparse_index_object_equal(chunk_obj, ht_obj))
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			to_drop = lappend(to_drop, chunk_obj);
+		}
+	}
+
+	if (to_drop != NIL)
+	{
+		drop_sparse_index_columns(chunk_settings->fd.compress_relid, to_drop);
+	}
+
+	/* Step 2: collect sparse index objects to add, then add all at once */
+	List *to_add = NIL;
+	foreach_ptr(SparseIndexSettingsObject, ht_obj, ht_index->objects)
+	{
+		/* ignore orderby sparse indexes */
+		if (ts_sparse_index_is_orderby_source(ht_obj))
+		{
+			continue;
+		}
+
+		if (force)
+		{
+			to_add = lappend(to_add, ht_obj);
+			continue;
+		}
+
+		bool found = false;
+		foreach_ptr(SparseIndexSettingsObject, chunk_obj, chunk_index->objects)
+		{
+			if (ts_sparse_index_object_equal(ht_obj, chunk_obj))
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			to_add = lappend(to_add, ht_obj);
+		}
+	}
+
+	if (to_add != NIL)
+	{
+		add_sparse_index_columns(chunk, chunk_settings->fd.compress_relid, to_add);
+	}
+
+	/* Update the chunk's compression settings to match the hypertable */
+	chunk_settings->fd.index = ht_settings->fd.index;
+	ts_compression_settings_update(chunk_settings);
+
+	return to_add;
+}
+
+/*
+ * Scan every compressed batch, decompress it, feed the rows through the
+ * builders, and update the compressed tuple with the computed sparse index
+ * values.
+ */
+static void
+populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompressor,
+							  List *builders, bool *repl)
+{
+	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
+	TableScanDesc scan = table_beginscan(compressed_rel, GetActiveSnapshot(), 0, NULL);
+	TupleTableSlot *scan_slot = table_slot_create(compressed_rel, NULL);
+	TupleTableSlot *update_slot = MakeSingleTupleTableSlot(compressed_desc, &TTSOpsHeapTuple);
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, scan_slot))
+	{
+		CHECK_FOR_INTERRUPTS();
+
+		bool should_free;
+		HeapTuple compressed_tuple = ExecFetchSlotHeapTuple(scan_slot, false, &should_free);
+
+		heap_deform_tuple(compressed_tuple,
+						  compressed_desc,
+						  decompressor->compressed_datums,
+						  decompressor->compressed_is_nulls);
+
+		int n_batch_rows = decompress_batch(decompressor);
+
+		/* Feed each decompressed row through the builders */
+		for (int i = 0; i < n_batch_rows; i++)
+		{
+			foreach_ptr(BatchMetadataBuilder, builder, builders)
+			{
+				builder->update_row(builder, decompressor->decompressed_slots[i]);
+			}
+		}
+
+		/* Write computed sparse index values into the datum arrays */
+		foreach_ptr(BatchMetadataBuilder, builder, builders)
+		{
+			builder->insert_to_compressed_row(builder,
+											  decompressor->compressed_datums,
+											  decompressor->compressed_is_nulls);
+		}
+
+		/* Update the compressed tuple in-place */
+		ItemPointerData tid = scan_slot->tts_tid;
+		HeapTuple new_tuple = heap_modify_tuple(compressed_tuple,
+												compressed_desc,
+												decompressor->compressed_datums,
+												decompressor->compressed_is_nulls,
+												repl);
+		ExecStoreHeapTuple(new_tuple, update_slot, false);
+
+		/*
+		 * Sparse index metadata columns are not covered by any index.
+		 * If indexes on metadata columns are added in the future,
+		 * this will need to handle index updates via update_indexes.
+		 */
+#if PG16_LT
+		bool update_indexes;
+#else
+		TU_UpdateIndexes update_indexes;
+#endif
+		simple_table_tuple_update(compressed_rel,
+								  &tid,
+								  update_slot,
+								  GetActiveSnapshot(),
+								  &update_indexes);
+		ExecClearTuple(update_slot);
+
+		/* Reset */
+		foreach_ptr(BatchMetadataBuilder, builder, builders)
+		{
+			builder->reset(builder,
+						   decompressor->compressed_datums,
+						   decompressor->compressed_is_nulls);
+		}
+
+		row_decompressor_reset(decompressor);
+
+		if (should_free)
+		{
+			heap_freetuple(compressed_tuple);
+		}
+	}
+
+	ExecDropSingleTupleTableSlot(update_slot);
+	ExecDropSingleTupleTableSlot(scan_slot);
+	table_endscan(scan);
+}
+
+void
+rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
+{
+	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
+	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+
+	LockRelationOid(ht->main_table_relid, AccessShareLock);
+	LockRelationOid(compress_ht->main_table_relid, AccessShareLock);
+	LockRelationOid(uncompressed_chunk->table_id, ShareUpdateExclusiveLock);
+
+	/* Re-read chunk state after locks — another process may have changed it */
+	uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk->table_id, true);
+	if (!ts_chunk_is_compressed(uncompressed_chunk) || ts_chunk_is_frozen(uncompressed_chunk))
+	{
+		ereport(NOTICE,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s.%s\" is no longer compressed or is frozen, skipping",
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name))));
+		return;
+	}
+
+	CompressionSettings *chunk_settings = ts_compression_settings_get(uncompressed_chunk->table_id);
+	CompressionSettings *ht_settings =
+		ts_compression_settings_get(uncompressed_chunk->hypertable_relid);
+
+	/* Orderby changes require recompression, not sparse index rebuild */
+	if (!ts_array_equal(chunk_settings->fd.orderby, ht_settings->fd.orderby))
+	{
+		ereport(NOTICE,
+				(errmsg("orderby settings for chunk \"%s.%s\" differ from hypertable \"%s\"",
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name),
+						get_rel_name(uncompressed_chunk->hypertable_relid)),
+				 errhint("Use compress_chunk(chunk, recompress => true) to recompress.")));
+		return;
+	}
+
+	if (!force && ts_sparse_index_equal(chunk_settings->fd.index, ht_settings->fd.index))
+	{
+		ereport(NOTICE,
+				(errmsg("sparse index settings for chunk \"%s.%s\" already match hypertable "
+						"after acquiring locks, skipping",
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name))));
+		return;
+	}
+
+	/* Step 1: drop old columns, add new ones, update compression settings */
+	List *added_indexes = modify_compressed_table(uncompressed_chunk, force);
+
+	if (added_indexes == NIL)
+	{
+		return;
+	}
+
+	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+
+	/* Step 2: initialize builders and decompressor */
+	Relation compressed_rel = table_open(compressed_chunk->table_id, RowExclusiveLock);
+	Relation uncompressed_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
+	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
+
+	bool *repl = palloc0(sizeof(bool) * compressed_desc->natts);
+	List *builders = create_sparse_index_builders(uncompressed_rel,
+												  compressed_chunk->table_id,
+												  added_indexes,
+												  repl);
+
+	RowDecompressor decompressor = build_decompressor(compressed_desc,
+													  RelationGetDescr(uncompressed_rel),
+													  compressed_chunk->table_id,
+													  uncompressed_chunk->table_id);
+
+	/* Step 3: scan, decompress, populate, update */
+	populate_sparse_index_columns(compressed_rel, &decompressor, builders, repl);
+
+	row_decompressor_close(&decompressor);
+	table_close(uncompressed_rel, AccessShareLock);
+	table_close(compressed_rel, RowExclusiveLock);
 }

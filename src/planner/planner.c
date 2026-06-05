@@ -57,6 +57,7 @@
 #include "partitioning.h"
 #include "planner/planner.h"
 #include "sort_transform.h"
+#include "ts_catalog/compression_settings.h"
 #include "utils.h"
 
 #include "compat/compat.h"
@@ -1744,26 +1745,18 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			/* Check for DML on chunk directly */
 			if (!ht)
 			{
-				Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
-				if (!chunk)
+				/*
+				 * For operations on internal compressed chunks we block modifications
+				 * if the chunk belongs to a frozen chunk.
+				 * Direct modifications of uncompressed chunks is intercepted by chunk
+				 * tuple routing.
+				 * In all other cases of direct modification of chunks we dont interfere
+				 * and do not add a ModifyHypertable node.
+				 */
+				Oid uncompressed_relid = ts_relation_get_uncompressed_relid(rte->relid);
+				if (OidIsValid(uncompressed_relid))
 				{
-					/* Not a hypertable or chunk, continue */
-					new_pathlist = lappend(new_pathlist, path);
-					continue;
-				}
-
-				ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
-				if (ht->fd.compression_state == HypertableInternalCompressionTable)
-				{
-					/*
-					 * For operations on internal compressed chunks we block modifications
-					 * if the chunk belongs to a frozen chunk.
-					 * Direct modifications of uncompressed chunks is intercepted by chunk
-					 * tuple routing.
-					 * In all other cases of direct modification of chunks we dont interfere
-					 * and do not add a ModifyHypertable node.
-					 */
-					Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
+					Chunk *uncompressed = ts_chunk_get_by_relid(uncompressed_relid, true);
 					if (ts_chunk_is_frozen(uncompressed))
 					{
 						ereport(ERROR,
@@ -1775,6 +1768,16 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					new_pathlist = lappend(new_pathlist, path);
 					continue;
 				}
+
+				int32 hypertable_id = ts_chunk_get_hypertable_id_by_reloid(rte->relid);
+				if (hypertable_id == INVALID_HYPERTABLE_ID)
+				{
+					/* Not a hypertable or chunk, continue */
+					new_pathlist = lappend(new_pathlist, path);
+					continue;
+				}
+
+				ht = ts_hypertable_get_by_id(hypertable_id);
 			}
 
 			switch (mt->operation)

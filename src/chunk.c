@@ -374,65 +374,6 @@ do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
 }
 
 /*
- * Calculate, and potentially set, a new chunk interval for an open dimension.
- */
-static bool
-calculate_and_set_new_chunk_interval(const Hypertable *ht, const Point *p)
-{
-	Hyperspace *hs = ht->space;
-	Dimension *dim = NULL;
-	Datum datum;
-	int64 chunk_interval, coord;
-	int i;
-
-	if (!OidIsValid(ht->chunk_sizing_func) || ht->fd.chunk_target_size <= 0)
-	{
-		return false;
-	}
-
-	/* Find first open dimension */
-	for (i = 0; i < hs->num_dimensions; i++)
-	{
-		dim = &hs->dimensions[i];
-
-		if (IS_OPEN_DIMENSION(dim))
-		{
-			break;
-		}
-
-		dim = NULL;
-	}
-
-	/* Nothing to do if no open dimension */
-	if (NULL == dim)
-	{
-		elog(WARNING,
-			 "adaptive chunking enabled on hypertable \"%s\" without an open (time) dimension",
-			 get_rel_name(ht->main_table_relid));
-
-		return false;
-	}
-
-	coord = p->coordinates[i];
-	datum = OidFunctionCall3(ht->chunk_sizing_func,
-							 Int32GetDatum(dim->fd.id),
-							 Int64GetDatum(coord),
-							 Int64GetDatum(ht->fd.chunk_target_size));
-	chunk_interval = DatumGetInt64(datum);
-
-	/* Check if the function didn't set and interval or nothing changed */
-	if (chunk_interval <= 0 || chunk_interval == dim->fd.interval_length)
-	{
-		return false;
-	}
-
-	/* Update the dimension */
-	ts_dimension_set_chunk_interval(dim, chunk_interval);
-
-	return true;
-}
-
-/*
  * Resolve chunk collisions.
  *
  * After a chunk collision scan, this function is called for each chunk in the
@@ -1391,12 +1332,6 @@ chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const c
 		.waitpolicy = LockWaitBlock,
 	};
 
-	/*
-	 * If the user has enabled adaptive chunking, call the function to
-	 * calculate and set the new chunk time interval.
-	 */
-	calculate_and_set_new_chunk_interval(ht, p);
-
 	/* Calculate the hypercube for a new chunk that covers the tuple's point. */
 	cube = ts_hypercube_calculate_from_point(hs, p, &tuplock);
 
@@ -2000,7 +1935,7 @@ chunk_scan_context_add_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 }
 
 TM_Result
-ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_chunk_id)
+ts_chunk_lock_for_creating_compressed_chunk(Chunk *chunk)
 {
 	ScanIterator iterator;
 	bool found = false;
@@ -2012,7 +1947,7 @@ ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_ch
 	};
 
 	iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
-	ts_chunk_scan_iterator_set_chunk_id(&iterator, chunk_id);
+	ts_chunk_scan_iterator_set_chunk_id(&iterator, chunk->fd.id);
 	iterator.ctx.tuplock = &tuplock;
 
 	ts_scanner_foreach(&iterator)
@@ -2020,11 +1955,16 @@ ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_ch
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		lockresult = ti->lockresult;
 
-		if (lockresult == TM_Ok && compressed_chunk_id)
+		/*
+		 * Refresh the chunk's status from the locked tuple so the caller can
+		 * recheck whether the chunk was compressed concurrently.
+		 */
+		if (lockresult == TM_Ok)
 		{
 			bool isnull;
-			Datum value = slot_getattr(ti->slot, Anum_chunk_compressed_chunk_id, &isnull);
-			*compressed_chunk_id = isnull ? INVALID_CHUNK_ID : DatumGetInt32(value);
+			Datum value = slot_getattr(ti->slot, Anum_chunk_status, &isnull);
+			Assert(!isnull);
+			chunk->fd.status = DatumGetInt32(value);
 		}
 		found = true;
 	}
@@ -2033,7 +1973,7 @@ ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_ch
 
 	if (!found)
 	{
-		elog(ERROR, "chunk with ID %d does not exist", chunk_id);
+		elog(ERROR, "chunk with ID %d does not exist", chunk->fd.id);
 	}
 
 	return lockresult;
@@ -2469,99 +2409,6 @@ chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_f
 	};
 
 	return ts_scanner_scan(&ctx);
-}
-
-/*
- * Get a window of chunks that "precedes" the given dimensional point.
- *
- * For instance, if the dimension is "time", then given a point in time the
- * function returns the recent chunks that come before the chunk that includes
- * that point. The count parameter determines the number or slices the window
- * should include in the given dimension. Note, that with multi-dimensional
- * partitioning, there might be multiple chunks in each dimensional slice that
- * all precede the given point. For instance, the example below shows two
- * different situations that each go "back" two slices (count = 2) in the
- * x-dimension, but returns two vs. eight chunks due to different
- * partitioning.
- *
- * '_____________
- * '|   |   | * |
- * '|___|___|___|
- * '
- * '
- * '____ ________
- * '|   |   | * |
- * '|___|___|___|
- * '|   |   |   |
- * '|___|___|___|
- * '|   |   |   |
- * '|___|___|___|
- * '|   |   |   |
- * '|___|___|___|
- *
- * Note that the returned chunks will be allocated on the given memory
- * context, including the list itself. So, beware of not leaking the list if
- * the chunks are later cached somewhere else.
- */
-List *
-ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mctx)
-{
-	List *chunks = NIL;
-	DimensionVec *dimvec;
-	int i;
-
-	/* Scan for "count" slices that precede the point in the given dimension */
-	dimvec = ts_dimension_slice_scan_by_dimension_before_point(dimension_id,
-															   point,
-															   count,
-															   BackwardScanDirection,
-															   mctx);
-
-	/*
-	 * Each slice carries its owning chunk_id directly, so go fetch the chunk
-	 * and build its hypercube from the slice catalog.
-	 */
-	for (i = 0; i < dimvec->num_slices; i++)
-	{
-		DimensionSlice *slice = dimvec->slices[i];
-		Chunk *chunk = ts_chunk_get_by_id(slice->fd.chunk_id, true);
-		MemoryContext old;
-
-		List *chunk_slices = ts_dimension_slice_scan_by_chunk_id(chunk->fd.id, mctx);
-		ListCell *lc;
-		int idx = 0;
-
-		old = MemoryContextSwitchTo(mctx);
-		chunk->cube = ts_hypercube_alloc(list_length(chunk_slices));
-		MemoryContextSwitchTo(old);
-		foreach (lc, chunk_slices)
-		{
-			chunk->cube->slices[idx++] = (DimensionSlice *) lfirst(lc);
-		}
-		chunk->cube->num_slices = idx;
-		ts_hypercube_slice_sort(chunk->cube);
-
-		/* Allocate the list on the same memory context as the chunks */
-		old = MemoryContextSwitchTo(mctx);
-		chunks = lappend(chunks, chunk);
-		MemoryContextSwitchTo(old);
-	}
-
-#ifdef USE_ASSERT_CHECKING
-	/* Assert that we never return dropped chunks */
-	do
-	{
-		ListCell *lc;
-
-		foreach (lc, chunks)
-		{
-			Chunk *chunk = lfirst(lc);
-			ASSERT_IS_VALID_CHUNK(chunk);
-		}
-	} while (false);
-#endif
-
-	return chunks;
 }
 
 static Chunk *
@@ -3288,10 +3135,11 @@ ts_chunk_exists_with_compression(int32 hypertable_id)
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		bool isnull_chunk_id =
-			slot_attisnull(ts_scan_iterator_slot(&iterator), Anum_chunk_compressed_chunk_id);
+		bool status_isnull;
+		Datum status =
+			slot_getattr(ts_scan_iterator_slot(&iterator), Anum_chunk_status, &status_isnull);
 
-		if (!isnull_chunk_id)
+		if (!status_isnull && ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED))
 		{
 			found = true;
 			break;
@@ -3299,57 +3147,6 @@ ts_chunk_exists_with_compression(int32 hypertable_id)
 	}
 	ts_scan_iterator_close(&iterator);
 	return found;
-}
-
-static void
-init_scan_by_compressed_chunk_id(ScanIterator *iterator, int32 compressed_chunk_id)
-{
-	iterator->ctx.index =
-		catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_COMPRESSED_CHUNK_ID_INDEX);
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_chunk_compressed_chunk_id_idx_compressed_chunk_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(compressed_chunk_id));
-}
-
-Chunk *
-ts_chunk_get_compressed_chunk_parent(const Chunk *chunk)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	Oid parent_id = InvalidOid;
-
-	init_scan_by_compressed_chunk_id(&iterator, chunk->fd.id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		Datum datum;
-		bool isnull;
-
-		Assert(!OidIsValid(parent_id));
-		datum = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
-
-		if (!isnull)
-		{
-			parent_id = DatumGetObjectId(datum);
-		}
-	}
-
-	if (OidIsValid(parent_id))
-	{
-		return ts_chunk_get_by_id(parent_id, true);
-	}
-
-	return NULL;
-}
-
-bool
-ts_chunk_contains_compressed_data(const Chunk *chunk)
-{
-	Chunk *parent_chunk = ts_chunk_get_compressed_chunk_parent(chunk);
-
-	return parent_chunk != NULL;
 }
 
 List *
@@ -4336,6 +4133,15 @@ Datum
 ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 {
 	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	if (ts_relation_is_compressed_chunk_relation(chunk_relid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("dropping compressed chunks not supported"),
+				 errhint("Please drop the corresponding chunk on the uncompressed hypertable "
+						 "instead.")));
+	}
+
 	char *chunk_table_name = get_rel_name(chunk_relid);
 	char *chunk_schema_name = get_namespace_name(get_rel_namespace(chunk_relid));
 	ScanTupLock tuplock = {
@@ -4351,15 +4157,6 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   true);
 	Assert(ch != NULL);
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
-
-	if (ts_chunk_contains_compressed_data(ch))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("dropping compressed chunks not supported"),
-				 errhint("Please drop the corresponding chunk on the uncompressed hypertable "
-						 "instead.")));
-	}
 
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);

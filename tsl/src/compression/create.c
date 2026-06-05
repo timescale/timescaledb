@@ -403,7 +403,7 @@ should_create_bloom_sparse_index(Oid atttypid, TypeCacheEntry *type, Oid src_rel
  * List of Form_pg_attribute elements. Min and max indices only use
  * the first element. Bloom filters may use multiple columns.
  */
-static ColumnDef *
+ColumnDef *
 create_sparse_index_column_def(List *attributes, const char *metadata_type)
 {
 	Assert(is_sparse_index_type(metadata_type));

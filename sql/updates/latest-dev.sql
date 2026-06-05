@@ -1,3 +1,16 @@
+
+-- block when adaptive chunking is in use
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM _timescaledb_catalog.hypertable WHERE chunk_target_size > 0) THEN
+    RAISE EXCEPTION 'cannot upgrade because there are hypertables using adaptive chunking'
+      USING
+        ERRCODE = 'object_not_in_prerequisite_state',
+        DETAIL = format('Please disable adaptive chunking.');
+  END IF;
+END;
+$$;
+
 -- Drop obsolete chunk_constraint rows for inherited CHECK constraints on
 -- OSM chunks; PG inheritance handles propagation now.
 DELETE FROM _timescaledb_catalog.chunk_constraint cc
@@ -158,3 +171,108 @@ ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_constraint_
 DROP TABLE _timescaledb_catalog.chunk_constraint;
 DROP SEQUENCE _timescaledb_catalog.chunk_constraint_name;
 
+-- remove adaptive chunking
+DROP FUNCTION IF EXISTS @extschema@.set_adaptive_chunking(regclass, text, regproc);
+DROP FUNCTION IF EXISTS @extschema@.create_hypertable(relation REGCLASS, time_column_name NAME, partitioning_column NAME, number_partitions INTEGER, associated_schema_name NAME, associated_table_prefix NAME, chunk_time_interval ANYELEMENT, create_default_indexes BOOLEAN, if_not_exists BOOLEAN, partitioning_func REGPROC, migrate_data BOOLEAN, chunk_target_size TEXT, chunk_sizing_func REGPROC, time_partitioning_func REGPROC);
+DROP FUNCTION IF EXISTS _timescaledb_internal.calculate_chunk_interval(integer, bigint, bigint);
+DROP FUNCTION IF EXISTS _timescaledb_functions.calculate_chunk_interval(integer, bigint, bigint);
+
+
+-- chunk_target_size is no longer used, so its check constraint is dropped.
+ALTER TABLE _timescaledb_catalog.hypertable
+    DROP CONSTRAINT IF EXISTS hypertable_chunk_target_size_check;
+
+-- Rebuild the catalog table `_timescaledb_catalog.continuous_agg` to add the
+-- `schema_change_timestamp` column.
+
+-- Drop views and foreign keys that depend on the catalog table.
+DROP VIEW IF EXISTS timescaledb_experimental.policies;
+DROP VIEW IF EXISTS timescaledb_information.hypertables;
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+DROP VIEW IF EXISTS timescaledb_information.jobs;
+
+ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
+    DROP CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+    DROP CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges
+    DROP CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    DROP CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey;
+
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.continuous_agg;
+
+CREATE TABLE _timescaledb_catalog._tmp_continuous_agg AS
+    SELECT
+        mat_hypertable_id,
+        raw_hypertable_id,
+        parent_mat_hypertable_id,
+        user_view_schema,
+        user_view_name,
+        partial_view_schema,
+        partial_view_name,
+        direct_view_schema,
+        direct_view_name,
+        materialized_only
+    FROM
+        _timescaledb_catalog.continuous_agg
+    ORDER BY
+        mat_hypertable_id;
+
+DROP TABLE _timescaledb_catalog.continuous_agg;
+
+CREATE TABLE _timescaledb_catalog.continuous_agg (
+  mat_hypertable_id integer NOT NULL,
+  raw_hypertable_id integer NOT NULL,
+  parent_mat_hypertable_id integer,
+  user_view_schema name NOT NULL,
+  user_view_name name NOT NULL,
+  partial_view_schema name NOT NULL,
+  partial_view_name name NOT NULL,
+  direct_view_schema name NOT NULL,
+  direct_view_name name NOT NULL,
+  materialized_only bool NOT NULL DEFAULT FALSE,
+  schema_change_timestamp bigint,
+  -- table constraints
+  CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
+  CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),
+  CONSTRAINT continuous_agg_user_view_schema_user_view_name_key UNIQUE (user_view_schema, user_view_name),
+  CONSTRAINT continuous_agg_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT continuous_agg_raw_hypertable_id_fkey FOREIGN KEY (raw_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT continuous_agg_parent_mat_hypertable_id_fkey FOREIGN KEY (parent_mat_hypertable_id)
+    REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+INSERT INTO _timescaledb_catalog.continuous_agg
+    (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema,
+     user_view_name, partial_view_schema, partial_view_name, direct_view_schema,
+     direct_view_name, materialized_only)
+SELECT * FROM _timescaledb_catalog._tmp_continuous_agg;
+DROP TABLE _timescaledb_catalog._tmp_continuous_agg;
+
+CREATE INDEX continuous_agg_raw_hypertable_id_idx ON _timescaledb_catalog.continuous_agg (raw_hypertable_id);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
+
+GRANT SELECT ON TABLE _timescaledb_catalog.continuous_agg TO PUBLIC;
+
+ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
+    ADD CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey
+        FOREIGN KEY (mat_hypertable_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+    ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey
+        FOREIGN KEY (materialization_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges
+    ADD CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey
+        FOREIGN KEY (materialization_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    ADD CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey
+        FOREIGN KEY (materialization_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+
+ANALYZE _timescaledb_catalog.continuous_agg;
+-- end rebuild _timescaledb_catalog.continuous_agg --
