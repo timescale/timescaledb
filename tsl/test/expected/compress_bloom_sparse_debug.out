@@ -230,3 +230,6 @@ SELECT _timescaledb_functions.bloom1_contains(NULL, pg_catalog.record_in(null::c
 -----------------
  f
 
+-- The hash function is callable by user, so must return proper error
+SELECT _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
+ERROR:  composite bloom filter supports at most 8 columns, got 9

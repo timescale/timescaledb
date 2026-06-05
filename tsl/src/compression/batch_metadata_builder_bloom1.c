@@ -903,10 +903,14 @@ bloom1_hash(PG_FUNCTION_ARGS)
 		TupleDesc tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 
 		num_columns = tupdesc->natts;
-		Ensure(num_columns <= MAX_BLOOM_FILTER_COLUMNS,
-			   "composite bloom filter supports at most %d columns, got %d",
-			   MAX_BLOOM_FILTER_COLUMNS,
-			   num_columns);
+		if (num_columns > MAX_BLOOM_FILTER_COLUMNS)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("composite bloom filter supports at most %d columns, got %d",
+							MAX_BLOOM_FILTER_COLUMNS,
+							num_columns)));
+		}
 
 		for (int i = 0; i < num_columns; i++)
 		{
