@@ -168,7 +168,7 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 static void
 modify_hypertable_init_child_plan_states(CustomScanState *node)
 {
-	mybt();
+//	mybt();
 
 	EState *estate = node->ss.ps.state;
 
@@ -209,7 +209,7 @@ modify_hypertable_init_child_plan_states(CustomScanState *node)
 static TupleTableSlot *
 modify_hypertable_exec(CustomScanState *node)
 {
-	mybt();
+//	mybt();
 
 	ModifyHypertableState *state = (ModifyHypertableState *) node;
 	ModifyTableState *mtstate;
