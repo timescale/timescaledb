@@ -34,11 +34,12 @@ set(TEST_FILES
     compress_compbloom_manual_config.sql
     compress_compbloom_naming.sql
     compress_compbloom_upsert.sql
-    compress_firstlast_sparse.sql
     compress_default.sql
-    compress_dml_copy.sql
+    compress_dml_aux.sql
     compress_dml_bitmap_rescan.sql
+    compress_dml_copy.sql
     compress_explain.sql
+    compress_firstlast_sparse.sql
     compress_float8_corrupt.sql
     compress_qualpushdown_complex.sql
     compress_qualpushdown_saop.sql
