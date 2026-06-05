@@ -1,4 +1,9 @@
 DROP VIEW IF EXISTS timescaledb_information.dimensions;
+DROP VIEW IF EXISTS timescaledb_information.hypertables;
+DROP VIEW IF EXISTS timescaledb_information.chunks;
+DROP VIEW IF EXISTS timescaledb_information.chunk_columnstore_settings;
+DROP VIEW IF EXISTS timescaledb_information.chunk_compression_settings;
+
 -- Block update if CAggs in old format are found
 DO
 $$
@@ -252,3 +257,4 @@ DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts 
 DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ);
 
 DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ);
+

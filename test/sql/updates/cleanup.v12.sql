@@ -2,6 +2,4 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir setup.v10.sql
-\ir setup.fix_sparse_index_migration.sql
-
+\ir cleanup.v11.sql
