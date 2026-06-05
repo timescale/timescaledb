@@ -1063,12 +1063,12 @@ SET client_min_messages TO DEBUG1;
 CALL run_job(:sparse_job_id);
 LOG:  statement: CALL run_job(1007);
 DEBUG:  Executing policy_refresh_continuous_aggregate with parameters {"end_offset": "@ 1 mon", "start_offset": "@ 10 years", "buckets_per_batch": 1, "mat_hypertable_id": 8, "refresh_newest_first": false}
-DEBUG:  begin "sparse_cagg" in window [ Wed Mar 11 00:00:00 2015 UTC, Tue Feb 11 00:00:00 2025 UTC ] internal [ 1426032000000000, 1739232000000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  before produce batches "sparse_cagg" in window [ Wed Apr 01 00:00:00 2015 UTC, Sat Feb 01 00:00:00 2025 UTC ] internal [ 1427846400000000, 1738368000000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, Fri Mar 01 00:00:00 2024 UTC ] internal [ 1706745600000000, 1709251200000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg" in window [ Fri Mar 01 00:00:00 2024 UTC, Mon Apr 01 00:00:00 2024 UTC ] internal [ 1709251200000000, 1711929600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg" in window [ Wed May 01 00:00:00 2024 UTC, Sat Jun 01 00:00:00 2024 UTC ] internal [ 1714521600000000, 1717200000000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg" in window [ Tue Oct 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] internal [ 1727740800000000, 1730419200000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
+DEBUG:  begin "sparse_cagg" in window [ Wed Mar 11 00:00:00 2015 UTC, Tue Feb 11 00:00:00 2025 UTC ] internal [ 1426032000000000, 1739232000000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  before produce batches "sparse_cagg" in window [ Wed Apr 01 00:00:00 2015 UTC, Sat Feb 01 00:00:00 2025 UTC ] internal [ 1427846400000000, 1738368000000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, Fri Mar 01 00:00:00 2024 UTC ] internal [ 1706745600000000, 1709251200000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg" in window [ Fri Mar 01 00:00:00 2024 UTC, Mon Apr 01 00:00:00 2024 UTC ] internal [ 1709251200000000, 1711929600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg" in window [ Wed May 01 00:00:00 2024 UTC, Sat Jun 01 00:00:00 2024 UTC ] internal [ 1714521600000000, 1717200000000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg" in window [ Tue Oct 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] internal [ 1727740800000000, 1730419200000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
 DEBUG:  refreshing continuous aggregate "sparse_cagg" from Thu Feb 01 00:00:00 2024 UTC to Fri Mar 01 00:00:00 2024 UTC
 DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1719792000000000 1709251200000000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, Fri Mar 01 00:00:00 2024 UTC ] (batch 1 of 4)
@@ -1159,19 +1159,19 @@ SET client_min_messages TO DEBUG1;
 CALL run_job(:fixed_job_id);
 LOG:  statement: CALL run_job(1008);
 DEBUG:  Executing policy_refresh_continuous_aggregate with parameters {"end_offset": "@ 1 mon", "start_offset": "@ 10 years", "buckets_per_batch": 1, "mat_hypertable_id": 9, "refresh_newest_first": false}
-DEBUG:  begin "sparse_cagg_fixed" in window [ Wed Mar 11 00:00:00 2015 UTC, Tue Feb 11 00:00:00 2025 UTC ] internal [ 1426032000000000, 1739232000000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  before produce batches "sparse_cagg_fixed" in window [ Sun Mar 15 00:00:00 2015 UTC, Mon Feb 10 00:00:00 2025 UTC ] internal [ 1426377600000000, 1739145600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Fri Feb 16 00:00:00 2024 UTC, Mon Feb 26 00:00:00 2024 UTC ] internal [ 1708041600000000, 1708905600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Mon Feb 26 00:00:00 2024 UTC, Thu Mar 07 00:00:00 2024 UTC ] internal [ 1708905600000000, 1709769600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Thu Mar 07 00:00:00 2024 UTC, Sun Mar 17 00:00:00 2024 UTC ] internal [ 1709769600000000, 1710633600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Sun Mar 17 00:00:00 2024 UTC, Wed Mar 27 00:00:00 2024 UTC ] internal [ 1710633600000000, 1711497600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Mon May 06 00:00:00 2024 UTC, Thu May 16 00:00:00 2024 UTC ] internal [ 1714953600000000, 1715817600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Thu May 16 00:00:00 2024 UTC, Sun May 26 00:00:00 2024 UTC ] internal [ 1715817600000000, 1716681600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Sun May 26 00:00:00 2024 UTC, Wed Jun 05 00:00:00 2024 UTC ] internal [ 1716681600000000, 1717545600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Tue Jun 25 00:00:00 2024 UTC, Fri Jul 05 00:00:00 2024 UTC ] internal [ 1719273600000000, 1720137600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Thu Oct 03 00:00:00 2024 UTC, Sun Oct 13 00:00:00 2024 UTC ] internal [ 1727913600000000, 1728777600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Sun Oct 13 00:00:00 2024 UTC, Wed Oct 23 00:00:00 2024 UTC ] internal [ 1728777600000000, 1729641600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_fixed" in window [ Wed Oct 23 00:00:00 2024 UTC, Sat Nov 02 00:00:00 2024 UTC ] internal [ 1729641600000000, 1730505600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
+DEBUG:  begin "sparse_cagg_fixed" in window [ Wed Mar 11 00:00:00 2015 UTC, Tue Feb 11 00:00:00 2025 UTC ] internal [ 1426032000000000, 1739232000000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  before produce batches "sparse_cagg_fixed" in window [ Sun Mar 15 00:00:00 2015 UTC, Mon Feb 10 00:00:00 2025 UTC ] internal [ 1426377600000000, 1739145600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Fri Feb 16 00:00:00 2024 UTC, Mon Feb 26 00:00:00 2024 UTC ] internal [ 1708041600000000, 1708905600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Mon Feb 26 00:00:00 2024 UTC, Thu Mar 07 00:00:00 2024 UTC ] internal [ 1708905600000000, 1709769600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Thu Mar 07 00:00:00 2024 UTC, Sun Mar 17 00:00:00 2024 UTC ] internal [ 1709769600000000, 1710633600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Sun Mar 17 00:00:00 2024 UTC, Wed Mar 27 00:00:00 2024 UTC ] internal [ 1710633600000000, 1711497600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Mon May 06 00:00:00 2024 UTC, Thu May 16 00:00:00 2024 UTC ] internal [ 1714953600000000, 1715817600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Thu May 16 00:00:00 2024 UTC, Sun May 26 00:00:00 2024 UTC ] internal [ 1715817600000000, 1716681600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Sun May 26 00:00:00 2024 UTC, Wed Jun 05 00:00:00 2024 UTC ] internal [ 1716681600000000, 1717545600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Tue Jun 25 00:00:00 2024 UTC, Fri Jul 05 00:00:00 2024 UTC ] internal [ 1719273600000000, 1720137600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Thu Oct 03 00:00:00 2024 UTC, Sun Oct 13 00:00:00 2024 UTC ] internal [ 1727913600000000, 1728777600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Sun Oct 13 00:00:00 2024 UTC, Wed Oct 23 00:00:00 2024 UTC ] internal [ 1728777600000000, 1729641600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_fixed" in window [ Wed Oct 23 00:00:00 2024 UTC, Sat Nov 02 00:00:00 2024 UTC ] internal [ 1729641600000000, 1730505600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
 DEBUG:  refreshing continuous aggregate "sparse_cagg_fixed" from Fri Feb 16 00:00:00 2024 UTC to Mon Feb 26 00:00:00 2024 UTC
 DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1730419200000000 1708905600000000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_fixed" in window [ Fri Feb 16 00:00:00 2024 UTC, Mon Feb 26 00:00:00 2024 UTC ] (batch 1 of 11)
@@ -1284,11 +1284,11 @@ SET client_min_messages TO DEBUG1;
 CALL run_job(:sparse_bp3_job_id);
 LOG:  statement: CALL run_job(1009);
 DEBUG:  Executing policy_refresh_continuous_aggregate with parameters {"end_offset": "@ 1 mon", "start_offset": "@ 10 years", "buckets_per_batch": 3, "mat_hypertable_id": 10, "refresh_newest_first": false}
-DEBUG:  begin "sparse_cagg_bp3" in window [ Wed Mar 11 00:00:00 2015 UTC, Tue Feb 11 00:00:00 2025 UTC ] internal [ 1426032000000000, 1739232000000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  before produce batches "sparse_cagg_bp3" in window [ Wed Apr 01 00:00:00 2015 UTC, Sat Feb 01 00:00:00 2025 UTC ] internal [ 1427846400000000, 1738368000000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_bp3" in window [ Thu Feb 01 00:00:00 2024 UTC, Wed May 01 00:00:00 2024 UTC ] internal [ 1706745600000000, 1714521600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_bp3" in window [ Wed May 01 00:00:00 2024 UTC, Thu Aug 01 00:00:00 2024 UTC ] internal [ 1714521600000000, 1722470400000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "sparse_cagg_bp3" in window [ Tue Oct 01 00:00:00 2024 UTC, Wed Jan 01 00:00:00 2025 UTC ] internal [ 1727740800000000, 1735689600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
+DEBUG:  begin "sparse_cagg_bp3" in window [ Wed Mar 11 00:00:00 2015 UTC, Tue Feb 11 00:00:00 2025 UTC ] internal [ 1426032000000000, 1739232000000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  before produce batches "sparse_cagg_bp3" in window [ Wed Apr 01 00:00:00 2015 UTC, Sat Feb 01 00:00:00 2025 UTC ] internal [ 1427846400000000, 1738368000000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_bp3" in window [ Thu Feb 01 00:00:00 2024 UTC, Wed May 01 00:00:00 2024 UTC ] internal [ 1706745600000000, 1714521600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_bp3" in window [ Wed May 01 00:00:00 2024 UTC, Thu Aug 01 00:00:00 2024 UTC ] internal [ 1714521600000000, 1722470400000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "sparse_cagg_bp3" in window [ Tue Oct 01 00:00:00 2024 UTC, Wed Jan 01 00:00:00 2025 UTC ] internal [ 1727740800000000, 1735689600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
 DEBUG:  refreshing continuous aggregate "sparse_cagg_bp3" from Thu Feb 01 00:00:00 2024 UTC to Wed May 01 00:00:00 2024 UTC
 DEBUG:  hypertable 7 existing watermark >= new invalidation threshold 1730505600000000 1714521600000000
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_bp3" in window [ Thu Feb 01 00:00:00 2024 UTC, Wed May 01 00:00:00 2024 UTC ] (batch 1 of 3)
@@ -1395,14 +1395,14 @@ SET client_min_messages TO DEBUG1;
 CALL run_job(:end_null_job_id);
 LOG:  statement: CALL run_job(1010);
 DEBUG:  Executing policy_refresh_continuous_aggregate with parameters {"end_offset": null, "start_offset": null, "buckets_per_batch": 1, "mat_hypertable_id": 12, "refresh_newest_first": false}
-DEBUG:  begin "end_null_cagg" in window [ -infinity, infinity ] internal [ -9223372036854775808, 9223372036854775807 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  START IS NULL "end_null_cagg" in window [ -infinity, infinity ] internal [ -9223372036854775808, 9223372036854775807 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  END IS NULL "end_null_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, infinity ] internal [ 1706745600000000, 9223372036854775807 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  before produce batches "end_null_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] internal [ 1706745600000000, 1730419200000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "end_null_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, Fri Mar 01 00:00:00 2024 UTC ] internal [ 1706745600000000, 1709251200000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "end_null_cagg" in window [ Fri Mar 01 00:00:00 2024 UTC, Mon Apr 01 00:00:00 2024 UTC ] internal [ 1709251200000000, 1711929600000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "end_null_cagg" in window [ Wed May 01 00:00:00 2024 UTC, Sat Jun 01 00:00:00 2024 UTC ] internal [ 1714521600000000, 1717200000000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
-DEBUG:  batch produced "end_null_cagg" in window [ Tue Oct 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] internal [ 1727740800000000, 1730419200000000 ] minimum [ Wed Nov 24 00:00:00 4684 UTC BC ]
+DEBUG:  begin "end_null_cagg" in window [ -infinity, infinity ] internal [ -9223372036854775808, 9223372036854775807 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  START IS NULL "end_null_cagg" in window [ -infinity, infinity ] internal [ -9223372036854775808, 9223372036854775807 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  END IS NULL "end_null_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, infinity ] internal [ 1706745600000000, 9223372036854775807 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  before produce batches "end_null_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] internal [ 1706745600000000, 1730419200000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "end_null_cagg" in window [ Thu Feb 01 00:00:00 2024 UTC, Fri Mar 01 00:00:00 2024 UTC ] internal [ 1706745600000000, 1709251200000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "end_null_cagg" in window [ Fri Mar 01 00:00:00 2024 UTC, Mon Apr 01 00:00:00 2024 UTC ] internal [ 1709251200000000, 1711929600000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "end_null_cagg" in window [ Wed May 01 00:00:00 2024 UTC, Sat Jun 01 00:00:00 2024 UTC ] internal [ 1714521600000000, 1717200000000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
+DEBUG:  batch produced "end_null_cagg" in window [ Tue Oct 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] internal [ 1727740800000000, 1730419200000000 ] minimum [ Mon Nov 24 00:00:00 4714 UTC BC ]
 DEBUG:  refreshing continuous aggregate "end_null_cagg" from -infinity to Fri Mar 01 00:00:00 2024 UTC
 DEBUG:  hypertable 11 existing watermark >= new invalidation threshold 1719792000000000 1709251200000000
 LOG:  continuous aggregate refresh (individual invalidation) on "end_null_cagg" in window [ -infinity, Fri Mar 01 00:00:00 2024 UTC ] (batch 1 of 4)

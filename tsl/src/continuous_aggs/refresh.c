@@ -1082,8 +1082,7 @@ debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh
 		 ts_internal_to_time_string(refresh_window->end, refresh_window->type),
 		 refresh_window->start,
 		 refresh_window->end,
-		 ts_datum_to_string(Int64GetDatum(ts_time_get_min(refresh_window->type)),
-							refresh_window->type));
+		 ts_internal_to_time_string(ts_time_get_min(refresh_window->type), refresh_window->type));
 }
 
 List *
