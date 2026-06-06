@@ -3053,6 +3053,17 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		if (!ec->ec_has_volatile)
 		{
 			em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
+
+			/*
+			 * We can't sort the ColumnarScan on a set-returning function. It is
+			 * expanded by a ProjectSet node above the scan, so treat it as no
+			 * match and let the sort happen there. The leading sort keys
+			 * collected before it are still usable to sort the ColumnarScan.
+			 */
+			if (em_expr && expression_returns_set((Node *) em_expr))
+			{
+				em_expr = NULL;
+			}
 		}
 		chunk_em_exprs = lappend(chunk_em_exprs, em_expr);
 	}
