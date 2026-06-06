@@ -545,6 +545,15 @@ COPY table_with_layout_change (value7, time) FROM STDIN DELIMITER ',' NULL AS 'n
 
 SELECT * FROM table_with_layout_change ORDER BY time, value7;
 
+-- COPY WHERE into a hypertable whose chunks have dropped columns
+COPY table_with_layout_change (value7, time) FROM STDIN DELIMITER ',' NULL AS 'null' WHERE value7 > 800;
+850,2
+727,1
+860,3
+\.
+
+SELECT * FROM table_with_layout_change ORDER BY time, value7;
+
 -- verify check constraints work
 CREATE TABLE test_check(a INT, b TIMESTAMPTZ);
 ALTER TABLE test_check ADD CONSTRAINT c1 CHECK (a > 7);
