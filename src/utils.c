@@ -2197,9 +2197,31 @@ ts_is_time_bucket_function(Expr *node)
 	return false;
 }
 
+/*
+ * Report whether a column cannot contain NULLs.
+ *
+ * On PG18 a NOT NULL constraint can be NOT VALID: attnotnull is set but
+ * existing rows may still be NULL, so we only trust a valid constraint. The
+ * validity is not on the pg_attribute tuple, so read it from the descriptor.
+ */
 bool
 ts_get_attnotnull(Oid relid, AttrNumber attno)
 {
+#if PG18_GE
+	Relation rel = try_relation_open(relid, AccessShareLock);
+	if (rel == NULL)
+	{
+		return false;
+	}
+	bool result = false;
+	if (attno >= 1 && attno <= rel->rd_att->natts)
+	{
+		const CompactAttribute *att = TupleDescCompactAttr(rel->rd_att, attno - 1);
+		result = att->attnullability == ATTNULLABLE_VALID;
+	}
+	relation_close(rel, AccessShareLock);
+	return result;
+#else
 	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
 	if (!HeapTupleIsValid(tp))
 	{
@@ -2209,4 +2231,5 @@ ts_get_attnotnull(Oid relid, AttrNumber attno)
 	bool result = att_tup->attnotnull;
 	ReleaseSysCache(tp);
 	return result;
+#endif
 }
