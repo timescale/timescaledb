@@ -1098,6 +1098,19 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 		ExecStoreVirtualTuple(myslot);
 
+		/*
+		 * Apply the WHERE clause before the tuple is converted to the chunk
+		 * layout. The chunk can have different physical layout.
+		 */
+		if (qualexpr != NULL)
+		{
+			econtext->ecxt_scantuple = myslot;
+			if (!ExecQual(qualexpr, econtext))
+			{
+				continue;
+			}
+		}
+
 		/* Calculate the tuple's point in the N-dimensional hyperspace */
 		point = ts_hyperspace_calculate_point(ht->space, myslot);
 
@@ -1187,15 +1200,6 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 				 */
 				ExecCopySlot(batchslot, myslot);
 				myslot = batchslot;
-			}
-		}
-
-		if (qualexpr != NULL)
-		{
-			econtext->ecxt_scantuple = myslot;
-			if (!ExecQual(qualexpr, econtext))
-			{
-				continue;
 			}
 		}
 

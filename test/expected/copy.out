@@ -678,6 +678,41 @@ SELECT * FROM table_with_layout_change ORDER BY time, value7;
     5 |    724
     6 |    725
 
+-- COPY WHERE into a hypertable whose chunks have dropped columns
+COPY table_with_layout_change (value7, time) FROM STDIN DELIMITER ',' NULL AS 'null' WHERE value7 > 800;
+SELECT * FROM table_with_layout_change ORDER BY time, value7;
+ time | value7 
+------+--------
+    1 |    700
+    1 |    700
+    1 |    700
+    1 |    700
+    1 |    700
+    1 |    700
+    1 |    722
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    721
+    2 |    850
+    3 |    700
+    3 |    700
+    3 |    700
+    3 |    700
+    3 |    723
+    3 |    860
+    4 |    700
+    4 |    700
+    4 |    726
+    5 |    700
+    5 |    724
+    6 |    725
+
 -- verify check constraints work
 CREATE TABLE test_check(a INT, b TIMESTAMPTZ);
 ALTER TABLE test_check ADD CONSTRAINT c1 CHECK (a > 7);
