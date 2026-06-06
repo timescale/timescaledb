@@ -4801,6 +4801,23 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			}
+			case AT_AddInherit:
+			{
+				/* A plain table cannot inherit from a hypertable, since the
+				 * child would not be a chunk and its rows would be hidden from
+				 * queries on the hypertable. */
+				RangeVar *parent = castNode(RangeVar, cmd->def);
+				Oid parent_relid = RangeVarGetRelid(parent, NoLock, true);
+
+				if (OidIsValid(parent_relid) && ts_is_hypertable(parent_relid))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot inherit from hypertable \"%s\"",
+									get_rel_name(parent_relid))));
+				}
+				break;
+			}
 
 			case AT_SetRelOptions:
 			{
