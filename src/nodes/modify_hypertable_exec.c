@@ -2431,15 +2431,26 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		if (TupIsNull(context.planSlot))
 			break;
 
-		if (operation == CMD_INSERT || (operation == CMD_MERGE && (node->mt_merge_subcommands & MERGE_INSERT)))
+		/*
+		 * Only route tuples that get inserted: plain INSERTs and MERGE tuples
+		 * not matched by target (those have a NULL row identity). Routing a
+		 * matched or NOT MATCHED BY SOURCE tuple projects the INSERT over a
+		 * NULL source, putting a NULL into the partitioning column.
+		 */
+		bool route_insert = operation == CMD_INSERT;
+		if (operation == CMD_MERGE && (node->mt_merge_subcommands & MERGE_INSERT))
+		{
+			bool isNull = true;
+			if (AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo))
+				ExecGetJunkAttribute(context.planSlot, resultRelInfo->ri_RowIdAttNo, &isNull);
+			route_insert = isNull;
+		}
+
+		if (route_insert)
 		{
 			TupleTableSlot *hypertable_slot = context.planSlot;
 			if (operation == CMD_MERGE)
 			{
-				/*
-				 * XXX do we need an additional support of NOT MATCHED BY SOURCE
-				 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
-				 */
 #if PG17_GE
 				List *actionStates = ctr->root_rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
 #else
@@ -2555,12 +2566,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				continue;
 			}
 
-			/*
-			 * copy INSERT merge action list to result relation info of corresponding chunk
-			 *
-			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
-			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
-			 */
 			if (operation == CMD_MERGE)
 #if PG17_GE
 				ctr->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
@@ -2982,16 +2987,21 @@ ExecMergeMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo, Item
 	bool isNull;
 	EPQState *epqstate = &mtstate->mt_epqstate;
 	ListCell *l;
+#if PG17_GE
+	List *actionStates;
+#endif
 
 	TupleTableSlot *rslot = NULL;
 
 	Assert(*matched == true);
 
 	/*
-	 * If there are no WHEN MATCHED actions, we are done.
+	 * If there are no WHEN MATCHED or WHEN NOT MATCHED BY SOURCE actions, we
+	 * are done.
 	 */
 #if PG17_GE
-	if (resultRelInfo->ri_MergeActions[MERGE_WHEN_MATCHED] == NIL)
+	if (resultRelInfo->ri_MergeActions[MERGE_WHEN_MATCHED] == NIL &&
+		resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_SOURCE] == NIL)
 		return NULL;
 #else
 	if (resultRelInfo->ri_matchedMergeAction == NIL)
@@ -3033,7 +3043,12 @@ lmerge_matched:;
 										   resultRelInfo->ri_oldTupleSlot))
 		elog(ERROR, "failed to fetch the target tuple");
 #if PG17_GE
-	foreach (l, resultRelInfo->ri_MergeActions[MERGE_WHEN_MATCHED])
+	if (ExecQual(resultRelInfo->ri_MergeJoinCondition, econtext))
+		actionStates = resultRelInfo->ri_MergeActions[MERGE_WHEN_MATCHED];
+	else
+		actionStates = resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_SOURCE];
+
+	foreach (l, actionStates)
 	{
 #else
 	foreach (l, resultRelInfo->ri_matchedMergeAction)
@@ -3446,9 +3461,6 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	 *
 	 * XXX does this mean that we can avoid creating copies of
 	 * actionStates on partitioned tables, for not-matched actions?
-	 *
-	 * XXX do we need an additional support of NOT MATCHED BY SOURCE
-	 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 	 */
 #if PG17_GE
 	actionStates = resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
