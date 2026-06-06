@@ -19,22 +19,23 @@ CREATE TABLE metrics(
     device text,
     sensor text,
     value float,
-    value2 float
-) WITH (tsdb.hypertable,tsdb.orderby='time desc',tsdb.segmentby='device,sensor',tsdb.index='minmax(value)');
+    value2 float,
+    value3 float
+) WITH (tsdb.hypertable,tsdb.orderby='time desc',tsdb.segmentby='device,sensor',tsdb.index='minmax(value), firstlast(value3)');
 
 INSERT INTO metrics VALUES
-('2025-01-01 00:00:00 PST', 'd1', 'A', 10.0, 10.1),
-('2025-01-01 01:00:00 PST', 'd1', 'A', 20.0, 20.1),
-('2025-01-01 02:00:00 PST', 'd1', 'A', 15.0, 15.1),
-('2025-01-01 00:30:00 PST', 'd1', 'B', 4.0, 4.1),
-('2025-01-01 01:30:00 PST', 'd1', 'B', 25.0, 25.1),
-('2025-01-01 02:30:00 PST', 'd1', 'B', 29.0, 29.1),
-('2025-01-01 00:00:00 PST', 'd2', 'A', 10.0, 10.1),
-('2025-01-01 01:00:00 PST', 'd2', 'A', 20.0, 20.1),
-('2025-01-01 02:00:00 PST', 'd2', 'A', 15.0, 15.1),
-('2025-01-01 00:30:00 PST', 'd2', 'C', 6.0, 6.1),
-('2025-01-01 01:30:00 PST', 'd2', 'C', 25.0, 25.1),
-('2025-01-01 02:30:00 PST', 'd2', 'C', 31.0, 31.1);
+('2025-01-01 00:01:00 PST', 'd1', 'A', 10.0, 10.1, 100.0),
+('2025-01-01 01:00:00 PST', 'd1', 'A', 20.0, 20.1, 200.0),
+('2025-01-01 02:00:00 PST', 'd1', 'A', 15.0, 15.1, 150.0),
+('2025-01-01 00:30:00 PST', 'd1', 'B', 4.0, 4.1, 40.0),
+('2025-01-01 01:30:00 PST', 'd1', 'B', 25.0, 25.1, 250.0),
+('2025-01-01 02:30:00 PST', 'd1', 'B', 29.0, 29.1, 290.0),
+('2025-01-01 00:01:00 PST', 'd2', 'A', 10.0, 10.1, 100.0),
+('2025-01-01 01:00:00 PST', 'd2', 'A', 20.0, 20.1, 200.0),
+('2025-01-01 02:00:00 PST', 'd2', 'A', 15.0, 15.1, 150.0),
+('2025-01-01 00:30:00 PST', 'd2', 'C', 6.0, 6.1, 60.0),
+('2025-01-01 01:30:00 PST', 'd2', 'C', 25.0, 25.1, 250.0),
+('2025-01-01 02:30:00 PST', 'd2', 'C', 31.0, 31.1, 310.0);
 
 -- Compress all chunks
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
@@ -67,9 +68,9 @@ SET timescaledb.enable_columnarindexscan = on;
 
 -- make initial chunk partial
 INSERT INTO metrics VALUES
-('2025-01-01 00:00:00 PST', 'd1', 'A', 1.0, 1.1),
-('2025-01-01 00:00:00 PST', 'd3', 'A', 50.0, 50.1),
-('2025-01-01 00:00:00 PST', 'd3', 'B', 52.0, 52.1);
+('2025-01-01 00:00:00 PST', 'd1', 'A', 1.0, 1.1, 11.0),
+('2025-01-01 00:00:00 PST', 'd3', 'A', 50.0, 50.1, 500.0),
+('2025-01-01 00:00:00 PST', 'd3', 'B', 52.0, 52.1, 520.0);
 
 -- second run with hypertable with 1 partial chunk
 
@@ -99,10 +100,10 @@ SET timescaledb.enable_columnarindexscan = on;
 
 -- create a second chunk
 INSERT INTO metrics VALUES
-('2025-02-01 00:00:00 PST', 'd1', 'A', 100.0, 100.1),
-('2025-02-01 01:00:00 PST', 'd1', 'B', 200.0, 200.1),
-('2025-02-01 00:00:00 PST', 'd2', 'A', 150.0, 150.1),
-('2025-02-01 01:00:00 PST', 'd2', 'C', 250.0, 250.1);
+('2025-02-01 00:00:00 PST', 'd1', 'A', 100.0, 100.1, 1000.0),
+('2025-02-01 01:00:00 PST', 'd1', 'B', 200.0, 200.1, 2000.0),
+('2025-02-01 00:00:00 PST', 'd2', 'A', 150.0, 150.1, 1500.0),
+('2025-02-01 01:00:00 PST', 'd2', 'C', 250.0, 250.1, 2500.0);
 
 SELECT compress_chunk(c) FROM show_chunks('metrics') c LIMIT 1 OFFSET 1;
 
@@ -153,4 +154,90 @@ SELECT count(*) FROM (SELECT count(*) FROM metrics GROUP BY sensor, device) g;
 SET timescaledb.enable_columnarindexscan = on;
 SELECT count(*) FROM (SELECT count(*) FROM metrics GROUP BY device, sensor) g;
 SELECT count(*) FROM (SELECT count(*) FROM metrics GROUP BY sensor, device) g;
+
+\set ECHO all
+-- Test: nullable orderby column should NOT use ColumnarIndexScan for first/last(col, orderby)
+CREATE TABLE metrics_nullable_orderby(
+    time int NOT NULL,
+    priority int,
+    device text,
+    value float
+) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.orderby='priority',tsdb.segmentby='device',tsdb.index='firstlast("value")');
+
+INSERT INTO metrics_nullable_orderby VALUES
+(1, 1, 'd1', 10.0),
+(2, 2, 'd1', 20.0),
+(3, 3, 'd1', 15.0),
+(4, 1, 'd2', 30.0),
+(5, 2, 'd2', 5.0),
+(6, NULL, 'd2', 99.0);
+
+SELECT compress_chunk(c) FROM show_chunks('metrics_nullable_orderby') c;
+
+SET timescaledb.enable_columnarindexscan = on;
+-- first/last(value, priority) should NOT optimize because priority is nullable
+EXPLAIN (costs off) SELECT device, first(value, priority) FROM metrics_nullable_orderby GROUP BY device ORDER BY device;
+EXPLAIN (costs off) SELECT device, last(value, priority) FROM metrics_nullable_orderby GROUP BY device ORDER BY device;
+-- min/max should still optimize
+EXPLAIN (costs off) SELECT device, min(priority) FROM metrics_nullable_orderby GROUP BY device ORDER BY device;
+
+-- Test: multiple orderby columns, first/last only optimized for the first orderby column
+CREATE TABLE metrics_multi_orderby(
+    time timestamptz NOT NULL,
+    seq int NOT NULL,
+    device text,
+    value float
+) WITH (tsdb.hypertable,tsdb.orderby='time desc, seq asc',tsdb.segmentby='device',tsdb.index='firstlast("value")');
+
+INSERT INTO metrics_multi_orderby VALUES
+('2025-01-01 00:00:00 PST', 1, 'd1', 10.0),
+('2025-01-01 00:01:00 PST', 2, 'd1', 20.0),
+('2025-01-01 01:00:00 PST', 1, 'd1', 15.0),
+('2025-01-01 00:02:00 PST', 1, 'd2', 30.0),
+('2025-01-01 01:02:00 PST', 1, 'd2', 5.0),
+('2025-01-01 01:03:00 PST', 2, 'd2', 25.0);
+
+SELECT compress_chunk(c) FROM show_chunks('metrics_multi_orderby') c;
+
+SET timescaledb.enable_columnarindexscan = on;
+-- first/last(value, time) should optimize (time is first orderby column)
+EXPLAIN (costs off) SELECT device, first(value, time) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
+EXPLAIN (costs off) SELECT device, last(value, time) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
+-- first/last(value, seq) should NOT optimize (seq is second orderby column)
+EXPLAIN (costs off) SELECT device, first(value, seq) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
+EXPLAIN (costs off) SELECT device, last(value, seq) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
+
+-- correctness check
+SET timescaledb.enable_columnarindexscan = off;
+SELECT device, first(value, time), last(value, time) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
+SET timescaledb.enable_columnarindexscan = on;
+SELECT device, first(value, time), last(value, time) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
+
+-- Repeat all queries with ASC orderby to test the DESC flip logic
+ALTER TABLE metrics SET (timescaledb.compress_orderby = 'time asc');
+SELECT compress_chunk(decompress_chunk(c)) FROM show_chunks('metrics') c;
+
+-- get query plans
+\set PREFIX 'EXPLAIN (costs off)'
+\set ECHO all
+SET timescaledb.enable_columnarindexscan = on;
+\ir :TEST_QUERY_NAME
+
+\set PREFIX ''
+\set ECHO errors
+
+-- get query results with columnar index scan disabled
+SET timescaledb.enable_columnarindexscan = off;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- get query results with columnar index scan enabled
+SET timescaledb.enable_columnarindexscan = on;
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- compare optimized vs non-optimized results
+:DIFF_CMD
 
