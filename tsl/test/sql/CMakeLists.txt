@@ -225,6 +225,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
        merge_append_partially_compressed.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
+  list(APPEND TEST_FILES constraints_not_valid.sql)
+endif()
+
 set(SOLO_TESTS
     # This interferes with other tests since it reloads the config to increase
     # log level.
