@@ -1448,9 +1448,8 @@ gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist)
 			 * if there is time_bucket_gapfill function call this is our time
 			 * column
 			 */
-			if (IsA(expr, FuncExpr) && strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
-											   GAPFILL_FUNCTION,
-											   NAMEDATALEN) == 0)
+			if (IsA(expr, FuncExpr) &&
+				gapfill_is_extension_function(castNode(FuncExpr, expr)->funcid, GAPFILL_FUNCTION))
 			{
 				state->columns[i] =
 					gapfill_column_state_create(TIME_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
@@ -1467,10 +1466,9 @@ gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist)
 		}
 		else if (IsA(expr, FuncExpr))
 		{
+			Oid funcid = castNode(FuncExpr, expr)->funcid;
 			/* locf and interpolate will be toplevel function calls in the gapfill node */
-			if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
-						GAPFILL_LOCF_FUNCTION,
-						NAMEDATALEN) == 0)
+			if (gapfill_is_extension_function(funcid, GAPFILL_LOCF_FUNCTION))
 			{
 				state->columns[i] =
 					gapfill_column_state_create(LOCF_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
@@ -1479,9 +1477,7 @@ gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist)
 										(FuncExpr *) expr);
 				continue;
 			}
-			if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
-						GAPFILL_INTERPOLATE_FUNCTION,
-						NAMEDATALEN) == 0)
+			if (gapfill_is_extension_function(funcid, GAPFILL_INTERPOLATE_FUNCTION))
 			{
 				state->columns[i] =
 					gapfill_column_state_create(INTERPOLATE_COLUMN,
