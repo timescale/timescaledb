@@ -4,12 +4,14 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/stratnum.h>
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_type.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/optimizer.h>
 #include <utils/lsyscache.h>
+#include <utils/typcache.h>
 
 #include "nodes/chunk_append/transform.h"
 #include "utils.h"
@@ -78,6 +80,31 @@ ts_transform_cross_datatype_comparison(Expr *clause)
 		{
 			source_type = left_type;
 			target_type = right_type;
+		}
+
+		/*
+		 * Casting the TIMESTAMPTZ side down to DATE rounds it down to midnight.
+		 * Since midnight is the smallest time of the day the comparison only
+		 * stays equivalent for "date > value" and "date <= value". For the
+		 * other operators the dropped time-of-day would change the result, so
+		 * we leave them untransformed.
+		 */
+		if (target_type == DATEOID)
+		{
+			TypeCacheEntry *tce = lookup_type_cache(TIMESTAMPTZOID, TYPECACHE_BTREE_OPFAMILY);
+			int strategy = get_op_opfamily_strategy(op->opno, tce->btree_opf);
+
+			if (IsA(linitial(op->args), Var))
+			{
+				if (strategy != BTGreaterStrategyNumber && strategy != BTLessEqualStrategyNumber)
+				{
+					return clause;
+				}
+			}
+			else if (strategy != BTLessStrategyNumber && strategy != BTGreaterEqualStrategyNumber)
+			{
+				return clause;
+			}
 		}
 
 		opno = ts_get_operator(opname, PG_CATALOG_NAMESPACE, target_type, target_type);
