@@ -873,6 +873,97 @@ RESET client_min_messages;
 
 DROP TABLE end_null_data CASCADE;
 
+-- Test: null end_offset — incremental and single-pass refresh set the same threshold.
+--
+-- A 3-day bucket is used so bucket boundaries are clearly distinct from both the
+-- chunk boundaries and the raw data timestamp, making any mismatch obvious.
+--
+-- Setup (1-month chunk interval ≈ 30 days from Unix epoch):
+--   data point    : 2024-01-05 12:00 UTC  (noon, not on any bucket boundary)
+--   chunk range   : [2023-12-19 00:00, 2024-01-18 00:00) UTC
+--   data bucket   : time_bucket('3 days', data) = 2024-01-03 → [Jan 03, Jan 06)
+--   threshold set by 1-pass refresh: cagg_next_bucket_start(data) = 2024-01-06 00:00 UTC
+--
+-- Before the fix the split function capped the window at chunk_end (Jan 18 UTC)
+-- instead of max-data's next bucket (Jan 06).  With buckets_per_batch=1 (batch_size
+-- = 3 days), that produces ten 3-day batches over the 30-day chunk:
+--   [Dec 19, Dec 22) ... [Jan 03, Jan 06) ... [Jan 15, Jan 18) → [Jan 15, INF)
+-- Newest-first processing:
+--   batch [Jan 15, INF): max_refresh → threshold = Jan 06 (from max data)
+--   batch [Jan 12, Jan 15): Jan 15 > Jan 06 → threshold advances to Jan 15
+-- The remaining older batches don't advance it further, so the final threshold is
+-- Jan 15 — 9 days past the value set by the single-pass refresh.
+--
+-- After the fix the window is capped at Jan 06, producing six 3-day batches:
+--   [Dec 19, Dec 22)  [Dec 22, Dec 25)  [Dec 25, Dec 28)
+--   [Dec 28, Dec 31)  [Dec 31, Jan 03)  [Jan 03, Jan 06) → [Jan 03, INF)
+-- Newest-first processing:
+--   batch [Jan 03, INF): max_refresh → threshold = Jan 06 (from max data)
+--   batch [Dec 31, Jan 03): Jan 03 < Jan 06 → no change  ← FIXED
+-- Final threshold = Jan 06, matching single-pass exactly.
+--
+-- Two separate hypertables (identical data) keep the thresholds independent so the
+-- run order cannot mask a discrepancy.
+CREATE TABLE threshold_sp_data (time TIMESTAMPTZ NOT NULL, val INT);
+SELECT FROM create_hypertable('threshold_sp_data', by_range('time', INTERVAL '1 month'));
+
+CREATE TABLE threshold_inc_data (time TIMESTAMPTZ NOT NULL, val INT);
+SELECT FROM create_hypertable('threshold_inc_data', by_range('time', INTERVAL '1 month'));
+
+INSERT INTO threshold_sp_data  VALUES ('2024-01-05 12:00:00+00', 1);
+INSERT INTO threshold_inc_data VALUES ('2024-01-05 12:00:00+00', 1);
+
+CREATE MATERIALIZED VIEW threshold_sp_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('3 days', time) AS bucket, count(*) AS cnt
+FROM threshold_sp_data GROUP BY 1 WITH NO DATA;
+
+CREATE MATERIALIZED VIEW threshold_inc_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('3 days', time) AS bucket, count(*) AS cnt
+FROM threshold_inc_data GROUP BY 1 WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('threshold_sp_cagg',
+    start_offset => NULL, end_offset => NULL,
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 0   -- single-pass
+) AS sp_job \gset
+
+SELECT add_continuous_aggregate_policy('threshold_inc_cagg',
+    start_offset => NULL, end_offset => NULL,
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 1   -- incremental: one 3-day batch at a time
+) AS inc_job \gset
+
+CALL run_job(:sp_job);
+CALL run_job(:inc_job);
+
+-- Both must equal 2024-01-06 00:00:00+00 = cagg_next_bucket_start(MAX(data) = Jan 05 12:00).
+-- Before the fix incremental_threshold was 2024-01-15 00:00:00+00 (9 days too far).
+SELECT
+    _timescaledb_functions.to_timestamp(t1.watermark) AS singlepass_threshold,
+    _timescaledb_functions.to_timestamp(t2.watermark) AS incremental_threshold
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold t1
+JOIN _timescaledb_catalog.continuous_aggs_invalidation_threshold t2
+  ON true
+WHERE t1.hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'threshold_sp_cagg')
+  AND t2.hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'threshold_inc_cagg');
+
+DROP TABLE threshold_sp_data CASCADE;
+
+-- Test: null end_offset on an empty hypertable hits the maxval_isnull branch and
+-- falls back to single-pass without error.  The DEBUG1 message confirms the path.
+TRUNCATE threshold_inc_data;
+SET client_min_messages TO DEBUG1;
+CALL run_job(:inc_job);
+RESET client_min_messages;
+
+DROP TABLE threshold_inc_data CASCADE;
+
 DROP TABLE sparse_data CASCADE;
 RESET timezone;
 

@@ -1151,11 +1151,30 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				 NameStr(cagg->data.user_view_name));
 			return NIL;
 		}
-		/* range_end is exclusive; subtract 1 to get the last internal value in the chunk,
-		 * then find the end of the bucket that contains it. */
-		refresh_window.end = cagg_next_bucket_start(slice->fd.range_end - 1,
-													refresh_window.type,
-													cagg->bucket_function);
+		/*
+		 * Cap the window end at the next bucket boundary after the actual
+		 * maximum data value in the hypertable, not the chunk's range_end.
+		 *
+		 * invalidation_threshold_compute() uses
+		 * ts_hypertable_get_open_dim_max_value() for the same reason.  Using
+		 * the same value here keeps single-pass and incremental refresh
+		 * behaviour consistent.
+		 */
+		bool maxval_isnull;
+		int64 maxval = ts_hypertable_get_open_dim_max_value(ht, 0, &maxval_isnull);
+
+		if (maxval_isnull)
+		{
+			elog(DEBUG1,
+				 "no data in hypertable for continuous aggregate \"%s.%s\", falling back to "
+				 "single batch processing",
+				 NameStr(cagg->data.user_view_schema),
+				 NameStr(cagg->data.user_view_name));
+			return NIL;
+		}
+
+		refresh_window.end =
+			cagg_next_bucket_start(maxval, refresh_window.type, cagg->bucket_function);
 		refresh_window.end_isnull = false;
 	}
 
