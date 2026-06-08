@@ -132,11 +132,12 @@ add_subdirectory(ts_stats)
 # all here.
 set(IMPORTED_SOURCES
     import/allpaths.c
+    import/createplan.c
     import/heapswap.c
-    import/ts_inherit.c
     import/list.c
     import/planner.c
     import/setrefs.c
-    import/ts_explain.c)
+    import/ts_explain.c
+    import/ts_inherit.c)
 set_source_files_properties(${IMPORTED_SOURCES} PROPERTIES SKIP_LINTING ON)
 target_sources(${PROJECT_NAME} PRIVATE ${IMPORTED_SOURCES})
