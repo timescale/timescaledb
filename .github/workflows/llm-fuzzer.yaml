@@ -265,7 +265,12 @@ jobs:
       if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
-        pkill -U "$(id -u)" postgres || true
+
+        # PG can get stuck in background worker termination after an
+        # AddressSanitizer failure (upstream bug), so we have to kill it
+        # forcefully.
+        killall -9 postgres || true
+
         sleep 2
 
     - name: Restore clean PostgreSQL build
