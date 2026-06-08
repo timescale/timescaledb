@@ -163,7 +163,7 @@ SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
 SELECT format('%I.%I', schemaname, indexname) AS "INDEXNAME"
 FROM pg_indexes i
 INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name
-INNER JOIN _timescaledb_catalog.chunk c ON (cc.id = c.compressed_chunk_id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
 LIMIT 1 \gset
 
 

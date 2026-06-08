@@ -683,10 +683,11 @@ FROM generate_series(0,4379) g;
 
 SELECT count(compress_chunk(c)) FROM show_chunks('bsm_segby') c;
 
-select schema_name || '.' || table_name chunk  from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'bsm_segby') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'bsm_segby') limit 1
 \gset
 
 -- Firstlast index is used with Batch Sorted Merge: correct result
@@ -704,10 +705,9 @@ where relid = 'bsm_segby'::regclass;
 
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]'
-where compress_relid = (select format('%I.%I', schema_name, table_name)::regclass AS chunk_regclass from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id  from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'bsm_segby') limit 1));
+where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'bsm_segby') limit 1);
 
 create index compressed_index_minmax_firstlast on :chunk (grp, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_ts, _ts_meta_v2_last_ts);
 
@@ -730,10 +730,9 @@ where relid = 'bsm_segby'::regclass;
 
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]'
-where compress_relid = (select format('%I.%I', schema_name, table_name)::regclass AS chunk_regclass from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id  from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'bsm_segby') limit 1));
+where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'bsm_segby') limit 1);
 
 -- Correct result only when cannot use Batch Sorted Merge
 set timescaledb.debug_require_batch_sorted_merge = 'forbid';

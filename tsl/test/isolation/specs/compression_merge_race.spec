@@ -127,22 +127,22 @@ step "s3_count_chunks_post_compression" {
 step "s3_select_on_compressed_chunk" {
     DO $$
     DECLARE
-      hyper_id int;
-      chunk_id int;
+      comp_chunk regclass;
     BEGIN
-      SELECT h.compressed_hypertable_id, c.compressed_chunk_id 
-      INTO hyper_id, chunk_id
-      FROM _timescaledb_catalog.hypertable h 
-      INNER JOIN _timescaledb_catalog.chunk c  
-      ON h.id = c.hypertable_id 
-      WHERE h.table_name = 'sensor_data' 
-      AND c.compressed_chunk_id IS NOT NULL;
-      EXECUTE format('SELECT * 
-        FROM _timescaledb_internal.compress_hyper_%s_%s_chunk 
-        WHERE sensor_id = 40 
-        AND temperature IS NOT NULL;', 
-        hyper_id, 
-        chunk_id);
+      SELECT cs.compress_relid
+      INTO comp_chunk
+      FROM _timescaledb_catalog.hypertable h
+      INNER JOIN _timescaledb_catalog.chunk c
+      ON h.id = c.hypertable_id
+      INNER JOIN _timescaledb_catalog.compression_settings cs
+      ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
+      WHERE h.table_name = 'sensor_data'
+      AND cs.compress_relid IS NOT NULL;
+      EXECUTE format('SELECT *
+        FROM %s
+        WHERE sensor_id = 40
+        AND temperature IS NOT NULL;',
+        comp_chunk);
     END;
     $$;
 }

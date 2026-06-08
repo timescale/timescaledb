@@ -715,7 +715,8 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex, LOCKMOD
 	}
 
 	stats->relid = result_minfo->relid;
-	stats->chunk_id = result_minfo->chunk->fd.id;
+	/* Compressed relinfos carry no Chunk */
+	stats->chunk_id = result_minfo->chunk ? result_minfo->chunk->fd.id : INVALID_CHUNK_ID;
 
 	Oid tablespace = result_rel->rd_rel->reltablespace;
 	struct VacuumCutoffs *merged_cutoffs = &result_minfo->cutoffs;
@@ -838,8 +839,7 @@ relock_rel(const Relation hyper_rel, RelationMergeInfo *rmi, LOCKMODE lockmode)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("chunk \"%s\" was removed concurrently",
-						NameStr(rmi->chunk->fd.table_name))));
+				 errmsg("chunk \"%s\" was removed concurrently", get_rel_name(rmi->relid))));
 	}
 
 	/* Re-lock toast tables, heap swap expects it */
@@ -1234,9 +1234,9 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 * order below, because the compressed relations need to be in the
 		 * same order.
 		 */
-		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		if (ts_chunk_is_compressed(chunk))
 		{
-			Oid crelid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
+			Oid crelid = ts_relation_get_compressed_relid(chunk->table_id);
 			Relation crel = table_open(crelid, lockmode);
 			rellocks = append_rellock(rellocks, crel, lockmode, merge_cxt);
 			table_close(crel, NoLock);
@@ -1355,19 +1355,12 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 * Fill in the compressed mergerelinfo array here after final sort of
 		 * rels so that the two arrays have the same order.
 		 */
-		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		if (ts_chunk_is_compressed(chunk))
 		{
 			RelationMergeInfo *crelinfo = &crelinfos[i];
-			Chunk *cchunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-			/*
-			 * Allocate on merge_cxt to survive transaction end in
-			 * concurrent mode.
-			 */
-			MemoryContext old_mcxt = MemoryContextSwitchTo(merge_cxt);
-			crelinfo->chunk = ts_chunk_copy(cchunk);
-			MemoryContextSwitchTo(old_mcxt);
-
-			crelinfo->relid = crelinfo->chunk->table_id;
+			/* Merging the compressed relation only needs its relid, not a full Chunk. */
+			crelinfo->chunk = NULL;
+			crelinfo->relid = ts_relation_get_compressed_relid(chunk->table_id);
 			crelinfo->rel = table_open(crelinfo->relid, lockmode);
 			crelinfo->isresult = relinfos[i].isresult;
 			crelinfo->iscompressed_rel = true;
@@ -1395,7 +1388,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		const CompressionSettings *result_settings = NULL;
 		const Chunk *result_chunk = relinfos[mergeindex].chunk;
 
-		if (result_chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		if (ts_chunk_is_compressed(result_chunk))
 		{
 			result_settings = ts_compression_settings_get(result_chunk->table_id);
 		}
@@ -1405,7 +1398,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			const Chunk *chunk = relinfos[i].chunk;
 			const CompressionSettings *settings;
 
-			if (i == mergeindex || chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
+			if (i == mergeindex || !ts_chunk_is_compressed(chunk))
 			{
 				continue;
 			}

@@ -151,7 +151,8 @@ SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_3') c
 SELECT format('%I.%I', i.schemaname, i.indexname) AS "COMPRESSED_CHUNK_INDEX"
 FROM pg_indexes i
 JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name AND i.tablename = cc.table_name
-JOIN _timescaledb_catalog.chunk uc ON uc.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
+JOIN _timescaledb_catalog.chunk uc ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 WHERE format('%I.%I', uc.schema_name, uc.table_name) = :'CHUNK'
 LIMIT 1 \gset
 
@@ -409,8 +410,10 @@ SELECT
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
+   LEFT JOIN _timescaledb_catalog.compression_settings cs
+ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
    LEFT JOIN _timescaledb_catalog.chunk comp
-ON comp.id = c.compressed_chunk_id;
+ON cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass;
 
 CREATE TABLE compressed_ht (
        time TIMESTAMP WITH TIME ZONE NOT NULL,

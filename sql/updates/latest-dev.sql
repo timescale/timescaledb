@@ -11,16 +11,6 @@ BEGIN
 END;
 $$;
 
--- Drop obsolete chunk_constraint rows for inherited CHECK constraints on
--- OSM chunks; PG inheritance handles propagation now.
-DELETE FROM _timescaledb_catalog.chunk_constraint cc
-USING _timescaledb_catalog.chunk c
-WHERE cc.chunk_id = c.id
-  AND c.osm_chunk
-  AND cc.dimension_slice_id IS NULL
-  AND cc.hypertable_constraint_name IS NOT NULL
-  AND cc.constraint_name = cc.hypertable_constraint_name;
-
 -- Rename legacy chunk-side constraints to the names the new code recomputes:
 -- FKs use the parent's name; unique/PK/exclusion/trigger use the deterministic
 -- "<chunk_id>_<parent>" form
@@ -52,14 +42,6 @@ BEGIN
 END
 $$;
 
--- Remove the chunk_constraint rows that mirrored non-dimensional constraints.
--- FK chunk-side constraints are now located by name through the event-trigger
--- hooks; unique/PK/exclusion/trigger constraints through the deterministic
--- "<chunk_id>_<parent>" name pattern.
-DELETE FROM _timescaledb_catalog.chunk_constraint
-WHERE dimension_slice_id IS NULL
-  AND hypertable_constraint_name IS NOT NULL;
-
 ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
 ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
 
@@ -71,8 +53,6 @@ CREATE TABLE _timescaledb_internal.tmp_dimension_slice_seq_value AS
 
 ALTER TABLE _timescaledb_catalog.chunk_constraint
     DROP CONSTRAINT IF EXISTS chunk_constraint_dimension_slice_id_fkey;
-
-DROP VIEW IF EXISTS timescaledb_information.chunks;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_slice;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.dimension_slice_id_seq;
@@ -163,7 +143,6 @@ DROP FUNCTION _timescaledb_functions.chunk_constraint_add_table_constraint(
     _timescaledb_catalog.chunk_constraint);
 DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_constraint_add_table_constraint(
     _timescaledb_catalog.chunk_constraint);
-DROP VIEW IF EXISTS timescaledb_information.chunks;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_constraint;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_constraint_name;
@@ -181,3 +160,100 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.calculate_chunk_interval(integer,
 -- chunk_target_size is no longer used, so its check constraint is dropped.
 ALTER TABLE _timescaledb_catalog.hypertable
     DROP CONSTRAINT IF EXISTS hypertable_chunk_target_size_check;
+
+-- Rebuild the catalog table `_timescaledb_catalog.continuous_agg` to add the
+-- `schema_change_timestamp` column.
+
+-- Drop views and foreign keys that depend on the catalog table.
+DROP VIEW IF EXISTS timescaledb_experimental.policies;
+
+ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
+    DROP CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+    DROP CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges
+    DROP CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    DROP CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey;
+
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.continuous_agg;
+
+CREATE TABLE _timescaledb_catalog._tmp_continuous_agg AS
+    SELECT
+        mat_hypertable_id,
+        raw_hypertable_id,
+        parent_mat_hypertable_id,
+        user_view_schema,
+        user_view_name,
+        partial_view_schema,
+        partial_view_name,
+        direct_view_schema,
+        direct_view_name,
+        materialized_only
+    FROM
+        _timescaledb_catalog.continuous_agg
+    ORDER BY
+        mat_hypertable_id;
+
+DROP TABLE _timescaledb_catalog.continuous_agg;
+
+CREATE TABLE _timescaledb_catalog.continuous_agg (
+  mat_hypertable_id integer NOT NULL,
+  raw_hypertable_id integer NOT NULL,
+  parent_mat_hypertable_id integer,
+  user_view_schema name NOT NULL,
+  user_view_name name NOT NULL,
+  partial_view_schema name NOT NULL,
+  partial_view_name name NOT NULL,
+  direct_view_schema name NOT NULL,
+  direct_view_name name NOT NULL,
+  materialized_only bool NOT NULL DEFAULT FALSE,
+  schema_change_timestamp bigint,
+  -- table constraints
+  CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
+  CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),
+  CONSTRAINT continuous_agg_user_view_schema_user_view_name_key UNIQUE (user_view_schema, user_view_name),
+  CONSTRAINT continuous_agg_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT continuous_agg_raw_hypertable_id_fkey FOREIGN KEY (raw_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT continuous_agg_parent_mat_hypertable_id_fkey FOREIGN KEY (parent_mat_hypertable_id)
+    REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+INSERT INTO _timescaledb_catalog.continuous_agg
+    (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema,
+     user_view_name, partial_view_schema, partial_view_name, direct_view_schema,
+     direct_view_name, materialized_only)
+SELECT * FROM _timescaledb_catalog._tmp_continuous_agg;
+DROP TABLE _timescaledb_catalog._tmp_continuous_agg;
+
+CREATE INDEX continuous_agg_raw_hypertable_id_idx ON _timescaledb_catalog.continuous_agg (raw_hypertable_id);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
+
+GRANT SELECT ON TABLE _timescaledb_catalog.continuous_agg TO PUBLIC;
+
+ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
+    ADD CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey
+        FOREIGN KEY (mat_hypertable_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+    ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey
+        FOREIGN KEY (materialization_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges
+    ADD CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey
+        FOREIGN KEY (materialization_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    ADD CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey
+        FOREIGN KEY (materialization_id)
+        REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE;
+
+ANALYZE _timescaledb_catalog.continuous_agg;
+-- end rebuild _timescaledb_catalog.continuous_agg --
+
+-- drop telemetry_event
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.telemetry_event;
+DROP TABLE _timescaledb_catalog.telemetry_event;
+

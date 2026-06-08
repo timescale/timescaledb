@@ -95,6 +95,7 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_add_column.sql.in
     cagg_query.sql.in
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
@@ -110,11 +111,6 @@ set(TEST_TEMPLATES
     vector_agg_planning.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
-
-# WAL numbers will differ on 32-bit platform so we only run on 64-bit
-if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
-  list(APPEND TEST_FILES explain_wal.sql)
-endif()
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
@@ -194,6 +190,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_filter.sql
     vector_agg_grouping.sql
     vector_agg_text.sql
+    vector_agg_text_overflow.sql
     vector_agg_memory.sql
     vector_agg_modify_hypertable.sql
     vector_agg_segmentby.sql
@@ -227,6 +224,12 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
+  # WAL numbers will differ on 32-bit platform so we only run on 64-bit only run
+  # on PG17+ since the test can be flaky at times
+  if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+    list(APPEND TEST_FILES explain_wal.sql)
+  endif()
+
   list(APPEND TEST_FILES privilege_maintain.sql
        merge_append_partially_compressed.sql)
 endif()

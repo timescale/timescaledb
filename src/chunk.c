@@ -1935,7 +1935,7 @@ chunk_scan_context_add_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 }
 
 TM_Result
-ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_chunk_id)
+ts_chunk_lock_for_creating_compressed_chunk(Chunk *chunk)
 {
 	ScanIterator iterator;
 	bool found = false;
@@ -1947,7 +1947,7 @@ ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_ch
 	};
 
 	iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
-	ts_chunk_scan_iterator_set_chunk_id(&iterator, chunk_id);
+	ts_chunk_scan_iterator_set_chunk_id(&iterator, chunk->fd.id);
 	iterator.ctx.tuplock = &tuplock;
 
 	ts_scanner_foreach(&iterator)
@@ -1955,11 +1955,16 @@ ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_ch
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		lockresult = ti->lockresult;
 
-		if (lockresult == TM_Ok && compressed_chunk_id)
+		/*
+		 * Refresh the chunk's status from the locked tuple so the caller can
+		 * recheck whether the chunk was compressed concurrently.
+		 */
+		if (lockresult == TM_Ok)
 		{
 			bool isnull;
-			Datum value = slot_getattr(ti->slot, Anum_chunk_compressed_chunk_id, &isnull);
-			*compressed_chunk_id = isnull ? INVALID_CHUNK_ID : DatumGetInt32(value);
+			Datum value = slot_getattr(ti->slot, Anum_chunk_status, &isnull);
+			Assert(!isnull);
+			chunk->fd.status = DatumGetInt32(value);
 		}
 		found = true;
 	}
@@ -1968,7 +1973,7 @@ ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_ch
 
 	if (!found)
 	{
-		elog(ERROR, "chunk with ID %d does not exist", chunk_id);
+		elog(ERROR, "chunk with ID %d does not exist", chunk->fd.id);
 	}
 
 	return lockresult;
@@ -2986,9 +2991,9 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		ts_chunk_rewrite_delete(relid, false);
 	}
 
-	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
+	if (ts_flags_are_set_32(DatumGetInt32(form.status), CHUNK_STATUS_COMPRESSED))
 	{
-		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false);
+		Oid compressed_relid = ts_relation_get_compressed_relid(relid);
 
 		if (OidIsValid(relid))
 		{
@@ -2996,11 +3001,11 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		}
 
 		/* The chunk may have been deleted by a CASCADE */
-		if (compressed_chunk != NULL)
+		if (OidIsValid(compressed_relid))
 		{
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
-			ts_chunk_drop(compressed_chunk, behavior, DEBUG1);
+			ts_chunk_drop_by_relid(compressed_relid, behavior, DEBUG1);
 		}
 	}
 	else if (OidIsValid(relid))
@@ -3130,10 +3135,11 @@ ts_chunk_exists_with_compression(int32 hypertable_id)
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		bool isnull_chunk_id =
-			slot_attisnull(ts_scan_iterator_slot(&iterator), Anum_chunk_compressed_chunk_id);
+		bool status_isnull;
+		Datum status =
+			slot_getattr(ts_scan_iterator_slot(&iterator), Anum_chunk_status, &status_isnull);
 
-		if (!isnull_chunk_id)
+		if (!status_isnull && ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED))
 		{
 			found = true;
 			break;
@@ -3141,57 +3147,6 @@ ts_chunk_exists_with_compression(int32 hypertable_id)
 	}
 	ts_scan_iterator_close(&iterator);
 	return found;
-}
-
-static void
-init_scan_by_compressed_chunk_id(ScanIterator *iterator, int32 compressed_chunk_id)
-{
-	iterator->ctx.index =
-		catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_COMPRESSED_CHUNK_ID_INDEX);
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_chunk_compressed_chunk_id_idx_compressed_chunk_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(compressed_chunk_id));
-}
-
-Chunk *
-ts_chunk_get_compressed_chunk_parent(const Chunk *chunk)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	Oid parent_id = InvalidOid;
-
-	init_scan_by_compressed_chunk_id(&iterator, chunk->fd.id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		Datum datum;
-		bool isnull;
-
-		Assert(!OidIsValid(parent_id));
-		datum = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
-
-		if (!isnull)
-		{
-			parent_id = DatumGetObjectId(datum);
-		}
-	}
-
-	if (OidIsValid(parent_id))
-	{
-		return ts_chunk_get_by_id(parent_id, true);
-	}
-
-	return NULL;
-}
-
-bool
-ts_chunk_contains_compressed_data(const Chunk *chunk)
-{
-	Chunk *parent_chunk = ts_chunk_get_compressed_chunk_parent(chunk);
-
-	return parent_chunk != NULL;
 }
 
 List *
@@ -3868,6 +3823,32 @@ ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 
 	/* Evict the chunk stats from the shared memory */
 	ts_stats_chunk_evict(chunk->table_id);
+}
+
+void
+ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level)
+{
+	ObjectAddress objaddr = {
+		.classId = RelationRelationId,
+		.objectId = relid,
+	};
+
+	const char *schema_name = get_namespace_name(get_rel_namespace(relid));
+	const char *table_name = get_rel_name(relid);
+
+	if (log_level >= 0)
+	{
+		elog(log_level, "dropping chunk %s.%s", schema_name, table_name);
+	}
+
+	/* Remove the chunk from the chunk table */
+	ts_chunk_delete_by_relid_and_relname(relid, schema_name, table_name, behavior);
+
+	/* Drop the table */
+	performDeletion(&objaddr, behavior, 0);
+
+	/* Evict the chunk stats from the shared memory */
+	ts_stats_chunk_evict(relid);
 }
 
 static void
