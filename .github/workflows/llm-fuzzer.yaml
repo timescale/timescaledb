@@ -301,7 +301,10 @@ jobs:
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
 
         export PGDATA=verify_db
-        export PGPORT=5433
+
+        PGPORT=$(( 6600 + $RANDOM % 100 ))
+        export PGPORT
+
         export PGDATABASE=postgres
 
         initdb
