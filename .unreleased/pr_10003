@@ -1,0 +1,1 @@
+Fixes: #10003 Block unsafe updates of unique columns on compressed chunks

@@ -76,6 +76,7 @@
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "hypertable_cache.h"
+#include "indexing.h"
 #include "modify_hypertable.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "utils.h"
@@ -2250,6 +2251,7 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 static void fireASTriggers(ModifyTableState *node);
 static void fireBSTriggers(ModifyTableState *node);
 static void checkDMLOnFrozenChunk(ResultRelInfo *resultRelInfo);
+static void error_on_compressed_unique_conflict_update(ChunkTupleRouting *ctr);
 
 /* ----------------------------------------------------------------
  *	   ExecModifyTable
@@ -2465,6 +2467,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 			/* Find or create the insert state matching the point */
 			ctr->cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
+			error_on_compressed_unique_conflict_update(ctr);
 			bool update_counter = ctr->cis->onConflictAction == ONCONFLICT_UPDATE;
 			ts_chunk_tuple_routing_decompress_for_insert(ctr->cis, ctr->root_rri, hypertable_slot, ctr->estate, update_counter);
 			MemoryContextSwitchTo(oldctx);
@@ -2946,6 +2949,107 @@ static void checkDMLOnFrozenChunk(ResultRelInfo *resultRelInfo)
 				 errmsg("cannot update/delete rows from chunk \"%s\" as it is frozen",
 						get_rel_name(resultRelInfo->ri_RelationDesc->rd_id))));
 	}
+}
+
+/*
+ * Find a column changed by the ON CONFLICT DO UPDATE SET clause that is part of
+ * a unique constraint, or InvalidAttrNumber when none changes. The result only
+ * depends on the statement, not on the routed row.
+ */
+static AttrNumber
+conflict_update_changed_unique_col(ModifyTable *mt, Relation rel)
+{
+	/* Columns covered by any unique index (PRIMARY KEY included). */
+	Bitmapset *unique_columns = ts_indexing_relation_get_unique_columns(rel);
+
+	if (unique_columns == NULL)
+		return InvalidAttrNumber;
+
+	/*
+	 * onConflictSet holds the SET expressions; its non-junk entries correspond
+	 * in order to the target column numbers in onConflictCols.
+	 */
+	ListCell *col_cell = list_head(mt->onConflictCols);
+	ListCell *set_cell;
+	foreach (set_cell, mt->onConflictSet)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, set_cell);
+
+		if (tle->resjunk)
+			continue;
+		if (col_cell == NULL)
+			break;
+
+		AttrNumber attno = lfirst_int(col_cell);
+		col_cell = lnext(mt->onConflictCols, col_cell);
+
+		if (!bms_is_member(attno, unique_columns))
+			continue;
+
+		/*
+		 * Allow the no-op "SET col = excluded.col". Planning rewrites the
+		 * excluded Var's varno to INNER_VAR, but varnosyn/varattnosyn still
+		 * carry the original reference to the excluded pseudo-relation.
+		 */
+		Expr *expr = tle->expr;
+		if (IsA(expr, RelabelType))
+			expr = ((RelabelType *) expr)->arg;
+		if (IsA(expr, Var))
+		{
+			Var *var = (Var *) expr;
+			if (var->varnosyn == mt->exclRelRTI && var->varattnosyn == attno)
+				continue;
+		}
+
+		return attno;
+	}
+
+	return InvalidAttrNumber;
+}
+
+/*
+ * Reject INSERT ... ON CONFLICT DO UPDATE on a compressed chunk when the SET
+ * clause changes a column that is part of a unique constraint.
+ *
+ * Like a plain UPDATE of a unique column, this could move a row onto a key held
+ * by a row that is still compressed and therefore invisible to the unique
+ * indexes, silently introducing a duplicate. Setting a key column to its own
+ * excluded value (SET col = excluded.col) does not change the value and stays
+ * allowed, as that is a common UPSERT idiom.
+ */
+static void
+error_on_compressed_unique_conflict_update(ChunkTupleRouting *ctr)
+{
+	ChunkInsertState *cis = ctr->cis;
+	ModifyTable *mt = ctr->mht_state ? ctr->mht_state->mt : NULL;
+
+	if (mt == NULL || cis->onConflictAction != ONCONFLICT_UPDATE || !cis->chunk_compressed)
+		return;
+
+	/* Result relation and ON CONFLICT columns share the root relation's attribute space. */
+	Relation rel = ctr->root_rri->ri_RelationDesc;
+
+	/*
+	 * The check is statement-constant but reaching it requires a compressed
+	 * target chunk, so compute it on the first such row and reuse it after that
+	 * instead of reopening every index per row.
+	 */
+	if (!ctr->conflict_update_col_checked)
+	{
+		ctr->conflict_update_col = conflict_update_changed_unique_col(mt, rel);
+		ctr->conflict_update_col_checked = true;
+	}
+
+	if (ctr->conflict_update_col == InvalidAttrNumber)
+		return;
+
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("cannot update column \"%s\" of a compressed chunk",
+					get_attname(RelationGetRelid(rel), ctr->conflict_update_col, false)),
+			 errdetail("ON CONFLICT DO UPDATE cannot change a column that is part of a unique "
+					   "constraint on a compressed chunk."),
+			 errhint("Decompress the chunk before running this statement.")));
 }
 
 
