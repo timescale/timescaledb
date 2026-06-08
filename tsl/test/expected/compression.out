@@ -189,15 +189,18 @@ insert into foo_join select generate_series(0,40, 10), 222;
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a;
+ERROR:  cannot update column "b" of a compressed chunk
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a and foo_join.a > 10;
+ERROR:  cannot update column "b" of a compressed chunk
 --here the chunk gets excluded , so succeeds --
 update foo
 set b = newval
 from foo_join where foo.a = foo_join.a and foo.a > 20;
 update foo
 set b = (select f1.newval from foo_join f1 left join lateral (select newval as newval2 from  foo_join2 f2 where f1.a= f2.a ) subq on true limit 1);
+ERROR:  cannot update column "b" of a compressed chunk
 --upsert test --
 insert into foo values(10, 12, 12, 12)
 on conflict( a, b)
@@ -205,21 +208,20 @@ do update set b = excluded.b;
 SELECT * from foo ORDER BY a,b;
  a  |  b  | c  | d  
 ----+-----+----+----
-  3 | 111 | 20 |   
  10 |  12 | 12 | 12
- 20 | 111 | 20 |   
+ 20 |  11 | 20 |   
  30 | 111 | 40 |   
 
 --TEST2c Do DML directly on the chunk.
 insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12)
 on conflict( a, b)
 do update set b = excluded.b + 12;
+ERROR:  cannot update column "b" of a compressed chunk
 SELECT * from foo ORDER BY a,b;
  a  |  b  | c  | d  
 ----+-----+----+----
-  3 | 111 | 20 |   
- 10 |  24 | 12 | 12
- 20 | 111 | 20 |   
+ 10 |  12 | 12 | 12
+ 20 |  11 | 20 |   
  30 | 111 | 40 |   
 
 update _timescaledb_internal._hyper_1_2_chunk
