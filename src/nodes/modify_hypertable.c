@@ -132,21 +132,26 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	else if (!mt->canSetTag)
 	{
 		/*
-		 * This node is a data-modifying CTEs that is not used by the main query.
-		 * It will be executed at the ExecPostprocessPlan() step, after the main
-		 * query finishes. We have to add it now to the list of queries to
-		 * execute, otherwise it will just not be called later.
+		 * This node is a data-modifying CTEs that is not the main subquery. It
+		 * will be executed at the ExecPostprocessPlan() step, after the main
+		 * subquery finishes. If it's not refrenced by the main subquery, that
+		 * postprocessing is the only execution path that can ever reach it.
+		 * We have to add this node now to the list of nodes to execute,
+		 * otherwise it might just not be called later.
 		 *
 		 * Note that our deferred plan initialization, that will happen during
 		 * ExecPostprocessPlan() itself, will add the underlying Postgres
-		 * ModifyTable node to the list as well. We barely get away with this
-		 * duplication, because the initialization adds to the beginning,
-		 * and ExecPostprocessPlan() iterates nodes in forward direction.
+		 * ModifyTable node to the beginning of the array as well. This leads to
+		 * the array shifting during iteration, and this node being processed
+		 * twice. This is OK because the ModifyTableState tracks whether it's
+		 * done using the mt_done flag, and won't run twice, but overall this is
+		 * very fragile.
 		 *
 		 * If this breaks, we'd probably have to switch to calling the PG init
 		 * unconditionally, but giving it some dummy Result node as a child.
 		 * ExecInitModifyTable() has some dependencies on child so it can't be
-		 * just omitted.
+		 * just omitted. This approach is more complicated than what we have
+		 * now, but should be more robust.
 		 */
 		estate->es_auxmodifytables = lcons(state, estate->es_auxmodifytables);
 	}
