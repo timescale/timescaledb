@@ -34,44 +34,53 @@
 #include <optimizer/paramassign.h>
 #include <parser/parsetree.h>
 
-static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
-
 static Plan *inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe);
 
-/*
- * make_result
- *	  Build a Result plan node
- */
-static Result *
-make_result(List *tlist, Node *resconstantqual, Plan *subplan)
-{
-	Result *node = makeNode(Result);
-	Plan *plan = &node->plan;
+static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
 
-	plan->targetlist = tlist;
-	plan->qual = NIL;
-	plan->lefttree = subplan;
-	plan->righttree = NULL;
-	node->resconstantqual = resconstantqual;
+static void copy_plan_costsize(Plan *dest, Plan *src);
 
-	return node;
-}
+static Result *make_result(List *tlist, Node *resconstantqual, Plan *subplan);
 
 /*
- * Copy cost and size info from a lower plan node to an inserted node.
- * (Most callers alter the info after copying it.)
+ * Build a target list (ie, a list of TargetEntry) for the Path's output.
+ *
+ * This is almost just make_tlist_from_pathtarget(), but we also have to
+ * deal with replacing nestloop params.
  */
-static void
-copy_plan_costsize(Plan *dest, Plan *src)
+List *
+ts_build_path_tlist(PlannerInfo *root, Path *path)
 {
-	dest->startup_cost = src->startup_cost;
-	dest->total_cost = src->total_cost;
-	dest->plan_rows = src->plan_rows;
-	dest->plan_width = src->plan_width;
-	/* Assume the inserted node is not parallel-aware. */
-	dest->parallel_aware = false;
-	/* Assume the inserted node is parallel-safe, if child plan is. */
-	dest->parallel_safe = src->parallel_safe;
+	List	   *tlist = NIL;
+	Index	   *sortgrouprefs = path->pathtarget->sortgrouprefs;
+	int			resno = 1;
+	ListCell   *v;
+
+	foreach(v, path->pathtarget->exprs)
+	{
+		Node	   *node = (Node *) lfirst(v);
+		TargetEntry *tle;
+
+		/*
+		 * If it's a parameterized path, there might be lateral references in
+		 * the tlist, which need to be replaced with Params.  There's no need
+		 * to remake the TargetEntry nodes, so apply this to each list item
+		 * separately.
+		 */
+		if (path->param_info)
+			node = ts_replace_nestloop_params(root, node);
+
+		tle = makeTargetEntry((Expr *) node,
+							  resno,
+							  NULL,
+							  false);
+		if (sortgrouprefs)
+			tle->ressortgroupref = sortgrouprefs[resno - 1];
+
+		tlist = lappend(tlist, tle);
+		resno++;
+	}
+	return tlist;
 }
 
 
@@ -90,7 +99,7 @@ copy_plan_costsize(Plan *dest, Plan *src)
 static Plan *
 inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe)
 {
-	Plan *plan;
+	Plan	   *plan;
 
 	plan = (Plan *) make_result(tlist, NULL, subplan);
 
@@ -109,8 +118,8 @@ inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe)
 
 /*
  * ts_replace_nestloop_params
- *    Replace outer-relation Vars and PlaceHolderVars in the given expression
- *    with nestloop Params
+ *	  Replace outer-relation Vars and PlaceHolderVars in the given expression
+ *	  with nestloop Params
  *
  * All Vars and PlaceHolderVars belonging to the relation(s) identified by
  * root->curOuterRels are replaced by Params, and entries are added to
@@ -130,7 +139,8 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 		return NULL;
 	if (IsA(node, Var))
 	{
-		Var *var = (Var *) node;
+		Var		   *var = (Var *) node;
+
 		/* Upper-level Vars should be long gone at this point */
 		Assert(var->varlevelsup == 0);
 		/* If not to be replaced, we can just return the Var unmodified */
@@ -177,13 +187,77 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 			PlaceHolderVar *newphv = makeNode(PlaceHolderVar);
 
 			memcpy(newphv, phv, sizeof(PlaceHolderVar));
-			newphv->phexpr = (Expr *) replace_nestloop_params_mutator((Node *) phv->phexpr, root);
+			newphv->phexpr = (Expr *)
+				replace_nestloop_params_mutator((Node *) phv->phexpr,
+												root);
 			return (Node *) newphv;
 		}
 		/* Replace the PlaceHolderVar with a nestloop Param */
 		return (Node *) replace_nestloop_param_placeholdervar(root, phv);
 	}
-	return expression_tree_mutator(node, replace_nestloop_params_mutator, (void *) root);
+	return expression_tree_mutator(node,
+								   replace_nestloop_params_mutator,
+								   (void *) root);
+}
+
+/*
+ * Copy cost and size info from a lower plan node to an inserted node.
+ * (Most callers alter the info after copying it.)
+ */
+static void
+copy_plan_costsize(Plan *dest, Plan *src)
+{
+	dest->startup_cost = src->startup_cost;
+	dest->total_cost = src->total_cost;
+	dest->plan_rows = src->plan_rows;
+	dest->plan_width = src->plan_width;
+	/* Assume the inserted node is not parallel-aware. */
+	dest->parallel_aware = false;
+	/* Assume the inserted node is parallel-safe, if child plan is. */
+	dest->parallel_safe = src->parallel_safe;
+}
+
+
+
+/*
+ * Some places in this file build Sort nodes that don't have a directly
+ * corresponding Path node.  The cost of the sort is, or should have been,
+ * included in the cost of the Path node we're working from, but since it's
+ * not split out, we have to re-figure it using cost_sort().  This is just
+ * to label the Sort node nicely for EXPLAIN.
+ *
+ * limit_tuples is as for cost_sort (in particular, pass -1 if no limit)
+ */
+void
+ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
+{
+	Plan	   *lefttree = plan->plan.lefttree;
+	Path		sort_path;		/* dummy for result of cost_sort */
+
+	/*
+	 * This function shouldn't have to deal with IncrementalSort plans because
+	 * they are only created from corresponding Path nodes.
+	 */
+	Assert(IsA(plan, Sort));
+
+	cost_sort(&sort_path,
+			  root,
+			  NIL,
+#if PG18_GE
+			  lefttree->disabled_nodes,
+#endif
+			  lefttree->total_cost,
+			  lefttree->plan_rows,
+			  lefttree->plan_width,
+			  0.0,
+			  work_mem,
+			  limit_tuples);
+	plan->plan.startup_cost = sort_path.startup_cost;
+	plan->plan.total_cost = sort_path.total_cost;
+	plan->plan.plan_rows = lefttree->plan_rows;
+	plan->plan.plan_width = lefttree->plan_width;
+	plan->plan.parallel_aware = false;
+	plan->plan.parallel_safe = lefttree->parallel_safe;
 }
 
 /*
@@ -193,12 +267,16 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
  * nullsFirst arrays already.
  */
 Sort *
-ts_make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators, Oid *collations,
-		  bool *nullsFirst)
+ts_make_sort(Plan *lefttree, int numCols,
+		  AttrNumber *sortColIdx, Oid *sortOperators,
+		  Oid *collations, bool *nullsFirst)
 {
-	Sort *node = makeNode(Sort);
-	Plan *plan = &node->plan;
+	Sort	   *node;
+	Plan	   *plan;
 
+	node = makeNode(Sort);
+
+	plan = &node->plan;
 	plan->targetlist = lefttree->targetlist;
 	plan->qual = NIL;
 	plan->lefttree = lefttree;
@@ -210,39 +288,6 @@ ts_make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOpera
 	node->nullsFirst = nullsFirst;
 
 	return node;
-}
-
-/*
- * make_sort_from_pathkeys
- *    Create sort plan to sort according to given pathkeys
- *
- *    'lefttree' is the node which yields input tuples
- *    'pathkeys' is the list of pathkeys by which the result is to be sorted
- *    'relids' is the set of relations required by prepare_sort_from_pathkeys()
- */
-Sort *
-ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids)
-{
-	int numsortkeys;
-	AttrNumber *sortColIdx;
-	Oid *sortOperators;
-	Oid *collations;
-	bool *nullsFirst;
-
-	/* Compute sort column info, and adjust lefttree as needed */
-	lefttree = ts_prepare_sort_from_pathkeys(lefttree,
-											 pathkeys,
-											 relids,
-											 NULL,
-											 false,
-											 &numsortkeys,
-											 &sortColIdx,
-											 &sortOperators,
-											 &collations,
-											 &nullsFirst);
-
-	/* Now build the Sort node */
-	return ts_make_sort(lefttree, numsortkeys, sortColIdx, sortOperators, collations, nullsFirst);
 }
 
 /*
@@ -289,18 +334,23 @@ ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids)
  * static function copied from createplan.c
  */
 Plan *
-ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
-							  const AttrNumber *reqColIdx, bool adjust_tlist_in_place,
-							  int *p_numsortkeys, AttrNumber **p_sortColIdx, Oid **p_sortOperators,
-							  Oid **p_collations, bool **p_nullsFirst)
+ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys,
+						   Relids relids,
+						   const AttrNumber *reqColIdx,
+						   bool adjust_tlist_in_place,
+						   int *p_numsortkeys,
+						   AttrNumber **p_sortColIdx,
+						   Oid **p_sortOperators,
+						   Oid **p_collations,
+						   bool **p_nullsFirst)
 {
-	List *tlist = lefttree->targetlist;
-	ListCell *i;
-	int numsortkeys;
+	List	   *tlist = lefttree->targetlist;
+	ListCell   *i;
+	int			numsortkeys;
 	AttrNumber *sortColIdx;
-	Oid *sortOperators;
-	Oid *collations;
-	bool *nullsFirst;
+	Oid		   *sortOperators;
+	Oid		   *collations;
+	bool	   *nullsFirst;
 
 	/*
 	 * We will need at most list_length(pathkeys) sort columns; possibly less
@@ -313,15 +363,15 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 
 	numsortkeys = 0;
 
-	foreach (i, pathkeys)
+	foreach(i, pathkeys)
 	{
-		PathKey *pathkey = (PathKey *) lfirst(i);
+		PathKey    *pathkey = (PathKey *) lfirst(i);
 		EquivalenceClass *ec = pathkey->pk_eclass;
 		EquivalenceMember *em;
 		TargetEntry *tle = NULL;
-		Oid pk_datatype = InvalidOid;
-		Oid sortop;
-		ListCell *j;
+		Oid			pk_datatype = InvalidOid;
+		Oid			sortop;
+		ListCell   *j;
 
 		if (ec->ec_has_volatile)
 		{
@@ -330,7 +380,7 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 			 * have come from an ORDER BY clause, and we have to match it to
 			 * that same targetlist entry.
 			 */
-			if (ec->ec_sortref == 0) /* can't happen */
+			if (ec->ec_sortref == 0)	/* can't happen */
 				elog(ERROR, "volatile EquivalenceClass has no sortref");
 			tle = get_sortgroupref_tle(ec->ec_sortref, tlist);
 			Assert(tle);
@@ -379,7 +429,7 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 			 * in the same equivalence class...)  Not clear that we ever will
 			 * have an interesting choice in practice, so it may not matter.
 			 */
-			foreach (j, tlist)
+			foreach(j, tlist)
 			{
 				tle = (TargetEntry *) lfirst(j);
 				em = find_ec_member_matching_expr(ec, tle->expr, relids);
@@ -406,11 +456,13 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 			/*
 			 * Do we need to insert a Result node?
 			 */
-			if (!adjust_tlist_in_place && !is_projection_capable_plan(lefttree))
+			if (!adjust_tlist_in_place &&
+				!is_projection_capable_plan(lefttree))
 			{
 				/* copy needed so we don't modify input's tlist below */
 				tlist = copyObject(tlist);
-				lefttree = inject_projection_plan(lefttree, tlist, lefttree->parallel_safe);
+				lefttree = inject_projection_plan(lefttree, tlist,
+												  lefttree->parallel_safe);
 			}
 
 			/* Don't bother testing is_projection_capable_plan again */
@@ -419,9 +471,12 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 			/*
 			 * Add resjunk entry to input's tlist
 			 */
-			tle = makeTargetEntry(copyObject(em->em_expr), list_length(tlist) + 1, NULL, true);
+			tle = makeTargetEntry(copyObject(em->em_expr),
+								  list_length(tlist) + 1,
+								  NULL,
+								  true);
 			tlist = lappend(tlist, tle);
-			lefttree->targetlist = tlist; /* just in case NIL before */
+			lefttree->targetlist = tlist;	/* just in case NIL before */
 		}
 
 		/*
@@ -432,7 +487,7 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 									 pk_datatype,
 									 pk_datatype,
 									 pathkey->pk_cmptype);
-		if (!OidIsValid(sortop)) /* should not happen */
+		if (!OidIsValid(sortop))	/* should not happen */
 			elog(ERROR,
 				 "missing operator %d(%u,%u) in opfamily %u",
 				 pathkey->pk_cmptype,
@@ -459,80 +514,56 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 }
 
 /*
- * copied verbatim from createplan.c
+ * make_sort_from_pathkeys
+ *	  Create sort plan to sort according to given pathkeys
+ *
+ *	  'lefttree' is the node which yields input tuples
+ *	  'pathkeys' is the list of pathkeys by which the result is to be sorted
+ *	  'relids' is the set of relations required by prepare_sort_from_pathkeys()
  */
-List *
-ts_build_path_tlist(PlannerInfo *root, Path *path)
+Sort *
+ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids)
 {
-	List *tlist = NIL;
-	Index *sortgrouprefs = path->pathtarget->sortgrouprefs;
-	int resno = 1;
-	ListCell *v;
+	int			numsortkeys;
+	AttrNumber *sortColIdx;
+	Oid		   *sortOperators;
+	Oid		   *collations;
+	bool	   *nullsFirst;
 
-	foreach (v, path->pathtarget->exprs)
-	{
-		Node *node = (Node *) lfirst(v);
-		TargetEntry *tle;
+	/* Compute sort column info, and adjust lefttree as needed */
+	lefttree = ts_prepare_sort_from_pathkeys(lefttree, pathkeys,
+										  relids,
+										  NULL,
+										  false,
+										  &numsortkeys,
+										  &sortColIdx,
+										  &sortOperators,
+										  &collations,
+										  &nullsFirst);
 
-		/*
-		 * If it's a parameterized path, there might be lateral references in
-		 * the tlist, which need to be replaced with Params.  There's no need
-		 * to remake the TargetEntry nodes, so apply this to each list item
-		 * separately.
-		 */
-		if (path->param_info)
-			node = ts_replace_nestloop_params(root, node);
-
-		tle = makeTargetEntry((Expr *) node, resno, NULL, false);
-		if (sortgrouprefs)
-			tle->ressortgroupref = sortgrouprefs[resno - 1];
-
-		tlist = lappend(tlist, tle);
-		resno++;
-	}
-	return tlist;
+	/* Now build the Sort node */
+	return ts_make_sort(lefttree, numsortkeys,
+					 sortColIdx, sortOperators,
+					 collations, nullsFirst);
 }
 
-
 /*
- * Copy of the Postgres' static function from createplan.c.
- *
- * Some places in Columnar Scan plannign build Sort nodes that don't have a directly
- * corresponding Path node.  The cost of the sort is, or should have been,
- * included in the cost of the Path node we're working from, but since it's
- * not split out, we have to re-figure it using cost_sort().  This is just
- * to label the Sort node nicely for EXPLAIN.
- *
- * limit_tuples is as for cost_sort (in particular, pass -1 if no limit)
+ * make_result
+ *	  Build a Result plan node
  */
-void
-ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
+static Result *
+make_result(List *tlist,
+			Node *resconstantqual,
+			Plan *subplan)
 {
-	Plan *lefttree = plan->plan.lefttree;
-	Path sort_path; /* dummy for result of cost_sort */
+	Result	   *node = makeNode(Result);
+	Plan	   *plan = &node->plan;
 
-	/*
-	 * This function shouldn't have to deal with IncrementalSort plans because
-	 * they are only created from corresponding Path nodes.
-	 */
-	Assert(IsA(plan, Sort));
+	plan->targetlist = tlist;
+	plan->qual = NIL;
+	plan->lefttree = subplan;
+	plan->righttree = NULL;
+	node->resconstantqual = resconstantqual;
 
-	cost_sort(&sort_path,
-			  root,
-			  NIL,
-#if PG18_GE
-			  lefttree->disabled_nodes,
-#endif
-			  lefttree->total_cost,
-			  lefttree->plan_rows,
-			  lefttree->plan_width,
-			  0.0,
-			  work_mem,
-			  limit_tuples);
-	plan->plan.startup_cost = sort_path.startup_cost;
-	plan->plan.total_cost = sort_path.total_cost;
-	plan->plan.plan_rows = lefttree->plan_rows;
-	plan->plan.plan_width = lefttree->plan_width;
-	plan->plan.parallel_aware = false;
-	plan->plan.parallel_safe = lefttree->parallel_safe;
+	return node;
 }
