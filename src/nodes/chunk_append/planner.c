@@ -21,8 +21,8 @@
 #include <parser/parsetree.h>
 
 #include "guc.h"
-#include "import/planner.h"
 #include "import/createplan.h"
+#include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
 #include "nodes/modify_hypertable.h"

@@ -1,9 +1,8 @@
 /*
- * This file and its contents are licensed under the Timescale License.
+ * This file and its contents are licensed under the Apache License 2.0.
  * Please see the included NOTICE for copyright information and
- * LICENSE-TIMESCALE for a copy of the license.
+ * LICENSE-APACHE for a copy of the license.
  */
-
 
 /*
  * This file contains source code that was copied and/or modified from
