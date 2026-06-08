@@ -25,4 +25,7 @@ extern TSDLLEXPORT Node *ts_replace_nestloop_params(PlannerInfo *root, Node *exp
 
 extern TSDLLEXPORT List *ts_build_path_tlist(PlannerInfo *root, Path *path);
 
+extern TSDLLEXPORT void
+ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples);
+
 

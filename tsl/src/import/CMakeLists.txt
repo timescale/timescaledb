@@ -1,8 +1,7 @@
 set(SOURCES)
 
 if(USE_UMASH)
-  list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/umash.c
-   ${CMAKE_CURRENT_SOURCE_DIR}/createplan.c)
+  list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/umash.c)
 endif()
 
 if(SOURCES)

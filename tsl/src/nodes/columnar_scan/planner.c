@@ -30,7 +30,6 @@
 #include "guc.h"
 #include "import/list.h"
 #include "src/import/planner.h"
-#include "tsl/src/import/createplan.h"
 #include "import/createplan.h"
 #include "nodes/chunk_append/transform.h"
 #include "nodes/columnar_scan/columnar_scan.h"
