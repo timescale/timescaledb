@@ -295,6 +295,23 @@ step "r3_run_oldest_first"
     $$;
 }
 
+# Session for batched manual refresh via JSONB options. Goes through the same
+# continuous_agg_refresh_single_window path as the policy, so it pauses at the
+# same waitpoint.
+session "R4"
+setup
+{
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+}
+step "r4_run"
+{
+    CALL refresh_continuous_aggregate(
+        'cond_10', NULL, NULL,
+        options => jsonb_build_object('buckets_per_batch', 1));
+}
+
 #insert data to create invalidations when refresh is stopped after batch 1
 session "I2"
 step "i2_insert"
@@ -326,3 +343,13 @@ permutation "wp_enable" "r3_run"("wp_enable") "i2_insert" "wp_release"
 
 # Test 5: Same as test 5, but the policy refreshes oldest batch first
 permutation "wp_enable" "r3_run_oldest_first"("wp_enable") "i2_insert" "wp_release"
+
+# Test 6: Manual incremental refresh pauses after batch 1.
+# A non-overlapping atomic manual refresh proceeds successfully
+# Mirrors test 1 but with batched manual refresh on the paused side instead of policy.
+permutation "wp_enable" "r4_run"("wp_enable") "s1_refresh_ranges" "s1_count" "r2_refresh" "wp_release" "s1_count" "s1_check_duplicates"
+
+# Test 7: Manual incremental refresh pauses after batch 1.
+# An overlapping atomic manual refresh must error with "concurrent refresh".
+# Mirrors test 3 with batched manual refresh on the paused side.
+permutation "wp_enable" "r4_run"("wp_enable") "s1_refresh_ranges" "r2_refresh_overlap" "wp_release" "s1_count" "s1_check_duplicates"

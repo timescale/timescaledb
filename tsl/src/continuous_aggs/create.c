@@ -857,8 +857,11 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 	if (!stmt->into->skipData)
 	{
+		bool refreshed = false;
 		InternalTimeRange refresh_window = {
 			.type = InvalidOid,
+			.start_isnull = true,
+			.end_isnull = true,
 		};
 
 		/*
@@ -887,14 +890,15 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
 		ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
-		continuous_agg_refresh_internal(cagg,
-										&refresh_window,
-										context,
-										true,  /* start_isnull */
-										true,  /* end_isnull */
-										true,  /* bucketing_refresh_window */
-										false, /* force */
-										false /*extend_last_bucket*/);
+		refreshed = continuous_agg_refresh_internal(cagg,
+													&refresh_window,
+													context,
+													true, /* bucketing_refresh_window */
+													false /*extend_last_bucket*/);
+		if (!refreshed)
+		{
+			emit_up_to_date_notice(cagg, context);
+		}
 	}
 
 	return DDL_DONE;

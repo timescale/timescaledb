@@ -422,74 +422,18 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
-	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY, .job_id = job_id };
+	ContinuousAggRefreshContext context = {
+		.callctx = CAGG_REFRESH_POLICY,
+		.job_id = job_id,
+		.buckets_per_batch = policy_data.buckets_per_batch,
+		.max_batches_per_execution = policy_data.max_batches_per_execution,
+		.refresh_newest_first = policy_data.refresh_newest_first,
+	};
 
-	/* Try to split window range into a list of ranges */
-	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
-																	&policy_data.refresh_window,
-																	policy_data.buckets_per_batch);
-	if (refresh_window_list == NIL)
-	{
-		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
-	}
-	else
-	{
-		context.callctx = CAGG_REFRESH_POLICY_BATCHED;
-	}
-
-	context.number_of_batches = list_length(refresh_window_list);
-
-	/*
-	 * The list is always built oldest-first. When refresh_newest_first is true we
-	 * iterate from the last element down to the first using index-based access so
-	 * that no reversal copy of the list is needed.
-	 */
-	int32 processing_batch = 0;
-	int32 nbatches = list_length(refresh_window_list);
-	int32 batch_start = policy_data.refresh_newest_first ? nbatches - 1 : 0;
-	int32 batch_end = policy_data.refresh_newest_first ? -1 : nbatches;
-	int32 batch_step = policy_data.refresh_newest_first ? -1 : 1;
-	for (int32 batch_idx = batch_start; batch_idx != batch_end; batch_idx += batch_step)
-	{
-		InternalTimeRange *refresh_window =
-			(InternalTimeRange *) list_nth(refresh_window_list, batch_idx);
-		elog(DEBUG1,
-			 "refreshing continuous aggregate \"%s\" from %s to %s",
-			 NameStr(policy_data.cagg->data.user_view_name),
-			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
-			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
-
-		context.processing_batch = ++processing_batch;
-
-		/* extend_last_bucket must only apply to the boundary batch — the one
-		 * whose window abuts the adjacent policy.  For newest-first ordering
-		 * that is batch 1; for oldest-first it is the final batch.
-		 * In non-batched mode (single batch) the one batch is always the boundary. */
-		bool apply_extend =
-			extend_last_bucket &&
-			(policy_data.refresh_newest_first ? processing_batch == 1 :
-												processing_batch == context.number_of_batches);
-
-		continuous_agg_refresh_internal(policy_data.cagg,
-										refresh_window,
-										context,
-										refresh_window->start_isnull,
-										refresh_window->end_isnull,
-										(context.callctx != CAGG_REFRESH_POLICY_BATCHED),
-										false, /* force */
-										apply_extend);
-		DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_refresh", processing_batch));
-		if (processing_batch >= policy_data.max_batches_per_execution &&
-			processing_batch < context.number_of_batches &&
-			policy_data.max_batches_per_execution > 0)
-		{
-			elog(LOG,
-				 "reached maximum number of batches per execution (%d), batches not processed (%d)",
-				 policy_data.max_batches_per_execution,
-				 context.number_of_batches - processing_batch);
-			break;
-		}
-	}
+	continuous_agg_refresh_batched(policy_data.cagg,
+								   &policy_data.refresh_window,
+								   context,
+								   extend_last_bucket);
 
 	if (!policy_data.include_tiered_data_isnull)
 	{

@@ -1,4 +1,4 @@
-Parsed test spec with 7 sessions
+Parsed test spec with 8 sessions
 
 starting permutation: wp_enable r1_run s1_refresh_ranges s1_count r2_refresh wp_release s1_count s1_check_duplicates
 step wp_enable: 
@@ -112,6 +112,11 @@ R3: LOG:  statement:
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
+
+R4: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
 
 step wp_enable: 
     SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
@@ -241,6 +246,11 @@ R3: LOG:  statement:
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
+R4: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
 step wp_enable: 
     SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
 
@@ -357,6 +367,11 @@ R3: LOG:  statement:
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
+R4: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
 step wp_enable: 
     SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
 
@@ -448,6 +463,11 @@ R3: LOG:  statement:
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
+R4: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
 step wp_enable: 
     SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
 
@@ -521,3 +541,203 @@ R3: LOG:  continuous aggregate refresh (individual invalidation) on "sensor_hour
 R3: LOG:  deleted 2 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R3: LOG:  inserted 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
 step r3_run_oldest_first: <... completed>
+
+starting permutation: wp_enable r4_run s1_refresh_ranges s1_count r2_refresh wp_release s1_count s1_check_duplicates
+R1: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+R2: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+R3: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+    SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
+
+R4: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+step wp_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+R4: LOG:  statement: 
+    CALL refresh_continuous_aggregate(
+        'cond_10', NULL, NULL,
+        options => jsonb_build_object('buckets_per_batch', 1));
+
+R4: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r4_run: 
+    CALL refresh_continuous_aggregate(
+        'cond_10', NULL, NULL,
+        options => jsonb_build_object('buckets_per_batch', 1));
+ <waiting ...>
+step s1_refresh_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |         50|       60
+
+step s1_count: 
+    SELECT count(*) AS row_count FROM cond_10;
+
+row_count
+---------
+       18
+
+R2: LOG:  statement: 
+    -- Non-overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 1, 50);
+
+R2: LOG:  deleted 12 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R2: LOG:  inserted 12 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r2_refresh: 
+    -- Non-overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 1, 50);
+
+step wp_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+R4: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r4_run: <... completed>
+step s1_count: 
+    SELECT count(*) AS row_count FROM cond_10;
+
+row_count
+---------
+       21
+
+step s1_check_duplicates: 
+    -- Check for duplicate (bucket, device_id) rows in the materialization hypertable.
+    -- If duplicates exist, the same range was materialized twice without proper cleanup.
+    SELECT bucket, device_id, count(*) AS copies
+    FROM cond_10
+    GROUP BY bucket, device_id
+    HAVING count(*) > 1
+    ORDER BY bucket, device_id;
+
+bucket|device_id|copies
+------+---------+------
+
+
+starting permutation: wp_enable r4_run s1_refresh_ranges r2_refresh_overlap wp_release s1_count s1_check_duplicates
+R1: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+R2: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+R3: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+    SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
+
+R4: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+step wp_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+R4: LOG:  statement: 
+    CALL refresh_continuous_aggregate(
+        'cond_10', NULL, NULL,
+        options => jsonb_build_object('buckets_per_batch', 1));
+
+R4: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r4_run: 
+    CALL refresh_continuous_aggregate(
+        'cond_10', NULL, NULL,
+        options => jsonb_build_object('buckets_per_batch', 1));
+ <waiting ...>
+step s1_refresh_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |         50|       60
+
+R2: LOG:  statement: 
+    -- Overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 40, 60);
+
+step r2_refresh_overlap: 
+    -- Overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 40, 60);
+
+ERROR:  could not refresh continuous aggregate "cond_10" due to a concurrent refresh
+step wp_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+R4: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R4: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r4_run: <... completed>
+step s1_count: 
+    SELECT count(*) AS row_count FROM cond_10;
+
+row_count
+---------
+       21
+
+step s1_check_duplicates: 
+    -- Check for duplicate (bucket, device_id) rows in the materialization hypertable.
+    -- If duplicates exist, the same range was materialized twice without proper cleanup.
+    SELECT bucket, device_id, count(*) AS copies
+    FROM cond_10
+    GROUP BY bucket, device_id
+    HAVING count(*) > 1
+    ORDER BY bucket, device_id;
+
+bucket|device_id|copies
+------+---------+------
+
