@@ -152,6 +152,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_bools.sql
     compression_bool_vectorized.sql
     compression_ddl.sql
+    compression_delete_bitmapscan.sql
     compression_errors.sql
     compression_hypertable.sql
     compression_merge.sql
@@ -206,7 +207,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_usage.sql.in
     cagg.sql.in
     compression_update_delete.sql.in
-    compression_delete_bitmapscan.sql.in
     transparent_decompression_queries.sql.in)
 
   if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))

@@ -134,7 +134,7 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		/*
 		 * This node is a data-modifying CTEs that is not the main subquery. It
 		 * will be executed at the ExecPostprocessPlan() step, after the main
-		 * subquery finishes. If it's not refrenced by the main subquery, that
+		 * subquery finishes. If it's not referenced by the main subquery, that
 		 * postprocessing is the only execution path that can ever reach it.
 		 * We have to add this node now to the list of nodes to execute,
 		 * otherwise it might just not be called later.
