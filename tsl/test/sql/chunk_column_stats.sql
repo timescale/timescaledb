@@ -351,3 +351,12 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('attno') ch;
 
 SELECT * FROM attno WHERE id = 1 AND start > '2025-02-02T11:53:28Z'::date ORDER BY start;
 
+
+-- Test for wrong allocation size of chunk stats storage
+CREATE TABLE sensor_readings(measured_at timestamptz NOT NULL, temperature int, humidity int);
+SELECT create_hypertable('sensor_readings', 'measured_at');
+SELECT enable_chunk_skipping('sensor_readings', 'temperature');
+RESET timescaledb.enable_chunk_skipping;
+
+
+RESET timescaledb.enable_chunk_skipping;
