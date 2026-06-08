@@ -1223,6 +1223,7 @@ bloom1_contains_hash(Datum bloom_datum, uint64 hash)
 	const uint32 num_bits = 8 * VARSIZE_ANY_EXHDR(bloom);
 
 	/* Validate bloom structure */
+	CheckCompressedData(num_bits != 0);
 	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 	CheckCompressedData(num_bits >= 64);
 

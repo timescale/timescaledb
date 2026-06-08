@@ -115,6 +115,8 @@ select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb
 
 select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
 
+select _timescaledb_functions.bloom1_contains(_timescaledb_functions.bloom1in('\x'::cstring), 1);
+
 \set ON_ERROR_STOP 1
 
 
