@@ -235,6 +235,7 @@ continuous_agg_add_column(ContinuousAgg *cagg, AlterTableStmt *stmt)
 												false);
 	DEBUG_WAITPOINT("cagg_add_column_before_ht_lock");
 	LockRelationOid(mat_ht_oid, AccessExclusiveLock);
+	DEBUG_WAITPOINT("cagg_add_column_before_pv_lock");
 	LockRelationOid(partial_view_oid, AccessExclusiveLock);
 	LockRelationOid(direct_view_oid, AccessExclusiveLock);
 	DEBUG_WAITPOINT("cagg_add_column_after_locks");

@@ -44,6 +44,8 @@ step "wp_before_uv_enable"  { SELECT debug_waitpoint_enable('cagg_add_column_bef
 step "wp_before_uv_release" { SELECT debug_waitpoint_release('cagg_add_column_before_uv_lock'); }
 step "wp_before_ht_enable"  { SELECT debug_waitpoint_enable('cagg_add_column_before_ht_lock'); }
 step "wp_before_ht_release" { SELECT debug_waitpoint_release('cagg_add_column_before_ht_lock'); }
+step "wp_before_pv_enable"    { SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock'); }
+step "wp_before_pv_release"   { SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock'); }
 step "wp_after_enable"      { SELECT debug_waitpoint_enable('cagg_add_column_after_locks'); }
 step "wp_after_release"     { SELECT debug_waitpoint_release('cagg_add_column_after_locks'); }
 step "wp_refresh_enable"    { SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock'); }
@@ -72,6 +74,8 @@ session "alt"
 step "alt_matonly"  { ALTER MATERIALIZED VIEW cagg_a SET (timescaledb.materialized_only = false); }
 step "alt_chunk"    { ALTER MATERIALIZED VIEW cagg_a SET (timescaledb.chunk_interval = '2 days'); }
 step "alt_owner"    { ALTER MATERIALIZED VIEW cagg_a OWNER TO cagg_role; }
+step "alt_compress" { ALTER MATERIALIZED VIEW cagg_a SET (timescaledb.compress = true); }
+step "alt_rename"   { ALTER MATERIALIZED VIEW cagg_a RENAME COLUMN avg_val TO mean_val; }
 
 session "v"
 step "v_cols_a"      { SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position; }
@@ -80,6 +84,7 @@ step "v_cols_child"  { SELECT column_name FROM information_schema.columns WHERE 
 step "v_exists_a"    { SELECT count(*) AS cagg_a_exists FROM pg_class WHERE relname='cagg_a' AND relkind='v'; }
 step "v_matonly_a"   { SELECT materialized_only FROM timescaledb_information.continuous_aggregates WHERE view_name='cagg_a'; }
 step "v_owner_a"     { SELECT pg_get_userbyid(relowner) AS owner FROM pg_class WHERE relname='cagg_a'; }
+step "v_compress_a"  { SELECT compression_enabled FROM timescaledb_information.continuous_aggregates WHERE view_name='cagg_a'; }
 
 # Two concurrent ADD COLUMNs serialize on the user-view lock alone.
 # s1 pauses BEFORE mat HT lock (so it holds only the user view), then s2 blocks
@@ -106,11 +111,21 @@ permutation "wp_after_enable" "s1_add_a" "drop_a"("s1_add_a") "wp_after_release"
 # DROP takes locks first; subsequent ADD COLUMN errors because the cagg is gone.
 permutation "wp_before_uv_enable" "s1_add_a" "drop_a" "wp_before_uv_release"
 
-# SET materialized_only flips to real-time (takes the user-view lock).
-permutation "wp_before_uv_enable" "alt_matonly" "s1_add_a"("alt_matonly") "wp_before_uv_release" "v_cols_a" "v_matonly_a"
+# No deadlock cases due to non-conflicting locks
+permutation "wp_before_pv_enable" "s1_add_a" "alt_matonly"("s1_add_a") "wp_before_pv_release" "v_cols_a" "v_matonly_a"
+permutation "wp_before_pv_enable" "s1_add_a" "alt_chunk"("s1_add_a")   "wp_before_pv_release" "v_cols_a"
+permutation "wp_before_pv_enable" "s1_add_a" "alt_owner"("s1_add_a")   "wp_before_pv_release" "v_cols_a" "v_owner_a"
 
-# SET chunk_interval updates the mat-HT dimension.
-permutation "wp_after_enable" "s1_add_a" "alt_chunk"("s1_add_a") "wp_after_release" "v_cols_a"
-
-# OWNER TO re-owns the user view, partial/direct views and the mat HT.
-permutation "wp_before_uv_enable" "alt_owner" "s1_add_a"("alt_owner") "wp_before_uv_release" "v_cols_a" "v_owner_a"
+# DEADLOCK REPRODUCER due to different ordering in locks taken
+#
+# e.g. ADD COLUMN locks the cagg relations as user view -> mat HT -> partial view
+# -> direct view, whereas RENAME COLUMN locks them in the reverse order
+# (direct view -> partial view -> mat HT -> user view).
+#
+# Here ADD COLUMN pauses BEFORE the mat-HT lock, holding only the user-view
+# lock. RENAME COLUMN then takes the direct view, partial view and mat HT and
+# finally blocks waiting for the user view (held by ADD COLUMN). When ADD COLUMN
+# resumes it tries to take the mat HT (now held by RENAME COLUMN) and the two
+# deadlock.
+permutation "wp_before_pv_enable" "s1_add_a" "alt_rename"("s1_add_a")   "wp_before_pv_release" "v_cols_a"
+permutation "wp_before_pv_enable" "s1_add_a" "alt_compress"("s1_add_a") "wp_before_pv_release" "v_cols_a" "v_compress_a"
