@@ -105,11 +105,11 @@ set(PG_ISOLATION_REGRESS_OPTS_INOUT
     --outputdir=${TEST_OUTPUT_DIR}/isolation --load-extension=timescaledb)
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE
-    --port=${TEST_PGPORT_TEMP_INSTANCE} --temp-instance=${TEST_CLUSTER}
+    --temp-instance=${TEST_CLUSTER}
     --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf)
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE_PGTEST
-    --port=${TEST_PGPORT_TEMP_INSTANCE} --temp-instance=${TEST_CLUSTER}
+    --temp-instance=${TEST_CLUSTER}
     --temp-config=${TEST_OUTPUT_DIR}/pgtest.conf)
 
 set(PG_REGRESS_OPTS_LOCAL_INSTANCE --port=${TEST_PGPORT_LOCAL})
