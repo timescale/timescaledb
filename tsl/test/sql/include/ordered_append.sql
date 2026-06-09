@@ -46,6 +46,16 @@ ORDER BY time DESC,
   device_id
 LIMIT 1;
 
+-- a window function ordering by time must get its input in the window's order,
+-- so the ordered append follows the window order, not the opposite final ORDER BY
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+
 -- test RECORD in targetlist
 :PREFIX
 SELECT (time,
