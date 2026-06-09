@@ -11,7 +11,7 @@ This release contains performance improvements and bug fixes since the 2.27.2 re
 
 **Features**
 * [#4054](https://github.com/timescale/timescaledb/pull/4054) Support `ANALYZE` and `VACUUM` on continuous aggregates by redirecting to the underlying materialization hypertable
-* [#9125](https://github.com/timescale/timescaledb/pull/9125) Increase the parallelism of SELECT queries over compressed hypertables to approximately match the uncompressed data size
+* [#9125](https://github.com/timescale/timescaledb/pull/9125) Increase the parallelism of `SELECT` queries over compressed hypertables to approximately match the uncompressed data size
 * [#9410](https://github.com/timescale/timescaledb/pull/9410) Mark `hypertable` and `chunk` as user catalog tables
 * [#9416](https://github.com/timescale/timescaledb/pull/9416) Support some forms of `CASE` expression in columnar aggregation and grouping
 * [#9580](https://github.com/timescale/timescaledb/pull/9580) Add first/last sparse indexes to compression
