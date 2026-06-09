@@ -2346,9 +2346,9 @@ ts_relation_xid_blocks_logical_slot(TransactionId max_xid, NameData *blocking_sl
  * becomes unrecoverable (see error_if_logical_slot_blocks_extension_drop for
  * the underlying mechanism).
  */
-TS_FUNCTION_INFO_V1(ts_validate_catalog_replication_status);
+TS_FUNCTION_INFO_V1(ts_ensure_catalog_replication);
 Datum
-ts_validate_catalog_replication_status(PG_FUNCTION_ARGS)
+ts_ensure_catalog_replication(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_GETARG_OID(0);
 	TransactionId max_xid;

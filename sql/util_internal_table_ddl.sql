@@ -77,6 +77,6 @@ $BODY$ SET search_path TO pg_catalog, pg_temp;
 -- relation is dropped, a slot that still needs to decode changes to it can no
 -- longer be decoded ("could not find pg_class entry"), so the slot must be
 -- advanced or dropped first.
-CREATE OR REPLACE FUNCTION _timescaledb_functions.validate_catalog_replication_status(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.ensure_catalog_replication(
     rel REGCLASS
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_validate_catalog_replication_status' LANGUAGE C VOLATILE STRICT;
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_ensure_catalog_replication' LANGUAGE C VOLATILE STRICT;
