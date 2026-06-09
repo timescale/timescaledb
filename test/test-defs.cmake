@@ -32,9 +32,6 @@ set(TEST_PGUSER
 set(TEST_DBNAME
     single
     CACHE STRING "The database name to use for tests")
-set(TEST_PGPORT_TEMP_INSTANCE
-    55432
-    CACHE STRING "The port to run a temporary test PostgreSQL instance on")
 set(TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/test_schedule)
 set(TEST_SCHEDULE_SHARED
     ${CMAKE_CURRENT_BINARY_DIR}/shared/test_schedule_shared)
