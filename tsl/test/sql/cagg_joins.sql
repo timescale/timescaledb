@@ -583,7 +583,7 @@ SELECT current_setting('port') AS "PGPORT", current_database() AS "PGDATABASE" \
 CREATE EXTENSION postgres_fdw;
 CREATE SERVER loopback
    FOREIGN DATA WRAPPER postgres_fdw
-   OPTIONS (host 'localhost', dbname :'PGDATABASE', port :'PGPORT');
+   OPTIONS (dbname :'PGDATABASE', port :'PGPORT');
 CREATE USER MAPPING FOR :ROLE_DEFAULT_PERM_USER
    SERVER loopback
    OPTIONS (user :'ROLE_DEFAULT_PERM_USER', password 'nopassword');
