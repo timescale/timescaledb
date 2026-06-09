@@ -15,6 +15,14 @@
 #define GAPFILL_INTERPOLATE_FUNCTION "interpolate"
 
 /*
+ * Check whether funcid is the gapfill function with the given name. Resolved
+ * through the function cache, whose entries are keyed by our functions' fixed
+ * signatures, so a user-defined function that merely shares the name is not
+ * mistaken for ours.
+ */
+extern bool gapfill_is_extension_function(Oid funcid, const char *name);
+
+/*
  * Indices into CustomScan->custom_private for GapFill node.
  */
 typedef enum GapfillPrivateIndex

@@ -981,6 +981,9 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 							  compress_chunk->table_id,
 							  tablespace_oid);
 
+	/* Associate the source chunk with the new compressed chunk. */
+	ts_chunk_set_compressed_chunk(src_chunk, compress_chunk->fd.id);
+
 	return compress_chunk;
 }
 

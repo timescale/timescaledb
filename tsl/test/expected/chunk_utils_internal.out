@@ -498,11 +498,18 @@ SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
       3
 
 -- must also update the range since the created chunk contains data
+BEGIN;
+SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('ht_try');
+ lock_osm_chunk_dimension_slice 
+--------------------------------
+ 
+
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-01'::timestamptz, '2020-01-02');
  hypertable_osm_range_update 
 -----------------------------
  f
 
+COMMIT;
 -- OSM chunk is not visible in chunks view
 SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
@@ -659,6 +666,11 @@ SELECT * FROM hypertable_approximate_size('ht_try');
 -----------------------------
                        32768
 
+\set ON_ERROR_STOP 0
+-- Error for a hypertable that has no OSM chunk
+SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('test1.hyper1');
+ERROR:  no OSM chunk found for hypertable test1.hyper1
+\set ON_ERROR_STOP 1
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;
 :EXPLAIN SELECT * from ht_try;
@@ -1289,13 +1301,13 @@ ORDER BY 2,3;
 CREATE TABLE test_multicon(time timestamptz not null unique, a int);
 SELECT hypertable_id as htid FROM create_hypertable('test_multicon', 'time', chunk_time_interval => interval '1 day') \gset
 insert into test_multicon values ('2020-01-02 01:00'::timestamptz, 1);
-SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.compressed_chunk_id, c.status, c.osm_chunk,
+SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.status, c.osm_chunk,
 ds.chunk_id, ds.id AS dimension_slice_id, format('constraint_%s', ds.id)::name AS constraint_name FROM
 _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds WHERE c.hypertable_id = :htid
 AND ds.chunk_id = c.id;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | status | osm_chunk | chunk_id | dimension_slice_id | constraint_name 
-----+---------------+-----------------------+--------------------+---------------------+--------+-----------+----------+--------------------+-----------------
- 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |                     |      0 | f         |       31 |                 28 | constraint_28
+ id | hypertable_id |      schema_name      |     table_name     | status | osm_chunk | chunk_id | dimension_slice_id | constraint_name 
+----+---------------+-----------------------+--------------------+--------+-----------+----------+--------------------+-----------------
+ 31 |            19 | _timescaledb_internal | _hyper_19_31_chunk |      0 | f         |       31 |                 28 | constraint_28
 
 \c :TEST_DBNAME :ROLE_SUPERUSER ;
 UPDATE _timescaledb_catalog.chunk SET osm_chunk = true WHERE hypertable_id = :htid;

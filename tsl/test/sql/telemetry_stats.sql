@@ -77,7 +77,7 @@ SELECT * FROM normal;
 INSERT INTO part
 SELECT * FROM normal;
 
-CALL refresh_continuous_aggregate('contagg', NULL, NULL);
+CALL refresh_continuous_aggregate('contagg', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 
 -- Reindex to avoid the dependency on the way the index is built (e.g. the caggs
 -- might get their rows inserted in different order during the refresh based on

@@ -217,8 +217,6 @@ make_colref_target(ColumnDef *coldef)
 void
 continuous_agg_add_column(ContinuousAgg *cagg, AlterTableStmt *stmt)
 {
-	ts_cagg_permissions_check(cagg->relid, GetUserId());
-
 	/* Lock all the relations we'll touch, in the same order as
 	 * DROP so concurrent DROP and ADD COLUMN cannot deadlock. */
 	Oid cagg_relid = cagg->relid;

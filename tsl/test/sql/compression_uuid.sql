@@ -103,7 +103,7 @@ SELECT compress_chunk(show_chunks('mixed_compressed'));
 -- check the compression algorithm for the compressed chunks
 CREATE TABLE compressed_chunks AS
 SELECT
-	format('%I.%I', comp.schema_name, comp.table_name)::regclass as compressed_chunk,
+	cs.compress_relid as compressed_chunk,
 	ccs.compressed_heap_size,
 	ccs.compressed_toast_size,
 	ccs.compressed_index_size,
@@ -113,10 +113,10 @@ FROM
 	show_chunks('mixed_compressed') c
 	INNER JOIN _timescaledb_catalog.chunk cat
 		ON (c = format('%I.%I', cat.schema_name, cat.table_name)::regclass)
-	INNER JOIN _timescaledb_catalog.chunk comp
-		ON (cat.compressed_chunk_id = comp.id)
+	INNER JOIN _timescaledb_catalog.compression_settings cs
+		ON (cs.relid = format('%I.%I', cat.schema_name, cat.table_name)::regclass)
 	INNER JOIN _timescaledb_catalog.compression_chunk_size ccs
-		ON (comp.id = ccs.compressed_chunk_id);
+		ON (ccs.chunk_id = cat.id);
 
 CREATE TABLE compression_info (compressed_chunk regclass, result text, compressed_size int, num_rows int);
 

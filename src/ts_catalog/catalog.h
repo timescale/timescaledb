@@ -53,7 +53,6 @@ typedef enum CatalogTable
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	CONTINUOUS_AGGS_WATERMARK,
-	TELEMETRY_EVENT,
 	CHUNK_COLUMN_STATS,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
@@ -737,22 +736,6 @@ enum
 	METADATA_PKEY_IDX = 0,
 	_MAX_METADATA_INDEX,
 };
-
-/*
- * telemetry_event table definition
- */
-
-#define TELEMETRY_EVENT_TABLE_NAME "telemetry_event"
-
-enum Anum_telemetry_event
-{
-	Anum_telemetry_event_created = 1,
-	Anum_telemetry_event_tag,
-	Anum_telemetry_event_body,
-	_Anum_telemetry_event_max,
-};
-
-#define Natts_telemetry_event_max (_Anum_telemetry_event_max - 1)
 
 /****** BGW_POLICY_CHUNK_STATS TABLE definitions */
 #define BGW_POLICY_CHUNK_STATS_TABLE_NAME "bgw_policy_chunk_stats"

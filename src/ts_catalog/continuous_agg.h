@@ -145,6 +145,8 @@ typedef struct ContinuousAggPolicyOffset
 	const char *name;
 } ContinuousAggPolicyOffset;
 
+extern TSDLLEXPORT bool ts_lock_continuous_agg_tuple(int32 mat_hypertable_id);
+
 extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
 
 extern TSDLLEXPORT ContinuousAggInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);

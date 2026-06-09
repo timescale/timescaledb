@@ -1,6 +1,6 @@
 Parsed test spec with 9 sessions
 
-starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_refresh check_locks check_jobs L1_unlock check_locks check_jobs
+starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable WP_enable_after_refresh R3_refresh R4_refresh check_locks check_jobs L1_unlock WP_disable_after_refresh check_locks check_jobs
 step WP_mat_enable: SELECT debug_waitpoint_enable('after_process_cagg_materializations');
 debug_waitpoint_enable
 ----------------------
@@ -18,6 +18,11 @@ step WP_mat_disable: SELECT debug_waitpoint_release('after_process_cagg_material
 debug_waitpoint_release
 -----------------------
                        
+
+step WP_enable_after_refresh: SELECT debug_waitpoint_enable('after_cagg_refresh_window');
+debug_waitpoint_enable
+----------------------
+                      
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
@@ -50,10 +55,15 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
+cond_daily    |Sun Feb 08 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
 step L1_unlock: 
     COMMIT;
+
+step WP_disable_after_refresh: SELECT debug_waitpoint_release('after_cagg_refresh_window');
+debug_waitpoint_release
+-----------------------
+                       
 
 step R2_refresh: <... completed>
 step R3_refresh: <... completed>
@@ -81,7 +91,7 @@ user_view_name|start_time|end_time
 --------------+----------+--------
 
 
-starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_overlapping_refresh check_locks check_jobs L1_unlock check_locks check_jobs
+starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable WP_after_register_enable R3_refresh R4_overlapping_refresh check_locks check_jobs L1_unlock WP_after_register_disable check_locks check_jobs
 step WP_mat_enable: SELECT debug_waitpoint_enable('after_process_cagg_materializations');
 debug_waitpoint_enable
 ----------------------
@@ -100,11 +110,16 @@ debug_waitpoint_release
 -----------------------
                        
 
+step WP_after_register_enable: SELECT debug_waitpoint_enable('cagg_refresh_after_register');
+debug_waitpoint_enable
+----------------------
+                      
+
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
  <waiting ...>
 step R4_overlapping_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-05');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15');
  <waiting ...>
 step check_locks: 
     SELECT l.mode, l.granted
@@ -131,10 +146,15 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
+cond_daily    |Sun Feb 08 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
 step L1_unlock: 
     COMMIT;
+
+step WP_after_register_disable: SELECT debug_waitpoint_release('cagg_refresh_after_register');
+debug_waitpoint_release
+-----------------------
+                       
 
 step R2_refresh: <... completed>
 step R3_refresh: <... completed>
@@ -183,7 +203,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Sun Feb 15 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Sat Mar 07 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
 
 step A1_revoke_perm: 
   REVOKE SELECT on conditions FROM cagg_user;
@@ -228,7 +248,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Sun Feb 15 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Sat Mar 07 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
 
 step A1_revoke_mat_perm: 
   DO $$
@@ -363,7 +383,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Tue Mar 10 17:00:00 2026 PDT|Sat Mar 14 17:00:00 2026 PDT
 
 step K1_terminate: 
     DO $$

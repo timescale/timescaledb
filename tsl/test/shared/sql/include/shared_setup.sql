@@ -63,10 +63,11 @@ UPDATE metrics_compressed SET v3 = 42 WHERE device_id=1 AND time > '2000-01-01' 
 -- used to be different before 2.15 with all metadata columns at the back. We
 -- had cases where new code broke with this layout, but this was not detected by
 -- the tests since they all use the modern layout.
-select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'metrics_compressed') order by id limit 1)
+select cs.compress_relid::regclass chunk, 'c' column from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'metrics_compressed') order by ch.id limit 1
 \gset
 
 set role :ROLE_SUPERUSER;

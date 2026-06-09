@@ -62,7 +62,7 @@ FROM ( select max(timec)as timeval from conditions ) as q;
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
 
-CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 --test first/last
 create materialized view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -77,7 +77,7 @@ FROM ( select max(timec)as timeval from conditions ) as q;
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
 
-CALL refresh_continuous_aggregate('mat_m2', NULL, NULL);
+CALL refresh_continuous_aggregate('mat_m2', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 --normal view --
 create or replace view regview( location, timec, minl, sumt , sumh)
 as
@@ -1081,7 +1081,7 @@ SET ROLE :ROLE_SUPERUSER;
 BEGIN;
 UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';
 -- should error because function does not exist
-CALL refresh_continuous_aggregate('cagg_bigint_offset2', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_bigint_offset2', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:566: ERROR:  function "func_does_not_exist()" does not exist
 ROLLBACK;
 \set ON_ERROR_STOP 1
@@ -1298,9 +1298,9 @@ SELECT * FROM cagg_4_hours_origin;
 
 -- Update the last bucket and re-materialize
 INSERT INTO temperature values('2020-01-01 23:55:00 PST', 10);
-CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 SELECT * FROM cagg_4_hours;
          time_bucket          | max 
 ------------------------------+-----
@@ -1433,18 +1433,21 @@ SELECT * FROM cagg_4_hours_origin;
 
 -- Update materialized data
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-psql:include/cagg_query_common.sql:683: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:683: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:683: DEBUG:  refreshing continuous aggregate "cagg_4_hours" from Sun Nov 23 16:07:02 4714 LMT BC to infinity
 psql:include/cagg_query_common.sql:683: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Thu Jan 02 00:00:00 2020 PST, Thu Jan 02 12:00:00 2020 PST ]
 psql:include/cagg_query_common.sql:683: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
 psql:include/cagg_query_common.sql:683: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
-CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-psql:include/cagg_query_common.sql:684: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:684: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:684: DEBUG:  refreshing continuous aggregate "cagg_4_hours_offset" from Sun Nov 23 16:07:02 4714 LMT BC to infinity
 psql:include/cagg_query_common.sql:684: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Wed Jan 01 20:30:00 2020 PST, Thu Jan 02 12:30:00 2020 PST ]
 psql:include/cagg_query_common.sql:684: LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
 psql:include/cagg_query_common.sql:684: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
-psql:include/cagg_query_common.sql:685: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:685: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:685: DEBUG:  refreshing continuous aggregate "cagg_4_hours_origin" from Sun Nov 23 16:07:02 4714 LMT BC to infinity
 psql:include/cagg_query_common.sql:685: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Wed Jan 01 21:00:00 2020 PST, Thu Jan 02 13:00:00 2020 PST ]
 psql:include/cagg_query_common.sql:685: LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
 psql:include/cagg_query_common.sql:685: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
@@ -1627,9 +1630,9 @@ SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(
 
 -- Test invalidations
 TRUNCATE temperature;
-CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 INSERT INTO temperature
   SELECT time, 5
     FROM generate_series('2000-01-01 01:00:00 PST'::timestamptz,
@@ -1642,8 +1645,9 @@ INSERT INTO temperature values('2020-01-02 01:05:00+01', 2222);
 INSERT INTO temperature values('2020-01-02 01:35:00+01', 5555);
 INSERT INTO temperature values('2020-01-02 05:05:00+01', 8888);
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
-psql:include/cagg_query_common.sql:725: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:725: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:725: DEBUG:  refreshing continuous aggregate "cagg_4_hours" from Sun Nov 23 16:07:02 4714 LMT BC to infinity
 psql:include/cagg_query_common.sql:725: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577998800000000 1577952000000000
 psql:include/cagg_query_common.sql:725: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Sat Jan 01 00:00:00 2000 PST, Sun Jan 02 00:00:00 2000 PST ]
 psql:include/cagg_query_common.sql:725: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
@@ -1653,8 +1657,9 @@ psql:include/cagg_query_common.sql:725: DEBUG:  continuous aggregate refresh (in
 psql:include/cagg_query_common.sql:725: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
 psql:include/cagg_query_common.sql:725: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
 psql:include/cagg_query_common.sql:725: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 1577952000000000
-CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
-psql:include/cagg_query_common.sql:726: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:726: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:726: DEBUG:  refreshing continuous aggregate "cagg_4_hours_offset" from Sun Nov 23 16:07:02 4714 LMT BC to infinity
 psql:include/cagg_query_common.sql:726: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577998800000000 1577953800000000
 psql:include/cagg_query_common.sql:726: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Sat Jan 01 00:30:00 2000 PST, Sun Jan 02 00:30:00 2000 PST ]
 psql:include/cagg_query_common.sql:726: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
@@ -1664,8 +1669,9 @@ psql:include/cagg_query_common.sql:726: DEBUG:  continuous aggregate refresh (in
 psql:include/cagg_query_common.sql:726: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
 psql:include/cagg_query_common.sql:726: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
 psql:include/cagg_query_common.sql:726: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 1577953800000000
-CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
-psql:include/cagg_query_common.sql:727: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:727: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:727: DEBUG:  refreshing continuous aggregate "cagg_4_hours_origin" from Sun Nov 23 16:07:02 4714 LMT BC to infinity
 psql:include/cagg_query_common.sql:727: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577998800000000 1577955600000000
 psql:include/cagg_query_common.sql:727: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Sat Jan 01 01:00:00 2000 PST, Sun Jan 02 01:00:00 2000 PST ]
 psql:include/cagg_query_common.sql:727: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
@@ -1911,7 +1917,7 @@ ORDER BY 1, 2, 3;
                  33 |      1577995200000000 |     9223372036854775807
                  33 |      1577995200000000 |     9223372036854775807
 
-CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz);
+CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz, options => '{"buckets_per_batch": 0}'::jsonb);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
                              WHERE user_view_name = 'cagg_4_hours')
@@ -2039,7 +2045,7 @@ SELECT * FROM cagg_int;
           50 |     5
          100 |   555
 
-CALL refresh_continuous_aggregate('cagg_int', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_int', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 SELECT * FROM cagg_int;
  time_bucket | value 
 -------------+-------
@@ -2088,7 +2094,7 @@ SELECT * FROM cagg_int_offset;  -- the value 100 is part of the already serializ
           45 |    30
           95 |   555
 
-CALL refresh_continuous_aggregate('cagg_int_offset', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_int_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 SELECT * FROM cagg_int_offset;
  time_bucket | value 
 -------------+-------
@@ -2143,8 +2149,9 @@ SELECT * FROM cagg_int_offset;
 -- Check that the refresh is properly aligned
 INSERT INTO table_int VALUES(114, 0);
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130);
-psql:include/cagg_query_common.sql:845: LOG:  statement: CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130);
+CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:845: LOG:  statement: CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130, options => '{"buckets_per_batch": 0}'::jsonb);
+psql:include/cagg_query_common.sql:845: DEBUG:  refreshing continuous aggregate "cagg_int_offset" from 100 to 130
 psql:include/cagg_query_common.sql:845: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_int_offset" in window [ 105, 125 ]
 psql:include/cagg_query_common.sql:845: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_38"
 psql:include/cagg_query_common.sql:845: DEBUG:  building index "_hyper_38_68_chunk__materialized_hypertable_38_time_bucket_idx" on table "_hyper_38_68_chunk" serially
@@ -2363,8 +2370,8 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestampt
  Sun Dec 30 01:00:00 2029 PST | 55555
 
 -- Test refresh
-CALL refresh_continuous_aggregate('cagg_1_hour_offset', NULL, NULL);
-CALL refresh_continuous_aggregate('cagg_1_week_offset', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_1_hour_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
+CALL refresh_continuous_aggregate('cagg_1_week_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 -- Everything should be now materailized
 ALTER MATERIALIZED VIEW cagg_1_hour_offset SET (timescaledb.materialized_only=false);
 ALTER MATERIALIZED VIEW cagg_1_week_offset SET (timescaledb.materialized_only=false);
