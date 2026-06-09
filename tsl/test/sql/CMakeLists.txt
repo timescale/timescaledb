@@ -111,11 +111,6 @@ set(TEST_TEMPLATES
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 
-# WAL numbers will differ on 32-bit platform so we only run on 64-bit
-if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
-  list(APPEND TEST_FILES explain_wal.sql)
-endif()
-
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
 endif()
@@ -142,6 +137,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_policy_concurrent.sql
     cagg_policy_incremental.sql
     cagg_refresh_cleanup.sql
+    cagg_refresh_incremental.sql
     chunk_column_stats.sql
     compress_bgw_reorder_drop_chunks.sql
     compress_bloom_legacy_v1.sql
@@ -194,6 +190,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_filter.sql
     vector_agg_grouping.sql
     vector_agg_text.sql
+    vector_agg_text_overflow.sql
     vector_agg_memory.sql
     vector_agg_modify_hypertable.sql
     vector_agg_segmentby.sql
@@ -227,8 +224,18 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
+  # WAL numbers will differ on 32-bit platform so we only run on 64-bit only run
+  # on PG17+ since the test can be flaky at times
+  if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+    list(APPEND TEST_FILES explain_wal.sql)
+  endif()
+
   list(APPEND TEST_FILES privilege_maintain.sql
        merge_append_partially_compressed.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
+  list(APPEND TEST_FILES constraints_not_valid.sql)
 endif()
 
 set(SOLO_TESTS

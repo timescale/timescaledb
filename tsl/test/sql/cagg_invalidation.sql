@@ -1017,6 +1017,13 @@ SET timezone = 'UTC';
 call refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
 call refresh_continuous_aggregate ('test_cagg_1d_offset','2023-12-29 18:00:00', '2024-01-01 18:00:00');
 
+-- test_cagg uses 1-month buckets with buckets_per_batch=10. The inscribed window
+-- [2024-01-01, 2026-01-01) spans 24 months, producing two batches:
+-- [2024-01-01, 2024-11-01) and [2024-11-01, 2025-09-01).
+-- Data only exists through Dec 2024, so the split function finds no chunks past
+-- Dec 2024 and stops at Sep 2025 (end of batch 2). The range [2025-09-01, 2026-01-01)
+-- has no data and is left unprocessed, so the upper residual in the mat_inval_log
+-- is 2025-09-01 rather than 2026-01-01 as it would be with single-pass refresh.
 SELECT materialization_id,
        _timescaledb_functions.to_timestamp(lowest_modified_value) as low,
        _timescaledb_functions.to_timestamp(greatest_modified_value) as high
@@ -1043,9 +1050,10 @@ WHERE materialization_id = (
 )
 ORDER BY lowest_modified_value, greatest_modified_value;
 
-
---now do the same refresh again, it should say the cagg is already up to date
+-- Refresh the same range again, [2025-09-01 ─ 2026-01-01) was left.
+-- This time refresh will go into the single batch path, so it will process the whole range.
 CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
+--Do the same refresh once again, it should say the cagg is already up to date
 CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
 
 
@@ -1095,7 +1103,8 @@ WHERE hypertable_id IN (
   SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'test_cagg_1d_offset');
 
 INSERT INTO test_data values ('2026-01-05 00:00:00', 1);
-CALL refresh_continuous_aggregate ('test_cagg_1d_offset','2023-12-29 15:00:00', NULL);
+-- Setting buckets_per_batch to 0 as the intention is to test the capping when windew end is set to NULL, no need for batching.
+CALL refresh_continuous_aggregate ('test_cagg_1d_offset','2023-12-29 15:00:00', NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 
 --should be at the 18th hour
 SELECT  _timescaledb_functions.to_timestamp(watermark) as invalidation_threshold
@@ -1158,9 +1167,9 @@ WHERE hypertable_id = (
 -- Now refresh cagg_4hrs with NULL,NULL.
 -- cagg_4hrs computes its own threshold = 04:00, but stored threshold = 06:00 > 04:00,
 -- so the stored (misaligned) value is used but capped to the start of the current bucket of cagg_4hrs,
--- which is 2020-01-01 04:00 UTC.
+-- which is 2020-01-01 04:00 UTC. Disabling incremental refresh to preseve the isolate the test intention.
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL);
+CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
 
 -- Show invalidations left in cagg_4hrs's invalidation log,

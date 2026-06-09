@@ -206,6 +206,7 @@ extern TSDLLEXPORT bool ts_chunk_is_frozen(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
+extern TSDLLEXPORT void ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, Oid time_type, Oid arg_type,
 												 bool older_newer);

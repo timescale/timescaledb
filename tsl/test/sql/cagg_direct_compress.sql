@@ -30,7 +30,8 @@ FROM conditions
 GROUP BY 1, 2
 WITH NO DATA;
 
-CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL);
+-- Setting buckets_per_batch to a high value to bypass "disabling direct compress because of too small batch size" situation
+CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_hourly') chunk;
 
 -- Enable columnstore
@@ -39,14 +40,14 @@ ALTER MATERIALIZED VIEW conditions_hourly SET (timescaledb.compress);
 
 -- Enable direct compress on cagg refresh
 SET timescaledb.enable_direct_compress_on_cagg_refresh TO on;
-CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_hourly') chunk;
 
 -- Backfill data and refresh again WITHOUT direct compress
 INSERT INTO conditions
 SELECT t, d::text, 1, 1 FROM generate_series('2025-12-15 00:00:00+00'::timestamptz - interval '1 year', '2025-12-15 00:00:00+00'::timestamptz, interval '1 hour') AS t, generate_series(1, 10) AS d;
 SET timescaledb.enable_direct_compress_on_cagg_refresh TO off;
-CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_hourly') chunk;
 
 -- Recompress all uncompressed chunks
@@ -57,7 +58,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 INSERT INTO conditions
 SELECT t, d::text, 1, 1 FROM generate_series('2025-12-15 00:00:00+00'::timestamptz - interval '1 year', '2025-12-15 00:00:00+00'::timestamptz, interval '1 hour') AS t, generate_series(1, 10) AS d;
 SET timescaledb.enable_direct_compress_on_cagg_refresh TO on;
-CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_hourly') chunk;
 
 -- Cleanup
@@ -85,11 +86,11 @@ SELECT t, d::text, 1, 1 FROM generate_series('2025-12-15 00:00:00+00'::timestamp
 SET timescaledb.enable_direct_compress_on_cagg_refresh TO on;
 
 -- Refresh the base CAgg
-CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_hourly') chunk;
 
 -- Refresh the hierarchical CAgg
-CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_daily') chunk;
 
 -- Produce some invalidations for the base CAgg
@@ -97,18 +98,18 @@ INSERT INTO conditions
 SELECT t, d::text, 1, 1 FROM generate_series('2025-12-15 00:00:00+00'::timestamptz - interval '1 year', '2025-12-15 00:00:00+00'::timestamptz, interval '1 hour') AS t, generate_series(1, 10) AS d;
 
 -- Refresh the base CAgg
-CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_hourly') chunk;
 
 -- Refreshing again the base CAgg is a no-op since everything is up to date
-CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_hourly', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 
 -- Refresh the hierarchical CAgg with invalidations procuded by the base CAgg
-CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_daily') chunk;
 
 -- Refreshing again the hierarchical CAgg is a no-op since everything is up to date
-CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 
 -- Tests with custom segmentby and orderby
 CREATE MATERIALIZED VIEW conditions_weekly
@@ -126,7 +127,7 @@ WITH NO DATA;
 
 ALTER MATERIALIZED VIEW conditions_weekly SET (timescaledb.compress_segmentby = 'device_id, location_id', timescaledb.compress_orderby = 'max, min, bucket DESC');
 
-CALL refresh_continuous_aggregate('conditions_weekly', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_weekly', NULL, NULL, options => '{"buckets_per_batch": 10000}'::jsonb);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_weekly') chunk;
 
 -- Test GROUP BY ROLLUP on compressed continuous aggregate (issue #9520)

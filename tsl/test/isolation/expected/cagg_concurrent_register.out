@@ -39,8 +39,8 @@ step s5_show_running_jobs:
 
 cagg_name|     start_range|       end_range|start_ts_utc            |end_ts_utc              
 ---------+----------------+----------------+------------------------+------------------------
-cagg_1   |1577836800000000|1578009600000000|Wed Jan 01 00:00:00 2020|Fri Jan 03 00:00:00 2020
-cagg_2   |1578009600000000|1578182400000000|Fri Jan 03 00:00:00 2020|Sun Jan 05 00:00:00 2020
+cagg_1   |1577980800000000|1578009600000000|Thu Jan 02 16:00:00 2020|Fri Jan 03 00:00:00 2020
+cagg_2   |1578153600000000|1578182400000000|Sat Jan 04 16:00:00 2020|Sun Jan 05 00:00:00 2020
 
 step s4_release_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
@@ -81,8 +81,6 @@ step s3_release_after_register:
    -- release lock on jobs_refresh_ranges table
    ROLLBACK;
 
-step s2_run_cagg2_overlap_refresh: <... completed>
-ERROR:  could not refresh continuous aggregate "cagg_2" due to a concurrent refresh
 step s5_show_running_jobs: 
   SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range,
          to_timestamp(r.start_range / 1000000) AT TIME ZONE 'UTC' AS start_ts_utc,
@@ -93,7 +91,8 @@ step s5_show_running_jobs:
 
 cagg_name|     start_range|       end_range|start_ts_utc            |end_ts_utc              
 ---------+----------------+----------------+------------------------+------------------------
-cagg_2   |1577836800000000|1578355200000000|Wed Jan 01 00:00:00 2020|Tue Jan 07 00:00:00 2020
+cagg_2   |1578268800000000|1578355200000000|Mon Jan 06 00:00:00 2020|Tue Jan 07 00:00:00 2020
+cagg_2   |1578153600000000|1578182400000000|Sat Jan 04 16:00:00 2020|Sun Jan 05 00:00:00 2020
 
 step s4_release_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
@@ -103,6 +102,8 @@ debug_waitpoint_release
                        
 
 step s1_run_cagg2_overlap_refresh: <... completed>
+ERROR:  could not refresh continuous aggregate "cagg_2" due to a concurrent refresh
+step s2_run_cagg2_overlap_refresh: <... completed>
 
 starting permutation: s2_insert_new_data_2020 s3_lock_before_register s1_run_cagg2_nonoverlap_refresh s2_run_cagg2_overlap_refresh s4_enable_before_process_cagg_invalidations s3_release_after_register s5_show_running_jobs s4_release_before_process_cagg_invalidations
 step s2_insert_new_data_2020: 
@@ -144,7 +145,7 @@ step s5_show_running_jobs:
 cagg_name|     start_range|       end_range|start_ts_utc            |end_ts_utc              
 ---------+----------------+----------------+------------------------+------------------------
 cagg_2   |1577836800000000|1577923200000000|Wed Jan 01 00:00:00 2020|Thu Jan 02 00:00:00 2020
-cagg_2   |1578009600000000|1578182400000000|Fri Jan 03 00:00:00 2020|Sun Jan 05 00:00:00 2020
+cagg_2   |1578153600000000|1578182400000000|Sat Jan 04 16:00:00 2020|Sun Jan 05 00:00:00 2020
 
 step s4_release_before_process_cagg_invalidations: 
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');

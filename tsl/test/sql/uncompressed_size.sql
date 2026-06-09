@@ -15,7 +15,7 @@ SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
 SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
 
 
-SELECT ccs.compressed_chunk_id, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk ch ON ch.id=ccs.compressed_chunk_id JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(format('%I.%I',ch.schema_name,ch.table_name))) l ON true;
+SELECT cs.compress_relid, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk uc ON uc.id=ccs.chunk_id JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=format('%I.%I',uc.schema_name,uc.table_name)::regclass JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(cs.compress_relid)) l ON true;
 
 -- test NULL compression does not error and returns NULL
 INSERT INTO t1 SELECT '2026-01-01'::timestamptz + format('%s ms', i)::interval, NULL, NULL FROM generate_series(1, 3000) i;

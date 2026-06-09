@@ -60,6 +60,42 @@ SELECT count(*) FROM qual_filter_date
 WHERE d >= '2026-02-01' AND d < '2026-03-01'::timestamp;
 RESET timescaledb.enable_qual_filtering;
 
+-- A date column compared to a '<' timestamptz constant keeps the boundary day.
+SET timezone TO 'UTC';
+CREATE TABLE qual_filter_date_tz(d date NOT NULL);
+SELECT create_hypertable('qual_filter_date_tz', 'd',
+    chunk_time_interval => INTERVAL '1 day');
+INSERT INTO qual_filter_date_tz
+SELECT generate_series('2024-03-08'::date, '2024-03-12'::date, '1 day');
+-- Mar 8, 9 and 10 match.
+SELECT d FROM qual_filter_date_tz
+WHERE d < '2024-03-10 12:00:00+00'::timestamptz ORDER BY d;
+DROP TABLE qual_filter_date_tz;
+RESET timezone;
+
+-- A date constant against a timestamptz time_bucket is converted to timestamptz.
+SET timezone TO 'UTC';
+CREATE TABLE qual_filter_tb(ts timestamptz NOT NULL);
+SELECT create_hypertable('qual_filter_tb', 'ts',
+    chunk_time_interval => INTERVAL '1 day');
+INSERT INTO qual_filter_tb
+SELECT generate_series('2024-03-01'::timestamptz, '2024-03-20'::timestamptz, '1 day');
+-- Both count the 9 buckets before March 10.
+SELECT count(*) FROM qual_filter_tb WHERE time_bucket('1 day', ts) < '2024-03-10'::date;
+SELECT count(*) FROM qual_filter_tb WHERE time_bucket('1 day', ts) < '2024-03-10'::timestamptz;
+DROP TABLE qual_filter_tb;
+
+-- A timestamptz constant against a date time_bucket is not transformed.
+CREATE TABLE qual_filter_tb_date(d date NOT NULL);
+SELECT create_hypertable('qual_filter_tb_date', 'd',
+    chunk_time_interval => INTERVAL '1 day');
+INSERT INTO qual_filter_tb_date
+SELECT generate_series('2024-03-01'::date, '2024-03-20'::date, '1 day');
+SELECT count(*) FROM qual_filter_tb_date
+WHERE time_bucket('1 day', d) < '2024-03-10 12:00:00+00'::timestamptz;
+DROP TABLE qual_filter_tb_date;
+RESET timezone;
+
 -- Cleanup
 DROP TABLE qual_filter_tz;
 DROP TABLE qual_filter_date;
