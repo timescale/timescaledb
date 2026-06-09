@@ -748,14 +748,10 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 
 	/*
 	 * Check ownership up front, before any work that touches the source
-	 * hypertable (e.g. computing the batches for an incremental refresh).
+	 * hypertable pr other cagg related objects (e.g. computing the batches
+	 * for an incremental refresh).
 	 */
-	if (!object_ownercheck(RelationRelationId, cagg_relid, GetUserId()))
-	{
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-					   get_relkind_objtype(get_rel_relkind(cagg_relid)),
-					   get_rel_name(cagg_relid));
-	}
+	ts_cagg_permissions_check(cagg_relid, GetUserId());
 
 	if (!PG_ARGISNULL(1))
 	{
@@ -1007,13 +1003,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
 	CaggRefreshSpiContext cagg_spi_ctx = {};
-	/* Like regular materialized views, require owner to refresh. */
-	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
-	{
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
-					   get_rel_name(cagg->relid));
-	}
 
 	continuous_agg_refresh_spi_setup_and_connect(&cagg_spi_ctx);
 	/* No bucketing when open ended */
