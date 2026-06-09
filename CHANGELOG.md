@@ -13,7 +13,7 @@ This release contains performance improvements and bug fixes since the 2.27.2 re
 * [#4054](https://github.com/timescale/timescaledb/pull/4054) Support `ANALYZE` and `VACUUM` on continuous aggregates by redirecting to the underlying materialization hypertable
 * [#9125](https://github.com/timescale/timescaledb/pull/9125) Increase the parallelism of SELECT queries over compressed hypertables to approximately match the uncompressed data size
 * [#9410](https://github.com/timescale/timescaledb/pull/9410) Mark `hypertable` and `chunk` as user catalog tables
-* [#9416](https://github.com/timescale/timescaledb/pull/9416) Support some forms of CASE expression in columnar aggregation and grouping
+* [#9416](https://github.com/timescale/timescaledb/pull/9416) Support some forms of `CASE` expression in columnar aggregation and grouping
 * [#9580](https://github.com/timescale/timescaledb/pull/9580) Add first/last sparse indexes to compression
 * [#9668](https://github.com/timescale/timescaledb/pull/9668) Allow database owner to configure hypertables and policies
 * [#9701](https://github.com/timescale/timescaledb/pull/9701) Relax lock during CAgg invalidation log processing
@@ -27,7 +27,7 @@ This release contains performance improvements and bug fixes since the 2.27.2 re
 * [#9893](https://github.com/timescale/timescaledb/pull/9893) Remove `chunk_constraint` catalog tracking for non-dimensional constraints
 * [#9903](https://github.com/timescale/timescaledb/pull/9903) Incremental refresh for `refresh_continuous_aggregate()`
 * [#9915](https://github.com/timescale/timescaledb/pull/9915) Remove `_timescaledb_catalog.chunk_constraint` table
-* [#9938](https://github.com/timescale/timescaledb/pull/9938) Add rebuild_sparse_index function
+* [#9938](https://github.com/timescale/timescaledb/pull/9938) Add `rebuild_sparse_index` function
 * [#9964](https://github.com/timescale/timescaledb/pull/9964) Add a function to lock OSM chunk's dimension slice
 
 **Bugfixes**
