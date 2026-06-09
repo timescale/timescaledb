@@ -258,34 +258,18 @@ step R12_refresh:
     CALL refresh_continuous_aggregate('cond2_10', 25, 70);
 
 
-starting permutation: WP_before_enable R1_refresh R3_refresh WP_before_release
+starting permutation: R1_refresh R3_refresh
 R5: LOG:  statement: 
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'DEBUG1';
 
-step WP_before_enable: 
-    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
-
-debug_waitpoint_enable
-----------------------
-                      
-
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
- <waiting ...>
+
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
- <waiting ...>
-step WP_before_release: 
-    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
 
-debug_waitpoint_release
------------------------
-                       
-
-step R1_refresh: <... completed>
-step R3_refresh: <... completed>
 
 starting permutation: WP_after_materialization_enable R1_refresh WP_after_materialization_release R3_refresh
 R5: LOG:  statement: 

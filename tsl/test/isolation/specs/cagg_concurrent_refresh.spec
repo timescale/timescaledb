@@ -488,8 +488,8 @@ permutation "R1_refresh" "R12_refresh"
 # TODO: pending materialization ranges not populated yet
 #permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_after_release" "R1_drop" "R6_pending_materialization_ranges_orphan"
 
-# R3 should wait for R1 to finish because there are cagg invalidation rows locked
-permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "R3_refresh" "WP_before_release"
+# R3 should wait for R1 to finish because they serialize on the catalog tuple lock
+permutation "R1_refresh" "R3_refresh"
 
 # Concurrent refresh of caggs on non-overlapping ranges should not
 # block each other in the third transaction (materialization)

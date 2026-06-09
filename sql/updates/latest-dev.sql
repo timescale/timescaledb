@@ -11,15 +11,27 @@ BEGIN
 END;
 $$;
 
--- Drop obsolete chunk_constraint rows for inherited CHECK constraints on
--- OSM chunks; PG inheritance handles propagation now.
-DELETE FROM _timescaledb_catalog.chunk_constraint cc
-USING _timescaledb_catalog.chunk c
-WHERE cc.chunk_id = c.id
-  AND c.osm_chunk
-  AND cc.dimension_slice_id IS NULL
-  AND cc.hypertable_constraint_name IS NOT NULL
-  AND cc.constraint_name = cc.hypertable_constraint_name;
+-- Block the update if any firstlast sparse indexes exist. This could only
+-- happen when downgrading and then upgrading again. Under this circumstance
+-- the firstlast sparse index might not be consistent for any chunks that
+-- were recompressed while the extension was downgraded.
+DO $$
+DECLARE
+  affected text;
+BEGIN
+  SELECT string_agg(DISTINCT relid::text, ', ')
+  INTO affected
+  FROM _timescaledb_catalog.compression_settings
+  WHERE compress_relid IS NOT NULL AND index @> '[{"type": "firstlast"}]';
+
+  IF affected IS NOT NULL THEN
+    RAISE EXCEPTION 'cannot upgrade because firstlast sparse indexes exist'
+      USING
+        DETAIL = format('The following chunks have firstlast sparse indexes: %s', affected),
+        HINT = 'Recompress the chunks with firstlast indexes before upgrading.';
+  END IF;
+END
+$$;
 
 -- Rename legacy chunk-side constraints to the names the new code recomputes:
 -- FKs use the parent's name; unique/PK/exclusion/trigger use the deterministic
@@ -52,14 +64,6 @@ BEGIN
 END
 $$;
 
--- Remove the chunk_constraint rows that mirrored non-dimensional constraints.
--- FK chunk-side constraints are now located by name through the event-trigger
--- hooks; unique/PK/exclusion/trigger constraints through the deterministic
--- "<chunk_id>_<parent>" name pattern.
-DELETE FROM _timescaledb_catalog.chunk_constraint
-WHERE dimension_slice_id IS NULL
-  AND hypertable_constraint_name IS NOT NULL;
-
 ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
 ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
 
@@ -71,8 +75,6 @@ CREATE TABLE _timescaledb_internal.tmp_dimension_slice_seq_value AS
 
 ALTER TABLE _timescaledb_catalog.chunk_constraint
     DROP CONSTRAINT IF EXISTS chunk_constraint_dimension_slice_id_fkey;
-
-DROP VIEW IF EXISTS timescaledb_information.chunks;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_slice;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.dimension_slice_id_seq;
@@ -163,7 +165,6 @@ DROP FUNCTION _timescaledb_functions.chunk_constraint_add_table_constraint(
     _timescaledb_catalog.chunk_constraint);
 DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_constraint_add_table_constraint(
     _timescaledb_catalog.chunk_constraint);
-DROP VIEW IF EXISTS timescaledb_information.chunks;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_constraint;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_constraint_name;
@@ -187,9 +188,6 @@ ALTER TABLE _timescaledb_catalog.hypertable
 
 -- Drop views and foreign keys that depend on the catalog table.
 DROP VIEW IF EXISTS timescaledb_experimental.policies;
-DROP VIEW IF EXISTS timescaledb_information.hypertables;
-DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
-DROP VIEW IF EXISTS timescaledb_information.jobs;
 
 ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
     DROP CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey;
@@ -276,3 +274,8 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
 
 ANALYZE _timescaledb_catalog.continuous_agg;
 -- end rebuild _timescaledb_catalog.continuous_agg --
+
+-- drop telemetry_event
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.telemetry_event;
+DROP TABLE _timescaledb_catalog.telemetry_event;
+

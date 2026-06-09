@@ -12,3 +12,12 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_osm_range_update(
     empty BOOL = false
 ) RETURNS BOOL AS '@MODULE_PATHNAME@',
 'ts_hypertable_osm_range_update' LANGUAGE C VOLATILE;
+
+-- Acquires a FOR UPDATE row lock on the dimension slice tuple belonging to the
+-- OSM chunk of the given hypertable. There is exactly one OSM chunk per
+-- hypertable, so this locks its single dimension_slice entry. The lock is held
+-- until the end of the current transaction; nothing is returned.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.lock_osm_chunk_dimension_slice(
+    htoid REGCLASS
+) RETURNS VOID AS '@MODULE_PATHNAME@',
+'ts_lock_osm_chunk_dimension_slice' LANGUAGE C VOLATILE;

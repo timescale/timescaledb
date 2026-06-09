@@ -24,7 +24,7 @@ typedef struct ChunkRangeSpace
 } ChunkRangeSpace;
 
 #define CHUNKRANGESPACE_SIZE(num_columns)                                                          \
-	(sizeof(ChunkRangeSpace) + (sizeof(NameData) * (num_columns)))
+	(sizeof(ChunkRangeSpace) + (sizeof(FormData_chunk_column_stats) * (num_columns)))
 
 extern ChunkRangeSpace *ts_chunk_column_stats_range_space_scan(int32 hypertable_id, Oid ht_reloid,
 															   MemoryContext mctx);

@@ -1,19 +1,34 @@
-Parsed test spec with 10 sessions
+Parsed test spec with 11 sessions
+
+starting permutation: LockDimSliceTuple LockDimSliceTuple2 UnlockDimSliceTuple UnlockDimSliceTuple2
+step LockDimSliceTuple: 
+  BEGIN;
+  SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('osm_test');
+
+lock_osm_chunk_dimension_slice
+------------------------------
+                              
+
+step LockDimSliceTuple2: 
+  BEGIN;
+  SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('osm_test');
+ <waiting ...>
+step UnlockDimSliceTuple: ROLLBACK;
+step LockDimSliceTuple2: <... completed>
+lock_osm_chunk_dimension_slice
+------------------------------
+                              
+
+step UnlockDimSliceTuple2: ROLLBACK;
 
 starting permutation: LockDimSliceTuple UR1b UR1u UR2b UR2u UnlockDimSliceTuple UR1c UR2c
 step LockDimSliceTuple: 
   BEGIN;
-  SELECT range_start, range_end FROM _timescaledb_catalog.dimension_slice
-  WHERE id IN ( SELECT ds.id FROM
-    _timescaledb_catalog.chunk ch,
-    _timescaledb_catalog.dimension_slice ds, _timescaledb_catalog.hypertable ht
-    WHERE ht.table_name like 'osm_test' AND ds.chunk_id = ch.id AND ht.id = ch.hypertable_id
-    AND ch.osm_chunk = true
-    ) FOR UPDATE;
+  SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('osm_test');
 
-        range_start|          range_end
--------------------+-------------------
-9223372036854775806|9223372036854775807
+lock_osm_chunk_dimension_slice
+------------------------------
+                              
 
 step UR1b: BEGIN;
 step UR1u: SELECT _timescaledb_functions.hypertable_osm_range_update('osm_test', 0, 10); <waiting ...>
@@ -36,17 +51,11 @@ step UR2c: COMMIT;
 starting permutation: LockDimSliceTuple DTb UR1b DropOsmChunk UR1u UnlockDimSliceTuple DTc UR1c
 step LockDimSliceTuple: 
   BEGIN;
-  SELECT range_start, range_end FROM _timescaledb_catalog.dimension_slice
-  WHERE id IN ( SELECT ds.id FROM
-    _timescaledb_catalog.chunk ch,
-    _timescaledb_catalog.dimension_slice ds, _timescaledb_catalog.hypertable ht
-    WHERE ht.table_name like 'osm_test' AND ds.chunk_id = ch.id AND ht.id = ch.hypertable_id
-    AND ch.osm_chunk = true
-    ) FOR UPDATE;
+  SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('osm_test');
 
-        range_start|          range_end
--------------------+-------------------
-9223372036854775806|9223372036854775807
+lock_osm_chunk_dimension_slice
+------------------------------
+                              
 
 step DTb: BEGIN;
 step UR1b: BEGIN;
@@ -73,17 +82,11 @@ step UR1c: COMMIT;
 starting permutation: LockDimSliceTuple DTb UR1b UR1u DropOsmChunk UnlockDimSliceTuple UR1c DTc
 step LockDimSliceTuple: 
   BEGIN;
-  SELECT range_start, range_end FROM _timescaledb_catalog.dimension_slice
-  WHERE id IN ( SELECT ds.id FROM
-    _timescaledb_catalog.chunk ch,
-    _timescaledb_catalog.dimension_slice ds, _timescaledb_catalog.hypertable ht
-    WHERE ht.table_name like 'osm_test' AND ds.chunk_id = ch.id AND ht.id = ch.hypertable_id
-    AND ch.osm_chunk = true
-    ) FOR UPDATE;
+  SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('osm_test');
 
-        range_start|          range_end
--------------------+-------------------
-9223372036854775806|9223372036854775807
+lock_osm_chunk_dimension_slice
+------------------------------
+                              
 
 step DTb: BEGIN;
 step UR1b: BEGIN;

@@ -6,6 +6,7 @@
 
 from pglast import parse_sql
 from pglast.ast import ColumnDef
+from pglast.enums.parsenodes import ObjectType
 from pglast.visitors import Visitor
 from pglast import enums
 import sys
@@ -177,6 +178,14 @@ class SQLVisitor(Visitor):
                 f"Attempting to create {functype} {node.funcname[1].sval} in the internal schema",
                 "_timescaledb_functions should be used as schema for internal functions",
             )
+
+    def visit_DropStmt(self, _ancestors, node):
+        if node.removeType == ObjectType.OBJECT_VIEW:
+            if node.objects[0][0].sval == "timescaledb_information":
+                self.error(
+                    f"Attempting to drop view {node.objects[0][0].sval}.{node.objects[0][1].sval}",
+                    "Views in schema timescaledb_information must not be dropped in update scripts",
+                )
 
 
 # copied from pgspot

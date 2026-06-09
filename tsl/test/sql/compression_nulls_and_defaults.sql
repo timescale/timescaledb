@@ -277,10 +277,11 @@ BEGIN
 		FROM
 			_timescaledb_catalog.chunk uncomp,
 			_timescaledb_catalog.chunk comp,
+			_timescaledb_catalog.compression_settings cs,
 			(SELECT show_chunks('codecov') as c) as x
 		WHERE
-			uncomp.compressed_chunk_id IS NOT NULL AND
-			comp.id = uncomp.compressed_chunk_id AND
+			cs.relid = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass AND
+			cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass AND
 			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
 	LOOP
 		-- codecov to record coverage of 'tsl_compressed_data_info'

@@ -131,13 +131,13 @@ CREATE TABLE composite_filter_ref AS SELECT * FROM composite_filter_test;
 -----------------------------------------------------------
 -- Verify Composite Bloom Column Exists
 -----------------------------------------------------------
-SELECT cc.schema_name || '.' || cc.table_name AS chunk
-FROM _timescaledb_catalog.chunk uc, timescaledb_information.chunks tc, _timescaledb_catalog.chunk cc
+SELECT cs.compress_relid AS chunk
+FROM _timescaledb_catalog.chunk uc, timescaledb_information.chunks tc, _timescaledb_catalog.compression_settings cs
 WHERE uc.table_name = tc.chunk_name
-  AND cc.id = uc.compressed_chunk_id
+  AND cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
   AND tc.hypertable_name = 'composite_filter_test'
   AND tc.is_compressed
-ORDER BY cc.table_name
+ORDER BY cs.compress_relid::text
 LIMIT 1
 \gset
 

@@ -578,11 +578,11 @@ CALL refresh_continuous_aggregate('cagg_now_view', NULL, '2004-01-01');
 --- QUERY PLAN ---
  Append
    ->  Append
-         ->  Seq Scan on _hyper_X_X_chunk
-         ->  Seq Scan on _hyper_X_X_chunk
-         ->  Seq Scan on _hyper_X_X_chunk
          ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
                Index Cond: (bucket < 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+         ->  Seq Scan on _hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk
    ->  Finalize HashAggregate
          Group Key: (time_bucket('@ 1 day'::interval, cagg_now_test."time")), cagg_now_test.device
          ->  Append
@@ -704,9 +704,9 @@ CALL refresh_continuous_aggregate('cagg_hierarch_l2', NULL, '2004-01-01');
  Append
    ->  Append
          ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
-               Index Cond: ((bucket < 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (bucket >= (ts_now_mock() - '@ 1 year'::interval)))
-         ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
                Index Cond: (bucket >= (ts_now_mock() - '@ 1 year'::interval))
+         ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
+               Index Cond: ((bucket < 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (bucket >= (ts_now_mock() - '@ 1 year'::interval)))
    ->  HashAggregate
          Group Key: time_bucket('@ 1 mon'::interval, (time_bucket('@ 1 day'::interval, cagg_hierarch_test."time"))), cagg_hierarch_test.device
          ->  Result

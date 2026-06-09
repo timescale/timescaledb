@@ -933,21 +933,18 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 		return false;
 	}
 
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-	Ensure(compressed_chunk != NULL,
-		   "compressed chunk not found for chunk \"%s\"",
-		   get_rel_name(uncompressed_chunk->table_id));
-
 	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
-	Ensure(settings != NULL,
-		   "compression settings not found for chunk \"%s\"",
+	Oid compressed_relid = settings->fd.compress_relid;
+
+	Ensure(settings && OidIsValid(compressed_relid),
+		   "compressed chunk not found for chunk \"%s\"",
 		   get_rel_name(uncompressed_chunk->table_id));
 
 	Ensure(settings->fd.orderby, "empty order by, cannot recompress in-memory");
 
 	LOCKMODE lockmode = ExclusiveLock;
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, lockmode);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, lockmode);
+	Relation compressed_chunk_rel = table_open(compressed_relid, lockmode);
 
 	CompressionSettings *new_settings = resolve_recompression_settings(uncompressed_chunk);
 
@@ -999,8 +996,8 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	table_close(new_compressed_chunk_rel, NoLock);
 
 	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
-	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
-	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
+	LockRelationOid(compressed_relid, AccessExclusiveLock);
+	ts_chunk_drop_by_relid(compressed_relid, DROP_RESTRICT, -1);
 	if (ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_UNORDERED))
 	{
 		ereport(DEBUG1,
@@ -1008,7 +1005,6 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 						NameStr(uncompressed_chunk->fd.schema_name),
 						NameStr(uncompressed_chunk->fd.table_name))));
 	}
-	ts_chunk_set_compressed_chunk(uncompressed_chunk, new_compressed_chunk->fd.id);
 
 	/* recompress successful */
 	return true;
@@ -1831,22 +1827,20 @@ rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
 		return;
 	}
 
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	Oid compressed_relid = chunk_settings->fd.compress_relid;
 
 	/* Step 2: initialize builders and decompressor */
-	Relation compressed_rel = table_open(compressed_chunk->table_id, RowExclusiveLock);
+	Relation compressed_rel = table_open(compressed_relid, RowExclusiveLock);
 	Relation uncompressed_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
 	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
 
 	bool *repl = palloc0(sizeof(bool) * compressed_desc->natts);
-	List *builders = create_sparse_index_builders(uncompressed_rel,
-												  compressed_chunk->table_id,
-												  added_indexes,
-												  repl);
+	List *builders =
+		create_sparse_index_builders(uncompressed_rel, compressed_relid, added_indexes, repl);
 
 	RowDecompressor decompressor = build_decompressor(compressed_desc,
 													  RelationGetDescr(uncompressed_rel),
-													  compressed_chunk->table_id,
+													  compressed_relid,
 													  uncompressed_chunk->table_id);
 
 	/* Step 3: scan, decompress, populate, update */

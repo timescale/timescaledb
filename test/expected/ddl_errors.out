@@ -60,6 +60,10 @@ CREATE TABLE PUBLIC."Hyper_Child" () INHERITS ("Hypertable_1");
 ERROR:  hypertables do not support inheritance
 CREATE TABLE PUBLIC."Hyper_Child" (extra int) INHERITS (PUBLIC."Hypertable_1", PUBLIC."Parent");
 ERROR:  hypertables do not support inheritance
+-- a plain table cannot inherit from a hypertable
+CREATE TABLE PUBLIC."Inherit_Child" (LIKE "Hypertable_1");
+ALTER TABLE PUBLIC."Inherit_Child" INHERIT "Hypertable_1";
+ERROR:  cannot inherit from hypertable "Hypertable_1"
 \set ON_ERROR_STOP 1
 CREATE TABLE PUBLIC."Child" () INHERITS ("Parent");
 \set ON_ERROR_STOP 0

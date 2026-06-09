@@ -101,11 +101,11 @@ step "wp0_release"
 session "WP1"
 step "wp1_enable"
 {
-    SELECT debug_waitpoint_enable('cagg_policy_batch_0_after_txn_1_wait');
+    SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
 }
 step "wp1_release"
 {
-    SELECT debug_waitpoint_release('cagg_policy_batch_0_after_txn_1_wait');
+    SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
 }
 
 # Waitpoint after txn 2 (cagg invalidations processed)

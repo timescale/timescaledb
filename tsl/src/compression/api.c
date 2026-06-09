@@ -483,8 +483,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		/* create compressed chunk and a new table */
 		compress_ht_chunk =
 			create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid, false, NULL);
-		/* Associate compressed chunk with main chunk. */
-		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
 		ereport(DEBUG1,
 				(errmsg("new columnstore chunk \"%s.%s\" created",
@@ -607,7 +605,6 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 												CACHE_FLAG_NONE,
 												&hcache);
 	Hypertable *compressed_hypertable;
-	Chunk *compressed_chunk;
 
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
 
@@ -646,7 +643,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	write_logical_replication_msg_decompression_start();
 
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
-	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	Oid compressed_relid = ts_relation_get_compressed_relid(uncompressed_chunk->table_id);
 
 	ereport(DEBUG1,
 			(errmsg("acquiring locks for converting to rowstore \"%s.%s\"",
@@ -671,7 +668,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	 *       operations.
 	 */
 	LockRelationOid(uncompressed_chunk->table_id, ExclusiveLock);
-	LockRelationOid(compressed_chunk->table_id, ExclusiveLock);
+	LockRelationOid(compressed_relid, ExclusiveLock);
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
@@ -693,7 +690,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	/* Throw error if chunk has invalid status for operation */
 	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_DECOMPRESS, true);
 
-	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
+	decompress_chunk(compressed_relid, uncompressed_chunk->table_id);
 
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
@@ -711,8 +708,8 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	 * this call makes the lock on the chunk explicit.
 	 */
 	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
-	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
-	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
+	LockRelationOid(compressed_relid, AccessExclusiveLock);
+	ts_chunk_drop_by_relid(compressed_relid, DROP_RESTRICT, -1);
 	ts_cache_release(&hcache);
 	write_logical_replication_msg_decompression_end();
 }
@@ -861,6 +858,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	 * CreateCommandTag can handle to avoid spurious printouts.
 	 */
 	EventTriggerAlterTableStart(create_dummy_query());
+	chunk_was_compressed = ts_chunk_is_compressed(cxt.srcht_chunk);
 	/* Create compressed chunk using existing table */
 	compress_ht_chunk =
 		create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table, false, NULL);
@@ -875,8 +873,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 										  numrows_post_compression,
 										  0);
 
-	chunk_was_compressed = ts_chunk_is_compressed(cxt.srcht_chunk);
-	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 	if (!chunk_was_compressed && ts_table_has_tuples(cxt.srcht_chunk->table_id, AccessShareLock))
 	{
 		/* The chunk was not compressed before it had the compressed chunk
@@ -1186,17 +1182,15 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 	return index_oid;
 }
 
-Chunk *
+void
 tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk)
 {
 	/* Create a new compressed chunk */
-	return create_compress_chunk(
-		compressed_ht,
-		src_chunk,
-		InvalidOid,
-		ts_guc_enable_direct_compress_auto_segmentby, /* skip_segmentby_default
-													   */
-		NULL);
+	create_compress_chunk(compressed_ht,
+						  src_chunk,
+						  InvalidOid,
+						  ts_guc_enable_direct_compress_auto_segmentby, /* skip_segmentby_default */
+						  NULL);
 }
 
 Datum

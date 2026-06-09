@@ -49,7 +49,7 @@ cagg_name|start_range|end_range
 
 starting permutation: wp1_enable r1_register_pid r1_refresh s1_registered_ranges k1_cancel wp1_release s1_registered_ranges
 step wp1_enable: 
-    SELECT debug_waitpoint_enable('cagg_policy_batch_0_after_txn_1_wait');
+    SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
 
 debug_waitpoint_enable
 ----------------------
@@ -77,7 +77,7 @@ step k1_cancel:
 step r1_refresh: <... completed>
 ERROR:  canceling statement due to user request
 step wp1_release: 
-    SELECT debug_waitpoint_release('cagg_policy_batch_0_after_txn_1_wait');
+    SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
 
 debug_waitpoint_release
 -----------------------
@@ -254,7 +254,7 @@ cagg_name|start_range|end_range
 
 starting permutation: wp1_enable tr2_register_pid tr2_refresh s1_registered_ranges t1_terminate wp1_release s1_registered_ranges r2_refresh s1_registered_ranges
 step wp1_enable: 
-    SELECT debug_waitpoint_enable('cagg_policy_batch_0_after_txn_1_wait');
+    SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
 
 debug_waitpoint_enable
 ----------------------
@@ -286,7 +286,7 @@ server closed the connection unexpectedly
 	before or while processing the request.
 
 step wp1_release: 
-    SELECT debug_waitpoint_release('cagg_policy_batch_0_after_txn_1_wait');
+    SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
 
 debug_waitpoint_release
 -----------------------
