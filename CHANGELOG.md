@@ -2,9 +2,17 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
-## 2.28.0 (2026-06-09)
+## 2.28.0 (2026-06-16)
 
 This release contains performance improvements and bug fixes since the 2.27.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.28.0**
+* **Faster `first()` and `last()` queries on compressed data.** TimescaleDB derives `first(value, time)` and `last(value, time)` aggregates straight from the columnstore's batch metadata, skipping batch decompression entirely. For the "latest reading per series" lookups that time-series workloads run constantly, that means meaningfully faster recency queries with no changes to your SQL queries.
+* **Lighter, less disruptive continuous aggregate refreshes.** `refresh_continuous_aggregate()` can now run incrementally in batches — the same behavior refresh policies already use — enabling breaking large manual refreshes into smaller chunks (tunable via `buckets_per_batch`, `max_batches_per_execution`, and `refresh_newest_first`) instead of one heavy operation. Refreshes also now take a lighter lock while processing the invalidation log, so they no longer block unrelated concurrent operations on the same continuous aggregate, resulting improved behaviour for concurrent workloads.
+* **Vectorized execution now covers `CASE` expressions.** TimescaleDB's columnar executor can now evaluate `CASE ... WHEN` expressions directly on compressed data, so queries using conditional logic stay on the fast vectorized path instead of falling back to slower row-by-row decompression. This speeds up a common pattern — conditional aggregations and computed columns over compressed history — with no query changes needed. 
+
+**Deprecation warning**
+This is the last minor release supporting PostgreSQL 15. Starting with the next minor version of TimescaleDB, only Postgres 16, 17, and 18 will be supported.
 
 **Backward-Incompatible Changes**
 * [#9934](https://github.com/timescale/timescaledb/pull/9934) Remove adaptive chunking
@@ -14,12 +22,12 @@ This release contains performance improvements and bug fixes since the 2.27.2 re
 * [#9125](https://github.com/timescale/timescaledb/pull/9125) Increase the parallelism of `SELECT` queries over compressed hypertables to approximately match the uncompressed data size
 * [#9410](https://github.com/timescale/timescaledb/pull/9410) Mark `hypertable` and `chunk` as user catalog tables
 * [#9416](https://github.com/timescale/timescaledb/pull/9416) Support some forms of `CASE` expression in columnar aggregation and grouping
-* [#9580](https://github.com/timescale/timescaledb/pull/9580) Add first/last sparse indexes to compression
+* [#9580](https://github.com/timescale/timescaledb/pull/9580) Add `first` / `last` sparse indexes to compression
+* [#9784](https://github.com/timescale/timescaledb/pull/9784) Use `first` / `last` sparse index for `orderby` metadata on new compressed chunks
 * [#9668](https://github.com/timescale/timescaledb/pull/9668) Allow database owner to configure hypertables and policies
-* [#9701](https://github.com/timescale/timescaledb/pull/9701) Relax lock during CAgg invalidation log processing
+* [#9701](https://github.com/timescale/timescaledb/pull/9701) Relax lock during continuous aggregate invalidation log processing
 * [#9730](https://github.com/timescale/timescaledb/pull/9730) Add in-memory observability for compressed chunks
 * [#9735](https://github.com/timescale/timescaledb/pull/9735) Improve `GapFill` row count estimate
-* [#9784](https://github.com/timescale/timescaledb/pull/9784) Use first/last sparse index for `orderby` metadata on new compressed chunks
 * [#9821](https://github.com/timescale/timescaledb/pull/9821) Allow subquery results which are exec params as GapFill arguments
 * [#9825](https://github.com/timescale/timescaledb/pull/9825) Support `ADD COLUMN` on continuous aggregates
 * [#9842](https://github.com/timescale/timescaledb/pull/9842) Suppress continuous aggregate invalidation tracking during bulk loads
@@ -46,10 +54,6 @@ This release contains performance improvements and bug fixes since the 2.27.2 re
 **New Settings**
 * `skip_cagg_invalidation`: skip continuous aggregate invalidation tracking for DML and DDL in the current session/transaction. Off by default.
 * `stats_max_chunks`: set the per-database compressed chunk statistics cache capacity. Defaults to 1024 chunks; set to 0 to disable the feature.
-
-**GUCs**
-* `skip_cagg_invalidation`
-* `stats_max_chunks`
 
 **Thanks**
 * @Fabian-2596 for suggesting more accurate GapFill row count estimate
