@@ -259,7 +259,8 @@ jobs:
 
     - name: Check for reproducer
       id: repro
-      run: test -f ~/llm-fuzzer-repro.sql && echo "found=true" >> $GITHUB_OUTPUT || true
+      run: |
+        if [ -f ~/llm-fuzzer-repro.sql ]; then echo "found=true" >> "$GITHUB_OUTPUT"; fi
 
     - name: Rebuild after fuzzing
       if: steps.repro.outputs.found == 'true'
