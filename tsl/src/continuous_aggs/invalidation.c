@@ -1303,7 +1303,7 @@ invalidation_get_earliest_chunk_start(int32 raw_hypertable_id)
 	const Dimension *time_dim = hyperspace_get_open_dimension(raw_ht->space, 0);
 	Assert(time_dim != NULL);
 
-	DimensionSlice *slice = ts_dimension_slice_nth_earliest_slice(time_dim->fd.id, 1);
+	DimensionSlice *slice = ts_dimension_slice_earliest_non_osm_slice(time_dim->fd.id);
 	if (slice != NULL)
 	{
 		return slice->fd.range_start;
