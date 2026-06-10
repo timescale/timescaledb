@@ -227,8 +227,7 @@ INSERT INTO conditions2 VALUES (55, 1, 99.0);
 SET timescaledb.enable_tiered_reads = false;
 CALL refresh_continuous_aggregate('cond2_10', NULL, NULL);
 
--- The expected entry should be (-INF, 19) and NOT (-INF, -11)
--- The capping is incorrect
+-- The refresh cap skips the OSM chunk entry and caps at the earliest hypertable entry
 SELECT "start", "end" FROM cagg_invals WHERE cagg_id = :cond2_10_id;
 
 ----------------------------------------------------------------------
