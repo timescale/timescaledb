@@ -76,10 +76,16 @@ jobs:
 
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-    - name: Get version of latest release
+    - name: Get expected version
       id: versions
       run: |
-        version=$(wget -q https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
+        # if run from a tag, check the repo's version, meant to be run after a release
+        # otherwise we rely on github's api for scheduled runs.
+        if [ "${{ github.ref_type }}" = "tag" ]; then
+          version=$(grep '^version = ' version.config | sed -e 's!version = !!')
+        else
+          version=$(wget -q https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
+        fi
         echo "version=${version}"
         echo "version=${version}" >>$GITHUB_OUTPUT
 
@@ -128,4 +134,3 @@ jobs:
       if: always()
       run: |
         cat /var/log/postgresql/postgresql-${{ matrix.pg }}-main.log
-
