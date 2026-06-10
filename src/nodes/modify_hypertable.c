@@ -124,15 +124,15 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
 	{
 		/*
-		 * With plain EXPLAIN, when the node is not actually executed, so we have
-		 * to finish the initialization now.
+		 * With plain EXPLAIN, the node is not actually executed, so we have to
+		 * finish the initialization now.
 		 */
 		modify_hypertable_init_child_plan_states(node);
 	}
 	else if (!mt->canSetTag)
 	{
 		/*
-		 * This node is a data-modifying CTEs that is not the main subquery. It
+		 * This node is a data-modifying CTE that is not the main subquery. It
 		 * will be executed at the ExecPostprocessPlan() step, after the main
 		 * subquery finishes. If it's not referenced by the main subquery, that
 		 * postprocessing is the only execution path that can ever reach it.
@@ -166,9 +166,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
  * decompressed data. The way we do it at the moment is we delay the
  * initialization of the Postgres ModifyTable node itself. This simplifies the
  * code here, but leads to some weirdness in es_auxmodifytables handling. An
- * alternative would be to initialize the ModifyTable node eagerly, but substite
- * its child plan with a dummy Result node, and initialize the actual children
- * here.
+ * alternative would be to initialize the ModifyTable node eagerly, but
+ * substitute its child plan with a dummy Result node, and initialize the actual
+ * children here.
  */
 static void
 modify_hypertable_init_child_plan_states(CustomScanState *node)
