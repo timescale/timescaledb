@@ -21,10 +21,19 @@
 #include "compat/compat.h"
 
 #include "estimate.h"
+#include "func_cache.h"
 #include "gapfill.h"
 #include "gapfill_internal.h"
 #include "import/list.h"
 #include "utils.h"
+
+bool
+gapfill_is_extension_function(Oid funcid, const char *name)
+{
+	FuncInfo *finfo = ts_func_cache_get(funcid);
+
+	return finfo != NULL && strncmp(finfo->funcname, name, NAMEDATALEN) == 0;
+}
 
 static CustomScanMethods gapfill_plan_methods = {
 	.CustomName = "GapFill",
@@ -119,8 +128,7 @@ contains_nonconstant_expr(Node *node)
 static inline bool
 is_gapfill_function_call(FuncExpr *call)
 {
-	char *func_name = get_func_name(call->funcid);
-	return strncmp(func_name, GAPFILL_FUNCTION, NAMEDATALEN) == 0;
+	return gapfill_is_extension_function(call->funcid, GAPFILL_FUNCTION);
 }
 
 /*
@@ -129,9 +137,8 @@ is_gapfill_function_call(FuncExpr *call)
 static inline bool
 is_marker_function_call(FuncExpr *call)
 {
-	char *func_name = get_func_name(call->funcid);
-	return strncmp(func_name, GAPFILL_LOCF_FUNCTION, NAMEDATALEN) == 0 ||
-		   strncmp(func_name, GAPFILL_INTERPOLATE_FUNCTION, NAMEDATALEN) == 0;
+	return gapfill_is_extension_function(call->funcid, GAPFILL_LOCF_FUNCTION) ||
+		   gapfill_is_extension_function(call->funcid, GAPFILL_INTERPOLATE_FUNCTION);
 }
 
 /*

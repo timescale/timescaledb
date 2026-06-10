@@ -138,6 +138,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_policy_concurrent.sql
     cagg_policy_incremental.sql
     cagg_refresh_cleanup.sql
+    cagg_refresh_incremental.sql
     chunk_column_stats.sql
     compress_bgw_reorder_drop_chunks.sql
     compress_bloom_legacy_v1.sql
@@ -232,6 +233,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
 
   list(APPEND TEST_FILES privilege_maintain.sql
        merge_append_partially_compressed.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
+  list(APPEND TEST_FILES constraints_not_valid.sql)
 endif()
 
 set(SOLO_TESTS

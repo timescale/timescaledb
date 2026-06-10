@@ -1,6 +1,26 @@
 
+-- Warn about firstlast indexes when downgrading.
+DO $$
+DECLARE
+  affected text;
+BEGIN
+  SELECT string_agg(DISTINCT relid::text, ', ')
+  INTO affected
+  FROM _timescaledb_catalog.compression_settings
+  WHERE index @> '[{"type": "firstlast"}]';
+
+  IF affected IS NOT NULL THEN
+    RAISE WARNING 'Before upgrading again you have to recompress chunks with firstlast indexes.'
+      USING
+        DETAIL = format('The following chunk use firstlast sparse indexes: %s', affected);
+  END IF;
+END
+$$;
+
 DROP VIEW IF EXISTS _timescaledb_catalog.chunk_constraint;
 DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_constraint_add_table_constraint( integer, name, name);
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.lock_osm_chunk_dimension_slice(regclass);
 
 ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
 ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);

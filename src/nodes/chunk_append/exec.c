@@ -1159,7 +1159,16 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 			{
 				Form_pg_attribute att = TupleDescAttr(relation->rd_att, i - 1);
 
+				/*
+				 * A NOT VALID NOT NULL constraint (PG18) sets attnotnull but
+				 * existing rows may still be NULL, so don't use it here.
+				 */
+#if PG18_GE
+				CompactAttribute *catt = TupleDescCompactAttr(relation->rd_att, i - 1);
+				if (catt->attnullability == ATTNULLABLE_VALID && !att->attisdropped)
+#else
 				if (att->attnotnull && !att->attisdropped)
+#endif
 				{
 					NullTest *ntest = makeNode(NullTest);
 

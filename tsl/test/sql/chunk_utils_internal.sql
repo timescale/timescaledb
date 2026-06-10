@@ -305,7 +305,7 @@ SELECT current_setting('port') as "PORTNO" \gset
 
 CREATE EXTENSION postgres_fdw;
 CREATE SERVER s3_server FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS ( host 'localhost', dbname 'postgres_fdw_db', port :'PORTNO');
+OPTIONS ( dbname 'postgres_fdw_db', port :'PORTNO');
 GRANT USAGE ON FOREIGN SERVER s3_server TO :ROLE_4;
 
 CREATE USER MAPPING FOR :ROLE_4 SERVER s3_server
@@ -339,7 +339,10 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table'
 -- check hypertable status
 SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
 -- must also update the range since the created chunk contains data
+BEGIN;
+SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('ht_try');
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-01'::timestamptz, '2020-01-02');
+COMMIT;
 
 -- OSM chunk is not visible in chunks view
 SELECT chunk_name, range_start, range_end
@@ -405,6 +408,11 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2022-05-05 
 
 -- test that approximate size function works when a osm chunk is present
 SELECT * FROM hypertable_approximate_size('ht_try');
+
+\set ON_ERROR_STOP 0
+-- Error for a hypertable that has no OSM chunk
+SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('test1.hyper1');
+\set ON_ERROR_STOP 1
 
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;

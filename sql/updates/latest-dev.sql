@@ -11,6 +11,28 @@ BEGIN
 END;
 $$;
 
+-- Block the update if any firstlast sparse indexes exist. This could only
+-- happen when downgrading and then upgrading again. Under this circumstance
+-- the firstlast sparse index might not be consistent for any chunks that
+-- were recompressed while the extension was downgraded.
+DO $$
+DECLARE
+  affected text;
+BEGIN
+  SELECT string_agg(DISTINCT relid::text, ', ')
+  INTO affected
+  FROM _timescaledb_catalog.compression_settings
+  WHERE compress_relid IS NOT NULL AND index @> '[{"type": "firstlast"}]';
+
+  IF affected IS NOT NULL THEN
+    RAISE EXCEPTION 'cannot upgrade because firstlast sparse indexes exist'
+      USING
+        DETAIL = format('The following chunks have firstlast sparse indexes: %s', affected),
+        HINT = 'Recompress the chunks with firstlast indexes before upgrading.';
+  END IF;
+END
+$$;
+
 -- Rename legacy chunk-side constraints to the names the new code recomputes:
 -- FKs use the parent's name; unique/PK/exclusion/trigger use the deterministic
 -- "<chunk_id>_<parent>" form

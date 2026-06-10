@@ -760,6 +760,15 @@ process_alterviewschema(ProcessUtilityArgs *args)
 	schema = get_namespace_name(get_rel_namespace(relid));
 	name = get_rel_name(relid);
 
+	/* For a continuous aggregate, check ownership up front so the error refers
+	 * to the continuous aggregate rather than the underlying view, which is
+	 * what PG's own ownership check would report once the schema change is
+	 * dispatched as a view operation. */
+	if (ts_continuous_agg_find_by_relid(relid) != NULL)
+	{
+		ts_cagg_permissions_check(relid, GetUserId());
+	}
+
 	ts_continuous_agg_rename_view(schema, name, stmt->newschema, name, &stmt->objectType);
 }
 
@@ -2221,6 +2230,12 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 
 		if (cagg)
 		{
+			/* Check ownership up front so the error refers to the continuous
+			 * aggregate rather than the underlying view, which is what PG's own
+			 * ownership check below would report after we rewrite the drop into
+			 * a DROP VIEW. */
+			ts_cagg_permissions_check(cagg->relid, GetUserId());
+
 			/* If there is at least one cagg, the drop should be treated as a
 			 * DROP VIEW. */
 			stmt->removeType = OBJECT_VIEW;
@@ -2449,6 +2464,16 @@ process_rename_view(Oid relid, RenameStmt *stmt)
 {
 	char *schema = get_namespace_name(get_rel_namespace(relid));
 	char *name = get_rel_name(relid);
+
+	/* For a continuous aggregate, check ownership up front so the error refers
+	 * to the continuous aggregate rather than the underlying view, which is
+	 * what PG's own ownership check would report once the rename is dispatched
+	 * as a view rename. */
+	if (ts_continuous_agg_find_by_relid(relid) != NULL)
+	{
+		ts_cagg_permissions_check(relid, GetUserId());
+	}
+
 	ts_continuous_agg_rename_view(schema, name, schema, stmt->newname, &stmt->renameType);
 }
 
@@ -2517,6 +2542,11 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		if (cagg)
 		{
 			is_cagg = true;
+
+			/* Check ownership up front so the error refers to the continuous
+			 * aggregate rather than one of the internal views, which is what
+			 * the ExecRenameStmt calls below would otherwise report. */
+			ts_cagg_permissions_check(relid, GetUserId());
 
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
@@ -3839,7 +3869,14 @@ process_index_start(ProcessUtilityArgs *args)
 		stmt->relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
 	}
 
-	ts_hypertable_permissions_check_by_id(ht->fd.id);
+	if (cagg != NULL)
+	{
+		ts_cagg_permissions_check(cagg->relid, GetUserId());
+	}
+	else
+	{
+		ts_hypertable_permissions_check_by_id(ht->fd.id);
+	}
 
 	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &postgres_options);
 
@@ -3890,9 +3927,7 @@ process_index_start(ProcessUtilityArgs *args)
 		 * If this is an index creation for cagg, then we need to switch user as the current
 		 * user might not have permissions on the internal schema where cagg index will be
 		 * created.
-		 * Need to restore user soon after this step.
 		 */
-		ts_cagg_permissions_check(ht->main_table_relid, GetUserId());
 		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
 	}
 
@@ -4918,6 +4953,23 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			}
+			case AT_AddInherit:
+			{
+				/* A plain table cannot inherit from a hypertable, since the
+				 * child would not be a chunk and its rows would be hidden from
+				 * queries on the hypertable. */
+				RangeVar *parent = castNode(RangeVar, cmd->def);
+				Oid parent_relid = RangeVarGetRelid(parent, NoLock, true);
+
+				if (OidIsValid(parent_relid) && ts_is_hypertable(parent_relid))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot inherit from hypertable \"%s\"",
+									get_rel_name(parent_relid))));
+				}
+				break;
+			}
 
 			case AT_SetRelOptions:
 			{
@@ -4969,26 +5021,11 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	return (list_length(stmt->cmds) > 0) ? DDL_CONTINUE : DDL_DONE;
 }
 
-static void
-continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
-{
-	Oid ownerid = ts_rel_get_owner(view_relid);
-
-	if (!ts_has_owner_privs(GetUserId(), ownerid))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(view_relid))));
-	}
-}
-
 static List *
 process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const List *defelems)
 {
 	WithClauseResult *parse_results;
 	List *pg_options = NIL, *other_namespace_options = NIL, *cagg_options = NIL;
-
-	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
 	ts_with_clause_filter(defelems, &cagg_options, &other_namespace_options, &pg_options);
 
@@ -5067,7 +5104,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 		return DDL_CONTINUE;
 	}
 
-	continuous_agg_with_clause_perm_check(cagg, view_relid);
+	ts_cagg_permissions_check(view_relid, GetUserId());
 
 	/*
 	 * CAgg add column handler.

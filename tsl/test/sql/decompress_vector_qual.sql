@@ -414,6 +414,15 @@ select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
 select * from date_table where ts <  CURRENT_DATE;
 
+-- A date column vs a timestamptz constant is only vectorized for '>' and '<='.
+select * from date_table where ts >  '2021-01-02 12:00:00+00'::timestamptz;
+select * from date_table where ts <= '2021-01-02 12:00:00+00'::timestamptz;
+set timescaledb.debug_require_vector_qual to 'forbid';
+select * from date_table where ts =  '2021-01-02 12:00:00+00'::timestamptz;
+select * from date_table where ts <  '2021-01-02 12:00:00+00'::timestamptz;
+select * from date_table where ts >= '2021-01-02 12:00:00+00'::timestamptz;
+set timescaledb.debug_require_vector_qual to 'require';
+
 -- Text columns.
 create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');

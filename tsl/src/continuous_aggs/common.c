@@ -2102,3 +2102,21 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 	}
 	return retlist;
 }
+
+void
+emit_up_to_date_notice(const ContinuousAgg *cagg, const ContinuousAggRefreshContext context)
+{
+	switch (context.callctx)
+	{
+		case CAGG_REFRESH_WINDOW:
+		case CAGG_REFRESH_CREATION:
+		case CAGG_REFRESH_WINDOW_BATCHED:
+			elog(NOTICE,
+				 "continuous aggregate \"%s\" is already up-to-date",
+				 NameStr(cagg->data.user_view_name));
+			break;
+		case CAGG_REFRESH_POLICY:
+		case CAGG_REFRESH_POLICY_BATCHED:
+			break;
+	}
+}

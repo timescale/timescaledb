@@ -2690,6 +2690,71 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(overlap);
 }
 
+/*
+ * lock_osm_chunk_dimension_slice
+ * 0 hypertable REGCLASS
+ *
+ * Acquires a FOR UPDATE row lock on the dimension slice tuple belonging to the
+ * OSM chunk of the given hypertable. There is exactly one OSM chunk per
+ * hypertable, so this locks its single dimension slice entry. The lock is held
+ * until the end of the current transaction. Returns void.
+ *
+ * Like hypertable_osm_range_update this is meant to be used by OSM to
+ * coordinate access to the OSM chunk's dimension slice; it is not meant to run
+ * on a read-only secondary.
+ */
+TS_FUNCTION_INFO_V1(ts_lock_osm_chunk_dimension_slice);
+Datum
+ts_lock_osm_chunk_dimension_slice(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Hypertable *ht;
+	const Dimension *time_dim;
+	Cache *hcache;
+
+	Assert(!RecoveryInProgress());
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
+	Assert(ht != NULL);
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	Ensure(time_dim != NULL,
+		   "could not find time dimension for hypertable %s.%s",
+		   quote_identifier(NameStr(ht->fd.schema_name)),
+		   quote_identifier(NameStr(ht->fd.table_name)));
+
+	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+	if (osm_chunk_id == INVALID_CHUNK_ID)
+	{
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("no OSM chunk found for hypertable %s.%s",
+					   quote_identifier(NameStr(ht->fd.schema_name)),
+					   quote_identifier(NameStr(ht->fd.table_name))));
+	}
+
+	/*
+	 * Lock the OSM chunk's dimension slice tuple FOR UPDATE. The row lock is
+	 * held until the end of the current transaction.
+	 */
+	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
+															time_dim->fd.id,
+															LockTupleExclusive,
+															RowShareLock);
+
+	if (!slice)
+	{
+		ereport(ERROR,
+				errcode(ERRCODE_INTERNAL_ERROR),
+				errmsg("could not find time dimension slice for chunk %d", osm_chunk_id));
+	}
+
+	ts_cache_release(&hcache);
+
+	PG_RETURN_VOID();
+}
+
 TSDLLEXPORT bool
 ts_hypertable_has_continuous_aggregates(int32 hypertable_id)
 {
