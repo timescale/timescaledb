@@ -721,6 +721,7 @@ SELECT * FROM ht_try_weekly;
 
 SET timescaledb.enable_tiered_reads=false;
 CALL refresh_continuous_aggregate('ht_try_weekly', '2019-12-29', '2020-01-10', force=>false);
+NOTICE:  continuous aggregate "ht_try_weekly" is already up-to-date
 SELECT * FROM ht_try_weekly;
  ts_bucket | avg 
 -----------+-----

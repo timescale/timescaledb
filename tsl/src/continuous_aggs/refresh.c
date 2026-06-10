@@ -1289,7 +1289,17 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	if (refresh_window.start_isnull)
 	{
 		debug_refresh_window(cagg, &refresh_window, "START IS NULL");
-		DimensionSlice *slice = ts_dimension_slice_nth_earliest_slice(time_dim->fd.id, 1);
+		DimensionSlice *slice;
+		// If tiered reads are disabled, we cap the refresh window to the start of the hypertable
+		// Get the earliest *non-osm* slice in this scenario.
+		if (!ts_guc_enable_osm_reads)
+		{
+			slice = ts_dimension_slice_earliest_non_osm_slice(time_dim->fd.id);
+		}
+		else
+		{
+			slice = ts_dimension_slice_nth_earliest_slice(time_dim->fd.id, 1);
+		}
 
 		/* If still there's no MIN slice range start then return no batches */
 		if (NULL == slice || TS_TIME_IS_MIN(slice->fd.range_start, refresh_window.type) ||
