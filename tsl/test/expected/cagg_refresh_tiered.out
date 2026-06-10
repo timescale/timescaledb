@@ -226,6 +226,46 @@ SELECT "start", "end" FROM cagg_invals WHERE cagg_id = :cond2_10_id;
                    80 | 9223372036854775807
 
 ----------------------------------------------------------------------
+-- Test 5: When the OSM chunk's range is updated to precede the
+-- earliest real chunk, the wrong dimension slice is picked up
+-- and the refresh is not capped correctly.
+----------------------------------------------------------------------
+-- Update the OSM chunk range so it sorts before all real chunks
+SELECT _timescaledb_functions.hypertable_osm_range_update('conditions2', -10::bigint, 10::bigint);
+ hypertable_osm_range_update 
+-----------------------------
+ f
+
+-- Verify the OSM chunk now has a range that precedes the real data
+SELECT ds.range_start, ds.range_end, c.osm_chunk
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON cc.chunk_id = c.id
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions2')
+ORDER BY ds.range_start;
+ range_start | range_end | osm_chunk 
+-------------+-----------+-----------
+         -10 |        10 | t
+          20 |        30 | f
+          30 |        40 | f
+          40 |        50 | f
+          50 |        60 | f
+          60 |        70 | f
+          70 |        80 | f
+
+-- Insert to create a new invalidation
+INSERT INTO conditions2 VALUES (55, 1, 99.0);
+SET timescaledb.enable_tiered_reads = false;
+CALL refresh_continuous_aggregate('cond2_10', NULL, NULL);
+-- The expected entry should be (-INF, 19) and NOT (-INF, -11)
+-- The capping is incorrect
+SELECT "start", "end" FROM cagg_invals WHERE cagg_id = :cond2_10_id;
+        start         |         end         
+----------------------+---------------------
+ -9223372036854775808 |                 -11
+                   80 | 9223372036854775807
+
+----------------------------------------------------------------------
 -- Cleanup
 ----------------------------------------------------------------------
 SET timescaledb.enable_tiered_reads = true;
