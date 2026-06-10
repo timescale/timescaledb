@@ -9,7 +9,7 @@ This release contains performance improvements and bug fixes since the 2.27.2 re
 **Highlighted features in TimescaleDB v2.28.0**
 * **Faster `first()` and `last()` queries on compressed data.** TimescaleDB derives `first(value, time)` and `last(value, time)` aggregates straight from the columnstore's batch metadata, skipping batch decompression entirely. For the "latest reading per series" lookups that time-series workloads run constantly, that means meaningfully faster recency queries with no changes to your SQL queries.
 * **Lighter, less disruptive continuous aggregate refreshes.** `refresh_continuous_aggregate()` can now run incrementally in batches — the same behavior refresh policies already use — enabling breaking large manual refreshes into smaller chunks (tunable via `buckets_per_batch`, `max_batches_per_execution`, and `refresh_newest_first`) instead of one heavy operation. Refreshes also now take a lighter lock while processing the invalidation log, so they no longer block unrelated concurrent operations on the same continuous aggregate, resulting improved behaviour for concurrent workloads.
-* **Vectorized execution now covers `CASE` expressions.** TimescaleDB's columnar executor can now evaluate `CASE ... WHEN` expressions directly on compressed data, so queries using conditional logic stay on the fast vectorized path instead of falling back to slower row-by-row decompression. This speeds up a common pattern — conditional aggregations and computed columns over compressed history — with no query changes needed. 
+* **Vectorized execution now covers `CASE` expressions.** TimescaleDB's columnar executor can now evaluate `CASE ... WHEN` expressions directly on compressed data, so queries using conditional logic stay on the fast vectorized path instead of falling back to slower row-by-row decompression. This speeds up a common pattern — conditional aggregations and computed columns over compressed history — with no query changes needed.
 * **Add new aggregations to a continuous aggregate without rebuilding it.** You can now run `ALTER MATERIALIZED VIEW <cagg> ADD COLUMN <name> <type> GENERATED ALWAYS AS (<aggregate>) STORED` to add a new computed aggregate to an existing continuous aggregate in place — no more dropping and recreating the whole aggregate just to track one more metric. New data populates the column going forward, letting your rollups evolve alongside your application. (Existing rows start as `NULL`; a forced refresh backfills them when you need historical values.)
 
 **Deprecation Notice: PostgreSQL 15 Support**
@@ -41,6 +41,7 @@ Please note that the `_timescaledb_catalog.chunk_constraint` table has been drop
 * [#9915](https://github.com/timescale/timescaledb/pull/9915) Remove `_timescaledb_catalog.chunk_constraint` table
 * [#9938](https://github.com/timescale/timescaledb/pull/9938) Add `rebuild_sparse_index` function
 * [#9964](https://github.com/timescale/timescaledb/pull/9964) Add a function to lock OSM chunk's dimension slice
+* [#9980](https://github.com/timescale/timescaledb/pull/9980) Support `first/last(value, time)` in `ColumnarIndexScan`
 
 **Bugfixes**
 * [#9708](https://github.com/timescale/timescaledb/pull/9708) Guard time bucket parameter handling against bad input
