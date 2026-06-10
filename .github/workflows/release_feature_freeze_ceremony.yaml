@@ -188,8 +188,8 @@ jobs:
           ./scripts/release/build_release_artefacts.sh "${{ env.CURRENT_VERSION }}" "${{ env.NEXT_VERSION }}"
 
           if [ -z "$(git status --porcelain)" ]; then
-            echo "* ✓ release artefacts already up-to-date on \`${{ env.RELEASE_BRANCH }}\`" >> $GITHUB_STEP_SUMMARY
-            exit 0
+            echo "* ❌ release artefact generation produced no changes but we expect it to." >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
 
           git add \
