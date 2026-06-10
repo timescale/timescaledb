@@ -2160,10 +2160,9 @@ ORDER BY device;
  Aggregate
    ->  Merge Append
          Sort Key: metrics.device
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_2_2_chunk.device
-                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Sort
                Sort Key: _hyper_1_1_chunk.device
                ->  Seq Scan on _hyper_1_1_chunk
@@ -2316,13 +2315,14 @@ ORDER BY device;
 -- DISTINCT on a segmentby column (Agg with no Aggrefs)
 :PREFIX SELECT DISTINCT device FROM metrics ORDER BY device;
 --- QUERY PLAN ---
- Sort
-   Sort Key: metrics.device
-   ->  HashAggregate
-         Group Key: metrics.device
-         ->  Append
+ Unique
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk.device
                ->  Seq Scan on _hyper_1_1_chunk
 
 -- count(*) without GROUP BY
