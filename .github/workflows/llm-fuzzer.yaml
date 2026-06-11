@@ -71,9 +71,10 @@ jobs:
       contents: read
       pull-requests: read
       issues: read
-    matrix:
-      oracle:
-        - "internal-error"
+    strategy:
+      matrix:
+        oracle:
+          - "internal-error"
 
     steps:
     - name: Install Linux Dependencies
