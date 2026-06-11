@@ -183,6 +183,7 @@ PartitioningInfo *
 ts_partitioning_info_create(const char *schema, const char *partfunc, const char *partcol,
 							DimensionType dimtype, Oid relid)
 {
+	/* LOOK HERE */
 	PartitioningInfo *pinfo;
 	Oid columntype, varcollid, funccollid = InvalidOid;
 	Var *var;
