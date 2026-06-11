@@ -7,7 +7,6 @@
 
 #include <postgres.h>
 
-#include <commands/cluster.h>
 #include <commands/defrem.h>
 #include <commands/explain.h>
 #include <commands/trigger.h>
@@ -36,6 +35,7 @@
 #define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
 #define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
 #define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
+#define is_supported_pg_version_19(version) ((version >= 190000) && (version < 200000))
 
 /*
  * To compile with an unsupported version, use -DEXPERIMENTAL=ON with cmake.
@@ -43,12 +43,14 @@
  */
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_15(version) || is_supported_pg_version_16(version) ||                 \
-	 is_supported_pg_version_17(version) || is_supported_pg_version_18(version))
+	 is_supported_pg_version_17(version) || is_supported_pg_version_18(version) ||                 \
+	 is_supported_pg_version_19(version))
 
 #define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
 #define PG17 is_supported_pg_version_17(PG_VERSION_NUM)
 #define PG18 is_supported_pg_version_18(PG_VERSION_NUM)
+#define PG19 is_supported_pg_version_19(PG_VERSION_NUM)
 
 #define PG15_LT (PG_VERSION_NUM < 150000)
 #define PG15_GE (PG_VERSION_NUM >= 150000)
@@ -58,6 +60,14 @@
 #define PG17_GE (PG_VERSION_NUM >= 170000)
 #define PG18_LT (PG_VERSION_NUM < 180000)
 #define PG18_GE (PG_VERSION_NUM >= 180000)
+#define PG19_LT (PG_VERSION_NUM < 190000)
+#define PG19_GE (PG_VERSION_NUM >= 190000)
+
+#if PG19_GE
+#include <commands/repack.h>
+#else
+#include <commands/cluster.h>
+#endif
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
