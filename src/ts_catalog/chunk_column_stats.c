@@ -945,8 +945,6 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 			if (max != DIMENSION_SLICE_MAXVALUE)
 			{
 				max++;
-				/* Again, check overflow */
-				max = REMAP_LAST_COORDINATE(max);
 			}
 
 			/*
@@ -1322,7 +1320,7 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 		 * check so prepare to short circuit if one evaluates to true.
 		 *
 		 * No real way to know if checking range_start or range_end first will be more
-		 * effective. So let's start with range_end checks first.
+		 * effective. So let's start with range_start checks first.
 		 */
 		switch (open->upper_strategy)
 		{
@@ -1346,19 +1344,20 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 			goto done;
 		}
 
-		/* range_end checks didn't match, check for range_start now */
+		/* range_start checks didn't match, check for range_end now */
+		/* range_end is exclusive except when DIMENSION_SLICE_MAXVALUE */
+		int64 range_end =
+			(fd.range_end == DIMENSION_SLICE_MAXVALUE) ? fd.range_end : (fd.range_end - 1);
 		switch (open->lower_strategy)
 		{
 			case BTGreaterEqualStrategyNumber:
 			{
-				/* range_end is exclusive */
-				matched = (fd.range_end - 1) >= open->lower_bound;
+				matched = range_end >= open->lower_bound;
 			}
 			break;
 			case BTGreaterStrategyNumber:
 			{
-				/* range_end is exclusive */
-				matched = (fd.range_end - 1) > open->lower_bound;
+				matched = range_end > open->lower_bound;
 			}
 			break;
 			default:
