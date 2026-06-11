@@ -151,6 +151,7 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 						  Oid *conffeqop, int numfkdelsetcols, AttrNumber *confdelsetcols,
 						  Oid parentDelTrigger, Oid parentUpdTrigger)
 {
+	/* LOOK HERE */
 	AttrNumber mapped_confkey[INDEX_MAX_KEYS];
 	Relation pkrel = table_open(chunk->table_id, AccessShareLock);
 
