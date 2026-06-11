@@ -64,7 +64,7 @@ jobs:
 
   fuzzer:
     if: needs.config.outputs.pg_latest
-    name: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
+    name: ${{ matrix.display_name }}
     runs-on: ubuntu-22.04
     needs: config
     permissions:
@@ -73,8 +73,9 @@ jobs:
       issues: read
     strategy:
       matrix:
-        oracle:
-          - "internal-error"
+        include:
+          - oracle: "internal-error"
+            display_name: "Internal Program Errors"
 
     steps:
     - name: Install Linux Dependencies
