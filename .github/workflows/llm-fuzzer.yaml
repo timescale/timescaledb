@@ -298,6 +298,8 @@ jobs:
 
         .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh
 
+        psql -c "select 1;"
+
 
         pg_ctl stop
 

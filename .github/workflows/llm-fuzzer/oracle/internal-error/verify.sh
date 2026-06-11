@@ -4,6 +4,4 @@
 # The reproducer script for this oracle must trigger this class of error.
 set -xeu
 
-psql -c "create extension timescaledb;"
 psql -v ON_ERROR_STOP=0 -f ~/llm-fuzzer-repro.sql
-psql -c "select 1"
