@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <nodes/execnodes.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <parser/parsetree.h>
 #include <utils/snapmgr.h>
 
@@ -137,8 +138,26 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 									  BoolGetDatum(false),
 									  /* constisnull = */ false,
 									  /* constbyval = */ true));
-	dummy_child->targetlist = modify_hypertable_state->deferred_modify_table_subplan->targetlist;
 
+	/*
+	 * The child targetlist can contain Aggrefs which are not allowed on a Result
+	 * targetlist. Just replace every expression with a null constant of the
+	 * same type.
+	 */
+	dummy_child->targetlist =
+		copyObject(modify_hypertable_state->deferred_modify_table_subplan->targetlist);
+	ListCell *lc;
+	foreach (lc, dummy_child->targetlist)
+	{
+		TargetEntry *entry = lfirst(lc);
+		Node *expr = (Node *) entry->expr;
+		entry->expr = (Expr *) makeNullConst(exprType(expr), exprTypmod(expr), exprCollation(expr));
+	}
+
+	/*
+	 * Initialize the Postgres ModifyTableState with dummy Result plan as a
+	 * child.
+	 */
 	outerPlan(modify_table_plan) = dummy_child;
 	PlanState *modify_table_state = ExecInitNode((Plan *) modify_table_plan, estate, eflags);
 	outerPlan(modify_table_plan) = modify_hypertable_state->deferred_modify_table_subplan;
