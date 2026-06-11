@@ -310,9 +310,13 @@ jobs:
       if: always() && steps.repro.outputs.found == 'true'
       run: |
         ! jq 'select(
-                (.state_code == "XX000" and .error_severity != "LOG" and (.message | test("TestFailure") | not))
-                or (.message | test("resource was not closed|could not close|leak"))
-            ) | [.message, .func_name,  .statement] | @tsv
+            (
+              .state_code == "XX000" and .func_name != "exec_stmt_raise"
+              and .error_severity != "LOG" and (.message | test("TestFailure") | not)
+            ) or (
+              .message | test("resource was not closed|could not close|leak")
+            )
+          ) | [.message, .func_name,  .statement] | @tsv
         ' -r postmaster.json | grep .
 
     - name: Collect the logs

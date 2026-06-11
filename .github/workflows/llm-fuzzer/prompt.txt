@@ -4,14 +4,11 @@ built and installed, with AddressSanitizer enabled. The build
 environment is functional, use it to rebuild with debug logging as
 needed.
 
-Find bugs in the TimescaleDB code modified in this change set. The bug
-you trigger must pass the mechanical reproduction with the current
-fuzzing oracle at .github/workflows/llm-fuzzer/oracle/${ORACLE_NAME}/verify.sh.
-Focus on the bug classes that can be caught by this oracle. Do not chase
-different classes of bugs that would need manual verification.
-That is, if you see a bug, but it manifests in a way that is not
-going to be caught by the reproduction step of this workflow, choose
-another bug. Stop after one reproducible bug.
+Find bugs in the TimescaleDB code modified in this change set. Only consider the
+bugs that manifest in a way that is handled by the current oracle at
+.github/workflows/llm-fuzzer/oracle/${ORACLE_NAME}/verify.sh.
+This run focuses on these classes of bugs specifically, so do not chase
+different classes. Stop after one reproducible bug.
 
 Determine whether you are testing a PR or a commit on a branch. Focus
 on the changes in that change set. Do not explore unrelated git
