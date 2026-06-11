@@ -208,6 +208,7 @@ modify_hypertable_init_child_plan_states(CustomScanState *node)
 	ModifyTableState *modify_table_state = castNode(ModifyTableState, linitial(node->custom_ps));
 
 	outerPlanState(modify_table_state) = subplan_state;
+	outerPlan(modify_table_state->ps.plan) = subplan_state->plan;
 
 	modify_hypertable_state->deferred_modify_table_subplan = NULL;
 
