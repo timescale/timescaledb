@@ -360,10 +360,7 @@ modify_hypertable_end(CustomScanState *node)
 	/* compressor is flushed in ExecModifyTable */
 	Assert(!state->compressor);
 
-	if (node->custom_ps != NIL)
-	{
-		ExecEndNode(linitial(node->custom_ps));
-	}
+	ExecEndNode(linitial(node->custom_ps));
 
 	if (state->ctr)
 	{
@@ -397,14 +394,7 @@ static void
 modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	ModifyHypertableState *state = (ModifyHypertableState *) node;
-	ModifyTableState *mtstate;
-
-	if (node->custom_ps == NIL)
-	{
-		modify_hypertable_init_child_plan_states(node);
-	}
-
-	mtstate = linitial_node(ModifyTableState, node->custom_ps);
+	ModifyTableState *mtstat = linitial_node(ModifyTableState, node->custom_ps);
 
 	/*
 	 * The targetlist for this node will have references that cannot be resolved by
