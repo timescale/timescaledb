@@ -305,7 +305,7 @@ SELECT current_setting('port') as "PORTNO" \gset
 
 CREATE EXTENSION postgres_fdw;
 CREATE SERVER s3_server FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS ( host 'localhost', dbname 'postgres_fdw_db', port :'PORTNO');
+OPTIONS ( dbname 'postgres_fdw_db', port :'PORTNO');
 GRANT USAGE ON FOREIGN SERVER s3_server TO :ROLE_4;
 
 CREATE USER MAPPING FOR :ROLE_4 SERVER s3_server
