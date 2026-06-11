@@ -170,3 +170,8 @@ SELECT _timescaledb_functions.bloom1_contains('\xd098c885f08468eb8916751d947f248
 -- both args NULL but second arg obfuscated through record_in
 SELECT _timescaledb_functions.bloom1_contains(NULL, pg_catalog.record_in(null::cstring, 23::oid, 12::int4));
 
+
+-- The hash function is callable by user, so must return proper error
+SELECT _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
+
+
