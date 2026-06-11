@@ -2430,8 +2430,8 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 			settings = ht_settings;
 		}
 
-		/* check the minmax and single bloom index columns no matter what the compression settings
-		 * says */
+		/* check the minmax, firstlast and single bloom index columns no matter what the compression
+		 * settings says */
 		{
 			/* handle minmax index */
 			struct RenameFromTo *from_to =
@@ -2446,6 +2446,20 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 				compressed_column_metadata_name_v2("max", (const char **) &stmt->subname, 1);
 			from_to->to =
 				compressed_column_metadata_name_v2("max", (const char **) &stmt->newname, 1);
+			rename_from_to = lappend(rename_from_to, from_to);
+
+			/* handle firstlast index */
+			from_to = (struct RenameFromTo *) palloc(sizeof(struct RenameFromTo));
+			from_to->from =
+				compressed_column_metadata_name_v2("first", (const char **) &stmt->subname, 1);
+			from_to->to =
+				compressed_column_metadata_name_v2("first", (const char **) &stmt->newname, 1);
+			rename_from_to = lappend(rename_from_to, from_to);
+			from_to = (struct RenameFromTo *) palloc(sizeof(struct RenameFromTo));
+			from_to->from =
+				compressed_column_metadata_name_v2("last", (const char **) &stmt->subname, 1);
+			from_to->to =
+				compressed_column_metadata_name_v2("last", (const char **) &stmt->newname, 1);
 			rename_from_to = lappend(rename_from_to, from_to);
 		}
 
