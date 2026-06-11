@@ -350,3 +350,40 @@ order by _ts_meta_min_1;
 drop table fl_push_recompress;
 
 drop view settings;
+
+-- Issue #9970: test RENAME COLUMN
+CREATE TABLE sensor_readings (
+    recorded_at int NOT NULL,
+    value       int
+);
+SELECT create_hypertable('sensor_readings', 'recorded_at',
+                         chunk_time_interval => 10000);
+ALTER TABLE sensor_readings SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'recorded_at'
+);
+
+INSERT INTO sensor_readings
+SELECT i, i FROM generate_series(1, 100) i;
+
+SELECT compress_chunk(c) FROM show_chunks('sensor_readings') c;
+
+ALTER TABLE sensor_readings RENAME COLUMN recorded_at TO measured_at;
+
+INSERT INTO sensor_readings
+SELECT i, i FROM generate_series(101, 200) i;
+-- Should work correctly after renaming
+SELECT compress_chunk(c) FROM show_chunks('sensor_readings') c;
+
+select ch.schema_name || '.' || ch.table_name as compressed_chunk
+from _timescaledb_catalog.chunk ch
+inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'sensor_readings')
+order by ch.id
+limit 1
+\gset
+-- should see firstlast metadata columns also renamed
+select * from :compressed_chunk LIMIT 0;
+
+drop table sensor_readings cascade;
