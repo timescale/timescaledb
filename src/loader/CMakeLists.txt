@@ -6,6 +6,7 @@ set(SOURCES
     bgw_interface.c
     function_telemetry.c
     ts_stats_handles.c
+    tenant_tracker_shmem.c
     lwlocks.c)
 
 set(TEST_SOURCES ${PROJECT_SOURCE_DIR}/test/src/symbol_conflict.c)
