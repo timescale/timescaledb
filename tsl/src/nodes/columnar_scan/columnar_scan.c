@@ -1490,6 +1490,10 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 */
 	if (sort_info->use_compressed_sort)
 	{
+		ColumnarScanPath *columnar_scan_with_compressed_sort = NULL;
+		Path dummy_sort_path; /* dummy for result of cost_sort */
+		Path *compressed_path_for_cost = NULL;
+
 		if (pathkeys_contained_in(sort_info->required_compressed_pathkeys,
 								  compressed_path->pathkeys))
 		{
@@ -1502,6 +1506,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			path->needs_sequence_num = sort_info->needs_sequence_num;
 			path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 			path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+
+			columnar_scan_with_compressed_sort = path;
+			compressed_path_for_cost = linitial(path->custom_path.custom_paths);
 		}
 		else
 		{
@@ -1523,9 +1530,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			 * creation. Examples of this in: create_merge_append_path &
 			 * create_merge_append_plan
 			 */
-			Path sort_path; /* dummy for result of cost_sort */
 
-			cost_sort(&sort_path,
+			cost_sort(&dummy_sort_path,
 					  root,
 					  sort_info->required_compressed_pathkeys,
 #if PG18_GE
@@ -1538,7 +1544,29 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 					  work_mem,
 					  -1);
 
-			cost_columnar_scan(compression_info, path_copy, &sort_path);
+			cost_columnar_scan(compression_info, path_copy, &dummy_sort_path);
+
+			decompressed_paths = lappend(decompressed_paths, path_copy);
+
+			columnar_scan_with_compressed_sort = path_copy;
+			compressed_path_for_cost = &dummy_sort_path;
+		}
+
+		if (chunk_rel->consider_startup &&
+			columnar_scan_with_compressed_sort->enable_bulk_decompression)
+		{
+			/*
+			 * Try a version with row-by-row decompression too, if the planner
+			 * requests the paths with cheap startup. Typically it happens with
+			 * ORDER BY + LIMIT. Row-by-row decompression is only useful if
+			 * there is no sort above the columnar scan, because a sort would
+			 * require a full decompression anyway.
+			 */
+			ColumnarScanPath *path_copy =
+				copy_columnar_scan_path(columnar_scan_with_compressed_sort);
+			path_copy->enable_bulk_decompression = false;
+
+			cost_columnar_scan(compression_info, path_copy, compressed_path_for_cost);
 
 			decompressed_paths = lappend(decompressed_paths, path_copy);
 		}

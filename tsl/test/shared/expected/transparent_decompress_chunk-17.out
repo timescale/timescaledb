@@ -22,7 +22,7 @@ SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
                Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
                Chunk Status: PARTIAL
                Reverse: true
-               Bulk Decompression: true
+               Bulk Decompression: false
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_v2_last_time, compress_hyper_X_X_chunk._ts_meta_v2_first_time, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count
                      Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
@@ -334,7 +334,7 @@ ORDER BY time, device_id;
    ->  Merge Append
          Sort Key: _hyper_X_X_chunk.device_id
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-               Vectorized Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Sort
                      Sort Key: compress_hyper_X_X_chunk.device_id
                      ->  Seq Scan on compress_hyper_X_X_chunk
@@ -515,11 +515,10 @@ ORDER BY time, device_id;
          Sort Key: _hyper_X_X_chunk."time"
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_X_X_chunk (actual rows=1.00 loops=1)
                Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
-               Filter: (_hyper_X_X_chunk.device_id = 1)
-               Vectorized Filter: (_hyper_X_X_chunk."time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Filter: ((_hyper_X_X_chunk."time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_hyper_X_X_chunk.device_id = 1))
                Chunk Status: PARTIAL
                Reverse: true
-               Bulk Decompression: true
+               Bulk Decompression: false
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_v2_last_time, compress_hyper_X_X_chunk._ts_meta_v2_first_time, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count
                      Index Cond: ((compress_hyper_X_X_chunk.device_id = 1) AND (compress_hyper_X_X_chunk._ts_meta_v2_first_time > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
