@@ -293,3 +293,7 @@ CREATE TABLE _timescaledb_catalog.telemetry_event (
 );
 GRANT SELECT ON _timescaledb_catalog.telemetry_event TO PUBLIC;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_id_by_name(NAME, NAME);
+DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_chunk_parent_id(INTEGER);
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_hypertable_id(INTEGER);
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_relid_by_id(INTEGER);
