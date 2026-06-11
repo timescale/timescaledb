@@ -1427,8 +1427,7 @@ static void decompress_chunk_plan_walker(Plan *plan, EState *estate,
  * Find every chunk Scan in the DML's subplan that targets a compressed
  * target relation, and decompress the matching batches into the
  * uncompressed chunk. This is invoked from modify_hypertable_exec before
- * the inner ModifyTable is initialized, so it walks the Plan tree (with
- * an explicit EState) rather than a PlanState tree.
+ * the subplan of ModifyTable is initialized, so it walks the saved Plan tree.
  */
 bool
 decompress_target_segments(ModifyHypertableState *ht_state)
@@ -1440,7 +1439,8 @@ decompress_target_segments(ModifyHypertableState *ht_state)
 	};
 	Assert(ctx.relids);
 
-	decompress_chunk_plan_walker(&ht_state->mt->plan, css->ss.ps.state, &ctx);
+	Assert(ht_state->deferred_modify_table_subplan != NULL);
+	decompress_chunk_plan_walker(ht_state->deferred_modify_table_subplan, css->ss.ps.state, &ctx);
 	return ctx.batches_decompressed;
 }
 

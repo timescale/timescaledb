@@ -70,6 +70,7 @@ typedef struct ModifyHypertableState
 	List *explain_saved_custom_scan_tlist;
 
 	int deferred_eflags;
+	Plan *deferred_modify_table_subplan;
 } ModifyHypertableState;
 
 extern TSDLLEXPORT bool ts_is_modify_hypertable_plan(Plan *plan);

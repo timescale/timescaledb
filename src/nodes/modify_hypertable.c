@@ -79,43 +79,83 @@ static void modify_hypertable_init_child_plan_states(CustomScanState *node);
 static void
 modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 {
-	ModifyHypertableState *state = (ModifyHypertableState *) node;
-	ModifyTable *mt = castNode(ModifyTable, &state->mt->plan);
+	ModifyHypertableState *modify_hypertable_state = (ModifyHypertableState *) node;
+	ModifyTable *modify_table_plan = castNode(ModifyTable, &modify_hypertable_state->mt->plan);
 
 	/*
 	 * To make statement trigger defined on the hypertable work
 	 * we need to set the hypertable as the rootRelation otherwise
 	 * statement trigger defined only on the hypertable will not fire.
 	 */
-	if (mt->operation == CMD_DELETE || mt->operation == CMD_UPDATE || mt->operation == CMD_MERGE)
+	if (modify_table_plan->operation == CMD_DELETE || modify_table_plan->operation == CMD_UPDATE ||
+		modify_table_plan->operation == CMD_MERGE)
 	{
-		mt->rootRelation = mt->nominalRelation;
+		modify_table_plan->rootRelation = modify_table_plan->nominalRelation;
 	}
 
-	Oid result_relid = rt_fetch(mt->nominalRelation, estate->es_range_table)->relid;
-	state->ht = ts_hypertable_cache_get_cache_and_entry(result_relid,
-														CACHE_FLAG_MISSING_OK,
-														&state->ht_cache);
+	Oid result_relid = rt_fetch(modify_table_plan->nominalRelation, estate->es_range_table)->relid;
+	modify_hypertable_state->ht =
+		ts_hypertable_cache_get_cache_and_entry(result_relid,
+												CACHE_FLAG_MISSING_OK,
+												&modify_hypertable_state->ht_cache);
 
 	/*
 	 * If we are inserting into a chunk directly, rri will point to the chunk
 	 * itself, so we need to get the hypertable from the chunk.
 	 */
-	if (!state->ht)
+	if (!modify_hypertable_state->ht)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(result_relid, true);
-		state->ht = ts_hypertable_cache_get_entry(state->ht_cache,
-												  chunk->hypertable_relid,
-												  CACHE_FLAG_NONE);
+		modify_hypertable_state->ht =
+			ts_hypertable_cache_get_entry(modify_hypertable_state->ht_cache,
+										  chunk->hypertable_relid,
+										  CACHE_FLAG_NONE);
 	}
-	state->has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(state->ht->fd.id);
+	modify_hypertable_state->has_continuous_aggregate =
+		ts_hypertable_has_continuous_aggregates(modify_hypertable_state->ht->fd.id);
 
 	/*
+	 * The ModifyTable node itself must be initialized now, so that it's properly
+	 * added to the es_auxmodifytables list. For secondary data-modifying CTEs,
+	 * this can be the last time our code is called before ExecPostprocessPlan(),
+	 * if the CTE is not referenced by the main query.
+	 *
 	 * The actual initialization of the child plan states is deferred until after
 	 * we decompress the data that might potentially be involved in DML operations.
+	 * We substitute them with a dummy Result here, so that the Postgres code
+	 * can work.
 	 */
-	state->deferred_eflags = eflags;
-	node->custom_ps = NIL;
+	modify_hypertable_state->deferred_eflags = eflags;
+	modify_hypertable_state->deferred_modify_table_subplan = outerPlan(modify_table_plan);
+
+	Plan *dummy_child = (Plan *) makeNode(Result);
+	castNode(Result, dummy_child)->resconstantqual =
+		(Node *) list_make1(makeConst(BOOLOID,
+									  /* consttypmod = */ -1,
+									  /* constcollid = */ InvalidOid,
+									  /* constlen = */ 1,
+									  BoolGetDatum(false),
+									  /* constisnull = */ false,
+									  /* constbyval = */ true));
+
+	dummy_child->targetlist = modify_hypertable_state->deferred_modify_table_subplan->targetlist;
+
+	outerPlan(modify_table_plan) = dummy_child;
+
+	PlanState *modify_table_state = ExecInitNode((Plan *) modify_table_plan, estate, eflags);
+
+	node->custom_ps = list_make1(modify_table_state);
+
+	/*
+	 * If Postgres adds our node to the secondary data-modifying CTE list, it
+	 * adds just the Postgres ModifyTableState. Make it point to our
+	 * ModifyHypertableState instead, so that our custom code is called.
+	 */
+	if (list_length(estate->es_auxmodifytables) > 0 &&
+		linitial(estate->es_auxmodifytables) == modify_table_state)
+	{
+		linitial(estate->es_auxmodifytables) = node;
+	}
 
 	/*
 	 * In some cases, the plain deferred initialization from exec doesn't work,
@@ -128,32 +168,6 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		 * finish the initialization now.
 		 */
 		modify_hypertable_init_child_plan_states(node);
-	}
-	else if (!mt->canSetTag)
-	{
-		/*
-		 * This node is a data-modifying CTE that is not the main subquery. It
-		 * will be executed at the ExecPostprocessPlan() step, after the main
-		 * subquery finishes. If it's not referenced by the main subquery, that
-		 * postprocessing is the only execution path that can ever reach it.
-		 * We have to add this node now to the list of nodes to execute,
-		 * otherwise it might just not be called later.
-		 *
-		 * Note that our deferred plan initialization, that will happen during
-		 * ExecPostprocessPlan() itself, will add the underlying Postgres
-		 * ModifyTable node to the beginning of the array as well. This leads to
-		 * the array shifting during iteration, and this node being processed
-		 * twice. This is OK because the ModifyTableState tracks whether it's
-		 * done using the mt_done flag, and won't run twice, but overall this is
-		 * very fragile.
-		 *
-		 * If this breaks, we'd probably have to switch to calling the PG init
-		 * unconditionally, but giving it some dummy Result node as a child.
-		 * ExecInitModifyTable() has some dependencies on child so it can't be
-		 * just omitted. This approach is more complicated than what we have
-		 * now, but should be more robust.
-		 */
-		estate->es_auxmodifytables = lcons(state, estate->es_auxmodifytables);
 	}
 }
 
@@ -176,14 +190,18 @@ modify_hypertable_init_child_plan_states(CustomScanState *node)
 	EState *estate = node->ss.ps.state;
 
 	ModifyHypertableState *modify_hypertable_state = (ModifyHypertableState *) node;
-	ModifyTable *modify_table = modify_hypertable_state->mt;
 
-	ModifyTableState *modify_table_state =
-		castNode(ModifyTableState,
-				 ExecInitNode(&modify_table->plan,
-							  estate,
-							  modify_hypertable_state->deferred_eflags));
-	node->custom_ps = list_make1(modify_table_state);
+	Assert(modify_hypertable_state->deferred_modify_table_subplan != NULL);
+
+	PlanState *subplan_state = ExecInitNode(modify_hypertable_state->deferred_modify_table_subplan,
+											estate,
+											modify_hypertable_state->deferred_eflags);
+
+	ModifyTableState *modify_table_state = castNode(ModifyTableState, linitial(node->custom_ps));
+
+	outerPlanState(modify_table_state) = subplan_state;
+
+	modify_hypertable_state->deferred_modify_table_subplan = NULL;
 
 	if (modify_table_state->operation == CMD_INSERT || modify_table_state->operation == CMD_MERGE)
 	{
@@ -212,14 +230,12 @@ modify_hypertable_init_child_plan_states(CustomScanState *node)
 static TupleTableSlot *
 modify_hypertable_exec(CustomScanState *node)
 {
-	ModifyHypertableState *state = (ModifyHypertableState *) node;
-	ModifyTableState *mtstate;
-	TupleTableSlot *result;
+	ModifyHypertableState *modify_hypertable_state = (ModifyHypertableState *) node;
 
-	if (node->custom_ps == NIL)
+	if (modify_hypertable_state->deferred_modify_table_subplan != NULL)
 	{
 		EState *estate = node->ss.ps.state;
-		CmdType op = state->mt->operation;
+		CmdType op = modify_hypertable_state->mt->operation;
 
 		/*
 		 * For UPDATE/DELETE/MERGE on compressed hypertable, decompress chunks and
@@ -231,14 +247,14 @@ modify_hypertable_exec(CustomScanState *node)
 		{
 			/* Modify snapshot only if something got decompressed */
 			if (ts_cm_functions->decompress_target_segments &&
-				ts_cm_functions->decompress_target_segments(state))
+				ts_cm_functions->decompress_target_segments(modify_hypertable_state))
 			{
-				state->comp_chunks_processed = true;
+				modify_hypertable_state->comp_chunks_processed = true;
 				/*
 				 * save snapshot set during ExecutorStart(), since this is the same
 				 * snapshot used to SeqScan of uncompressed chunks
 				 */
-				state->snapshot = estate->es_snapshot;
+				modify_hypertable_state->snapshot = estate->es_snapshot;
 				CommandCounterIncrement();
 				/* use a static copy of current transaction snapshot
 				 * this needs to be a copy so we don't read trigger updates
@@ -248,30 +264,33 @@ modify_hypertable_exec(CustomScanState *node)
 				estate->es_output_cid = GetCurrentCommandId(true);
 
 				if (ts_guc_max_tuples_decompressed_per_dml > 0 &&
-					state->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+					modify_hypertable_state->tuples_decompressed >
+						ts_guc_max_tuples_decompressed_per_dml)
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
 							 errmsg("tuple decompression limit exceeded by operation"),
 							 errdetail("current limit: %d, tuples decompressed: %lld",
 									   ts_guc_max_tuples_decompressed_per_dml,
-									   (long long int) state->tuples_decompressed),
+									   (long long int)
+										   modify_hypertable_state->tuples_decompressed),
 							 errhint("Consider increasing "
 									 "timescaledb.max_tuples_decompressed_per_dml_transaction "
 									 "or set to 0 (unlimited).")));
 				}
 			}
 			/* Account for tuples deleted via batch DELETE in compressed chunks */
-			if (op == CMD_DELETE && state->tuples_deleted > 0)
+			if (op == CMD_DELETE && modify_hypertable_state->tuples_deleted > 0)
 			{
-				estate->es_processed += state->tuples_deleted;
+				estate->es_processed += modify_hypertable_state->tuples_deleted;
 			}
 		}
 
 		modify_hypertable_init_child_plan_states(node);
 	}
+	Assert(modify_hypertable_state->deferred_modify_table_subplan == NULL);
 
-	mtstate = linitial_node(ModifyTableState, node->custom_ps);
+	ModifyTableState *modify_table_state = linitial_node(ModifyTableState, node->custom_ps);
 
 	/*
 	 * The wrapped ModifyTable is not reached through ExecProcNode, so its
@@ -281,16 +300,16 @@ modify_hypertable_exec(CustomScanState *node)
 	 * what makes it safe for extensions that call ExplainPrintPlan at
 	 * arbitrary points (see issues #7583 and #8531).
 	 */
-	if (mtstate->ps.instrument)
+	if (modify_table_state->ps.instrument)
 	{
-		InstrStartNode(mtstate->ps.instrument);
+		InstrStartNode(modify_table_state->ps.instrument);
 	}
 
-	result = ExecModifyTable(node, &mtstate->ps);
+	TupleTableSlot *result = ExecModifyTable(node, &modify_table_state->ps);
 
-	if (mtstate->ps.instrument)
+	if (modify_table_state->ps.instrument)
 	{
-		InstrStopNode(mtstate->ps.instrument, TupIsNull(result) ? 0.0 : 1.0);
+		InstrStopNode(modify_table_state->ps.instrument, TupIsNull(result) ? 0.0 : 1.0);
 	}
 
 	return result;
