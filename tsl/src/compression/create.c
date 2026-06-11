@@ -2381,7 +2381,8 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 void
 tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 {
-	Assert(stmt->relationType == OBJECT_TABLE && stmt->renameType == OBJECT_COLUMN);
+	Assert((stmt->relationType == OBJECT_TABLE || stmt->relationType == OBJECT_MATVIEW) &&
+		   stmt->renameType == OBJECT_COLUMN);
 	Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 
 	struct RenameFromTo
