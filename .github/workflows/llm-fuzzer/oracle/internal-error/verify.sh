@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # This oracle just runs the reproducer script. The later workflow checks will
 # detect the program logic errors: segfault, assertion failure, address
 # sanitizer failure, internal program error (SQLSTATE XX000) and so on.
