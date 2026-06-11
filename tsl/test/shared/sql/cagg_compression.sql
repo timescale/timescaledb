@@ -113,3 +113,24 @@ RESET client_min_messages;
 
 DROP TABLE comp_rename CASCADE;
 
+-- test renaming a column on cagg after compression is enabled
+CREATE TABLE comp_rename2(ts timestamptz NOT NULL, val double precision);
+SELECT table_name FROM create_hypertable('comp_rename2', 'ts');
+
+CREATE MATERIALIZED VIEW comp_rename2_cagg WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', ts) AS bucket, avg(val) AS avg_val
+FROM comp_rename2 GROUP BY 1 WITH NO DATA;
+
+ALTER MATERIALIZED VIEW comp_rename2_cagg SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'bucket'
+);
+
+ALTER MATERIALIZED VIEW comp_rename2_cagg RENAME COLUMN avg_val TO average_value;
+
+-- verify the column was renamed
+SELECT attname FROM pg_attribute WHERE attrelid = 'comp_rename2_cagg'::regclass AND attname = 'average_value';
+
+DROP TABLE comp_rename2 CASCADE;
+
+
