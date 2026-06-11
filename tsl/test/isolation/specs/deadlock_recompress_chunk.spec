@@ -51,8 +51,9 @@ step "lock_after_decompress" {
       chunk regclass;
     BEGIN
       SELECT format('%I.%I', c.schema_name, c.table_name)::regclass INTO chunk
-      FROM show_chunks('hyper'), _timescaledb_catalog.chunk p, _timescaledb_catalog.chunk c
-      WHERE p.compressed_chunk_id = c.id
+      FROM show_chunks('hyper'), _timescaledb_catalog.chunk p, _timescaledb_catalog.chunk c, _timescaledb_catalog.compression_settings cs
+      WHERE cs.relid = format('%I.%I', p.schema_name, p.table_name)::regclass
+      AND cs.compress_relid = format('%I.%I', c.schema_name, c.table_name)::regclass
       AND format('%I.%I', p.schema_name, p.table_name)::regclass = show_chunks;
       EXECUTE format('LOCK TABLE %s IN EXCLUSIVE MODE', chunk);
     END;

@@ -45,15 +45,17 @@ step "UR2c" { COMMIT; }
 session "LDST"
 step "LockDimSliceTuple" {
   BEGIN;
-  SELECT range_start, range_end FROM _timescaledb_catalog.dimension_slice
-  WHERE id IN ( SELECT ds.id FROM
-    _timescaledb_catalog.chunk ch,
-    _timescaledb_catalog.dimension_slice ds, _timescaledb_catalog.hypertable ht
-    WHERE ht.table_name like 'osm_test' AND ds.chunk_id = ch.id AND ht.id = ch.hypertable_id
-    AND ch.osm_chunk = true
-    ) FOR UPDATE;
+  SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('osm_test');
   }
 step "UnlockDimSliceTuple" { ROLLBACK; }
+
+# second session that locks the same dimension_slice tuple
+session "LDST2"
+step "LockDimSliceTuple2" {
+  BEGIN;
+  SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('osm_test');
+  }
+step "UnlockDimSliceTuple2" { ROLLBACK; }
 
 session "DT"
 step "DTb" { BEGIN; }
@@ -102,6 +104,10 @@ step DR2b { BEGIN; }
 step DR2drop { SELECT _timescaledb_functions.drop_osm_chunk('test_drop'); }
 step DR2c { COMMIT; }
 
+# Two concurrent locks on the same OSM chunk dimension_slice tuple block one
+# another. The second lock can only be acquired after the first session rolls
+# back and releases its lock.
+permutation "LockDimSliceTuple" "LockDimSliceTuple2" "UnlockDimSliceTuple" "UnlockDimSliceTuple2"
 # Concurrent updates will block one another
 # this previously deadlocked one of the two transactions
 permutation "LockDimSliceTuple" "UR1b" "UR1u" "UR2b" "UR2u" "UnlockDimSliceTuple" "UR1c" "UR2c"

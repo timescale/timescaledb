@@ -1,0 +1,1 @@
+Fixes: #9967 Block upgrade after downgrade with firstlast indexes present

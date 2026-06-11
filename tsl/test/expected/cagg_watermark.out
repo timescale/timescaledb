@@ -479,9 +479,9 @@ CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
  Append (actual rows=3.00 loops=1)
    ->  Append (actual rows=3.00 loops=1)
          ->  Seq Scan on _hyper_8_17_chunk (actual rows=1.00 loops=1)
-         ->  Seq Scan on _hyper_8_20_chunk (actual rows=1.00 loops=1)
-         ->  Index Scan using _hyper_8_21_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_21_chunk (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_8_20_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_20_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < 'Wed Jul 31 18:00:00 2002 PDT'::timestamp with time zone)
+         ->  Seq Scan on _hyper_8_21_chunk (actual rows=1.00 loops=1)
    ->  HashAggregate (actual rows=0.00 loops=1)
          Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_19_chunk."time"), _hyper_7_19_chunk.device
          ->  Result (actual rows=0.00 loops=1)
@@ -493,9 +493,9 @@ CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
  Append (actual rows=3.00 loops=1)
    ->  Append (actual rows=3.00 loops=1)
          ->  Seq Scan on _hyper_8_17_chunk (actual rows=1.00 loops=1)
-         ->  Seq Scan on _hyper_8_20_chunk (actual rows=1.00 loops=1)
-         ->  Index Scan using _hyper_8_21_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_21_chunk (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_8_20_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_20_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < 'Wed Jul 31 18:00:00 2002 PDT'::timestamp with time zone)
+         ->  Seq Scan on _hyper_8_21_chunk (actual rows=1.00 loops=1)
    ->  HashAggregate (actual rows=0.00 loops=1)
          Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_19_chunk."time"), _hyper_7_19_chunk.device
          ->  Result (actual rows=0.00 loops=1)
@@ -512,9 +512,9 @@ SET timescaledb.enable_constraint_aware_append = OFF;
  Append (actual rows=3.00 loops=1)
    ->  Append (actual rows=3.00 loops=1)
          ->  Seq Scan on _hyper_8_17_chunk (actual rows=1.00 loops=1)
-         ->  Seq Scan on _hyper_8_20_chunk (actual rows=1.00 loops=1)
-         ->  Index Scan using _hyper_8_21_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_21_chunk (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_8_20_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_20_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < 'Wed Jul 31 18:00:00 2002 PDT'::timestamp with time zone)
+         ->  Seq Scan on _hyper_8_21_chunk (actual rows=1.00 loops=1)
    ->  HashAggregate (actual rows=0.00 loops=1)
          Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_19_chunk."time"), _hyper_7_19_chunk.device
          ->  Result (actual rows=0.00 loops=1)
@@ -551,16 +551,16 @@ EXECUTE cagg_scan_1h;
             bucket            | device | max 
 ------------------------------+--------+-----
  Mon Jul 31 17:00:00 2000 PDT |      1 |   2
- Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Wed Jul 31 17:00:00 2002 PDT |      1 |   2
+ Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Thu Jul 31 17:00:00 2003 PDT |      1 |   2
 
 SELECT * FROM chunks_1h;
             bucket            | device | max 
 ------------------------------+--------+-----
  Mon Jul 31 17:00:00 2000 PDT |      1 |   2
- Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Wed Jul 31 17:00:00 2002 PDT |      1 |   2
+ Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Thu Jul 31 17:00:00 2003 PDT |      1 |   2
 
 INSERT INTO chunks VALUES ('2004-08-01 01:01:01+01', 1, 2);
@@ -677,8 +677,8 @@ EXECUTE cagg_scan_1h;
             bucket            | device | max 
 ------------------------------+--------+-----
  Mon Jul 31 17:00:00 2000 PDT |      1 |   2
- Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Wed Jul 31 17:00:00 2002 PDT |      1 |   2
+ Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Thu Jul 31 17:00:00 2003 PDT |      1 |   2
  Sat Jul 31 17:00:00 2004 PDT |      1 |   2
  Sun Jul 31 17:00:00 2005 PDT |      1 |   2
@@ -689,8 +689,8 @@ SELECT * FROM chunks_1h;
             bucket            | device | max 
 ------------------------------+--------+-----
  Mon Jul 31 17:00:00 2000 PDT |      1 |   2
- Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Wed Jul 31 17:00:00 2002 PDT |      1 |   2
+ Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Thu Jul 31 17:00:00 2003 PDT |      1 |   2
  Sat Jul 31 17:00:00 2004 PDT |      1 |   2
  Sun Jul 31 17:00:00 2005 PDT |      1 |   2
@@ -704,8 +704,8 @@ EXECUTE cagg_scan_1h;
             bucket            | device | max 
 ------------------------------+--------+-----
  Mon Jul 31 17:00:00 2000 PDT |      1 |   2
- Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Wed Jul 31 17:00:00 2002 PDT |      1 |   2
+ Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Thu Jul 31 17:00:00 2003 PDT |      1 |   2
  Sat Jul 31 17:00:00 2004 PDT |      1 |   2
  Sun Jul 31 17:00:00 2005 PDT |      1 |   2
@@ -716,8 +716,8 @@ SELECT * FROM chunks_1h;
             bucket            | device | max 
 ------------------------------+--------+-----
  Mon Jul 31 17:00:00 2000 PDT |      1 |   2
- Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Wed Jul 31 17:00:00 2002 PDT |      1 |   2
+ Tue Jul 31 17:00:00 2001 PDT |      1 |   2
  Thu Jul 31 17:00:00 2003 PDT |      1 |   2
  Sat Jul 31 17:00:00 2004 PDT |      1 |   2
  Sun Jul 31 17:00:00 2005 PDT |      1 |   2
@@ -963,8 +963,8 @@ INSERT INTO chunks VALUES ('2014-01-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
 :EXPLAIN_ANALYZE EXECUTE ht_scan_realtime_1h;
 --- QUERY PLAN ---
- Append (actual rows=2.00 loops=1)
-   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=2.00 loops=1)
+ Append (actual rows=8.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=8.00 loops=1)
          Chunks excluded during startup: 0
          ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk (actual rows=0.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -982,17 +982,17 @@ CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_31_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_31_chunk (actual rows=0.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_48_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_48_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1013,10 +1013,10 @@ INSERT INTO chunks VALUES ('2015-01-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
 :EXPLAIN_ANALYZE SELECT device FROM chunks_1h;
 --- QUERY PLAN ---
- Append (actual rows=3.00 loops=1)
-   ->  Subquery Scan on "*SELECT* 1" (actual rows=3.00 loops=1)
-         ->  Result (actual rows=3.00 loops=1)
-               ->  Append (actual rows=3.00 loops=1)
+ Append (actual rows=9.00 loops=1)
+   ->  Subquery Scan on "*SELECT* 1" (actual rows=9.00 loops=1)
+         ->  Result (actual rows=9.00 loops=1)
+               ->  Append (actual rows=9.00 loops=1)
                      ->  Seq Scan on _hyper_8_17_chunk (actual rows=0.00 loops=1)
                      ->  Seq Scan on _hyper_8_20_chunk (actual rows=0.00 loops=1)
                      ->  Seq Scan on _hyper_8_21_chunk (actual rows=0.00 loops=1)
@@ -1025,12 +1025,12 @@ CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
                      ->  Seq Scan on _hyper_8_27_chunk (actual rows=0.00 loops=1)
                      ->  Seq Scan on _hyper_8_29_chunk (actual rows=0.00 loops=1)
                      ->  Seq Scan on _hyper_8_31_chunk (actual rows=0.00 loops=1)
-                     ->  Seq Scan on _hyper_8_33_chunk (actual rows=0.00 loops=1)
-                     ->  Seq Scan on _hyper_8_36_chunk (actual rows=0.00 loops=1)
-                     ->  Seq Scan on _hyper_8_39_chunk (actual rows=0.00 loops=1)
-                     ->  Seq Scan on _hyper_8_42_chunk (actual rows=0.00 loops=1)
-                     ->  Seq Scan on _hyper_8_44_chunk (actual rows=0.00 loops=1)
-                     ->  Seq Scan on _hyper_8_46_chunk (actual rows=0.00 loops=1)
+                     ->  Seq Scan on _hyper_8_33_chunk (actual rows=1.00 loops=1)
+                     ->  Seq Scan on _hyper_8_36_chunk (actual rows=1.00 loops=1)
+                     ->  Seq Scan on _hyper_8_39_chunk (actual rows=1.00 loops=1)
+                     ->  Seq Scan on _hyper_8_42_chunk (actual rows=1.00 loops=1)
+                     ->  Seq Scan on _hyper_8_44_chunk (actual rows=1.00 loops=1)
+                     ->  Seq Scan on _hyper_8_46_chunk (actual rows=1.00 loops=1)
                      ->  Seq Scan on _hyper_8_48_chunk (actual rows=1.00 loops=1)
                      ->  Seq Scan on _hyper_8_50_chunk (actual rows=1.00 loops=1)
                      ->  Index Scan using _hyper_8_52_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_52_chunk (actual rows=1.00 loops=1)
@@ -1055,8 +1055,8 @@ CREATE TABLE continuous_agg_test(time int, data int);
 -- Query without COALESCE - should not be optimized
 :EXPLAIN_ANALYZE (SELECT * FROM chunks_1h AS t1) UNION ALL (SELECT * from chunks_1h AS t2 WHERE _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H)) IS NOT NULL);
 --- QUERY PLAN ---
- Append (actual rows=6.00 loops=1)
-   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=3.00 loops=1)
+ Append (actual rows=18.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=9.00 loops=1)
          Chunks excluded during startup: 0
          ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk (actual rows=0.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1074,17 +1074,17 @@ CREATE TABLE continuous_agg_test(time int, data int);
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_31_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_31_chunk (actual rows=0.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_48_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_48_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1100,10 +1100,10 @@ CREATE TABLE continuous_agg_test(time int, data int);
                      Group Key: time_bucket('@ 1 hour'::interval, _hyper_7_51_chunk."time"), _hyper_7_51_chunk.device
                      ->  Index Scan using _hyper_7_51_chunk_chunks_time_idx on _hyper_7_51_chunk (actual rows=0.00 loops=1)
                            Index Cond: ("time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-   ->  Append (actual rows=3.00 loops=1)
-         ->  Result (actual rows=3.00 loops=1)
+   ->  Append (actual rows=9.00 loops=1)
+         ->  Result (actual rows=9.00 loops=1)
                One-Time Filter: (_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)) IS NOT NULL)
-               ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 _materialized_hypertable_8_1 (actual rows=3.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 _materialized_hypertable_8_1 (actual rows=9.00 loops=1)
                      Chunks excluded during startup: 0
                      ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk _hyper_8_17_chunk_1 (actual rows=0.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1121,17 +1121,17 @@ CREATE TABLE continuous_agg_test(time int, data int);
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
                      ->  Index Scan using _hyper_8_31_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_31_chunk _hyper_8_31_chunk_1 (actual rows=0.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-                     ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk _hyper_8_33_chunk_1 (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk _hyper_8_33_chunk_1 (actual rows=1.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-                     ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk _hyper_8_36_chunk_1 (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk _hyper_8_36_chunk_1 (actual rows=1.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-                     ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk _hyper_8_39_chunk_1 (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk _hyper_8_39_chunk_1 (actual rows=1.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-                     ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk _hyper_8_42_chunk_1 (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk _hyper_8_42_chunk_1 (actual rows=1.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-                     ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk _hyper_8_44_chunk_1 (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk _hyper_8_44_chunk_1 (actual rows=1.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-                     ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk _hyper_8_46_chunk_1 (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk _hyper_8_46_chunk_1 (actual rows=1.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
                      ->  Index Scan using _hyper_8_48_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_48_chunk _hyper_8_48_chunk_1 (actual rows=1.00 loops=1)
                            Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1154,10 +1154,10 @@ CREATE TABLE continuous_agg_test(time int, data int);
 :EXPLAIN_ANALYZE SELECT max(device) from chunks_1h;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
-   ->  Append (actual rows=3.00 loops=1)
-         ->  Subquery Scan on "*SELECT* 1" (actual rows=3.00 loops=1)
-               ->  Result (actual rows=3.00 loops=1)
-                     ->  Append (actual rows=3.00 loops=1)
+   ->  Append (actual rows=9.00 loops=1)
+         ->  Subquery Scan on "*SELECT* 1" (actual rows=9.00 loops=1)
+               ->  Result (actual rows=9.00 loops=1)
+                     ->  Append (actual rows=9.00 loops=1)
                            ->  Seq Scan on _hyper_8_17_chunk (actual rows=0.00 loops=1)
                            ->  Seq Scan on _hyper_8_20_chunk (actual rows=0.00 loops=1)
                            ->  Seq Scan on _hyper_8_21_chunk (actual rows=0.00 loops=1)
@@ -1166,12 +1166,12 @@ CREATE TABLE continuous_agg_test(time int, data int);
                            ->  Seq Scan on _hyper_8_27_chunk (actual rows=0.00 loops=1)
                            ->  Seq Scan on _hyper_8_29_chunk (actual rows=0.00 loops=1)
                            ->  Seq Scan on _hyper_8_31_chunk (actual rows=0.00 loops=1)
-                           ->  Seq Scan on _hyper_8_33_chunk (actual rows=0.00 loops=1)
-                           ->  Seq Scan on _hyper_8_36_chunk (actual rows=0.00 loops=1)
-                           ->  Seq Scan on _hyper_8_39_chunk (actual rows=0.00 loops=1)
-                           ->  Seq Scan on _hyper_8_42_chunk (actual rows=0.00 loops=1)
-                           ->  Seq Scan on _hyper_8_44_chunk (actual rows=0.00 loops=1)
-                           ->  Seq Scan on _hyper_8_46_chunk (actual rows=0.00 loops=1)
+                           ->  Seq Scan on _hyper_8_33_chunk (actual rows=1.00 loops=1)
+                           ->  Seq Scan on _hyper_8_36_chunk (actual rows=1.00 loops=1)
+                           ->  Seq Scan on _hyper_8_39_chunk (actual rows=1.00 loops=1)
+                           ->  Seq Scan on _hyper_8_42_chunk (actual rows=1.00 loops=1)
+                           ->  Seq Scan on _hyper_8_44_chunk (actual rows=1.00 loops=1)
+                           ->  Seq Scan on _hyper_8_46_chunk (actual rows=1.00 loops=1)
                            ->  Seq Scan on _hyper_8_48_chunk (actual rows=1.00 loops=1)
                            ->  Seq Scan on _hyper_8_50_chunk (actual rows=1.00 loops=1)
                            ->  Index Scan using _hyper_8_52_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_52_chunk (actual rows=1.00 loops=1)
@@ -1364,8 +1364,8 @@ UNION ALL
   WHERE chunks_1h.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(COALESCE(:MAT_HT_ID_1H, :MAT_HT_ID_1H))), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, chunks_1h.bucket)), chunks_1h.device;
 --- QUERY PLAN ---
- Append (actual rows=3.00 loops=1)
-   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=3.00 loops=1)
+ Append (actual rows=9.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=9.00 loops=1)
          Chunks excluded during startup: 0
          ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk (actual rows=0.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1383,17 +1383,17 @@ UNION ALL
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_31_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_31_chunk (actual rows=0.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_48_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_48_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1431,8 +1431,8 @@ UNION ALL
   WHERE chunks_1h.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(COALESCE(:MAT_HT_ID_1H, :MAT_HT_ID_1H))), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, chunks_1h.bucket)), chunks_1h.device;
 --- QUERY PLAN ---
- Append (actual rows=3.00 loops=1)
-   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=3.00 loops=1)
+ Append (actual rows=9.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8 (actual rows=9.00 loops=1)
          Chunks excluded during startup: 0
          ->  Index Scan using _hyper_8_17_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_17_chunk (actual rows=0.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1450,17 +1450,17 @@ UNION ALL
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_31_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_31_chunk (actual rows=0.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_33_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_33_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_36_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_36_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_39_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_39_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_42_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_42_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_44_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_44_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
-         ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_8_46_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_46_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
          ->  Index Scan using _hyper_8_48_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_48_chunk (actual rows=1.00 loops=1)
                Index Cond: (bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(8)), '-infinity'::timestamp with time zone))
@@ -1498,8 +1498,8 @@ UNION ALL
   WHERE chunks_1h.bucket >= COALESCE(COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H)), '-infinity'::timestamp with time zone), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, chunks_1h.bucket)), chunks_1h.device;
 --- QUERY PLAN ---
- Append (actual rows=3.00 loops=1)
-   ->  Append (actual rows=3.00 loops=1)
+ Append (actual rows=9.00 loops=1)
+   ->  Append (actual rows=9.00 loops=1)
          ->  Seq Scan on _hyper_8_17_chunk (actual rows=0.00 loops=1)
          ->  Seq Scan on _hyper_8_20_chunk (actual rows=0.00 loops=1)
          ->  Seq Scan on _hyper_8_21_chunk (actual rows=0.00 loops=1)
@@ -1508,12 +1508,12 @@ UNION ALL
          ->  Seq Scan on _hyper_8_27_chunk (actual rows=0.00 loops=1)
          ->  Seq Scan on _hyper_8_29_chunk (actual rows=0.00 loops=1)
          ->  Seq Scan on _hyper_8_31_chunk (actual rows=0.00 loops=1)
-         ->  Seq Scan on _hyper_8_33_chunk (actual rows=0.00 loops=1)
-         ->  Seq Scan on _hyper_8_36_chunk (actual rows=0.00 loops=1)
-         ->  Seq Scan on _hyper_8_39_chunk (actual rows=0.00 loops=1)
-         ->  Seq Scan on _hyper_8_42_chunk (actual rows=0.00 loops=1)
-         ->  Seq Scan on _hyper_8_44_chunk (actual rows=0.00 loops=1)
-         ->  Seq Scan on _hyper_8_46_chunk (actual rows=0.00 loops=1)
+         ->  Seq Scan on _hyper_8_33_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_8_36_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_8_39_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_8_42_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_8_44_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_8_46_chunk (actual rows=1.00 loops=1)
          ->  Seq Scan on _hyper_8_48_chunk (actual rows=1.00 loops=1)
          ->  Seq Scan on _hyper_8_50_chunk (actual rows=1.00 loops=1)
          ->  Index Scan using _hyper_8_52_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_52_chunk (actual rows=1.00 loops=1)

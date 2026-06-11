@@ -105,6 +105,7 @@ typedef struct CrossModuleFunctions
 										  bool update);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+	void (*continuous_agg_add_column)(ContinuousAgg *cagg, AlterTableStmt *stmt);
 	Query *(*continuous_agg_apply_rewrites_tsl)(Query *parse);
 	PGFunction continuous_agg_validate_query;
 	PGFunction continuous_agg_get_bucket_function;
@@ -137,7 +138,7 @@ typedef struct CrossModuleFunctions
 								TupleTableSlot *slot);
 	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
 	void (*compressor_close)(RowCompressor *compressor, BulkWriter *bulk_writer);
-	Chunk *(*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
+	void (*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
 
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module

@@ -1144,7 +1144,6 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	CompressionSettings *settings =
 		ts_compression_settings_get_by_compress_relid(old_compressed_relid);
 	Chunk *src_chunk = ts_chunk_get_by_relid(settings->fd.relid, true);
-	Chunk *old_compressed_chunk = ts_chunk_get_by_relid(old_compressed_relid, true);
 	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
 	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 
@@ -1175,8 +1174,8 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	Ensure(CheckRelationOidLockedByMe(old_compressed_relid, AccessExclusiveLock, false),
 		   "compressed chunk \"%s\".\"%s\" must have AccessExclusiveLock "
 		   "to apply segmentby",
-		   NameStr(old_compressed_chunk->fd.schema_name),
-		   NameStr(old_compressed_chunk->fd.table_name));
+		   get_namespace_name(get_rel_namespace(old_compressed_relid)),
+		   get_rel_name(old_compressed_relid));
 
 	settings->fd.segmentby = analyze_and_get_segmentby(settings, old_compressor);
 
@@ -1208,7 +1207,6 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	/* Create before drop. We must update settings first to point to the new chunk. */
 	Chunk *new_compressed_chunk =
 		create_compress_chunk(compress_ht, src_chunk, InvalidOid, false, settings);
-	ts_chunk_set_compressed_chunk(src_chunk, new_compressed_chunk->fd.id);
 
 	/* Initialize the new bulk writer and compressor against the new compressed relation */
 	Relation out_rel = table_open(new_compressed_chunk->table_id, RowExclusiveLock);
@@ -1245,7 +1243,7 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 
 	tsl_compressor_close(old_compressor, old_bulk_writer);
 
-	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
+	ts_chunk_drop_by_relid(old_compressed_relid, DROP_RESTRICT, -1);
 
 	tuplesort_performsort(new_compressor.sort_state);
 

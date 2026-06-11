@@ -53,7 +53,6 @@ typedef enum CatalogTable
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	CONTINUOUS_AGGS_WATERMARK,
-	TELEMETRY_EVENT,
 	CHUNK_COLUMN_STATS,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
@@ -738,22 +737,6 @@ enum
 	_MAX_METADATA_INDEX,
 };
 
-/*
- * telemetry_event table definition
- */
-
-#define TELEMETRY_EVENT_TABLE_NAME "telemetry_event"
-
-enum Anum_telemetry_event
-{
-	Anum_telemetry_event_created = 1,
-	Anum_telemetry_event_tag,
-	Anum_telemetry_event_body,
-	_Anum_telemetry_event_max,
-};
-
-#define Natts_telemetry_event_max (_Anum_telemetry_event_max - 1)
-
 /****** BGW_POLICY_CHUNK_STATS TABLE definitions */
 #define BGW_POLICY_CHUNK_STATS_TABLE_NAME "bgw_policy_chunk_stats"
 
@@ -815,6 +798,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
+	Anum_continuous_agg_schema_change_timestamp,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -832,6 +816,7 @@ typedef struct FormData_continuous_agg
 	NameData direct_view_schema;
 	NameData direct_view_name;
 	bool materialized_only;
+	int64 schema_change_timestamp;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
