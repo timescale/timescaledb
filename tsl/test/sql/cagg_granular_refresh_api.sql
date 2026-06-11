@@ -2,20 +2,21 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET timezone TO 'UTC';
-SET datestyle TO 'ISO, YMD';
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- Helper to inspect the granular refresh configuration of a hypertable.
+\set GRC 'SELECT h.table_name, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset FROM _timescaledb_catalog.hypertable_cagg_settings s JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id WHERE h.table_name = '
 
 ----------------------------------------------------------------------
 -- ALTER TABLE <hypertable> SET (timescaledb.granular_refresh_*)
---
--- The options are parsed and validated, but granular refresh is not
--- implemented yet: a valid configuration errors out after validation.
 ----------------------------------------------------------------------
 
 CREATE TABLE metrics (time timestamptz NOT NULL, device_id integer, value float8);
 SELECT create_hypertable('metrics', 'time', chunk_time_interval => '1 day'::interval);
+
+-- Not configured by default
+:GRC 'metrics';
 
 \set ON_ERROR_STOP 0
 -- Error: all three options are required to enable granular refresh.
@@ -28,6 +29,13 @@ ALTER TABLE metrics SET (
 -- Error: column does not exist.
 ALTER TABLE metrics SET (
     timescaledb.granular_refresh_column = 'does_not_exist',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+-- Error: column type is not supported (must be timestamp, date, integer, UUID
+-- or a string type).
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'value',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
 );
@@ -54,6 +62,17 @@ ALTER TABLE metrics SET (
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '-5 days'
 );
+-- Error: NULL is not a valid offset value.
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'device_id',
+    timescaledb.granular_refresh_start_offset = NULL,
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'device_id',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = NULL
+);
 -- Error: timescaledb options only apply to hypertables.
 CREATE TABLE plain_table (time timestamptz NOT NULL, device_id integer);
 ALTER TABLE plain_table SET (
@@ -61,18 +80,31 @@ ALTER TABLE plain_table SET (
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
 );
--- Error: a valid configuration passes validation but the feature is not
--- implemented yet.
+\set ON_ERROR_STOP 1
+DROP TABLE plain_table;
+
+-- Nothing was configured by the failed attempts.
+:GRC 'metrics';
+
+-- Enable granular refresh: the column and the late-arrival window.
 ALTER TABLE metrics SET (
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
 );
-\set ON_ERROR_STOP 1
-DROP TABLE plain_table;
+:GRC 'metrics';
 
--- Integer-time hypertable: offsets are interpreted as integers. Validation
--- passes, then the feature errors as not implemented.
+\set ON_ERROR_STOP 0
+-- Error: once configured, the settings cannot be changed or cleared.
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'device_id',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+\set ON_ERROR_STOP 1
+:GRC 'metrics';
+
+-- Integer-time hypertable: offsets are interpreted as integers.
 CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
 SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
 \set ON_ERROR_STOP 0
@@ -82,21 +114,29 @@ ALTER TABLE metrics_int SET (
     timescaledb.granular_refresh_start_offset = 50000,
     timescaledb.granular_refresh_end_offset = -1000
 );
+-- Error: NULL is not a valid offset value.
+ALTER TABLE metrics_int SET (
+    timescaledb.granular_refresh_column = 'sensor',
+    timescaledb.granular_refresh_start_offset = NULL,
+    timescaledb.granular_refresh_end_offset = 1000
+);
+ALTER TABLE metrics_int SET (
+    timescaledb.granular_refresh_column = 'sensor',
+    timescaledb.granular_refresh_start_offset = 50000,
+    timescaledb.granular_refresh_end_offset = NULL
+);
 ALTER TABLE metrics_int SET (
     timescaledb.granular_refresh_column = 'sensor',
     timescaledb.granular_refresh_start_offset = 50000,
     timescaledb.granular_refresh_end_offset = 1000
 );
-\set ON_ERROR_STOP 1
+:GRC 'metrics_int';
 
 DROP TABLE metrics_int;
 DROP TABLE metrics;
 
 ----------------------------------------------------------------------
 -- ALTER MATERIALIZED VIEW <cagg> SET (timescaledb.enable_granular_refresh)
---
--- The option is recognized, but granular refresh is not implemented
--- yet: enabling it errors out.
 ----------------------------------------------------------------------
 
 CREATE TABLE sensors (time timestamptz NOT NULL, sensor_id integer, temp float8);
@@ -108,6 +148,11 @@ SELECT time_bucket('1 hour', time) AS bucket, sensor_id, avg(temp) AS avg_temp
 FROM sensors
 GROUP BY bucket, sensor_id
 WITH NO DATA;
+
+\set GRE 'SELECT user_view_name, granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = '
+
+-- Disabled by default.
+:GRE 'sensors_hourly';
 
 \set ON_ERROR_STOP 0
 -- Error: the option is not supported in CREATE MATERIALIZED VIEW, regardless
@@ -126,8 +171,85 @@ GROUP BY bucket, sensor_id
 WITH NO DATA;
 -- Error: disabling is not supported.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
--- Error: enabling is recognized but not implemented yet.
+-- Error: the raw hypertable has no granular refresh configuration yet.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 \set ON_ERROR_STOP 1
 
-DROP TABLE sensors CASCADE;
+-- Configure granular refresh on the raw hypertable, then enable it on the cagg.
+ALTER TABLE sensors SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
+:GRE 'sensors_hourly';
+
+-- Enabling again is a no-op, not an error.
+ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
+:GRE 'sensors_hourly';
+
+DROP MATERIALIZED VIEW sensors_hourly;
+DROP TABLE sensors;
+
+-- Error: the granular refresh column must be one of the cagg's grouping columns.
+CREATE TABLE readings (time timestamptz NOT NULL, sensor_id integer, location text, temp float8);
+SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE readings SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+
+CREATE MATERIALIZED VIEW readings_by_location
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, location, avg(temp) AS avg_temp
+FROM readings
+GROUP BY bucket, location
+WITH NO DATA;
+
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW readings_by_location SET (timescaledb.enable_granular_refresh = true);
+\set ON_ERROR_STOP 1
+:GRE 'readings_by_location';
+
+DROP MATERIALIZED VIEW readings_by_location;
+DROP TABLE readings;
+
+-- Error: only one cagg per hypertable can enable granular refresh
+CREATE TABLE devices (time timestamptz NOT NULL, device_id integer, value float8);
+SELECT create_hypertable('devices', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE devices SET (
+    timescaledb.granular_refresh_column = 'device_id',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+
+CREATE MATERIALIZED VIEW devices_hourly
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, device_id, avg(value) AS avg_value
+FROM devices
+GROUP BY bucket, device_id
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW devices_daily
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, device_id, avg(value) AS avg_value
+FROM devices
+GROUP BY bucket, device_id
+WITH NO DATA;
+
+ALTER MATERIALIZED VIEW devices_hourly SET (timescaledb.enable_granular_refresh = true);
+
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW devices_daily SET (timescaledb.enable_granular_refresh = true);
+\set ON_ERROR_STOP 1
+:GRE 'devices_hourly';
+:GRE 'devices_daily';
+
+-- Dropping the first one frees the hypertable, so the second can enable it.
+DROP MATERIALIZED VIEW devices_hourly;
+ALTER MATERIALIZED VIEW devices_daily SET (timescaledb.enable_granular_refresh = true);
+:GRE 'devices_daily';
+
+DROP MATERIALIZED VIEW devices_daily;
+DROP TABLE devices;
