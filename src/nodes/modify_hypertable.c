@@ -394,7 +394,7 @@ static void
 modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	ModifyHypertableState *state = (ModifyHypertableState *) node;
-	ModifyTableState *mtstat = linitial_node(ModifyTableState, node->custom_ps);
+	ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
 
 	/*
 	 * The targetlist for this node will have references that cannot be resolved by
