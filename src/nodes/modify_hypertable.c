@@ -131,13 +131,7 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 
 	Plan *dummy_child = (Plan *) makeNode(Result);
 	castNode(Result, dummy_child)->resconstantqual =
-		(Node *) list_make1(makeConst(BOOLOID,
-									  /* consttypmod = */ -1,
-									  /* constcollid = */ InvalidOid,
-									  /* constlen = */ 1,
-									  BoolGetDatum(false),
-									  /* constisnull = */ false,
-									  /* constbyval = */ true));
+		(Node *) list_make1(makeBoolConst(false, false));
 
 	/*
 	 * The child targetlist can contain Aggrefs which are not allowed on a Result
@@ -156,11 +150,14 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 
 	/*
 	 * Initialize the Postgres ModifyTableState with dummy Result plan as a
-	 * child.
+	 * child. The plan nodes here might come from the plan cache for prepared
+	 * statements, and they outlive a single query. We shouldn't change them
+	 * directly, so make a copy.
 	 */
-	outerPlan(modify_table_plan) = dummy_child;
-	PlanState *modify_table_state = ExecInitNode((Plan *) modify_table_plan, estate, eflags);
-	outerPlan(modify_table_plan) = modify_hypertable_state->deferred_modify_table_subplan;
+	ModifyTable *modify_table_plan_copy = makeNode(ModifyTable);
+	memcpy(modify_table_plan_copy, modify_table_plan, sizeof(ModifyTable));
+	outerPlan(modify_table_plan_copy) = dummy_child;
+	PlanState *modify_table_state = ExecInitNode((Plan *) modify_table_plan_copy, estate, eflags);
 
 	node->custom_ps = list_make1(modify_table_state);
 
@@ -191,16 +188,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 
 /*
  * Initialize the child plan states after we have decompressed the data that can
- * potentially be involved in DML operations.
- *
- * The main purpose is to delay the initialization of scans over uncompressed
- * chunk tables until after decompression, so that they properly pick up the
- * decompressed data. The way we do it at the moment is we delay the
- * initialization of the Postgres ModifyTable node itself. This simplifies the
- * code here, but leads to some weirdness in es_auxmodifytables handling. An
- * alternative would be to initialize the ModifyTable node eagerly, but
- * substitute its child plan with a dummy Result node, and initialize the actual
- * children here.
+ * potentially be involved in DML operations. This is done to delay the
+ * initialization of scans over uncompressed chunk tables until after
+ * decompression, so that they properly pick up the decompressed data.
  */
 static void
 modify_hypertable_init_child_plan_states(CustomScanState *node)
