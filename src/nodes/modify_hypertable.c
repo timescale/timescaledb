@@ -137,12 +137,11 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 									  BoolGetDatum(false),
 									  /* constisnull = */ false,
 									  /* constbyval = */ true));
-
 	dummy_child->targetlist = modify_hypertable_state->deferred_modify_table_subplan->targetlist;
 
 	outerPlan(modify_table_plan) = dummy_child;
-
 	PlanState *modify_table_state = ExecInitNode((Plan *) modify_table_plan, estate, eflags);
+	outerPlan(modify_table_plan) = modify_hypertable_state->deferred_modify_table_subplan;
 
 	node->custom_ps = list_make1(modify_table_state);
 
