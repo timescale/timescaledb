@@ -76,6 +76,8 @@ jobs:
         include:
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
+          - oracle: "optimizations"
+            display_name: "Optimizations ON/OFF"
 
     steps:
     - name: Install Linux Dependencies
@@ -88,11 +90,14 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
-        fetch-depth: 50
+        fetch-depth: 200
 
     - name: Fetch base branch
       if: github.event_name == 'pull_request'
-      run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=50
+      run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=200
+
+    - name: Fetch main branch
+      run: git fetch origin main --depth=200
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -297,12 +302,20 @@ jobs:
 
         psql -c "create extension timescaledb;"
 
-        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh
+        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh 2>&1 > repro_result.txt
 
         psql -c "select 1;"
 
 
         pg_ctl stop
+
+    - name: Add repro result to summary
+      run: |
+        if [ -s repro_result.txt ]
+        then
+            printf '\n## Result\n\n" >> "$GITHUB_STEP_SUMMARY"
+            cat repro_result.txt >> "$GITHUB_STEP_SUMMARY"
+        fi
 
     # The jq --exit-code option is broken with select() on jq-1.6 which we see
     # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
