@@ -1592,6 +1592,39 @@ RESET timescaledb.enable_compressed_direct_batch_delete;
 BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
 BEGIN; :EXPLAIN EXECUTE q1('not here'); ROLLBACK;
 
+-- prepared statement with generic plan (param should be constified)
+SET plan_cache_mode = force_generic_plan;
+BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
+BEGIN; :EXPLAIN EXECUTE q1('not here'); ROLLBACK;
+RESET plan_cache_mode;
+
+-- ensure that we're not incorrectly constifying the nestloop join params
+CREATE TABLE nl_param(time timestamptz NOT NULL, device int, PRIMARY KEY(device, time));
+SELECT table_name FROM create_hypertable('nl_param', 'time', chunk_time_interval => INTERVAL '10 years');
+INSERT INTO nl_param
+SELECT '2020-01-01'::timestamptz + (i || ' seconds')::interval, (i % 100) + 1
+FROM generate_series(1, 50000) i;
+ALTER TABLE nl_param SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(show_chunks('nl_param'));
+
+-- Uncompressed rows so PG sees a non-empty heap and considers indexed paths
+INSERT INTO nl_param
+SELECT '2025-01-01'::timestamptz + (i || ' seconds')::interval, (i % 100) + 1
+FROM generate_series(1, 50000) i;
+
+CREATE TABLE nl_devices(device int);
+INSERT INTO nl_devices VALUES (1);
+
+ANALYZE nl_param, nl_devices;
+
+SET enable_hashjoin = off;
+SET enable_mergejoin = off;
+SET enable_seqscan = off;
+BEGIN; :EXPLAIN DELETE FROM nl_param p USING nl_devices d WHERE p.device=d.device; SELECT count(*) FROM nl_param; ROLLBACK;
+RESET enable_hashjoin;
+RESET enable_mergejoin;
+RESET enable_seqscan;
+
 -- test arrayop pushdown less than 3 decompressions are expected for successful pushdown
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a','d'); ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = ANY('{a,d}'); ROLLBACK;

@@ -567,6 +567,15 @@ static bool
 decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chunk,
 									 List *predicates, EState *estate, bool has_joins)
 {
+	/*
+	 * Constify the stable functions and query parameters in the predicates.
+	 * This doesn't evaluate the join parameters (PARAM_EXEC) which are supplied
+	 * differently and would have to be evaluated on every rescan.
+	 */
+	PlannerGlobal glob = { .boundParams = estate->es_param_list_info };
+	PlannerInfo root = { .glob = &glob };
+	predicates = (List *) estimate_expression_value(&root, (Node *) predicates);
+
 	/* process each chunk with its corresponding predicates */
 
 	List *heap_filters = NIL;
@@ -1679,15 +1688,6 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 	*num_mem_scankeys = 0;
 	List *eq_preds = NIL;
 
-	/*
-	 * We dont want to forward boundParams from the execution state here
-	 * as we dont want to constify join params in the predicates.
-	 * Constifying JOIN params would not be safe as we don't redo
-	 * this part in rescan.
-	 */
-	PlannerGlobal glob = { .boundParams = NULL };
-	PlannerInfo root = { .glob = &glob };
-
 	foreach (lc, predicates)
 	{
 		Node *node = copyObject(lfirst(lc));
@@ -1712,12 +1712,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 
 				if (!IsA(expr, Const))
 				{
-					expr = (Expr *) estimate_expression_value(&root, (Node *) expr);
-
-					if (!IsA(expr, Const))
-					{
-						continue;
-					}
+					continue;
 				}
 
 				arg_value = castNode(Const, expr);
@@ -1917,11 +1912,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 
 				if (!IsA(expr, Const))
 				{
-					expr = (Expr *) estimate_expression_value(&root, (Node *) expr);
-					if (!IsA(expr, Const))
-					{
-						continue;
-					}
+					continue;
 				}
 
 				Const *arg_value = castNode(Const, expr);
