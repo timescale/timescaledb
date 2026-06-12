@@ -197,11 +197,14 @@ SELECT compress_chunk(:'chunk_to_compress_prep'); -- the output of the prepared 
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 
--- plan should be invalidated to return results from the uncompressed chunk also
-set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
+-- Plan should be invalidated to return results from the uncompressed chunk as well.
+-- Penalize MergeAppend for predictable plans on PG < 17.
+set enable_sort to off;
+set enable_indexscan to off;
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 EXECUTE p1;
 reset enable_sort;
+reset enable_indexscan;
 
 -- check plan again after recompression
 SELECT compress_chunk(:'chunk_to_compress_prep');
