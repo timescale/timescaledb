@@ -232,6 +232,9 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
 
   list(APPEND TEST_FILES privilege_maintain.sql
        merge_append_partially_compressed.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES vector_agg_expr_debug.sql)
+  endif(CMAKE_BUILD_TYPE MATCHES Debug)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
