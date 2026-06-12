@@ -158,7 +158,7 @@ jobs:
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: config.log for PostgreSQL
+        name: ${{ matrix.display_name }} config.log
         path: ~/${{ env.PG_SRC_DIR }}/config.log
 
     - name: Install PostgreSQL ${{ needs.config.outputs.pg_latest }}
@@ -179,7 +179,7 @@ jobs:
         make -C build install
 
     - name: Install Claude Code
-      run: npm install -g @anthropic-ai/claude-code@2.1.153
+      run: npm install -g @anthropic-ai/claude-code@2.1.104
 
     - name: LLM Fuzzing
       id: llm-fuzzing
@@ -216,6 +216,7 @@ jobs:
         exit $rc
 
     - name: Write job summary
+      if: always()
       run: |
         jq -r 'select(.type == "result") | "## ${{ matrix.display_name }} Fuzzer\n\n"
           + (.result // "No result produced.")
@@ -233,7 +234,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Claude execution log
+        name: ${{ matrix.display_name }} Claude Execution Log
         path: ${{ runner.temp }}/claude-execution-output.json
         if-no-files-found: ignore
 
@@ -375,7 +376,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: sanitizer logs
+        name: ${{ matrix.display_name }} Sanitizer Logs
         # The log_path sanitizer option means "Write logs to 'log_path.pid'".
         # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
         path: ${{ github.workspace }}/sanitizer_logs/*
@@ -385,7 +386,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Coredumps
+        name: ${{ matrix.display_name }} Coredumps
         path: coredumps
         if-no-files-found: ignore
 
@@ -393,7 +394,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: PostgreSQL log
+        name: ${{ matrix.display_name }} PostgreSQL Log
         path: postmaster.*
         if-no-files-found: ignore
 
@@ -401,7 +402,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: llm-fuzzer-repro.sql
+        name: ${{ matrix.display_name }} repro.sql
         path: ~/llm-fuzzer-repro.sql
         if-no-files-found: ignore
 
@@ -409,7 +410,7 @@ jobs:
       if: always() && steps.repro.outputs.found == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Reproduction details
+        name: ${{ matrix.display_name }} Reproduction Details
         path: |
           result*
           repro_result.txt
