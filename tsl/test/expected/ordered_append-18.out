@@ -194,6 +194,30 @@ LIMIT 1;
          ->  Index Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (never executed)
                Index Cond: (device_id = 1)
 
+-- a window function ordering by time must get its input in the window's order,
+-- so the ordered append follows the window order, not the opposite final ORDER BY
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: metrics."time" DESC
+         Sort Method: top-N heapsort 
+         ->  WindowAgg (actual rows=13674.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics (actual rows=13674.00 loops=1)
+                     Order: metrics."time"
+                     ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (actual rows=3598.00 loops=1)
+                           Index Cond: (device_id = 1)
+                     ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk (actual rows=5038.00 loops=1)
+                           Index Cond: (device_id = 1)
+                     ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=5038.00 loops=1)
+                           Index Cond: (device_id = 1)
+
 -- test RECORD in targetlist
 :PREFIX
 SELECT (time,
@@ -871,6 +895,30 @@ LIMIT 1;
                Index Cond: (device_id = 1)
          ->  Index Scan Backward using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk (never executed)
                Index Cond: (device_id = 1)
+
+-- a window function ordering by time must get its input in the window's order,
+-- so the ordered append follows the window order, not the opposite final ORDER BY
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: metrics_space."time" DESC
+         Sort Method: top-N heapsort 
+         ->  WindowAgg (actual rows=13674.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=13674.00 loops=1)
+                     Order: metrics_space."time"
+                     ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk (actual rows=3598.00 loops=1)
+                           Index Cond: (device_id = 1)
+                     ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk (actual rows=5038.00 loops=1)
+                           Index Cond: (device_id = 1)
+                     ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk (actual rows=5038.00 loops=1)
+                           Index Cond: (device_id = 1)
 
 -- test RECORD in targetlist
 :PREFIX
@@ -1899,6 +1947,33 @@ LIMIT 1;
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (never executed)
                      Index Cond: (device_id = 1)
+
+-- a window function ordering by time must get its input in the window's order,
+-- so the ordered append follows the window order, not the opposite final ORDER BY
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: metrics_compressed."time" DESC
+         Sort Method: top-N heapsort 
+         ->  WindowAgg (actual rows=13674.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=13674.00 loops=1)
+                     Order: metrics_compressed."time"
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=3598.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (actual rows=4.00 loops=1)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=5038.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (actual rows=6.00 loops=1)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=5038.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=6.00 loops=1)
+                                 Index Cond: (device_id = 1)
 
 -- test RECORD in targetlist
 :PREFIX
@@ -2974,6 +3049,33 @@ LIMIT 1;
          ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (never executed)
                      Index Cond: (device_id = 1)
+
+-- a window function ordering by time must get its input in the window's order,
+-- so the ordered append follows the window order, not the opposite final ORDER BY
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: metrics_space_compressed."time" DESC
+         Sort Method: top-N heapsort 
+         ->  WindowAgg (actual rows=13674.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=13674.00 loops=1)
+                     Order: metrics_space_compressed."time"
+                     ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (actual rows=4.00 loops=1)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=5038.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (actual rows=6.00 loops=1)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=5038.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
+                                 Index Cond: (device_id = 1)
 
 -- test RECORD in targetlist
 :PREFIX

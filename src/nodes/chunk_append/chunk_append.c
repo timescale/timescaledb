@@ -12,6 +12,7 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "compat/compat.h"
 #include "func_cache.h"
 #include "guc.h"
 #include "nodes/chunk_append/chunk_append.h"
@@ -649,8 +650,27 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	}
 
 	Assert(order_attno != NULL && reverse != NULL);
+
 	*order_attno = ht_var->varattno;
-	*reverse = sort->sortop == tce->lt_opr ? false : true;
+
+	/*
+	 * Take the sort direction from the processed query pathkeys rather than the
+	 * parse-tree ORDER BY. The two can disagree, e.g. when a window function
+	 * orders its input opposite to the final ORDER BY, and the pathkeys reflect
+	 * the order the plan actually requires. When there is no required order
+	 * (e.g. the ordering column is constrained to a constant) any append order
+	 * works and we keep the parse-tree direction. The ordering column is
+	 * checked later in should_chunk_append().
+	 */
+	if (root->query_pathkeys == NIL)
+	{
+		*reverse = (sort->sortop == tce->gt_opr);
+	}
+	else
+	{
+		PathKey *pk = linitial_node(PathKey, root->query_pathkeys);
+		*reverse = (pk->pk_cmptype == COMPARE_GT);
+	}
 
 	return true;
 }
