@@ -64,13 +64,18 @@ jobs:
 
   fuzzer:
     if: needs.config.outputs.pg_latest
-    name: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
+    name: ${{ matrix.display_name }}
     runs-on: ubuntu-22.04
     needs: config
     permissions:
       contents: read
       pull-requests: read
       issues: read
+    strategy:
+      matrix:
+        include:
+          - oracle: "internal-error"
+            display_name: "Internal Program Errors"
 
     steps:
     - name: Install Linux Dependencies
@@ -176,6 +181,9 @@ jobs:
         EVENT_WHAT: ${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
         EVENT_BRANCH: ${{ github.head_ref || github.ref_name }}
         EVENT_BASE: ${{ github.base_ref || github.ref_name }}
+        EVENT_NAME: ${{ github.event_name }}
+        SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        ORACLE_NAME: ${{ matrix.oracle }}
       run: |
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
         export PGDATABASE=postgres
@@ -184,43 +192,8 @@ jobs:
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 5.00 --dangerously-skip-permissions \
           --model opus --effort high \
-          "$(cat <<PROMPT
-        Find bugs in the TimescaleDB code modified in this change set. Focus
-        on crashes, assertion failures, sanitizer errors, and internal errors
-        (SQLSTATE XX000) -- these are detected automatically from server
-        logs. Do not chase wrong-result bugs that need manual verification.
-        That is, if you see a bug, but it manifests in a way that is not
-        going to be caught by the reproduction step of this workflow, choose
-        another bug. Stop after one reproducible bug.
-
-        Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
-        running in that workflow. PostgreSQL with TimescaleDB is already
-        built and installed, with AddressSanitizer enabled. The build
-        environment is functional, use it to rebuild with debug logging as
-        needed.
-
-        Determine whether we are testing a PR or a commit on a branch. Focus
-        on the changes in that change set. Do not explore unrelated git
-        history or old commits.
-
-        Only use public SQL APIs (CREATE, ALTER, SELECT, INSERT, etc. and
-        documented timescaledb functions). Do not directly modify internal
-        catalog tables (_timescaledb_catalog.*, _timescaledb_internal.*) --
-        corrupting internal state is not a useful bug. The goal is to find
-        inputs that break the code through its public interface.
-
-        When done, generate a self-contained ~/llm-fuzzer-repro.sql that
-        reproduces the error when the subsequent workflow step replays it
-        against a fresh server.
-
-        Some details about the GitHub Actions event that triggered this workflow
-        what=$EVENT_WHAT
-        branch=$EVENT_BRANCH
-        base=$EVENT_BASE
-        event=${{ github.event_name }}
-        sha=${{ github.event.pull_request.head.sha || github.sha }}
-        PROMPT
-        )" > ${{ runner.temp }}/claude-execution-output.json || rc=$?
+          "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
+          > ${{ runner.temp }}/claude-execution-output.json || rc=$?
 
         # When it goes over the budget, mostly it terminates gracefully because
         # the agent is aware of the remaining budget, but sometimes there's a
@@ -323,8 +296,11 @@ jobs:
         pg_ctl start
 
         psql -c "create extension timescaledb;"
-        psql -v ON_ERROR_STOP=0 -f ~/llm-fuzzer-repro.sql
-        psql -c "select 1"
+
+        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh
+
+        psql -c "select 1;"
+
 
         pg_ctl stop
 
@@ -334,9 +310,13 @@ jobs:
       if: always() && steps.repro.outputs.found == 'true'
       run: |
         ! jq 'select(
-                (.state_code == "XX000" and .error_severity != "LOG" and (.message | test("TestFailure") | not))
-                or (.message | test("resource was not closed|could not close|leak"))
-            ) | [.message, .func_name,  .statement] | @tsv
+            (
+              .state_code == "XX000" and .func_name != "exec_stmt_raise"
+              and .error_severity != "LOG" and (.message | test("TestFailure") | not)
+            ) or (
+              .message | test("resource was not closed|could not close|leak")
+            )
+          ) | [.message, .func_name,  .statement] | @tsv
         ' -r postmaster.json | grep .
 
     - name: Collect the logs
