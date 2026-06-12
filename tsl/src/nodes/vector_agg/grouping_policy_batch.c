@@ -129,10 +129,11 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontex
 	if (agg_def->argument != NULL)
 	{
 		/*
-		 * FILTER aggregate args are excluded from interning at init time.
-		 * Pass NULL here as defense-in-depth: the assert in
-		 * vector_slot_evaluate_expression rejects filters that differ
-		 * from vector_qual_result.
+		 * FILTER aggregates can't participate in caching because their arguments
+		 * are evaluated under a different filter. They don't participate in the
+		 * interning, so shouldn't have cache entries, but theoretically you
+		 * could get a shared pointer between FILTER and non-FILTER expression
+		 * in some other way, so disable caching here explicitly.
 		 */
 		struct expr_cache_hash *agg_expr_cache = agg_def->filter_clauses == NIL ? expr_cache : NULL;
 		const CompressedColumnValues values =

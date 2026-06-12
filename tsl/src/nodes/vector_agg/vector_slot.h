@@ -33,10 +33,9 @@ vector_slot_get_qual_result(const TupleTableSlot *slot, uint16 *num_rows)
 struct expr_cache_hash;
 
 /*
- * Return the arrow array or the datum (in case of single scalar value) for a
- * given expression as a CompressedColumnValues struct. If expr_cache is not
- * NULL, results for interned common subexpressions are cached and reused
- * within the current batch.
+ * Compute the arrow array or the datum (in case of single scalar value) for a
+ * given expression as a CompressedColumnValues struct. Optionally use the
+ * common subexpression cache.
  */
 CompressedColumnValues vector_slot_evaluate_expression(DecompressContext *dcontext,
 													   TupleTableSlot *slot, uint64 const *filter,

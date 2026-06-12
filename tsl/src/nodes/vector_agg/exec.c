@@ -555,9 +555,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 											slot,
 											branch_filter,
 											value_expression,
-											branch_filter == top_filter ?
-												expr_cache :
-												NULL);
+											branch_filter == top_filter ? expr_cache : NULL);
 
 		branch_values[i].output_value = &branch_data[i];
 		branch_values[i].output_isnull = &branch_isnull[i];
@@ -808,7 +806,7 @@ cse_interning_hash_expr(Expr *expr)
 /*
  * Common subexpression elimination mutator. Walks the expression tree
  * bottom-up via expression_tree_mutator, interning each subtree. Structurally
- * equal subtrees end up sharing the same canonical Expr pointer.
+ * equal subtrees are replaced with the same canonical pointer.
  */
 static Node *
 cse_interning_expression_mutator(Node *node, void *context)
@@ -820,7 +818,7 @@ cse_interning_expression_mutator(Node *node, void *context)
 
 	/*
 	 * Recurse into children first (bottom-up) so that by the time we intern
-	 * this node, its children are already canonical.
+	 * this node, its children are already interned.
 	 */
 	Node *result = expression_tree_mutator(node, cse_interning_expression_mutator, context);
 
@@ -891,8 +889,10 @@ count_expr_refs_walker(Node *node, void *context)
 
 	/*
 	 * Starting with second visit, skip recursion into children -- they were
-	 * already counted during the first visit. Return false so the walker
-	 * continues visiting sibling nodes at the parent level.
+	 * already counted during the first visit. We don't want to cache the
+	 * children separately when they are only reachable through parent.
+	 * Return false so the walker continues visiting sibling nodes at the parent
+	 * level.
 	 */
 	if (entry->refcount > 1)
 	{
@@ -903,10 +903,9 @@ count_expr_refs_walker(Node *node, void *context)
 }
 
 /*
- * Build the expression cache from the refcount table. Only expressions
- * reached by more than one top-level root get entries -- their presence
- * marks them as common subexpressions. The result values start as DT_Invalid
- * and are filled per-batch during evaluation.
+ * Build the expression cache from the refcount table. Every expression that we
+ * want to cache gets the entry right at the initialization. The actual value is
+ * initialized as DT_Invalid and gets computed on demand.
  */
 static struct expr_cache_hash *
 build_expr_cache(struct cse_refcount_hash *refcounts)
@@ -939,9 +938,7 @@ build_expr_cache(struct cse_refcount_hash *refcounts)
 }
 
 /*
- * Reset the cached expression values between batches. The keys (interned
- * Expr pointers) persist, but the CompressedColumnValues are invalidated
- * because they point into per-batch memory.
+ * Reset the cached expression values between batches, keeping the keys.
  */
 static void
 reset_expr_cache(struct expr_cache_hash *cache)
@@ -1096,10 +1093,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	/*
 	 * Intern the expression subtrees for common subexpression elimination.
-	 * Aggregates with FILTER clauses are excluded because caching would
-	 * require evaluating the expression under the batch filter, which could
-	 * run the function on rows excluded by FILTER that cause runtime errors
-	 * (e.g. division by zero).
 	 */
 	struct cse_interning_hash *interning_table =
 		cse_interning_create(CurrentMemoryContext, 32, NULL);
@@ -1108,6 +1101,14 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		VectorAggDef *def = &vector_agg_state->agg_defs[i];
 		if (def->filter_clauses == NIL && def->argument != NULL)
 		{
+			/*
+			 * Aggregates with FILTER clauses are excluded. Cached expressions
+			 * must be evaluated under the batch filter, which includes the rows
+			 * excluded by the FILTER clause. It might be purposefully written
+			 * to exclude the rows that would give an error with a given
+			 * aggregated expression (e.g. division by zero).
+			 */
+
 			def->argument =
 				(Expr *) cse_interning_expression_mutator((Node *) def->argument, interning_table);
 		}
@@ -1128,9 +1129,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	/*
 	 * Count how many top-level expression roots reach each interned node.
-	 * Only nodes reachable from multiple roots need caching. This correctly
-	 * avoids caching subtrees that are shared only because they appear inside
-	 * a parent that is itself cached.
+	 * Only nodes reachable from multiple roots need caching.
 	 */
 	struct cse_refcount_hash *refcounts_table = cse_refcount_create(CurrentMemoryContext, 32, NULL);
 	for (int i = 0; i < vector_agg_state->num_agg_defs; i++)
@@ -1354,7 +1353,7 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		compressed_batch_discard_tuples(batch_state);
 
 		/*
-		 * Discard the common subexpression cache before starting with the new
+		 * Reset the common subexpression cache before starting with the new
 		 * batch.
 		 */
 		reset_expr_cache(vector_agg_state->expr_cache);
