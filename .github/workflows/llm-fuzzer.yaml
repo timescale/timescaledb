@@ -179,7 +179,7 @@ jobs:
         make -C build install
 
     - name: Install Claude Code
-      run: npm install -g @anthropic-ai/claude-code@2.1.104
+      run: npm install -g @anthropic-ai/claude-code@2.1.153
 
     - name: LLM Fuzzing
       id: llm-fuzzing
@@ -198,7 +198,7 @@ jobs:
         rc=0
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 5.00 --dangerously-skip-permissions \
-          --model opus --effort high \
+          --model opus[1m] --effort xhigh \
           "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
           > ${{ runner.temp }}/claude-execution-output.json || rc=$?
 

@@ -168,6 +168,7 @@ copy_merge_append_path(PlannerInfo *root, MergeAppendPath *path, List *subpaths,
 static Path *
 copy_append_like_path(PlannerInfo *root, Path *path, List *new_subpaths, PathTarget *pathtarget)
 {
+	/* LOOK HERE */
 	if (IsA(path, AppendPath))
 	{
 		AppendPath *append_path = castNode(AppendPath, path);
