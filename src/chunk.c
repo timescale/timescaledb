@@ -3882,6 +3882,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 						Oid time_type, Oid arg_type, bool older_newer)
 
 {
+	/* LOOK HERE */
 	uint64 num_chunks = 0;
 	Chunk *chunks;
 	const char *schema_name, *table_name;
