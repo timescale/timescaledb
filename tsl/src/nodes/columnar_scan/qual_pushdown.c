@@ -1532,7 +1532,6 @@ contain_volatile_functions_checker(Oid func_id, void *context)
 static Node *
 qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 {
-	/* LOOK HERE */
 	if (orig_node == NULL)
 	{
 		/*

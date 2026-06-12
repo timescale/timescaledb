@@ -19,7 +19,7 @@
 # optimizations enabled or disabled.
 set -xeu
 
-printf "\\restrict %s" "${RANDOM}" | tee restricted-repro.sql
+printf '\\restrict %s\n' "${RANDOM}" | tee restricted-repro.sql
 cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
 
 psql -c "create database repro_off"

@@ -302,7 +302,7 @@ jobs:
 
         psql -c "create extension timescaledb;"
 
-        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh 2>&1 > repro_result.txt
+        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh &> repro_result.txt
 
         psql -c "select 1;"
 
@@ -310,10 +310,11 @@ jobs:
         pg_ctl stop
 
     - name: Add repro result to summary
+      if: always() && steps.repro.outputs.found == 'true'
       run: |
         if [ -s repro_result.txt ]
         then
-            printf '\n## Result\n\n" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n## Result\n\n' >> "$GITHUB_STEP_SUMMARY"
             cat repro_result.txt >> "$GITHUB_STEP_SUMMARY"
         fi
 
