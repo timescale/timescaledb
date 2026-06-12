@@ -65,7 +65,7 @@ jobs:
   fuzzer:
     if: needs.config.outputs.pg_latest
     name: ${{ matrix.display_name }}
-    runs-on: ubuntu-22.04
+    runs-on: timescaledb-runner-arm64
     needs: config
     permissions:
       contents: read
@@ -73,6 +73,7 @@ jobs:
       issues: read
     strategy:
       matrix:
+        fail-fast: false
         include:
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
@@ -398,6 +399,16 @@ jobs:
       with:
         name: llm-fuzzer-repro.sql
         path: ~/llm-fuzzer-repro.sql
+        if-no-files-found: ignore
+
+    - name: Upload reproduction details
+      if: always() && steps.repro.outputs.found == 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: Reproduction details
+        path: |
+          result*
+          repro_result.txt
         if-no-files-found: ignore
 
     - name: Upload results to the database

@@ -420,7 +420,6 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 		Index rti = 1;
 		bool ret;
 
-		/* LOOK HERE */
 		if (ts_guc_enable_foreign_key_propagation)
 		{
 			preprocess_fk_checks(query, hcache, context);
