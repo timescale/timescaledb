@@ -130,7 +130,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES tableam_alter_defaults.sql)
+  list(APPEND TEST_FILES tableam_alter_defaults.sql
+       merge_not_matched_by_source.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
