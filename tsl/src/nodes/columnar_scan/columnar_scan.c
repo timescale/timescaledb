@@ -3218,6 +3218,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	 */
 	if (ts_chunk_is_unordered(chunk))
 	{
+		/* LOOK HERE */
 		/*
 		 * If compression has no segmentby columns or all segmentby columns in a query are pinned to
 		 * a Const, try batch sorted merge instead.

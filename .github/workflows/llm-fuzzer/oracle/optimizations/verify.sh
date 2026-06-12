@@ -27,26 +27,33 @@ export PGDATABASE=repro_off
 psql -c "create extension timescaledb"
 psql -c "alter database repro_off set timescaledb.enable_optimizations to off"
 
-if ! psql -f restricted-repro.sql > result_noopt.txt
+if ! psql -q -f restricted-repro.sql > result_noopt.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -c "set enable_seqscan to off;" -f restricted-repro.sql > result_noopt_noseq.txt
+if ! psql -q -c "set enable_seqscan to off;" -f restricted-repro.sql > result_noopt_noseq.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -c "set enable_indexscan to off;" -f restricted-repro.sql > result_noopt_noindex.txt
+if ! psql -q -c "set enable_indexscan to off;" -f restricted-repro.sql > result_noopt_noindex.txt
+then
+    echo "Repro errors out, not admissible"
+    exit 0
+fi
+
+if ! psql -q -c "set enable_hashagg to off;" -f restricted-repro.sql > result_noopt_nohashagg.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
 if ! diff result_noopt.txt result_noopt_noseq.txt \
-    || ! diff result_noopt.txt result_noopt_noindex.txt
+    || ! diff result_noopt.txt result_noopt_noindex.txt \
+    || ! diff result_noopt.txt result_noopt_nohashagg.txt
 then
     echo "Repro gives different results between runs, not admissible"
     exit 0
@@ -57,7 +64,7 @@ export PGDATABASE=repro_on
 psql -c "create extension timescaledb"
 psql -c "alter database repro_on set timescaledb.enable_optimizations to on"
 
-if ! psql -f restricted-repro.sql > result_opt.txt
+if ! psql -q -f restricted-repro.sql > result_opt.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
