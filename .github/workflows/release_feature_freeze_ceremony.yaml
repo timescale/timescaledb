@@ -86,7 +86,7 @@ jobs:
         timeout-minutes: 15
         run: |
           sudo apt-get update
-          sudo apt-get install pip
+          sudo apt-get install -y gawk pip
           pip install PyGithub requests
 
       # Read the next version and build the next versions
@@ -163,10 +163,46 @@ jobs:
       #
       # -------------------------------------------------------
 
-      # Generate the CHANGELOG and submit it in a separate PR
+      # Prepare the release branch, then generate the CHANGELOG in a separate PR
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ env.RELEASE_BRANCH }}
+
+      - name: Generate release artefacts on release branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          UPDATE_FILE="${{ env.CURRENT_VERSION }}--${{ env.NEXT_VERSION }}.sql"
+          DOWNGRADE_FILE="${{ env.NEXT_VERSION }}--${{ env.CURRENT_VERSION }}.sql"
+
+          if [ -f "sql/updates/$UPDATE_FILE" ] \
+            && [ -f "sql/updates/$DOWNGRADE_FILE" ] \
+            && grep -Fq "updates/$UPDATE_FILE" sql/CMakeLists.txt \
+            && grep -Fq "$DOWNGRADE_FILE" sql/CMakeLists.txt \
+            && grep -Fq "set(CURRENT_REV_FILE $DOWNGRADE_FILE)" sql/CMakeLists.txt \
+            && grep -Fxq "version = ${{ env.NEXT_VERSION }}" version.config; then
+            echo "* ✓ release artefacts already up to date on \`${{ env.RELEASE_BRANCH }}\`" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          ./scripts/release/build_release_artefacts.sh "${{ env.CURRENT_VERSION }}" "${{ env.NEXT_VERSION }}"
+
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "* ❌ release artefact generation produced no changes but we expect it to." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          git add \
+            version.config \
+            sql/CMakeLists.txt \
+            sql/updates/latest-dev.sql \
+            sql/updates/reverse-dev.sql \
+            "sql/updates/$UPDATE_FILE" \
+            "sql/updates/$DOWNGRADE_FILE"
+
+          git commit -m "Add release artefacts for ${{ env.NEXT_VERSION }}"
+          git push origin HEAD:${{ env.RELEASE_BRANCH }}
+          echo "* ✅ release artefacts committed to \`${{ env.RELEASE_BRANCH }}\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Generate and create Pull Request for CHANGELOG
         env:

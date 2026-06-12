@@ -8,7 +8,7 @@
 # - adjusts the CMakeLists.txt
 #
 # Param: <current_version>
-# Param: <nextt_version>
+# Param: <next_version>
 #
 
 set -eu
@@ -38,18 +38,16 @@ truncate -s 0 ./sql/updates/reverse-dev.sql
 # CMakeLists
 echo "register upgrade sql file"
 gawk -i inplace '/'${LAST_UPDATE_FILE}')/ { print; print "    updates/'${UPDATE_FILE}')"; next }1' ./sql/CMakeLists.txt
-sed -i.bak "s/${LAST_UPDATE_FILE})/${LAST_UPDATE_FILE}/g" ./sql/CMakeLists.txt
+sed -i "s/${LAST_UPDATE_FILE})/${LAST_UPDATE_FILE}/g" ./sql/CMakeLists.txt
 
 echo "register downgrade sql file"
 gawk -i inplace '/'${LAST_DOWNGRADE_FILE}')/ { print; print "    '${DOWNGRADE_FILE}')"; next }1' ./sql/CMakeLists.txt
-sed -i.bak "s/${LAST_DOWNGRADE_FILE})/${LAST_DOWNGRADE_FILE}/g" ./sql/CMakeLists.txt
+sed -i "s/${LAST_DOWNGRADE_FILE})/${LAST_DOWNGRADE_FILE}/g" ./sql/CMakeLists.txt
 
 echo "register reverse path"
-sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" ./sql/CMakeLists.txt
+sed -i "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" ./sql/CMakeLists.txt
 
-# Set only next minor release version in version.config 
-# and create this as a separate PR on `main`
-echo "Set next minor release version.config"
-sed -i.bak "s/${NEXT_VERSION}-dev/${NEXT_VERSION}/g" version.config
-rm version.config.bak
+# Set release version in version.config.
+echo "Set release version.config"
+sed -i "s/${NEXT_VERSION}-dev/${NEXT_VERSION}/g" version.config
 head -n1 version.config
