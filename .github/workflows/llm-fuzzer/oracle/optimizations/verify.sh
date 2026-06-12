@@ -17,7 +17,7 @@
 #
 # The script must run exactly the same statements no matter if it runs with
 # optimizations enabled or disabled.
-set -xeu
+set -eu
 
 printf '\\restrict %s\n' "${RANDOM}" | tee restricted-repro.sql
 cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
@@ -51,9 +51,9 @@ then
     exit 0
 fi
 
-if ! diff result_noopt.txt result_noopt_noseq.txt \
-    || ! diff result_noopt.txt result_noopt_noindex.txt \
-    || ! diff result_noopt.txt result_noopt_nohashagg.txt
+if ! diff -u result_noopt.txt result_noopt_noseq.txt \
+    || ! diff -u result_noopt.txt result_noopt_noindex.txt \
+    || ! diff -u result_noopt.txt result_noopt_nohashagg.txt
 then
     echo "Repro gives different results between runs, not admissible"
     exit 0
@@ -70,7 +70,7 @@ then
     exit 0
 fi
 
-if diff result_noopt.txt result_opt.txt
+if diff -u result_noopt.txt result_opt.txt
 then
     echo "Same result with optimizations ON/OFF, error not reproduced"
     exit 0

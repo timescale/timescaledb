@@ -341,8 +341,6 @@ TS_FUNCTION_INFO_V1(ts_timestamptz_timezone_bucket);
 TSDLLEXPORT Datum
 ts_timestamptz_timezone_bucket(PG_FUNCTION_ARGS)
 {
-	/* LOOK HERE */
-
 	Datum period = PG_GETARG_DATUM(0);
 	Datum timestamp = PG_GETARG_DATUM(1);
 	Datum tzname = PG_GETARG_DATUM(2);
