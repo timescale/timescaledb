@@ -197,7 +197,7 @@ jobs:
 
         rc=0
         claude -p --output-format stream-json --verbose \
-          --max-budget-usd 5.00 --dangerously-skip-permissions \
+          --max-budget-usd 15.00 --dangerously-skip-permissions \
           --model opus[1m] --effort xhigh \
           "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
           > ${{ runner.temp }}/claude-execution-output.json || rc=$?
@@ -379,6 +379,7 @@ jobs:
         # The log_path sanitizer option means "Write logs to 'log_path.pid'".
         # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
         path: ${{ github.workspace }}/sanitizer_logs/*
+        if-no-files-found: ignore
 
     - name: Upload core dumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -386,6 +387,7 @@ jobs:
       with:
         name: Coredumps
         path: coredumps
+        if-no-files-found: ignore
 
     - name: Save PostgreSQL log
       if: always()
@@ -393,6 +395,7 @@ jobs:
       with:
         name: PostgreSQL log
         path: postmaster.*
+        if-no-files-found: ignore
 
     - name: Upload llm-fuzzer-repro.sql
       if: always()
