@@ -293,3 +293,4 @@ CREATE TABLE _timescaledb_catalog.telemetry_event (
 );
 GRANT SELECT ON _timescaledb_catalog.telemetry_event TO PUBLIC;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.decompress_batch(record);
