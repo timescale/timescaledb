@@ -82,7 +82,7 @@ jobs:
       timeout-minutes: 15
       run: |
         sudo apt-get update
-        sudo apt-get install cmake flex bison systemd-coredump gdb \
+        sudo apt-get install ccache cmake flex bison systemd-coredump gdb \
           jq ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
@@ -167,7 +167,8 @@ jobs:
     - name: Build TimescaleDB
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
-          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF
+          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
         make -j$(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
