@@ -100,13 +100,13 @@ typedef struct ScheduledBgwJob
 	BackgroundWorkerHandle *handle;
 
 	bool reserved_worker;
+	bool worker_unavailable_logged;
 
 	/*
 	 * We say "may" here since under normal circumstances the job itself will
 	 * perform the mark_end
 	 */
 	bool may_need_mark_end;
-	int32 consecutive_failed_launches;
 } ScheduledBgwJob;
 
 static void on_failure_to_start_job(ScheduledBgwJob *sjob);
@@ -160,7 +160,6 @@ static void
 mark_job_as_started(ScheduledBgwJob *sjob)
 {
 	Assert(!sjob->may_need_mark_end);
-	sjob->consecutive_failed_launches = 0;
 	ts_bgw_job_stat_mark_start(&sjob->job);
 	sjob->may_need_mark_end = true;
 }
@@ -297,8 +296,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
 			Assert(!sjob->reserved_worker);
-			sjob->next_start =
-				ts_bgw_job_stat_next_start(job_stat, &sjob->job, sjob->consecutive_failed_launches);
+			sjob->next_start = ts_bgw_job_stat_next_start(job_stat, &sjob->job);
 			break;
 		case JOB_STATE_STARTED:
 			Assert(prev_state == JOB_STATE_SCHEDULED);
@@ -319,27 +317,29 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 				return;
 			}
 
-			/* If we are unable to reserve a worker go back to the scheduled state */
+			/* If no worker is available, stay scheduled and keep the existing start time. */
 			sjob->reserved_worker = ts_bgw_worker_reserve();
 			if (!sjob->reserved_worker)
 			{
-				elog(WARNING,
-					 "failed to launch job %d \"%s\": out of background workers",
-					 sjob->job.fd.id,
-					 NameStr(sjob->job.fd.application_name));
-				sjob->consecutive_failed_launches++;
-				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+				if (!sjob->worker_unavailable_logged)
+				{
+					elog(WARNING,
+						 "failed to launch job %d \"%s\": out of background workers",
+						 sjob->job.fd.id,
+						 NameStr(sjob->job.fd.application_name));
+					sjob->worker_unavailable_logged = true;
+				}
 				PopActiveSnapshot();
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(scratch_mctx);
 				return;
 			}
-
 			/*
 			 * start the job before you can encounter any errors so that they
 			 * are always registered
 			 */
 			mark_job_as_started(sjob);
+			sjob->worker_unavailable_logged = false;
 			if (ts_bgw_job_has_timeout(&sjob->job))
 			{
 				sjob->timeout_at =
