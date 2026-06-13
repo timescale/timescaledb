@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [ "rockylinux:8", "rockylinux:9", "rockylinux:10" ]
-        pg: [ 15, 16, 17, 18 ]
+        pg: [ 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -32,9 +32,6 @@ jobs:
         exclude:
           - image: "rockylinux:8"
             pg: 18
-          - image: "rockylinux:10"
-            pg: 15
-
 
     steps:
     - name: Add postgres repositories
