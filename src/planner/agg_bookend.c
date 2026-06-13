@@ -619,10 +619,8 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	subroot->parse = parse = copyObject(root->parse);
 	IncrementVarSublevelsUp((Node *) parse, 1, 1);
 
-#if PG16_GE
 	/* Reset placeholdersFrozen: https://github.com/postgres/postgres/commit/b3ff6c74 */
 	subroot->placeholdersFrozen = false;
-#endif
 
 	/* append_rel_list might contain outer Vars? */
 	subroot->append_rel_list = copyObject(root->append_rel_list);

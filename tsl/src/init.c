@@ -54,10 +54,6 @@ TS_MODULE_MAGIC("timescaledb-tsl");
 #error "cannot compile the TSL for ApacheOnly mode"
 #endif
 
-#if PG16_LT
-extern void PGDLLEXPORT _PG_init(void);
-#endif
-
 /*
  * Cross module function initialization.
  *
@@ -129,9 +125,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_add_column = continuous_agg_add_column,
-#if PG16_GE
 	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
-#endif
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,

@@ -133,14 +133,6 @@ function_allowed_in_cagg_definition(Oid funcid)
 void
 RemoveRangeTableEntries(Query *query)
 {
-#if PG16_LT
-	List *rtable = query->rtable;
-	Assert(list_length(rtable) >= 3);
-	rtable = list_delete_first(rtable);
-	query->rtable = list_delete_first(rtable);
-	OffsetVarNodes((Node *) query, -2, 0);
-	Assert(list_length(query->rtable) >= 1);
-#endif
 }
 
 /*
@@ -2058,23 +2050,13 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 	Oid mat_relid = mat_ht->main_table_relid;
 	Query *finalize_query;
 
-#if PG16_LT
-	/* The view rule has dummy old and new range table entries as the 1st and 2nd entries */
-	Assert(list_length(cagg_view_query->rtable) >= 2);
-#endif
-
 	if (cagg_view_query->setOperations)
 	{
 		/*
 		 * This corresponds to the union view.
-		 *   PG16_LT the 3rd RTE entry has the SELECT 1 query from the union view.
-		 *   PG16_GE the 1st RTE entry has the SELECT 1 query from the union view
+		 *   the 1st RTE entry has the SELECT 1 query from the union view
 		 */
-#if PG16_LT
-		RangeTblEntry *finalize_query_rte = lthird(cagg_view_query->rtable);
-#else
 		RangeTblEntry *finalize_query_rte = linitial(cagg_view_query->rtable);
-#endif
 		if (finalize_query_rte->rtekind != RTE_SUBQUERY)
 		{
 			ereport(ERROR,

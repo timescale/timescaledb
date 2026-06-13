@@ -133,11 +133,7 @@ typedef struct ModifyTableContext
 typedef struct UpdateContext
 {
 	bool		crossPartUpdate;	/* was it a cross-partition update? */
-#if PG16_LT
-	bool updateIndexes; /* index update required? */
-#else
 	TU_UpdateIndexes updateIndexes; /* Which index updates are required? */
-#endif
 
 	/*
 	 * Lock mode to acquire on the latest tuple version before performing
@@ -1696,20 +1692,12 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 	List	   *recheckIndexes = NIL;
 
 	/* insert index entries for tuple if necessary */
-#if PG15
-	if (resultRelInfo->ri_NumIndices > 0 && updateCxt->updateIndexes)
-		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
-											   slot, context->estate,
-											   true, false,
-											   NULL, NIL);
-#else
 	if (resultRelInfo->ri_NumIndices > 0 && (updateCxt->updateIndexes != TU_None))
 		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 											   slot, context->estate,
 											   true, false,
 											   NULL, NIL,
 											   (updateCxt->updateIndexes == TU_Summarizing));
-#endif
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
@@ -1803,9 +1791,7 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	}
 	else
 	{
-#if PG16_GE
 		ItemPointerData lockedtid;
-#endif
 
 		/*
 		 * If we generate a new candidate tuple after EvalPlanQual testing, we
@@ -1815,9 +1801,7 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		 * to do them again.)
 		 */
 redo_act:
-#if PG16_GE
 		lockedtid = *tupleid;
-#endif
 		result = ExecUpdateAct(context, resultRelInfo, tupleid, oldtuple, slot,
 							   canSetTag, &updateCxt);
 
@@ -1911,7 +1895,6 @@ redo_act:
 								ExecInitUpdateProjection(context->mtstate,
 														 resultRelInfo);
 
-#if PG16_GE
 							if (resultRelInfo->ri_needLockTagTuple)
 							{
 								UnlockTuple(resultRelationDesc,
@@ -1919,7 +1902,6 @@ redo_act:
 								LockTuple(resultRelationDesc,
 										  tupleid, InplaceUpdateTupleLock);
 							}
-#endif
 
 							/* Fetch the most recent version of old tuple. */
 							oldSlot = resultRelInfo->ri_oldTupleSlot;
@@ -2051,9 +2033,7 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 	 * supporting this; we'd just need to handle LOCKTAG_TUPLE like the other
 	 * ExecUpdate() caller.
 	 */
-#if PG16_GE
 	Assert(!resultRelInfo->ri_needLockTagTuple);
-#endif
 
 	/* Determine lock mode to use */
 	lockmode = ExecUpdateLockMode(context->estate, resultRelInfo);
@@ -3216,12 +3196,8 @@ lmerge_matched:;
 
 				if (!ExecUpdatePrologue(context, resultRelInfo, tupleid, NULL, newslot, &result))
 				{
-#if PG16_LT
-					result = TM_Ok;
-#else
 					if (result == TM_Ok)
 						return NULL;
-#endif
 
 					/* if not TM_OK, it is concurrent update/delete */
 					break;
@@ -3255,14 +3231,10 @@ lmerge_matched:;
 #endif
 				if (!ExecDeletePrologue(context, resultRelInfo, tupleid, NULL, NULL, &result))
 				{
-#if PG16_LT
-					result = TM_Ok;
-#else
 					if (result == TM_Ok)
 						return NULL; /* "do nothing" */
 
 						/* if not TM_OK, it is concurrent update/delete */
-#endif
 					break;
 				}
 				result = ExecDeleteAct(context, resultRelInfo, tupleid, false);

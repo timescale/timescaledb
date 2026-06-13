@@ -231,11 +231,7 @@ create_sorted_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
 											   target,
 											   parse->groupClause ? AGG_SORTED : AGG_PLAIN,
 											   AGGSPLIT_INITIAL_SERIAL,
-#if PG16_LT
-											   parse->groupClause,
-#else
 											   root->processed_groupClause,
-#endif
 											   NIL,
 											   agg_partial_costs,
 											   d_num_groups);
@@ -259,11 +255,7 @@ create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
 										 target,
 										 AGG_HASHED,
 										 AGGSPLIT_INITIAL_SERIAL,
-#if PG16_LT
-										 root->parse->groupClause,
-#else
 										 root->processed_groupClause,
-#endif
 										 NIL,
 										 agg_partial_costs,
 										 d_num_groups);
@@ -316,13 +308,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 		foreach (lc, chunk_grouped_target->exprs)
 		{
 			Index sgref = get_pathtarget_sortgroupref(chunk_grouped_target, i++);
-			if (sgref && get_sortgroupref_clause_noerr(sgref,
-#if PG16_LT
-													   root->parse->groupClause
-#else
-													   root->processed_groupClause
-#endif
-													   ) != NULL)
+			if (sgref && get_sortgroupref_clause_noerr(sgref, root->processed_groupClause) != NULL)
 			{
 				group_exprs = lappend(group_exprs, lfirst(lc));
 			}
@@ -806,11 +792,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 										  grouping_target,
 										  final_strategy,
 										  AGGSPLIT_FINAL_DESERIAL,
-#if PG16_LT
-										  parse->groupClause,
-#else
 										  root->processed_groupClause,
-#endif
 										  (List *) parse->havingQual,
 										  agg_final_costs,
 										  existing_agg_path->numGroups));

@@ -340,7 +340,6 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 		 * SELECT dev, dev FROM t; SELECT 1, dev FROM t; SELECT dev, time FROM t WHERE time = 100;
 		 */
 		SortGroupClause *distinct_clause = NULL;
-#if PG16_GE
 		foreach (lc, root->processed_distinctClause)
 		{
 			distinct_clause = (SortGroupClause *) lfirst(lc);
@@ -354,71 +353,7 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 				return NULL;
 			}
 		}
-#else
-		if (root->distinct_pathkeys)
-		{
-			foreach (lc, root->distinct_pathkeys)
-			{
-				PathKey *pathkey = (PathKey *) lfirst(lc);
-				if (pathkey->pk_eclass->ec_sortref)
-				{
-					foreach (lc, root->parse->distinctClause)
-					{
-						SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
-						if (clause->tleSortGroupRef == pathkey->pk_eclass->ec_sortref)
-						{
-							distinct_clause = clause;
-							break;
-						}
-					}
-					if (!distinct_clause)
-					{
-						return NULL;
-					}
-				}
-				/* We can get PathKey with ec_sortref = 0 in PG15
-				 * when False filter is not pushed into a relation with distinct column (i.e. it's
-				 * on top of a join), so need to support this case in PG15
-				 */
-				else
-				{
-					return NULL;
-				}
-
-				tlexpr = get_distint_clause_expr(root, distinct_clause);
-				if (tlexpr)
-				{
-					result = lappend(result, tlexpr);
-				}
-				else
-				{
-					return NULL;
-				}
-			}
-		}
-		/* In PG16+ we use LIMIT instead of UpperUniquePath for (numkeys = 0),
-		 * but in PG15- we would still create UpperUniquePath for (numkeys = 0), so handle this case
-		 * here
-		 */
-		else
-		{
-			foreach (lc, root->parse->distinctClause)
-			{
-				distinct_clause = lfirst_node(SortGroupClause, lc);
-				tlexpr = get_distint_clause_expr(root, distinct_clause);
-				if (tlexpr)
-				{
-					result = lappend(result, tlexpr);
-				}
-				else
-				{
-					return NULL;
-				}
-			}
-		}
-#endif
 	}
-#if PG16_GE
 	else if (stage == UPPERREL_GROUP_AGG)
 	{
 		/* Find all non-nested Aggref in the query target list */
@@ -486,7 +421,6 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 			}
 		}
 	}
-#endif
 	return result;
 }
 
@@ -526,19 +460,15 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 					return;
 				}
 
-#if PG16_GE
 				/* since PG16+ we no longer create UpperUniquePath with 0 numkeys,
 				 * we create LIMIT path instead, so shouldn't be here with 0 numkeys
 				 */
 				Assert(unique->numkeys >= 1);
-#endif
 				dpinfo->unique_path = (Path *) unique;
 				break;
 			}
 		}
 	}
-	/* Sorted inputs for Distinct aggs weren't supported until PG16 */
-#if PG16_GE
 	/* Look for Aggpath with eligible Distinct aggregates */
 	else if (dpinfo->stage == UPPERREL_GROUP_AGG)
 	{
@@ -573,7 +503,6 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 			}
 		}
 	}
-#endif
 	else
 	{
 		return;
