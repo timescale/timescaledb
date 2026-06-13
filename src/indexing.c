@@ -615,11 +615,7 @@ ts_indexing_compare(Oid index1, Oid index2)
 	IndexInfo *info1 = BuildIndexInfo(indexrel1);
 	IndexInfo *info2 = BuildIndexInfo(indexrel2);
 
-#if PG16_GE
 	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(rel1), RelationGetDescr(rel2), false);
-#else
-	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(rel1), RelationGetDescr(rel2));
-#endif
 
 	bool result = CompareIndexInfo(info1,
 								   info2,

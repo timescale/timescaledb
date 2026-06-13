@@ -30,12 +30,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - pg_version_old: 15 # 15 to 16
-            pg_version_new: 16
-          - pg_version_old: 15 # 15 to 17
-            pg_version_new: 17
-          - pg_version_old: 15 # 15 to 18
-            pg_version_new: 18
           - pg_version_old: 16 # 16 to 17
             pg_version_new: 17
           - pg_version_old: 16 # 16 to 18

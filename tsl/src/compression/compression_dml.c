@@ -1138,18 +1138,10 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		{
 			/* filter tuple based on compress_orderby columns */
 			valid = false;
-#if PG16_LT
-			HeapKeyTest(compressed_tuple,
-						RelationGetDescr(in_rel),
-						num_heap_scankeys,
-						heap_scankeys,
-						valid);
-#else
 			valid = HeapKeyTest(compressed_tuple,
 								RelationGetDescr(in_rel),
 								num_heap_scankeys,
 								heap_scankeys);
-#endif
 			if (!valid)
 			{
 				stats.batches_filtered_compressed++;
