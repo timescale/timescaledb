@@ -26,7 +26,7 @@ jobs:
       matrix:
         arch: [ "x86", "ARM" ]
         image: [ "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04" ]
-        pg: [ 15, 16, 17, 18 ]
+        pg: [ 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -35,10 +35,6 @@ jobs:
             runner: "ubuntu-latest"
           - arch: "ARM"
             runner: "cloud-image-runner-ubuntu-24-arm64"
-        exclude:
-          - image: "ubuntu:26.04"
-            pg: 15
-
 
     steps:
     - name: Add repositories

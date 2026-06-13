@@ -211,15 +211,11 @@ static bool
 gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 {
 	int num_groupby_pathkeys;
-#if PG16_LT
-	num_groupby_pathkeys = list_length(root->group_pathkeys);
-#else
 	/* In PG16 group_pathkeys can contain additional pathkeys
 	 * used for optimization on ordered aggregates.
 	 * We only want to deal with group by elements only here.
 	 */
 	num_groupby_pathkeys = root->num_groupby_pathkeys;
-#endif
 
 	if (list_length(subpath->pathkeys) != num_groupby_pathkeys)
 	{
@@ -587,11 +583,7 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 static double
 estimate_gapfill_groups(PlannerInfo *root, double path_rows)
 {
-#if PG16_GE
 	List *group_exprs = get_sortgrouplist_exprs(root->processed_groupClause, root->processed_tlist);
-#else
-	List *group_exprs = get_sortgrouplist_exprs(root->parse->groupClause, root->parse->targetList);
-#endif
 	/* If we group on something beside time_bucket_gapfill, estimate number of groups */
 	List *group_exprs_without_gapfill = NULL;
 	if (list_length(group_exprs) > 1)
@@ -670,15 +662,11 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 		List *new_order = NIL;
 		PathKey *pk_func = NULL;
 		int num_groupby_pathkeys;
-#if PG16_LT
-		num_groupby_pathkeys = list_length(root->group_pathkeys);
-#else
 		/* In PG16 group_pathkeys can contain additional pathkeys
 		 * used for optimization on ordered aggregates.
 		 * We only want to deal with group by elements only here.
 		 */
 		num_groupby_pathkeys = root->num_groupby_pathkeys;
-#endif
 		int i;
 		/* subpath does not have correct order */
 		for (i = 0; i < num_groupby_pathkeys; i++)

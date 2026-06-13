@@ -1265,14 +1265,12 @@ process_vacuum(ProcessUtilityArgs *args)
 	foreach (lc, stmt->options)
 	{
 		DefElem *opt = (DefElem *) lfirst(lc);
-#if PG16_GE
 		/* if "only_database_stats" is defined then don't execute our custom code and return to
 		 * the postgres execution for the proper validations */
 		if (is_vacuumcmd && strcmp(opt->defname, "only_database_stats") == 0)
 		{
 			return DDL_CONTINUE;
 		}
-#endif
 		if (strcmp(opt->defname, "full") == 0)
 		{
 			ctx.is_vacuumfull = defGetBoolean(opt);
@@ -3033,10 +3031,6 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 						 quote_identifier(get_namespace_name(nspcid)),
 						 quote_identifier(get_rel_name(chunk->table_id)));
 
-		/*
-		 * Before PG15 NULLs were always considered distinct, with
-		 * PG15 the behaviour became configurable.
-		 */
 		if (!stmt->nulls_not_distinct)
 		{
 			int i = 0;
@@ -3207,9 +3201,6 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 
 			break;
 		case AT_AddConstraint:
-#if PG16_LT
-		case AT_AddConstraintRecurse:
-#endif
 		{
 			Constraint *con = castNode(Constraint, info->cmd->def);
 			switch (con->contype)
@@ -3571,7 +3562,6 @@ typedef struct CreateIndexInfo
 	Oid main_table_relid;
 	HypertableIndexOptions extended_options;
 	MemoryContext mctx;
-	int64 partitions_done; /* for tracking chunk progress on PG15 */
 } CreateIndexInfo;
 
 /*
@@ -3616,12 +3606,7 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	index_close(hypertable_index_rel, NoLock);
 	table_close(chunk_rel, NoLock);
 
-#if PG16_GE
 	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
-#else
-	/* pgstat_progress_incr_param is not available before PG16 */
-	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, ++info->partitions_done);
-#endif
 	DEBUG_WAITPOINT("process_index_chunk_done");
 }
 
@@ -3727,12 +3712,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 
 	ts_catalog_restore_user(&sec_ctx);
 
-#if PG16_GE
 	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
-#else
-	/* pgstat_progress_incr_param is not available before PG16 */
-	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, ++info->partitions_done);
-#endif
 	DEBUG_WAITPOINT("process_index_chunk_multitransaction_done");
 
 	PopActiveSnapshot();
@@ -4885,9 +4865,6 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			case AT_AddColumn:
-#if PG16_LT
-			case AT_AddColumnRecurse:
-#endif
 			{
 				ColumnDef *col;
 				ListCell *constraint_lc;
@@ -4908,18 +4885,12 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				break;
 			}
 			case AT_DropColumn:
-#if PG16_LT
-			case AT_DropColumnRecurse:
-#endif
 				if (ht)
 				{
 					process_altertable_drop_column(ht, cmd);
 				}
 				break;
 			case AT_AddConstraint:
-#if PG16_LT
-			case AT_AddConstraintRecurse:
-#endif
 				Assert(IsA(cmd->def, Constraint));
 
 				if (ht)
@@ -5293,9 +5264,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		}
 		break;
 		case AT_AddConstraint:
-#if PG16_LT
-		case AT_AddConstraintRecurse:
-#endif
 		{
 			Constraint *stmt = (Constraint *) cmd->def;
 			const char *conname = stmt->conname;
@@ -5353,9 +5321,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			process_altertable_alter_constraint_end(ht, cmd);
 			break;
 		case AT_ValidateConstraint:
-#if PG16_LT
-		case AT_ValidateConstraintRecurse:
-#endif
 			process_altertable_validate_constraint_end(ht, cmd);
 			break;
 		case AT_SetLogged:
@@ -5410,15 +5375,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 */
 			break;
 		case AT_AddColumn:
-#if PG16_LT
-		case AT_AddColumnRecurse:
-#endif
 			/* this is handled for compressed hypertables by tsl code */
 			break;
 		case AT_DropColumn:
-#if PG16_LT
-		case AT_DropColumnRecurse:
-#endif
 		case AT_DropExpression:
 
 			/*
@@ -5427,9 +5386,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 */
 			break;
 		case AT_DropConstraint:
-#if PG16_LT
-		case AT_DropConstraintRecurse:
-#endif
 			/* drop constraints handled by process_ddl_sql_drop */
 			break;
 		case AT_ReAddComment:			   /* internal command never hit in our test
@@ -6049,11 +6005,7 @@ process_create_stmt(ProcessUtilityArgs *args)
 				pelem->location = -1;
 
 				PartitionSpec *partspec = makeNode(PartitionSpec);
-#if PG16_LT
-				partspec->strategy = pstrdup("range");
-#else
 				partspec->strategy = PARTITION_STRATEGY_RANGE;
-#endif
 				partspec->partParams = list_make1(pelem);
 				partspec->location = -1;
 				stmt->partspec = partspec;
@@ -6061,11 +6013,7 @@ process_create_stmt(ProcessUtilityArgs *args)
 			else
 			{
 				/* User has specified PARTITION BY clause */
-#if PG16_LT
-				if (strcmp(stmt->partspec->strategy, "range") != 0)
-#else
 				if (stmt->partspec->strategy != PARTITION_STRATEGY_RANGE)
-#endif
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),

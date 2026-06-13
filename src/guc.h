@@ -34,9 +34,7 @@ extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
-#if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
-#endif
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_merge;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
@@ -76,19 +74,15 @@ extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT bool ts_guc_enable_uuid_compression;
 extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
 extern TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit;
-#if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
-#endif
 extern bool ts_guc_enable_event_triggers;
 extern bool ts_guc_enable_chunk_auto_publication;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan;
 extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
 extern TSDLLEXPORT bool ts_guc_debug_skip_scan_info;
-#if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_cagg_rewrites;
 extern TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info;
-#endif
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;

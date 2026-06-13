@@ -30,6 +30,7 @@ set(TEST_FILES
     extension_scripts.sql
     generated_as_identity.sql
     hash.sql
+    histogram.sql
     index.sql
     information_views.sql
     insert_many.sql
@@ -41,10 +42,13 @@ set(TEST_FILES
     partition.sql
     partition_coercion.sql
     partitioning.sql
+    partitionwise.sql
     pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
+    plan_hashagg.sql
     plan_hypertable_inline.sql
+    plan_ordered_append.sql
     qual_filtering.sql
     query.sql
     relocate_extension.sql
@@ -55,6 +59,7 @@ set(TEST_FILES
     tableam.sql
     tableam_alter.sql
     tablespace.sql
+    timestamp.sql
     triggers.sql
     truncate.sql
     trusted_extension.sql
@@ -72,16 +77,11 @@ set(TEST_TEMPLATES
     append.sql.in
     drop_owned.sql.in
     grant_hypertable.sql.in
-    histogram_test.sql.in
     insert.sql.in
     null_exclusion.sql.in
-    plan_hashagg.sql.in
     rowsecurity.sql.in
     parallel.sql.in
-    partitionwise.sql.in
     plan_expand_hypertable.sql.in
-    plan_ordered_append.sql.in
-    timestamp.sql.in
     ts_merge.sql.in)
 
 # Loader test must distinguish between Apache and TSL builds so we parametrize

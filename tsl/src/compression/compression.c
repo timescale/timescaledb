@@ -201,11 +201,7 @@ truncate_relation(Oid table_oid)
 
 	CheckTableForSerializableConflictIn(rel);
 
-#if PG16_LT
-	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
-#else
 	RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
-#endif
 
 	toast_relid = rel->rd_rel->reltoastrelid;
 
@@ -214,11 +210,7 @@ truncate_relation(Oid table_oid)
 	if (OidIsValid(toast_relid))
 	{
 		rel = table_open(toast_relid, AccessExclusiveLock);
-#if PG16_LT
-		RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
-#else
 		RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
-#endif
 		table_close(rel, NoLock);
 	}
 
