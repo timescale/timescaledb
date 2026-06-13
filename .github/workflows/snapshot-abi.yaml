@@ -19,7 +19,6 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
       pg18_abi_min: ${{ steps.config.outputs.pg18_abi_min }}
@@ -44,12 +43,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 15, 16, 17, 18 ]
+        pg: [ 16, 17, 18 ]
         ignores:
           - 'net telemetry bgw_launcher'
         include:
-          - pg: 15
-            abi_min: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
           - pg: 16
             abi_min: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
           - pg: 17
