@@ -12,6 +12,7 @@ set(TEST_FILES_SHARED
     decompress_tracking.sql
     gapfill_bug.sql
     generated_columns.sql
+    lateral_subquery.sql
     memoize.sql
     osm_api.sql
     parameterized_chunkappend.sql
@@ -20,7 +21,6 @@ set(TEST_FILES_SHARED
 
 set(TEST_TEMPLATES_SHARED
     gapfill.sql.in
-    lateral_subquery.sql.in
     ordered_append_join.sql.in
     constify_timestamptz_op_interval.sql.in
     constraint_exclusion_prepared.sql.in

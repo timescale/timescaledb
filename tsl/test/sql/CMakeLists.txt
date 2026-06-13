@@ -7,14 +7,21 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
+    cagg_add_column.sql
+    cagg_ddl.sql
     cagg_direct_compress.sql
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
+    cagg_planning.sql
     cagg_policy.sql
+    cagg_query.sql
+    cagg_query_using_merge.sql
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
+    cagg_rewrites.sql
     cagg_skip_invalidation.sql
+    cagg_union_view.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_publication_compression.sql
@@ -83,6 +90,7 @@ set(TEST_FILES
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
+    skip_scan_dagg.sql
     split_chunk.sql
     transparent_decompression_join_index.sql
     uncompressed_size.sql
@@ -94,10 +102,6 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
-    cagg_add_column.sql.in
-    cagg_query.sql.in
-    cagg_query_using_merge.sql.in
-    cagg_union_view.sql.in
     cagg_permissions.sql.in
     columnar_index_scan.sql.in
     compress_bloom_sparse.sql.in
@@ -107,6 +111,7 @@ set(TEST_TEMPLATES
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
+    plan_skip_scan_dagg.sql.in
     vector_agg_planning.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
@@ -159,20 +164,24 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_segment_meta.sql
     compression_sorted_merge_columns.sql
     compression_sorted_merge_filter.sql
+    cagg.sql
+    cagg_bgw.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
     cagg_joins.sql
     cagg_multi.sql
-    cagg_on_cagg.sql
     cagg_on_cagg_joins.sql
-    cagg_tableam.sql
+    cagg_on_cagg.sql
     cagg_policy_run.sql
+    cagg_tableam.sql
+    cagg_usage.sql
     cagg_uuid.sql
     columnar_scan_memory.sql
     decompress_memory.sql
     decompress_vector_qual.sql
     detach_chunk.sql
+    direct_compress_memory.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
@@ -198,30 +207,14 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_qual_default.sql
     vacuum.sql)
 
-  list(
-    APPEND
-    TEST_TEMPLATES
-    cagg_bgw.sql.in
-    cagg_ddl.sql.in
-    cagg_usage.sql.in
-    cagg.sql.in
-    compression_update_delete.sql.in
-    compression_delete_bitmapscan.sql.in
-    transparent_decompression_queries.sql.in)
-
-  if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-    list(APPEND TEST_FILES direct_compress_memory.sql)
-  endif()
+  list(APPEND TEST_TEMPLATES compression_update_delete.sql.in
+       compression_delete_bitmapscan.sql.in
+       transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql cagg_rewrites.sql skip_scan_dagg.sql)
-  list(APPEND TEST_TEMPLATES plan_skip_scan_dagg.sql.in)
-endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   # WAL numbers will differ on 32-bit platform so we only run on 64-bit only run
@@ -254,7 +247,7 @@ set(SOLO_TESTS
     compress_bgw_reorder_drop_chunks
     compression_ddl
     cagg_bgw
-    cagg_ddl-${PG_VERSION_MAJOR}
+    cagg_ddl
     cagg_dump
     cagg_policy_incremental
     explain_wal
