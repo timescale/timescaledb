@@ -960,19 +960,15 @@ typedef void (*mt_process_chunk_t)(int32 hypertable_id, Oid chunk_relid, void *a
  * Returns the number of processed chunks, or -1 if the table was not a
  * hypertable.
  */
-static int
-foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
+static void
+foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg,
+			  bool propagate_to_compressed)
 {
 	List *chunks;
 	ListCell *lc;
-	int n = 0;
 	MemoryContext orig_mcxt = CurrentMemoryContext;
 	MemoryContext chunk_mcxt;
-
-	if (NULL == ht)
-	{
-		return -1;
-	}
+	Ensure(ht, "hypertable cannot be null");
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
@@ -985,58 +981,24 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 	foreach (lc, chunks)
 	{
 		MemoryContextSwitchTo(chunk_mcxt);
+		if (propagate_to_compressed)
+		{
+			Oid compressed_relid = ts_relation_get_compressed_relid(lfirst_oid(lc));
+			if (OidIsValid(compressed_relid))
+			{
+				process_chunk(ht, compressed_relid, arg);
+			}
+		}
 		process_chunk(ht, lfirst_oid(lc), arg);
 		MemoryContextSwitchTo(orig_mcxt);
 		MemoryContextReset(chunk_mcxt);
-		n++;
 	}
 
 	MemoryContextDelete(chunk_mcxt);
 	list_free(chunks);
-
-	return n;
 }
 
-/*
- * Applies a function to each compressed internal chunk of a hypertable.
- *
- * Returns the number of processed chunks, or -1 if the table was not a
- * hypertable.
- */
-static int
-foreach_compressed_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
-{
-	List *chunks;
-	ListCell *lc;
-	int n = 0;
-	MemoryContext orig_mcxt = CurrentMemoryContext;
-	MemoryContext chunk_mcxt;
-
-	if (!ht || !ht->fd.compressed_hypertable_id)
-	{
-		return -1;
-	}
-
-	chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-
-	chunk_mcxt = AllocSetContextCreate(orig_mcxt, "foreach_chunk", ALLOCSET_DEFAULT_SIZES);
-	foreach (lc, chunks)
-	{
-		Chunk *chunk = lfirst(lc);
-		MemoryContextSwitchTo(chunk_mcxt);
-		process_chunk(ht, chunk->table_id, arg);
-		MemoryContextReset(chunk_mcxt);
-		n++;
-	}
-
-	MemoryContextSwitchTo(orig_mcxt);
-	MemoryContextDelete(chunk_mcxt);
-	list_free(chunks);
-
-	return n;
-}
-
-static int
+static void
 foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t process_chunk,
 							   void *arg)
 {
@@ -1045,7 +1007,6 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	int32 hypertable_id;
 	List *chunks;
 	ListCell *lc;
-	int num_chunks = -1;
 
 	StartTransactionCommand();
 	MemoryContextSwitchTo(mctx);
@@ -1056,7 +1017,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	{
 		ts_cache_release(&hcache);
 		CommitTransactionCommand();
-		return -1;
+		return;
 	}
 
 	hypertable_id = ht->fd.id;
@@ -1065,16 +1026,13 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	ts_cache_release(&hcache);
 	CommitTransactionCommand();
 
-	num_chunks = list_length(chunks);
-	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, num_chunks);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, list_length(chunks));
 	foreach (lc, chunks)
 	{
 		process_chunk(hypertable_id, lfirst_oid(lc), arg);
 	}
 
 	list_free(chunks);
-
-	return num_chunks;
 }
 
 typedef struct VacuumCtx
@@ -1326,7 +1284,7 @@ process_vacuum(ProcessUtilityArgs *args)
 				if (ht)
 				{
 					ctx.ht_vacuum_rel = vacuum_rel;
-					foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
+					foreach_chunk(ht, add_chunk_to_vacuum, &ctx, false);
 				}
 			}
 			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
@@ -1391,7 +1349,7 @@ handle_truncate_hypertable(ProcessUtilityArgs *args, TruncateStmt *stmt, Hyperta
 	ts_chunk_delete_by_hypertable_id(ht->fd.id);
 
 	/* Drop the chunk tables */
-	foreach_chunk(ht, process_truncate_chunk, stmt);
+	foreach_chunk(ht, process_truncate_chunk, stmt, true);
 }
 
 /*
@@ -1808,7 +1766,7 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				 *  We need to drop hypertable chunks before the hypertable to avoid the need
 				 *  to CASCADE such drops;
 				 */
-				foreach_chunk(ht, process_drop_table_chunk, stmt);
+				foreach_chunk(ht, process_drop_table_chunk, stmt, true);
 				/* The usual path for deleting an associated compressed hypertable uses
 				 * DROP_RESTRICT But if we are using DROP_CASCADE we should propagate that down to
 				 * the compressed hypertable.
@@ -1817,22 +1775,6 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				{
 					Hypertable *compressed_hypertable =
 						ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-					List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-					foreach (lc, chunks)
-					{
-						Chunk *chunk = lfirst(lc);
-
-						if (OidIsValid(chunk->table_id))
-						{
-							ObjectAddress chunk_addr = (ObjectAddress){
-								.classId = RelationRelationId,
-								.objectId = chunk->table_id,
-							};
-
-							/* Drop the postgres table */
-							performDeletion(&chunk_addr, stmt->behavior, 0);
-						}
-					}
 					ts_hypertable_drop(compressed_hypertable, DROP_CASCADE);
 				}
 			}
@@ -2146,7 +2088,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 					if (ht)
 					{
-						foreach_chunk(ht, add_chunk_oid, args);
+						foreach_chunk(ht, add_chunk_oid, args, false);
 					}
 				}
 
@@ -2360,13 +2302,12 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	ProcessUtilityArgs *args = arg;
 	ReindexStmt *stmt = (ReindexStmt *) args->parsetree;
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	switch (stmt->kind)
 	{
 		case REINDEX_OBJECT_TABLE:
-			stmt->relation->relname = NameStr(chunk->fd.table_name);
-			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
+			stmt->relation->relname = get_rel_name(chunk_relid);
+			stmt->relation->schemaname = get_namespace_name(get_rel_namespace(chunk_relid));
 			ExecReindex(NULL, stmt, false);
 			break;
 		case REINDEX_OBJECT_INDEX:
@@ -2410,7 +2351,7 @@ process_reindex(ProcessUtilityArgs *args)
 		case REINDEX_OBJECT_TABLE:
 			ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 
-			if (NULL != ht)
+			if (ht)
 			{
 				PreventCommandDuringRecovery("REINDEX");
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
@@ -2421,10 +2362,8 @@ process_reindex(ProcessUtilityArgs *args)
 							 errmsg("concurrent index creation on hypertables is not supported")));
 				}
 
-				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
-				{
-					result = DDL_DONE;
-				}
+				foreach_chunk(ht, reindex_chunk, args, true);
+				result = DDL_DONE;
 			}
 			break;
 
@@ -2871,11 +2810,11 @@ process_rename_constraint_or_trigger(ProcessUtilityArgs *args, Cache *hcache, Oi
 
 		if (stmt->renameType == OBJECT_TABCONSTRAINT)
 		{
-			foreach_chunk(ht, rename_hypertable_constraint, stmt);
+			foreach_chunk(ht, rename_hypertable_constraint, stmt, false);
 		}
 		else if (stmt->renameType == OBJECT_TRIGGER)
 		{
-			foreach_chunk(ht, rename_hypertable_trigger, stmt);
+			foreach_chunk(ht, rename_hypertable_trigger, stmt, false);
 		}
 	}
 	else if (stmt->renameType == OBJECT_TABCONSTRAINT)
@@ -2985,20 +2924,13 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 	Assert(IsA(cmd->newowner, RoleSpec));
 
 	process_altertable_change_owner_bgw_jobs(ht->fd.id, newrole_oid);
-	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd);
+	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd, true);
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
-		ListCell *lc;
-		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		foreach (lc, chunks)
-		{
-			Chunk *chunk = lfirst(lc);
-			AlterTableInternal(chunk->table_id, list_make1(cmd), false);
-		}
 		process_altertable_change_owner(compressed_hypertable, cmd);
 	}
 }
@@ -3277,19 +3209,19 @@ process_altertable_add_constraint(Hypertable *ht, const AlterTableCmd *cmd,
 			get_relation_constraint_oid(ht->main_table_relid, constraint_name, false),
 	};
 
-	foreach_chunk(ht, process_add_constraint_chunk, &info);
+	foreach_chunk(ht, process_add_constraint_chunk, &info, false);
 }
 
 static void
 process_altertable_alter_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
 {
-	foreach_chunk(ht, alter_hypertable_constraint, cmd);
+	foreach_chunk(ht, alter_hypertable_constraint, cmd, false);
 }
 
 static void
 process_altertable_validate_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
 {
-	foreach_chunk(ht, validate_hypertable_constraint, cmd);
+	foreach_chunk(ht, validate_hypertable_constraint, cmd, false);
 }
 
 /*
@@ -3389,7 +3321,7 @@ process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 {
 	if (cmd->subtype == AT_SetNotNull)
 	{
-		foreach_chunk(ht, validate_set_not_null, cmd);
+		foreach_chunk(ht, validate_set_not_null, cmd, false);
 	}
 
 	if (cmd->subtype == AT_DropNotNull)
@@ -3998,7 +3930,7 @@ process_index_start(ProcessUtilityArgs *args)
 		list_free(chunks);
 
 		/* Recurse to each chunk and create a corresponding index. */
-		foreach_chunk(ht, process_index_chunk, &info);
+		foreach_chunk(ht, process_index_chunk, &info, false);
 
 		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(&hcache);
@@ -4705,7 +4637,7 @@ process_altertable_replica_identity(Hypertable *ht, AlterTableCmd *cmd)
 		}
 	}
 
-	foreach_chunk(ht, process_altertable_chunk_replica_identity, cmd);
+	foreach_chunk(ht, process_altertable_chunk_replica_identity, cmd, false);
 }
 
 static void
@@ -4737,20 +4669,12 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 	}
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
-	foreach_chunk(ht, process_altertable_chunk, cmd);
+	foreach_chunk(ht, process_altertable_chunk, cmd, true);
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
-
-		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		ListCell *lc;
-		foreach (lc, chunks)
-		{
-			Chunk *chunk = lfirst(lc);
-			AlterTableInternal(chunk->table_id, list_make1(cmd), false);
-		}
 		process_altertable_set_tablespace_end(compressed_hypertable, cmd);
 	}
 }
@@ -5331,7 +5255,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DisableTrigAll:
 		case AT_EnableTrigUser:
 		case AT_DisableTrigUser:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
+			foreach_chunk(ht, process_altertable_chunk, cmd, false);
 			break;
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);
@@ -5360,8 +5284,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			break;
 		case AT_SetLogged:
 		case AT_SetUnLogged:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
-			foreach_compressed_chunk(ht, process_altertable_chunk, cmd);
+			foreach_chunk(ht, process_altertable_chunk, cmd, true);
 			break;
 		case AT_DropCluster:
 		case AT_SetNotNull:
@@ -5374,7 +5297,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ResetOptions:
 		case AT_ReAddStatistics:
 		case AT_SetCompression:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
+			foreach_chunk(ht, process_altertable_chunk, cmd, false);
 			break;
 		case AT_SetTableSpace:
 			process_altertable_set_tablespace_end(ht, cmd);
@@ -6335,7 +6258,10 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		/* Recurse to each chunk and drop the corresponding constraint */
-		foreach_chunk(ht, process_drop_constraint_on_chunk, (void *) constraint->constraint_name);
+		foreach_chunk(ht,
+					  process_drop_constraint_on_chunk,
+					  (void *) constraint->constraint_name,
+					  false);
 
 		ts_catalog_restore_user(&sec_ctx);
 	}
