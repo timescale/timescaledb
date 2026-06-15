@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# shellcheck disable=SC2053,SC2153
+# shellcheck disable=SC2053
 
 # Wrapper around pg_regress and pg_isolation_regress to be able to control the schedule with environment variables
 #
@@ -227,22 +227,6 @@ export PG_REGRESS_DIFF_OPTS
 if [[ "${PG_REGRESS_USE_FAKETIME}" == "1" ]]
 then
     PG_REGRESS_FAKETIME="${FAKETIME}"
-fi
-
-# Use a free port per run for the temporary instance to avoid collisions, or the
-# port in TEST_TEMP_PORT if set. The appended --port overrides the one from CMake.
-if [[ "$*" == *"--temp-instance"* ]]; then
-  TEMP_PORT=${TEST_TEMP_PORT}
-  if [[ -z ${TEMP_PORT} ]]; then
-    PYTHON=$(command -v python3 || command -v python)
-    if [[ -n ${PYTHON} ]]; then
-      TEMP_PORT=$(${PYTHON} -c 'import socket; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("", 0)); print(s.getsockname()[1]); s.close()' 2>/dev/null)
-    fi
-  fi
-  if [[ -n ${TEMP_PORT} ]]; then
-    export TEST_PGPORT=${TEMP_PORT}
-    PG_REGRESS_OPTS="${PG_REGRESS_OPTS} --port=${TEST_PGPORT}"
-  fi
 fi
 
 PG_REGRESS_OPTS="${PG_REGRESS_OPTS}  --schedule=${SCHEDULE}"
