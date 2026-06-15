@@ -48,6 +48,7 @@ Please note that the `_timescaledb_catalog.chunk_constraint` table has been drop
 * [#9745](https://github.com/timescale/timescaledb/pull/9745) Check constraints when adding unique constraints to chunks
 * [#9890](https://github.com/timescale/timescaledb/pull/9890) Fix incremental refresh batch boundaries to align with variable-width buckets and start only where a chunk and an invalidation overlap
 * [#9914](https://github.com/timescale/timescaledb/pull/9914) Fix use-after-free in segmentwise recompression
+* [#9929](https://github.com/timescale/timescaledb/pull/9929) Fix background jobs being bumped in the queue forever and never running
 * [#9955](https://github.com/timescale/timescaledb/pull/9955) Fix wrong results when using Batch Sorted Merge with no first-last index on a non-leading order by column
 * [#9967](https://github.com/timescale/timescaledb/pull/9967) Block upgrade after downgrade with first/last indexes present
 * [#9976](https://github.com/timescale/timescaledb/pull/9976) Fix wrong results when comparing a date column to a `timestamptz` value
@@ -59,6 +60,7 @@ Please note that the `_timescaledb_catalog.chunk_constraint` table has been drop
 * [#9988](https://github.com/timescale/timescaledb/pull/9988) Fix `time_bucket_gapfill` function detection
 * [#10003](https://github.com/timescale/timescaledb/pull/10003) Block unsafe updates of unique columns on compressed chunks
 * [#10025](https://github.com/timescale/timescaledb/pull/10025) Fix rename on compressed continuous aggregates
+* [#10026](https://github.com/timescale/timescaledb/pull/10026) Fix chunk skipping near `PG_INT64_MAX`
 
 **New Settings**
 * `skip_cagg_invalidation`: skip continuous aggregate invalidation tracking for DML and DDL in the current session/transaction. Off by default.
