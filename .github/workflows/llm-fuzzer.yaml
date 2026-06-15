@@ -198,7 +198,7 @@ jobs:
         rc=0
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 15.00 --dangerously-skip-permissions \
-          --model opus[1m] --effort xhigh \
+          --model opus[1m] --effort high \
           "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
           > ${{ runner.temp }}/claude-execution-output.json || rc=$?
 
