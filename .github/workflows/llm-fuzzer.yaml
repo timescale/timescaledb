@@ -78,7 +78,7 @@ jobs:
           - oracle: "internal-error"
             display_name: "Internal Program Errors"
           - oracle: "optimizations"
-            display_name: "Optimizations ON/OFF"
+            display_name: "Optimizations ON-OFF"
 
     steps:
     - name: Install Linux Dependencies
