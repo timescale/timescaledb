@@ -198,4 +198,7 @@ select ss, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
 select ss, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
 select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
 
+-- NaN handling in minmax is different from other functions.
+select s, min(cfloat4), max(cfloat4) from aggfns group by s order by s;
+
 reset max_parallel_workers_per_gather;
