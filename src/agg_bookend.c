@@ -376,7 +376,6 @@ static inline Datum
 bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 					InternalCmpAggStore *state2, char *opname, FunctionCallInfo fcinfo)
 {
-	/* LOOK HERE */
 	MemoryContext old_context;
 
 	if (state2 == NULL)

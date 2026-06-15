@@ -7,16 +7,15 @@
 # The script output must be sufficiently ordered to prevent false positives
 # (i.e. ORDER BY, no ties).
 #
-# The irrelevant output from the preparatory stages like table creation should
-# be hidden using the "\o" psql option or other means.
+# The script must be runnable on same database multiple times in sequence.
 #
 # The script output must be independent from arbitrary environmental influence
-# like the OID values.
-#
-# The script must be runnable on same database multiple times in sequence.
+# like the OID values or chunk identifiers.
 #
 # The script must run exactly the same statements no matter if it runs with
 # optimizations enabled or disabled.
+#
+# The script must not use the psql meta-commands.
 set -eu
 
 printf '\\restrict %s\n' "${RANDOM}" | tee restricted-repro.sql
@@ -51,9 +50,29 @@ then
     exit 0
 fi
 
+if ! psql -q -c "
+        set max_parallel_workers_per_gather = 8;
+        set parallel_setup_cost = 0;
+        set parallel_tuple_cost = 0;
+        set min_parallel_table_scan_size = 0;
+        set min_parallel_index_scan_size = 0;
+    " -f restricted-repro.sql > result_noopt_para.txt
+then
+    echo "Repro errors out, not admissible"
+    exit 0
+fi
+
+if ! psql -q -c "set work_mem = '4GB'" -f restricted-repro.sql > result_noopt_mem.txt
+then
+    echo "Repro errors out, not admissible"
+    exit 0
+fi
+
 if ! diff -u result_noopt.txt result_noopt_noseq.txt \
     || ! diff -u result_noopt.txt result_noopt_noindex.txt \
-    || ! diff -u result_noopt.txt result_noopt_nohashagg.txt
+    || ! diff -u result_noopt.txt result_noopt_nohashagg.txt \
+    || ! diff -u result_noopt.txt result_noopt_para.txt \
+    || ! diff -u result_noopt.txt result_noopt_mem.txt
 then
     echo "Repro gives different results between runs, not admissible"
     exit 0
