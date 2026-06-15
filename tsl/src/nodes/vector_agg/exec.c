@@ -421,8 +421,6 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 
 			const Datum datum = FunctionCallInvoke(fcinfo);
 
-			/* LOOK HERE */
-
 			/*
 			 * A strict function can still return a null for a non-null argument.
 			 */

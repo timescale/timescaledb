@@ -18,13 +18,18 @@
 # The script must not use the psql meta-commands.
 set -eu
 
+PGOPTIONS='-c client_min_messages=error'
+export PGOPTIONS
+
+
 printf '\\restrict %s\n' "${RANDOM}" | tee restricted-repro.sql
 cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
 
-psql -c "create database repro_off"
+psql -q -c "create database repro_off"
+psql -q -c "alter database repro_off set client_min_messages to error"
 export PGDATABASE=repro_off
-psql -c "create extension timescaledb"
-psql -c "alter database repro_off set timescaledb.enable_optimizations to off"
+psql -q -c "create extension timescaledb"
+psql -q -c "alter database repro_off set timescaledb.enable_optimizations to off"
 
 if ! psql -q -f restricted-repro.sql > result_noopt.txt
 then
@@ -78,10 +83,11 @@ then
     exit 0
 fi
 
-psql -c "create database repro_on"
+psql -q -c "create database repro_on"
+psql -q -c "alter database repro_on set client_min_messages to error"
 export PGDATABASE=repro_on
-psql -c "create extension timescaledb"
-psql -c "alter database repro_on set timescaledb.enable_optimizations to on"
+psql -q -c "create extension timescaledb"
+psql -q -c "alter database repro_on set timescaledb.enable_optimizations to on"
 
 if ! psql -q -f restricted-repro.sql > result_opt.txt
 then
@@ -89,11 +95,19 @@ then
     exit 0
 fi
 
+echo
+echo '```diff'
+echo
+
 if diff -u result_noopt.txt result_opt.txt
 then
     echo "Same result with optimizations ON/OFF, error not reproduced"
     exit 0
 fi
+
+echo
+echo '```'
+echo
 
 echo "Reproduced"
 exit 1
