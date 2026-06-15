@@ -121,7 +121,7 @@ jobs:
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "$llm-fuzzer-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
+        key: "llm-fuzzer-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ needs.config.outputs.pg_latest }} if not in cache
@@ -187,7 +187,7 @@ jobs:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         EVENT_WHAT: ${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
         EVENT_BRANCH: ${{ github.head_ref || github.ref_name }}
-        EVENT_BASE: ${{ github.base_ref || github.ref_name }}
+        EVENT_BASE: ${{ github.base_ref || format('{0}~', github.ref_name) }}
         EVENT_NAME: ${{ github.event_name }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         ORACLE_NAME: ${{ matrix.oracle }}
