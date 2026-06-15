@@ -59,8 +59,10 @@ Please note that the `_timescaledb_catalog.chunk_constraint` table has been drop
 * [#9986](https://github.com/timescale/timescaledb/pull/9986) Handle `MERGE WHEN NOT MATCHED BY SOURCE` on hypertables
 * [#9988](https://github.com/timescale/timescaledb/pull/9988) Fix `time_bucket_gapfill` function detection
 * [#10003](https://github.com/timescale/timescaledb/pull/10003) Block unsafe updates of unique columns on compressed chunks
+* [#10024](https://github.com/timescale/timescaledb/pull/10024) Fix `approximate_row_count` handling of Infinity
 * [#10025](https://github.com/timescale/timescaledb/pull/10025) Fix rename on compressed continuous aggregates
 * [#10026](https://github.com/timescale/timescaledb/pull/10026) Fix chunk skipping near `PG_INT64_MAX`
+
 
 **New Settings**
 * `skip_cagg_invalidation`: skip continuous aggregate invalidation tracking for DML and DDL in the current session/transaction. Off by default.
