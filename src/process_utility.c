@@ -412,7 +412,6 @@ check_altertable_add_column_for_compressed(ParseState *parse_state, Hypertable *
 					Oid typeoid;
 					int32 typmod;
 					typenameTypeIdAndMod(parse_state, col->typeName, &typeoid, &typmod);
-					/* LOOK HERE */
 					Node *transformed = cookDefault(parse_state,
 													constraint->raw_expr,
 													typeoid,

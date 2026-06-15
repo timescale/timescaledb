@@ -318,7 +318,7 @@ jobs:
         if [ -s repro_result.txt ]
         then
             printf '\n## Result\n\n' >> "$GITHUB_STEP_SUMMARY"
-            cat repro_result.txt >> "$GITHUB_STEP_SUMMARY"
+            head -100 repro_result.txt >> "$GITHUB_STEP_SUMMARY"
         fi
 
     # The jq --exit-code option is broken with select() on jq-1.6 which we see
