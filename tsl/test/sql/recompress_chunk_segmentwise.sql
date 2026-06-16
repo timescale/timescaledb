@@ -358,7 +358,6 @@ ROLLBACK;
 RESET timescaledb.enable_segmentwise_recompression;
 
 -- Same when the optimizations GUC is off.
---SET timescaledb.enable_segmentwise_recompression TO OFF;
 SET timescaledb.enable_optimizations TO OFF;
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');

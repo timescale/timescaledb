@@ -636,14 +636,13 @@ NOTICE:  segmentwise in-memory recompression functionality disabled, set timesca
 ROLLBACK;
 RESET timescaledb.enable_segmentwise_recompression;
 -- Same when the optimizations GUC is off.
-SET timescaledb.enable_segmentwise_recompression TO OFF;
--- SET timescaledb.enable_optimizations TO OFF;
+SET timescaledb.enable_optimizations TO OFF;
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
-ERROR:  segmentwise recompression functionality disabled, enable it by first setting timescaledb.enable_segmentwise_recompression to on
+ERROR:  segmentwise recompression functionality disabled, enable it by first setting timescaledb.enable_optimizations to on
 \set ON_ERROR_STOP 1
 SELECT compress_chunk(:'chunk_to_compress');
-NOTICE:  segmentwise in-memory recompression functionality disabled, set timescaledb.enable_segmentwise_recompression to on
+NOTICE:  segmentwise in-memory recompression functionality disabled, set timescaledb.enable_optimizations to on
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_22_24_chunk

@@ -1041,6 +1041,11 @@ can_use_in_memory_rebuild(Chunk *chunk)
 		elog(DEBUG1, "timescaledb.enable_in_memory_recompression is disabled");
 		return false;
 	}
+	if (!ts_guc_enable_optimizations)
+	{
+		elog(DEBUG1, "timescaledb.enable_optimizations is disabled");
+		return false;
+	}
 
 	return true;
 }
