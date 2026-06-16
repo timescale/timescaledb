@@ -1,1 +1,0 @@
-Fixes: #9986 Handle MERGE WHEN NOT MATCHED BY SOURCE on hypertables
