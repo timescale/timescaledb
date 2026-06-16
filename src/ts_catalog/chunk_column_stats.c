@@ -1552,7 +1552,7 @@ ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid,
 	}
 
 	clist.chunk_relid = reloid;
-	clist.main_table_relid = ts_hypertable_id_to_relid(fd.hypertable_id, NULL, false);
+	clist.main_table_relid = ts_hypertable_id_to_relid(fd.hypertable_id, false);
 
 	Assert(fd.id != INVALID_CHUNK_ID);
 

@@ -819,7 +819,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		int32 parent_hypertable_id = ts_chunk_get_hypertable_id_by_reloid(chunk_reloid);
 		if (parent_hypertable_id != INVALID_HYPERTABLE_ID)
 		{
-			Assert(ts_hypertable_id_to_relid(parent_hypertable_id, NULL, false) == parent_reloid);
+			Assert(ts_hypertable_id_to_relid(parent_hypertable_id, false) == parent_reloid);
 
 			if (ht != NULL)
 			{
@@ -838,9 +838,7 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
 		if (hypertable_id != INVALID_HYPERTABLE_ID)
 		{
 			/* Hypertable reloid not specified by the caller, look it up. */
-			parent_reloid = ts_hypertable_id_to_relid(hypertable_id,
-													  NULL,
-													  /* return_invalid */ false);
+			parent_reloid = ts_hypertable_id_to_relid(hypertable_id, /* return_invalid */ false);
 
 			ht = ts_planner_get_hypertable(parent_reloid, CACHE_FLAG_NONE);
 			Assert(ht != NULL);
@@ -1753,7 +1751,7 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 				 * In all other cases of direct modification of chunks we dont interfere
 				 * and do not add a ModifyHypertable node.
 				 */
-				Oid uncompressed_relid = ts_relation_get_uncompressed_relid(rte->relid);
+				Oid uncompressed_relid = ts_relation_get_uncompressed_relid(rte->relid, NULL);
 				if (OidIsValid(uncompressed_relid))
 				{
 					Chunk *uncompressed = ts_chunk_get_by_relid(uncompressed_relid, true);

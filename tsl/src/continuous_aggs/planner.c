@@ -220,7 +220,7 @@ get_watermark_const(HTAB *watermarks, int32 watermark_hypertable_id, List *range
 		 * removed from the query cache by PostgreSQL when an invalidation for the watermark
 		 * hypertable is processed (see CacheInvalidateRelcacheByRelid).
 		 */
-		Oid ht_relid = ts_hypertable_id_to_relid(watermark_hypertable_id, NULL, true);
+		Oid ht_relid = ts_hypertable_id_to_relid(watermark_hypertable_id, true);
 
 		if (!OidIsValid(ht_relid))
 		{

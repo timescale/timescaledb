@@ -439,9 +439,7 @@ chunk_detach(PG_FUNCTION_ARGS)
 
 	DEBUG_WAITPOINT("chunk_detach_before_lock");
 
-	ht_rel = ts_hypertable_id_to_relid(ts_chunk_get_hypertable_id_by_reloid(chunk_relid),
-									   NULL,
-									   true);
+	ht_rel = ts_hypertable_id_to_relid(ts_chunk_get_hypertable_id_by_reloid(chunk_relid), true);
 	if (!OidIsValid(ht_rel))
 	{
 		ereport(ERROR,
