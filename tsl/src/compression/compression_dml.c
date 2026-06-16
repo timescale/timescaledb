@@ -941,8 +941,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			continue;
 		}
 
-		/* LOOK HERE */
-
 		/* To track false positives */
 		bool bloom_passed = false;
 

@@ -22,7 +22,7 @@ PGOPTIONS='-c client_min_messages=error'
 export PGOPTIONS
 
 
-printf '\\restrict %s\n' "${RANDOM}" | tee restricted-repro.sql
+printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
 cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
 
 psql -q -c "create database repro_off"

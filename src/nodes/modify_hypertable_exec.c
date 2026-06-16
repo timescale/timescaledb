@@ -2561,6 +2561,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 													   hypertable_slot,
 													   ctr->cis->slot);
 
+				/* LOOK HERE */
 				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, chunk_slot);
 				estate->es_processed++;
 				continue;
