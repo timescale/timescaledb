@@ -778,6 +778,15 @@ recompress_chunk_impl(Chunk *chunk, bool recompress)
 			return false;
 		}
 
+		if (!ts_guc_enable_optimizations)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("segmentwise in-memory recompression functionality disabled, "
+							"set timescaledb.enable_optimizations to on")));
+			return false;
+		}
+
 		/* #9444: do not recompress when order by columns are nullable, do segmentwise
 		 * decompress/compress instead. It is due to compression min/max metadata not handling
 		 * NULLs. This restriction is lifted with first/last metadata index.
@@ -802,6 +811,15 @@ recompress_chunk_impl(Chunk *chunk, bool recompress)
 					(errcode(ERRCODE_WARNING),
 					 errmsg("in-memory recompression functionality disabled, "
 							"set timescaledb.enable_in_memory_recompression to on")));
+			return false;
+		}
+
+		if (!ts_guc_enable_optimizations)
+		{
+			ereport(DEBUG1,
+					(errcode(ERRCODE_WARNING),
+					 errmsg("in-memory recompression functionality disabled, "
+							"set timescaledb.enable_optimizations to on")));
 			return false;
 		}
 
