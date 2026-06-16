@@ -266,15 +266,15 @@ debug_waitpoint_release
 -----------------------
                        
 
+step s1_add_a: <... completed>
+step alt_rename: <... completed>
 step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
 column_name
 -----------
 bucket     
-avg_val    
+mean_val   
+min_temp   
 
-step s1_add_a: <... completed>
-step alt_rename: <... completed>
-ERROR:  deadlock detected
 
 starting permutation: wp_before_pv_enable s1_add_a alt_compress wp_before_pv_release v_cols_a v_compress_a
 step wp_before_pv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock');
@@ -283,24 +283,24 @@ debug_waitpoint_enable
                       
 
 step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
-alt: NOTICE:  defaulting compress_orderby to bucket
 step alt_compress: ALTER MATERIALIZED VIEW cagg_a SET (timescaledb.compress = true); <waiting ...>
 step wp_before_pv_release: SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock');
 debug_waitpoint_release
 -----------------------
                        
 
+step s1_add_a: <... completed>
+alt: NOTICE:  defaulting compress_orderby to bucket
+step alt_compress: <... completed>
 step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
 column_name
 -----------
 bucket     
 avg_val    
+min_temp   
 
 step v_compress_a: SELECT compression_enabled FROM timescaledb_information.continuous_aggregates WHERE view_name='cagg_a';
 compression_enabled
 -------------------
-f                  
+t                  
 
-step s1_add_a: <... completed>
-step alt_compress: <... completed>
-ERROR:  deadlock detected

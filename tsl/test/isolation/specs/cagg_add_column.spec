@@ -44,8 +44,8 @@ step "wp_before_uv_enable"  { SELECT debug_waitpoint_enable('cagg_add_column_bef
 step "wp_before_uv_release" { SELECT debug_waitpoint_release('cagg_add_column_before_uv_lock'); }
 step "wp_before_ht_enable"  { SELECT debug_waitpoint_enable('cagg_add_column_before_ht_lock'); }
 step "wp_before_ht_release" { SELECT debug_waitpoint_release('cagg_add_column_before_ht_lock'); }
-step "wp_before_pv_enable"    { SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock'); }
-step "wp_before_pv_release"   { SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock'); }
+step "wp_before_pv_enable"  { SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock'); }
+step "wp_before_pv_release" { SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock'); }
 step "wp_after_enable"      { SELECT debug_waitpoint_enable('cagg_add_column_after_locks'); }
 step "wp_after_release"     { SELECT debug_waitpoint_release('cagg_add_column_after_locks'); }
 step "wp_refresh_enable"    { SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock'); }
@@ -116,16 +116,10 @@ permutation "wp_before_pv_enable" "s1_add_a" "alt_matonly"("s1_add_a") "wp_befor
 permutation "wp_before_pv_enable" "s1_add_a" "alt_chunk"("s1_add_a")   "wp_before_pv_release" "v_cols_a"
 permutation "wp_before_pv_enable" "s1_add_a" "alt_owner"("s1_add_a")   "wp_before_pv_release" "v_cols_a" "v_owner_a"
 
-# DEADLOCK REPRODUCER due to different ordering in locks taken
-#
-# e.g. ADD COLUMN locks the cagg relations as user view -> mat HT -> partial view
-# -> direct view, whereas RENAME COLUMN locks them in the reverse order
-# (direct view -> partial view -> mat HT -> user view).
-#
-# Here ADD COLUMN pauses BEFORE the mat-HT lock, holding only the user-view
-# lock. RENAME COLUMN then takes the direct view, partial view and mat HT and
-# finally blocks waiting for the user view (held by ADD COLUMN). When ADD COLUMN
-# resumes it tries to take the mat HT (now held by RENAME COLUMN) and the two
-# deadlock.
+# Before the canonical lock ordering was enforced these two permutations
+# deadlocked: SET compress locked the partial view (to derive default settings)
+# before the mat HT, and RENAME COLUMN locked the views in the reverse (direct,
+# partial, mat, user) order. Now both take the mat HT / user view first, so they
+# simply wait for ADD COLUMN and then complete.
 permutation "wp_before_pv_enable" "s1_add_a" "alt_rename"("s1_add_a")   "wp_before_pv_release" "v_cols_a"
 permutation "wp_before_pv_enable" "s1_add_a" "alt_compress"("s1_add_a") "wp_before_pv_release" "v_cols_a" "v_compress_a"

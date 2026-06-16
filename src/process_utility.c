@@ -2484,6 +2484,22 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 			 * aggregate rather than one of the internal views, which is what
 			 * the ExecRenameStmt calls below would otherwise report. */
 			ts_cagg_permissions_check(relid, GetUserId());
+			/*
+			 * Renaming a column rewrites all four relations (user view, mat
+			 * hypertable, partial view and direct view) and each ExecRenameStmt
+			 * below takes an AccessExclusiveLock on its target. ExecRenameStmt
+			 * would lock them in the order direct, partial, mat, user view,
+			 * which is the reverse of the canonical order and could deadlock
+			 * with a concurrent ALTER. Lock them all upfront in the canonical
+			 * order; the ExecRenameStmt calls then re-take locks that are already
+			 * held.
+			 */
+			ts_continuous_agg_lock_relations(cagg,
+											 AccessExclusiveLock, /* user_view */
+											 AccessExclusiveLock, /* mat_hypertable */
+											 AccessExclusiveLock, /* partial_view */
+											 AccessExclusiveLock, /* direct_view */
+											 NULL);				  /* waitpoint_prefix */
 
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
@@ -5061,6 +5077,18 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 				break;
 
 			case AT_ChangeOwner:
+				/*
+				 * Lock mat. ht and CAgg views upfront in the same order with
+				 * the rest of ALTERs so this cannot deadlock with another concurrent
+				 * ALTER. The per-relation ALTERs below then re-take locks that are
+				 * already held.
+				 */
+				ts_continuous_agg_lock_relations(cagg,
+												 AccessExclusiveLock, /* user_view */
+												 AccessExclusiveLock, /* mat_hypertable */
+												 AccessExclusiveLock, /* partial_view */
+												 AccessExclusiveLock, /* direct_view */
+												 NULL);				  /* waitpoint_prefix */
 				alter_table_by_relation(stmt->relation, cmd);
 				alter_table_by_name(&cagg->data.partial_view_schema,
 									&cagg->data.partial_view_name,

@@ -32,6 +32,7 @@
 
 #include "bgw/job.h"
 #include "cross_module_fn.h"
+#include "debug_point.h"
 #include "errors.h"
 #include "func_cache.h"
 #include "hypercube.h"
@@ -900,6 +901,50 @@ get_and_lock_rel_by_hypertable_id(int32 hypertable_id, LOCKMODE mode)
 }
 
 /*
+ * Lock the relations that make up a continuous aggregate in the canonical
+ * order: user view, mat hypertable, partial view, direct view.
+ *
+ * Every concurrent ALTER on a continuous aggregate must acquire the locks it
+ * needs in this order so that ALTER operations cannot deadlock with each other
+ * or with a concurrent DROP. An operation that does not touch a particular
+ * relation passes NoLock for it; the relation is skipped and the relative
+ * order of the remaining locks is preserved.
+ */
+void
+ts_continuous_agg_lock_relations(ContinuousAgg *cagg, LOCKMODE user_view, LOCKMODE mat_hypertable,
+								 LOCKMODE partial_view, LOCKMODE direct_view,
+								 const char *waitpoint_prefix)
+{
+	if (user_view != NoLock)
+	{
+		DEBUG_WAITPOINT(psprintf("%s_%s", waitpoint_prefix, "before_uv_lock"));
+		LockRelationOid(cagg->relid, user_view);
+	}
+
+	if (mat_hypertable != NoLock)
+	{
+		DEBUG_WAITPOINT(psprintf("%s_%s", waitpoint_prefix, "before_ht_lock"));
+		get_and_lock_rel_by_hypertable_id(cagg->data.mat_hypertable_id, mat_hypertable);
+	}
+
+	if (partial_view != NoLock)
+	{
+		DEBUG_WAITPOINT(psprintf("%s_%s", waitpoint_prefix, "before_pv_lock"));
+		get_and_lock_rel_by_name(&cagg->data.partial_view_schema,
+								 &cagg->data.partial_view_name,
+								 partial_view);
+	}
+
+	if (direct_view != NoLock)
+	{
+		DEBUG_WAITPOINT(psprintf("%s_%s", waitpoint_prefix, "before_dv_lock"));
+		get_and_lock_rel_by_name(&cagg->data.direct_view_schema,
+								 &cagg->data.direct_view_name,
+								 direct_view);
+	}
+}
+
+/*
  * Drops continuous aggs and all related objects.
  *
  * This function is intended to be run by event trigger during CASCADE,
@@ -915,8 +960,11 @@ get_and_lock_rel_by_hypertable_id(int32 hypertable_id, LOCKMODE mode)
  * - trigger on the raw hypertable (hypertable specified in the user view)
  * - copy of the user view query (AKA the direct view)
  *
- * NOTE: The order in which the objects are dropped should be EXACTLY the
- * same as in materialize.c
+ * NOTE: The order in which the relations are locked here is the canonical
+ * lock order for a continuous aggregate (user view, raw hypertable, mat
+ * hypertable, partial view, direct view). Every concurrent ALTER on a cagg
+ * must lock the relations it touches in this same order to avoid deadlocks;
+ * see ts_continuous_agg_lock_relations().
  *
  * drop_user_view indicates whether to drop the user view.
  *                (should be false if called as part of the drop-user-view callback)
@@ -950,7 +998,8 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	 * Following objects might be already dropped in case of CASCADE
 	 * drop including the associated schema object.
 	 *
-	 * NOTE: the lock order matters, see tsl/src/materialization.c.
+	 * NOTE: the lock order matters; this is the canonical order that every
+	 * concurrent ALTER must follow (see ts_continuous_agg_lock_relations()).
 	 * Perform all locking upfront.
 	 *
 	 * AccessExclusiveLock is needed to drop triggers and also prevent

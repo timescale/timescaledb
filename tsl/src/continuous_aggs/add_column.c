@@ -217,28 +217,22 @@ make_colref_target(ColumnDef *coldef)
 void
 continuous_agg_add_column(ContinuousAgg *cagg, AlterTableStmt *stmt)
 {
-	/* Lock all the relations we'll touch, in the same order as
-	 * DROP so concurrent DROP and ADD COLUMN cannot deadlock. */
-	Oid cagg_relid = cagg->relid;
-	DEBUG_WAITPOINT("cagg_add_column_before_uv_lock");
-	LockRelationOid(cagg_relid, AccessExclusiveLock);
+	Oid mat_ht_oid;
+	List *expr_targets = NIL;
+	List *colref_targets = NIL;
 
-	/* A concurrent DROP could have committed between the cagg lookup and user-view lock
-	 * here. */
-	cagg = cagg_get_by_relid_or_fail(cagg_relid);
-	Oid mat_ht_oid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
-	Oid partial_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
-												 NameStr(cagg->data.partial_view_name),
-												 false);
-	Oid direct_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
-												NameStr(cagg->data.direct_view_name),
-												false);
-	DEBUG_WAITPOINT("cagg_add_column_before_ht_lock");
-	LockRelationOid(mat_ht_oid, AccessExclusiveLock);
-	DEBUG_WAITPOINT("cagg_add_column_before_pv_lock");
-	LockRelationOid(partial_view_oid, AccessExclusiveLock);
-	LockRelationOid(direct_view_oid, AccessExclusiveLock);
+	ts_cagg_permissions_check(cagg->relid, GetUserId());
+
+	ts_continuous_agg_lock_relations(cagg,
+									 AccessExclusiveLock, /* user_view */
+									 AccessExclusiveLock, /* mat_hypertable */
+									 AccessExclusiveLock, /* partial_view */
+									 AccessExclusiveLock, /* direct_view */
+									 "cagg_add_column");  /* waitpoint_prefix */
 	DEBUG_WAITPOINT("cagg_add_column_after_locks");
+
+	cagg = cagg_get_by_relid_or_fail(cagg->relid);
+	mat_ht_oid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
 
 	ListCell *lc;
 	foreach (lc, stmt->cmds)
@@ -251,8 +245,6 @@ continuous_agg_add_column(ContinuousAgg *cagg, AlterTableStmt *stmt)
 	/* Build the per-view ResTarget lists. Partial / direct views get
 	 * the user's aggregate expression; the user view gets a column
 	 * reference to the freshly-added mat-HT column. */
-	List *expr_targets = NIL;
-	List *colref_targets = NIL;
 	foreach (lc, stmt->cmds)
 	{
 		AlterTableCmd *cmd = lfirst_node(AlterTableCmd, lc);
