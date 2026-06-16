@@ -326,9 +326,7 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	interval_getter = policy_retention_get_drop_after_interval;
 	bool use_creation_time = false;
 
-	object_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config),
-											 NULL,
-											 false);
+	object_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
 
 	open_dim = get_open_dimension_for_hypertable(hypertable, false);
@@ -605,9 +603,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 void
 policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
 {
-	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config),
-												NULL,
-												false);
+	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	Cache *hcache;
 	Hypertable *hypertable =
 		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
@@ -621,9 +617,7 @@ policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData
 void
 policy_recompression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
 {
-	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config),
-												NULL,
-												false);
+	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	Cache *hcache;
 	Hypertable *hypertable =
 		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);

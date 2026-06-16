@@ -154,10 +154,6 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
 static Chunk *get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 												MemoryContext mctx, uint64 *num_chunks_returned,
 												ScanTupLock *tupLock);
-static bool compressed_chunk_get_uncompressed_chunk(int32 compressed_chunk_id,
-													FormData_chunk *chunk_fd);
-static void init_scan_by_compressed_chunk_id(ScanIterator *iterator, int32 compressed_chunk_id);
-
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -1649,9 +1645,7 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 		ts_hypercube_slice_sort(chunk->cube);
 	}
 
-	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id,
-														NULL,
-														false);
+	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
 	ts_get_rel_info_by_name(NameStr(chunk->fd.schema_name),
 							NameStr(chunk->fd.table_name),
 							&chunk->table_id,
@@ -2702,8 +2696,9 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
 }
 
-bool
-ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
+static inline bool
+ts_chunk_simple_scan_by_reloid_internal(Oid reloid, FormData_chunk *form, Snapshot snapshot,
+										bool missing_ok)
 {
 	bool found = false;
 
@@ -2716,7 +2711,7 @@ ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok
 			Oid nspid = get_rel_namespace(reloid);
 			const char *schema = get_namespace_name(nspid);
 
-			found = chunk_simple_scan_by_name(schema, table, form, NULL, missing_ok);
+			found = chunk_simple_scan_by_name(schema, table, form, snapshot, missing_ok);
 		}
 	}
 
@@ -2728,6 +2723,12 @@ ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok
 	}
 
 	return found;
+}
+
+bool
+ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
+{
+	return ts_chunk_simple_scan_by_reloid_internal(reloid, form, NULL, missing_ok);
 }
 
 static bool
@@ -2771,15 +2772,16 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 Datum
 ts_chunk_get_hypertable(PG_FUNCTION_ARGS)
 {
-	Oid         chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	TupleDesc   tupdesc;
-	HeapTuple   tuple;
-	Datum       values[2];
-	bool        nulls[2] = { false, false };
-	Oid         hypertable_relid = InvalidOid;
-	bool        is_compressed = false;
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	Datum values[2];
+	bool nulls[2] = { false, false };
+	Oid hypertable_relid = InvalidOid;
+	bool is_compressed = false;
+	FormData_chunk chunk_fd;
 
-	if (!OidIsValid(chunk_relid))
+	if (!OidIsValid(relid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -2793,45 +2795,32 @@ ts_chunk_get_hypertable(PG_FUNCTION_ARGS)
 	}
 	tupdesc = BlessTupleDesc(tupdesc);
 
-	char *table = get_rel_name(chunk_relid);
-	char *schema = get_namespace_name(get_rel_namespace(chunk_relid));
+	/* Use active snapshot for catalog lookups */
+	Snapshot snapshot = GetActiveSnapshot();
+	Oid uncompressed_relid = ts_relation_get_uncompressed_relid(relid, snapshot);
 
-	if (table == NULL || schema == NULL)
+	if (OidIsValid(uncompressed_relid))
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("relation %u not found", chunk_relid)));
+		relid = uncompressed_relid;
+		is_compressed = true;
 	}
 
-	FormData_chunk chunk_fd;
-	int32 hypertable_id;
-
-    /* Use active snapshot for catalog lookups */
-	Snapshot snapshot = GetActiveSnapshot();
-
-	if (chunk_simple_scan_by_name(schema, table, &chunk_fd, snapshot, true))
+	/* If the relid belongs to a chunk find its hypertable relid */
+	if (ts_chunk_simple_scan_by_reloid_internal(relid, &chunk_fd, snapshot, true))
 	{
-		FormData_chunk uncompressed_chunk_fd;
+		int32 hypertable_id = chunk_fd.hypertable_id;
 
-		if (compressed_chunk_get_uncompressed_chunk(chunk_fd.id, &uncompressed_chunk_fd))
+		if (hypertable_id != INVALID_HYPERTABLE_ID)
 		{
-			hypertable_id = uncompressed_chunk_fd.hypertable_id;
-			is_compressed = true;
+			hypertable_relid =
+				ts_hypertable_id_to_relid_with_snapshot(hypertable_id, snapshot, true);
 		}
-		else
-		{
-			hypertable_id = chunk_fd.hypertable_id;
-		}
-
-		/* Get hypertable relid */
-		hypertable_relid = ts_hypertable_id_to_relid(hypertable_id, snapshot, true);
-
 	}
 
 	if (OidIsValid(hypertable_relid))
 	{
-		values[0] = ObjectIdGetDatum(hypertable_relid);   /* OUT hypertable     */
-		values[1] = BoolGetDatum(is_compressed);          /* OUT is_compressed  */
+		values[0] = ObjectIdGetDatum(hypertable_relid);
+		values[1] = BoolGetDatum(is_compressed);
 	}
 	else
 	{
@@ -2840,21 +2829,6 @@ ts_chunk_get_hypertable(PG_FUNCTION_ARGS)
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
-}
-
-/*
- * Look up the parent (uncompressed) chunk id from a compressed chunk id, using
- * the active snapshot. See ts_chunk_id_by_name for snapshot semantics.
- */
-static bool
-compressed_chunk_get_uncompressed_chunk(int32 compressed_chunk_id, FormData_chunk *chunk_fd)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-
-	iterator.ctx.snapshot = GetActiveSnapshot();
-	init_scan_by_compressed_chunk_id(&iterator, compressed_chunk_id);
-
-	return chunk_simple_scan(&iterator, chunk_fd, true, NULL);
 }
 
 bool
@@ -3257,7 +3231,7 @@ List *
 ts_chunk_get_by_hypertable_id(int32 hypertable_id)
 {
 	List *chunks = NIL;
-	Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id, NULL, false);
+	Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id, false);
 
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 
@@ -5253,9 +5227,7 @@ ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti)
 	chunkptr->table_id = ts_get_relation_relid(NameStr(chunkptr->fd.schema_name),
 											   NameStr(chunkptr->fd.table_name),
 											   true);
-	chunkptr->hypertable_relid = ts_hypertable_id_to_relid(chunkptr->fd.hypertable_id,
-														   NULL,
-														   false);
+	chunkptr->hypertable_relid = ts_hypertable_id_to_relid(chunkptr->fd.hypertable_id, false);
 	chunkptr->relkind = get_rel_relkind(chunkptr->table_id);
 
 	return vec;

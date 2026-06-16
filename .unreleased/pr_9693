@@ -1,1 +1,1 @@
-Implements: #9693 Add snapshot-aware catalog lookup SQL functions
+Implements: #9693 Add `chunk_get_hypertable` SQL function

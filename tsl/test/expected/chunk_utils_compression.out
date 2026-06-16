@@ -66,16 +66,40 @@ SELECT compress_chunk(show_chunks('public.table_to_compress'));
  _timescaledb_internal._hyper_2_8_chunk
  _timescaledb_internal._hyper_2_9_chunk
 
--- compressed_chunk_parent_id resolves a real compressed chunk back to its
--- parent. Used by logical decoding plugins via the active snapshot.
-SELECT bool_and(_timescaledb_functions.compressed_chunk_parent_id(compressed.id) = parent.id) AS ok
-FROM _timescaledb_catalog.chunk parent
-JOIN _timescaledb_catalog.chunk compressed ON parent.compressed_chunk_id = compressed.id
-JOIN _timescaledb_catalog.hypertable h ON h.id = parent.hypertable_id
-WHERE h.table_name = 'table_to_compress';
- ok 
-----
- t
+-- `chunk_get_hypertable()` should resolve the uncompressed chunks's hypertable
+-- and return `is_compressed=false` (even when they have their respective
+-- compressed chunks)
+SELECT *
+FROM show_chunks('public.table_to_compress') as show,
+LATERAL _timescaledb_functions.chunk_get_hypertable(show);
+                  show                  |    hypertable     | is_compressed 
+----------------------------------------+-------------------+---------------
+ _timescaledb_internal._hyper_2_7_chunk | table_to_compress | f
+ _timescaledb_internal._hyper_2_8_chunk | table_to_compress | f
+ _timescaledb_internal._hyper_2_9_chunk | table_to_compress | f
+
+-- `chunk_get_hypertable()` should resolve the compressed chunks' main hypertable
+-- (not the internal compressed hypertable) and return `is_compressed=true`
+SELECT cs.compress_relid, get_ht.*
+FROM _timescaledb_catalog.compression_settings cs,
+LATERAL _timescaledb_functions.chunk_get_hypertable(cs.compress_relid) get_ht
+WHERE compress_relid IS NOT NULL;
+                 compress_relid                  |    hypertable     | is_compressed 
+-------------------------------------------------+-------------------+---------------
+ _timescaledb_internal.compress_hyper_3_10_chunk | table_to_compress | t
+ _timescaledb_internal.compress_hyper_3_11_chunk | table_to_compress | t
+ _timescaledb_internal.compress_hyper_3_12_chunk | table_to_compress | t
+
+-- returns NULL on non-chunk tables
+SELECT * FROM _timescaledb_functions.chunk_get_hypertable('public.table_to_compress');
+ hypertable | is_compressed 
+------------+---------------
+            | 
+
+SELECT * FROM _timescaledb_functions.chunk_get_hypertable('pg_class');
+ hypertable | is_compressed 
+------------+---------------
+            | 
 
 -- check that approx size function works. We call VACUUM to ensure all forks exist
 VACUUM public.table_to_compress;

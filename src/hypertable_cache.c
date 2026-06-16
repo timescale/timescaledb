@@ -227,9 +227,7 @@ TSDLLEXPORT Hypertable *
 ts_hypertable_cache_get_entry_by_id(Cache *cache, const int32 hypertable_id)
 {
 	return ts_hypertable_cache_get_entry(cache,
-										 ts_hypertable_id_to_relid(hypertable_id,
-											 					   NULL,
-											 					   true),
+										 ts_hypertable_id_to_relid(hypertable_id, true),
 										 CACHE_FLAG_MISSING_OK);
 }
 
