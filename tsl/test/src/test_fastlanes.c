@@ -15,19 +15,6 @@
 
 TS_FUNCTION_INFO_V1(ts_test_fastlanes);
 
-/*
- * palloc_aligned was added in PG 16. As PG 15 support
- * is about to be removed, this test is skipped on PG15.
- */
-#if PG_VERSION_NUM < 160000
-
-Datum
-ts_test_fastlanes(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_VOID();
-}
-
-#else
 #define pfree_aligned(p) pfree(p)
 
 /*
@@ -824,5 +811,3 @@ ts_test_fastlanes(PG_FUNCTION_ARGS)
 	test_w0_coverage();
 	PG_RETURN_VOID();
 }
-
-#endif

@@ -1,0 +1,194 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\pset null '<NULL>'
+SELECT * FROM _timescaledb_functions.get_hypertable_info('public.metrics'::regclass);
+ hypertable_id | schema_name | table_name | is_cagg 
+---------------+-------------+------------+---------
+             1 | public      | metrics    | f
+
+SELECT * FROM _timescaledb_functions.get_hypertable_info('public.hourly_device_metrics'::regclass);
+ hypertable_id | schema_name | table_name | is_cagg 
+---------------+-------------+------------+---------
+        <NULL> | <NULL>      | <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_hypertable_info(NULL);
+ hypertable_id | schema_name | table_name | is_cagg 
+---------------+-------------+------------+---------
+        <NULL> | <NULL>      | <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_hypertable_info(0);
+ hypertable_id | schema_name | table_name | is_cagg 
+---------------+-------------+------------+---------
+        <NULL> | <NULL>      | <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_hypertable_info('pg_catalog.pg_class'::regclass);
+ hypertable_id | schema_name | table_name | is_cagg 
+---------------+-------------+------------+---------
+        <NULL> | <NULL>      | <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(1);
+ hypertable_id | schema_name | table_name | is_cagg 
+---------------+-------------+------------+---------
+             1 | public      | metrics    | f
+
+SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(8);
+ hypertable_id |      schema_name      |         table_name         | is_cagg 
+---------------+-----------------------+----------------------------+---------
+             8 | _timescaledb_internal | _materialized_hypertable_X | f
+
+SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(0);
+ hypertable_id | schema_name | table_name | is_cagg 
+---------------+-------------+------------+---------
+        <NULL> | <NULL>      | <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(NULL);
+ hypertable_id | schema_name | table_name | is_cagg 
+---------------+-------------+------------+---------
+        <NULL> | <NULL>      | <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_primary_dimension(1);
+ column_name |       column_type        | integer_now_func 
+-------------+--------------------------+------------------
+ time        | timestamp with time zone | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_primary_dimension(8);
+ column_name |       column_type        | integer_now_func 
+-------------+--------------------------+------------------
+ hour        | timestamp with time zone | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_primary_dimension(0);
+ column_name | column_type | integer_now_func 
+-------------+-------------+------------------
+ <NULL>      | <NULL>      | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_primary_dimension(NULL);
+ column_name | column_type | integer_now_func 
+-------------+-------------+------------------
+ <NULL>      | <NULL>      | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_info('_timescaledb_internal._hyper_X_X_chunk');
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name |     chunk_schema      |    chunk_name    | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+-----------------------+------------------+--------------+-----------
+        3 |             1 | public         | metrics       | _timescaledb_internal | _hyper_X_X_chunk | f            | f
+
+SELECT * FROM _timescaledb_functions.get_chunk_info('_timescaledb_internal._hyper_X_X_chunk'::regclass);
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name |     chunk_schema      |    chunk_name    | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+-----------------------+------------------+--------------+-----------
+        3 |             1 | public         | metrics       | _timescaledb_internal | _hyper_X_X_chunk | f            | f
+
+SELECT * FROM _timescaledb_functions.get_chunk_info(0);
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name | chunk_schema | chunk_name | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+--------------+------------+--------------+-----------
+   <NULL> |        <NULL> | <NULL>         | <NULL>        | <NULL>       | <NULL>     | <NULL>       | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_info(NULL);
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name | chunk_schema | chunk_name | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+--------------+------------+--------------+-----------
+   <NULL> |        <NULL> | <NULL>         | <NULL>        | <NULL>       | <NULL>     | <NULL>       | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_info('pg_catalog.pg_class'::regclass);
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name | chunk_schema | chunk_name | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+--------------+------------+--------------+-----------
+   <NULL> |        <NULL> | <NULL>         | <NULL>        | <NULL>       | <NULL>     | <NULL>       | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(3);
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name |     chunk_schema      |    chunk_name    | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+-----------------------+------------------+--------------+-----------
+        3 |             1 | public         | metrics       | _timescaledb_internal | _hyper_X_X_chunk | f            | f
+
+SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(38);
+ chunk_id | hypertable_id |    ht_schema_name     |       ht_table_name        |     chunk_schema      |    chunk_name     | is_osm_chunk | is_frozen 
+----------+---------------+-----------------------+----------------------------+-----------------------+-------------------+--------------+-----------
+       38 |             8 | _timescaledb_internal | _materialized_hypertable_X | _timescaledb_internal | _hyper_X_X_chunk | f            | f
+
+SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(0);
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name | chunk_schema | chunk_name | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+--------------+------------+--------------+-----------
+   <NULL> |        <NULL> | <NULL>         | <NULL>        | <NULL>       | <NULL>     | <NULL>       | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(-1);
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name | chunk_schema | chunk_name | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+--------------+------------+--------------+-----------
+   <NULL> |        <NULL> | <NULL>         | <NULL>        | <NULL>       | <NULL>     | <NULL>       | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(NULL);
+ chunk_id | hypertable_id | ht_schema_name | ht_table_name | chunk_schema | chunk_name | is_osm_chunk | is_frozen 
+----------+---------------+----------------+---------------+--------------+------------+--------------+-----------
+   <NULL> |        <NULL> | <NULL>         | <NULL>        | <NULL>       | <NULL>     | <NULL>       | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range('_timescaledb_internal._hyper_X_X_chunk'::regclass);
+   range_start   |    range_end    
+-----------------+-----------------
+ 947721600000000 | 948326400000000
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range(0::regclass);
+ range_start | range_end 
+-------------+-----------
+      <NULL> |    <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range(1::regclass);
+ range_start | range_end 
+-------------+-----------
+      <NULL> |    <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range('pg_catalog.pg_class'::regclass);
+ range_start | range_end 
+-------------+-----------
+      <NULL> |    <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range(NULL::regclass);
+ range_start | range_end 
+-------------+-----------
+      <NULL> |    <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(3);
+   range_start   |    range_end    
+-----------------+-----------------
+ 947721600000000 | 948326400000000
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(38);
+   range_start   |    range_end    
+-----------------+-----------------
+ 943488000000000 | 949536000000000
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(0::int);
+ range_start | range_end 
+-------------+-----------
+      <NULL> |    <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(-1::int);
+ range_start | range_end 
+-------------+-----------
+      <NULL> |    <NULL>
+
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(NULL::int);
+ range_start | range_end 
+-------------+-----------
+      <NULL> |    <NULL>
+
+SELECT * FROM _timescaledb_functions.get_integer_now_func(1);
+ hypertable | integer_func 
+------------+--------------
+ <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_integer_now_func(8);
+ hypertable | integer_func 
+------------+--------------
+ <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_integer_now_func(0);
+ hypertable | integer_func 
+------------+--------------
+ <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_integer_now_func(-1);
+ hypertable | integer_func 
+------------+--------------
+ <NULL>     | <NULL>
+
+SELECT * FROM _timescaledb_functions.get_integer_now_func(NULL);
+ hypertable | integer_func 
+------------+--------------
+ <NULL>     | <NULL>
+

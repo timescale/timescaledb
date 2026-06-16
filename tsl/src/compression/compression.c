@@ -201,11 +201,7 @@ truncate_relation(Oid table_oid)
 
 	CheckTableForSerializableConflictIn(rel);
 
-#if PG16_LT
-	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
-#else
 	RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
-#endif
 
 	toast_relid = rel->rd_rel->reltoastrelid;
 
@@ -214,11 +210,7 @@ truncate_relation(Oid table_oid)
 	if (OidIsValid(toast_relid))
 	{
 		rel = table_open(toast_relid, AccessExclusiveLock);
-#if PG16_LT
-		RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
-#else
 		RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
-#endif
 		table_close(rel, NoLock);
 	}
 
@@ -3095,10 +3087,8 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
 
-	if (header.compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
-	{
-		elog(ERROR, "invalid compression algorithm %d", header.compression_algorithm);
-	}
+	CheckCompressedData(header.compression_algorithm > 0 &&
+						header.compression_algorithm < _END_COMPRESSION_ALGORITHMS);
 
 	return definitions[header.compression_algorithm].compressed_data_recv(buf);
 }

@@ -786,4 +786,60 @@ SELECT enable_chunk_skipping('sensor_readings', 'temperature');
  (17,t)
 
 RESET timescaledb.enable_chunk_skipping;
+-- Test chunk skipping with PG_INT64_MAX value
+SET timescaledb.enable_chunk_skipping = on;
+CREATE TABLE chunk_skip_bigint_max(
+    ts     timestamptz NOT NULL,
+    ranged bigint
+);
+SELECT * FROM create_hypertable('chunk_skip_bigint_max', 'ts',
+                         chunk_time_interval => interval '1 day');
+ hypertable_id | schema_name |      table_name       | created 
+---------------+-------------+-----------------------+---------
+            11 | public      | chunk_skip_bigint_max | t
+
+SELECT * FROM enable_chunk_skipping('chunk_skip_bigint_max', 'ranged');
+ column_stats_id | enabled 
+-----------------+---------
+              18 | t
+
+ALTER TABLE chunk_skip_bigint_max SET (timescaledb.compress);
+INSERT INTO chunk_skip_bigint_max VALUES ('2025-01-01', 9223372036854775806); -- PG_INT64_MAX - 1
+INSERT INTO chunk_skip_bigint_max VALUES ('2025-01-02', 9223372036854775807); -- PG_INT64_MAX
+SELECT compress_chunk(c) FROM show_chunks('chunk_skip_bigint_max') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_14_chunk
+ _timescaledb_internal._hyper_11_15_chunk
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged = 9223372036854775807;
+ count 
+-------
+     1
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged >= 9223372036854775807;
+ count 
+-------
+     1
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged > 9223372036854775806;
+ count 
+-------
+     1
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged = 9223372036854775806;
+ count 
+-------
+     1
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged >= 9223372036854775806;
+ count 
+-------
+     2
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged > 9223372036854775805;
+ count 
+-------
+     2
+
 RESET timescaledb.enable_chunk_skipping;

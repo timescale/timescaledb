@@ -966,11 +966,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	 */
 	/* createSubid is creation check, newRelfilenodeSubid is truncation check */
 	if (ccstate->rel->rd_createSubid != InvalidSubTransactionId ||
-#if PG16_LT
-		ccstate->rel->rd_newRelfilenodeSubid != InvalidSubTransactionId)
-#else
 		ccstate->rel->rd_newRelfilelocatorSubid != InvalidSubTransactionId)
-#endif
 	{
 		ti_options |= HEAP_INSERT_SKIP_FSM;
 	}
@@ -986,9 +982,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	 */
 	resultRelInfo = makeNode(ResultRelInfo);
 
-#if PG16_LT
-	ExecInitRangeTable(estate, pstate->p_rtable);
-#elif PG18_LT
+#if PG18_LT
 	Assert(pstate->p_rteperminfos != NULL);
 	ExecInitRangeTable(estate, pstate->p_rtable, pstate->p_rteperminfos);
 #else
@@ -1485,17 +1479,6 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 	RangeTblEntry *rte = nsitem->p_rte;
 	addNSItemToQuery(pstate, nsitem, true, true, true);
 
-#if PG16_LT
-	rte->requiredPerms = ACL_INSERT;
-
-	foreach (cur, attnums)
-	{
-		int attno = lfirst_int(cur) - FirstLowInvalidHeapAttributeNumber;
-		rte->insertedCols = bms_add_member(rte->insertedCols, attno);
-	}
-
-	ExecCheckRTPerms(pstate->p_rtable, true);
-#else
 	RTEPermissionInfo *perminfo = nsitem->p_perminfo;
 	perminfo->requiredPerms = ACL_INSERT;
 
@@ -1506,7 +1489,6 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 	}
 
 	ExecCheckPermissions(pstate->p_rtable, list_make1(perminfo), true);
-#endif
 
 	/*
 	 * Permission check for row security policies.

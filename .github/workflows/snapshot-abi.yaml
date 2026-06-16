@@ -19,7 +19,6 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
       pg18_abi_min: ${{ steps.config.outputs.pg18_abi_min }}
@@ -44,12 +43,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 15, 16, 17, 18 ]
+        pg: [ 16, 17, 18 ]
         ignores:
           - 'net telemetry bgw_launcher'
         include:
-          - pg: 15
-            abi_min: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
           - pg: 16
             abi_min: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
           - pg: 17
@@ -73,7 +70,7 @@ jobs:
 
     - name: Download Postgres ${{ matrix.pg }}
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ matrix.abi_min }}/postgresql-${{ matrix.abi_min }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
@@ -108,7 +105,7 @@ jobs:
 
     - name: Download Postgres ${{ matrix.pg }}-snapshot
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
         mkdir -p ~/$PG_SRC_DIR-snapshot
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR-snapshot --strip-components 1

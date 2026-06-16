@@ -666,9 +666,7 @@ ts_make_range_from_internal_time(PG_FUNCTION_ARGS)
 {
 	Oid rngtypid = get_fn_expr_rettype(fcinfo->flinfo);
 	TypeCacheEntry *typcache = range_get_typcache(fcinfo, rngtypid);
-#if PG16_GE
 	Node *escontext = fcinfo->context;
-#endif
 	RangeBound lower = {
 		.val = PG_ARGISNULL(1) ? 0 : PG_GETARG_DATUM(1),
 		.infinite = PG_ARGISNULL(1),
@@ -684,7 +682,7 @@ ts_make_range_from_internal_time(PG_FUNCTION_ARGS)
 
 	/* Need to check the types of the lower and upper values. They should
 	 * match the returned range. */
-	PG_RETURN_RANGE_P(make_range_compat(typcache, &lower, &upper, false, escontext));
+	PG_RETURN_RANGE_P(make_range(typcache, &lower, &upper, false, escontext));
 }
 
 Datum

@@ -62,14 +62,8 @@ jobs:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
 
-      # For some reason, on PG <= 15 with faketime the client backends get the
-      # modified time, and the background workers the unmodified time, so it
-      # doesn't work.
       FAKETIME: |
-        ${{ (contains(matrix.os, 'ubuntu')
-               && !startsWith(matrix.pg, '14.')
-               && !startsWith(matrix.pg, '15.')
-            ) && 'faketime -f +379d' || '' }}
+        ${{ contains(matrix.os, 'ubuntu') && 'faketime -f +379d' || '' }}
 
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
@@ -139,10 +133,10 @@ jobs:
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
-          wget -q -O postgresql.tar.bz2 \
+          wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
         else
-          wget -q -O postgresql.tar.bz2 \
+          wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         fi
         mkdir -p ~/$PG_SRC_DIR
@@ -225,6 +219,24 @@ jobs:
     - name: coverage
       if: matrix.coverage
       run: make -j $(getconf _NPROCESSORS_ONLN) -k -C build coverage
+
+    # The below key is from the codecov website and I place it
+    # here because the network location returns 404
+    # (https://keybase.io/codecovsecurity/pgp_keys.asc)
+    - name: Import local Codecov GPG key
+      if: matrix.coverage
+      run: |
+        mkdir -p /home/runner/.gnupg
+        chmod 700 /home/runner/.gnupg
+        gpg --no-default-keyring \
+            --keyring /home/runner/.gnupg/trustedkeys.gpg \
+            --import "${GITHUB_WORKSPACE}/.github/codecov.asc"
+        # Verify the fingerprint matches before trusting it
+        gpg --no-default-keyring \
+            --keyring /home/runner/.gnupg/trustedkeys.gpg \
+            --list-keys --with-colons \
+            | grep -q '27034E7FDB850E0BBC2C62FF806BB28AED779869' \
+            || (echo "Codecov GPG fingerprint mismatch!" && exit 1)
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
