@@ -498,6 +498,13 @@ DROP TABLE base_uuids;
 RESET timescaledb.enable_uuid_compression;
 DROP table uuid_set;
 
+
+-- Corrupt compressed data with zero header
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.compressed_data_in('AA=='::cstring);
+\set ON_ERROR_STOP 1
+
+
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --
 -----------------------------------------------

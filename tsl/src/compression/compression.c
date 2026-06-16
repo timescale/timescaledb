@@ -3087,10 +3087,8 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
 
-	if (header.compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
-	{
-		elog(ERROR, "invalid compression algorithm %d", header.compression_algorithm);
-	}
+	CheckCompressedData(header.compression_algorithm > 0 &&
+						header.compression_algorithm < _END_COMPRESSION_ALGORITHMS);
 
 	return definitions[header.compression_algorithm].compressed_data_recv(buf);
 }
