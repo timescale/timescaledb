@@ -130,7 +130,7 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 void
 ts_hypertable_permissions_check_by_id(int32 hypertable_id)
 {
-	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id, false);
+	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id, NULL, false);
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 }
 
@@ -360,7 +360,7 @@ hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 }
 
 Oid
-ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
+ts_hypertable_id_to_relid(int32 hypertable_id, Snapshot snapshot, bool return_invalid)
 {
 	Catalog *catalog = ts_catalog_get();
 	Oid relid = InvalidOid;
@@ -374,6 +374,7 @@ ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
 		.data = &relid,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
+		.snapshot = snapshot,
 	};
 
 	/* Perform an index scan on the hypertable pkey. */

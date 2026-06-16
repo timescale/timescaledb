@@ -102,6 +102,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_hypertable_id);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
+TS_FUNCTION_INFO_V1(ts_chunk_get_hypertable);
 
 static bool ts_chunk_add_status(Chunk *chunk, int32 status);
 
@@ -153,6 +154,10 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
 static Chunk *get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 												MemoryContext mctx, uint64 *num_chunks_returned,
 												ScanTupLock *tupLock);
+static bool compressed_chunk_get_uncompressed_chunk(int32 compressed_chunk_id,
+													FormData_chunk *chunk_fd);
+static void init_scan_by_compressed_chunk_id(ScanIterator *iterator, int32 compressed_chunk_id);
+
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -1644,7 +1649,9 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 		ts_hypercube_slice_sort(chunk->cube);
 	}
 
-	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
+	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id,
+														NULL,
+														false);
 	ts_get_rel_info_by_name(NameStr(chunk->fd.schema_name),
 							NameStr(chunk->fd.table_name),
 							&chunk->table_id,
@@ -2675,7 +2682,7 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok,
 
 static bool
 chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk *form,
-						  bool missing_ok)
+						  Snapshot snapshot, bool missing_ok)
 {
 	ScanIterator iterator;
 	static const DisplayKeyData displaykey[] = {
@@ -2689,6 +2696,7 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 	}
 
 	iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	iterator.ctx.snapshot = snapshot;
 	init_scan_by_qualified_table_name(&iterator, schema, table);
 
 	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
@@ -2708,7 +2716,7 @@ ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok
 			Oid nspid = get_rel_namespace(reloid);
 			const char *schema = get_namespace_name(nspid);
 
-			found = chunk_simple_scan_by_name(schema, table, form, missing_ok);
+			found = chunk_simple_scan_by_name(schema, table, form, NULL, missing_ok);
 		}
 	}
 
@@ -2760,143 +2768,93 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(last_id);
 }
 
-/*
- * Look up a chunk id by (schema, table) using the active snapshot.
- *
- * Reads the snapshot via GetActiveSnapshot() so a logical decoding plugin can
- * install a HistoricSnapshot via PushActiveSnapshot() before invoking. Returns
- * NULL when no matching chunk exists.
- */
 Datum
-ts_chunk_id_by_name(PG_FUNCTION_ARGS)
+ts_chunk_get_hypertable(PG_FUNCTION_ARGS)
 {
-	Name schema = PG_GETARG_NAME(0);
-	Name table = PG_GETARG_NAME(1);
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	int32 chunk_id = INVALID_CHUNK_ID;
-	bool found = false;
+	Oid         chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	TupleDesc   tupdesc;
+	HeapTuple   tuple;
+	Datum       values[2];
+	bool        nulls[2] = { false, false };
+	Oid         hypertable_relid = InvalidOid;
+	bool        is_compressed = false;
 
-	iterator.ctx.snapshot = GetActiveSnapshot();
-	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_SCHEMA_NAME_INDEX);
-
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_chunk_schema_name_idx_schema_name,
-								   BTEqualStrategyNumber,
-								   F_NAMEEQ,
-								   NameGetDatum(schema));
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_chunk_schema_name_idx_table_name,
-								   BTEqualStrategyNumber,
-								   F_NAMEEQ,
-								   NameGetDatum(table));
-
-	ts_scanner_foreach(&iterator)
+	if (!OidIsValid(chunk_relid))
 	{
-		bool isnull;
-		Datum value = slot_getattr(iterator.tinfo->slot, Anum_chunk_id, &isnull);
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid relation: cannot be NULL")));
+	}
 
-		if (!isnull)
+	/* Resolve the TupleDesc from the OUT-parameter signature */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
+		elog(ERROR, "function returning record called in context that cannot accept type record");
+	}
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	char *table = get_rel_name(chunk_relid);
+	char *schema = get_namespace_name(get_rel_namespace(chunk_relid));
+
+	if (table == NULL || schema == NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("relation %u not found", chunk_relid)));
+	}
+
+	FormData_chunk chunk_fd;
+	int32 hypertable_id;
+
+    /* Use active snapshot for catalog lookups */
+	Snapshot snapshot = GetActiveSnapshot();
+
+	if (chunk_simple_scan_by_name(schema, table, &chunk_fd, snapshot, true))
+	{
+		FormData_chunk uncompressed_chunk_fd;
+
+		if (compressed_chunk_get_uncompressed_chunk(chunk_fd.id, &uncompressed_chunk_fd))
 		{
-			chunk_id = DatumGetInt32(value);
-			found = true;
+			hypertable_id = uncompressed_chunk_fd.hypertable_id;
+			is_compressed = true;
 		}
-		break;
-	}
-	ts_scan_iterator_close(&iterator);
+		else
+		{
+			hypertable_id = chunk_fd.hypertable_id;
+		}
 
-	if (!found)
+		/* Get hypertable relid */
+		hypertable_relid = ts_hypertable_id_to_relid(hypertable_id, snapshot, true);
+
+	}
+
+	if (OidIsValid(hypertable_relid))
 	{
-		PG_RETURN_NULL();
+		values[0] = ObjectIdGetDatum(hypertable_relid);   /* OUT hypertable     */
+		values[1] = BoolGetDatum(is_compressed);          /* OUT is_compressed  */
+	}
+	else
+	{
+		nulls[0] = nulls[1] = true;
 	}
 
-	PG_RETURN_INT32(chunk_id);
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
 /*
  * Look up the parent (uncompressed) chunk id from a compressed chunk id, using
  * the active snapshot. See ts_chunk_id_by_name for snapshot semantics.
  */
-Datum
-ts_compressed_chunk_parent_id(PG_FUNCTION_ARGS)
+static bool
+compressed_chunk_get_uncompressed_chunk(int32 compressed_chunk_id, FormData_chunk *chunk_fd)
 {
-	int32 compressed_chunk_id = PG_GETARG_INT32(0);
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	int32 chunk_id = INVALID_CHUNK_ID;
-	bool found = false;
 
 	iterator.ctx.snapshot = GetActiveSnapshot();
-	iterator.ctx.index =
-		catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_COMPRESSED_CHUNK_ID_INDEX);
+	init_scan_by_compressed_chunk_id(&iterator, compressed_chunk_id);
 
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_chunk_compressed_chunk_id_idx_compressed_chunk_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(compressed_chunk_id));
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool isnull;
-		Datum value = slot_getattr(iterator.tinfo->slot, Anum_chunk_id, &isnull);
-
-		if (!isnull)
-		{
-			chunk_id = DatumGetInt32(value);
-			found = true;
-		}
-		break;
-	}
-	ts_scan_iterator_close(&iterator);
-
-	if (!found)
-	{
-		PG_RETURN_NULL();
-	}
-
-	PG_RETURN_INT32(chunk_id);
-}
-
-/*
- * Look up the owning hypertable id of a chunk by chunk id, using the active
- * snapshot. See ts_chunk_id_by_name for snapshot semantics.
- */
-Datum
-ts_chunk_hypertable_id(PG_FUNCTION_ARGS)
-{
-	int32 chunk_id = PG_GETARG_INT32(0);
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	int32 hypertable_id = 0;
-	bool found = false;
-
-	iterator.ctx.snapshot = GetActiveSnapshot();
-	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
-
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_chunk_idx_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(chunk_id));
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool isnull;
-		Datum value = slot_getattr(iterator.tinfo->slot, Anum_chunk_hypertable_id, &isnull);
-
-		if (!isnull)
-		{
-			hypertable_id = DatumGetInt32(value);
-			found = true;
-		}
-		break;
-	}
-	ts_scan_iterator_close(&iterator);
-
-	if (!found)
-	{
-		PG_RETURN_NULL();
-	}
-
-	PG_RETURN_INT32(hypertable_id);
+	return chunk_simple_scan(&iterator, chunk_fd, true, NULL);
 }
 
 bool
@@ -2979,7 +2937,7 @@ ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id, bool mis
 {
 	FormData_chunk form = { 0 };
 
-	if (!chunk_simple_scan_by_name(schema, table, &form, missing_ok))
+	if (!chunk_simple_scan_by_name(schema, table, &form, NULL, missing_ok))
 	{
 		return false;
 	}
@@ -3299,7 +3257,7 @@ List *
 ts_chunk_get_by_hypertable_id(int32 hypertable_id)
 {
 	List *chunks = NIL;
-	Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id, false);
+	Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id, NULL, false);
 
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 
@@ -5295,7 +5253,9 @@ ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti)
 	chunkptr->table_id = ts_get_relation_relid(NameStr(chunkptr->fd.schema_name),
 											   NameStr(chunkptr->fd.table_name),
 											   true);
-	chunkptr->hypertable_relid = ts_hypertable_id_to_relid(chunkptr->fd.hypertable_id, false);
+	chunkptr->hypertable_relid = ts_hypertable_id_to_relid(chunkptr->fd.hypertable_id,
+														   NULL,
+														   false);
 	chunkptr->relkind = get_rel_relkind(chunkptr->table_id);
 
 	return vec;
