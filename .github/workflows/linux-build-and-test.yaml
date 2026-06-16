@@ -133,10 +133,10 @@ jobs:
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
-          wget -q -O postgresql.tar.bz2 \
+          wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
         else
-          wget -q -O postgresql.tar.bz2 \
+          wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         fi
         mkdir -p ~/$PG_SRC_DIR

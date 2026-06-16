@@ -70,7 +70,7 @@ jobs:
 
     - name: Download Postgres ${{ matrix.pg }}
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ matrix.abi_min }}/postgresql-${{ matrix.abi_min }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
@@ -105,7 +105,7 @@ jobs:
 
     - name: Download Postgres ${{ matrix.pg }}-snapshot
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
         mkdir -p ~/$PG_SRC_DIR-snapshot
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR-snapshot --strip-components 1
