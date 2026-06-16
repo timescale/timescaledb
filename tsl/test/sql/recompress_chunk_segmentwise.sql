@@ -351,9 +351,22 @@ SET timescaledb.enable_segmentwise_recompression TO OFF;
 SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
 \set ON_ERROR_STOP 1
 -- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
+BEGIN;
 SELECT compress_chunk(:'chunk_to_compress');
+ROLLBACK;
 
 RESET timescaledb.enable_segmentwise_recompression;
+
+-- Same when the optimizations GUC is off.
+--SET timescaledb.enable_segmentwise_recompression TO OFF;
+SET timescaledb.enable_optimizations TO OFF;
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+\set ON_ERROR_STOP 1
+SELECT compress_chunk(:'chunk_to_compress');
+RESET timescaledb.enable_optimizations;
+RESET timescaledb.enable_segmentwise_recompression;
+
 
 --- Test behaviour of enable_exclusive_locking_recompression GUC
 CREATE TABLE exclusive_test(time timestamptz not null, a int, b int, c int);

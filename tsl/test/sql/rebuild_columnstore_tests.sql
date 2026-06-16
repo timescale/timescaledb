@@ -198,12 +198,21 @@ SELECT _timescaledb_functions.freeze_chunk(chunk) FROM show_chunks('rebuild_erro
 -- frozen notice
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 SELECT _timescaledb_functions.unfreeze_chunk(chunk) FROM show_chunks('rebuild_error') AS chunk;
-SET timescaledb.enable_in_memory_recompression = false;
+
 -- guc disabled, decompress/compress fallback
+SET timescaledb.enable_in_memory_recompression = false;
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
 RESET timescaledb.enable_in_memory_recompression;
+
+-- optimizations guc should disable too
+SET timescaledb.enable_optimizations = false;
+SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
+CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
+SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
+RESET timescaledb.enable_optimizations;
+
 DROP TABLE rebuild_error CASCADE;
 
 CREATE TABLE rebuild_no_orderby (col1 INT NOT NULL, device INT);
