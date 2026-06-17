@@ -592,7 +592,7 @@ $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -------------End index size for hypertables -------
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.estimate_uncompressed_size(IN regclass, OUT tuples bigint, OUT relation_size bigint, OUT index_size bigint, OUT total_size bigint)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.estimate_uncompressed_size(IN regclass, IN samplerate double precision DEFAULT 100, OUT tuples bigint, OUT relation_size bigint, OUT index_size bigint, OUT total_size bigint)
 AS $$
 DECLARE
   v_compressed_chunk regclass;
@@ -609,9 +609,21 @@ DECLARE
   v_varlen_query text:= '';
   v_multiplier decimal:=1.15; -- multiplier to account for page header, fill factor and alignment padding
   v_index_multiplier decimal:=1.25; -- multiplier to account for page header, fill factor and alignment padding
+  v_sample_clause text:= '';
+  v_scale decimal:=1;
 BEGIN
 
   v_compressed_chunk := $1;
+
+  IF samplerate IS NULL OR samplerate >= 100 THEN
+    v_sample_clause := '';
+    v_scale := 1;
+  ELSIF samplerate <= 0 THEN
+    RAISE EXCEPTION 'samplerate must be in the range (0, 100]';
+  ELSE
+    v_sample_clause := format(' TABLESAMPLE BERNOULLI(%s)', samplerate);
+    v_scale := 100.0 / samplerate;
+  END IF;
 
   SELECT relid, segmentby INTO v_uncompressed_chunk, v_segmentby FROM _timescaledb_catalog.compression_settings WHERE compress_relid = v_compressed_chunk;
   IF NOT FOUND THEN
@@ -637,12 +649,15 @@ BEGIN
 	    CASE WHEN attname = ANY(v_segmentby)
 	      THEN format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
 	      ELSE format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
-	    END, ' + ') || ')' FROM pg_attribute INTO v_varlen_query WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped AND attlen = -1;
+	    END, ' + ') || ') * ' || v_scale
+    FROM pg_attribute
+    INTO v_varlen_query
+    WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped AND attlen = -1;
   END IF;
 
   EXECUTE format('SELECT sum(_ts_meta_count) FROM %s', v_compressed_chunk) INTO tuples;
   -- we can optimize the following query if all columns are fixed size
-  EXECUTE format('SELECT (((%s::bigint * (%s::bigint + %s::bigint)) %s) * %s)::bigint FROM %s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk) INTO relation_size;
+  EXECUTE format('SELECT (((%s::bigint * (%s::bigint + %s::bigint)) %s) * %s)::bigint FROM %s%s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk, v_sample_clause) INTO relation_size;
 
   index_size := 0;
   FOR v_index, v_varlen_query, v_columns IN
@@ -652,14 +667,18 @@ BEGIN
          CASE WHEN attname = ANY(v_segmentby)
            THEN format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
            ELSE format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
-         END, ' + ' ORDER BY attnum) || ')' FROM pg_attribute att WHERE att.attrelid=i.indrelid AND attnum =ANY(i.indkey)),
+         END, ' + ' ORDER BY attnum
+         )
+         || ') * ' || v_scale
+       FROM pg_attribute att
+       WHERE att.attrelid=i.indrelid AND attnum =ANY(i.indkey)),
       array_length(i.indkey,1) FROM pg_index i
     WHERE i.indrelid = v_uncompressed_chunk
   LOOP
     v_index_header := 8; -- Index tuple header
 
     -- v_compressed_chunk is a regclass, which will be properly escaped when cast to `text`
-    EXECUTE format('SELECT (((%s::bigint * %s::bigint) %s) * %s)::bigint FROM %s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk) INTO v_index_size;
+    EXECUTE format('SELECT (((%s::bigint * %s::bigint) %s) * %s)::bigint FROM %s%s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk, v_sample_clause) INTO v_index_size;
     index_size := index_size + v_index_size;
   END LOOP;
 

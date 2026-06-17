@@ -25,6 +25,37 @@ SELECT cs.compress_relid, l.relation_size, l.index_size, l.total_size FROM _time
  _timescaledb_internal.compress_hyper_2_3_chunk |       5980000 |    2000000 |    7980000
  _timescaledb_internal.compress_hyper_4_4_chunk |       5520000 |    2000000 |    7520000
 
+-- samplerate of 100 reads the whole chunk and matches the default
+SELECT
+  d.tuples = s.tuples AS tuples_match,
+  d.relation_size = s.relation_size AS relation_size_match,
+  d.index_size = s.index_size AS index_size_match,
+  d.total_size = s.total_size AS total_size_match
+FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk') d,
+     _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk', 100) s;
+ tuples_match | relation_size_match | index_size_match | total_size_match 
+--------------+---------------------+------------------+------------------
+ t            | t                   | t                | t
+
+-- samplerate scales the sampled variable length size back up to the full chunk
+SELECT
+  s.tuples = d.tuples AS tuples_match,
+  s.relation_size BETWEEN d.relation_size * 0.8 AND d.relation_size * 1.2 AS relation_size_in_range,
+  s.index_size BETWEEN d.index_size * 0.8 AND d.index_size * 1.2 AS index_size_in_range,
+  s.total_size BETWEEN d.total_size * 0.8 AND d.total_size * 1.2 AS total_size_in_range
+FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk') d,
+     _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk', 50) s;
+ tuples_match | relation_size_in_range | index_size_in_range | total_size_in_range 
+--------------+------------------------+---------------------+---------------------
+ t            | t                      | t                   | t
+
+-- samplerate outside the (0, 100] range is rejected
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk', 0);
+ERROR:  samplerate must be in the range (0, 100]
+SELECT * FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk', -5);
+ERROR:  samplerate must be in the range (0, 100]
+\set ON_ERROR_STOP 1
 -- test NULL compression does not error and returns NULL
 INSERT INTO t1 SELECT '2026-01-01'::timestamptz + format('%s ms', i)::interval, NULL, NULL FROM generate_series(1, 3000) i;
 SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
