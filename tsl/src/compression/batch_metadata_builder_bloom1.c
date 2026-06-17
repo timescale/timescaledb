@@ -912,6 +912,13 @@ bloom1_hash(PG_FUNCTION_ARGS)
 							num_columns)));
 		}
 
+		if (num_columns < 2)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("composite bloom filter must have at least two columns")));
+		}
+
 		for (int i = 0; i < num_columns; i++)
 		{
 			type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
@@ -992,6 +999,7 @@ bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_c
 			},
 	};
 
+	Assert(num_columns != 0);
 	for (int i = 0; i < num_columns; i++)
 	{
 		hasher->hash_functions[i] =
