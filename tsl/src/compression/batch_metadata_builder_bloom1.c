@@ -69,7 +69,7 @@ typedef struct Bloom1MetadataBuilder
 	Bloom1HasherInternal hasher;
 } Bloom1MetadataBuilder;
 
-static void bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_columns);
+static Bloom1HasherInternal bloom1_hasher_init(const Oid *type_oids, int num_columns);
 
 /*
  * Low-bias invertible hash function from this article:
@@ -544,6 +544,13 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 								num_columns)));
 			}
 
+			if (num_columns < 2)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("composite bloom filter must have at least two columns")));
+			}
+
 			for (int i = 0; i < num_columns; i++)
 			{
 				type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
@@ -556,7 +563,7 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 			num_columns = 1;
 		}
 
-		bloom1_hasher_init(&context->bloom_hasher, type_oids, num_columns);
+		context->bloom_hasher = bloom1_hasher_init(type_oids, num_columns);
 
 		get_typlenbyvalalign(context->element_type,
 							 &context->element_typlen,
@@ -945,8 +952,8 @@ bloom1_hash(PG_FUNCTION_ARGS)
 		num_columns = 1;
 	}
 
-	Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_columns);
-	uint64 hash = hasher->hash_values(hasher, values);
+	Bloom1HasherInternal hasher = bloom1_hasher_init(type_oids, num_columns);
+	uint64 hash = hasher.functions.hash_values(&hasher, values);
 	PG_RETURN_INT64((int64) hash);
 }
 
@@ -988,10 +995,10 @@ batch_metadata_builder_bloom1_varlena_size(void)
 	return bloom1_varlena_alloc_size(desired_bits);
 }
 
-static void
-bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_columns)
+static Bloom1HasherInternal
+bloom1_hasher_init(const Oid *type_oids, int num_columns)
 {
-	*hasher = (Bloom1HasherInternal){
+	Bloom1HasherInternal hasher = (Bloom1HasherInternal){
 		.functions =
 			(Bloom1Hasher){
 				.hash_values = bloom1_hash_values,
@@ -1002,9 +1009,9 @@ bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_c
 	Assert(num_columns != 0);
 	for (int i = 0; i < num_columns; i++)
 	{
-		hasher->hash_functions[i] =
-			bloom1_get_hash_function(type_oids[i], &hasher->hash_function_finfos[i]);
-		if (hasher->hash_functions[i] == NULL)
+		hasher.hash_functions[i] =
+			bloom1_get_hash_function(type_oids[i], &hasher.hash_function_finfos[i]);
+		if (hasher.hash_functions[i] == NULL)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_FUNCTION),
@@ -1012,13 +1019,15 @@ bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_c
 							format_type_be(type_oids[i]))));
 		}
 	}
+
+	return hasher;
 }
 
 Bloom1Hasher *
 bloom1_hasher_create(const Oid *type_oids, int num_columns)
 {
 	Bloom1HasherInternal *hasher = palloc(sizeof(*hasher));
-	bloom1_hasher_init(hasher, type_oids, num_columns);
+	*hasher = bloom1_hasher_init(type_oids, num_columns);
 	return &hasher->functions;
 }
 
@@ -1046,7 +1055,7 @@ batch_metadata_builder_bloom1_create(int num_columns, const Oid *type_oids,
 	memcpy(builder->input_columns, attnums, num_columns * sizeof(AttrNumber));
 
 	/* Initialize the embedded hasher */
-	bloom1_hasher_init(&builder->hasher, type_oids, num_columns);
+	builder->hasher = bloom1_hasher_init(type_oids, num_columns);
 
 	/*
 	 * Initialize the bloom filter.
@@ -1204,7 +1213,7 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 	}
 	ReleaseTupleDesc(tupdesc);
 
-	Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_fields);
+	Bloom1HasherInternal hasher = bloom1_hasher_init(type_oids, num_fields);
 
 	NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
 	for (int i = 0; i < num_fields; i++)
@@ -1212,7 +1221,7 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 		values[i].value = GetAttributeByNum(tuple, i + 1, &values[i].isnull);
 	}
 
-	uint64 hash = hasher->hash_values(hasher, values);
+	uint64 hash = hasher.functions.hash_values(&hasher, values);
 	PG_RETURN_INT64((int64) hash);
 }
 

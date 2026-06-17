@@ -122,10 +122,12 @@ select _timescaledb_functions.bloom1_contains_any(_timescaledb_functions.bloom1i
 
 select _timescaledb_functions.bloom1_contains('\x'::_timescaledb_internal.bloom1, ROW(1));
 
--- The hash function is callable by user, so must return proper error
-SELECT _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
+select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, ROW());
 
-SELECT _timescaledb_functions.bloom1_hash(ROW());
+-- The hash function is callable by user, so must return proper error
+select _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
+
+select _timescaledb_functions.bloom1_hash(ROW());
 
 \set ON_ERROR_STOP 1
 
