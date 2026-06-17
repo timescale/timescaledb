@@ -331,11 +331,13 @@ SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 
--- Test with null values: should not optimize
-set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+-- Test with null values: should optimize with firstlast index
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
 
+-- should not optimize (NULL order wrong)
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
@@ -555,6 +557,8 @@ SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"sign
 
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM bugtab ORDER BY "time" DESC;
 
+drop table bugtab cascade;
+
 -- Condition that filter the first tuple of a batch - Issue 5797
 CREATE TABLE test (
     id      bigint,
@@ -665,6 +669,88 @@ set timescaledb.debug_require_batch_sorted_merge = 'require';
 :PREFIX
 SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
 RESET enable_sort;
+
+drop table test cascade;
+
+-- Test issue #9922: wrong sort order for Batch Sorted Merge with multikey minmax index
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+CREATE TABLE bsm_segby(ts timestamptz NOT NULL, grp int NOT NULL, name text NOT NULL);
+SELECT table_name FROM create_hypertable('bsm_segby','ts',chunk_time_interval=>interval '100 day');
+ALTER TABLE bsm_segby SET (timescaledb.compress,  timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='name asc, ts asc');
+
+INSERT INTO bsm_segby
+SELECT '2024-08-01'::timestamptz + g*interval '1 min', g%4, 'k'||lpad(((g*5)%17)::text,3,'0')
+FROM generate_series(0,4379) g;
+
+SELECT count(compress_chunk(c)) FROM show_chunks('bsm_segby') c;
+
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'bsm_segby') limit 1
+\gset
+
+-- Firstlast index is used with Batch Sorted Merge: correct result
+set timescaledb.debug_require_batch_sorted_merge = 'force';
+
+SELECT count(*) misorder FROM (
+  SELECT name, ts, lag(name) OVER () pn, lag(ts) OVER () pt
+  FROM (SELECT name, ts FROM bsm_segby ORDER BY name, ts) s) z
+WHERE pn IS NOT NULL AND (name<pn OR (name=pn AND ts<pt));
+
+-- Remove firstlast index from leading column: still OK to use Batch Sorted Merge
+update _timescaledb_catalog.compression_settings
+set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]'
+where relid = 'bsm_segby'::regclass;
+
+update _timescaledb_catalog.compression_settings
+set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]'
+where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'bsm_segby') limit 1);
+
+create index compressed_index_minmax_firstlast on :chunk (grp, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_ts, _ts_meta_v2_last_ts);
+
+-- Correct result with Batch Sorted Merge
+set timescaledb.debug_require_batch_sorted_merge = 'force';
+
+SELECT count(*) misorder FROM (
+  SELECT name, ts, lag(name) OVER () pn, lag(ts) OVER () pt
+  FROM (SELECT name, ts FROM bsm_segby ORDER BY name, ts) s) z
+WHERE pn IS NOT NULL AND (name<pn OR (name=pn AND ts<pt));
+
+-- Now use minmax index on non-leading column "ts"
+drop index _timescaledb_internal.compressed_index_minmax_firstlast;
+create index compressed_index_minmax_minmax on :chunk (grp, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_min_2, _ts_meta_max_2);
+
+-- Remove firstlast index from all columns
+update _timescaledb_catalog.compression_settings
+set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]'
+where relid = 'bsm_segby'::regclass;
+
+update _timescaledb_catalog.compression_settings
+set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]'
+where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'bsm_segby') limit 1);
+
+-- Correct result only when cannot use Batch Sorted Merge
+set timescaledb.debug_require_batch_sorted_merge = 'forbid';
+
+SELECT count(*) misorder FROM (
+  SELECT name, ts, lag(name) OVER () pn, lag(ts) OVER () pt
+  FROM (SELECT name, ts FROM bsm_segby ORDER BY name, ts) s) z
+WHERE pn IS NOT NULL AND (name<pn OR (name=pn AND ts<pt));
+
+drop table bsm_segby cascade;
+
+drop table test1 cascade;
+drop table test2 cascade;
+drop table test_with_defined_null cascade;
+drop table test_costs cascade;
+drop table insert_test cascade;
 
 reset timescaledb.debug_require_batch_sorted_merge;
 

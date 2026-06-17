@@ -652,7 +652,7 @@ cancel_worker_for_job(const char *appname)
 	const int num_backends = pgstat_fetch_stat_numbackends();
 	for (int i = 1; i <= num_backends; i++)
 	{
-		const LocalPgBackendStatus *local_beentry = pgstat_get_local_beentry_by_index_compat(i);
+		const LocalPgBackendStatus *local_beentry = pgstat_get_local_beentry_by_index(i);
 		const PgBackendStatus *beentry = &local_beentry->backendStatus;
 		if (beentry->st_databaseid == MyDatabaseId && beentry->st_appname[0] != '\0' &&
 			strcmp(beentry->st_appname, appname) == 0)
@@ -905,7 +905,7 @@ ts_bgw_job_check_max_retries(BgwJob *job)
 void
 ts_bgw_job_permission_check(BgwJob *job, const char *cmd)
 {
-	if (!has_privs_of_role(GetUserId(), job->fd.owner))
+	if (!ts_has_owner_privs(GetUserId(), job->fd.owner))
 	{
 		const char *owner_name = GetUserNameFromId(job->fd.owner, false);
 		const char *user_name = GetUserNameFromId(GetUserId(), false);

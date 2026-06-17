@@ -4,8 +4,6 @@ set(TEST_FILES
     alter.sql
     alternate_users.sql
     baserel_cache.sql
-    catalog_corruption.sql
-    chunk_adaptive.sql
     chunk_publication.sql
     chunk_utils.sql
     chunks.sql
@@ -32,6 +30,7 @@ set(TEST_FILES
     extension_scripts.sql
     generated_as_identity.sql
     hash.sql
+    histogram.sql
     index.sql
     information_views.sql
     insert_many.sql
@@ -39,13 +38,17 @@ set(TEST_FILES
     insert_single.sql
     lateral.sql
     merge.sql
+    observ_funcs.sql
     partition.sql
     partition_coercion.sql
     partitioning.sql
+    partitionwise.sql
     pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
+    plan_hashagg.sql
     plan_hypertable_inline.sql
+    plan_ordered_append.sql
     qual_filtering.sql
     query.sql
     relocate_extension.sql
@@ -56,6 +59,7 @@ set(TEST_FILES
     tableam.sql
     tableam_alter.sql
     tablespace.sql
+    timestamp.sql
     triggers.sql
     truncate.sql
     trusted_extension.sql
@@ -73,16 +77,11 @@ set(TEST_TEMPLATES
     append.sql.in
     drop_owned.sql.in
     grant_hypertable.sql.in
-    histogram_test.sql.in
     insert.sql.in
     null_exclusion.sql.in
-    plan_hashagg.sql.in
     rowsecurity.sql.in
     parallel.sql.in
-    partitionwise.sql.in
     plan_expand_hypertable.sql.in
-    plan_ordered_append.sql.in
-    timestamp.sql.in
     ts_merge.sql.in)
 
 # Loader test must distinguish between Apache and TSL builds so we parametrize
@@ -131,7 +130,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES tableam_alter_defaults.sql)
+  list(APPEND TEST_FILES tableam_alter_defaults.sql
+       merge_not_matched_by_source.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))

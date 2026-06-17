@@ -41,6 +41,7 @@
 #include "loader/function_telemetry.h"
 #include "loader/loader.h"
 #include "loader/lwlocks.h"
+#include "loader/ts_stats_handles.h"
 
 /*
  * Loading process:
@@ -94,10 +95,6 @@ TS_MODULE_MAGIC("timescaledb-loader");
 
 #define CalledInParallelWorker()                                                                   \
 	(MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
-
-#if PG16_LT
-extern void TSDLLEXPORT _PG_init(void);
-#endif
 
 /* was the versioned-extension loaded*/
 static bool loader_present = true;
@@ -623,13 +620,11 @@ timescaledb_shmem_startup_hook(void)
 	ts_bgw_message_queue_shmem_startup();
 	ts_lwlocks_shmem_startup();
 	ts_function_telemetry_shmem_startup();
+#if PG17_LT
+	ts_stats_shmem_startup();
+#endif
 }
 
-/*
- * PG15 requires all shared memory requests to be requested in a dedicated
- * hook. We group all our shared memory requests in this function and use
- * it as a normal function for PG < 14 and as a hook for PG 15+.
- */
 static void
 timescaledb_shmem_request_hook(void)
 {
@@ -642,6 +637,9 @@ timescaledb_shmem_request_hook(void)
 	ts_bgw_message_queue_alloc();
 	ts_lwlocks_shmem_alloc();
 	ts_function_telemetry_shmem_alloc();
+#if PG17_LT
+	ts_stats_shmem_request();
+#endif
 }
 
 static void

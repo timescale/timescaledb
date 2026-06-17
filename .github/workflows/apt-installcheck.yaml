@@ -52,22 +52,22 @@ jobs:
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
           > /etc/apt/sources.list.d/timescaledb.list
-        wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
+        wget --quiet --tries=6 --waitretry=15 -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
 
     - name: Install timescaledb
       timeout-minutes: 15
       run: |
         apt-get update
         apt-get install -y --no-install-recommends \
-          timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }} timescaledb-tools
+          timescaledb-2-postgresql-${{ matrix.pg }} timescaledb-tools
         timescaledb-tune --quiet --yes
 
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Get version of latest release
       id: versions
       run: |
-        version=$(wget -q https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
+        version=$(wget -q --tries=6 --waitretry=15 https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
         echo "version=${version}"
         echo "version=${version}" >>$GITHUB_OUTPUT
 
@@ -93,7 +93,7 @@ jobs:
         " | tee -a $GITHUB_OUTPUT
 
     - name: Checkout the sources for version ${{ steps.installation.outputs.commit_tag }}
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         ref: ${{ steps.installation.outputs.commit_hash }}
 

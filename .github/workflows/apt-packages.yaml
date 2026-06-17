@@ -25,8 +25,8 @@ jobs:
       fail-fast: false
       matrix:
         arch: [ "x86", "ARM" ]
-        image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
-        pg: [ 15, 16, 17, 18 ]
+        image: [ "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04" ]
+        pg: [ 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -35,10 +35,6 @@ jobs:
             runner: "ubuntu-latest"
           - arch: "ARM"
             runner: "cloud-image-runner-ubuntu-24-arm64"
-        exclude:
-          - image: "debian:11-slim"
-            pg: 18
-
 
     steps:
     - name: Add repositories
@@ -50,10 +46,10 @@ jobs:
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
           > /etc/apt/sources.list.d/timescaledb.list
-        if [ "${image_type}" = "ubuntu" ]; then
-          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+        if [ "${{ matrix.image }}" = "ubuntu:22.04" ]; then
+          wget --quiet --tries=6 --waitretry=15 -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
         else
-          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
+          wget --quiet --tries=6 --waitretry=15 -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
         fi
 
 
@@ -74,12 +70,12 @@ jobs:
       run: |
         dpkg -L timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}
 
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Get version of latest release
       id: versions
       run: |
-        version=$(wget -q https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
+        version=$(wget -q --tries=6 --waitretry=15 https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
         echo "version=${version}"
         echo "version=${version}" >>$GITHUB_OUTPUT
 
@@ -95,10 +91,13 @@ jobs:
         fi
 
     - name: Test Downgrade
+      # 2.27.0 is the first release for Ubuntu 26.04 so we can't test downgrades on it.
+      # we can remove the condition with 2.27.1 release
+      if: matrix.image != 'ubuntu:26.04'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
-        prev_version=$(wget --quiet -O - \
+        prev_version=$(wget --quiet --tries=6 --waitretry=15 -O - \
         https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config \
           | grep previous_version | sed -e 's!previous_version = !!')
         sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}'" \
@@ -110,6 +109,8 @@ jobs:
         fi
 
     - name: Install toolkit
+      # Ubuntu 26.04 does not yet have toolkit
+      if: matrix.image != 'ubuntu:26.04'
       timeout-minutes: 15
       run: |
         apt-get install -y --no-install-recommends \

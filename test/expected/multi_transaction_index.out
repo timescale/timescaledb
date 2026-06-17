@@ -166,21 +166,19 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 ----------------------------------------+-------------------------------------------------------------------+---------------+------+--------+---------+-----------+------------
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."1_1_index_test_time_device_key"            | {time,device} |      | t      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."1_index_test_time_device_key"              | {time,device} |      | t      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_index_test_device_time_idx | {device,time} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."2_2_index_test_time_device_key"            | {time,device} |      | t      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."2_index_test_time_device_key"              | {time,device} |      | t      | f       | f         | 
 
 -- Constraints are added to chunk_constraint table.
-SELECT * FROM _timescaledb_catalog.chunk_constraint;
- chunk_id | dimension_slice_id |        constraint_name         | hypertable_constraint_name 
-----------+--------------------+--------------------------------+----------------------------
-        1 |                  1 | constraint_1                   | 
-        1 |                  2 | constraint_2                   | 
-        2 |                  3 | constraint_3                   | 
-        2 |                  2 | constraint_2                   | 
-        1 |                    | 1_1_index_test_time_device_key | index_test_time_device_key
-        2 |                    | 2_2_index_test_time_device_key | index_test_time_device_key
+SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name 
+----------+--------------------+-----------------
+        1 |                  1 | constraint_1
+        1 |                  2 | constraint_2
+        2 |                  3 | constraint_3
+        2 |                  4 | constraint_4
 
 DROP TABLE index_test;
 -- Test that indexes are planned correctly

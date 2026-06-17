@@ -26,7 +26,7 @@ SELECT table_name FROM Create_hypertable('test2', 'Time', chunk_time_interval=> 
 -- This creates chunks 7 - 9 on second hypertable.
 INSERT INTO test2 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
 
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 \set ON_ERROR_STOP 0
 
@@ -76,19 +76,13 @@ FROM test1
 GROUP BY i, bucket;
 
 -- Merging cagg chunks should also work.
-WITH adjacent_slices AS
-  (SELECT S1.id AS PRIMARY,
-          s2.id AS secondary
+WITH chunks AS
+  (SELECT s1.chunk_id AS primary_chunk,
+          s2.chunk_id AS secondary_chunk
    FROM _timescaledb_catalog.dimension_slice s2
    INNER JOIN _timescaledb_catalog.dimension_slice s1 ON s1.range_end = s2.range_start
    WHERE s1.dimension_id = 4
      AND s2.dimension_id = 4
-   LIMIT 1),
-     chunks AS
-  (SELECT c1.chunk_id AS primary_chunk,
-          c2.chunk_id AS secondary_chunk
-   FROM adjacent_slices
-   INNER JOIN _timescaledb_catalog.chunk_constraint c1 ON c1.dimension_slice_id = adjacent_slices.primary
-   INNER JOIN _timescaledb_catalog.chunk_constraint c2 ON c2.dimension_slice_id = adjacent_slices.secondary)
+   LIMIT 1)
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension(format('_timescaledb_internal._hyper_4_%s_chunk', chunks.primary_chunk), format('_timescaledb_internal._hyper_4_%s_chunk', chunks.secondary_chunk), 4)
 FROM chunks;

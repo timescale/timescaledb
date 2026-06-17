@@ -14,8 +14,10 @@ SELECT
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
+   LEFT JOIN _timescaledb_catalog.compression_settings cs
+ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
    LEFT JOIN _timescaledb_catalog.chunk comp
-ON comp.id = c.compressed_chunk_id
+ON cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass
 ;
 
 CREATE TABLE test2 (timec timestamptz NOT NULL, i integer ,

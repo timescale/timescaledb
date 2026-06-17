@@ -61,7 +61,7 @@ alter table estimate_count
 insert into estimate_count
 select t, d, 1
 from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
-  generate_series(1, 1000) d
+  generate_series(1, 1500) d
 ;
 
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
@@ -74,7 +74,7 @@ explain (analyze, timing off, summary off, buffers off) select * from estimate_c
 truncate estimate_count;
 insert into estimate_count
 select t, d, 2
-from generate_series(1, 1000) d,
+from generate_series(1, 1500) d,
     lateral generate_series('2025-01-01'::timestamptz,'2025-01-03',
         interval '15 min' * (d % 10 + 1)) t
 ;
@@ -89,7 +89,7 @@ explain (analyze, timing off, summary off, buffers off) select * from estimate_c
 truncate estimate_count;
 insert into estimate_count
 select t, d, 2
-from generate_series(1, 1000) d,
+from generate_series(1, 1500) d,
     lateral generate_series('2025-01-01'::timestamptz,'2025-01-03',
         interval '15 min' + interval '1 minute' * d) t
 ;
@@ -104,7 +104,7 @@ explain (analyze, timing off, summary off, buffers off) select * from estimate_c
 truncate estimate_count;
 insert into estimate_count
 select t, d, 2
-from generate_series(1, 1000) d,
+from generate_series(1, 1500) d,
     lateral generate_series('2025-01-01'::timestamptz,'2025-01-03',
         case when d % 2 = 0 then interval '10 min'
             else interval '15 min' + interval '1 minute' * d end) t
@@ -135,7 +135,7 @@ vacuum analyze estimate_count;
 insert into estimate_count
 select t, d, 1
 from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
-  generate_series(1, 1000) d
+  generate_series(1, 1500) d
 ;
 
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
@@ -190,10 +190,11 @@ select count(compress_chunk(x)) from show_chunks('lastmax') x;
 
 vacuum freeze analyze lastmax;
 
-select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'lastmax') limit 1)
+select cs.compress_relid::regclass chunk, 'c' column from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'lastmax') limit 1
 \gset
 
 set timescaledb.restoring to true;

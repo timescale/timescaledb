@@ -101,7 +101,8 @@ SELECT
 FROM _timescaledb_catalog.chunk comp_chunk
 INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (comp_chunk.hypertable_id = comp_hyper.id)
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-INNER JOIN _timescaledb_catalog.chunk uncomp_chunk ON (uncomp_chunk.compressed_chunk_id = comp_chunk.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.compress_relid = format('%I.%I', comp_chunk.schema_name, comp_chunk.table_name)::regclass)
+INNER JOIN _timescaledb_catalog.chunk uncomp_chunk ON (cs.relid = format('%I.%I', uncomp_chunk.schema_name, uncomp_chunk.table_name)::regclass)
 WHERE uncomp_hyper.table_name like 'test1' ORDER BY comp_chunk.id LIMIT 1\gset
 
 -- ensure compression chunk cannot be moved directly
@@ -123,8 +124,14 @@ ALTER TABLE test1 SET TABLESPACE tablespace2;
 SELECT tablename
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
+SELECT format('%I.%I', schemaname, indexname) AS "COMPRESSED_CHUNK_INDEX"
+FROM pg_indexes
+WHERE schemaname = '_timescaledb_internal'
+  AND tablename = split_part(:'COMPRESSED_CHUNK_NAME', '.', 2)
+LIMIT 1 \gset
+
 \set ON_ERROR_STOP 0
-SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx"');
+SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>:'COMPRESSED_CHUNK_INDEX');
 \set ON_ERROR_STOP 1
 
 -- ensure that both compressed and uncompressed chunks moved
@@ -229,7 +236,8 @@ SELECT
     chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME",
     comp_chunk.schema_name|| '.' || comp_chunk.table_name as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (chunk.compressed_chunk_id = comp_chunk.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (cs.compress_relid = format('%I.%I', comp_chunk.schema_name, comp_chunk.table_name)::regclass)
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
@@ -259,7 +267,8 @@ SELECT
     chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME",
     comp_chunk.schema_name|| '.' || comp_chunk.table_name as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (chunk.compressed_chunk_id = comp_chunk.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (cs.compress_relid = format('%I.%I', comp_chunk.schema_name, comp_chunk.table_name)::regclass)
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
@@ -918,7 +927,7 @@ DECLARE
 BEGIN
   FOR chunk IN
   SELECT format('%I.%I', schema_name, table_name)::regclass
-    FROM _timescaledb_catalog.chunk WHERE status = 9 and compressed_chunk_id IS NOT NULL
+    FROM _timescaledb_catalog.chunk WHERE status = 9 and format('%I.%I', schema_name, table_name)::regclass IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL)
     ORDER BY id
   LOOP
     EXECUTE format('select decompress_chunk(''%s'');', chunk::text);

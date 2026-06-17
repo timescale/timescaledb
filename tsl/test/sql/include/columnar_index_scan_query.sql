@@ -26,6 +26,10 @@ SHOW timescaledb.enable_columnarindexscan;
 -- simple query with 1 last aggregate that can use optimization
 :PREFIX SELECT device, last(time, time) FROM metrics GROUP BY device ORDER BY device;
 
+-- simple query with first/last(value3, time) that can use optimization
+:PREFIX SELECT first(value3, time) FROM metrics GROUP BY device ORDER BY device;
+:PREFIX SELECT last(value3, time) FROM metrics GROUP BY device ORDER BY device;
+
 -- explicit index columns dont prevent optimization
 :PREFIX SELECT sensor, min(value) FROM metrics GROUP BY sensor ORDER BY sensor;
 
@@ -45,18 +49,22 @@ SHOW timescaledb.enable_columnarindexscan;
 
 -- test multiple group by columns
 :PREFIX SELECT device, sensor, max(time) FROM metrics GROUP BY device,sensor ORDER BY device,sensor;
+:PREFIX SELECT device, sensor, first(value3, time), last(value3, time) FROM metrics GROUP BY device, sensor ORDER BY device, sensor;
 
 -- filter on segmentby allows optimization
 :PREFIX SELECT device, min(time) FROM metrics WHERE device IN ('d1','d2') GROUP BY device;
 :PREFIX SELECT device, min(time) FROM metrics WHERE device =ANY(ARRAY['d1','d2']) AND sensor='B' GROUP BY device;
+:PREFIX SELECT device, first(value3, time) FROM metrics WHERE device = 'd1' GROUP BY device;
 
 -- HAVING on segmentby (pushed down to lower scan)
 :PREFIX SELECT device, min(time) FROM metrics GROUP BY device HAVING device IN ('d1','d2');
 :PREFIX SELECT device, min(time) FROM metrics GROUP BY device,sensor HAVING device =ANY(ARRAY['d1','d2']) AND sensor='B';
+:PREFIX SELECT device, first(value3, time) FROM metrics GROUP BY device HAVING device IN ('d1','d2') ORDER BY device;
 
 -- HAVING with aggregate function
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING min(value) > 20;
 :PREFIX SELECT device, max(value) FROM metrics GROUP BY device HAVING min(value) < 25;
+:PREFIX SELECT device, first(value3, time) FROM metrics GROUP BY device HAVING first(value3, time) > 5 ORDER BY device;
 
 -- HAVING
 :PREFIX SELECT device, min(time) FROM metrics GROUP BY device HAVING min(time) > '2025-01-01 00:30:00 PST';
@@ -73,6 +81,7 @@ SHOW timescaledb.enable_columnarindexscan;
 
 -- segmentby column at end of targetlist
 :PREFIX SELECT first(time, time), last(time, time), device FROM metrics GROUP BY device;
+:PREFIX SELECT first(value3, time), last(value3, time), device FROM metrics GROUP BY device ORDER BY device;
 
 -- multiple aggregates on different columns use optimization
 :PREFIX SELECT device, min(time), max(value) FROM metrics GROUP BY device;
@@ -83,20 +92,32 @@ SHOW timescaledb.enable_columnarindexscan;
 -- multiple aggregates on multiple columns
 :PREFIX SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device;
 
+-- first/last(value3,time) mixed with other columnar index scan aggregates
+:PREFIX SELECT device, first(value3, time), last(value3, time), count(*) FROM metrics GROUP BY device ORDER BY device;
+:PREFIX SELECT device, first(value3, time), last(value3, time), min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
+:PREFIX SELECT device, first(value3, time), last(value3, time), min(value), max(value) FROM metrics GROUP BY device ORDER BY device;
+:PREFIX SELECT device, first(value3, time), last(value3, time), first(time, time), last(time, time) FROM metrics GROUP BY device ORDER BY device;
+
 -- expression on aggregates
 :PREFIX SELECT device, max(time), min(time), max(time) - min(time)  FROM metrics GROUP BY device;
+:PREFIX SELECT device, last(value3, time) - first(value3, time) FROM metrics GROUP BY device ORDER BY device;
 
 -- test with sort
 :PREFIX SELECT device, sensor, first(time,time), last(time,time) from metrics group by device, sensor order by 1,2;
 
 -- test with subquery (SubqueryScan)
 :PREFIX SELECT * FROM (SELECT device, min(time), max(time) FROM metrics GROUP BY device) sub ORDER BY device;
-
 :PREFIX SELECT mx, mn, device FROM (SELECT device, min(time) mn, max(time) mx FROM metrics GROUP BY device) sub ORDER BY device;
+:PREFIX SELECT * FROM (SELECT device, first(value3, time), last(value3, time) FROM metrics GROUP BY device) sub ORDER BY device;
 
 -- test with CTE (also uses SubqueryScan)
 :PREFIX WITH agg_data AS (
     SELECT device, min(time) as min_time, max(time) as max_time FROM metrics GROUP BY device
+)
+SELECT * FROM agg_data ORDER BY device;
+
+:PREFIX WITH agg_data AS (
+    SELECT device, first(value3, time) as fv, last(value3, time) as lv FROM metrics GROUP BY device
 )
 SELECT * FROM agg_data ORDER BY device;
 
@@ -115,9 +136,17 @@ ORDER BY device;
 UNION ALL
 SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
 
+:PREFIX SELECT device, first(value3, time) FROM metrics WHERE device = 'd1' GROUP BY device
+UNION ALL
+SELECT device, first(value3, time) FROM metrics WHERE device = 'd2' GROUP BY device
+ORDER BY device;
+
 -- test WINDOW functions
 :PREFIX SELECT device, max(time), lead(device) OVER (PARTITION BY max(time)) from metrics GROUP BY device ORDER BY device;
 :PREFIX SELECT device, max(time), lead(device) OVER (PARTITION BY device) from metrics GROUP BY device ORDER BY device;
+
+-- first/last(value3,time) without GROUP BY
+:PREFIX SELECT first(value3, time), last(value3, time) FROM metrics;
 
 -- currently unoptimized queries
 
@@ -147,9 +176,11 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
 -- aggregates with FILTER clause
 :PREFIX SELECT count(*) FILTER(WHERE device='dev 1') FROM metrics;
 :PREFIX SELECT min(value) FILTER(WHERE device='dev 1') FROM metrics;
+:PREFIX SELECT device, first(value3, time) FILTER(WHERE sensor = 'A') FROM metrics GROUP BY device ORDER BY device;
 
 -- aggregates with DISTINCT
 :PREFIX SELECT count(DISTINCT device) FROM metrics;
+:PREFIX SELECT first(DISTINCT value3, time) FROM metrics;
 
 -- aggregates with ORDER
 :PREFIX SELECT min(value ORDER BY time) FROM metrics;
@@ -157,7 +188,78 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
 -- WHERE clause on non-segmentby column
 :PREFIX SELECT count(*) FROM metrics WHERE value > 10;
 
--- first/last with different arg1 and arg2
+-- first/last on column without firstlast sparse index (should not optimize)
 :PREFIX SELECT first(value, time) FROM metrics GROUP BY device ORDER BY device;
 :PREFIX SELECT last(value, time) FROM metrics GROUP BY device ORDER BY device;
+
+-- first/last where arg2 is NOT the orderby column (should not optimize)
+:PREFIX SELECT device, first(time, value3) FROM metrics GROUP BY device ORDER BY device;
+
+-- GROUPING SETS / ROLLUP / CUBE are not supported by ColumnarIndexScan
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY ROLLUP(device, sensor) ORDER BY device, sensor;
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY CUBE(device, sensor) ORDER BY device, sensor;
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY GROUPING SETS ((device), (sensor), ()) ORDER BY device, sensor;
+
+-- DISTINCT on a segmentby column (Agg with no Aggrefs)
+:PREFIX SELECT DISTINCT device FROM metrics ORDER BY device;
+
+-- count(*) without GROUP BY
+:PREFIX SELECT count(*) FROM metrics;
+
+-- aggregate only in HAVING (not in SELECT)
+:PREFIX SELECT device FROM metrics GROUP BY device HAVING min(value) > 10 ORDER BY device;
+
+-- GROUP BY ordinal position
+:PREFIX SELECT device, min(time) FROM metrics GROUP BY 1 ORDER BY 1;
+
+-- GROUP BY () empty grouping
+:PREFIX SELECT count(*) FROM metrics GROUP BY ();
+
+-- aggregate wrapped in COALESCE
+:PREFIX SELECT device, COALESCE(min(time), '2000-01-01'::timestamptz) FROM metrics GROUP BY device ORDER BY device;
+
+-- aggregate above a JOIN (Agg not directly above ColumnarScan)
+:PREFIX SELECT m.device, min(m.time) FROM metrics m JOIN (VALUES ('d1'), ('d2')) AS d(device) ON m.device = d.device GROUP BY m.device ORDER BY m.device;
+
+-- ordered-set aggregate (not supported)
+:PREFIX SELECT device, percentile_cont(0.5) WITHIN GROUP (ORDER BY value) FROM metrics GROUP BY device ORDER BY device;
+
+-- bool_and / bool_or (not supported)
+:PREFIX SELECT device, bool_and(value > 0), bool_or(value > 0) FROM metrics GROUP BY device ORDER BY device;
+
+-- partition-wise aggregate
+SET enable_partitionwise_aggregate = on;
+:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
+SET enable_partitionwise_aggregate = off;
+
+-- Aggref inside a SubLink in the outer tlist (inner aggregate belongs to a separate Agg)
+:PREFIX SELECT device, count(*), (SELECT count(*) FROM (VALUES (1),(2),(3)) v(x) WHERE x::text < device) FROM metrics GROUP BY device ORDER BY device;
+
+-- HAVING with non-pushable expression on grouping columns
+:PREFIX SELECT device, sensor, min(time) FROM metrics GROUP BY device, sensor HAVING (device || sensor) LIKE 'd1%' ORDER BY device, sensor;
+
+-- same Aggref referenced multiple times in tlist
+:PREFIX SELECT device, min(time), date_trunc('day', min(time)) FROM metrics GROUP BY device ORDER BY device;
+
+-- GROUP BY column not in SELECT (appears only as resjunk in Agg tlist)
+:PREFIX SELECT count(*) FROM metrics GROUP BY device ORDER BY count(*);
+
+-- WHERE mixes segmentby and non-segmentby column
+:PREFIX SELECT device, count(*) FROM metrics WHERE device = 'd1' AND value > 10 GROUP BY device ORDER BY device;
+
+-- WHERE with a SubPlan on a segmentby column (not pushable, must not be dropped)
+:PREFIX SELECT count(*) FROM metrics WHERE device NOT IN (SELECT 'd' || g FROM generate_series(1,1) g);
+:PREFIX SELECT count(*) FROM metrics WHERE device IN (SELECT 'd' || g FROM generate_series(1,2) g);
+
+-- HAVING with NOT around Aggref
+:PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING NOT (min(value) > 10) ORDER BY device;
+
+-- HAVING with Aggref IS NULL
+:PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING min(value) IS NULL ORDER BY device;
+
+-- GROUP BY with explicit collation (not a bare Var)
+:PREFIX SELECT device COLLATE "C", count(*) FROM metrics GROUP BY device COLLATE "C" ORDER BY 1;
+
+-- self-join on the same hypertable
+:PREFIX SELECT m1.device, min(m1.time) FROM metrics m1 JOIN metrics m2 ON m1.device = m2.device GROUP BY m1.device ORDER BY m1.device;
 

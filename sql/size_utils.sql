@@ -378,10 +378,10 @@ BEGIN
   SELECT compress_relid FROM _timescaledb_catalog.compression_settings INTO v_oid WHERE relid = relation;
 
   IF v_oid IS NOT NULL THEN
-    row_count := (SELECT CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 ELSE reltuples * _timescaledb_functions.estimate_compressed_batch_size(oid) END FROM pg_class WHERE oid = v_oid);
+    row_count := (SELECT CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 WHEN reltuples = 'Infinity'::float4 THEN 0 ELSE reltuples * _timescaledb_functions.estimate_compressed_batch_size(oid) END FROM pg_class WHERE oid = v_oid);
   END IF;
 
-  row_count := COALESCE((SELECT row_count + CASE WHEN reltuples < 0 OR relkind = 'p' THEN 0 ELSE reltuples END FROM pg_class WHERE oid = relation), 0);
+  row_count := COALESCE((SELECT row_count + CASE WHEN reltuples < 0 OR relkind = 'p' or reltuples = 'Infinity' THEN 0 ELSE reltuples END FROM pg_class WHERE oid = relation), 0);
 
   RETURN row_count;
 END

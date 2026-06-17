@@ -114,7 +114,7 @@ select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id
 select count(*) from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id;
 
 -- Make a manual calls to reorder: make sure the correct (oldest) chunk is called
-select chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id ORDER BY ds.range_start LIMIT 1 \gset oldest_
+select chunk_id from _timescaledb_catalog.dimension_slice as ds where ds.dimension_id=1 ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
 CALL run_job(:reorder_job_id);
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
@@ -123,7 +123,7 @@ select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy
 SELECT reorder_called(:oldest_chunk_id);
 
 -- Now run reorder again and pick the next oldest chunk
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+select ds.chunk_id from _timescaledb_catalog.dimension_slice as ds where ds.dimension_id=1 and ds.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
 CALL run_job(:reorder_job_id);
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
@@ -132,7 +132,7 @@ select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy
 SELECT reorder_called(:oldest_chunk_id);
 
 -- Again
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+select ds.chunk_id from _timescaledb_catalog.dimension_slice as ds where ds.dimension_id=1 and ds.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
 CALL run_job(:reorder_job_id);
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
@@ -140,7 +140,7 @@ select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy
 SELECT reorder_called(:oldest_chunk_id);
 
 -- Again
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+select ds.chunk_id from _timescaledb_catalog.dimension_slice as ds where ds.dimension_id=1 and ds.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
 CALL run_job(:reorder_job_id);
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
@@ -148,7 +148,7 @@ select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy
 SELECT reorder_called(:oldest_chunk_id);
 
 -- Again
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+select ds.chunk_id from _timescaledb_catalog.dimension_slice as ds where ds.dimension_id=1 and ds.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
 CALL run_job(:reorder_job_id);
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;
@@ -170,7 +170,7 @@ CALL run_job(:reorder_job_id);
 
 -- But if we create a new time dimension, reorder it
 INSERT INTO test_table VALUES (now() - INTERVAL '1 year', 1);
-select cc.chunk_id from _timescaledb_catalog.dimension_slice as ds, _timescaledb_catalog.chunk_constraint as cc where ds.dimension_id=1 and ds.id=cc.dimension_slice_id and cc.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
+select ds.chunk_id from _timescaledb_catalog.dimension_slice as ds where ds.dimension_id=1 and ds.chunk_id NOT IN (select chunk_id from _timescaledb_internal.bgw_policy_chunk_stats) ORDER BY ds.range_start LIMIT 1 \gset oldest_
 
 CALL run_job(:reorder_job_id);
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats where job_id=:reorder_job_id and chunk_id=:oldest_chunk_id;

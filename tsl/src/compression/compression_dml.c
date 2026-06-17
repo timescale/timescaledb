@@ -9,6 +9,8 @@
 #include <access/tableam.h>
 #include <access/valid.h>
 #include <catalog/pg_am.h>
+#include <executor/executor.h>
+#include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/optimizer.h>
 #include <parser/parse_coerce.h>
@@ -22,6 +24,7 @@
 
 #include <compat/compat.h>
 #include "foreach_ptr.h"
+#include "ts_stats/ts_stats_record.h"
 #include <chunk_insert_state.h>
 #include <compression/arrow_c_data_interface.h>
 #include <compression/compression.h>
@@ -60,7 +63,7 @@ static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
-						TupleTableSlot *insert_slot);
+						TupleTableSlot *insert_slot, CmdType cmd_type);
 
 static BatchQualSummary batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys,
 									  int num_scankeys, tuple_filtering_constraints *constraints,
@@ -76,6 +79,10 @@ static void process_predicates(Chunk *ch, CompressionSettings *settings, List *p
 static Relation find_matching_index(Relation comp_chunk_rel, List **index_filters,
 									List **heap_filters);
 static tuple_filtering_constraints *get_batch_keys_for_unique_constraints(Relation relation);
+static bool decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chunk,
+												 List *predicates, EState *estate, bool has_joins);
+static bool decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk *chunk,
+													  EState *estate, bool has_joins);
 static BatchFilter *make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation,
 									 RegProcedure opcode, Const *value, bool is_null_check,
 									 bool is_null, bool is_array_op);
@@ -92,6 +99,8 @@ static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constra
 static void update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
 static void init_upsert_bloom_state(ChunkInsertState *cis);
 static Bitmapset *get_arbiter_index_attnums(ChunkInsertState *cis);
+static inline void copy_stats_to_observ_counters(RowDecompressor *d,
+												 const struct decompress_batches_stats *s);
 
 static AttrNumber
 TupleDescGetAttrNumber(TupleDesc desc, const char *name)
@@ -347,7 +356,7 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		Bitmapset *index_columns = NULL;
 		Relation index_rel = NULL;
 
-		if (ts_guc_enable_dml_decompression_tuple_filtering)
+		if (ts_guc_enable_optimizations && ts_guc_enable_dml_decompression_tuple_filtering)
 		{
 			cdst->mem_scankeys.scankeys =
 				build_mem_scankeys_from_slot(cis->hypertable_relid,
@@ -521,7 +530,9 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									NIL,
 									NULL /* no CAgg invalidation for inserts */,
 									cdst,
-									slot);
+									slot,
+									CMD_INSERT);
+
 	if (index_rel)
 	{
 		index_close(index_rel, AccessShareLock);
@@ -546,6 +557,249 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 
 	CommandCounterIncrement();
 	table_close(in_rel, NoLock);
+}
+
+/*
+ * Find the SET expression that produces the new value for a result-relation
+ * column in an UPDATE. The new values live in the ModifyTable subplan's
+ * targetlist; its non-junk entries correspond one-to-one (and in order) to the
+ * result relation's update column numbers. Returns NULL if the column is not
+ * updated.
+ */
+static Expr *
+find_update_set_expr(ModifyTable *mt, AttrNumber target_attno)
+{
+	List *update_colnos = linitial(mt->updateColnosLists);
+	List *subplan_tlist = outerPlan(mt)->targetlist;
+	ListCell *col_cell = list_head(update_colnos);
+	ListCell *tl_cell;
+
+	foreach (tl_cell, subplan_tlist)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, tl_cell);
+
+		if (tle->resjunk)
+		{
+			continue;
+		}
+
+		if (col_cell == NULL)
+		{
+			break;
+		}
+
+		if (lfirst_int(col_cell) == target_attno)
+		{
+			return tle->expr;
+		}
+
+		col_cell = lnext(update_colnos, col_cell);
+	}
+
+	return NULL;
+}
+
+/*
+ * Build an equality predicate "chunk_col = <new value>" for a changed unique key
+ * column, or NULL when its new value cannot be used to prune batches.
+ *
+ * The column must be a segmentby column or have minmax sparse index.
+ */
+static OpExpr *
+build_changed_key_filter(CompressionSettings *settings, Relation rel, Oid chunk_relid,
+						 AttrNumber attno, ModifyTable *mt, PlannerInfo *root)
+{
+	char *colname = get_attname(RelationGetRelid(rel), attno, false);
+	AttrNumber chunk_attno = get_attnum(chunk_relid, colname);
+
+	if (!ts_array_is_member(settings->fd.segmentby, colname) &&
+		(compressed_column_metadata_attno(settings,
+										  chunk_relid,
+										  chunk_attno,
+										  settings->fd.compress_relid,
+										  "min") == InvalidAttrNumber ||
+		 compressed_column_metadata_attno(settings,
+										  chunk_relid,
+										  chunk_attno,
+										  settings->fd.compress_relid,
+										  "max") == InvalidAttrNumber))
+	{
+		return NULL;
+	}
+
+	/* The new value has to be derivable before the scan. */
+	Expr *setexpr = find_update_set_expr(mt, attno);
+	if (setexpr == NULL)
+	{
+		return NULL;
+	}
+
+	Node *folded = estimate_expression_value(root, copyObject((Node *) setexpr));
+	if (!IsA(folded, Const))
+	{
+		return NULL;
+	}
+
+	Const *value = castNode(Const, folded);
+
+	/* Currently we dont support filtering on NULL values. */
+	if (value->constisnull)
+	{
+		return NULL;
+	}
+
+	Oid eq_opr = lookup_type_cache(value->consttype, TYPECACHE_EQ_OPR)->eq_opr;
+	if (!OidIsValid(eq_opr))
+	{
+		return NULL;
+	}
+
+	Var *var = makeVar(1, chunk_attno, value->consttype, value->consttypmod, value->constcollid, 0);
+	OpExpr *op = (OpExpr *) make_opclause(eq_opr,
+										  BOOLOID,
+										  false,
+										  (Expr *) var,
+										  (Expr *) value,
+										  InvalidOid,
+										  value->constcollid);
+	op->opfuncid = get_opcode(eq_opr);
+	return op;
+}
+
+/*
+ * Support UPDATEs that change columns covered by a unique constraint on a
+ * compressed chunk.
+ *
+ * The regular UPDATE decompression only decompresses the batches matching the
+ * statement's WHERE clause. A row that the UPDATE moves to a new unique key
+ * could collide with a row that is still compressed and therefore invisible to
+ * the unique indexes. To let those indexes detect the conflict we decompress,
+ * up front, the batches that could hold a row with the new key value.
+ *
+ * This only works when the new key value can be derived before the scan (a
+ * constant) and the changed unique columns can prune which batches to
+ * decompress. Anything we cannot derive that way is rejected, because staying
+ * correct would otherwise require decompressing the whole chunk.
+ */
+static bool
+decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk *chunk,
+										  EState *estate, bool has_joins)
+{
+	ModifyTable *mt = ht_state->mt;
+
+	if (mt->operation != CMD_UPDATE)
+	{
+		return false;
+	}
+
+	ModifyTableState *mtstate =
+		linitial_node(ModifyTableState, castNode(CustomScanState, ht_state)->custom_ps);
+	ResultRelInfo *relinfo = mtstate->resultRelInfo;
+	Relation rel = relinfo->ri_RelationDesc;
+	Bitmapset *updated_columns = ExecGetUpdatedCols(relinfo, estate);
+
+	if (bms_is_empty(updated_columns))
+	{
+		return false;
+	}
+
+	CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+	Oid chunk_relid = chunk->table_id;
+	bool batches_decompressed = false;
+
+	/*
+	 * Root used for constant folding of the SET expressions. Forwarding the
+	 * bound parameters lets us derive a value for "SET col = $1" style updates.
+	 */
+	PlannerGlobal glob = { .boundParams = estate->es_param_list_info };
+	PlannerInfo root = { .glob = &glob };
+
+	ListCell *lc;
+	foreach (lc, RelationGetIndexList(rel))
+	{
+		Relation index_rel = index_open(lfirst_oid(lc), AccessShareLock);
+
+		/* PRIMARY KEY indexes also have indisunique set */
+		if (!index_rel->rd_index->indisunique || !index_rel->rd_index->indislive ||
+			!index_rel->rd_index->indisvalid)
+		{
+			index_close(index_rel, AccessShareLock);
+			continue;
+		}
+
+		/*
+		 * Build equality predicates from the new values of the changed key
+		 * columns. We only use a column when its new value is a constant and it
+		 * can prune batches (a segmentby or orderby column); one such column is
+		 * enough, since decompressing the batches matching it yields a superset
+		 * of the conflicting rows for this constraint.
+		 */
+		bool key_updated = false;
+		char *changed_col = NULL;
+		List *predicates = NIL;
+		for (int i = 0; i < index_rel->rd_index->indnkeyatts; i++)
+		{
+			AttrNumber attno = index_rel->rd_index->indkey.values[i];
+
+			if (attno == 0 ||
+				!bms_is_member(attno - FirstLowInvalidHeapAttributeNumber, updated_columns))
+			{
+				continue;
+			}
+
+			key_updated = true;
+			if (changed_col == NULL)
+			{
+				changed_col = get_attname(RelationGetRelid(rel), attno, false);
+			}
+
+			OpExpr *filter = build_changed_key_filter(settings, rel, chunk_relid, attno, mt, &root);
+			if (filter != NULL)
+			{
+				predicates = lappend(predicates, filter);
+			}
+		}
+
+		/*
+		 * A key expression or partial-index predicate that depends on a changed
+		 * column also changes which rows the constraint covers, but cannot be
+		 * turned into a batch filter.
+		 */
+		Bitmapset *referenced = NULL;
+		pull_varattnos((Node *) RelationGetIndexExpressions(index_rel), 1, &referenced);
+		pull_varattnos((Node *) RelationGetIndexPredicate(index_rel), 1, &referenced);
+		bool expr_or_pred_updated = bms_overlap(referenced, updated_columns);
+
+		index_close(index_rel, AccessShareLock);
+
+		if (!key_updated && !expr_or_pred_updated)
+		{
+			/* this constraint's key does not change */
+			continue;
+		}
+
+		if (expr_or_pred_updated || predicates == NIL)
+		{
+			if (changed_col == NULL)
+			{
+				AttrNumber off = bms_next_member(bms_intersect(referenced, updated_columns), -1) +
+								 FirstLowInvalidHeapAttributeNumber;
+				changed_col = get_attname(RelationGetRelid(rel), off, false);
+			}
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot update column \"%s\" of a compressed chunk", changed_col),
+					 errdetail("The conflicting rows cannot be determined without decompressing "
+							   "the whole chunk."),
+					 errhint("Decompress the chunk before running this update.")));
+		}
+
+		/* Decompress the batches that could hold a row with the new key value. */
+		batches_decompressed |=
+			decompress_batches_for_update_delete(ht_state, chunk, predicates, estate, has_joins);
+	}
+
+	return batches_decompressed;
 }
 
 /*
@@ -685,7 +939,8 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 									is_null,
 									ht_state->has_continuous_aggregate ? &invalidation_ctx : NULL,
 									&temp_cdst,
-									NULL);
+									NULL,
+									ht_state->mt->operation);
 
 	/* close the selected index */
 	if (matching_index_rel)
@@ -821,7 +1076,7 @@ static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
-						TupleTableSlot *insert_slot)
+						TupleTableSlot *insert_slot, CmdType cmd_type)
 {
 	HeapTuple compressed_tuple;
 	BulkWriter writer;
@@ -844,6 +1099,16 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	AttrNumber meta_count_attno = InvalidAttrNumber;
 
 	struct decompress_batches_stats stats = { 0 };
+
+	/*
+	 * initialize stats related fields of the compressor, so it can be
+	 * used even if the decompression is skipped by the bloom filter or
+	 * other filters
+	 */
+	row_decompressor_init_stats(&decompressor,
+								RelationGetRelid(in_rel),
+								RelationGetRelid(out_rel),
+								cmd_type);
 
 	/* TODO: Optimization by reusing the index scan while working on a single chunk */
 
@@ -873,18 +1138,10 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		{
 			/* filter tuple based on compress_orderby columns */
 			valid = false;
-#if PG16_LT
-			HeapKeyTest(compressed_tuple,
-						RelationGetDescr(in_rel),
-						num_heap_scankeys,
-						heap_scankeys,
-						valid);
-#else
 			valid = HeapKeyTest(compressed_tuple,
 								RelationGetDescr(in_rel),
 								num_heap_scankeys,
 								heap_scankeys);
-#endif
 			if (!valid)
 			{
 				stats.batches_filtered_compressed++;
@@ -961,7 +1218,14 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 		if (!decompressor_initialized)
 		{
-			decompressor = build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+			decompressor = build_decompressor(RelationGetDescr(in_rel),
+											  RelationGetDescr(out_rel),
+											  RelationGetRelid(in_rel),
+											  RelationGetRelid(out_rel));
+
+			/* set the cmd type in the metrics record */
+			decompressor.cmd_type = cmd_type;
+
 			decompressor_initialized = true;
 			writer = bulk_writer_build(out_rel, 0);
 			meta_count_attno = TupleDescGetAttrNumber(decompressor.in_desc,
@@ -1040,6 +1304,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 		if (skip_current_tuple && *skip_current_tuple)
 		{
+			copy_stats_to_observ_counters(&decompressor, &stats);
 			row_decompressor_close(&decompressor);
 			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
@@ -1075,6 +1340,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		if (result != TM_Ok)
 		{
 			write_logical_replication_msg_decompression_end();
+			copy_stats_to_observ_counters(&decompressor, &stats);
 			row_decompressor_close(&decompressor);
 			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
@@ -1116,10 +1382,21 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	decompress_batch_endscan(scan);
+	copy_stats_to_observ_counters(&decompressor, &stats);
+
 	if (decompressor_initialized)
 	{
 		row_decompressor_close(&decompressor);
 		bulk_writer_close(&writer);
+	}
+	else
+	{
+		/*
+		 * we accumulate stats in the decompressor even if
+		 * skip decompression because of other filters like
+		 * the bloom, null or index filter.
+		 */
+		row_decompressor_flush_stats(&decompressor);
 	}
 
 	if (ts_guc_debug_compression_path_info)
@@ -1484,6 +1761,18 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 																			ctx->has_joins);
 				ctx->batches_decompressed |= batches_decompressed;
 
+				/*
+				 * For UPDATEs that change a unique key column, also decompress
+				 * the batches that could hold a row with the new key value so
+				 * the unique indexes can detect a conflict (or reject the
+				 * statement when that cannot be derived).
+				 */
+				ctx->batches_decompressed |=
+					decompress_unique_update_conflict_batches(ctx->ht_state,
+															  current_chunk,
+															  ps->state,
+															  ctx->has_joins);
+
 				/* This is a workaround specifically for bitmap heap scans:
 				 * during node initialization, initialize the scan state with the active snapshot
 				 * but since we are inserting data to be modified during the same query, they end up
@@ -1733,7 +2022,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 				/*
 				 * Segmentby columns are checked as part of batch scan so no need to redo the check.
 				 */
-				if (ts_guc_enable_dml_decompression_tuple_filtering)
+				if (ts_guc_enable_optimizations && ts_guc_enable_dml_decompression_tuple_filtering)
 				{
 					ScanKeyEntryInitialize(&(*mem_scankeys)[(*num_mem_scankeys)++],
 										   arg_value->constisnull ? SK_ISNULL : 0,
@@ -1989,7 +2278,8 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 	 * equality predicates, compute hashes, and collect matches.
 	 * Results are sorted by selectivity (most columns first).
 	 */
-	if (eq_preds != NIL && settings->fd.index != NULL && ts_guc_enable_dml_bloom_filter)
+	if (eq_preds != NIL && settings->fd.index != NULL && ts_guc_enable_dml_bloom_filter &&
+		ts_guc_enable_optimizations)
 	{
 		SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
 		TsBmsList per_column_attnos =
@@ -2322,7 +2612,7 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 {
 	ListCell *lc;
 
-	if (!ts_guc_enable_compressed_direct_batch_delete)
+	if (!ts_guc_enable_compressed_direct_batch_delete || !ts_guc_enable_optimizations)
 	{
 		return false;
 	}
@@ -2457,4 +2747,19 @@ can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 	}
 
 	return true;
+}
+
+static inline void
+copy_stats_to_observ_counters(RowDecompressor *d, const struct decompress_batches_stats *s)
+{
+	d->observ_counters.batches_deleted = s->batches_deleted;
+	d->observ_counters.batches_decompressed = s->batches_decompressed;
+	d->observ_counters.tuples_decompressed = s->tuples_decompressed;
+	d->observ_counters.batches_scanned = s->batches_scanned;
+	d->observ_counters.batches_checked_by_bloom = s->batches_checked_by_bloom;
+	d->observ_counters.batches_pruned_by_bloom = s->batches_pruned_by_bloom;
+	d->observ_counters.batches_without_bloom = s->batches_without_bloom;
+	d->observ_counters.batches_bloom_false_positives = s->batches_bloom_false_positives;
+	d->observ_counters.batches_filtered_compressed = s->batches_filtered_compressed;
+	d->observ_counters.batches_filtered_decompressed = s->batches_filtered_decompressed;
 }

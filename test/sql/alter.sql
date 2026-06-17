@@ -101,15 +101,15 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_
 
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Rename chunk
 ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Set schema
 ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Test that we cannot rename chunk columns
 \set ON_ERROR_STOP 0
@@ -385,7 +385,7 @@ ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
 INSERT INTO my_table (date, quantity) VALUES ('2018-08-10T23:00:00+00:00', 20);
 -- Make sure the schema name is changed in both catalog tables
 SELECT * from _timescaledb_catalog.hypertable;
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk from _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk from _timescaledb_catalog.chunk;
 
 DROP TABLE my_table;
 
@@ -399,8 +399,13 @@ INSERT INTO t_hypertable AS h VALUES ( 1, '2021-01-01 00:00:00', 3.2) ON CONFLIC
 BEGIN;
 ALTER INDEX t_hypertable_id_time_key RENAME TO t_new_constraint;
 
--- chunk_constraint should have updated constraint names
-SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
+-- chunk-side constraints should reflect the rename
+SELECT con.conname AS constraint_name
+FROM _timescaledb_catalog.chunk c
+JOIN pg_constraint con
+  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+WHERE con.conname LIKE '%t_new_constraint%'
+ORDER BY 1;
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;
@@ -408,8 +413,13 @@ ROLLBACK;
 BEGIN;
 ALTER TABLE t_hypertable RENAME CONSTRAINT t_hypertable_id_time_key TO t_new_constraint;
 
--- chunk_constraint should have updated constraint names
-SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
+-- chunk-side constraints should reflect the rename
+SELECT con.conname AS constraint_name
+FROM _timescaledb_catalog.chunk c
+JOIN pg_constraint con
+  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+WHERE con.conname LIKE '%t_new_constraint%'
+ORDER BY 1;
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;
@@ -528,4 +538,43 @@ SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c
 CREATE TABLE i9132(time timestamptz) WITH (tsdb.hypertable);
 INSERT INTO i9132 VALUES ('2024-01-01'), ('2024-02-02');
 ALTER TABLE i9132 ADD COLUMN id serial, ADD CONSTRAINT implicit_pk PRIMARY KEY (id, time);
+
+-- Renaming an outbound foreign key on the hypertable should rename the
+-- inherited foreign key on every chunk.
+CREATE TABLE fk_ref(id INTEGER PRIMARY KEY);
+INSERT INTO fk_ref VALUES (1), (2);
+CREATE TABLE fk_ht(
+    time TIMESTAMPTZ NOT NULL,
+    ref_id INTEGER,
+    CONSTRAINT fk_ht_ref_fkey FOREIGN KEY (ref_id) REFERENCES fk_ref(id)
+) WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO fk_ht VALUES ('2024-01-01', 1), ('2024-03-01', 2);
+
+-- Inherited FKs on chunks initially carry the hypertable constraint name.
+SELECT count(*) AS chunk_fks_fkey
+FROM pg_constraint pc
+JOIN pg_class c ON c.oid = pc.conrelid
+WHERE c.relname LIKE '_hyper%' AND pc.contype = 'f' AND pc.conname LIKE '%fk_ht_ref_fkey%';
+
+ALTER TABLE fk_ht RENAME CONSTRAINT fk_ht_ref_fkey TO fk_ht_ref_renamed;
+
+-- After the rename all chunk-side FKs must reference the new name and none
+-- of the old name should remain.
+SELECT count(*) AS chunk_fks_renamed
+FROM pg_constraint pc
+JOIN pg_class c ON c.oid = pc.conrelid
+WHERE c.relname LIKE '_hyper%' AND pc.contype = 'f' AND pc.conname LIKE '%fk_ht_ref_renamed%';
+
+SELECT count(*) AS chunk_fks_old
+FROM pg_constraint pc
+JOIN pg_class c ON c.oid = pc.conrelid
+WHERE c.relname LIKE '_hyper%' AND pc.contype = 'f' AND pc.conname LIKE '%fk_ht_ref_fkey%';
+
+-- The FK is still enforced.
+\set ON_ERROR_STOP 0
+INSERT INTO fk_ht VALUES ('2024-02-01', 999);
+\set ON_ERROR_STOP 1
+
+DROP TABLE fk_ht;
+DROP TABLE fk_ref;
 

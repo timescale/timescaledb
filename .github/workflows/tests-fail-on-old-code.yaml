@@ -17,7 +17,7 @@ jobs:
 
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
 
@@ -74,9 +74,9 @@ jobs:
           exit 0
         fi
 
-        echo "Changed tests: ${CHANGED_TESTS[@]}"
+        echo "Changed tests: ${CHANGED_TESTS[*]}"
         echo "should_run=true" >> $GITHUB_OUTPUT
-        echo "changed_tests=${CHANGED_TESTS[@]}" >> $GITHUB_OUTPUT
+        echo "changed_tests=${CHANGED_TESTS[*]}" >> $GITHUB_OUTPUT
 
     - name: Install Linux Dependencies
       if: steps.check.outputs.should_run == 'true'
@@ -85,13 +85,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install flex bison cmake
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       if: steps.check.outputs.should_run == 'true'
       id: get-date
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
 
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
@@ -107,7 +107,7 @@ jobs:
     - name: Build PostgreSQL ${{ steps.pg.outputs.version }}
       if: steps.check.outputs.should_run == 'true' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ steps.pg.outputs.version }}/postgresql-${{ steps.pg.outputs.version }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
@@ -183,7 +183,7 @@ jobs:
         # using a _NNN suffix (pg_regress feature).
         readarray -t FAILED_TESTS < <( \
           sed -n 's!^\+\+\+.*results/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out[[:space:]].*$!\1!gp' regression.log)
-        echo "Tests failing with the old code: ${FAILED_TESTS[@]}"
+        echo "Tests failing with the old code: ${FAILED_TESTS[*]}"
 
         # Check which changed tests did NOT fail
         PASSED_TESTS=""

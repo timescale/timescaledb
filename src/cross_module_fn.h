@@ -105,6 +105,7 @@ typedef struct CrossModuleFunctions
 										  bool update);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+	void (*continuous_agg_add_column)(ContinuousAgg *cagg, AlterTableStmt *stmt);
 	Query *(*continuous_agg_apply_rewrites_tsl)(Query *parse);
 	PGFunction continuous_agg_validate_query;
 	PGFunction continuous_agg_get_bucket_function;
@@ -124,6 +125,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	PGFunction rebuild_columnstore;
+	PGFunction rebuild_sparse_index;
 	void (*decompress_batches_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
@@ -135,8 +137,8 @@ typedef struct CrossModuleFunctions
 	void (*compressor_add_slot)(RowCompressor *compressor, BulkWriter *bulk_writer,
 								TupleTableSlot *slot);
 	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
-	void (*compressor_free)(RowCompressor *compressor, BulkWriter *bulk_writer);
-	Chunk *(*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
+	void (*compressor_close)(RowCompressor *compressor, BulkWriter *bulk_writer);
+	void (*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
 
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
@@ -147,6 +149,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_decompress_reverse;
 	PGFunction compressed_data_column_size;
 	PGFunction compressed_data_to_array;
+	PGFunction decompress_batch;
 	PGFunction deltadelta_compressor_append;
 	PGFunction deltadelta_compressor_finish;
 	PGFunction gorilla_compressor_append;

@@ -98,36 +98,16 @@ enable_fast_restart(int32 job_id, const char *job_name)
 	elog(DEBUG1, "the %s job is scheduled to run again immediately", job_name);
 }
 
-/*
- * Returns the ID of a chunk to reorder. Eligible chunks must be at least the
- * 3rd newest chunk in the hypertable (not entirely exact because we use the number
- * of dimension slices as a proxy for the number of chunks),
- * not compressed, not dropped and hasn't been reordered recently.
- * For this version of automatic reordering, "not reordered
- * recently" means the chunk has not been reordered at all. This information
- * is available in the bgw_policy_chunk_stats metadata table.
- */
+/* Return a chunk id to reorder, or -1 if none qualifies. */
 static int
 get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 {
 	const Dimension *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-	const DimensionSlice *nth_dimension =
-		ts_dimension_slice_nth_latest_slice(time_dimension->fd.id,
-											REORDER_SKIP_RECENT_DIM_SLICES_N);
-
-	if (!nth_dimension)
-	{
-		return -1;
-	}
-
 	Assert(time_dimension != NULL);
 
 	return ts_dimension_slice_oldest_valid_chunk_for_reorder(job_id,
 															 time_dimension->fd.id,
-															 BTLessEqualStrategyNumber,
-															 nth_dimension->fd.range_start,
-															 InvalidStrategy,
-															 -1);
+															 REORDER_SKIP_RECENT_DIM_SLICES_N);
 }
 
 /*
@@ -442,67 +422,18 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
-	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY, .job_id = job_id };
+	ContinuousAggRefreshContext context = {
+		.callctx = CAGG_REFRESH_POLICY,
+		.job_id = job_id,
+		.buckets_per_batch = policy_data.buckets_per_batch,
+		.max_batches_per_execution = policy_data.max_batches_per_execution,
+		.refresh_newest_first = policy_data.refresh_newest_first,
+	};
 
-	/* Try to split window range into a list of ranges */
-	List *refresh_window_list =
-		continuous_agg_split_refresh_window(policy_data.cagg,
-											&policy_data.refresh_window,
-											policy_data.buckets_per_batch,
-											policy_data.refresh_newest_first);
-	if (refresh_window_list == NIL)
-	{
-		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
-	}
-	else
-	{
-		context.callctx = CAGG_REFRESH_POLICY_BATCHED;
-	}
-
-	context.number_of_batches = list_length(refresh_window_list);
-
-	ListCell *lc;
-	int32 processing_batch = 0;
-	foreach (lc, refresh_window_list)
-	{
-		InternalTimeRange *refresh_window = (InternalTimeRange *) lfirst(lc);
-		elog(DEBUG1,
-			 "refreshing continuous aggregate \"%s\" from %s to %s",
-			 NameStr(policy_data.cagg->data.user_view_name),
-			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
-			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
-
-		context.processing_batch = ++processing_batch;
-
-		/* extend_last_bucket must only apply to the boundary batch — the one
-		 * whose window abuts the adjacent policy.  For newest-first ordering
-		 * that is batch 1; for oldest-first it is the final batch.
-		 * In non-batched mode (single batch) the one batch is always the boundary. */
-		bool apply_extend =
-			extend_last_bucket &&
-			(policy_data.refresh_newest_first ? processing_batch == 1 :
-												processing_batch == context.number_of_batches);
-
-		continuous_agg_refresh_internal(policy_data.cagg,
-										refresh_window,
-										context,
-										refresh_window->start_isnull,
-										refresh_window->end_isnull,
-										(context.callctx != CAGG_REFRESH_POLICY_BATCHED),
-										false, /* force */
-										apply_extend);
-		DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_refresh", processing_batch));
-		if (processing_batch >= policy_data.max_batches_per_execution &&
-			processing_batch < context.number_of_batches &&
-			policy_data.max_batches_per_execution > 0)
-		{
-			elog(LOG,
-				 "reached maximum number of batches per execution (%d), batches not processed (%d)",
-				 policy_data.max_batches_per_execution,
-				 context.number_of_batches - processing_batch);
-			break;
-		}
-	}
+	continuous_agg_refresh_batched(policy_data.cagg,
+								   &policy_data.refresh_window,
+								   context,
+								   extend_last_bucket);
 
 	if (!policy_data.include_tiered_data_isnull)
 	{
@@ -553,6 +484,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 			}
 
 			/* Process each chunk in its own transaction */
+			ListCell *lc;
 			foreach (lc, chunkid_lst)
 			{
 				PushActiveSnapshot(GetTransactionSnapshot());

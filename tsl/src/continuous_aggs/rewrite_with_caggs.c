@@ -17,8 +17,6 @@
 #include "invalidation.h"
 #include "utils.h"
 
-#if PG16_GE
-
 static bool match_lists(List *src, List *tgt);
 
 /* Wrappers for common methods checking Cagg view query validity */
@@ -323,6 +321,7 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 	StringInfo nonmatching_quals = NULL;
 	StringInfo nonmatching_having_quals = NULL;
 	StringInfo nonmatching_targets = NULL;
+	StringInfo schema_changed = NULL;
 
 	List *caggs = ts_continuous_aggs_find_by_raw_table_id(cagg_rewrite_ctx->ht->fd.id);
 	ListCell *l;
@@ -353,6 +352,19 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 			add_optional_debug_info(cagg,
 									&pending_ranges,
 									"Caggs with pending materialization ranges:");
+			continue;
+		}
+
+		/* A column added later via ALTER ... ADD COLUMN is NULL for the buckets
+		 * that were already materialized when the column was added. Such a cagg
+		 * cannot be used for rewriting until the column is backfilled over its
+		 * whole materialized range. There is not a backfill mechanism in place yet.
+		 * Block rewrite until we can backfill the new column at some point in the future. */
+		if (cagg->data.schema_change_timestamp != TS_TIME_NOBEGIN)
+		{
+			add_optional_debug_info(cagg,
+									&schema_changed,
+									"Schema has changed by ALTER ... ADD COLUMN:");
 			continue;
 		}
 
@@ -675,6 +687,11 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 				appendStringInfo(&(cagg_rewrite_ctx->msg), "%s\n", pending_ranges->data);
 				pfree(pending_ranges);
 			}
+			if (schema_changed)
+			{
+				appendStringInfo(&(cagg_rewrite_ctx->msg), "%s\n", schema_changed->data);
+				pfree(schema_changed);
+			}
 			if (nonmatching_buckets)
 			{
 				appendStringInfo(&(cagg_rewrite_ctx->msg), "%s\n", nonmatching_buckets->data);
@@ -980,5 +997,3 @@ continuous_agg_apply_rewrites(Query *parse)
 	}
 	return result;
 }
-
-#endif

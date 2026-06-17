@@ -46,6 +46,7 @@
  */
 typedef enum GapFillFetchState
 {
+	PREFETCH,
 	FETCHED_NONE,
 	FETCHED_ONE,
 	FETCHED_NEXT_GROUP,
@@ -125,4 +126,3 @@ typedef struct GapFillState
 Node *gapfill_state_create(CustomScan *);
 Expr *gapfill_adjust_varnos(GapFillState *state, Expr *expr);
 Datum gapfill_exec_expr(GapFillState *state, TupleTableSlot *, Expr *expr, bool *isnull);
-int64 gapfill_datum_get_internal(Datum, Oid);

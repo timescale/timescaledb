@@ -13,6 +13,7 @@
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#include "gapfill.h"
 #include "gapfill_internal.h"
 #include "interpolate.h"
 

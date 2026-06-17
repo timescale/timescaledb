@@ -217,7 +217,8 @@ FROM generate_series('2025-03-30 00:00:00'::timestamptz,
                      '2025-03-31 23:59:59.999999'::timestamptz,
                      '1 hour'::interval) ts;
 
-CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-03-01 00:00:00', '2025-05-01 00:00:00');
+-- Disabling incremental refresh as it's not the focus of the test and it's easier to read the test output without it.
+CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-03-01 00:00:00', '2025-05-01 00:00:00', options => '{"buckets_per_batch": 0}'::jsonb);
 -- March 30 should have 23 hours
 SELECT bucket, cnt FROM cagg_dst_daily
 ORDER BY bucket;
@@ -234,7 +235,7 @@ FROM generate_series('2025-10-26 00:00:00'::timestamptz,
                      '1 hour'::interval) ts;
 
 -- Wide window to cover all DST-shifted buckets
-CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-10-01 00:00:00', '2026-12-01 00:00:00');
+CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-10-01 00:00:00', '2026-12-01 00:00:00', options => '{"buckets_per_batch": 0}'::jsonb);
 
 -- October bucket should have extra hour (25-hour day on Oct 26)
 SELECT bucket, cnt FROM cagg_dst_daily
@@ -245,7 +246,7 @@ ORDER BY bucket;
 INSERT INTO dst_data VALUES ('2025-10-26 01:00:00', 888.0);  -- 2:00 AM Europe/Berlin (after fall-back)
 INSERT INTO dst_data VALUES ('2025-10-26 00:30:00', 777.0);  -- 2:30 AM Europe/Berlin (before fall-back)
 
-CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-09-01 00:00:00', '2026-02-01 00:00:00');
+CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-09-01 00:00:00', '2026-02-01 00:00:00', options => '{"buckets_per_batch": 0}'::jsonb);
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_dst_daily';
 
 SET timezone TO 'UTC';

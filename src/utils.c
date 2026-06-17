@@ -14,6 +14,7 @@
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am.h>
+#include <catalog/pg_authid_d.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
@@ -937,6 +938,17 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	return em ? em->em_expr : NULL;
 }
 
+/*
+ * True if `userid` has privileges of `ownerid` or of `pg_database_owner`.
+ * Used to gate hypertable/CAGG/job configuration: the table owner and the
+ * database owner are both allowed.
+ */
+bool
+ts_has_owner_privs(Oid userid, Oid ownerid)
+{
+	return has_privs_of_role(userid, ownerid) || has_privs_of_role(userid, ROLE_PG_DATABASE_OWNER);
+}
+
 bool
 ts_has_row_security(Oid relid)
 {
@@ -1556,11 +1568,6 @@ ts_get_node_name(Node *node)
 		/*
 		 * plan nodes (plannodes.h)
 		 */
-#if PG16_LT
-		NODE_CASE(Plan);
-		NODE_CASE(Scan);
-		NODE_CASE(Join);
-#endif
 		NODE_CASE(Result);
 		NODE_CASE(ProjectSet);
 		NODE_CASE(ModifyTable);
@@ -2185,9 +2192,31 @@ ts_is_time_bucket_function(Expr *node)
 	return false;
 }
 
+/*
+ * Report whether a column cannot contain NULLs.
+ *
+ * On PG18 a NOT NULL constraint can be NOT VALID: attnotnull is set but
+ * existing rows may still be NULL, so we only trust a valid constraint. The
+ * validity is not on the pg_attribute tuple, so read it from the descriptor.
+ */
 bool
 ts_get_attnotnull(Oid relid, AttrNumber attno)
 {
+#if PG18_GE
+	Relation rel = try_relation_open(relid, AccessShareLock);
+	if (rel == NULL)
+	{
+		return false;
+	}
+	bool result = false;
+	if (attno >= 1 && attno <= rel->rd_att->natts)
+	{
+		const CompactAttribute *att = TupleDescCompactAttr(rel->rd_att, attno - 1);
+		result = att->attnullability == ATTNULLABLE_VALID;
+	}
+	relation_close(rel, AccessShareLock);
+	return result;
+#else
 	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
 	if (!HeapTupleIsValid(tp))
 	{
@@ -2197,4 +2226,5 @@ ts_get_attnotnull(Oid relid, AttrNumber attno)
 	bool result = att_tup->attnotnull;
 	ReleaseSysCache(tp);
 	return result;
+#endif
 }

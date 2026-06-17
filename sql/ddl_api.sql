@@ -17,8 +17,6 @@
 -- if_not_exists - (Optional) Do not fail if table is already a hypertable
 -- partitioning_func - (Optional) The partitioning function to use for spatial partitioning
 -- migrate_data - (Optional) Set to true to migrate any existing data in the table to chunks
--- chunk_target_size - (Optional) The target size for chunks (e.g., '1000MB', 'estimate', or 'off')
--- chunk_sizing_func - (Optional) A function to calculate the chunk time interval for new chunks
 -- time_partitioning_func - (Optional) The partitioning function to use for "time" partitioning
 CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     relation                REGCLASS,
@@ -32,8 +30,6 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     if_not_exists           BOOLEAN = FALSE,
     partitioning_func       REGPROC = NULL,
     migrate_data            BOOLEAN = FALSE,
-    chunk_target_size       TEXT = NULL,
-    chunk_sizing_func       REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
@@ -53,14 +49,6 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     migrate_data            BOOLEAN = FALSE
 ) RETURNS TABLE(hypertable_id INT, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create_general' LANGUAGE C VOLATILE;
 
-
--- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
-CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
-    hypertable                     REGCLASS,
-    chunk_target_size              TEXT,
-    INOUT chunk_sizing_func        REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
-    OUT chunk_target_size          BIGINT
-) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_chunk_adaptive_set' LANGUAGE C VOLATILE;
 
 -- Update chunk_time_interval for a hypertable [DEPRECATED].
 --

@@ -214,6 +214,14 @@ COPY hyper_copy FROM STDIN DELIMITER ',' NULL AS 'null';
 
 SELECT count(*) FROM hyper_copy;
 
+-- Disabled by the debug GUC
+SET timescaledb.enable_optimizations TO OFF;
+\copy hyper_copy FROM data/copy_data.csv WITH csv header;
+RESET timescaledb.enable_optimizations;
+
+SELECT count(*) FROM hyper_copy;
+
+
 RESET client_min_messages;
 RESET timescaledb.max_open_chunks_per_insert;
 
@@ -541,6 +549,15 @@ COPY table_with_layout_change (value7, time) FROM STDIN DELIMITER ',' NULL AS 'n
 724,5
 725,6
 726,4
+\.
+
+SELECT * FROM table_with_layout_change ORDER BY time, value7;
+
+-- COPY WHERE into a hypertable whose chunks have dropped columns
+COPY table_with_layout_change (value7, time) FROM STDIN DELIMITER ',' NULL AS 'null' WHERE value7 > 800;
+850,2
+727,1
+860,3
 \.
 
 SELECT * FROM table_with_layout_change ORDER BY time, value7;

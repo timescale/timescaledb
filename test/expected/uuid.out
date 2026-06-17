@@ -32,10 +32,10 @@ WHERE hypertable_name = 'uuid_events';
 BEGIN;
 INSERT INTO uuid_events VALUES ('00000000-0000-7000-8000-000000000000', 1, 1.0);
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
-      Constraint      | Type | Columns |                    Index                     |                                                      Expr                                                      | Deferrable | Deferred | Validated 
-----------------------+------+---------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- 1_1_uuid_events_pkey | p    | {id}    | _timescaledb_internal."1_1_uuid_events_pkey" |                                                                                                                | f          | f        | t
- constraint_1         | c    | {id}    | -                                            | ((id >= '00000000-0000-0000-0000-000000000000'::uuid) AND (id < '00000526-5c00-0000-0000-000000000000'::uuid)) | f          | f        | t
+     Constraint     | Type | Columns |                   Index                    |                                                      Expr                                                      | Deferrable | Deferred | Validated 
+--------------------+------+---------+--------------------------------------------+----------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 1_uuid_events_pkey | p    | {id}    | _timescaledb_internal."1_uuid_events_pkey" |                                                                                                                | f          | f        | t
+ constraint_1       | c    | {id}    | -                                          | ((id >= '00000000-0000-0000-0000-000000000000'::uuid) AND (id < '00000526-5c00-0000-0000-000000000000'::uuid)) | f          | f        | t
 
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
@@ -64,40 +64,40 @@ ROLLBACK;
 BEGIN;
 INSERT INTO uuid_events VALUES ('00000000-0000-7fff-bfff-ffffffffffff', 1, 1.0);
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
-      Constraint      | Type | Columns |                    Index                     |                                                      Expr                                                      | Deferrable | Deferred | Validated 
-----------------------+------+---------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- 2_2_uuid_events_pkey | p    | {id}    | _timescaledb_internal."2_2_uuid_events_pkey" |                                                                                                                | f          | f        | t
- constraint_2         | c    | {id}    | -                                            | ((id >= '00000000-0000-0000-0000-000000000000'::uuid) AND (id < '00000526-5c00-0000-0000-000000000000'::uuid)) | f          | f        | t
+     Constraint     | Type | Columns |                   Index                    |                                                      Expr                                                      | Deferrable | Deferred | Validated 
+--------------------+------+---------+--------------------------------------------+----------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 2_uuid_events_pkey | p    | {id}    | _timescaledb_internal."2_uuid_events_pkey" |                                                                                                                | f          | f        | t
+ constraint_2       | c    | {id}    | -                                          | ((id >= '00000000-0000-0000-0000-000000000000'::uuid) AND (id < '00000526-5c00-0000-0000-000000000000'::uuid)) | f          | f        | t
 
 ROLLBACK;
 -- First value with max time: ffffffff-ffff-7000-8000-000000000000
 BEGIN;
 INSERT INTO uuid_events VALUES ('ffffffff-ffff-7000-8000-000000000000', 1, 1.0);
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
-      Constraint      | Type | Columns |                    Index                     |                         Expr                         | Deferrable | Deferred | Validated 
-----------------------+------+---------+----------------------------------------------+------------------------------------------------------+------------+----------+-----------
- 3_3_uuid_events_pkey | p    | {id}    | _timescaledb_internal."3_3_uuid_events_pkey" |                                                      | f          | f        | t
- constraint_3         | c    | {id}    | -                                            | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
+     Constraint     | Type | Columns |                   Index                    |                         Expr                         | Deferrable | Deferred | Validated 
+--------------------+------+---------+--------------------------------------------+------------------------------------------------------+------------+----------+-----------
+ 3_uuid_events_pkey | p    | {id}    | _timescaledb_internal."3_uuid_events_pkey" |                                                      | f          | f        | t
+ constraint_3       | c    | {id}    | -                                          | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
 
 ROLLBACK;
 -- (Max time with min value) + 1
 BEGIN;
 INSERT INTO uuid_events VALUES ('ffffffff-ffff-7000-8000-000000000001', 1, 1.0);
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
-      Constraint      | Type | Columns |                    Index                     |                         Expr                         | Deferrable | Deferred | Validated 
-----------------------+------+---------+----------------------------------------------+------------------------------------------------------+------------+----------+-----------
- 4_4_uuid_events_pkey | p    | {id}    | _timescaledb_internal."4_4_uuid_events_pkey" |                                                      | f          | f        | t
- constraint_4         | c    | {id}    | -                                            | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
+     Constraint     | Type | Columns |                   Index                    |                         Expr                         | Deferrable | Deferred | Validated 
+--------------------+------+---------+--------------------------------------------+------------------------------------------------------+------------+----------+-----------
+ 4_uuid_events_pkey | p    | {id}    | _timescaledb_internal."4_uuid_events_pkey" |                                                      | f          | f        | t
+ constraint_4       | c    | {id}    | -                                          | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
 
 ROLLBACK;
 -- Last value with max time: ffffffff-ffff-7fff-bfff-ffffffffffff
 BEGIN;
 INSERT INTO uuid_events VALUES ('ffffffff-ffff-7fff-bfff-ffffffffffff', 1, 1.0);
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
-      Constraint      | Type | Columns |                    Index                     |                         Expr                         | Deferrable | Deferred | Validated 
-----------------------+------+---------+----------------------------------------------+------------------------------------------------------+------------+----------+-----------
- 5_5_uuid_events_pkey | p    | {id}    | _timescaledb_internal."5_5_uuid_events_pkey" |                                                      | f          | f        | t
- constraint_5         | c    | {id}    | -                                            | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
+     Constraint     | Type | Columns |                   Index                    |                         Expr                         | Deferrable | Deferred | Validated 
+--------------------+------+---------+--------------------------------------------+------------------------------------------------------+------------+----------+-----------
+ 5_uuid_events_pkey | p    | {id}    | _timescaledb_internal."5_uuid_events_pkey" |                                                      | f          | f        | t
+ constraint_5       | c    | {id}    | -                                          | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
 
 ROLLBACK;
 --
@@ -127,14 +127,14 @@ SELECT * FROM show_chunks('uuid_events');
  _timescaledb_internal._hyper_1_8_chunk
 
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
-      Constraint      | Type | Columns |                    Index                     |                                                      Expr                                                      | Deferrable | Deferred | Validated 
-----------------------+------+---------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- 6_6_uuid_events_pkey | p    | {id}    | _timescaledb_internal."6_6_uuid_events_pkey" |                                                                                                                | f          | f        | t
- constraint_6         | c    | {id}    | -                                            | ((id >= '01941f29-7c00-0000-0000-000000000000'::uuid) AND (id < '0194244f-d800-0000-0000-000000000000'::uuid)) | f          | f        | t
- 7_7_uuid_events_pkey | p    | {id}    | _timescaledb_internal."7_7_uuid_events_pkey" |                                                                                                                | f          | f        | t
- constraint_7         | c    | {id}    | -                                            | ((id >= '0194244f-d800-0000-0000-000000000000'::uuid) AND (id < '01942976-3400-0000-0000-000000000000'::uuid)) | f          | f        | t
- 8_8_uuid_events_pkey | p    | {id}    | _timescaledb_internal."8_8_uuid_events_pkey" |                                                                                                                | f          | f        | t
- constraint_8         | c    | {id}    | -                                            | ((id >= '01942976-3400-0000-0000-000000000000'::uuid) AND (id < '01942e9c-9000-0000-0000-000000000000'::uuid)) | f          | f        | t
+     Constraint     | Type | Columns |                   Index                    |                                                      Expr                                                      | Deferrable | Deferred | Validated 
+--------------------+------+---------+--------------------------------------------+----------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 6_uuid_events_pkey | p    | {id}    | _timescaledb_internal."6_uuid_events_pkey" |                                                                                                                | f          | f        | t
+ constraint_6       | c    | {id}    | -                                          | ((id >= '01941f29-7c00-0000-0000-000000000000'::uuid) AND (id < '0194244f-d800-0000-0000-000000000000'::uuid)) | f          | f        | t
+ 7_uuid_events_pkey | p    | {id}    | _timescaledb_internal."7_uuid_events_pkey" |                                                                                                                | f          | f        | t
+ constraint_7       | c    | {id}    | -                                          | ((id >= '0194244f-d800-0000-0000-000000000000'::uuid) AND (id < '01942976-3400-0000-0000-000000000000'::uuid)) | f          | f        | t
+ 8_uuid_events_pkey | p    | {id}    | _timescaledb_internal."8_uuid_events_pkey" |                                                                                                                | f          | f        | t
+ constraint_8       | c    | {id}    | -                                          | ((id >= '01942976-3400-0000-0000-000000000000'::uuid) AND (id < '01942e9c-9000-0000-0000-000000000000'::uuid)) | f          | f        | t
 
 SELECT id, device, temp FROM uuid_events;
                   id                  | device | temp 
@@ -225,9 +225,9 @@ ORDER BY id DESC;
          Order: uuid_events.id DESC
          Startup Exclusion: false
          Runtime Exclusion: false
-         ->  Index Scan Backward using "7_7_uuid_events_pkey" on _timescaledb_internal._hyper_1_7_chunk
+         ->  Index Scan Backward using "7_uuid_events_pkey" on _timescaledb_internal._hyper_1_7_chunk
                Output: _hyper_1_7_chunk.id, _hyper_1_7_chunk.device, _hyper_1_7_chunk.temp
-         ->  Index Scan Backward using "6_6_uuid_events_pkey" on _timescaledb_internal._hyper_1_6_chunk
+         ->  Index Scan Backward using "6_uuid_events_pkey" on _timescaledb_internal._hyper_1_6_chunk
                Output: _hyper_1_6_chunk.id, _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
 
 SELECT uuid_timestamp(id), device, temp
@@ -345,9 +345,9 @@ GROUP BY id ORDER BY id DESC;
    Group Key: uuid_events.id
    ->  Custom Scan (ChunkAppend) on uuid_events
          Order: uuid_events.id DESC
-         ->  Index Scan Backward using "8_8_uuid_events_pkey" on _hyper_1_8_chunk
+         ->  Index Scan Backward using "8_uuid_events_pkey" on _hyper_1_8_chunk
                Filter: (time_bucket('@ 1 day'::interval, id) > 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
-         ->  Index Scan Backward using "7_7_uuid_events_pkey" on _hyper_1_7_chunk
+         ->  Index Scan Backward using "7_uuid_events_pkey" on _hyper_1_7_chunk
                Index Cond: (id > '0194244f-d800-7000-8000-000000000000'::uuid)
                Filter: (time_bucket('@ 1 day'::interval, id) > 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
 
@@ -392,7 +392,7 @@ GROUP BY id ORDER BY id DESC;
    ->  HashAggregate
          Group Key: uuid_events.id
          ->  Append
-               ->  Index Scan Backward using "8_8_uuid_events_pkey" on _hyper_1_8_chunk
+               ->  Index Scan Backward using "8_uuid_events_pkey" on _hyper_1_8_chunk
                      Index Cond: (id <= '01942976-3400-7000-8000-000000000000'::uuid)
                      Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
                ->  Seq Scan on _hyper_1_7_chunk

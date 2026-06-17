@@ -70,6 +70,13 @@ psql:include/cagg_rewrites_load.sql:47: NOTICE:  migrating data to chunks
 ----------------
  conditions_int
 
+CREATE TABLE conditions_addcol AS SELECT * FROM conditions;
+SELECT table_name FROM create_hypertable('conditions_addcol', 'day', chunk_time_interval => INTERVAL '1 day', migrate_data => true);
+psql:include/cagg_rewrites_load.sql:50: NOTICE:  migrating data to chunks
+    table_name     
+-------------------
+ conditions_addcol
+
 CREATE TABLE devices ( device_id int not null, name text, location text);
 INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 CREATE TABLE location (location_id INTEGER, name TEXT);
@@ -84,7 +91,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY bucket;
-psql:include/cagg_rewrites_load.sql:65: NOTICE:  refreshing continuous aggregate "cagg1"
+psql:include/cagg_rewrites_load.sql:68: NOTICE:  refreshing continuous aggregate "cagg1"
 CREATE MATERIALIZED VIEW cagg1_tz
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day, "offset"=>'30m'::interval, timezone=>'Australia/Sydney') AS bucket,
@@ -93,7 +100,7 @@ SELECT time_bucket(INTERVAL '1 day', day, "offset"=>'30m'::interval, timezone=>'
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY bucket;
-psql:include/cagg_rewrites_load.sql:74: NOTICE:  refreshing continuous aggregate "cagg1_tz"
+psql:include/cagg_rewrites_load.sql:77: NOTICE:  refreshing continuous aggregate "cagg1_tz"
 CREATE MATERIALIZED VIEW cagg1_origin
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day, origin=>'2001-01-02 00:00:00 UTC'::timestamptz) AS bucket,
@@ -102,7 +109,7 @@ SELECT time_bucket(INTERVAL '1 day', day, origin=>'2001-01-02 00:00:00 UTC'::tim
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY bucket;
-psql:include/cagg_rewrites_load.sql:83: NOTICE:  refreshing continuous aggregate "cagg1_origin"
+psql:include/cagg_rewrites_load.sql:86: NOTICE:  refreshing continuous aggregate "cagg1_origin"
 CREATE MATERIALIZED VIEW cagg2
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '2 days', day) AS bucket,
@@ -110,7 +117,7 @@ SELECT time_bucket(INTERVAL '2 days', day) AS bucket,
    count(device_id)
 FROM conditions
 GROUP BY bucket;
-psql:include/cagg_rewrites_load.sql:91: NOTICE:  refreshing continuous aggregate "cagg2"
+psql:include/cagg_rewrites_load.sql:94: NOTICE:  refreshing continuous aggregate "cagg2"
 CREATE MATERIALIZED VIEW cagg3
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
@@ -119,7 +126,7 @@ SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
 FROM conditions
 GROUP BY bucket
 HAVING count(device_id) > 1;
-psql:include/cagg_rewrites_load.sql:100: NOTICE:  refreshing continuous aggregate "cagg3"
+psql:include/cagg_rewrites_load.sql:103: NOTICE:  refreshing continuous aggregate "cagg3"
 -- A Cagg over integer dimension
 CREATE OR REPLACE FUNCTION conditions_int_now()
   RETURNS INT LANGUAGE SQL STABLE AS
@@ -138,7 +145,7 @@ SELECT time_bucket(3, day, 1) AS bucket,
    count(device_id)
 FROM conditions_int
 GROUP BY bucket;
-psql:include/cagg_rewrites_load.sql:116: NOTICE:  refreshing continuous aggregate "cagg3_int"
+psql:include/cagg_rewrites_load.sql:119: NOTICE:  refreshing continuous aggregate "cagg3_int"
 -- Caggs with joins
 CREATE MATERIALIZED VIEW cagg_join
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
@@ -149,7 +156,7 @@ FROM conditions, devices
 WHERE conditions.device_id = devices.device_id
 GROUP BY name, bucket
 ORDER BY bucket;
-psql:include/cagg_rewrites_load.sql:127: NOTICE:  refreshing continuous aggregate "cagg_join"
+psql:include/cagg_rewrites_load.sql:130: NOTICE:  refreshing continuous aggregate "cagg_join"
 -- Create CAgg with more joins and additional WHERE conditions
 CREATE MATERIALIZED VIEW cagg_more_conds
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
@@ -163,7 +170,7 @@ JOIN location ON conditions.city = location.name
 WHERE location_id > 1 AND
       conditions.temperature > 28
 GROUP BY devices.name, bucket, devices.device_id;
-psql:include/cagg_rewrites_load.sql:141: NOTICE:  refreshing continuous aggregate "cagg_more_conds"
+psql:include/cagg_rewrites_load.sql:144: NOTICE:  refreshing continuous aggregate "cagg_more_conds"
 -- Hierarchical CAgg with join
 CREATE MATERIALIZED VIEW cagg_on_cagg1
 WITH (timescaledb.continuous, timescaledb.materialized_only=FALSE) AS
@@ -172,7 +179,7 @@ SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
 FROM cagg1, devices
 WHERE devices.device_id = cagg1.device_id
 GROUP BY 1;
-psql:include/cagg_rewrites_load.sql:150: NOTICE:  refreshing continuous aggregate "cagg_on_cagg1"
+psql:include/cagg_rewrites_load.sql:153: NOTICE:  refreshing continuous aggregate "cagg_on_cagg1"
 -- Joining a hypertable and view
 CREATE MATERIALIZED VIEW cagg_view
 WITH (timescaledb.continuous, timescaledb.materialized_only=FALSE) AS
@@ -183,14 +190,23 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions, devices_view
 WHERE conditions.device_id = devices_view.device_id
 GROUP BY name, bucket, devices_view.device_id;
-psql:include/cagg_rewrites_load.sql:161: NOTICE:  refreshing continuous aggregate "cagg_view"
+psql:include/cagg_rewrites_load.sql:164: NOTICE:  refreshing continuous aggregate "cagg_view"
 -- Join on lateral subquery
 CREATE MATERIALIZED VIEW cagg_lateral WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE)
 AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket, q.name, avg(temperature)  from conditions,
 LATERAL (SELECT * FROM devices WHERE devices.device_id = conditions.device_id) q
 GROUP BY bucket, q.name;
-psql:include/cagg_rewrites_load.sql:168: NOTICE:  refreshing continuous aggregate "cagg_lateral"
+psql:include/cagg_rewrites_load.sql:171: NOTICE:  refreshing continuous aggregate "cagg_lateral"
+-- Real-time cagg used to test that a later ALTER ... ADD COLUMN makes a cagg
+-- ineligible for rewrite.
+CREATE MATERIALIZED VIEW cagg_added_col
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions_addcol
+GROUP BY bucket;
+psql:include/cagg_rewrites_load.sql:180: NOTICE:  refreshing continuous aggregate "cagg_added_col"
 SELECT h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME"
 FROM _timescaledb_catalog.continuous_agg ca
@@ -212,10 +228,10 @@ INFO:  Query was rewritten with Cagg "public.cagg2"
    ->  Append
          ->  Subquery Scan on "*SELECT* 1"
                ->  Result
-                     ->  Custom Scan (ChunkAppend) on _materialized_hypertable_8
-                           Order: _materialized_hypertable_8.bucket
-                           ->  Index Scan Backward using _hyper_8_51_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_51_chunk
-                           ->  Index Scan Backward using _hyper_8_50_chunk__materialized_hypertable_8_bucket_idx on _hyper_8_50_chunk
+                     ->  Custom Scan (ChunkAppend) on _materialized_hypertable_9
+                           Order: _materialized_hypertable_9.bucket
+                           ->  Index Scan Backward using _hyper_9_65_chunk__materialized_hypertable_9_bucket_idx on _hyper_9_65_chunk
+                           ->  Index Scan Backward using _hyper_9_64_chunk__materialized_hypertable_9_bucket_idx on _hyper_9_64_chunk
                                  Index Cond: (bucket < 'Mon Jun 28 17:00:00 2021 PDT'::timestamp with time zone)
          ->  Subquery Scan on "*SELECT* 2"
                ->  GroupAggregate
@@ -676,7 +692,7 @@ SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
 FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 GROUP BY device_id, bucket
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:70: INFO:  Query cannot be rewritten with CAggs: hypertable "_timescaledb_internal._materialized_hypertable_5" is a continuous aggregate materialization table
+psql:include/cagg_rewrites_error.sql:70: INFO:  Query cannot be rewritten with CAggs: hypertable "_timescaledb_internal._materialized_hypertable_6" is a continuous aggregate materialization table
             bucket            | device_id 
 ------------------------------+-----------
  Sun Jun 13 17:00:00 2021 PDT |         1
@@ -1140,6 +1156,24 @@ WHERE/JOIN quals do not match: "public.cagg_more_conds"
  1 | Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000 |     1 | thermo_1
  1 | Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000 |     1 | thermo_1
 
+-- A column added via ALTER ... ADD COLUMN makes the cagg ineligible for rewrite
+ALTER MATERIALIZED VIEW cagg_added_col
+   ADD COLUMN max_temp int GENERATED ALWAYS AS (max(temperature)) STORED;
+psql:include/cagg_rewrites_error.sql:339: INFO:  Query cannot be rewritten with CAggs: no GROUP BY clause in the query
+psql:include/cagg_rewrites_error.sql:339: INFO:  Query cannot be rewritten with CAggs: no GROUP BY clause in the query
+psql:include/cagg_rewrites_error.sql:339: INFO:  Query cannot be rewritten with CAggs: no GROUP BY clause in the query
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions_addcol
+GROUP BY bucket
+ORDER BY 1 LIMIT 1;
+psql:include/cagg_rewrites_error.sql:345: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions_addcol" are matching the query:
+Schema has changed by ALTER ... ADD COLUMN: "public.cagg_added_col"
+
+            bucket            |         avg         
+------------------------------+---------------------
+ Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000
+
 -- Test queries needing live data in addition to Cagg-materialized data
 \ir :TEST_MAT_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -1242,7 +1276,7 @@ FROM _timescaledb_catalog.continuous_agg ca INNER JOIN _timescaledb_catalog.cont
 ON (ca.mat_hypertable_id = wm.mat_hypertable_id) WHERE user_view_name = 'cagg2';
  CAGG2_ID | CAGG2_WATERMARK  
 ----------+------------------
-        8 | 1624924800000000
+        9 | 1624924800000000
 
 \gset
 -- This will create pending materialization range
@@ -1250,7 +1284,7 @@ ON (ca.mat_hypertable_id = wm.mat_hypertable_id) WHERE user_view_name = 'cagg2';
 DELETE FROM _timescaledb_catalog.continuous_aggs_watermark WHERE mat_hypertable_id = :CAGG2_ID;
 \set ON_ERROR_STOP 0
 CALL refresh_continuous_aggregate('cagg2', NULL, NULL);
-psql:include/cagg_rewrites_materialize.sql:59: ERROR:  watermark not defined for continuous aggregate: 8
+psql:include/cagg_rewrites_materialize.sql:59: ERROR:  watermark not defined for continuous aggregate: 9
 \set ON_ERROR_STOP 1
 -- Restore deleted watermark so that we can query (cagg2) again
 INSERT INTO _timescaledb_catalog.continuous_aggs_watermark values(:CAGG2_ID, :CAGG2_WATERMARK);
@@ -1305,10 +1339,13 @@ DROP MATERIALIZED VIEW cagg_view CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DROP MATERIALIZED VIEW cagg_lateral CASCADE;
 NOTICE:  drop cascades to 2 other objects
+DROP MATERIALIZED VIEW cagg_added_col CASCADE;
+NOTICE:  drop cascades to 2 other objects
 DROP TABLE conditions CASCADE;
 DROP TABLE conditions_dup CASCADE;
 DROP TABLE conditions_custom CASCADE;
 DROP TABLE conditions_int CASCADE;
+DROP TABLE conditions_addcol CASCADE;
 DROP VIEW devices_view CASCADE;
 DROP TABLE devices CASCADE;
 DROP TABLE location CASCADE;

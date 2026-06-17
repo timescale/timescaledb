@@ -416,8 +416,10 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 
 		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
 
-		RowDecompressor decompressor =
-			build_decompressor(slot->tts_tupleDescriptor, csp->noncompressed_tupdesc);
+		RowDecompressor decompressor = build_decompressor(slot->tts_tupleDescriptor,
+														  csp->noncompressed_tupdesc,
+														  csettings->fd.compress_relid,
+														  csettings->fd.relid);
 
 		heap_deform_tuple(tuple,
 						  decompressor.in_desc,
@@ -1173,8 +1175,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		new_compressed_chunk =
 			create_compress_chunk(ht_compressed, new_chunk, InvalidOid, false, NULL);
-		ts_trigger_create_all_on_chunk(new_compressed_chunk);
-		ts_chunk_set_compressed_chunk(new_chunk, new_compressed_chunk->fd.id);
 	}
 
 	CommandCounterIncrement();
@@ -1208,13 +1208,18 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			   NameStr(splitdim_name));
 
 		/*
-		 * Get the attribute numbers for the primary dimension's min and max
-		 * values in the compressed relation. We'll use these to get the time
-		 * range of compressed segments in order to route segments to the
-		 * right result chunk.
+		 * Get the attribute numbers for the primary dimension's lower- and
+		 * upper-bound metadata columns in the compressed relation. We'll use
+		 * these to get the time range of compressed segments in order to
+		 * route segments to the right result chunk.
 		 */
-		const char *min_attname = column_segment_min_name(orderby_pos);
-		const char *max_attname = column_segment_max_name(orderby_pos);
+		AttrNumber lower_attno;
+		AttrNumber upper_attno;
+		orderby_sparse_metadata_attnos(compress_settings,
+									   compress_settings->fd.compress_relid,
+									   orderby_pos,
+									   &lower_attno,
+									   &upper_attno);
 
 		CompressedSplitPoint csp = {
 			.base = {
@@ -1222,17 +1227,16 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 				.dim = hyperspace_get_open_dimension(ht->space, 0),
 				.route_next_tuple = route_next_compressed_tuple,
 			},
-			.attnum_min = get_attnum(compress_settings->fd.compress_relid, min_attname),
-			.attnum_max = get_attnum(compress_settings->fd.compress_relid, max_attname),
+			.attnum_min = lower_attno,
+			.attnum_max = upper_attno,
 			.attnum_count = get_attnum(compress_settings->fd.compress_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME),
 			.noncompressed_tupdesc = CreateTupleDescCopy(RelationGetDescr(srcrel)),
 		};
 
-		csplit_relations[0] = (SplitRelationInfo){ .relid = compress_settings->fd.compress_relid,
-												   .chunk_id = chunk->fd.compressed_chunk_id,
-												   .heap_swap = true };
+		csplit_relations[0] =
+			(SplitRelationInfo){ .relid = compress_settings->fd.compress_relid, .heap_swap = true };
 		csplit_relations[1] = (SplitRelationInfo){ .relid = new_compressed_chunk->table_id,
-												   .chunk_id = new_chunk->fd.compressed_chunk_id,
+												   .chunk_id = new_compressed_chunk->fd.id,
 												   .heap_swap = false };
 
 		Relation compressed_rel =

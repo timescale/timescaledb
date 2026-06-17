@@ -6,7 +6,6 @@ set(SOURCES
     cache.c
     cache_invalidate.c
     chunk.c
-    chunk_adaptive.c
     chunk_constraint.c
     chunk_index.c
     chunk_insert_state.c
@@ -121,11 +120,11 @@ if(USE_TELEMETRY)
 endif()
 add_subdirectory(loader)
 add_subdirectory(bgw_policy)
-add_subdirectory(compat)
 add_subdirectory(ts_catalog)
 add_subdirectory(nodes)
 add_subdirectory(planner)
 add_subdirectory(with_clause)
+add_subdirectory(ts_stats)
 
 # Don't run clang-tidy on the files we copied from Postgres. We don't want to
 # introduce changes there unless absolutely necessary. CMake can only access the
@@ -133,11 +132,12 @@ add_subdirectory(with_clause)
 # all here.
 set(IMPORTED_SOURCES
     import/allpaths.c
+    import/createplan.c
     import/heapswap.c
-    import/ts_inherit.c
     import/list.c
     import/planner.c
     import/setrefs.c
-    import/ts_explain.c)
+    import/ts_explain.c
+    import/ts_inherit.c)
 set_source_files_properties(${IMPORTED_SOURCES} PROPERTIES SKIP_LINTING ON)
 target_sources(${PROJECT_NAME} PRIVATE ${IMPORTED_SOURCES})

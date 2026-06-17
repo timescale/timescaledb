@@ -15,21 +15,31 @@
 
 #include <postgres.h>
 #include "access/attmap.h"
+#include "access/genam.h"
+#include "access/htup_details.h"
+#include "access/table.h"
+#include "catalog/dependency.h"
+#include "catalog/indexing.h"
 #include "catalog/pg_trigger.h"
 #include "commands/trigger.h"
 #include "parser/parser.h"
+#include "utils/fmgroids.h"
+#include "utils/lsyscache.h"
+#include "utils/syscache.h"
 
 #include "compat/compat.h"
 #include "chunk.h"
-#include "chunk_constraint.h"
 #include "foreign_key.h"
 #include "hypertable.h"
+#include "process_utility.h"
+#include "ts_catalog/catalog.h"
 
 static HeapTuple relation_get_fk_constraint(Oid conrelid, Oid confrelid);
 static List *relation_get_referencing_fk(Oid reloid);
 static Oid get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys);
 static void constraint_get_trigger(Oid conoid, Oid *updtrigoid, Oid *deltrigoid);
 static char *ChooseForeignKeyConstraintNameAddition(int numkeys, AttrNumber *keys, Oid relid);
+static void drop_fk_constraint(HeapTuple constraint_tuple);
 static void createForeignKeyActionTriggers(Form_pg_constraint fk, Oid relid, Oid refRelOid,
 										   Oid constraintOid, Oid indexOid, Oid parentDelTrigger,
 										   Oid parentUpdTrigger);
@@ -145,12 +155,8 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 	Relation pkrel = table_open(chunk->table_id, AccessShareLock);
 
 	/* Map the foreign key columns on the hypertable side to the chunk columns */
-#if PG16_GE
 	AttrMap *attmap =
 		build_attrmap_by_name(RelationGetDescr(pkrel), RelationGetDescr(parentRel), false);
-#else
-	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(pkrel), RelationGetDescr(parentRel));
-#endif
 	for (int i = 0; i < numfks; i++)
 	{
 		mapped_confkey[i] = attmap->attnums[confkey[i] - 1];
@@ -591,6 +597,36 @@ get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys)
 	return indexoid;
 }
 
+/*
+ * Drop a pg_constraint given its heap tuple.
+ *
+ * If the constraint inherits from a partitioned-parent constraint, break that
+ * internal dependency first so performDeletion is allowed to remove it.
+ */
+static void
+drop_fk_constraint(HeapTuple constraint_tuple)
+{
+	FormData_pg_constraint *constr = (FormData_pg_constraint *) GETSTRUCT(constraint_tuple);
+	ObjectAddress constrobj = {
+		.classId = ConstraintRelationId,
+		.objectId = constr->oid,
+	};
+
+	if (OidIsValid(constr->conparentid))
+	{
+		deleteDependencyRecordsForClass(constrobj.classId,
+										constrobj.objectId,
+										ConstraintRelationId,
+										DEPENDENCY_INTERNAL);
+		CommandCounterIncrement();
+	}
+
+	if (OidIsValid(constrobj.objectId))
+	{
+		performDeletion(&constrobj, DROP_RESTRICT, 0);
+	}
+}
+
 void
 ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 {
@@ -601,6 +637,119 @@ ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 	foreach (lc, fks)
 	{
 		HeapTuple fk_tuple = lfirst(lc);
-		ts_chunk_constraint_drop_from_tuple(fk_tuple);
+		drop_fk_constraint(fk_tuple);
+	}
+}
+
+/*
+ * Clone an outbound FK from the hypertable onto a chunk, keeping the parent's
+ * name so the DROP/RENAME hooks can find it by name.
+ */
+void
+ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
+{
+	char *parent_name;
+	Oid child_oid;
+
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE || IS_OSM_CHUNK(chunk))
+	{
+		return;
+	}
+
+	parent_name = get_constraint_name(parent_fk_oid);
+	if (parent_name == NULL)
+	{
+		elog(ERROR, "cache lookup failed for constraint %u", parent_fk_oid);
+	}
+
+	child_oid = get_relation_constraint_oid(chunk->table_id, parent_name, true);
+	if (OidIsValid(child_oid))
+	{
+		/* Only adopt the existing constraint if it's a FK to the same target. */
+		HeapTuple parent_tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(parent_fk_oid));
+		HeapTuple child_tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(child_oid));
+		Oid parent_confrelid;
+		Form_pg_constraint child_con;
+
+		if (!HeapTupleIsValid(parent_tup) || !HeapTupleIsValid(child_tup))
+		{
+			elog(ERROR, "cache lookup failed for constraint");
+		}
+
+		parent_confrelid = ((Form_pg_constraint) GETSTRUCT(parent_tup))->confrelid;
+		child_con = (Form_pg_constraint) GETSTRUCT(child_tup);
+
+		if (child_con->contype != CONSTRAINT_FOREIGN || child_con->confrelid != parent_confrelid)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DUPLICATE_OBJECT),
+					 errmsg("cannot inherit foreign key \"%s\" onto chunk \"%s\"",
+							parent_name,
+							get_rel_name(chunk->table_id)),
+					 errdetail("A constraint with that name already exists on the chunk "
+							   "and does not match the hypertable's foreign key.")));
+		}
+
+		ReleaseSysCache(child_tup);
+		ReleaseSysCache(parent_tup);
+		return;
+	}
+
+	CatalogSecurityContext sec_ctx;
+
+	/* Become DB owner so the ALTER TABLE in constraint_clone succeeds when
+	 * the calling user doesn't own the chunk. */
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_process_utility_set_expect_chunk_modification(true);
+	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
+						 ObjectIdGetDatum(parent_fk_oid),
+						 ObjectIdGetDatum(chunk->table_id));
+	ts_process_utility_set_expect_chunk_modification(false);
+	ts_catalog_restore_user(&sec_ctx);
+	CommandCounterIncrement();
+}
+
+/*
+ * Clone every outbound FK from the hypertable onto a chunk. Skips constraints
+ * whose conparentid is set, since PG already propagates those.
+ *
+ * FK OIDs are snapshotted first: RelationGetFKeyList returns a relcache-owned
+ * list that the clone path can invalidate.
+ */
+void
+ts_chunk_inherit_outbound_fk(const Hypertable *ht, const Chunk *chunk)
+{
+	Relation ht_rel;
+	List *fk_oids = NIL;
+	ListCell *lc;
+
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE || IS_OSM_CHUNK(chunk))
+	{
+		return;
+	}
+
+	ht_rel = table_open(ht->main_table_relid, AccessShareLock);
+	foreach (lc, RelationGetFKeyList(ht_rel))
+	{
+		Oid conoid = ((ForeignKeyCacheInfo *) lfirst(lc))->conoid;
+		HeapTuple tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(conoid));
+		bool has_parent;
+
+		if (!HeapTupleIsValid(tup))
+		{
+			continue;
+		}
+		has_parent = OidIsValid(((Form_pg_constraint) GETSTRUCT(tup))->conparentid);
+		ReleaseSysCache(tup);
+		if (!has_parent)
+		{
+			fk_oids = lappend_oid(fk_oids, conoid);
+		}
+	}
+	table_close(ht_rel, AccessShareLock);
+
+	foreach (lc, fk_oids)
+	{
+		ts_chunk_inherit_outbound_fk_by_oid(chunk, lfirst_oid(lc));
 	}
 }

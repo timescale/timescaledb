@@ -41,7 +41,7 @@ select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                            Output: _hyper_1_1_chunk.a
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
-                                 Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.a
+                                 Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk._ts_meta_v2_first_a, compress_hyper_2_3_chunk._ts_meta_v2_last_a, compress_hyper_2_3_chunk.a
                                  Filter: (compress_hyper_2_3_chunk.s = x.x)
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_1_2_chunk.a))
@@ -49,7 +49,7 @@ select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.a
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk
-                                 Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a
+                                 Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk._ts_meta_v2_first_a, compress_hyper_2_4_chunk._ts_meta_v2_last_a, compress_hyper_2_4_chunk.a
                                  Filter: (compress_hyper_2_4_chunk.s = x.x)
 
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
@@ -75,13 +75,13 @@ select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from p
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                            Output: _hyper_1_1_chunk.a
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
-                                 Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.a
+                                 Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk._ts_meta_v2_first_a, compress_hyper_2_3_chunk._ts_meta_v2_last_a, compress_hyper_2_3_chunk.a
                ->  Partial Aggregate
                      Output: PARTIAL sum((_hyper_1_2_chunk.a + x.x))
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.a
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk
-                                 Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a
+                                 Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk._ts_meta_v2_first_a, compress_hyper_2_4_chunk._ts_meta_v2_last_a, compress_hyper_2_4_chunk.a
 
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;
  x |   sum   

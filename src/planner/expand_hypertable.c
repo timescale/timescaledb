@@ -709,6 +709,29 @@ ts_transform_time_bucket_comparison(Expr *node)
 	}
 
 	/*
+	 * The value and the time_bucket() input column can have different time types
+	 * (e.g. a TIMESTAMPTZ bucket compared against a DATE constant). DATE counts
+	 * days while TIMESTAMP/TIMESTAMPTZ count microseconds, so we convert the value
+	 * to the input type before reading its integral value below. Converting down
+	 * to DATE would drop the time-of-day and change the result, so we skip it.
+	 */
+	if (tbqual.value->consttype != tbqual.tb.timetype &&
+		IS_TIMESTAMP_TYPE(tbqual.value->consttype) && IS_TIMESTAMP_TYPE(tbqual.tb.timetype))
+	{
+		Oid timetype = tbqual.tb.timetype;
+		Oid castfunc = ts_get_cast_func(tbqual.value->consttype, timetype);
+
+		if (timetype == DATEOID || !OidIsValid(castfunc))
+		{
+			return NULL;
+		}
+
+		/* TIMESTAMP and TIMESTAMPTZ are both 8-byte pass-by-value. */
+		Datum converted = OidFunctionCall1(castfunc, tbqual.value->constvalue);
+		tbqual.value = makeConst(timetype, -1, InvalidOid, sizeof(int64), converted, false, true);
+	}
+
+	/*
 	 * The qual is an expression <time_bucket OP value> or <value OP time_bucket>. Convert the value
 	 * to integral time format.
 	 */
@@ -1526,7 +1549,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * Add the newly added Vars to parent's reltarget.  We needn't worry
 		 * about the children's reltargets, they'll be made later.
 		 */
-		add_vars_to_targetlist_compat(root, newvars, bms_make_singleton(0));
+		add_vars_to_targetlist(root, newvars, bms_make_singleton(0));
 	}
 
 	if (bms_is_member(ht_relindex, root->all_result_relids))
@@ -1700,18 +1723,16 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 			Relids relids = pull_varnos(ctx->root, (Node *) propagated);
 			RestrictInfo *restrictinfo;
 
-			restrictinfo = make_restrictinfo_compat(root,
-													(Expr *) propagated,
-													true,
-													false,
-													false,
-													false,
-													false,
-													ctx->root->qual_security_level,
-													relids,
-													NULL,
-													NULL,
-													NULL);
+			restrictinfo = make_restrictinfo(root,
+											 (Expr *) propagated,
+											 true,
+											 false,
+											 false,
+											 false,
+											 ctx->root->qual_security_level,
+											 relids,
+											 NULL,
+											 NULL);
 			ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
 			/*
 			 * since hypertable expansion happens later, the propagated

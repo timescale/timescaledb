@@ -38,6 +38,16 @@ select device, time_bucket('1 minute', time), count(*)
 from ht_metrics_partially_compressed
 group by 1, 2 order by 1, 2 limit 1;
 
+-- Should be disabled when disabling optimizations.
+SET timescaledb.enable_optimizations TO false;
+
+:PREFIX
+select device, time_bucket('1 minute', time), count(*)
+from ht_metrics_partially_compressed
+group by 1, 2 order by 1, 2 limit 1;
+
+RESET timescaledb.enable_optimizations;
+
 -- Batch sorted merge.
 :PREFIX
 select time_bucket('1 minute', time), count(*)
@@ -86,3 +96,35 @@ reset max_parallel_workers_per_gather;
 
 reset work_mem;
 reset enable_hashagg;
+
+-- Sorting on a set-returning function.
+set max_parallel_workers_per_gather to 0;
+
+create table srf_sort(time timestamptz not null, dev int, seg int);
+select create_hypertable('srf_sort', 'time', chunk_time_interval => interval '1 day');
+insert into srf_sort values
+    ('2025-01-01', 3, 1),
+    ('2025-01-02', 2, 1),
+    ('2025-01-03', 4, 2);
+alter table srf_sort set (timescaledb.compress, timescaledb.compress_segmentby='seg', timescaledb.compress_orderby='time');
+select count(compress_chunk(c)) from show_chunks('srf_sort') c;
+
+-- Sorting by the set-returning function with a LIMIT.
+select generate_series(1, dev) g from srf_sort order by g limit 5;
+explain (costs off) select generate_series(1, dev) g from srf_sort order by g limit 5;
+
+-- Without a LIMIT it produces the same data.
+select generate_series(1, dev) g from srf_sort order by g;
+
+-- A set-returning function only in the output, sorting on a real column.
+explain (costs off) select generate_series(1, dev) g, time from srf_sort order by time limit 3;
+
+-- Sorting on a real column followed by a set-returning function.
+select dev, generate_series(1, dev) g from srf_sort order by dev, g limit 4;
+
+-- Sorting on a segment column followed by a set-returning function.
+explain (costs off) select seg, generate_series(1, dev) g from srf_sort order by seg, g limit 4;
+select seg, generate_series(1, dev) g from srf_sort order by seg, g limit 4;
+
+drop table srf_sort cascade;
+reset max_parallel_workers_per_gather;

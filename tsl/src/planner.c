@@ -56,6 +56,10 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
 							void *extra)
 {
+	/*
+	 * Gapfill node cannot be disabled if the query specifies it, so it runs
+	 * regardless of the timescaledb.enable_optimizations GUC.
+	 */
 	switch (stage)
 	{
 		case UPPERREL_GROUP_AGG:
@@ -63,7 +67,25 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			{
 				plan_add_gapfill(root, output_rel);
 			}
+			break;
+		case UPPERREL_WINDOW:
+			if (IsA(linitial(input_rel->pathlist), CustomPath))
+			{
+				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
+			}
+			break;
+		default:
+			break;
+	}
 
+	if (!ts_guc_enable_optimizations)
+	{
+		return;
+	}
+
+	switch (stage)
+	{
+		case UPPERREL_GROUP_AGG:
 			if (ts_guc_enable_chunkwise_aggregation && input_rel != NULL &&
 				!IS_DUMMY_REL(input_rel) && output_rel != NULL &&
 				involves_hypertable(root, input_rel))
@@ -74,12 +96,6 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			if (root->numOrderedAggs && !IS_DUMMY_REL(input_rel) && output_rel != NULL)
 			{
 				tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
-			}
-			break;
-		case UPPERREL_WINDOW:
-			if (IsA(linitial(input_rel->pathlist), CustomPath))
-			{
-				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 			}
 			break;
 		case UPPERREL_DISTINCT:
@@ -271,13 +287,11 @@ tsl_preprocess_query(Query *parse, int *cursor_opts)
 		constify_cagg_watermark(parse);
 	}
 
-#if PG16_GE
 	/* Push down ORDER BY and LIMIT for realtime cagg (PG16+ only) */
 	if (ts_guc_enable_cagg_sort_pushdown)
 	{
 		cagg_sort_pushdown(parse, cursor_opts);
 	}
-#endif
 }
 
 /*
@@ -286,6 +300,11 @@ tsl_preprocess_query(Query *parse, int *cursor_opts)
 void
 tsl_postprocess_plan(PlannedStmt *stmt)
 {
+	if (!ts_guc_enable_optimizations)
+	{
+		return;
+	}
+
 	if (ts_guc_enable_columnarindexscan)
 	{
 		stmt->planTree = try_insert_columnar_index_scan_node(stmt->planTree, stmt->rtable);

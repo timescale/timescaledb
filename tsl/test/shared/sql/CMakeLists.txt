@@ -12,14 +12,15 @@ set(TEST_FILES_SHARED
     decompress_tracking.sql
     gapfill_bug.sql
     generated_columns.sql
+    lateral_subquery.sql
     memoize.sql
+    osm_api.sql
     parameterized_chunkappend.sql
     security_barrier.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
     gapfill.sql.in
-    lateral_subquery.sql.in
     ordered_append_join.sql.in
     constify_timestamptz_op_interval.sql.in
     constraint_exclusion_prepared.sql.in
@@ -37,6 +38,9 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   # Dependent on MergeAppend costs which are broken on earlier versions.
   list(APPEND TEST_FILES_SHARED bulk_decompression_limit.sql)
+
+  # The costs are different on older versions.
+  list(APPEND TEST_FILES_SHARED chunkwise_agg_cost.sql)
 endif()
 
 # Regression tests that vary with PostgreSQL version. Generated test files are

@@ -103,8 +103,7 @@ select
     _timescaledb_functions.to_timestamp(ds.range_start) as range_start,
     _timescaledb_functions.to_timestamp(ds.range_end) as range_end
 from _timescaledb_catalog.chunk c
-join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id)
-join _timescaledb_catalog.dimension_slice ds on (ds.id = cc.dimension_slice_id)
+join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
 join _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
 order by range_start, range_end;
 
@@ -438,7 +437,7 @@ select *
 from ONLY _timescaledb_internal._hyper_1_3_chunk
 order by time;
 
-select table_name, status, compressed_chunk_id
+select table_name, status
 from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
 analyze _timescaledb_internal._hyper_1_3_chunk;
 
@@ -458,7 +457,7 @@ call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
 -- Check that the resulting chunks look OK and have the right access method
 select * from chunk_info;
 
-select table_name, status, compressed_chunk_id
+select table_name, status
 from _timescaledb_catalog.chunk
 where table_name in ('_hyper_1_3_chunk', '_hyper_1_16_chunk');
 

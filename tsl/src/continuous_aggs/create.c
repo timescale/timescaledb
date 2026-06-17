@@ -96,7 +96,6 @@ static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const ch
 								   int64 mat_tbltimecol_interval);
 static void mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
 												  Hypertable *ht);
-static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
 static void fixup_userview_query_tlist(Query *userquery, List *tlist_aliases);
 static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
 						ContinuousAggTimeBucketInfo *bucket_info,
@@ -170,6 +169,8 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
+
+	nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)] = true;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -270,27 +271,19 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 	int flags = 0;
 	NameData mat_tbltimecol;
 	DimensionInfo *time_dim_info;
-	ChunkSizingInfo *chunk_sizing_info;
 	namestrcpy(&mat_tbltimecol, matpartcolname);
 	time_dim_info = ts_dimension_info_create_open(mat_tbloid,
 												  &mat_tbltimecol,
 												  Int64GetDatum(mat_tbltimecol_interval),
 												  INT8OID,
 												  InvalidOid);
-	/*
-	 * Ideally would like to change/expand the API so setting the column name manually is
-	 * unnecessary, but not high priority.
-	 */
-	chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(mat_tbloid);
-	chunk_sizing_info->colname = matpartcolname;
 	created = ts_hypertable_create_from_info(mat_tbloid,
 											 hypertable_id,
 											 flags,
 											 time_dim_info,
 											 NULL,
 											 NULL,
-											 NULL,
-											 chunk_sizing_info);
+											 NULL);
 	if (!created)
 	{
 		ereport(ERROR,
@@ -864,8 +857,11 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 	if (!stmt->into->skipData)
 	{
+		bool refreshed = false;
 		InternalTimeRange refresh_window = {
 			.type = InvalidOid,
+			.start_isnull = true,
+			.end_isnull = true,
 		};
 
 		/*
@@ -894,14 +890,15 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
 		ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
-		continuous_agg_refresh_internal(cagg,
-										&refresh_window,
-										context,
-										true,  /* start_isnull */
-										true,  /* end_isnull */
-										true,  /* bucketing_refresh_window */
-										false, /* force */
-										false /*extend_last_bucket*/);
+		refreshed = continuous_agg_refresh_internal(cagg,
+													&refresh_window,
+													context,
+													true, /* bucketing_refresh_window */
+													false /*extend_last_bucket*/);
+		if (!refreshed)
+		{
+			emit_up_to_date_notice(cagg, context);
+		}
 	}
 
 	return DDL_DONE;

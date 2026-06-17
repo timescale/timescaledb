@@ -74,9 +74,9 @@ INSERT INTO "meta" ("id") values (1);
 COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
 \set ON_ERROR_STOP 0
 \copy hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
-ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "6_1_hyper_meta_id_fkey"
+ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "hyper_meta_id_fkey"
 COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
-ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "6_1_hyper_meta_id_fkey"
+ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "hyper_meta_id_fkey"
 \set ON_ERROR_STOP 1
 COPY (SELECT * FROM hyper ORDER BY time, meta_id) TO STDOUT;
 1	1	1
@@ -241,6 +241,16 @@ SELECT count(*) FROM hyper_copy;
  count 
 -------
    154
+
+-- Disabled by the debug GUC
+SET timescaledb.enable_optimizations TO OFF;
+\copy hyper_copy FROM data/copy_data.csv WITH csv header;
+DEBUG:  Using normal unbuffered copy operation (TS_CIM_SINGLE) because the optimizations are disabled.
+RESET timescaledb.enable_optimizations;
+SELECT count(*) FROM hyper_copy;
+ count 
+-------
+   179
 
 RESET client_min_messages;
 RESET timescaledb.max_open_chunks_per_insert;
@@ -671,6 +681,41 @@ SELECT * FROM table_with_layout_change ORDER BY time, value7;
     3 |    700
     3 |    700
     3 |    723
+    4 |    700
+    4 |    700
+    4 |    726
+    5 |    700
+    5 |    724
+    6 |    725
+
+-- COPY WHERE into a hypertable whose chunks have dropped columns
+COPY table_with_layout_change (value7, time) FROM STDIN DELIMITER ',' NULL AS 'null' WHERE value7 > 800;
+SELECT * FROM table_with_layout_change ORDER BY time, value7;
+ time | value7 
+------+--------
+    1 |    700
+    1 |    700
+    1 |    700
+    1 |    700
+    1 |    700
+    1 |    700
+    1 |    722
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    700
+    2 |    721
+    2 |    850
+    3 |    700
+    3 |    700
+    3 |    700
+    3 |    700
+    3 |    723
+    3 |    860
     4 |    700
     4 |    700
     4 |    726

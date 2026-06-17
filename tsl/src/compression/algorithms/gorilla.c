@@ -384,7 +384,7 @@ gorilla_compressor_append_value(GorillaCompressor *compressor, uint64 val)
 	{
 		/* leftmost/rightmost 1 is not well-defined when all the bits in the number
 		 * are 0; the C implementations of these functions will ERROR, while the
-		 * assembly versions may return any value. We special-case 0 to to use
+		 * assembly versions may return any value. We special-case 0 to use
 		 * values for leading and trailing-zeroes that we know will work.
 		 */
 		int leading_zeros = xor != 0 ? 63 - pg_leftmost_one_pos64(xor) : 63;

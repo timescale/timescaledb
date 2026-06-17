@@ -156,6 +156,79 @@ column_segment_max_name(int16 column_index)
 	return compression_column_segment_metadata_name("max", column_index);
 }
 
+OrderbySparseKind
+orderby_sparse_kind(const CompressionSettings *settings, int orderby_pos)
+{
+	Assert(settings != NULL);
+	Assert(orderby_pos >= 1 && orderby_pos <= ts_array_length(settings->fd.orderby));
+
+	if (settings->fd.index == NULL)
+	{
+		return ORDERBY_SPARSE_MINMAX;
+	}
+
+	const char *col_name = ts_array_get_element_text(settings->fd.orderby, orderby_pos);
+
+	SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
+	List *per_col = ts_get_per_column_compression_settings(parsed);
+	PerColumnCompressionSettings *col_settings =
+		ts_get_per_column_compression_settings_by_column_name(per_col, col_name);
+
+	OrderbySparseKind kind = ORDERBY_SPARSE_MINMAX;
+	if (col_settings != NULL && col_settings->firstlast_obj_id >= 0)
+	{
+		kind = ORDERBY_SPARSE_FIRSTLAST;
+	}
+
+	ts_free_sparse_index_settings(parsed);
+	return kind;
+}
+
+void
+orderby_sparse_metadata_names(const CompressionSettings *settings, int orderby_pos,
+							  char **lower_name, char **upper_name)
+{
+	Assert(lower_name != NULL && upper_name != NULL);
+
+	OrderbySparseKind kind = orderby_sparse_kind(settings, orderby_pos);
+
+	if (kind == ORDERBY_SPARSE_MINMAX)
+	{
+		*lower_name = column_segment_min_name(orderby_pos);
+		*upper_name = column_segment_max_name(orderby_pos);
+		return;
+	}
+
+	const char *col_name = ts_array_get_element_text(settings->fd.orderby, orderby_pos);
+	const char *col_names[1] = { col_name };
+	bool desc = ts_array_get_element_bool(settings->fd.orderby_desc, orderby_pos);
+
+	if (!desc)
+	{
+		*lower_name = compressed_column_metadata_name_v2("first", col_names, 1);
+		*upper_name = compressed_column_metadata_name_v2("last", col_names, 1);
+	}
+	else
+	{
+		/* DESC sort puts the largest value at the first row of each batch. */
+		*lower_name = compressed_column_metadata_name_v2("last", col_names, 1);
+		*upper_name = compressed_column_metadata_name_v2("first", col_names, 1);
+	}
+}
+
+void
+orderby_sparse_metadata_attnos(const CompressionSettings *settings, Oid compressed_relid,
+							   int orderby_pos, AttrNumber *lower_attno, AttrNumber *upper_attno)
+{
+	Assert(lower_attno != NULL && upper_attno != NULL);
+
+	char *lower_name;
+	char *upper_name;
+	orderby_sparse_metadata_names(settings, orderby_pos, &lower_name, &upper_name);
+	*lower_attno = get_attnum(compressed_relid, lower_name);
+	*upper_attno = get_attnum(compressed_relid, upper_name);
+}
+
 /*
  * Get metadata name for a given column name and metadata type, format version 2.
  * We can't reference the attribute numbers, because they can change after
@@ -330,7 +403,7 @@ should_create_bloom_sparse_index(Oid atttypid, TypeCacheEntry *type, Oid src_rel
  * List of Form_pg_attribute elements. Min and max indices only use
  * the first element. Bloom filters may use multiple columns.
  */
-static ColumnDef *
+ColumnDef *
 create_sparse_index_column_def(List *attributes, const char *metadata_type)
 {
 	Assert(is_sparse_index_type(metadata_type));
@@ -582,7 +655,11 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 						 errdetail("Could not identify a less-than operator for the type.")));
 			}
 
-			/* segment_meta min and max columns */
+			/*
+			 * Every orderby column gets minmax metadata so range predicates
+			 * on any orderby position can be pushed down as a filter on the
+			 * compressed scan.
+			 */
 			ColumnDef *def = makeColumnDef(column_segment_min_name(index),
 										   attr->atttypid,
 										   attr->atttypmod,
@@ -595,6 +672,29 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 								attr->attcollation);
 			def->storage = TYPSTORAGE_PLAIN;
 			compressed_column_defs = lappend(compressed_column_defs, def);
+
+			/*
+			 * When firstlast is configured for the orderby column, also add
+			 * first/last metadata. These columns are a part of the compressed chunk
+			 * btree and let predicates on the leading orderby become index
+			 * conditions when the column is NOT NULL.
+			 */
+			bool add_firstlast = per_column_setting != NULL && composite_attr_lists != NULL &&
+								 per_column_setting->firstlast_obj_id != -1;
+			if (add_firstlast)
+			{
+				ColumnDef *first_def =
+					create_sparse_index_column_def(composite_attr_lists[per_column_setting
+																			->firstlast_obj_id],
+												   "first");
+				compressed_column_defs = lappend(compressed_column_defs, first_def);
+
+				ColumnDef *last_def =
+					create_sparse_index_column_def(composite_attr_lists[per_column_setting
+																			->firstlast_obj_id],
+												   "last");
+				compressed_column_defs = lappend(compressed_column_defs, last_def);
+			}
 		}
 		else if (per_column_setting != NULL && composite_attr_lists != NULL)
 		{
@@ -604,12 +704,11 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			bool is_firstlast = per_column_setting->firstlast_obj_id != -1;
 
 			/*
-			 * We allow only one sparse index per column. Columns used in the ORDER BY
-			 * clause implicitly have a minmax index and adding a bloom filter on them is not
-			 * allowed.
+			 * We allow only one sparse index per column. Adding a bloom filter
+			 * on a column that already has a sparse index is not allowed.
 			 *
-			 * The parser is expected to enforce this constraint earlier, but we check again
-			 * here as a safeguard.
+			 * The parser is expected to enforce this constraint earlier, but we
+			 * check again here as a safeguard.
 			 */
 			Ensure((!is_bloom || !is_minmax),
 				   "Should not create bloom filter for minmax column \"%s\"",
@@ -881,6 +980,9 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 							  compress_chunk->fd.id,
 							  compress_chunk->table_id,
 							  tablespace_oid);
+
+	/* Associate the source chunk with the new compressed chunk. */
+	ts_chunk_set_compressed_chunk(src_chunk, compress_chunk->fd.id);
 
 	return compress_chunk;
 }
@@ -2279,7 +2381,8 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 void
 tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 {
-	Assert(stmt->relationType == OBJECT_TABLE && stmt->renameType == OBJECT_COLUMN);
+	Assert((stmt->relationType == OBJECT_TABLE || stmt->relationType == OBJECT_MATVIEW) &&
+		   stmt->renameType == OBJECT_COLUMN);
 	Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 
 	struct RenameFromTo
@@ -2328,8 +2431,8 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 			settings = ht_settings;
 		}
 
-		/* check the minmax and single bloom index columns no matter what the compression settings
-		 * says */
+		/* check the minmax, firstlast and single bloom index columns no matter what the compression
+		 * settings says */
 		{
 			/* handle minmax index */
 			struct RenameFromTo *from_to =
@@ -2344,6 +2447,20 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 				compressed_column_metadata_name_v2("max", (const char **) &stmt->subname, 1);
 			from_to->to =
 				compressed_column_metadata_name_v2("max", (const char **) &stmt->newname, 1);
+			rename_from_to = lappend(rename_from_to, from_to);
+
+			/* handle firstlast index */
+			from_to = (struct RenameFromTo *) palloc(sizeof(struct RenameFromTo));
+			from_to->from =
+				compressed_column_metadata_name_v2("first", (const char **) &stmt->subname, 1);
+			from_to->to =
+				compressed_column_metadata_name_v2("first", (const char **) &stmt->newname, 1);
+			rename_from_to = lappend(rename_from_to, from_to);
+			from_to = (struct RenameFromTo *) palloc(sizeof(struct RenameFromTo));
+			from_to->from =
+				compressed_column_metadata_name_v2("last", (const char **) &stmt->subname, 1);
+			from_to->to =
+				compressed_column_metadata_name_v2("last", (const char **) &stmt->newname, 1);
 			rename_from_to = lappend(rename_from_to, from_to);
 		}
 

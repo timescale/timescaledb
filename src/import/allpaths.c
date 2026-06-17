@@ -34,6 +34,7 @@
 
 #include "allpaths.h"
 #include "chunk.h"
+#include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "planner/planner.h"
 
@@ -538,11 +539,7 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 	if (enable_partitionwise_join &&
 		rel->reloptkind == RELOPT_BASEREL &&
 		rte->relkind == RELKIND_PARTITIONED_TABLE &&
-#if PG16_GE
 		bms_is_empty(rel->attr_needed[InvalidAttrNumber - rel->min_attr]))
-#else
-		rel->attr_needed[InvalidAttrNumber - rel->min_attr] == NULL)
-#endif
 		rel->consider_partitionwise_join = true;
 
 	/*
@@ -581,10 +578,8 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		int			childRTindex;
 		RangeTblEntry *childRTE;
 		RelOptInfo *childrel;
-#if PG16_GE
 		List *childrinfos;
 		ListCell   *lc;
-#endif
 		ListCell   *parentvars;
 		ListCell   *childvars;
 
@@ -633,7 +628,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 * rel, and it also avoids an implementation restriction in
 		 * adjust_appendrel_attrs (it can't apply nullingrels to a non-Var).
 		 */
-#if PG16_GE
 		childrinfos = NIL;
 		foreach(lc, rel->joininfo)
 		{
@@ -646,10 +640,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 															 1, &appinfo));
 		}
 		childrel->joininfo = childrinfos;
-#else
-		childrel->joininfo =
-			(List *) adjust_appendrel_attrs(root, (Node *) rel->joininfo, 1, &appinfo);
-#endif
 
 		/*
 		 * Now for the child's targetlist.

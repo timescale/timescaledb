@@ -70,6 +70,7 @@ dimension_slice_formdata_make_tuple(const FormData_dimension_slice *fd, TupleDes
 	memset(values, 0, sizeof(Datum) * Natts_dimension_slice);
 
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)] = Int32GetDatum(fd->id);
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_chunk_id)] = Int32GetDatum(fd->chunk_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)] =
 		Int32GetDatum(fd->dimension_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)] =
@@ -91,11 +92,13 @@ dimension_slice_formdata_fill(FormData_dimension_slice *fd, const TupleInfo *ti)
 	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_id)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_chunk_id)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_slice_range_end)]);
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)]);
+	fd->chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_slice_chunk_id)]);
 	fd->dimension_id =
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)]);
 	fd->range_start =
@@ -107,6 +110,8 @@ dimension_slice_formdata_fill(FormData_dimension_slice *fd, const TupleInfo *ti)
 		heap_freetuple(tuple);
 	}
 }
+
+static void lock_result_ok_or_abort(TupleInfo *ti);
 
 static bool
 lock_dimension_slice_tuple(int32 dimension_slice_id, ItemPointer tid,
@@ -155,13 +160,10 @@ lock_dimension_slice_tuple(int32 dimension_slice_id, ItemPointer tid,
 			}
 			else
 			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERNAL_ERROR),
-						 errmsg("unable to lock hypertable catalog tuple, lock result is %d for "
-								"hypertable "
-								"ID (%d)",
-								ti->lockresult,
-								dimension_slice_id)));
+				/* In read committed mode report the concurrent change on the
+				 * chunk that owns this slice and let the caller retry.
+				 */
+				lock_result_ok_or_abort(ti);
 			}
 		}
 		dimension_slice_formdata_fill(form, ti);
@@ -514,7 +516,7 @@ ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **matchi
 										CurrentMemoryContext);
 }
 
-int
+TSDLLEXPORT int
 ts_dimension_slice_scan_iterator_set_range(ScanIterator *it, int32 dimension_id,
 										   StrategyNumber start_strategy, int64 start_value,
 										   StrategyNumber end_strategy, int64 end_value)
@@ -712,54 +714,37 @@ ts_dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 }
 
 /*
- * Return slices that occur "before" the given point.
- *
- * The slices will be allocated on the given memory context. Note, however, that
- * the returned dimension vector is allocated on the current memory context.
+ * Return every slice that belongs to the given chunk, one per dimension.
  */
-DimensionVec *
-ts_dimension_slice_scan_by_dimension_before_point(int32 dimension_id, int64 point, int limit,
-												  ScanDirection scandir, MemoryContext mctx)
+List *
+ts_dimension_slice_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
 {
-	ScanKeyData scankey[3];
-	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+	List *slices = NIL;
+	ScanKeyData scankey[1];
 
 	ScanKeyInit(&scankey[0],
-				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				Anum_dimension_slice_chunk_id_dimension_id_idx_chunk_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(dimension_id));
-	ScanKeyInit(&scankey[1],
-				Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
-				BTLessStrategyNumber,
-				F_INT8LT,
-				Int64GetDatum(point));
-	ScanKeyInit(&scankey[2],
-				Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
-				BTLessStrategyNumber,
-				F_INT8LT,
-				Int64GetDatum(point));
+				Int32GetDatum(chunk_id));
 
-	dimension_slice_scan_limit_direction_internal(
-		DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
-		scankey,
-		3,
-		dimension_vec_tuple_found,
-		(void *) &slices,
-		limit,
-		scandir,
-		AccessShareLock,
-		NULL,
-		mctx);
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_CHUNK_ID_DIMENSION_ID_IDX,
+										scankey,
+										1,
+										dimension_vec_tuple_found_list,
+										(void *) &slices,
+										0,
+										AccessShareLock,
+										NULL,
+										mctx);
 
-	return ts_dimension_vec_sort(&slices);
+	return slices;
 }
 
 static ScanTupleResult
 dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 {
-	bool isnull;
-	Datum dimension_slice_id = slot_getattr(ti->slot, Anum_dimension_slice_id, &isnull);
+	CatalogSecurityContext sec_ctx;
 
 	if (ti->lockresult != TM_Ok)
 	{
@@ -774,25 +759,11 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 		}
 		else
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
-					 errmsg("unable to lock hypertable catalog tuple, lock result is %d for "
-							"hypertable "
-							"ID (%d)",
-							ti->lockresult,
-							DatumGetInt32(dimension_slice_id))));
+			/* In read committed mode report the concurrent change on the
+			 * chunk that owns this slice and let the caller retry.
+			 */
+			lock_result_ok_or_abort(ti);
 		}
-	}
-
-	bool *delete_constraints = data;
-	CatalogSecurityContext sec_ctx;
-
-	Assert(!isnull);
-
-	/* delete chunk constraints */
-	if (NULL != delete_constraints && *delete_constraints)
-	{
-		ts_chunk_constraint_delete_by_dimension_slice_id(DatumGetInt32(dimension_slice_id));
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -803,7 +774,7 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constraints)
+ts_dimension_slice_delete_by_dimension_id(int32 dimension_id)
 {
 	ScanKeyData scankey[1];
 
@@ -823,7 +794,7 @@ ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constr
 		scankey,
 		1,
 		dimension_slice_tuple_delete,
-		(void *) &delete_constraints,
+		NULL,
 		0,
 		RowExclusiveLock,
 		&scantuplock,
@@ -831,7 +802,7 @@ ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool delete_constr
 }
 
 int
-ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints)
+ts_dimension_slice_delete_by_id(int32 dimension_slice_id)
 {
 	FormData_dimension_slice form;
 	ItemPointerData tid;
@@ -841,80 +812,6 @@ ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraint
 
 	dimension_slice_delete_catalog_tuple(&tid);
 	return true;
-}
-
-static ScanTupleResult
-dimension_slice_fill(TupleInfo *ti, void *data)
-{
-	switch (ti->lockresult)
-	{
-		case TM_SelfModified:
-		case TM_Ok:
-		{
-			DimensionSlice **slice = (DimensionSlice **) data;
-			bool should_free;
-			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-
-			memcpy(&(*slice)->fd, GETSTRUCT(tuple), sizeof(FormData_dimension_slice));
-
-			if (should_free)
-			{
-				heap_freetuple(tuple);
-			}
-			break;
-		}
-		case TM_Deleted:
-		case TM_Updated:
-			/* Same as not found */
-			break;
-		default:
-			elog(ERROR, "unexpected tuple lock status: %d", ti->lockresult);
-			pg_unreachable();
-			break;
-	}
-
-	return SCAN_DONE;
-}
-
-/*
- * Scan for an existing slice that exactly matches the given slice's dimension
- * and range. If a match is found, the given slice is updated with slice ID
- * and the tuple is locked.
- *
- * Returns true if the dimension slice was found (and locked), false
- * otherwise.
- */
-bool
-ts_dimension_slice_scan_for_existing(const DimensionSlice *slice, const ScanTupLock *tuplock)
-{
-	ScanKeyData scankey[3];
-
-	ScanKeyInit(&scankey[0],
-				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(slice->fd.dimension_id));
-	ScanKeyInit(&scankey[1],
-				Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
-				BTEqualStrategyNumber,
-				F_INT8EQ,
-				Int64GetDatum(slice->fd.range_start));
-	ScanKeyInit(&scankey[2],
-				Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
-				BTEqualStrategyNumber,
-				F_INT8EQ,
-				Int64GetDatum(slice->fd.range_end));
-
-	return dimension_slice_scan_limit_internal(
-		DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
-		scankey,
-		3,
-		dimension_slice_fill,
-		(void *) &slice,
-		1,
-		AccessShareLock,
-		tuplock,
-		CurrentMemoryContext);
 }
 
 DimensionSlice *
@@ -970,7 +867,7 @@ ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, const ScanTupLo
 	return slice;
 }
 
-ScanIterator
+TSDLLEXPORT ScanIterator
 ts_dimension_slice_scan_iterator_create(const ScanTupLock *tuplock, MemoryContext result_mcxt)
 {
 	ScanIterator it = ts_scan_iterator_create(DIMENSION_SLICE, AccessShareLock, result_mcxt);
@@ -990,6 +887,20 @@ ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id)
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(slice_id));
+}
+
+void
+ts_dimension_slice_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
+{
+	it->ctx.index = catalog_get_index(ts_catalog_get(),
+									  DIMENSION_SLICE,
+									  DIMENSION_SLICE_CHUNK_ID_DIMENSION_ID_IDX);
+	ts_scan_iterator_scan_key_reset(it);
+	ts_scan_iterator_scan_key_init(it,
+								   Anum_dimension_slice_chunk_id_dimension_id_idx_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
 }
 
 DimensionSlice *
@@ -1122,10 +1033,16 @@ dimension_slice_insert_relation(const Relation rel, DimensionSlice *slice)
 		return false;
 	}
 
+	Ensure(slice->fd.chunk_id > 0,
+		   "dimension slice insert requires a valid chunk id (dimension_id=%d)",
+		   slice->fd.dimension_id);
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	memset(values, 0, sizeof(values));
 	slice->fd.id = ts_catalog_table_next_seq_id(ts_catalog_get(), DIMENSION_SLICE);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_id)] = Int32GetDatum(slice->fd.id);
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_chunk_id)] =
+		Int32GetDatum(slice->fd.chunk_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_dimension_id)] =
 		Int32GetDatum(slice->fd.dimension_id);
 	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)] =
@@ -1264,55 +1181,110 @@ ts_dimension_slice_nth_earliest_slice(int32 dimension_id, int n)
 	return ret;
 }
 
+typedef struct ReorderBoundaryState
+{
+	int target;
+	int distinct_seen;
+	int64 last_range_start;
+	int64 last_range_end;
+	int64 boundary_range_start;
+	bool found;
+} ReorderBoundaryState;
+
+static ScanTupleResult
+reorder_boundary_tuple_found(TupleInfo *ti, void *data)
+{
+	ReorderBoundaryState *st = data;
+	bool isnull;
+	int64 range_start =
+		DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
+	int64 range_end =
+		DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_end, &isnull));
+
+	/* The OSM chunk parks at PG_INT64_MAX - 1; it must not count as a
+	 * recent bucket or REORDER_SKIP_RECENT_DIM_SLICES_N shrinks by one. */
+	if (range_start == PG_INT64_MAX - 1)
+	{
+		return SCAN_CONTINUE;
+	}
+
+	if (st->distinct_seen == 0 || st->last_range_start != range_start ||
+		st->last_range_end != range_end)
+	{
+		st->distinct_seen++;
+		st->last_range_start = range_start;
+		st->last_range_end = range_end;
+
+		if (st->distinct_seen == st->target)
+		{
+			st->boundary_range_start = range_start;
+			st->found = true;
+			return SCAN_DONE;
+		}
+	}
+
+	return SCAN_CONTINUE;
+}
+
+/*
+ * Return the oldest chunk that is uncompressed, has not been reordered by
+ * this job, and lies outside the `skip_newest_distinct_buckets` most recent
+ * (range_start, range_end) buckets on `dimension_id`. Buckets are counted
+ * distinct so per-chunk slice duplicates do not shrink the protection
+ * window. Returns -1 if no chunk qualifies.
+ */
 int32
 ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_id,
-												  StrategyNumber start_strategy, int64 start_value,
-												  StrategyNumber end_strategy, int64 end_value)
+												  int skip_newest_distinct_buckets)
 {
 	int32 result_chunk_id = -1;
-	ScanIterator it = ts_dimension_slice_scan_iterator_create(NULL, CurrentMemoryContext);
-	bool done = false;
+	ScanKeyData boundary_scankey[1];
+	ReorderBoundaryState st = { .target = skip_newest_distinct_buckets };
 
+	ScanKeyInit(&boundary_scankey[0],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_id));
+
+	dimension_slice_scan_limit_direction_internal(
+		DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+		boundary_scankey,
+		1,
+		reorder_boundary_tuple_found,
+		(void *) &st,
+		0,
+		BackwardScanDirection,
+		AccessShareLock,
+		NULL,
+		CurrentMemoryContext);
+
+	if (!st.found)
+	{
+		return -1;
+	}
+
+	ScanIterator it = ts_dimension_slice_scan_iterator_create(NULL, CurrentMemoryContext);
 	ts_dimension_slice_scan_iterator_set_range(&it,
 											   dimension_id,
-											   start_strategy,
-											   start_value,
-											   end_strategy,
-											   end_value);
+											   BTLessEqualStrategyNumber,
+											   st.boundary_range_start,
+											   InvalidStrategy,
+											   -1);
 	ts_scan_iterator_start_scan(&it);
 
-	while (!done)
+	const TupleInfo *ti;
+	while ((ti = ts_scan_iterator_next(&it)) != NULL)
 	{
-		const TupleInfo *ti = ts_scan_iterator_next(&it);
-		ListCell *lc;
-		DimensionSlice *slice;
-		List *chunk_ids = NIL;
+		DimensionSlice *slice = dimension_slice_from_slot(ti->slot);
+		int32 chunk_id = slice->fd.chunk_id;
+		BgwPolicyChunkStats *chunk_stat = ts_bgw_policy_chunk_stats_find(job_id, chunk_id);
 
-		if (NULL == ti)
+		if ((chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0) &&
+			ts_chunk_get_compression_status(chunk_id) == CHUNK_COMPRESS_NONE)
 		{
+			result_chunk_id = chunk_id;
 			break;
-		}
-
-		slice = dimension_slice_from_slot(ti->slot);
-		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
-															&chunk_ids,
-															CurrentMemoryContext);
-
-		foreach (lc, chunk_ids)
-		{
-			/* Look for a chunk that a) doesn't have a job stat (reorder ) and b) is not compressed
-			 * (should not reorder a compressed chunk) */
-			int32 chunk_id = lfirst_int(lc);
-			BgwPolicyChunkStats *chunk_stat = ts_bgw_policy_chunk_stats_find(job_id, chunk_id);
-
-			if ((chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0) &&
-				ts_chunk_get_compression_status(chunk_id) == CHUNK_COMPRESS_NONE)
-			{
-				/* Save the chunk_id */
-				result_chunk_id = chunk_id;
-				done = true;
-				break;
-			}
 		}
 	}
 
@@ -1344,8 +1316,8 @@ ts_dimension_slice_get_chunkids_to_compress(int32 dimension_id, StrategyNumber s
 	{
 		DimensionSlice *slice;
 		TupleInfo *ti;
-		ListCell *lc;
-		List *slice_chunk_ids = NIL;
+		int32 chunk_id;
+		ChunkCompressionStatus st;
 
 		ti = ts_scan_iterator_next(&it);
 
@@ -1355,27 +1327,19 @@ ts_dimension_slice_get_chunkids_to_compress(int32 dimension_id, StrategyNumber s
 		}
 
 		slice = dimension_slice_from_slot(ti->slot);
-		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
-															&slice_chunk_ids,
-															CurrentMemoryContext);
-		foreach (lc, slice_chunk_ids)
+		chunk_id = slice->fd.chunk_id;
+		st = ts_chunk_get_compression_status(chunk_id);
+
+		if ((compress && st == CHUNK_COMPRESS_NONE) ||
+			(recompress && st == CHUNK_COMPRESS_UNORDERED))
 		{
-			int32 chunk_id = lfirst_int(lc);
-			ChunkCompressionStatus st = ts_chunk_get_compression_status(chunk_id);
+			/* found a chunk that is not compressed or needs recompress;
+			 * caller needs to check the correct chunk status */
+			chunk_ids = lappend_int(chunk_ids, chunk_id);
 
-			if ((compress && st == CHUNK_COMPRESS_NONE) ||
-				(recompress && st == CHUNK_COMPRESS_UNORDERED))
+			if (maxchunks > 0 && list_length(chunk_ids) >= maxchunks)
 			{
-				/* found a chunk that is not compressed or needs recompress
-				 * caller needs to check the correct chunk status
-				 */
-				chunk_ids = lappend_int(chunk_ids, chunk_id);
-
-				if (maxchunks > 0 && list_length(chunk_ids) >= maxchunks)
-				{
-					done = true;
-					break;
-				}
+				done = true;
 			}
 		}
 	}

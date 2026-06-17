@@ -1,0 +1,354 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+SET timezone TO 'UTC';
+SET datestyle TO 'ISO, YMD';
+CREATE TABLE skip_inv (ts timestamptz NOT NULL, v int);
+SELECT create_hypertable('skip_inv', 'ts', chunk_time_interval => '1 day'::interval);
+   create_hypertable   
+-----------------------
+ (1,public,skip_inv,t)
+
+INSERT INTO skip_inv VALUES ('2030-01-15 00:00', 0);
+CREATE MATERIALIZED VIEW skip_inv_1h
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', ts) AS bucket, count(*) AS n, sum(v) AS s
+FROM skip_inv
+GROUP BY 1
+WITH NO DATA;
+-- Advance the invalidation threshold so inserts below it write to the
+-- hypertable_invalidation_log.
+CALL refresh_continuous_aggregate('skip_inv_1h', NULL, '2030-01-16');
+SELECT format('%I.%I', chunk_schema, chunk_name) AS skip_inv_chunk
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'skip_inv' \gset
+-- Case 1: GUC defaults to off; INSERT writes to the log.
+INSERT INTO skip_inv VALUES ('2030-01-15 01:00', 1);
+SELECT count(*) AS after_baseline_insert
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_baseline_insert 
+-----------------------
+                     1
+
+-- Clear the log between cases.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET datestyle TO 'ISO, YMD';
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Case 2: All four DML paths under SET LOCAL skip_cagg_invalidation = on.
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+INSERT INTO skip_inv VALUES ('2030-01-15 02:00', 2);
+COPY skip_inv FROM STDIN;
+UPDATE skip_inv SET v = v * 10 WHERE ts = '2030-01-15 02:00';
+DELETE FROM skip_inv WHERE ts = '2030-01-15 02:30';
+COMMIT;
+SELECT count(*) AS after_skipped_dml
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_dml 
+-------------------
+                 0
+
+-- Case 3: Direct chunk write. ModifyHypertable wraps chunk INSERT/COPY too.
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+SELECT format('INSERT INTO %s VALUES (''2030-01-15 03:00'', 5)', :'skip_inv_chunk') \gexec
+INSERT INTO _timescaledb_internal._hyper_1_1_chunk VALUES ('2030-01-15 03:00', 5)
+SELECT format('COPY %s FROM STDIN', :'skip_inv_chunk') \gexec
+COPY _timescaledb_internal._hyper_1_1_chunk FROM STDIN
+COMMIT;
+SELECT count(*) AS after_skipped_direct_chunk
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_direct_chunk 
+----------------------------
+                          0
+
+-- Case 4: SET LOCAL must not leak past COMMIT.
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+INSERT INTO skip_inv VALUES ('2030-01-15 04:00', 7);
+COMMIT;
+SHOW timescaledb.skip_cagg_invalidation;
+ timescaledb.skip_cagg_invalidation 
+------------------------------------
+ off
+
+INSERT INTO skip_inv VALUES ('2030-01-15 04:30', 8);
+SELECT count(*) AS after_scope_check
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_scope_check 
+-------------------
+                 1
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET datestyle TO 'ISO, YMD';
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Case 5: After a skipped load, an explicit forced refresh picks up the new rows.
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+INSERT INTO skip_inv
+SELECT '2030-01-15 05:00'::timestamptz + (i || ' minutes')::interval, i
+FROM generate_series(1, 60) i;
+COMMIT;
+SELECT count(*) AS after_bulk_load_log
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_bulk_load_log 
+---------------------
+                   0
+
+SELECT count(*) AS hourly_rows_before_refresh FROM skip_inv_1h
+WHERE bucket >= '2030-01-15 05:00' AND bucket < '2030-01-15 07:00';
+ hourly_rows_before_refresh 
+----------------------------
+                          0
+
+CALL refresh_continuous_aggregate('skip_inv_1h', '2030-01-15 05:00', '2030-01-15 07:00', force => true);
+SELECT bucket, n, s FROM skip_inv_1h
+WHERE bucket >= '2030-01-15 05:00' AND bucket < '2030-01-15 07:00'
+ORDER BY bucket;
+         bucket         | n  |  s   
+------------------------+----+------
+ 2030-01-15 05:00:00+00 | 59 | 1770
+ 2030-01-15 06:00:00+00 |  1 |   60
+
+DROP MATERIALIZED VIEW skip_inv_1h;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
+DROP TABLE skip_inv;
+-- Case 6: Direct-compress INSERT/COPY paths. Exercises the
+-- compressor_set_invalidation gates in copy.c and modify_hypertable_exec.c.
+CREATE TABLE skip_inv_dc (ts timestamptz NOT NULL, v int);
+SELECT create_hypertable('skip_inv_dc', 'ts', chunk_time_interval => '1 day'::interval);
+    create_hypertable     
+--------------------------
+ (3,public,skip_inv_dc,t)
+
+ALTER TABLE skip_inv_dc SET (timescaledb.compress, timescaledb.compress_segmentby = '');
+INSERT INTO skip_inv_dc VALUES ('2030-02-15 00:00', 0);
+SELECT compress_chunk(c) IS NOT NULL AS compressed
+  FROM show_chunks('skip_inv_dc') c;
+ compressed 
+------------
+ t
+
+CREATE MATERIALIZED VIEW skip_inv_dc_1h
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', ts) AS bucket, count(*) AS n
+FROM skip_inv_dc
+GROUP BY 1
+WITH NO DATA;
+CALL refresh_continuous_aggregate('skip_inv_dc_1h', NULL, '2030-02-16');
+-- Direct-compress INSERT requires the planner to estimate >= 10 rows, so use
+-- generate_series. Direct-compress COPY has no row threshold.
+BEGIN;
+SET LOCAL timescaledb.enable_direct_compress_copy = on;
+SET LOCAL timescaledb.enable_direct_compress_insert = on;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+INSERT INTO skip_inv_dc
+SELECT '2030-02-15 01:00'::timestamptz + (i || ' seconds')::interval, i
+FROM generate_series(1, 20) i;
+COPY skip_inv_dc FROM STDIN;
+COMMIT;
+SELECT count(*) AS after_skipped_direct_compress
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_direct_compress 
+-------------------------------
+                             0
+
+DROP MATERIALIZED VIEW skip_inv_dc_1h;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_5_chunk
+DROP TABLE skip_inv_dc;
+-- Case 7: DDL paths (drop_chunks, DROP TABLE chunk, TRUNCATE chunk,
+-- TRUNCATE hypertable) under the GUC. Verifies the DDL invalidation
+-- sites in process_utility.c and chunk.c are gated.
+CREATE TABLE skip_inv_ddl (ts timestamptz NOT NULL, v int);
+SELECT create_hypertable('skip_inv_ddl', 'ts', chunk_time_interval => '1 day'::interval);
+     create_hypertable     
+---------------------------
+ (6,public,skip_inv_ddl,t)
+
+INSERT INTO skip_inv_ddl
+SELECT ts, 1 FROM generate_series('2030-03-01'::timestamptz, '2030-03-05', '6 hours') ts;
+CREATE MATERIALIZED VIEW skip_inv_ddl_1h
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', ts) AS bucket, count(*) AS n
+FROM skip_inv_ddl
+GROUP BY 1
+WITH NO DATA;
+CALL refresh_continuous_aggregate('skip_inv_ddl_1h', NULL, '2030-03-06');
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET datestyle TO 'ISO, YMD';
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- 7a) Baseline: drop_chunks WITHOUT the GUC records invalidations.
+SELECT drop_chunks('skip_inv_ddl', older_than => '2030-03-02'::timestamptz) IS NOT NULL AS dropped;
+ dropped 
+---------
+ t
+
+SELECT count(*) > 0 AS ddl_baseline_recorded
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ ddl_baseline_recorded 
+-----------------------
+ t
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET datestyle TO 'ISO, YMD';
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- 7b) drop_chunks UNDER the GUC: no invalidations recorded.
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+SELECT drop_chunks('skip_inv_ddl', older_than => '2030-03-03'::timestamptz) IS NOT NULL AS dropped;
+ dropped 
+---------
+ t
+
+COMMIT;
+SELECT count(*) AS after_skipped_drop_chunks
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_drop_chunks 
+---------------------------
+                         0
+
+-- 7c) TRUNCATE chunk UNDER the GUC.
+SELECT format('%I.%I', chunk_schema, chunk_name) AS skip_inv_ddl_chunk
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'skip_inv_ddl'
+  ORDER BY range_start
+  LIMIT 1 \gset
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+SELECT format('TRUNCATE TABLE %s', :'skip_inv_ddl_chunk') \gexec
+TRUNCATE TABLE _timescaledb_internal._hyper_6_8_chunk
+COMMIT;
+SELECT count(*) AS after_skipped_truncate_chunk
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_truncate_chunk 
+------------------------------
+                            0
+
+-- 7d) TRUNCATE hypertable UNDER the GUC.
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+TRUNCATE TABLE skip_inv_ddl;
+COMMIT;
+SELECT count(*) AS after_skipped_truncate_ht
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_truncate_ht 
+---------------------------
+                         0
+
+-- 7e) DROP TABLE chunk UNDER the GUC. Reload data first since 7d cleared it,
+-- and clear the log afterwards so it only reflects the DROP.
+INSERT INTO skip_inv_ddl
+SELECT ts, 1 FROM generate_series('2030-03-01'::timestamptz, '2030-03-05', '6 hours') ts;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET datestyle TO 'ISO, YMD';
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT format('%I.%I', chunk_schema, chunk_name) AS skip_inv_ddl_chunk2
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'skip_inv_ddl'
+  ORDER BY range_start
+  LIMIT 1 \gset
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+SELECT format('DROP TABLE %s', :'skip_inv_ddl_chunk2') \gexec
+DROP TABLE _timescaledb_internal._hyper_6_12_chunk
+COMMIT;
+SELECT count(*) AS after_skipped_drop_table_chunk
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_drop_table_chunk 
+--------------------------------
+                              0
+
+-- 7f) TRUNCATE cagg view UNDER the GUC. Records to the materialization
+-- invalidation log, not the hypertable log; assert both stay empty.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET datestyle TO 'ISO, YMD';
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+TRUNCATE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+TRUNCATE TABLE skip_inv_ddl_1h;
+COMMIT;
+SELECT count(*) AS after_skipped_truncate_cagg_hyper
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_truncate_cagg_hyper 
+-----------------------------------
+                                 0
+
+SELECT count(*) AS after_skipped_truncate_cagg_mat
+  FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ after_skipped_truncate_cagg_mat 
+---------------------------------
+                               0
+
+DROP MATERIALIZED VIEW skip_inv_ddl_1h;
+DROP TABLE skip_inv_ddl;
+-- 7g) Hierarchical cagg cascade: TRUNCATE on an intermediate cagg that is
+-- itself the raw hypertable for another cagg. Exercises the second gate in
+-- process_utility.c that fires when agg_status has HypertableIsRawTable.
+CREATE TABLE skip_inv_hier (ts timestamptz NOT NULL, v int);
+SELECT create_hypertable('skip_inv_hier', 'ts', chunk_time_interval => '1 day'::interval);
+     create_hypertable      
+----------------------------
+ (8,public,skip_inv_hier,t)
+
+INSERT INTO skip_inv_hier
+SELECT ts, 1 FROM generate_series('2030-04-01'::timestamptz, '2030-04-03', '1 hour') ts;
+CREATE MATERIALIZED VIEW skip_inv_hier_1h
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', ts) AS bucket, count(*) AS n
+FROM skip_inv_hier
+GROUP BY 1
+WITH NO DATA;
+CALL refresh_continuous_aggregate('skip_inv_hier_1h', NULL, '2030-04-04');
+CREATE MATERIALIZED VIEW skip_inv_hier_1d
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', bucket) AS bucket, sum(n) AS n
+FROM skip_inv_hier_1h
+GROUP BY 1
+WITH NO DATA;
+CALL refresh_continuous_aggregate('skip_inv_hier_1d', NULL, '2030-04-04');
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET datestyle TO 'ISO, YMD';
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+TRUNCATE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+TRUNCATE TABLE skip_inv_hier_1h;
+COMMIT;
+SELECT count(*) AS after_skipped_truncate_hier_hyper
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ after_skipped_truncate_hier_hyper 
+-----------------------------------
+                                 0
+
+SELECT count(*) AS after_skipped_truncate_hier_mat
+  FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ after_skipped_truncate_hier_mat 
+---------------------------------
+                               0
+
+DROP MATERIALIZED VIEW skip_inv_hier_1d;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_21_chunk
+DROP MATERIALIZED VIEW skip_inv_hier_1h;
+DROP TABLE skip_inv_hier;

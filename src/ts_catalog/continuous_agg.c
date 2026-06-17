@@ -138,6 +138,56 @@ init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *i
 		Int32GetDatum(materialization_id));
 }
 
+TSDLLEXPORT bool
+ts_lock_continuous_agg_tuple(int32 mat_hypertable_id)
+{
+	bool success = false;
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowShareLock, CurrentMemoryContext);
+	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+	iterator.ctx.tuplock = &scantuplock;
+	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
+
+	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
+	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
+	if (!IsolationUsesXactSnapshot())
+	{
+		/* in read committed mode, we follow all updates to this tuple */
+		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		if (ti->lockresult != TM_Ok)
+		{
+			if (IsolationUsesXactSnapshot())
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("unable to lock continuous aggregate catalog tuple, lock result "
+								"is %d for mat_hypertable_id (%d)",
+								ti->lockresult,
+								mat_hypertable_id)));
+			}
+		}
+		success = true;
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+	return success;
+}
+
 static int32
 number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 {
@@ -263,6 +313,16 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(fd->materialized_only);
 
+	if (fd->schema_change_timestamp == TS_TIME_NOBEGIN)
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)] = true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)] =
+			Int64GetDatum(fd->schema_change_timestamp);
+	}
+
 	return heap_form_tuple(desc, values, nulls);
 }
 
@@ -315,6 +375,17 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)])
+	{
+		fd->schema_change_timestamp = TS_TIME_NOBEGIN;
+	}
+	else
+	{
+		fd->schema_change_timestamp = DatumGetInt64(
+			values[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)]);
+	}
+
 	if (should_free)
 	{
 		heap_freetuple(tuple);
@@ -625,6 +696,42 @@ ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id, bool missin
 	}
 
 	return ca;
+}
+
+/*
+ * Record the threshold below which a newly added column is not yet materialized,
+ * so the planner rewrite can avoid serving for the cagg. The threshold only ever moves
+ * forward, so we keep the highest value across multiple ADD COLUMN operations.
+ */
+void
+ts_continuous_agg_set_schema_change_timestamp(int32 mat_hypertable_id, int64 threshold)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+	CatalogSecurityContext sec_ctx;
+
+	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		FormData_continuous_agg form;
+
+		continuous_agg_formdata_fill(&form, ti);
+
+		if (form.schema_change_timestamp == TS_TIME_NOBEGIN ||
+			threshold > form.schema_change_timestamp)
+		{
+			form.schema_change_timestamp = threshold;
+
+			HeapTuple new_tuple =
+				continuous_agg_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
+			ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+			ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
+			ts_catalog_restore_user(&sec_ctx);
+			heap_freetuple(new_tuple);
+		}
+	}
+	ts_scan_iterator_close(&iterator);
 }
 
 static bool
@@ -1540,7 +1647,7 @@ ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 {
 	Oid ownerid = ts_rel_get_owner(cagg_oid);
 
-	if (!has_privs_of_role(userid, ownerid))
+	if (!ts_has_owner_privs(userid, ownerid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),

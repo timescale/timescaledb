@@ -40,18 +40,16 @@ VACUUM FULL ANALYZE bloom;
 SELECT * FROM _timescaledb_catalog.compression_settings;
 
 SELECT
-    schema_name || '.' || table_name AS chunk
-FROM _timescaledb_catalog.chunk
-WHERE id = (
-    SELECT compressed_chunk_id
-    FROM _timescaledb_catalog.chunk
-    WHERE hypertable_id = (
-        SELECT id
-        FROM _timescaledb_catalog.hypertable
-        WHERE table_name = 'bloom'
-    )
-    LIMIT 1
+    cs.compress_relid::text AS chunk
+FROM _timescaledb_catalog.chunk ch
+JOIN _timescaledb_catalog.compression_settings cs
+    ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+WHERE ch.hypertable_id = (
+    SELECT id
+    FROM _timescaledb_catalog.hypertable
+    WHERE table_name = 'bloom'
 )
+LIMIT 1
 \gset
 
 \d+ :chunk

@@ -414,6 +414,15 @@ select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
 select * from date_table where ts <  CURRENT_DATE;
 
+-- A date column vs a timestamptz constant is only vectorized for '>' and '<='.
+select * from date_table where ts >  '2021-01-02 12:00:00+00'::timestamptz;
+select * from date_table where ts <= '2021-01-02 12:00:00+00'::timestamptz;
+set timescaledb.debug_require_vector_qual to 'forbid';
+select * from date_table where ts =  '2021-01-02 12:00:00+00'::timestamptz;
+select * from date_table where ts <  '2021-01-02 12:00:00+00'::timestamptz;
+select * from date_table where ts >= '2021-01-02 12:00:00+00'::timestamptz;
+set timescaledb.debug_require_vector_qual to 'require';
+
 -- Text columns.
 create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');
@@ -850,10 +859,11 @@ BEGIN
 		FROM
 			_timescaledb_catalog.chunk uncomp,
 			_timescaledb_catalog.chunk comp,
+			_timescaledb_catalog.compression_settings cs,
 			(SELECT show_chunks('bool_table') as c UNION SELECT show_chunks('int_table') as c) as x
 		WHERE
-			uncomp.compressed_chunk_id IS NOT NULL AND
-			comp.id = uncomp.compressed_chunk_id AND
+			cs.relid = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass AND
+			cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass AND
 			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
 	LOOP
 		FOR rec IN
