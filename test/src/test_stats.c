@@ -68,7 +68,7 @@ test_eviction()
 	Oid uncompressed_relid = 54321;
 	int32 slot_indices[NUM_SLOTS] = { 0 };
 	uint64 slot_seqno[NUM_SLOTS] = { 0 };
-	uint64 sum_lifespan = 0;
+	double sum_lifespan = 0;
 	double sumsq_lifespan = 0;
 	int32 num_evictions = 0;
 	uint64 min_lifespan = UINT64_MAX;

@@ -611,17 +611,17 @@ test_fl256_ffor_144x13b()
 #define CALC_MINMAX(min, max, values, n)                                                           \
 	do                                                                                             \
 	{                                                                                              \
-		min = *values;                                                                             \
-		max = *values;                                                                             \
-		for (size_t i = 0; i < n; ++i)                                                             \
+		(min) = *(values);                                                                         \
+		(max) = *(values);                                                                         \
+		for (size_t i = 0; i < (n); ++i)                                                           \
 		{                                                                                          \
-			if (min > values[i])                                                                   \
+			if ((min) > (values)[i])                                                               \
 			{                                                                                      \
-				min = values[i];                                                                   \
+				(min) = (values)[i];                                                               \
 			}                                                                                      \
-			if (max < values[i])                                                                   \
+			if ((max) < (values)[i])                                                               \
 			{                                                                                      \
-				max = values[i];                                                                   \
+				(max) = (values)[i];                                                               \
 			}                                                                                      \
 		}                                                                                          \
 	} while (0)
@@ -760,9 +760,9 @@ test_randomized()
 #define CHECK_VALUES(V, SZ, E)                                                                     \
 	do                                                                                             \
 	{                                                                                              \
-		for (int i = 0; i < SZ; ++i)                                                               \
+		for (int i = 0; i < (SZ); ++i)                                                             \
 		{                                                                                          \
-			TestAssertInt64Eq(V[i], E);                                                            \
+			TestAssertInt64Eq((V)[i], (E));                                                        \
 		}                                                                                          \
 	} while (0)
 
