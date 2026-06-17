@@ -1553,8 +1553,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * chunks or a SELECT FROM ONLY hypertable. We still want to run our
 			 * hypertable expansion code for hypertables w/o chunks.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL)
+			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
+				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL)
 			{
 				if (rel->relid == (Index) query->resultRelation && IS_UPDL_CMD(query) &&
 					ts_guc_enable_hypertable_expansion_for_dml)
