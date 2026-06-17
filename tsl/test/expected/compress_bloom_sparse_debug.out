@@ -166,9 +166,16 @@ select _timescaledb_functions.bloom1_contains(_timescaledb_functions.bloom1in('\
 ERROR:  the compressed data is corrupt
 select _timescaledb_functions.bloom1_contains_any(_timescaledb_functions.bloom1in('\x'::cstring), 1);
 ERROR:  function _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1, integer) does not exist at character 8
+select _timescaledb_functions.bloom1_contains('\x'::_timescaledb_internal.bloom1, ROW(1));
+ERROR:  the compressed data is corrupt
 -- The hash function is callable by user, so must return proper error
 SELECT _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
 ERROR:  composite bloom filter supports at most 8 columns, got 9
+SELECT _timescaledb_functions.bloom1_hash(ROW());
+     bloom1_hash      
+----------------------
+ -7046029254386353131
+
 \set ON_ERROR_STOP 1
 -- Test that the "contains" function cope with different source chunks.
 create table detoaster(ts int, tag text) with (tsdb.hypertable,

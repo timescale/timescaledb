@@ -125,6 +125,8 @@ select _timescaledb_functions.bloom1_contains('\x'::_timescaledb_internal.bloom1
 -- The hash function is callable by user, so must return proper error
 SELECT _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
 
+SELECT _timescaledb_functions.bloom1_hash(ROW());
+
 \set ON_ERROR_STOP 1
 
 

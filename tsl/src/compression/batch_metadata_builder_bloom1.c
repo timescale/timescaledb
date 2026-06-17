@@ -864,7 +864,6 @@ bloom1_contains_any_hashes(PG_FUNCTION_ARGS)
 	/* Must be a power of two. */
 	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 
-
 	for (int i = 0; i < num_hashes; i++)
 	{
 		if (hash_nulls[i])
