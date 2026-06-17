@@ -1,6 +1,6 @@
 Parsed test spec with 9 sessions
 
-starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable WP_enable_after_refresh R3_refresh R4_refresh check_locks check_jobs L1_unlock WP_disable_after_refresh check_locks check_jobs
+starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_refresh check_locks check_jobs L1_unlock check_locks check_jobs
 step WP_mat_enable: SELECT debug_waitpoint_enable('after_process_cagg_materializations');
 debug_waitpoint_enable
 ----------------------
@@ -18,11 +18,6 @@ step WP_mat_disable: SELECT debug_waitpoint_release('after_process_cagg_material
 debug_waitpoint_release
 -----------------------
                        
-
-step WP_enable_after_refresh: SELECT debug_waitpoint_enable('after_cagg_refresh_window');
-debug_waitpoint_enable
-----------------------
-                      
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
@@ -59,15 +54,11 @@ cond_daily    |Sun Feb 08 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
 step L1_unlock: 
     COMMIT;
-
-step WP_disable_after_refresh: SELECT debug_waitpoint_release('after_cagg_refresh_window');
-debug_waitpoint_release
------------------------
-                       
-
+ <waiting ...>
 step R2_refresh: <... completed>
 step R3_refresh: <... completed>
 step R4_refresh: <... completed>
+step L1_unlock: <... completed>
 step check_locks: 
     SELECT l.mode, l.granted
     FROM pg_locks l
@@ -91,7 +82,7 @@ user_view_name|start_time|end_time
 --------------+----------+--------
 
 
-starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable WP_after_register_enable R3_refresh R4_overlapping_refresh check_locks check_jobs L1_unlock WP_after_register_disable check_locks check_jobs
+starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_overlapping_refresh check_locks check_jobs L1_unlock check_locks check_jobs
 step WP_mat_enable: SELECT debug_waitpoint_enable('after_process_cagg_materializations');
 debug_waitpoint_enable
 ----------------------
@@ -109,11 +100,6 @@ step WP_mat_disable: SELECT debug_waitpoint_release('after_process_cagg_material
 debug_waitpoint_release
 -----------------------
                        
-
-step WP_after_register_enable: SELECT debug_waitpoint_enable('cagg_refresh_after_register');
-debug_waitpoint_enable
-----------------------
-                      
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
@@ -150,16 +136,12 @@ cond_daily    |Sun Feb 08 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
 step L1_unlock: 
     COMMIT;
-
-step WP_after_register_disable: SELECT debug_waitpoint_release('cagg_refresh_after_register');
-debug_waitpoint_release
------------------------
-                       
-
+ <waiting ...>
 step R2_refresh: <... completed>
 step R3_refresh: <... completed>
 step R4_overlapping_refresh: <... completed>
 ERROR:  could not refresh continuous aggregate "cond_daily" due to a concurrent refresh
+step L1_unlock: <... completed>
 step check_locks: 
     SELECT l.mode, l.granted
     FROM pg_locks l
