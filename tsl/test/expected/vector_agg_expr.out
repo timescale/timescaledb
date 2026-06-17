@@ -6,7 +6,14 @@
 set timescaledb.enable_columnarindexscan = off;
 \pset null $
 create function always_null(x int4) returns int4 as $$ select null::int4 $$
-language sql strict immutable parallel safe;
+language sql strict immutable parallel safe
+set search_path = pg_catalog /* prevent inlining */
+;
+create function null_on_odd(x int4) returns int4 as
+$$ select case when x % 2 = 1 then null else x end $$
+language sql strict immutable parallel safe
+set search_path = pg_catalog /* prevent inlining */
+;
 create or replace function throw_on_twelve(n integer)
 returns integer language plpgsql strict immutable parallel safe as $$
 begin
@@ -1978,6 +1985,62 @@ select count(*), case when v > 503 then x else 'something-else' end from aggexpr
      1 | 141014
      1 | 141016
      1 | 141018
+
+-- Null handling in expressions
+select count(null_on_odd(i)) from aggexpr;
+ count 
+-------
+  4360
+
+select count(null_on_odd(i)), i from aggexpr group by i order by i;
+ count | i  
+-------+----
+   640 |  0
+  1493 |  2
+     0 |  3
+  1487 | 12
+     0 | 13
+   740 | 14
+     0 |  $
+
+select count(null_on_odd(i)), x from aggexpr group by x order by 1 desc, 2 limit 10;
+ count |   x    
+-------+--------
+  1493 | 2
+  1487 | 12
+   320 | 0
+   320 | 3
+     1 | 1410
+     1 | 14100
+     1 | 141000
+     1 | 141002
+     1 | 141004
+     1 | 141006
+
+select count(substring(x, '12')), x from aggexpr group by x order by 1 desc, 2 limit 10;
+ count |   x    
+-------+--------
+  1487 | 12
+     1 | 141012
+     1 | 141112
+     1 | 14112
+     1 | 141120
+     1 | 141122
+     1 | 141124
+     1 | 141126
+     1 | 141128
+     1 | 1412
+
+select count(substring(x, '12')), i from aggexpr group by i order by 1 desc, 2 limit 10;
+ count | i  
+-------+----
+  1487 | 12
+    74 | 14
+     0 |  0
+     0 |  2
+     0 |  3
+     0 | 13
+     0 |  $
 
 -- The short circuit semantics for CASE is not implemented at the moment.
 \set ON_ERROR_STOP 0
