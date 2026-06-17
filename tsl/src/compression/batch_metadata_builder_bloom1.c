@@ -583,12 +583,6 @@ bloom1_contains_hash_internal(const char *words_buf, uint32 num_bits, uint64 has
 {
 	Assert(words_buf != NULL);
 
-	/* Must be a power of two. */
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
-
-	/* Must be >= 64 bits. */
-	CheckCompressedData(num_bits >= 64);
-
 	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
 	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
@@ -767,11 +761,11 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
-	/* Must be a power of two. */
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
-
 	/* Must be >= 64 bits. */
 	CheckCompressedData(num_bits >= 64);
+
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 
 	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
@@ -809,7 +803,7 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 }
 
 /*
- * Checks whether any hashes of the given array can be present in the given
+ * Checks whether any hashes in the given array can be present in the given
  * bloom filter. This is used for predicate pushdown where the values are
  * pre-hashed at planning time.
  *
@@ -863,6 +857,13 @@ bloom1_contains_any_hashes(PG_FUNCTION_ARGS)
 
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
+
+	/* Must be >= 64 bits. */
+	CheckCompressedData(num_bits >= 64);
+
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+
 
 	for (int i = 0; i < num_hashes; i++)
 	{
@@ -1227,9 +1228,8 @@ bloom1_contains_hash(Datum bloom_datum, uint64 hash)
 	const uint32 num_bits = 8 * VARSIZE_ANY_EXHDR(bloom);
 
 	/* Validate bloom structure */
-	CheckCompressedData(num_bits != 0);
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 	CheckCompressedData(num_bits >= 64);
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 
 	return bloom1_contains_hash_internal(words_buf, num_bits, hash);
 }
