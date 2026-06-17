@@ -12,6 +12,7 @@
 #include "chunk_tuple_routing.h"
 #include "cross_module_fn.h"
 #include "guc.h"
+#include "hypertable_cache.h"
 #include "indexing.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/modify_hypertable.h"
