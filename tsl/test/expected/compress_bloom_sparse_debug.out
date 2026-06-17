@@ -162,6 +162,8 @@ select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb
 ERROR:  the argument type bit lacks an extended hash function
 select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
 ERROR:  the argument type bit lacks an extended hash function
+select _timescaledb_functions.bloom1_contains(_timescaledb_functions.bloom1in('\x'::cstring), 1);
+ERROR:  the compressed data is corrupt
 \set ON_ERROR_STOP 1
 -- Test that the "contains" function cope with different source chunks.
 create table detoaster(ts int, tag text) with (tsdb.hypertable,
