@@ -191,6 +191,7 @@ jobs:
         EVENT_NAME: ${{ github.event_name }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         ORACLE_NAME: ${{ matrix.oracle }}
+      timeout-minutes: 60
       run: |
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
         export PGDATABASE=postgres
