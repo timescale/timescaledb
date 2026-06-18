@@ -87,7 +87,7 @@ SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 0 0.2 9.8 | sed -e ''s!.[0-9]$!!'' | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,dI,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL \gset
 -- should have 10 batches
 SELECT count(*) FROM :COMPRESSED_CHUNK;
 ROLLBACK;
