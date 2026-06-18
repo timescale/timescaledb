@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         os: ["ubuntu-24.04"]
-        pg: [ "15", "16", "17", "18" ]
+        pg: [ "16", "17", "18" ]
         build_type: ["Debug"]
       fail-fast: false
     env:
@@ -48,7 +48,7 @@ jobs:
         { psql -c "select 1" && exit 1 ; } || :
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Build TimescaleDB
       run: |
@@ -57,7 +57,7 @@ jobs:
         sudo make -C build install
 
     - name: Checkout sqlsmith
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         repository: 'timescale/sqlsmith'
         path: 'sqlsmith'

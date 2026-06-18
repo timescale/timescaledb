@@ -96,10 +96,6 @@ TS_MODULE_MAGIC("timescaledb-loader");
 #define CalledInParallelWorker()                                                                   \
 	(MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
 
-#if PG16_LT
-extern void TSDLLEXPORT _PG_init(void);
-#endif
-
 /* was the versioned-extension loaded*/
 static bool loader_present = true;
 
@@ -629,11 +625,6 @@ timescaledb_shmem_startup_hook(void)
 #endif
 }
 
-/*
- * PG15 requires all shared memory requests to be requested in a dedicated
- * hook. We group all our shared memory requests in this function and use
- * it as a normal function for PG < 14 and as a hook for PG 15+.
- */
 static void
 timescaledb_shmem_request_hook(void)
 {
