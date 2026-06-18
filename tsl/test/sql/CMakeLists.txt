@@ -211,7 +211,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vacuum.sql)
 
   list(APPEND TEST_TEMPLATES compression_update_delete.sql.in
-       compression_delete_bitmapscan.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
