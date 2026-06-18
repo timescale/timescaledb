@@ -44,8 +44,10 @@ _columnar_index_scan_init(void)
  * Currently supported aggregates are min, max, first, and last.
  */
 static bool
-is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type_out)
+is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type_out,
+					   Var **orderby_var_out)
 {
+	*orderby_var_out = NULL;
 	if (aggref->args == NIL)
 	{
 		return false;
@@ -133,7 +135,7 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 			*arg_var_out = var;
 			return true;
 		default:
-			/* Check for first()/last() with both args referencing same column */
+			/* Check for first()/last() */
 			if (!OidIsValid(ts_first_func_oid) || !OidIsValid(ts_last_func_oid))
 			{
 				ts_func_cache_init();
@@ -147,12 +149,30 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 				}
 				TargetEntry *tle2 = castNode(TargetEntry, lsecond(aggref->args));
 				Node *arg2_expr = strip_implicit_coercions((Node *) tle2->expr);
-				if (!equal(var, arg2_expr))
+
+				if (equal(var, arg2_expr))
+				{
+					/* Same column: first(x,x) / last(x,x) */
+					*meta_type_out = (aggref->aggfnoid == ts_first_func_oid) ? "min" : "max";
+					*arg_var_out = var;
+					return true;
+				}
+
+				/* Different columns: first(x,y) / last(x,y) */
+				if (!IsA(arg2_expr, Var))
 				{
 					return false;
 				}
-				*meta_type_out = (aggref->aggfnoid == ts_first_func_oid) ? "min" : "max";
+
+				Var *arg2_var = castNode(Var, arg2_expr);
+				if (arg2_var->varattno <= 0)
+				{
+					return false;
+				}
+
 				*arg_var_out = var;
+				*orderby_var_out = arg2_var;
+				*meta_type_out = (aggref->aggfnoid == ts_first_func_oid) ? "first" : "last";
 				return true;
 			}
 			break;
@@ -337,13 +357,117 @@ validate_entries_walker(Node *node, void *context)
 		else
 		{
 			Var *arg_var = NULL;
+			Var *orderby_var = NULL;
 			const char *meta_type = NULL;
-			if (!is_supported_aggregate(aggref, &arg_var, &meta_type))
+			if (!is_supported_aggregate(aggref, &arg_var, &meta_type, &orderby_var))
 			{
 				return true;
 			}
 
-			if (arg_var->varattno == TableOidAttributeNumber)
+			if (orderby_var != NULL)
+			{
+				/*
+				 * Two-column first(value, orderby) or last(value, orderby).
+				 * The orderby column must be the first orderby column.
+				 */
+				char *orderby_col_name =
+					get_attname(ctx->uncompressed_relid, orderby_var->varattno, false);
+				int16 orderby_pos = ts_array_position(ctx->settings->fd.orderby, orderby_col_name);
+				if (orderby_pos != 1)
+				{
+					return true;
+				}
+
+				/*
+				 * first and last functions disregard NULL values.
+				 * Skip NULLABLE orderby columns as boundary values could be NULL.
+				 */
+				if (!ts_get_attnotnull(ctx->uncompressed_relid, orderby_var->varattno))
+				{
+					return true;
+				}
+
+				bool desc = ts_array_get_element_bool(ctx->settings->fd.orderby_desc, 1);
+				bool is_first_agg = (strcmp(meta_type, "first") == 0);
+
+				/*
+				 * Determine which metadata columns to use.
+				 */
+				const char *value_meta_type;
+				const char *orderby_meta_type;
+				/*
+				 * first(value, orderby) returns value's value at min(orderby).
+				 * If orderby is descending, min(orderby) value corresponds to the last metadata
+				 * column. Similar logic for last(value, orderby)
+				 */
+				if (is_first_agg)
+				{
+					value_meta_type = desc ? "last" : "first";
+					orderby_meta_type = "min";
+				}
+				else
+				{
+					value_meta_type = desc ? "first" : "last";
+					orderby_meta_type = "max";
+				}
+
+				/* Look up value column's firstlast metadata */
+				AttrNumber value_meta_attno =
+					compressed_column_metadata_attno(ctx->settings,
+													 ctx->uncompressed_relid,
+													 arg_var->varattno,
+													 ctx->compressed_relid,
+													 value_meta_type);
+				if (value_meta_attno == InvalidAttrNumber)
+				{
+					return true;
+				}
+
+				AttrNumber value_child_resno =
+					find_resno_by_compressed_attno(ctx->leaf_plan, value_meta_attno);
+				if (value_child_resno == InvalidAttrNumber)
+				{
+					return true;
+				}
+
+				/* Look up orderby column's min/max metadata */
+				AttrNumber orderby_meta_attno =
+					compressed_column_metadata_attno(ctx->settings,
+													 ctx->uncompressed_relid,
+													 orderby_var->varattno,
+													 ctx->compressed_relid,
+													 orderby_meta_type);
+				if (orderby_meta_attno == InvalidAttrNumber)
+				{
+					return true;
+				}
+
+				AttrNumber orderby_child_resno =
+					find_resno_by_compressed_attno(ctx->leaf_plan, orderby_meta_attno);
+				if (orderby_child_resno == InvalidAttrNumber)
+				{
+					return true;
+				}
+
+				/* Add value metadata output first, then orderby metadata.
+				 * The rewrite mutator consumes them in this order. */
+				add_scan_output(ctx,
+								value_child_resno,
+								ctx->uncompressed_scanrelid,
+								arg_var->varattno,
+								get_atttype(ctx->compressed_relid, value_meta_attno),
+								-1,
+								arg_var->varcollid);
+
+				add_scan_output(ctx,
+								orderby_child_resno,
+								ctx->uncompressed_scanrelid,
+								orderby_var->varattno,
+								get_atttype(ctx->compressed_relid, orderby_meta_attno),
+								-1,
+								orderby_var->varcollid);
+			}
+			else if (arg_var->varattno == TableOidAttributeNumber)
 			{
 				/*
 				 * tableoid is constant within a single chunk scan, so
@@ -495,24 +619,63 @@ rewrite_agg_tlist_mutator(Node *node, void *context)
 		Aggref *aggref = copyObject(orig);
 		TargetEntry *scan_tle = list_nth_node(TargetEntry, ctx->custom_scan_tlist, resno - 1);
 		Var *scan_var = castNode(Var, scan_tle->expr);
-		Var *new_arg = makeVar(OUTER_VAR,
-							   resno,
-							   scan_var->vartype,
-							   scan_var->vartypmod,
-							   scan_var->varcollid,
-							   0);
-		TargetEntry *new_arg_te = makeTargetEntry((Expr *) new_arg, 1, NULL, false);
 
 		if (list_length(aggref->args) == 2)
 		{
-			/* first/last: both args point to same metadata column */
-			Var *new_arg2 = copyObject(new_arg);
-			TargetEntry *new_arg_te2 = makeTargetEntry((Expr *) new_arg2, 2, NULL, false);
-			aggref->args = list_make2(new_arg_te, new_arg_te2);
+			TargetEntry *orig_te1 = linitial_node(TargetEntry, orig->args);
+			TargetEntry *orig_te2 = lsecond_node(TargetEntry, orig->args);
+			Node *orig_arg1 = strip_implicit_coercions((Node *) orig_te1->expr);
+			Node *orig_arg2 = strip_implicit_coercions((Node *) orig_te2->expr);
+
+			if (!equal(orig_arg1, orig_arg2))
+			{
+				/* Two-column first/last: arg1 → value metadata, arg2 → orderby metadata */
+				Var *new_arg1 = makeVar(OUTER_VAR,
+										resno,
+										scan_var->vartype,
+										scan_var->vartypmod,
+										scan_var->varcollid,
+										0);
+
+				AttrNumber resno2 = ctx->next_resno++;
+				TargetEntry *scan_tle2 =
+					list_nth_node(TargetEntry, ctx->custom_scan_tlist, resno2 - 1);
+				Var *scan_var2 = castNode(Var, scan_tle2->expr);
+				Var *new_arg2 = makeVar(OUTER_VAR,
+										resno2,
+										scan_var2->vartype,
+										scan_var2->vartypmod,
+										scan_var2->varcollid,
+										0);
+
+				aggref->args = list_make2(makeTargetEntry((Expr *) new_arg1, 1, NULL, false),
+										  makeTargetEntry((Expr *) new_arg2, 2, NULL, false));
+			}
+			else
+			{
+				/* Same column: both args point to same metadata column */
+				Var *new_arg = makeVar(OUTER_VAR,
+									   resno,
+									   scan_var->vartype,
+									   scan_var->vartypmod,
+									   scan_var->varcollid,
+									   0);
+
+				aggref->args =
+					list_make2(makeTargetEntry((Expr *) new_arg, 1, NULL, false),
+							   makeTargetEntry((Expr *) copyObject(new_arg), 2, NULL, false));
+			}
 		}
 		else
 		{
-			aggref->args = list_make1(new_arg_te);
+			/* min/max: single arg */
+			Var *new_arg = makeVar(OUTER_VAR,
+								   resno,
+								   scan_var->vartype,
+								   scan_var->vartypmod,
+								   scan_var->varcollid,
+								   0);
+			aggref->args = list_make1(makeTargetEntry((Expr *) new_arg, 1, NULL, false));
 		}
 
 		return (Node *) aggref;
@@ -527,6 +690,8 @@ rewrite_agg_tlist_mutator(Node *node, void *context)
  *   count(*)        → sum(_ts_meta_count)
  *   min(col)/max(col) → same aggfnoid, arg rewritten to metadata column
  *   first(col,col)/last(col,col) → same aggfnoid, both args rewritten
+ *   first(val,ord)/last(val,ord) → same aggfnoid, args rewritten to
+ *       value's firstlast metadata and orderby's min/max metadata
  *
  * Expressions that combine aggregates (e.g. 2*count(*), min(x)+max(y)) are
  * supported — the walker/mutator handles Var and Aggref nodes at any depth.

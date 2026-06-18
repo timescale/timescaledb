@@ -9,11 +9,10 @@ CREATE VIEW chunk_status_view AS
 SELECT
     h.table_name AS hypertable_name,
     uc.schema_name || '.' || uc.table_name AS chunk,
-    cc.schema_name || '.' || cc.table_name AS compressed_chunk,
+    cs.compress_relid::text AS compressed_chunk,
     _timescaledb_functions.chunk_status_text((uc.schema_name || '.' || uc.table_name)::regclass) AS status
 FROM _timescaledb_catalog.chunk uc
 LEFT JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-LEFT JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
 JOIN _timescaledb_catalog.hypertable h ON uc.hypertable_id = h.id;
 
 SET timescaledb.enable_direct_compress_insert = true;

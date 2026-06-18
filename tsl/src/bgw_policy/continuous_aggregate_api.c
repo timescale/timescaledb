@@ -625,7 +625,7 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 		elog(ERROR, "cache lookup failed");
 	}
 
-	RangeType *range = make_range_compat(typcache, &lower, &upper, false, NULL);
+	RangeType *range = make_range(typcache, &lower, &upper, false, NULL);
 
 	ListCell *lc;
 
@@ -668,7 +668,7 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 			.lower = false,
 		};
 
-		RangeType *range_job = make_range_compat(typcache, &lower_job, &upper_job, false, NULL);
+		RangeType *range_job = make_range(typcache, &lower_job, &upper_job, false, NULL);
 
 		elog(DEBUG1,
 			 "start_offset_job: " INT64_FORMAT ", end_offset_job: " INT64_FORMAT,

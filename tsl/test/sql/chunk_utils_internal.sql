@@ -305,7 +305,7 @@ SELECT current_setting('port') as "PORTNO" \gset
 
 CREATE EXTENSION postgres_fdw;
 CREATE SERVER s3_server FOREIGN DATA WRAPPER postgres_fdw
-OPTIONS ( host 'localhost', dbname 'postgres_fdw_db', port :'PORTNO');
+OPTIONS ( dbname 'postgres_fdw_db', port :'PORTNO');
 GRANT USAGE ON FOREIGN SERVER s3_server TO :ROLE_4;
 
 CREATE USER MAPPING FOR :ROLE_4 SERVER s3_server
@@ -927,7 +927,7 @@ COPY :CHUNK FROM STDIN;
 SELECT _timescaledb_functions.unfreeze_chunk(:'CHUNK');
 SELECT compress_chunk(:'CHUNK');
 SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
-SELECT format('%I.%I', schema_name, table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE relid = :'CHUNK'::regclass \gset
 
 -- DML on hypertable after freezing should be blocked
 \set ON_ERROR_STOP 0

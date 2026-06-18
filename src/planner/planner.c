@@ -683,13 +683,11 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 #ifdef USE_TELEMETRY
 			ts_telemetry_function_info_gather(parse);
 #endif
-#if PG16_GE
 			if (ts_guc_enable_optimizations &&
 				ts_cm_functions->continuous_agg_apply_rewrites_tsl != NULL)
 			{
 				context.rootquery = ts_cm_functions->continuous_agg_apply_rewrites_tsl(parse);
 			}
-#endif
 			/*
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */

@@ -941,8 +941,8 @@ SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time
    1 |   2 |     3 |  3 |  1 | 43 | Fri Dec 31 17:00:00 1999 PST
    1 |   2 |     3 |  2 |  1 | 43 | Fri Dec 31 16:00:00 1999 PST
 
--- Test with null values: should not optimize
-set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+-- Test with null values: should optimize with firstlast index
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
              time             | x2 
 ------------------------------+----
@@ -959,6 +959,8 @@ SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
  Sat Jan 01 00:00:00 2000 PST |   
  Sat Jan 01 00:00:00 2000 PST |   
 
+-- should not optimize (NULL order wrong)
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
              time             | x2 
 ------------------------------+----

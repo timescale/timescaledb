@@ -116,6 +116,8 @@ select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb
 
 select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
 
+select _timescaledb_functions.bloom1_contains(_timescaledb_functions.bloom1in('\x'::cstring), 1);
+
 \set ON_ERROR_STOP 1
 
 
@@ -133,13 +135,11 @@ select count(compress_chunk(x)) from show_chunks('detoaster') x;
 
 with chunks as (
   select
-    row_number() over (order by cc.table_name) index,
-    cc.schema_name || '.' || cc.table_name chunk
+    row_number() over (order by cs.compress_relid::text) index,
+    cs.compress_relid::text chunk
   from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
       on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-    join _timescaledb_catalog.chunk cc
-      on cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
   where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'detoaster')
 )
@@ -169,4 +169,9 @@ SELECT _timescaledb_functions.bloom1_contains(NULL, NULL::int);
 SELECT _timescaledb_functions.bloom1_contains('\xd098c885f08468eb8916751d947f248ed2843a88c02b1dea6228591c588b8068'::_timescaledb_internal.bloom1, NULL::int);
 -- both args NULL but second arg obfuscated through record_in
 SELECT _timescaledb_functions.bloom1_contains(NULL, pg_catalog.record_in(null::cstring, 23::oid, 12::int4));
+
+
+-- The hash function is callable by user, so must return proper error
+SELECT _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
+
 
