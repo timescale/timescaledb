@@ -927,7 +927,7 @@ COPY :CHUNK FROM STDIN;
 SELECT _timescaledb_functions.unfreeze_chunk(:'CHUNK');
 SELECT compress_chunk(:'CHUNK');
 SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
-SELECT format('%I.%I', schema_name, table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE relid = :'CHUNK'::regclass \gset
 
 -- DML on hypertable after freezing should be blocked
 \set ON_ERROR_STOP 0

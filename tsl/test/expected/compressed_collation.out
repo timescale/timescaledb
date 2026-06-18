@@ -42,11 +42,13 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('compressed_collation_ht') ch;
      1
 
 vacuum analyze compressed_collation_ht;
-SELECT format('%I.%I',ch.schema_name, ch.table_name) AS "CHUNK"
+SELECT cs.compress_relid::text AS "CHUNK"
 FROM _timescaledb_catalog.hypertable ht
     INNER JOIN _timescaledb_catalog.chunk ch
-    ON ch.hypertable_id = ht.compressed_hypertable_id
-        AND ht.table_name = 'compressed_collation_ht' \gset
+    ON ch.hypertable_id = ht.id
+    INNER JOIN _timescaledb_catalog.compression_settings cs
+    ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+WHERE ht.table_name = 'compressed_collation_ht' \gset
 create index on :CHUNK (name);
 set enable_seqscan to off;
 explain (buffers off, costs off)
