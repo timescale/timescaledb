@@ -1191,16 +1191,33 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
 		{
 			RelOptInfo *in_rel = root->simple_rel_array[i];
+			Assert(in_rel != NULL);
+
 			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
+			Assert(ht != NULL);
 
-			Assert(ht != NULL && in_rel != NULL);
-			ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
-
+			/*
+			 * Run our hypertable expansion. We can save some time by not doing
+			 * it, if the relation has already been proven empty.
+			 */
+			if (!IS_DUMMY_REL(in_rel))
+			{
+				ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
+			}
 			in_rte->inh = true;
 			reenabled_inheritance = true;
-			/* Redo set_rel_consider_parallel, as results of the call may no longer be valid
-			 * here (due to adding more tables to the set of tables under consideration here).
-			 * This is especially true if dealing with foreign data wrappers. */
+
+			/*
+			 * For DML target that is an inheritance parent, we need to properly
+			 * create the row identity variables. Postgres didn't do this for us
+			 * because we wanted to expand the inheritance hierarchy ourselves,
+			 * and marked the table as inh = false to prevent expansion. Now just
+			 * call the standard Postgres function to do this.
+			 */
+			if (bms_is_member(i, root->all_result_relids))
+			{
+				distribute_row_identity_vars(root);
+			}
 
 			/*
 			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
@@ -1434,8 +1451,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 * the relation rte->relid (e.g., a transition table for a trigger), but
 	 * not the relation itself.
 	 */
-	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid) ||
-		IS_DUMMY_REL(rel))
+	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid))
 	{
 		if (prev_set_rel_pathlist_hook != NULL)
 		{
