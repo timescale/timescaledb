@@ -44,14 +44,18 @@ typedef struct InvalidationStore
 typedef struct Hypertable Hypertable;
 
 extern void invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end);
-extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end);
+extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end, int32 seqnum);
 extern void continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 end);
 extern void continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);
 extern void invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype);
 
 extern void invalidation_process_cagg_log(const ContinuousAgg *cagg,
-										  const InternalTimeRange *refresh_window);
+										  const InternalTimeRange *refresh_window,
+										  bool is_granular_refresh);
+
+extern void invalidation_cleanup_tenant_tracking(const ContinuousAgg *cagg,
+												 const InternalTimeRange *refresh_window);
 
 extern InvalidationStore *collect_and_delete_cagg_invalidations_in_window(
 	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window, bool force);
