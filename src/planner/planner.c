@@ -1489,23 +1489,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			}
 			break;
 
-		case TS_REL_HYPERTABLE:
-			if (!rte->inh)
-			{
-				/*
-				 * This happens with SELECT FROM ONLY hypertable or with an
-				 * empty hypertable. Mark it as dummy, otherwise we'll get a
-				 * scan on hypertable relation itself. It's always empty, so
-				 * this scan is useless and looks misleading.
-				 */
-				mark_dummy_rel(rel);
-			}
-			else
-			{
-				apply_optimizations(root, reltype, rel, rte, ht);
-			}
-			break;
-
 		default:
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
@@ -1539,6 +1522,9 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		case TS_REL_HYPERTABLE:
 		{
+			ts_create_private_reloptinfo(rel);
+
+			const bool have_chunks = has_subclass(rte->relid);
 			/*
 			 * Mark hypertable RTEs we'd like to expand ourselves.
 			 * We always do this for SELECTs from hypertables.
@@ -1553,14 +1539,29 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * chunks or a SELECT FROM ONLY hypertable. We still want to run our
 			 * hypertable expansion code for hypertables w/o chunks.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL &&
+			if (!ts_guc_enable_optimizations || !ts_guc_enable_constraint_exclusion)
+			{
+				break;
+			}
+
+			if ((inhparent || !have_chunks) && rte->ctename == NULL &&
 				rel->relid != (Index) query->resultRelation)
 			{
 				rte_mark_for_expansion(rte);
 			}
-			ts_create_private_reloptinfo(rel);
+			else if (!inhparent && have_chunks)
+			{
+				/*
+				 * This happens with SELECT FROM ONLY hypertable or with an
+				 * empty hypertable. Mark it as dummy, otherwise we'll get a
+				 * scan on hypertable relation itself. It's always empty, so
+				 * this scan is useless and looks misleading.
+				 */
+				mark_dummy_rel(rel);
+			}
+
 			ts_plan_expand_timebucket_annotate(root, rel);
+
 			break;
 		}
 		case TS_REL_CHUNK_STANDALONE:
