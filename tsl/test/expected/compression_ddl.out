@@ -880,14 +880,12 @@ WHERE
 -------
      7
 
---check count on internal compression table too i.e. all the chunks have
+--check count on compressed chunks too i.e. all the chunks have
 --the correct column name
-SELECT format('%I.%I', cht.schema_name, cht.table_name) AS "COMPRESSION_TBLNM"
-FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
-WHERE ht.table_name = 'test1' and cht.id = ht.compressed_hypertable_id \gset
 SELECT count(*) FROM pg_attribute att
-INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-INNER JOIN _timescaledb_catalog.hypertable ht ON ht.compressed_hypertable_id = ch.hypertable_id AND ht.table_name = 'test1'
+INNER JOIN _timescaledb_catalog.compression_settings cs ON att.attrelid = cs.compress_relid
+INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname = 'bigintcol';
  count 
@@ -898,7 +896,7 @@ WHERE
 -- check if the name change is reflected for settings
 ALTER TABLE test1 RENAME  bigintcol TO
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc;
-psql:include/compression_alter.sql:97: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
+psql:include/compression_alter.sql:94: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
 SELECT * from _timescaledb_catalog.compression_settings WHERE relid = 'test1'::regclass;
  relid | compress_relid |                             segmentby                             | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
 -------+----------------+-------------------------------------------------------------------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------
@@ -911,8 +909,9 @@ WHERE hypertable_name = 'test1' and attname like 'ccc%';
  public            | test1           | cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca |                      1 |                      |             | 
 
 SELECT count(*) FROM pg_attribute att
-INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-INNER JOIN _timescaledb_catalog.hypertable ht ON ht.compressed_hypertable_id = ch.hypertable_id AND ht.table_name = 'test1'
+INNER JOIN _timescaledb_catalog.compression_settings cs ON att.attrelid = cs.compress_relid
+INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname like 'ccc%a';
  count 
@@ -922,7 +921,7 @@ WHERE
 ALTER TABLE test1 RENAME
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc
 TO bigintcol;
-psql:include/compression_alter.sql:111: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
+psql:include/compression_alter.sql:109: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
 SELECT * from timescaledb_information.compression_settings
 WHERE hypertable_name = 'test1' and attname = 'bigintcol' ;
  hypertable_schema | hypertable_name |  attname  | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
@@ -991,7 +990,7 @@ SELECT *,assert_equal(c3,43) FROM test_defaults ORDER BY 1,2;
  Mon Jan 01 00:00:00 2001 PST |         1 |    | 42 | 43 | 
 
 select decompress_chunk(show_chunks('test_defaults'),true);
-psql:include/compression_alter.sql:142: NOTICE:  chunk "_hyper_15_93_chunk" is not converted to columnstore
+psql:include/compression_alter.sql:140: NOTICE:  chunk "_hyper_15_93_chunk" is not converted to columnstore
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_15_92_chunk
@@ -1028,13 +1027,13 @@ ALTER TABLE test_drop SET (timescaledb.compress,timescaledb.compress_segmentby='
 -- dropping segmentby or orderby columns will fail
 \set ON_ERROR_STOP 0
 ALTER TABLE test_drop DROP COLUMN time;
-psql:include/compression_alter.sql:154: ERROR:  cannot drop column named in partition key
+psql:include/compression_alter.sql:152: ERROR:  cannot drop column named in partition key
 ALTER TABLE test_drop DROP COLUMN o1;
-psql:include/compression_alter.sql:155: ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
+psql:include/compression_alter.sql:153: ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
 ALTER TABLE test_drop DROP COLUMN o2;
-psql:include/compression_alter.sql:156: ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
+psql:include/compression_alter.sql:154: ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
 ALTER TABLE test_drop DROP COLUMN device;
-psql:include/compression_alter.sql:157: ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
+psql:include/compression_alter.sql:155: ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
 \set ON_ERROR_STOP 1
 -- switch to WARNING only to suppress compress_chunk NOTICEs
 SET client_min_messages TO WARNING;
@@ -1050,7 +1049,7 @@ ALTER TABLE test_drop DROP COLUMN f2;
 -- test non-existant column
 \set ON_ERROR_STOP 0
 ALTER TABLE test_drop DROP COLUMN f10;
-psql:include/compression_alter.sql:171: ERROR:  column "f10" of relation "test_drop" does not exist
+psql:include/compression_alter.sql:169: ERROR:  column "f10" of relation "test_drop" does not exist
 \set ON_ERROR_STOP 1
 ALTER TABLE test_drop DROP COLUMN IF EXISTS f10;
 INSERT INTO test_drop SELECT NULL,'2001-01-01',2,'o1','o2';

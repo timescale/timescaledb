@@ -2,8 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
-CREATE VIEW metacols AS select relname,attname,count(*) from pg_attribute a, pg_class c where c.oid=a.attrelid and attname like '%_ts_meta%' and relname like '%chunk' GROUP BY 1,2 ORDER BY relname::text COLLATE "C", attname::text COLLATE "C";
-CREATE VIEW compressedcols AS select relname,attname,c.oid as reloid,attnum from pg_attribute a, pg_class c where c.oid=a.attrelid and relname like '%compress_hyper_%' order by c.oid asc, a.attnum asc;
+CREATE VIEW metacols AS select h.table_name as relname, a.attname, count(*) from _timescaledb_catalog.compression_settings cs join _timescaledb_catalog.chunk ch on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass join _timescaledb_catalog.hypertable h on ch.hypertable_id = h.id join pg_attribute a on a.attrelid = cs.compress_relid where a.attname like '%_ts_meta%' GROUP BY 1,2 ORDER BY h.table_name COLLATE "C", a.attname::text COLLATE "C";
+CREATE VIEW compressedcols AS select h.table_name as relname, a.attname, cs.compress_relid as reloid, a.attnum from _timescaledb_catalog.compression_settings cs join _timescaledb_catalog.chunk ch on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass join _timescaledb_catalog.hypertable h on ch.hypertable_id = h.id join pg_attribute a on a.attrelid = cs.compress_relid and not a.attisdropped order by cs.compress_relid asc, a.attnum asc;
 create table sparse(
     ts int,
     o bigint,
@@ -41,27 +41,27 @@ select min(big1), max(big2) from sparse where value < 100 and value > 10;
   11 |  99
 
 select relname,attname from metacols order by 1,2;
-         relname          |                 attname                 
---------------------------+-----------------------------------------
- compress_hyper_2_2_chunk | _ts_meta_count
- compress_hyper_2_2_chunk | _ts_meta_max_1
- compress_hyper_2_2_chunk | _ts_meta_max_2
- compress_hyper_2_2_chunk | _ts_meta_min_1
- compress_hyper_2_2_chunk | _ts_meta_min_2
- compress_hyper_2_2_chunk | regress-test-bloom_27f1_big1_big2
- compress_hyper_2_2_chunk | regress-test-bloom_2cb5_boo_big1
- compress_hyper_2_2_chunk | regress-test-bloom_4328_num_nowts
- compress_hyper_2_2_chunk | regress-test-bloom_5c7a_value_big1_big2
- compress_hyper_2_2_chunk | regress-test-bloom_9774_o_big2
- compress_hyper_2_2_chunk | regress-test-bloom_big1
- compress_hyper_2_2_chunk | regress-test-bloom_big2
- compress_hyper_2_2_chunk | regress-test-bloom_c250_num_hello
- compress_hyper_2_2_chunk | regress-test-bloom_cab4_small1_small2
- compress_hyper_2_2_chunk | regress-test-bloom_value
- compress_hyper_2_2_chunk | _ts_meta_v2_first_o
- compress_hyper_2_2_chunk | _ts_meta_v2_first_ts
- compress_hyper_2_2_chunk | _ts_meta_v2_last_o
- compress_hyper_2_2_chunk | _ts_meta_v2_last_ts
+ relname |                 attname                 
+---------+-----------------------------------------
+ sparse  | _ts_meta_count
+ sparse  | _ts_meta_max_1
+ sparse  | _ts_meta_max_2
+ sparse  | _ts_meta_min_1
+ sparse  | _ts_meta_min_2
+ sparse  | regress-test-bloom_27f1_big1_big2
+ sparse  | regress-test-bloom_2cb5_boo_big1
+ sparse  | regress-test-bloom_4328_num_nowts
+ sparse  | regress-test-bloom_5c7a_value_big1_big2
+ sparse  | regress-test-bloom_9774_o_big2
+ sparse  | regress-test-bloom_big1
+ sparse  | regress-test-bloom_big2
+ sparse  | regress-test-bloom_c250_num_hello
+ sparse  | regress-test-bloom_cab4_small1_small2
+ sparse  | regress-test-bloom_value
+ sparse  | _ts_meta_v2_first_o
+ sparse  | _ts_meta_v2_first_ts
+ sparse  | _ts_meta_v2_last_o
+ sparse  | _ts_meta_v2_last_ts
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse') and index is not null group by 1 order by 1;
                                                                                                                                                                                                                                                                                                                                                                                                                                                        index                                                                                                                                                                                                                                                                                                                                                                                                                                                        
@@ -69,8 +69,45 @@ select index from settings where relid = (select oid from pg_class where relname
  [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "big2", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["value", "big1", "big2"], "source": "config"}, {"type": "bloom", "column": ["o", "big2"], "source": "config"}, {"type": "bloom", "column": ["big1", "big2"], "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "minmax", "column": "o", "source": "orderby"}, {"type": "firstlast", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse' order by 1 asc;
- attname 
----------
+                 attname                 
+-----------------------------------------
+ _ts_meta_count
+ _ts_meta_max_1
+ _ts_meta_max_2
+ _ts_meta_min_1
+ _ts_meta_min_2
+ regress-test-bloom_27f1_big1_big2
+ regress-test-bloom_2cb5_boo_big1
+ regress-test-bloom_4328_num_nowts
+ regress-test-bloom_5c7a_value_big1_big2
+ regress-test-bloom_9774_o_big2
+ regress-test-bloom_big1
+ regress-test-bloom_big2
+ regress-test-bloom_c250_num_hello
+ regress-test-bloom_cab4_small1_small2
+ regress-test-bloom_value
+ _ts_meta_v2_first_o
+ _ts_meta_v2_first_ts
+ _ts_meta_v2_last_o
+ _ts_meta_v2_last_ts
+ big1
+ big2
+ boo
+ cmax
+ cmin
+ ctid
+ hello
+ nowts
+ num
+ o
+ sby
+ small1
+ small2
+ tableoid
+ ts
+ value
+ xmax
+ xmin
 
 -- show plan
 explain (buffers off, costs off) select * from sparse where value = 1;
@@ -196,56 +233,56 @@ select min(big1), max(big2) from sparse_sister where value < 100 and value > 10;
   11 |  99
 
 select relname,attname from metacols order by 1,2;
-         relname          |                 attname                 
---------------------------+-----------------------------------------
- compress_hyper_2_2_chunk | _ts_meta_count
- compress_hyper_2_2_chunk | _ts_meta_max_1
- compress_hyper_2_2_chunk | _ts_meta_max_2
- compress_hyper_2_2_chunk | _ts_meta_min_1
- compress_hyper_2_2_chunk | _ts_meta_min_2
- compress_hyper_2_2_chunk | regress-test-bloom_27f1_big1_big2
- compress_hyper_2_2_chunk | regress-test-bloom_2cb5_boo_big1
- compress_hyper_2_2_chunk | regress-test-bloom_4328_num_nowts
- compress_hyper_2_2_chunk | regress-test-bloom_5c7a_value_big1_big2
- compress_hyper_2_2_chunk | regress-test-bloom_9774_o_big2
- compress_hyper_2_2_chunk | regress-test-bloom_big1
- compress_hyper_2_2_chunk | regress-test-bloom_big2
- compress_hyper_2_2_chunk | regress-test-bloom_c250_num_hello
- compress_hyper_2_2_chunk | regress-test-bloom_cab4_small1_small2
- compress_hyper_2_2_chunk | regress-test-bloom_value
- compress_hyper_2_2_chunk | _ts_meta_v2_first_o
- compress_hyper_2_2_chunk | _ts_meta_v2_first_ts
- compress_hyper_2_2_chunk | _ts_meta_v2_last_o
- compress_hyper_2_2_chunk | _ts_meta_v2_last_ts
- compress_hyper_4_4_chunk | _ts_meta_count
- compress_hyper_4_4_chunk | _ts_meta_max_1
- compress_hyper_4_4_chunk | _ts_meta_max_2
- compress_hyper_4_4_chunk | _ts_meta_min_1
- compress_hyper_4_4_chunk | _ts_meta_min_2
- compress_hyper_4_4_chunk | regress-test-bloom_27f1_big1_big2
- compress_hyper_4_4_chunk | regress-test-bloom_2cb5_boo_big1
- compress_hyper_4_4_chunk | regress-test-bloom_4328_num_nowts
- compress_hyper_4_4_chunk | regress-test-bloom_9774_o_big2
- compress_hyper_4_4_chunk | regress-test-bloom_big1
- compress_hyper_4_4_chunk | regress-test-bloom_big2
- compress_hyper_4_4_chunk | regress-test-bloom_boo
- compress_hyper_4_4_chunk | regress-test-bloom_c250_num_hello
- compress_hyper_4_4_chunk | regress-test-bloom_cab4_small1_small2
- compress_hyper_4_4_chunk | regress-test-bloom_hello
- compress_hyper_4_4_chunk | _ts_meta_v2_first_o
- compress_hyper_4_4_chunk | _ts_meta_v2_first_ts
- compress_hyper_4_4_chunk | _ts_meta_v2_last_o
- compress_hyper_4_4_chunk | _ts_meta_v2_last_ts
- compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
- compress_hyper_4_4_chunk | _ts_meta_v2_max_num
- compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
- compress_hyper_4_4_chunk | _ts_meta_v2_max_small2
- compress_hyper_4_4_chunk | _ts_meta_v2_max_value
- compress_hyper_4_4_chunk | _ts_meta_v2_min_nowts
- compress_hyper_4_4_chunk | _ts_meta_v2_min_num
- compress_hyper_4_4_chunk | _ts_meta_v2_min_small1
- compress_hyper_4_4_chunk | _ts_meta_v2_min_small2
- compress_hyper_4_4_chunk | _ts_meta_v2_min_value
+    relname    |                 attname                 
+---------------+-----------------------------------------
+ sparse        | _ts_meta_count
+ sparse        | _ts_meta_max_1
+ sparse        | _ts_meta_max_2
+ sparse        | _ts_meta_min_1
+ sparse        | _ts_meta_min_2
+ sparse        | regress-test-bloom_27f1_big1_big2
+ sparse        | regress-test-bloom_2cb5_boo_big1
+ sparse        | regress-test-bloom_4328_num_nowts
+ sparse        | regress-test-bloom_5c7a_value_big1_big2
+ sparse        | regress-test-bloom_9774_o_big2
+ sparse        | regress-test-bloom_big1
+ sparse        | regress-test-bloom_big2
+ sparse        | regress-test-bloom_c250_num_hello
+ sparse        | regress-test-bloom_cab4_small1_small2
+ sparse        | regress-test-bloom_value
+ sparse        | _ts_meta_v2_first_o
+ sparse        | _ts_meta_v2_first_ts
+ sparse        | _ts_meta_v2_last_o
+ sparse        | _ts_meta_v2_last_ts
+ sparse_sister | _ts_meta_count
+ sparse_sister | _ts_meta_max_1
+ sparse_sister | _ts_meta_max_2
+ sparse_sister | _ts_meta_min_1
+ sparse_sister | _ts_meta_min_2
+ sparse_sister | regress-test-bloom_27f1_big1_big2
+ sparse_sister | regress-test-bloom_2cb5_boo_big1
+ sparse_sister | regress-test-bloom_4328_num_nowts
+ sparse_sister | regress-test-bloom_9774_o_big2
+ sparse_sister | regress-test-bloom_big1
+ sparse_sister | regress-test-bloom_big2
+ sparse_sister | regress-test-bloom_boo
+ sparse_sister | regress-test-bloom_c250_num_hello
+ sparse_sister | regress-test-bloom_cab4_small1_small2
+ sparse_sister | regress-test-bloom_hello
+ sparse_sister | _ts_meta_v2_first_o
+ sparse_sister | _ts_meta_v2_first_ts
+ sparse_sister | _ts_meta_v2_last_o
+ sparse_sister | _ts_meta_v2_last_ts
+ sparse_sister | _ts_meta_v2_max_nowts
+ sparse_sister | _ts_meta_v2_max_num
+ sparse_sister | _ts_meta_v2_max_small1
+ sparse_sister | _ts_meta_v2_max_small2
+ sparse_sister | _ts_meta_v2_max_value
+ sparse_sister | _ts_meta_v2_min_nowts
+ sparse_sister | _ts_meta_v2_min_num
+ sparse_sister | _ts_meta_v2_min_small1
+ sparse_sister | _ts_meta_v2_min_small2
+ sparse_sister | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse_sister') and index is not null group by 1 order by 1;
                                                                                                                   index                                                                                                                   
@@ -253,8 +290,55 @@ select index from settings where relid = (select oid from pg_class where relname
  [{"type": "minmax", "column": "o", "source": "orderby"}, {"type": "firstlast", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse_sister' order by 1 asc;
- attname 
----------
+                attname                
+---------------------------------------
+ _ts_meta_count
+ _ts_meta_max_1
+ _ts_meta_max_2
+ _ts_meta_min_1
+ _ts_meta_min_2
+ regress-test-bloom_27f1_big1_big2
+ regress-test-bloom_2cb5_boo_big1
+ regress-test-bloom_4328_num_nowts
+ regress-test-bloom_9774_o_big2
+ regress-test-bloom_big1
+ regress-test-bloom_big2
+ regress-test-bloom_boo
+ regress-test-bloom_c250_num_hello
+ regress-test-bloom_cab4_small1_small2
+ regress-test-bloom_hello
+ _ts_meta_v2_first_o
+ _ts_meta_v2_first_ts
+ _ts_meta_v2_last_o
+ _ts_meta_v2_last_ts
+ _ts_meta_v2_max_nowts
+ _ts_meta_v2_max_num
+ _ts_meta_v2_max_small1
+ _ts_meta_v2_max_small2
+ _ts_meta_v2_max_value
+ _ts_meta_v2_min_nowts
+ _ts_meta_v2_min_num
+ _ts_meta_v2_min_small1
+ _ts_meta_v2_min_small2
+ _ts_meta_v2_min_value
+ big1
+ big2
+ boo
+ cmax
+ cmin
+ ctid
+ hello
+ nowts
+ num
+ o
+ sby
+ small1
+ small2
+ tableoid
+ ts
+ value
+ xmax
+ xmin
 
 -- show plan
 explain (buffers off, costs off) select * from sparse_sister where value = 1;
@@ -330,56 +414,56 @@ explain (buffers off, costs off) select * from sparse_sister where o = sby and b
 -- renaming a column that participates in a composite bloom filter
 alter table sparse rename big2 to xxl;
 select relname,attname from metacols order by 1,2;
-         relname          |                attname                 
---------------------------+----------------------------------------
- compress_hyper_2_2_chunk | _ts_meta_count
- compress_hyper_2_2_chunk | _ts_meta_max_1
- compress_hyper_2_2_chunk | _ts_meta_max_2
- compress_hyper_2_2_chunk | _ts_meta_min_1
- compress_hyper_2_2_chunk | _ts_meta_min_2
- compress_hyper_2_2_chunk | regress-test-bloom_07a7_value_big1_xxl
- compress_hyper_2_2_chunk | regress-test-bloom_2cb5_boo_big1
- compress_hyper_2_2_chunk | regress-test-bloom_4328_num_nowts
- compress_hyper_2_2_chunk | regress-test-bloom_43c0_o_xxl
- compress_hyper_2_2_chunk | regress-test-bloom_b99a_big1_xxl
- compress_hyper_2_2_chunk | regress-test-bloom_big1
- compress_hyper_2_2_chunk | regress-test-bloom_c250_num_hello
- compress_hyper_2_2_chunk | regress-test-bloom_cab4_small1_small2
- compress_hyper_2_2_chunk | regress-test-bloom_value
- compress_hyper_2_2_chunk | regress-test-bloom_xxl
- compress_hyper_2_2_chunk | _ts_meta_v2_first_o
- compress_hyper_2_2_chunk | _ts_meta_v2_first_ts
- compress_hyper_2_2_chunk | _ts_meta_v2_last_o
- compress_hyper_2_2_chunk | _ts_meta_v2_last_ts
- compress_hyper_4_4_chunk | _ts_meta_count
- compress_hyper_4_4_chunk | _ts_meta_max_1
- compress_hyper_4_4_chunk | _ts_meta_max_2
- compress_hyper_4_4_chunk | _ts_meta_min_1
- compress_hyper_4_4_chunk | _ts_meta_min_2
- compress_hyper_4_4_chunk | regress-test-bloom_27f1_big1_big2
- compress_hyper_4_4_chunk | regress-test-bloom_2cb5_boo_big1
- compress_hyper_4_4_chunk | regress-test-bloom_4328_num_nowts
- compress_hyper_4_4_chunk | regress-test-bloom_9774_o_big2
- compress_hyper_4_4_chunk | regress-test-bloom_big1
- compress_hyper_4_4_chunk | regress-test-bloom_big2
- compress_hyper_4_4_chunk | regress-test-bloom_boo
- compress_hyper_4_4_chunk | regress-test-bloom_c250_num_hello
- compress_hyper_4_4_chunk | regress-test-bloom_cab4_small1_small2
- compress_hyper_4_4_chunk | regress-test-bloom_hello
- compress_hyper_4_4_chunk | _ts_meta_v2_first_o
- compress_hyper_4_4_chunk | _ts_meta_v2_first_ts
- compress_hyper_4_4_chunk | _ts_meta_v2_last_o
- compress_hyper_4_4_chunk | _ts_meta_v2_last_ts
- compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
- compress_hyper_4_4_chunk | _ts_meta_v2_max_num
- compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
- compress_hyper_4_4_chunk | _ts_meta_v2_max_small2
- compress_hyper_4_4_chunk | _ts_meta_v2_max_value
- compress_hyper_4_4_chunk | _ts_meta_v2_min_nowts
- compress_hyper_4_4_chunk | _ts_meta_v2_min_num
- compress_hyper_4_4_chunk | _ts_meta_v2_min_small1
- compress_hyper_4_4_chunk | _ts_meta_v2_min_small2
- compress_hyper_4_4_chunk | _ts_meta_v2_min_value
+    relname    |                attname                 
+---------------+----------------------------------------
+ sparse        | _ts_meta_count
+ sparse        | _ts_meta_max_1
+ sparse        | _ts_meta_max_2
+ sparse        | _ts_meta_min_1
+ sparse        | _ts_meta_min_2
+ sparse        | regress-test-bloom_07a7_value_big1_xxl
+ sparse        | regress-test-bloom_2cb5_boo_big1
+ sparse        | regress-test-bloom_4328_num_nowts
+ sparse        | regress-test-bloom_43c0_o_xxl
+ sparse        | regress-test-bloom_b99a_big1_xxl
+ sparse        | regress-test-bloom_big1
+ sparse        | regress-test-bloom_c250_num_hello
+ sparse        | regress-test-bloom_cab4_small1_small2
+ sparse        | regress-test-bloom_value
+ sparse        | regress-test-bloom_xxl
+ sparse        | _ts_meta_v2_first_o
+ sparse        | _ts_meta_v2_first_ts
+ sparse        | _ts_meta_v2_last_o
+ sparse        | _ts_meta_v2_last_ts
+ sparse_sister | _ts_meta_count
+ sparse_sister | _ts_meta_max_1
+ sparse_sister | _ts_meta_max_2
+ sparse_sister | _ts_meta_min_1
+ sparse_sister | _ts_meta_min_2
+ sparse_sister | regress-test-bloom_27f1_big1_big2
+ sparse_sister | regress-test-bloom_2cb5_boo_big1
+ sparse_sister | regress-test-bloom_4328_num_nowts
+ sparse_sister | regress-test-bloom_9774_o_big2
+ sparse_sister | regress-test-bloom_big1
+ sparse_sister | regress-test-bloom_big2
+ sparse_sister | regress-test-bloom_boo
+ sparse_sister | regress-test-bloom_c250_num_hello
+ sparse_sister | regress-test-bloom_cab4_small1_small2
+ sparse_sister | regress-test-bloom_hello
+ sparse_sister | _ts_meta_v2_first_o
+ sparse_sister | _ts_meta_v2_first_ts
+ sparse_sister | _ts_meta_v2_last_o
+ sparse_sister | _ts_meta_v2_last_ts
+ sparse_sister | _ts_meta_v2_max_nowts
+ sparse_sister | _ts_meta_v2_max_num
+ sparse_sister | _ts_meta_v2_max_small1
+ sparse_sister | _ts_meta_v2_max_small2
+ sparse_sister | _ts_meta_v2_max_value
+ sparse_sister | _ts_meta_v2_min_nowts
+ sparse_sister | _ts_meta_v2_min_num
+ sparse_sister | _ts_meta_v2_min_small1
+ sparse_sister | _ts_meta_v2_min_small2
+ sparse_sister | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse') and index is not null group by 1 order by 1;
                                                                                                                                                                                                                                                                                                                                                                                                                                                      index                                                                                                                                                                                                                                                                                                                                                                                                                                                      
@@ -387,58 +471,95 @@ select index from settings where relid = (select oid from pg_class where relname
  [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "xxl", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["value", "big1", "xxl"], "source": "config"}, {"type": "bloom", "column": ["o", "xxl"], "source": "config"}, {"type": "bloom", "column": ["big1", "xxl"], "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "minmax", "column": "o", "source": "orderby"}, {"type": "firstlast", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse' order by 1 asc;
- attname 
----------
+                attname                 
+----------------------------------------
+ _ts_meta_count
+ _ts_meta_max_1
+ _ts_meta_max_2
+ _ts_meta_min_1
+ _ts_meta_min_2
+ regress-test-bloom_07a7_value_big1_xxl
+ regress-test-bloom_2cb5_boo_big1
+ regress-test-bloom_4328_num_nowts
+ regress-test-bloom_43c0_o_xxl
+ regress-test-bloom_b99a_big1_xxl
+ regress-test-bloom_big1
+ regress-test-bloom_c250_num_hello
+ regress-test-bloom_cab4_small1_small2
+ regress-test-bloom_value
+ regress-test-bloom_xxl
+ _ts_meta_v2_first_o
+ _ts_meta_v2_first_ts
+ _ts_meta_v2_last_o
+ _ts_meta_v2_last_ts
+ big1
+ boo
+ cmax
+ cmin
+ ctid
+ hello
+ nowts
+ num
+ o
+ sby
+ small1
+ small2
+ tableoid
+ ts
+ value
+ xmax
+ xmin
+ xxl
 
 -- dropping a column that participates in a composite bloom filter
 alter table sparse drop column xxl;
 select relname,attname from metacols order by 1,2;
-         relname          |                attname                
---------------------------+---------------------------------------
- compress_hyper_2_2_chunk | _ts_meta_count
- compress_hyper_2_2_chunk | _ts_meta_max_1
- compress_hyper_2_2_chunk | _ts_meta_max_2
- compress_hyper_2_2_chunk | _ts_meta_min_1
- compress_hyper_2_2_chunk | _ts_meta_min_2
- compress_hyper_2_2_chunk | regress-test-bloom_2cb5_boo_big1
- compress_hyper_2_2_chunk | regress-test-bloom_4328_num_nowts
- compress_hyper_2_2_chunk | regress-test-bloom_big1
- compress_hyper_2_2_chunk | regress-test-bloom_c250_num_hello
- compress_hyper_2_2_chunk | regress-test-bloom_cab4_small1_small2
- compress_hyper_2_2_chunk | regress-test-bloom_value
- compress_hyper_2_2_chunk | _ts_meta_v2_first_o
- compress_hyper_2_2_chunk | _ts_meta_v2_first_ts
- compress_hyper_2_2_chunk | _ts_meta_v2_last_o
- compress_hyper_2_2_chunk | _ts_meta_v2_last_ts
- compress_hyper_4_4_chunk | _ts_meta_count
- compress_hyper_4_4_chunk | _ts_meta_max_1
- compress_hyper_4_4_chunk | _ts_meta_max_2
- compress_hyper_4_4_chunk | _ts_meta_min_1
- compress_hyper_4_4_chunk | _ts_meta_min_2
- compress_hyper_4_4_chunk | regress-test-bloom_27f1_big1_big2
- compress_hyper_4_4_chunk | regress-test-bloom_2cb5_boo_big1
- compress_hyper_4_4_chunk | regress-test-bloom_4328_num_nowts
- compress_hyper_4_4_chunk | regress-test-bloom_9774_o_big2
- compress_hyper_4_4_chunk | regress-test-bloom_big1
- compress_hyper_4_4_chunk | regress-test-bloom_big2
- compress_hyper_4_4_chunk | regress-test-bloom_boo
- compress_hyper_4_4_chunk | regress-test-bloom_c250_num_hello
- compress_hyper_4_4_chunk | regress-test-bloom_cab4_small1_small2
- compress_hyper_4_4_chunk | regress-test-bloom_hello
- compress_hyper_4_4_chunk | _ts_meta_v2_first_o
- compress_hyper_4_4_chunk | _ts_meta_v2_first_ts
- compress_hyper_4_4_chunk | _ts_meta_v2_last_o
- compress_hyper_4_4_chunk | _ts_meta_v2_last_ts
- compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
- compress_hyper_4_4_chunk | _ts_meta_v2_max_num
- compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
- compress_hyper_4_4_chunk | _ts_meta_v2_max_small2
- compress_hyper_4_4_chunk | _ts_meta_v2_max_value
- compress_hyper_4_4_chunk | _ts_meta_v2_min_nowts
- compress_hyper_4_4_chunk | _ts_meta_v2_min_num
- compress_hyper_4_4_chunk | _ts_meta_v2_min_small1
- compress_hyper_4_4_chunk | _ts_meta_v2_min_small2
- compress_hyper_4_4_chunk | _ts_meta_v2_min_value
+    relname    |                attname                
+---------------+---------------------------------------
+ sparse        | _ts_meta_count
+ sparse        | _ts_meta_max_1
+ sparse        | _ts_meta_max_2
+ sparse        | _ts_meta_min_1
+ sparse        | _ts_meta_min_2
+ sparse        | regress-test-bloom_2cb5_boo_big1
+ sparse        | regress-test-bloom_4328_num_nowts
+ sparse        | regress-test-bloom_big1
+ sparse        | regress-test-bloom_c250_num_hello
+ sparse        | regress-test-bloom_cab4_small1_small2
+ sparse        | regress-test-bloom_value
+ sparse        | _ts_meta_v2_first_o
+ sparse        | _ts_meta_v2_first_ts
+ sparse        | _ts_meta_v2_last_o
+ sparse        | _ts_meta_v2_last_ts
+ sparse_sister | _ts_meta_count
+ sparse_sister | _ts_meta_max_1
+ sparse_sister | _ts_meta_max_2
+ sparse_sister | _ts_meta_min_1
+ sparse_sister | _ts_meta_min_2
+ sparse_sister | regress-test-bloom_27f1_big1_big2
+ sparse_sister | regress-test-bloom_2cb5_boo_big1
+ sparse_sister | regress-test-bloom_4328_num_nowts
+ sparse_sister | regress-test-bloom_9774_o_big2
+ sparse_sister | regress-test-bloom_big1
+ sparse_sister | regress-test-bloom_big2
+ sparse_sister | regress-test-bloom_boo
+ sparse_sister | regress-test-bloom_c250_num_hello
+ sparse_sister | regress-test-bloom_cab4_small1_small2
+ sparse_sister | regress-test-bloom_hello
+ sparse_sister | _ts_meta_v2_first_o
+ sparse_sister | _ts_meta_v2_first_ts
+ sparse_sister | _ts_meta_v2_last_o
+ sparse_sister | _ts_meta_v2_last_ts
+ sparse_sister | _ts_meta_v2_max_nowts
+ sparse_sister | _ts_meta_v2_max_num
+ sparse_sister | _ts_meta_v2_max_small1
+ sparse_sister | _ts_meta_v2_max_small2
+ sparse_sister | _ts_meta_v2_max_value
+ sparse_sister | _ts_meta_v2_min_nowts
+ sparse_sister | _ts_meta_v2_min_num
+ sparse_sister | _ts_meta_v2_min_small1
+ sparse_sister | _ts_meta_v2_min_small2
+ sparse_sister | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse') and index is not null group by 1 order by 1;
                                                                                                                                                                                                                                                                                                                    index                                                                                                                                                                                                                                                                                                                    
@@ -446,8 +567,40 @@ select index from settings where relid = (select oid from pg_class where relname
  [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "minmax", "column": "o", "source": "orderby"}, {"type": "firstlast", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse' order by 1 asc;
- attname 
----------
+                attname                
+---------------------------------------
+ _ts_meta_count
+ _ts_meta_max_1
+ _ts_meta_max_2
+ _ts_meta_min_1
+ _ts_meta_min_2
+ regress-test-bloom_2cb5_boo_big1
+ regress-test-bloom_4328_num_nowts
+ regress-test-bloom_big1
+ regress-test-bloom_c250_num_hello
+ regress-test-bloom_cab4_small1_small2
+ regress-test-bloom_value
+ _ts_meta_v2_first_o
+ _ts_meta_v2_first_ts
+ _ts_meta_v2_last_o
+ _ts_meta_v2_last_ts
+ big1
+ boo
+ cmax
+ cmin
+ ctid
+ hello
+ nowts
+ num
+ o
+ sby
+ small1
+ small2
+ tableoid
+ ts
+ value
+ xmax
+ xmin
 
 -- droppping an orderby column should fail
 \set ON_ERROR_STOP 0
