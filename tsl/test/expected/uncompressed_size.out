@@ -34,14 +34,15 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_5_chunk
 
-SELECT _timescaledb_functions.compressed_data_info(time), _timescaledb_functions.compressed_data_info(device), _timescaledb_functions.compressed_data_info(value) FROM _timescaledb_internal.compress_hyper_2_6_chunk;
+SELECT compress_relid AS "COMPRESSED_RELATION" from show_chunks('t1') chunk JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=chunk ORDER BY chunk::text DESC LIMIT 1 \gset
+SELECT _timescaledb_functions.compressed_data_info(time), _timescaledb_functions.compressed_data_info(device), _timescaledb_functions.compressed_data_info(value) FROM :COMPRESSED_RELATION;
  compressed_data_info | compressed_data_info | compressed_data_info 
 ----------------------+----------------------+----------------------
  (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
  (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
  (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
 
-SELECT * FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_6_chunk');
+SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_RELATION');
  tuples | relation_size | index_size | total_size 
 --------+---------------+------------+------------
    3000 |        138000 |      60000 |     198000

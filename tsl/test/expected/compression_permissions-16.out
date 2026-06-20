@@ -15,19 +15,21 @@ SELECT (SELECT format('%I.%I', ht.schema_name, ht.table_name) FROM names
 	WHERE ct.schema_name = nspname AND ct.table_name = relname) AS compressed_acl
   FROM _timescaledb_catalog.hypertable ht
   LEFT JOIN _timescaledb_catalog.hypertable ct ON ht.compressed_hypertable_id = ct.id;
+-- Lists every compressed chunk relation with the ACL of the relation and
+-- of its parent hypertable. Compressed chunks are not separate catalog
+-- chunks, so the compressed relation is found through compression_settings.
 CREATE VIEW chunk_details AS
-WITH
-  names AS (SELECT * FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace)
-SELECT (SELECT format('%I.%I', ht.schema_name, ht.table_name) FROM names
-	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable,
-       (SELECT relacl FROM names
-	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable_acl,
-       (SELECT format('%I.%I', ch.schema_name, ch.table_name) FROM names
-	WHERE ch.schema_name = nspname AND ch.table_name = relname) AS chunk,
-       (SELECT relacl FROM names
-	WHERE ch.schema_name = nspname AND ch.table_name = relname) AS chunk_acl
+SELECT format('%I.%I', ht.schema_name, ht.table_name) AS hypertable,
+       htcls.relacl AS hypertable_acl,
+       format('%I.%I', cns.nspname, compress.relname) AS chunk,
+       compress.relacl AS chunk_acl
   FROM _timescaledb_catalog.hypertable ht
-  JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id;
+  JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
+  JOIN pg_class htcls ON htcls.oid = format('%I.%I', ht.schema_name, ht.table_name)::regclass
+  JOIN _timescaledb_catalog.compression_settings cs
+    ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+  JOIN pg_class compress ON compress.oid = cs.compress_relid
+  JOIN pg_namespace cns ON cns.oid = compress.relnamespace;
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
@@ -194,8 +196,8 @@ hypertable_acl |
 compressed     | _timescaledb_internal._compressed_hypertable_4
 compressed_acl | 
 
-SELECT htd.hypertable, htd.hypertable_acl, chunk, chunk_acl
-  FROM chunk_details chd JOIN hypertable_details htd ON chd.hypertable = htd.compressed
+SELECT hypertable, hypertable_acl, chunk, chunk_acl
+  FROM chunk_details WHERE hypertable = 'public.conditions'
 ORDER BY hypertable, chunk;
 -[ RECORD 1 ]--+------------------------------------------------
 hypertable     | public.conditions
@@ -231,8 +233,8 @@ hypertable_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 compressed     | _timescaledb_internal._compressed_hypertable_4
 compressed_acl | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 
-SELECT htd.hypertable, htd.hypertable_acl, chunk, chunk_acl
-  FROM chunk_details chd JOIN hypertable_details htd ON chd.hypertable = htd.compressed
+SELECT hypertable, hypertable_acl, chunk, chunk_acl
+  FROM chunk_details WHERE hypertable = 'public.conditions'
 ORDER BY hypertable, chunk;
 -[ RECORD 1 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
@@ -279,8 +281,8 @@ compress_chunk | _timescaledb_internal._hyper_3_20_chunk
 -[ RECORD 6 ]--+----------------------------------------
 compress_chunk | _timescaledb_internal._hyper_3_21_chunk
 
-SELECT htd.hypertable, htd.hypertable_acl, chunk, chunk_acl
-  FROM chunk_details chd JOIN hypertable_details htd ON chd.hypertable = htd.compressed
+SELECT hypertable, hypertable_acl, chunk, chunk_acl
+  FROM chunk_details WHERE hypertable = 'public.conditions'
 ORDER BY hypertable, chunk;
 -[ RECORD 1 ]--+---------------------------------------------------------------
 hypertable     | public.conditions
