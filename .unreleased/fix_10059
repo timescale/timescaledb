@@ -1,0 +1,1 @@
+Fixes: #10059 Fix error when using first/last aggregates in a HAVING clause
