@@ -995,10 +995,12 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *ord
 	}
 
 	/*
-	 * only do this optimization for hypertables with 1 dimension and queries
-	 * with an ORDER BY clause
+	 * Only do this optimization for queries that need some input ordering.
+	 * query_pathkeys covers the ordering a window function, GROUP BY or DISTINCT
+	 * needs. We also keep the ORDER BY check because query_pathkeys is empty when
+	 * the order column is fixed by an equality condition, which we still optimize.
 	 */
-	if (root->parse->sortClause == NIL)
+	if (root->query_pathkeys == NIL && root->parse->sortClause == NIL)
 	{
 		return false;
 	}

@@ -143,21 +143,21 @@ SHOW timescaledb.enable_optimizations;
    ->  GroupAggregate
          Group Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone))
          ->  Result
-               ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone)) DESC
-                     ->  Index Scan using _hyper_4_6_chunk_time_plain_date on _hyper_4_6_chunk
-                     ->  Index Scan using _hyper_4_7_chunk_time_plain_date on _hyper_4_7_chunk
-                     ->  Index Scan using _hyper_4_8_chunk_time_plain_date on _hyper_4_8_chunk
-                     ->  Index Scan using _hyper_4_9_chunk_time_plain_date on _hyper_4_9_chunk
-                     ->  Index Scan using _hyper_4_10_chunk_time_plain_date on _hyper_4_10_chunk
-                     ->  Index Scan using _hyper_4_11_chunk_time_plain_date on _hyper_4_11_chunk
-                     ->  Index Scan using _hyper_4_12_chunk_time_plain_date on _hyper_4_12_chunk
-                     ->  Index Scan using _hyper_4_13_chunk_time_plain_date on _hyper_4_13_chunk
-                     ->  Index Scan using _hyper_4_14_chunk_time_plain_date on _hyper_4_14_chunk
-                     ->  Index Scan using _hyper_4_15_chunk_time_plain_date on _hyper_4_15_chunk
-                     ->  Index Scan using _hyper_4_16_chunk_time_plain_date on _hyper_4_16_chunk
-                     ->  Index Scan using _hyper_4_17_chunk_time_plain_date on _hyper_4_17_chunk
+               ->  Custom Scan (ChunkAppend) on hyper_1_date
+                     Order: date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone) DESC
                      ->  Index Scan using _hyper_4_18_chunk_time_plain_date on _hyper_4_18_chunk
+                     ->  Index Scan using _hyper_4_17_chunk_time_plain_date on _hyper_4_17_chunk
+                     ->  Index Scan using _hyper_4_16_chunk_time_plain_date on _hyper_4_16_chunk
+                     ->  Index Scan using _hyper_4_15_chunk_time_plain_date on _hyper_4_15_chunk
+                     ->  Index Scan using _hyper_4_14_chunk_time_plain_date on _hyper_4_14_chunk
+                     ->  Index Scan using _hyper_4_13_chunk_time_plain_date on _hyper_4_13_chunk
+                     ->  Index Scan using _hyper_4_12_chunk_time_plain_date on _hyper_4_12_chunk
+                     ->  Index Scan using _hyper_4_11_chunk_time_plain_date on _hyper_4_11_chunk
+                     ->  Index Scan using _hyper_4_10_chunk_time_plain_date on _hyper_4_10_chunk
+                     ->  Index Scan using _hyper_4_9_chunk_time_plain_date on _hyper_4_9_chunk
+                     ->  Index Scan using _hyper_4_8_chunk_time_plain_date on _hyper_4_8_chunk
+                     ->  Index Scan using _hyper_4_7_chunk_time_plain_date on _hyper_4_7_chunk
+                     ->  Index Scan using _hyper_4_6_chunk_time_plain_date on _hyper_4_6_chunk
 
 --the minute and second results should be diff
 :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;

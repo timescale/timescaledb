@@ -3021,8 +3021,8 @@ GROUP BY 1;
    ->  GroupAggregate
          Group Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
          ->  Result
-               ->  Merge Append
-                     Sort Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Custom Scan (ChunkAppend) on metrics
+                     Order: time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk

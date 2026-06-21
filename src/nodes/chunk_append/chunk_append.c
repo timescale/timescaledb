@@ -12,10 +12,12 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "compat/compat.h"
 #include "func_cache.h"
 #include "guc.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner/planner.h"
+#include "utils.h"
 
 static Var *find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions);
 
@@ -497,9 +499,9 @@ bool
 ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 								  int *order_attno, bool *reverse)
 {
-	SortGroupClause *sort = linitial(root->parse->sortClause);
-	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
 	RangeTblEntry *rte = root->simple_rte_array[rel->relid];
+	SortGroupClause *sort;
+	TargetEntry *tle;
 	TypeCacheEntry *tce;
 	char *column;
 	Index ht_relid = rel->relid;
@@ -512,10 +514,45 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		   ts_guc_enable_chunk_append);
 
 	/*
-	 * only do this optimization for queries with an ORDER BY clause,
-	 * caller checked this, so only asserting
+	 * caller only calls us when the query requires some input ordering,
+	 * so only asserting
 	 */
-	Assert(root->parse->sortClause != NIL);
+	Assert(root->query_pathkeys != NIL || root->parse->sortClause != NIL);
+	Assert(order_attno != NULL && reverse != NULL);
+
+	if (root->query_pathkeys != NIL)
+	{
+		PathKey *pk = linitial_node(PathKey, root->query_pathkeys);
+		Var *pk_var = ts_ordered_append_var_from_pathkey(rel, root->query_pathkeys);
+
+		if (pk_var != NULL && pk_var->varattno > 0)
+		{
+			char *pk_column =
+				strVal(list_nth(rte->eref->colnames, AttrNumberGetAttrOffset(pk_var->varattno)));
+
+			if (namestrcmp(&ht->space->dimensions[0].fd.column_name, pk_column) == 0)
+			{
+				*order_attno = pk_var->varattno;
+				*reverse = (pk->pk_cmptype == COMPARE_GT);
+				return true;
+			}
+		}
+	}
+
+	/*
+	 * We get here when query_pathkeys is empty because the order column is fixed
+	 * by an equality condition, or its leading pathkey is not our first dimension
+	 * (mainly an outer join, whose condition is kept out of the equivalence
+	 * classes so the order only reaches us through joininfo). The ORDER BY path
+	 * below handles both. Without an ORDER BY there is nothing left to try.
+	 */
+	if (root->parse->sortClause == NIL)
+	{
+		return false;
+	}
+
+	sort = linitial(root->parse->sortClause);
+	tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
 
 	if (IsA(tle->expr, Var))
 	{
@@ -644,11 +681,53 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		return false;
 	}
 
-	Assert(order_attno != NULL && reverse != NULL);
 	*order_attno = ht_var->varattno;
 	*reverse = sort->sortop == tce->lt_opr ? false : true;
 
 	return true;
+}
+
+/*
+ * Var on rel that the leading pathkey requires ordering by, or NULL if it does
+ * not order by a plain column of rel. A bucketing function is resolved via its
+ * sort_transform, and only when it is the single ordering key.
+ */
+Var *
+ts_ordered_append_var_from_pathkey(RelOptInfo *rel, List *pathkeys)
+{
+	PathKey *pk = linitial_node(PathKey, pathkeys);
+	Expr *em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, rel);
+
+	if (em_expr == NULL)
+	{
+		return NULL;
+	}
+
+	/* direct column reference */
+	if (IsA(em_expr, Var))
+	{
+		return castNode(Var, em_expr);
+	}
+
+	/* Bucketing function: safe only as the single ordering key. */
+	if (IsA(em_expr, FuncExpr) && list_length(pathkeys) == 1)
+	{
+		FuncInfo *info = ts_func_cache_get_bucketing_func(castNode(FuncExpr, em_expr)->funcid);
+		Expr *transformed;
+
+		if (info == NULL || info->sort_transform == NULL)
+		{
+			return NULL;
+		}
+
+		transformed = info->sort_transform(castNode(FuncExpr, em_expr));
+		if (IsA(transformed, Var))
+		{
+			return castNode(Var, transformed);
+		}
+	}
+
+	return NULL;
 }
 
 /*

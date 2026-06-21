@@ -3678,11 +3678,14 @@ ORDER BY device;
 :PREFIX SELECT min(value ORDER BY time) FROM metrics;
 --- QUERY PLAN ---
  Aggregate
-   ->  Sort
-         Sort Key: metrics."time"
-         ->  Append
+   ->  Custom Scan (ChunkAppend) on metrics
+         Order: metrics."time"
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Sort
+               Sort Key: _hyper_1_3_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
                      ->  Seq Scan on compress_hyper_2_4_chunk
 
@@ -5492,11 +5495,14 @@ ORDER BY device;
 :PREFIX SELECT min(value ORDER BY time) FROM metrics;
 --- QUERY PLAN ---
  Aggregate
-   ->  Sort
-         Sort Key: metrics."time"
-         ->  Append
+   ->  Custom Scan (ChunkAppend) on metrics
+         Order: metrics."time"
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      ->  Seq Scan on compress_hyper_2_11_chunk
+         ->  Sort
+               Sort Key: _hyper_1_3_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
                      ->  Seq Scan on compress_hyper_2_12_chunk
 

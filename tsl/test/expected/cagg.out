@@ -1904,16 +1904,17 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1;
                Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
    ->  Sort
          Sort Key: (sum(conditions.temperature)) DESC
-         ->  Finalize HashAggregate
+         ->  Finalize GroupAggregate
                Group Key: (time_bucket('@ 7 days'::interval, conditions.timec))
-               ->  Append
-                     ->  Partial HashAggregate
+               ->  Custom Scan (ChunkAppend) on conditions
+                     Order: time_bucket('@ 7 days'::interval, conditions.timec)
+                     ->  Partial GroupAggregate
                            Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
                            ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
                                  Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
-                     ->  Partial HashAggregate
+                     ->  Partial GroupAggregate
                            Group Key: time_bucket('@ 7 days'::interval, _hyper_52_125_chunk.timec)
-                           ->  Seq Scan on _hyper_52_125_chunk
+                           ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
 
 -- Ordering by another column
 SELECT * FROM mat_m1 ORDER BY count;
@@ -1937,16 +1938,17 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                      Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
          ->  Sort
                Sort Key: (sum(conditions.temperature)) DESC
-               ->  Finalize HashAggregate
+               ->  Finalize GroupAggregate
                      Group Key: (time_bucket('@ 7 days'::interval, conditions.timec))
-                     ->  Append
-                           ->  Partial HashAggregate
+                     ->  Custom Scan (ChunkAppend) on conditions
+                           Order: time_bucket('@ 7 days'::interval, conditions.timec)
+                           ->  Partial GroupAggregate
                                  Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
                                  ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
                                        Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
-                           ->  Partial HashAggregate
+                           ->  Partial GroupAggregate
                                  Group Key: time_bucket('@ 7 days'::interval, _hyper_52_125_chunk.timec)
-                                 ->  Seq Scan on _hyper_52_125_chunk
+                                 ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
 
 -- Change the type of cagg
 ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);

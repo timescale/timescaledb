@@ -424,15 +424,15 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY ROLLUP(t);
                ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk (actual rows=7.00 loops=1)
                      Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
                      Worker 0:  actual rows=7.00 loops=1
+               ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk (actual rows=1.00 loops=1)
+                     Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
+                     Worker 0:  actual rows=1.00 loops=1
                ->  Seq Scan on _timescaledb_internal._hyper_3_6_chunk (actual rows=1.00 loops=1)
                      Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
                      Worker 0:  actual rows=1.00 loops=1
                ->  Seq Scan on _timescaledb_internal._hyper_3_7_chunk (actual rows=2.00 loops=1)
                      Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
                      Worker 0:  actual rows=2.00 loops=1
-               ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk (actual rows=1.00 loops=1)
-                     Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
-                     Worker 0:  actual rows=1.00 loops=1
 
 -- Check parallel fallback into a non-partial aggregation
 SET timescaledb.enable_chunkwise_aggregation = OFF;
@@ -537,8 +537,11 @@ GROUP BY
  Finalize GroupAggregate (actual rows=873.00 loops=1)
    Output: merge_append_test.start_time, merge_append_test.sensor_id, sum(merge_append_test.cost_recommendation_memory)
    Group Key: merge_append_test.start_time, merge_append_test.sensor_id
-   ->  Merge Append (actual rows=873.00 loops=1)
-         Sort Key: merge_append_test.start_time, merge_append_test.sensor_id
+   ->  Custom Scan (ChunkAppend) on public.merge_append_test (actual rows=873.00 loops=1)
+         Output: merge_append_test.start_time, merge_append_test.sensor_id, (PARTIAL sum(merge_append_test.cost_recommendation_memory))
+         Order: merge_append_test.start_time, merge_append_test.sensor_id
+         Startup Exclusion: false
+         Runtime Exclusion: false
          ->  Partial GroupAggregate (actual rows=648.00 loops=1)
                Output: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id, PARTIAL sum(_hyper_4_17_chunk.cost_recommendation_memory)
                Group Key: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id
