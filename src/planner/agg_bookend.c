@@ -514,10 +514,7 @@ find_first_last_aggs_walker(Node *node, List **context)
 		aggsortop = get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy);
 		if (!OidIsValid(aggsortop))
 		{
-			elog(ERROR,
-				 "Cannot resolve sort operator for function \"%s\" and type \"%s\"",
-				 format_procedure(aggref->aggfnoid),
-				 format_type_be(sort_oid));
+			return true; /* can't optimize, let runtime handle the error */
 		}
 
 		/* Used in projection */
