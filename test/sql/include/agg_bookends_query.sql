@@ -122,6 +122,25 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 
 ROLLBACK;
 
+-- two FIRST/LAST sharing the value column but ordering on different columns
+BEGIN;
+CREATE TABLE bookend_two_orderings(time timestamptz NOT NULL, time_alt timestamptz NOT NULL, val int NOT NULL);
+SELECT schema_name, table_name, created FROM create_hypertable('bookend_two_orderings', 'time');
+INSERT INTO bookend_two_orderings
+SELECT '2025-01-01'::timestamptz + g * interval '1 minute',
+       '2025-01-01'::timestamptz + (201 - g) * interval '1 minute',
+       g
+FROM generate_series(1, 200) g;
+CREATE INDEX ON bookend_two_orderings(time);
+CREATE INDEX ON bookend_two_orderings(time_alt);
+:PREFIX SELECT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+:PREFIX SELECT last(val, time), last(val, time_alt) FROM bookend_two_orderings;
+-- DISTINCT sorts on the first/last results, so the optimization must be skipped
+SET enable_hashagg = off;
+:PREFIX SELECT DISTINCT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+RESET enable_hashagg;
+ROLLBACK;
+
 -- Test with NULL numeric values
 BEGIN;
 TRUNCATE btest_numeric;
