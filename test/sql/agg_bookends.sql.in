@@ -78,3 +78,17 @@ FROM
 
 SET enable_partitionwise_aggregate = OFF;
 
+-- test error message for types without btree operator class
+CREATE TABLE weather_observations (ts timestamptz NOT NULL, location point);
+SELECT schema_name, table_name, created FROM create_hypertable('weather_observations', 'ts');
+INSERT INTO weather_observations VALUES ('2024-03-01', '(1,2)'), ('2024-03-02', '(3,4)');
+
+-- should work: sort key is timestamptz
+SELECT first(location, ts) FROM weather_observations;
+
+-- should raise a proper user-facing error, not an internal error
+\set ON_ERROR_STOP 0
+SELECT first(location, location) FROM weather_observations;
+SELECT last(location, location) FROM weather_observations;
+\set ON_ERROR_STOP 1
+
