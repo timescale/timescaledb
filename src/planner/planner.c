@@ -123,6 +123,7 @@ static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, Lis
  */
 static const char *TS_CTE_EXPAND = "ts_expand";
 static const char *TS_FK_EXPAND = "ts_fk_expand";
+static const char *TS_CTE_COMPRESSED_RELATION = "ts_compressed_relation";
 
 /*
  * A simplehash hash table that records the chunks and their corresponding
@@ -186,6 +187,20 @@ rte_mark_for_fk_expansion(RangeTblEntry *rte)
 	 * initially for hypertables.
 	 */
 	Assert(!rte->inh);
+}
+
+void
+ts_rte_mark_compressed_relation(RangeTblEntry *rte)
+{
+	Assert(rte->rtekind == RTE_RELATION);
+	Assert(rte->ctename == NULL);
+	rte->ctename = (char *) TS_CTE_COMPRESSED_RELATION;
+}
+
+static bool
+ts_rte_is_compressed_relation(const RangeTblEntry *rte)
+{
+	return rte->ctename == TS_CTE_COMPRESSED_RELATION;
 }
 
 bool
@@ -1531,6 +1546,17 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	}
 
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+
+	/*
+	 * Fast path for compressed relation built by ColumnarScan.
+	 * Don't need to classify relation as we already know what it is.
+	 */
+	if (ts_rte_is_compressed_relation(rte))
+	{
+		ts_create_private_reloptinfo(rel);
+		return;
+	}
+
 	Query *query = root->parse;
 	Hypertable *ht;
 	const TsRelType type = ts_classify_relation(root, rel, &ht);
