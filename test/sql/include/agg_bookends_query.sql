@@ -92,6 +92,17 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 -- can't do index scan when using FIRST/LAST in ORDER BY
 :PREFIX SELECT last(temp, time) FROM btest ORDER BY last(temp, time);
 
+-- do index scan when using FIRST/LAST in HAVING
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(temp, time) > 0;
+
+-- HAVING references a FIRST/LAST aggregate not present in the target list
+:PREFIX SELECT first(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+
+-- DISTINCT in HAVING while the target list has the same aggregate without DISTINCT
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(DISTINCT temp, time) > 0;
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(DISTINCT temp, time) IS NOT NULL;
+
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
 
