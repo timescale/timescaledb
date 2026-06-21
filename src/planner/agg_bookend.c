@@ -143,6 +143,10 @@ replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path, List *first_last_aggs)
 	((Path *) minmaxagg_path)->pathtarget->exprs =
 		(List *) mutate_aggref_node((Node *) ((Path *) minmaxagg_path)->pathtarget->exprs,
 									(void *) &context);
+
+	/* HAVING quals can also reference first/last aggregates */
+	minmaxagg_path->quals =
+		(List *) mutate_aggref_node((Node *) minmaxagg_path->quals, (void *) &context);
 }
 
 static StrategyNumber
@@ -538,9 +542,7 @@ find_first_last_aggs_walker(Node *node, List **context)
 		{
 			FirstLastAggInfo *existing = (FirstLastAggInfo *) lfirst(l);
 
-			mminfo = existing->m_agg_info;
-			if (mminfo->aggfnoid == aggref->aggfnoid && equal(mminfo->target, value->expr) &&
-				equal(existing->sort, sort->expr))
+			if (equal(existing->aggref, aggref))
 			{
 				return false;
 			}
