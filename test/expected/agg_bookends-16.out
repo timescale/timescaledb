@@ -2454,3 +2454,24 @@ SELECT time_bucket('3 year', time), last(time, longvalue) FROM partial_aggregati
  Thu Dec 31 16:00:00 2020 PST | Fri Jan 20 09:00:44 2023 PST
 
 SET enable_partitionwise_aggregate = OFF;
+-- test error message for types without btree operator class
+CREATE TABLE weather_observations (ts timestamptz NOT NULL, location point);
+SELECT create_hypertable('weather_observations', 'ts');
+         create_hypertable         
+-----------------------------------
+ (8,public,weather_observations,t)
+
+INSERT INTO weather_observations VALUES ('2024-03-01', '(1,2)'), ('2024-03-02', '(3,4)');
+-- should work: sort key is timestamptz
+SELECT first(location, ts) FROM weather_observations;
+ first 
+-------
+ (1,2)
+
+-- should raise a proper user-facing error, not an internal error
+\set ON_ERROR_STOP 0
+SELECT first(location, location) FROM weather_observations;
+ERROR:  could not find a < operator for type point
+SELECT last(location, location) FROM weather_observations;
+ERROR:  could not find a > operator for type point
+\set ON_ERROR_STOP 1
