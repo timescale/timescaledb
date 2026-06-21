@@ -2482,6 +2482,14 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					ExecComputeStoredGenerated(ctr->root_rri, estate, hypertable_slot, CMD_INSERT);
 				}
 
+				/* check WITH CHECK OPTIONs against the hypertable tuple
+				 * before it is mapped to chunk format below */
+				if (ctr->root_rri->ri_WithCheckOptions != NIL)
+				{
+					ExecWithCheckOptions(WCO_RLS_INSERT_CHECK, ctr->root_rri, hypertable_slot, estate);
+					ExecWithCheckOptions(WCO_VIEW_CHECK, ctr->root_rri, hypertable_slot, estate);
+				}
+
 				/*
 				 * Convert the slot to the chunk's rowtype if the chunk's
 				 * TupleDesc differs from the hypertable (e.g. due to dropped
@@ -2495,6 +2503,14 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					chunk_slot = execute_attr_map_slot(ctr->cis->hyper_to_chunk_map->attrMap,
 													   hypertable_slot,
 													   ctr->cis->slot);
+
+				/* enforce NOT NULL and CHECK constraints */
+				ResultRelInfo *chunk_rri = ctr->cis->result_relation_info;
+				if (chunk_rri->ri_RelationDesc->rd_att->constr)
+				{
+					chunk_slot->tts_tableOid = RelationGetRelid(ctr->cis->rel);
+					ExecConstraints(chunk_rri, chunk_slot, estate);
+				}
 
 				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, chunk_slot);
 				estate->es_processed++;
