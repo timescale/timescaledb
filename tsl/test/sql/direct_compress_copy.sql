@@ -236,3 +236,31 @@ COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-02 + I minute" 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
 ROLLBACK;
+
+-- Direct compress copy must still enforce CHECK and NOT NULL constraints
+CREATE TABLE metrics_check(time timestamptz NOT NULL, value int NOT NULL CHECK (value > 0))
+    WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.compress, tsdb.compress_orderby='time');
+SET timescaledb.enable_direct_compress_copy = true;
+\set ON_ERROR_STOP 0
+-- CHECK violation should be reported
+COPY metrics_check FROM STDIN WITH (FORMAT CSV);
+2025-01-01 00:00:00,1
+2025-01-01 00:01:00,-1
+2025-01-01 00:02:00,3
+\.
+-- NOT NULL violation should be reported
+COPY metrics_check FROM STDIN WITH (FORMAT CSV);
+2025-01-01 00:00:00,1
+2025-01-01 00:01:00,
+2025-01-01 00:02:00,3
+\.
+\set ON_ERROR_STOP 1
+-- valid rows copy without error
+COPY metrics_check FROM STDIN WITH (FORMAT CSV);
+2025-01-01 00:00:00,1
+2025-01-01 00:01:00,2
+2025-01-01 00:02:00,3
+\.
+SELECT count(*), min(value), max(value) FROM metrics_check;
+RESET timescaledb.enable_direct_compress_copy;
+DROP TABLE metrics_check;
