@@ -1,0 +1,1 @@
+Fixes: #10060 Fix first/last optimization returning the same value for aggregates that share the value column but order by different columns
