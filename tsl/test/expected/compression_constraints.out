@@ -433,3 +433,37 @@ CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
 ERROR:  duplicate key value violates unique constraint
 \set ON_ERROR_STOP 1
 ROLLBACK;
+DROP TABLE metrics CASCADE;
+-- test CHECK constraint on multiple compressed chunks
+-- reproduces use-after-free only detectable with sanitizers (#10045)
+CREATE TABLE sensor_readings(ts timestamptz NOT NULL, val int);
+SELECT create_hypertable('sensor_readings', 'ts', chunk_time_interval => INTERVAL '1 day');
+       create_hypertable       
+-------------------------------
+ (11,public,sensor_readings,t)
+
+INSERT INTO sensor_readings VALUES ('2024-01-01', 1), ('2024-01-02', NULL);
+SELECT count(*) AS num_chunks FROM show_chunks('sensor_readings');
+ num_chunks 
+------------
+          2
+
+ALTER TABLE sensor_readings SET (tsdb.compress);
+SELECT compress_chunk(c) FROM show_chunks('sensor_readings') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_34_chunk
+ _timescaledb_internal._hyper_11_35_chunk
+
+\set ON_ERROR_STOP 0
+ALTER TABLE sensor_readings ADD CONSTRAINT val_notnull CHECK (val IS NOT NULL);
+ERROR:  check constraint "val_notnull" of relation "_hyper_11_35_chunk" is violated by some row
+\set ON_ERROR_STOP 1
+-- check successful ALTER
+DELETE FROM sensor_readings WHERE val IS NULL;
+ALTER TABLE sensor_readings ADD CONSTRAINT val_notnull CHECK (val IS NOT NULL);
+\set ON_ERROR_STOP 0
+INSERT INTO sensor_readings VALUES ('2024-01-01', 1), ('2024-01-02', NULL);
+ERROR:  new row for relation "_hyper_11_35_chunk" violates check constraint "val_notnull"
+\set ON_ERROR_STOP 1
+DROP TABLE sensor_readings CASCADE;
