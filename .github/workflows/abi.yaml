@@ -22,18 +22,16 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
       pg18_abi_min: ${{ steps.config.outputs.pg18_abi_min }}
-      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest }}
       pg18_latest: ${{ steps.config.outputs.pg18_latest }}
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -45,13 +43,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 15, 16, 17, 18 ]
+        pg: [ 16, 17, 18 ]
         ignores:
           - 'net telemetry'
         include:
-          - pg: 15
-            builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
-            tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}
           - pg: 16
             builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
             tester: ${{ fromJson(needs.config.outputs.pg16_latest) }}
@@ -65,7 +60,7 @@ jobs:
     steps:
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Build extension with ${{ matrix.builder }}
       run: |

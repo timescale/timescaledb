@@ -1,1 +1,0 @@
-Fixes: #9982 Reject ALTER TABLE ... INHERIT when the parent is a hypertable

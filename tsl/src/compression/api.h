@@ -31,4 +31,4 @@ extern void compression_chunk_size_catalog_insert(int32 src_chunk_id, const Rela
 												  int64 rowcnt_frozen);
 extern Datum tsl_estimate_compressed_batch_size(PG_FUNCTION_ARGS);
 
-extern bool is_chunk_orderby_nonnullable(CompressionSettings *settings);
+extern bool is_chunk_orderby_nullhandling(CompressionSettings *settings);

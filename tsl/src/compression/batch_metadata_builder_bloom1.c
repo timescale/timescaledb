@@ -903,10 +903,14 @@ bloom1_hash(PG_FUNCTION_ARGS)
 		TupleDesc tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 
 		num_columns = tupdesc->natts;
-		Ensure(num_columns <= MAX_BLOOM_FILTER_COLUMNS,
-			   "composite bloom filter supports at most %d columns, got %d",
-			   MAX_BLOOM_FILTER_COLUMNS,
-			   num_columns);
+		if (num_columns > MAX_BLOOM_FILTER_COLUMNS)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("composite bloom filter supports at most %d columns, got %d",
+							MAX_BLOOM_FILTER_COLUMNS,
+							num_columns)));
+		}
 
 		for (int i = 0; i < num_columns; i++)
 		{
@@ -1223,6 +1227,7 @@ bloom1_contains_hash(Datum bloom_datum, uint64 hash)
 	const uint32 num_bits = 8 * VARSIZE_ANY_EXHDR(bloom);
 
 	/* Validate bloom structure */
+	CheckCompressedData(num_bits != 0);
 	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 	CheckCompressedData(num_bits >= 64);
 

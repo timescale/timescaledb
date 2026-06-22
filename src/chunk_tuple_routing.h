@@ -32,6 +32,16 @@ typedef struct ChunkTupleRouting
 	ChunkInsertState *cis;
 
 	SharedCounters *counters; /* shared counters for the current statement */
+
+	/*
+	 * Cached ON CONFLICT DO UPDATE unique-column check. The check is statement-constant,
+	 * so it runs once on the first compressed-chunk route and is reused for every later row.
+	 * conflict_update_col is the attribute number of a changed unique column to report,
+	 * or InvalidAttrNumber when no unique column changes. AttrNumber is only used for error
+	 * reporting.
+	 */
+	bool conflict_update_col_checked;
+	AttrNumber conflict_update_col;
 } ChunkTupleRouting;
 
 ChunkTupleRouting *ts_chunk_tuple_routing_create(EState *estate, Hypertable *ht,

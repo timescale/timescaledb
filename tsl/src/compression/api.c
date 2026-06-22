@@ -715,18 +715,21 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 }
 
 bool
-is_chunk_orderby_nonnullable(CompressionSettings *settings)
+is_chunk_orderby_nullhandling(CompressionSettings *settings)
 {
 	int num_orderby = ts_array_length(settings->fd.orderby);
 	const char *attname;
 	int attnum;
 	for (int i = 1; i <= num_orderby; i++)
 	{
-		attname = ts_array_get_element_text(settings->fd.orderby, i);
-		attnum = get_attnum(settings->fd.relid, attname);
-		if (!AttributeNumberIsValid(attnum) || !ts_get_attnotnull(settings->fd.relid, attnum))
+		if (orderby_sparse_kind(settings, i) != ORDERBY_SPARSE_FIRSTLAST)
 		{
-			return false;
+			attname = ts_array_get_element_text(settings->fd.orderby, i);
+			attnum = get_attnum(settings->fd.relid, attname);
+			if (!AttributeNumberIsValid(attnum) || !ts_get_attnotnull(settings->fd.relid, attnum))
+			{
+				return false;
+			}
 		}
 	}
 	return true;
@@ -777,19 +780,18 @@ recompress_chunk_impl(Chunk *chunk, bool recompress)
 
 		/* #9444: do not recompress when order by columns are nullable, do segmentwise
 		 * decompress/compress instead. It is due to compression min/max metadata not handling
-		 * NULLs. When we implement chunks with min/max NULL-handling metadata, this restriction can
-		 * be lifted.
+		 * NULLs. This restriction is lifted with first/last metadata index.
 		 */
-		bool nullable_orderby = !is_chunk_orderby_nonnullable(chunk_settings);
-		if (nullable_orderby)
+		bool orderby_not_handling_nulls = !is_chunk_orderby_nullhandling(chunk_settings);
+		if (orderby_not_handling_nulls)
 		{
 			elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-				 "in-memory recompression is disabled due to nullable order by, "
+				 "in-memory recompression is disabled due to nullable order by with no firstlast, "
 				 "performing segmentwise decompress/compress on chunk \"%s.%s\"",
 				 NameStr(chunk->fd.schema_name),
 				 NameStr(chunk->fd.table_name));
 		}
-		recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
+		recompress_chunk_segmentwise_impl(chunk, orderby_not_handling_nulls);
 		recompressed = true;
 	}
 	else

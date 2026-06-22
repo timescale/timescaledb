@@ -239,7 +239,7 @@ SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, ti
 ------------------------------+------------------------------
  Wed Jan 01 00:00:00 2025 PST | Sat Jan 04 02:00:00 2025 PST
 
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK order by 2;
  _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
@@ -282,7 +282,7 @@ SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, ti
 ------------------------------+------------------------------
  Wed Jan 01 00:00:00 2025 PST | Tue Jan 07 02:00:00 2025 PST
 
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should not see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK order by 2;
  _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
@@ -315,7 +315,7 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
  Custom Scan (ColumnarScan) on _hyper_1_33_chunk (actual rows=50.00 loops=1)
    ->  Seq Scan on compress_hyper_2_34_chunk (actual rows=10.00 loops=1)
 
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL \gset
 -- should have 10 batches
 SELECT count(*) FROM :COMPRESSED_CHUNK;
  count 
@@ -345,7 +345,7 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
    ->  Custom Scan (ColumnarScan) on _hyper_1_37_chunk (actual rows=5042.00 loops=1)
          ->  Seq Scan on compress_hyper_2_38_chunk (actual rows=8.00 loops=1)
 
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should see overlapping batches per device
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, device from :COMPRESSED_CHUNK order by 4, 2;
  _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        | device 
@@ -382,7 +382,7 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
    ->  Custom Scan (ColumnarScan) on _hyper_1_41_chunk (actual rows=2522.00 loops=1)
          ->  Seq Scan on compress_hyper_2_42_chunk (actual rows=4.00 loops=1)
 
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) order by 1 limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 limit 1 \gset
 -- should see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_min_2, _ts_meta_max_2 from :COMPRESSED_CHUNK order by 2, 4;
  _ts_meta_count | _ts_meta_min_1 | _ts_meta_max_1 |        _ts_meta_min_2        |        _ts_meta_max_2        

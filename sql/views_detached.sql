@@ -121,20 +121,28 @@ SELECT
   NULL::text AS sqlerrcode,
   NULL::text AS err_message;
 
-CREATE OR REPLACE VIEW timescaledb_information.job_history
-WITH (security_barrier = true) AS
-SELECT
-  NULL::bigint AS id,
-  NULL::integer AS job_id,
-  NULL::boolean AS succeeded,
-  NULL::text COLLATE "C" AS proc_schema,
-  NULL::text COLLATE "C" AS proc_name,
-  NULL::integer AS pid,
-  NULL::timestamptz AS start_time,
-  NULL::timestamptz AS finish_time,
-  NULL::jsonb AS config,
-  NULL::text AS sqlerrcode,
-  NULL::text AS err_message;
+-- only detach if the definition is correct, otherwise update script needs to drop the view to fix
+-- the conditional detach can be removed once we drop support for PG16
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_attribute WHERE attrelid='_timescaledb_internal.bgw_job_stat_history'::regclass AND attname = 'id' AND atttypid = 'bigint'::regtype) THEN
+    CREATE OR REPLACE VIEW timescaledb_information.job_history
+    WITH (security_barrier = true) AS
+    SELECT
+      NULL::bigint AS id,
+      NULL::integer AS job_id,
+      NULL::boolean AS succeeded,
+      NULL::text COLLATE "C" AS proc_schema,
+      NULL::text COLLATE "C" AS proc_name,
+      NULL::integer AS pid,
+      NULL::timestamptz AS start_time,
+      NULL::timestamptz AS finish_time,
+      NULL::jsonb AS config,
+      NULL::text AS sqlerrcode,
+      NULL::text AS err_message;
+    END IF;
+END
+$$;
 
 CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings AS
 SELECT

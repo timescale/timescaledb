@@ -31,7 +31,7 @@ jobs:
           libtest-most-perl tree jq
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Read configuration
       id: config
@@ -57,8 +57,8 @@ jobs:
     - name: Build PostgreSQL
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-       wget -q -O postgresql.tar.bz2 \
-         https://ftp.postgresql.org/pub/source/v${{ steps.config.outputs.PG15_LATEST }}/postgresql-${{ steps.config.outputs.PG15_LATEST }}.tar.bz2
+       wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
+         https://ftp.postgresql.org/pub/source/v${{ steps.config.outputs.PG18_LATEST }}/postgresql-${{ steps.config.outputs.PG18_LATEST }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
@@ -152,7 +152,7 @@ jobs:
         sudo apt-get install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Download the installation directory
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -204,7 +204,7 @@ jobs:
         find "tsl/test/fuzzing/compression/${{ matrix.case.algo }}-${{ matrix.case.pgtype }}" -type f -exec cp -n -t db/corpus {} +
         find "db/corpus-rowbyrow" -type f -exec cp -n -t db/corpus {} +
         find "db/corpus-bulk" -type f -exec cp -n -t db/corpus {} +
-        ls db/corpus | wc -l
+        find db/corpus -mindepth 1 -maxdepth 1 | wc -l
 
     - name: Run libfuzzer for compression
       run: |
@@ -254,7 +254,7 @@ jobs:
             exit 1
         fi
 
-        ls db/corpus | wc -l
+        find db/corpus -mindepth 1 -maxdepth 1 | wc -l
 
         fn="ts_read_compressed_data_directory('${{ matrix.case.algo }}',
                 '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')"
@@ -279,7 +279,7 @@ jobs:
         [ $errors -eq 0 ] || exit 1
 
         # Shouldn't have any WARNINGS in the log.
-        ! grep -F "] WARNING: " postmaster.log
+        if grep -F "] WARNING: " postmaster.log; then exit 1; fi
 
         # Check that the server is still alive.
         psql -c "select 1"

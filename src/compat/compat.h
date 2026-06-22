@@ -7,7 +7,6 @@
 
 #include <postgres.h>
 
-#include <commands/cluster.h>
 #include <commands/defrem.h>
 #include <commands/explain.h>
 #include <commands/trigger.h>
@@ -25,39 +24,43 @@
 
 #include "export.h"
 
-#define PG_MAJOR_MIN 15
-
 /*
  * Prevent building against upstream versions that had ABI breaking change (15.9, 16.5, 17.1)
  * that was reverted in the following release.
  */
 
-#define is_supported_pg_version_15(version) ((version >= 150010) && (version < 160000))
 #define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
 #define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
 #define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
+#define is_supported_pg_version_19(version) ((version >= 190000) && (version < 200000))
 
 /*
  * To compile with an unsupported version, use -DEXPERIMENTAL=ON with cmake.
  * (Useful when testing with unreleased versions)
  */
 #define is_supported_pg_version(version)                                                           \
-	(is_supported_pg_version_15(version) || is_supported_pg_version_16(version) ||                 \
-	 is_supported_pg_version_17(version) || is_supported_pg_version_18(version))
+	(is_supported_pg_version_16(version) || is_supported_pg_version_17(version) ||                 \
+	 is_supported_pg_version_18(version) || is_supported_pg_version_19(version))
 
-#define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
 #define PG17 is_supported_pg_version_17(PG_VERSION_NUM)
 #define PG18 is_supported_pg_version_18(PG_VERSION_NUM)
+#define PG19 is_supported_pg_version_19(PG_VERSION_NUM)
 
-#define PG15_LT (PG_VERSION_NUM < 150000)
-#define PG15_GE (PG_VERSION_NUM >= 150000)
 #define PG16_LT (PG_VERSION_NUM < 160000)
 #define PG16_GE (PG_VERSION_NUM >= 160000)
 #define PG17_LT (PG_VERSION_NUM < 170000)
 #define PG17_GE (PG_VERSION_NUM >= 170000)
 #define PG18_LT (PG_VERSION_NUM < 180000)
 #define PG18_GE (PG_VERSION_NUM >= 180000)
+#define PG19_LT (PG_VERSION_NUM < 190000)
+#define PG19_GE (PG_VERSION_NUM >= 190000)
+
+#if PG19_GE
+#include <commands/repack.h>
+#else
+#include <commands/cluster.h>
+#endif
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
@@ -123,17 +126,7 @@
  * behavior of the new version we simply adopt the new version's name.
  */
 
-#if PG16_LT
-#define ExecInsertIndexTuplesCompat(rri,                                                           \
-									slot,                                                          \
-									estate,                                                        \
-									update,                                                        \
-									noDupErr,                                                      \
-									specConflict,                                                  \
-									arbiterIndexes,                                                \
-									onlySummarizing)                                               \
-	ExecInsertIndexTuples(rri, slot, estate, update, noDupErr, specConflict, arbiterIndexes)
-#else
+#if PG19_LT
 #define ExecInsertIndexTuplesCompat(rri,                                                           \
 									slot,                                                          \
 									estate,                                                        \
@@ -150,62 +143,6 @@
 						  specConflict,                                                            \
 						  arbiterIndexes,                                                          \
 						  onlySummarizing)
-#endif
-
-/*
- * PG16 removed outerjoin_delayed, nullable_relids arguments from make_restrictinfo
- * https://github.com/postgres/postgres/commit/b448f1c8d8
- *
- * PG16 adds three new parameter - has_clone, is_clone and incompatible_relids, as a
- * part of fixing the filtering of "cloned" outer-join quals
- * https://github.com/postgres/postgres/commit/991a3df227
- */
-
-#if PG16_LT
-#define make_restrictinfo_compat(root,                                                             \
-								 clause,                                                           \
-								 is_pushed_down,                                                   \
-								 has_clone,                                                        \
-								 is_clone,                                                         \
-								 outerjoin_delayed,                                                \
-								 pseudoconstant,                                                   \
-								 security_level,                                                   \
-								 required_relids,                                                  \
-								 incompatible_relids,                                              \
-								 outer_relids,                                                     \
-								 nullable_relids)                                                  \
-	make_restrictinfo(root,                                                                        \
-					  clause,                                                                      \
-					  is_pushed_down,                                                              \
-					  outerjoin_delayed,                                                           \
-					  pseudoconstant,                                                              \
-					  security_level,                                                              \
-					  required_relids,                                                             \
-					  outer_relids,                                                                \
-					  nullable_relids)
-#else
-#define make_restrictinfo_compat(root,                                                             \
-								 clause,                                                           \
-								 is_pushed_down,                                                   \
-								 has_clone,                                                        \
-								 is_clone,                                                         \
-								 outerjoin_delayed,                                                \
-								 pseudoconstant,                                                   \
-								 security_level,                                                   \
-								 required_relids,                                                  \
-								 incompatible_relids,                                              \
-								 outer_relids,                                                     \
-								 nullable_relids)                                                  \
-	make_restrictinfo(root,                                                                        \
-					  clause,                                                                      \
-					  is_pushed_down,                                                              \
-					  has_clone,                                                                   \
-					  is_clone,                                                                    \
-					  pseudoconstant,                                                              \
-					  security_level,                                                              \
-					  required_relids,                                                             \
-					  incompatible_relids,                                                         \
-					  outer_relids)
 #endif
 
 /* fmgr
@@ -316,117 +253,13 @@ get_reindex_options(ReindexStmt *stmt)
 #define lfifth(l) lfirst(list_nth_cell(l, 4))
 #define lfifth_int(l) lfirst_int(list_nth_cell(l, 4))
 
-#if PG16_LT
-/*
- * PG15 consolidate VACUUM xid cutoff logic.
- *
- * https://github.com/postgres/postgres/commit/efa4a946
- *
- * PG16 introduced VacuumCutoffs so define here for previous PG versions.
- */
-struct VacuumCutoffs
-{
-	TransactionId relfrozenxid;
-	MultiXactId relminmxid;
-	TransactionId OldestXmin;
-	MultiXactId OldestMxact;
-	TransactionId FreezeLimit;
-	MultiXactId MultiXactCutoff;
-};
-
-static inline bool
-vacuum_get_cutoffs(Relation rel, const VacuumParams *params, struct VacuumCutoffs *cutoffs)
-{
-	return vacuum_set_xid_limits(rel,
-								 0,
-								 0,
-								 0,
-								 0,
-								 &cutoffs->OldestXmin,
-								 &cutoffs->OldestMxact,
-								 &cutoffs->FreezeLimit,
-								 &cutoffs->MultiXactCutoff);
-}
-#endif
-
-/*
- * PG16 adds TMResult argument to ExecBRUpdateTriggers
- * https://github.com/postgres/postgres/commit/7103ebb7
- * this was backported to PG15 in
- * https://github.com/postgres/postgres/commit/7d9a75713ab9
- */
-#if PG15
-#define ExecBRUpdateTriggers(estate,                                                               \
-							 epqstate,                                                             \
-							 resultRelInfo,                                                        \
-							 tupleid,                                                              \
-							 oldtuple,                                                             \
-							 slot,                                                                 \
-							 result,                                                               \
-							 tmfdp)                                                                \
-	ExecBRUpdateTriggersNew(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
-#endif
-
-/*
- * PG16 adds TMResult argument to ExecBRDeleteTriggers
- * https://github.com/postgres/postgres/commit/9321c79c
- * this was backported to PG15 in
- * https://github.com/postgres/postgres/commit/7d9a75713ab9
- */
-#if PG15
-#define ExecBRDeleteTriggers(estate,                                                               \
-							 epqstate,                                                             \
-							 relinfo,                                                              \
-							 tupleid,                                                              \
-							 fdw_trigtuple,                                                        \
-							 epqslot,                                                              \
-							 tmresult,                                                             \
-							 tmfd)                                                                 \
-	ExecBRDeleteTriggersNew(estate,                                                                \
-							epqstate,                                                              \
-							relinfo,                                                               \
-							tupleid,                                                               \
-							fdw_trigtuple,                                                         \
-							epqslot,                                                               \
-							tmresult,                                                              \
-							tmfd)
-#endif
-
-#if PG16_GE
-#define pgstat_get_local_beentry_by_index_compat(idx) pgstat_get_local_beentry_by_index(idx)
-#else
-#define pgstat_get_local_beentry_by_index_compat(idx) pgstat_fetch_stat_local_beentry(idx)
-#endif
-
 /*
  * PG16 adds a new parameter to DefineIndex, total_parts, that takes
  * in the total number of direct and indirect partitions of the relation.
  *
  * https://github.com/postgres/postgres/commit/27f5c712
  */
-#if PG16_LT
-#define DefineIndexCompat(relationId,                                                              \
-						  stmt,                                                                    \
-						  indexRelationId,                                                         \
-						  parentIndexId,                                                           \
-						  parentConstraintId,                                                      \
-						  total_parts,                                                             \
-						  is_alter_table,                                                          \
-						  check_rights,                                                            \
-						  check_not_in_use,                                                        \
-						  skip_build,                                                              \
-						  quiet)                                                                   \
-	DefineIndex(relationId,                                                                        \
-				stmt,                                                                              \
-				indexRelationId,                                                                   \
-				parentIndexId,                                                                     \
-				parentConstraintId,                                                                \
-				is_alter_table,                                                                    \
-				check_rights,                                                                      \
-				check_not_in_use,                                                                  \
-				skip_build,                                                                        \
-				quiet)
-#else
+#if PG19_LT
 #define DefineIndexCompat(relationId,                                                              \
 						  stmt,                                                                    \
 						  indexRelationId,                                                         \
@@ -449,57 +282,6 @@ vacuum_get_cutoffs(Relation rel, const VacuumParams *params, struct VacuumCutoff
 				check_not_in_use,                                                                  \
 				skip_build,                                                                        \
 				quiet)
-#endif
-
-#if PG16_LT
-#include <catalog/pg_database_d.h>
-#include <catalog/pg_foreign_server_d.h>
-#include <catalog/pg_namespace_d.h>
-#include <catalog/pg_proc_d.h>
-#include <catalog/pg_tablespace_d.h>
-#include <utils/acl.h>
-
-/*
- * PG16 replaces most aclcheck functions with a common object_aclcheck() function
- * https://github.com/postgres/postgres/commit/c727f511
- */
-static inline AclResult
-object_aclcheck(Oid classid, Oid objectid, Oid roleid, AclMode mode)
-{
-	switch (classid)
-	{
-		case DatabaseRelationId:
-			return pg_database_aclcheck(objectid, roleid, mode);
-		case ForeignServerRelationId:
-			return pg_foreign_server_aclcheck(objectid, roleid, mode);
-		case NamespaceRelationId:
-			return pg_namespace_aclcheck(objectid, roleid, mode);
-		case ProcedureRelationId:
-			return pg_proc_aclcheck(objectid, roleid, mode);
-		case TableSpaceRelationId:
-			return pg_tablespace_aclcheck(objectid, roleid, mode);
-		default:
-			Assert(false);
-	}
-	return ACLCHECK_NOT_OWNER;
-}
-
-/*
- * PG16 replaces pg_foo_ownercheck() functions with a common object_ownercheck() function
- * https://github.com/postgres/postgres/commit/afbfc029
- */
-static inline bool
-object_ownercheck(Oid classid, Oid objectid, Oid roleid)
-{
-	switch (classid)
-	{
-		case RelationRelationId:
-			return pg_class_ownercheck(objectid, roleid);
-		default:
-			Assert(false);
-	}
-	return false;
-}
 #endif
 
 #if PG17_LT
@@ -674,20 +456,6 @@ pg_cmp_u32(uint32 a, uint32 b)
 
 #endif
 
-#if PG16_LT
-/*
- * Similarly, wrappers around labs()/llabs() matching our int64.
- *
- * Introduced on PG16:
- * https://github.com/postgres/postgres/commit/357cfefb09115292cfb98d504199e6df8201c957
- */
-#ifdef HAVE_LONG_INT_64
-#define i64abs(i) labs(i)
-#else
-#define i64abs(i) llabs(i)
-#endif
-#endif
-
 /*
  * PG18 adds IndexScanInstrumentation parameter to index_beginscan
  * https://github.com/postgres/postgres/commit/0fbceae8
@@ -708,14 +476,6 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys)
-#endif
-
-#if PG16_LT
-#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
-	make_range(typcache, lower, upper, empty)
-#else
-#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
-	make_range(typcache, lower, upper, empty, escontext)
 #endif
 
 /* Copied from PG17. We can remove it once we deprecate older versions. */
@@ -862,32 +622,6 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 						 tmresult,                                                                 \
 						 tmfd,                                                                     \
 						 is_merge_delete)
-#endif
-
-/* PG16 removes create_new_ph parameter from add_vars_to_targetlist
- * https://github.com/postgres/postgres/commit/2489d76c4906 */
-#if PG16_LT
-#define add_vars_to_targetlist_compat(root, vars, where_needed)                                    \
-	add_vars_to_targetlist(root, vars, where_needed, false)
-#else
-#define add_vars_to_targetlist_compat(root, vars, where_needed)                                    \
-	add_vars_to_targetlist(root, vars, where_needed)
-#endif
-
-/* PG16 consolidates ItemPointer to datum functions so backported it to PG15
- * https://github.com/postgres/postgres/commit/bd944884e92a */
-#if PG16_LT
-static inline ItemPointer
-DatumGetItemPointer(Datum X)
-{
-	return (ItemPointer) DatumGetPointer(X);
-}
-
-static inline Datum
-ItemPointerGetDatum(const ItemPointerData *X)
-{
-	return PointerGetDatum(X);
-}
 #endif
 
 #if PG17_LT
