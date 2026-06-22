@@ -738,7 +738,8 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 		case T_CaseExpr:
 		{
 			CaseExpr const *c = (CaseExpr const *) argument;
-			return vector_slot_evaluate_case(dcontext, slot, filter, c, expr_cache);
+			result = vector_slot_evaluate_case(dcontext, slot, filter, c, expr_cache);
+			break;
 		}
 		default:
 			Ensure(false,

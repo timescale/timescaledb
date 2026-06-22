@@ -225,19 +225,6 @@ select sum((b = (i > 0))::int), count(b = (i > 0)) from aggexpr;
 -- Multiple qual evaluation with caching.
 select sum(abs(v - 500)), count(abs(v - 500)) from aggexpr where abs(v) > 3 AND abs(v) < 9;
 
--- CASE statement with cached parts
-select sum(case when i > 0 then abs(v)::int2 else length(x)::int4 end)
-from aggexpr
-where abs(v) < 10 and length(x) < 10
-;
-
--- CASE statement that is itself cached
-select sum(x) from (
-    select (case when i > 0 then abs(v)::int2 else length(x)::int4 end) as x
-    from aggexpr) t
-where x > 0
-;
-
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 
@@ -254,6 +241,20 @@ select sum(case when i > 10 then (case when i > 12 then length(x) else -length(x
 select avg(case when v > 500 then v - 500 else 500 - v end) from aggexpr group by x order by 1 limit 10;
 
 select count(*), case when v > 503 then x else 'something-else' end from aggexpr group by 2 order by 1, 2 limit 10;
+
+-- CASE statement with different types and common subexpressions. They can't
+-- actually be cached, because the evaluation context is different.
+select sum(case when i > 0 then abs(v)::int2 else length(x)::int4 end)
+from aggexpr
+where abs(v) < 10 and length(x) < 10
+;
+
+-- CASE statement that is itself a common subexpression.
+select sum(x) from (
+    select (case when i > 0 then abs(v)::int2 else length(x)::int4 end) as x
+    from aggexpr) t
+where x > 0
+;
 
 -- The short circuit semantics for CASE is not implemented at the moment.
 \set ON_ERROR_STOP 0

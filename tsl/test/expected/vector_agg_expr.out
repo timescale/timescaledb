@@ -2120,25 +2120,6 @@ select sum(abs(v - 500)), count(abs(v - 500)) from aggexpr where abs(v) > 3 AND 
 -------+-------
  14820 |    30
 
--- CASE statement with cached parts
-select sum(case when i > 0 then abs(v)::int2 else length(x)::int4 end)
-from aggexpr
-where abs(v) < 10 and length(x) < 10
-;
- sum 
------
- 120
-
--- CASE statement that is itself cached
-select sum(x) from (
-    select (case when i > 0 then abs(v)::int2 else length(x)::int4 end) as x
-    from aggexpr) t
-where x > 0
-;
-   sum   
----------
- 3321885
-
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 -- Some CASE statements are vectorized.
@@ -2192,6 +2173,26 @@ select count(*), case when v > 503 then x else 'something-else' end from aggexpr
      1 | 141014
      1 | 141016
      1 | 141018
+
+-- CASE statement with different types and common subexpressions. They can't
+-- actually be cached, because the evaluation context is different.
+select sum(case when i > 0 then abs(v)::int2 else length(x)::int4 end)
+from aggexpr
+where abs(v) < 10 and length(x) < 10
+;
+ sum 
+-----
+ 120
+
+-- CASE statement that is itself a common subexpression.
+select sum(x) from (
+    select (case when i > 0 then abs(v)::int2 else length(x)::int4 end) as x
+    from aggexpr) t
+where x > 0
+;
+   sum   
+---------
+ 3321885
 
 -- The short circuit semantics for CASE is not implemented at the moment.
 \set ON_ERROR_STOP 0
