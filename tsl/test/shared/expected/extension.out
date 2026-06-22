@@ -37,6 +37,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.cagg_watermark(integer)
  _timescaledb_functions.cagg_watermark_materialized(integer)
  _timescaledb_functions.chunk_constraint_add_table_constraint(integer,name,name)
+ _timescaledb_functions.chunk_get_hypertable(regclass)
  _timescaledb_functions.chunk_id_from_relid(oid)
  _timescaledb_functions.chunk_rewrite_cleanup()
  _timescaledb_functions.chunk_statistics(regclass,regclass,timestamp with time zone)

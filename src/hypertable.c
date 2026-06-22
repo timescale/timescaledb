@@ -359,8 +359,8 @@ hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
-Oid
-ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
+static inline Oid
+hypertable_id_to_relid_internal(int32 hypertable_id, Snapshot snapshot, bool return_invalid)
 {
 	Catalog *catalog = ts_catalog_get();
 	Oid relid = InvalidOid;
@@ -374,6 +374,7 @@ ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
 		.data = &relid,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
+		.snapshot = snapshot,
 	};
 
 	/* Perform an index scan on the hypertable pkey. */
@@ -393,6 +394,18 @@ ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
 	}
 
 	return relid;
+}
+
+Oid
+ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
+{
+	return hypertable_id_to_relid_internal(hypertable_id, NULL, return_invalid);
+}
+
+Oid
+ts_hypertable_id_to_relid_with_snapshot(int32 hypertable_id, Snapshot snapshot, bool return_invalid)
+{
+	return hypertable_id_to_relid_internal(hypertable_id, snapshot, return_invalid);
 }
 
 int32

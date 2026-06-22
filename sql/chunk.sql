@@ -17,6 +17,19 @@ AS $$ SELECT _timescaledb_functions.chunk_status_text(_timescaledb_functions.chu
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_id_from_relid(relid OID) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_chunk_id_from_relid' LANGUAGE C STABLE STRICT PARALLEL SAFE;
 
+-- Returns hypertable regclass if the relation is a chunk (for compressed chunk
+-- the main hypertable is returned, not the internal compressed hypertable) and
+-- `NULL` otherwise. The returned value of `is_compressed` is `true` if the
+-- chunk is an internal compressed chunk, `false` if it is a regular or
+-- uncompressed chunk (even if it has an associated with it compressed chunk)
+-- and `NULL` if the relation is not a chunk.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_get_hypertable(
+      IN  relation      REGCLASS,
+      OUT hypertable    REGCLASS,
+      OUT is_compressed BOOLEAN)
+RETURNS RECORD
+AS '@MODULE_PATHNAME@', 'ts_chunk_get_hypertable' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
 -- Show the definition of a chunk.
 CREATE OR REPLACE FUNCTION _timescaledb_functions.show_chunk(chunk REGCLASS)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB)
