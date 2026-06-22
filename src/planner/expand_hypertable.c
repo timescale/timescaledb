@@ -1451,7 +1451,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * Add the newly added Vars to parent's reltarget.  We needn't worry
 		 * about the children's reltargets, they'll be made later.
 		 */
-		add_vars_to_targetlist_compat(root, newvars, bms_make_singleton(0));
+		add_vars_to_targetlist(root, newvars, bms_make_singleton(0));
 	}
 
 	/*
@@ -1620,18 +1620,16 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 			Relids relids = pull_varnos(ctx->root, (Node *) propagated);
 			RestrictInfo *restrictinfo;
 
-			restrictinfo = make_restrictinfo_compat(root,
-													(Expr *) propagated,
-													true,
-													false,
-													false,
-													false,
-													false,
-													ctx->root->qual_security_level,
-													relids,
-													NULL,
-													NULL,
-													NULL);
+			restrictinfo = make_restrictinfo(root,
+											 (Expr *) propagated,
+											 true,
+											 false,
+											 false,
+											 false,
+											 ctx->root->qual_security_level,
+											 relids,
+											 NULL,
+											 NULL);
 			ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
 			/*
 			 * since hypertable expansion happens later, the propagated

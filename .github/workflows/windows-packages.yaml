@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ "15", "16", "17", "18" ]
+        pg: [ "16", "17", "18" ]
     env:
       # PostgreSQL configuration
       PGPORT: 6543
@@ -30,7 +30,7 @@ jobs:
     steps:
 
     - name: Checkout TimescaleDB source
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Get version
       id: version
@@ -43,15 +43,24 @@ jobs:
         echo "version=$version" >>$env:GITHUB_OUTPUT
 
     - name: Install PostgreSQL ${{ matrix.pg }}
+      shell: pwsh
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
+        choco config set webRequestTimeoutSeconds 120
+        choco config set commandExecutionTimeoutSeconds 600
         choco uninstall postgresql --yes
         winget install --id PostgreSQL.PostgreSQL.${{ matrix.pg }} --accept-source-agreements --accept-package-agreements --disable-interactivity
-        choco install wget
+        winget install --id=JernejSimoncic.Wget -e --accept-source-agreements --accept-package-agreements --disable-interactivity
+        wget --version
+
+    - name: Add winget shims to PATH
+      shell: pwsh
+      run: |
+        echo "$env:LOCALAPPDATA\Microsoft\WinGet\Links" >> $env:GITHUB_PATH
 
     - name: Download TimescaleDB
-      run: "wget --quiet -O timescaledb.zip 'https://github.com/timescale/timescaledb/releases/download/\
+      run: "wget --quiet --tries=6 --waitretry=15 -O timescaledb.zip 'https://github.com/timescale/timescaledb/releases/download/\
         ${{ steps.version.outputs.version }}/timescaledb-postgresql-${{ matrix.pg}}-windows-amd64.zip'"
 
     - name: Install TimescaleDB

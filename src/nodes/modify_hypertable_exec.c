@@ -76,6 +76,7 @@
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "hypertable_cache.h"
+#include "indexing.h"
 #include "modify_hypertable.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "utils.h"
@@ -132,11 +133,7 @@ typedef struct ModifyTableContext
 typedef struct UpdateContext
 {
 	bool		crossPartUpdate;	/* was it a cross-partition update? */
-#if PG16_LT
-	bool updateIndexes; /* index update required? */
-#else
 	TU_UpdateIndexes updateIndexes; /* Which index updates are required? */
-#endif
 
 	/*
 	 * Lock mode to acquire on the latest tuple version before performing
@@ -1695,20 +1692,12 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 	List	   *recheckIndexes = NIL;
 
 	/* insert index entries for tuple if necessary */
-#if PG15
-	if (resultRelInfo->ri_NumIndices > 0 && updateCxt->updateIndexes)
-		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
-											   slot, context->estate,
-											   true, false,
-											   NULL, NIL);
-#else
 	if (resultRelInfo->ri_NumIndices > 0 && (updateCxt->updateIndexes != TU_None))
 		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 											   slot, context->estate,
 											   true, false,
 											   NULL, NIL,
 											   (updateCxt->updateIndexes == TU_Summarizing));
-#endif
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
@@ -1802,9 +1791,7 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	}
 	else
 	{
-#if PG16_GE
 		ItemPointerData lockedtid;
-#endif
 
 		/*
 		 * If we generate a new candidate tuple after EvalPlanQual testing, we
@@ -1814,9 +1801,7 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		 * to do them again.)
 		 */
 redo_act:
-#if PG16_GE
 		lockedtid = *tupleid;
-#endif
 		result = ExecUpdateAct(context, resultRelInfo, tupleid, oldtuple, slot,
 							   canSetTag, &updateCxt);
 
@@ -1910,7 +1895,6 @@ redo_act:
 								ExecInitUpdateProjection(context->mtstate,
 														 resultRelInfo);
 
-#if PG16_GE
 							if (resultRelInfo->ri_needLockTagTuple)
 							{
 								UnlockTuple(resultRelationDesc,
@@ -1918,7 +1902,6 @@ redo_act:
 								LockTuple(resultRelationDesc,
 										  tupleid, InplaceUpdateTupleLock);
 							}
-#endif
 
 							/* Fetch the most recent version of old tuple. */
 							oldSlot = resultRelInfo->ri_oldTupleSlot;
@@ -2050,9 +2033,7 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 	 * supporting this; we'd just need to handle LOCKTAG_TUPLE like the other
 	 * ExecUpdate() caller.
 	 */
-#if PG16_GE
 	Assert(!resultRelInfo->ri_needLockTagTuple);
-#endif
 
 	/* Determine lock mode to use */
 	lockmode = ExecUpdateLockMode(context->estate, resultRelInfo);
@@ -2250,6 +2231,7 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 static void fireASTriggers(ModifyTableState *node);
 static void fireBSTriggers(ModifyTableState *node);
 static void checkDMLOnFrozenChunk(ResultRelInfo *resultRelInfo);
+static void error_on_compressed_unique_conflict_update(ChunkTupleRouting *ctr);
 
 /* ----------------------------------------------------------------
  *	   ExecModifyTable
@@ -2329,54 +2311,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	context.epqstate = &node->mt_epqstate;
 	context.estate = estate;
 
-	/*
-	 * For UPDATE/DELETE/MERGE on compressed hypertable, decompress chunks and
-	 * move rows to uncompressed chunks. For MERGE, decompression is needed
-	 * even for DO NOTHING or INSERT-only actions because the join evaluation
-	 * must see the actual rows to correctly determine matched vs not-matched.
-	 */
-	if ((operation == CMD_DELETE || operation == CMD_UPDATE || operation == CMD_MERGE) &&
-		!ht_state->comp_chunks_processed)
-	{
-		/* Modify snapshot only if something got decompressed */
-		if (ts_cm_functions->decompress_target_segments &&
-			ts_cm_functions->decompress_target_segments(ht_state))
-		{
-			ht_state->comp_chunks_processed = true;
-			/*
-			 * save snapshot set during ExecutorStart(), since this is the same
-			 * snapshot used to SeqScan of uncompressed chunks
-			 */
-			ht_state->snapshot = estate->es_snapshot;
-
-			CommandCounterIncrement();
-			/* use a static copy of current transaction snapshot
-			 * this needs to be a copy so we don't read trigger updates
-			 */
-			estate->es_snapshot = RegisterSnapshot(GetTransactionSnapshot());
-			/* mark rows visible */
-			estate->es_output_cid = GetCurrentCommandId(true);
-
-			if (ts_guc_max_tuples_decompressed_per_dml > 0)
-			{
-				if (ht_state->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-							 errmsg("tuple decompression limit exceeded by operation"),
-							 errdetail("current limit: %d, tuples decompressed: %lld",
-									   ts_guc_max_tuples_decompressed_per_dml,
-									   (long long int) ht_state->tuples_decompressed),
-							 errhint("Consider increasing "
-									 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
-									 "set to 0 (unlimited).")));
-				}
-			}
-		}
-		/* Account for tuples deleted via batch DELETE in compressed chunks */
-		if (operation == CMD_DELETE && ht_state->tuples_deleted > 0)
-			estate->es_processed += ht_state->tuples_deleted;
-	}
 	/*
 	 * Fetch rows from subplan, and execute the required table modification
 	 * for each row.
@@ -2476,6 +2410,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 			/* Find or create the insert state matching the point */
 			ctr->cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
+			error_on_compressed_unique_conflict_update(ctr);
 			bool update_counter = ctr->cis->onConflictAction == ONCONFLICT_UPDATE;
 			ts_chunk_tuple_routing_decompress_for_insert(ctr->cis, ctr->root_rri, hypertable_slot, ctr->estate, update_counter);
 			MemoryContextSwitchTo(oldctx);
@@ -2953,6 +2888,107 @@ static void checkDMLOnFrozenChunk(ResultRelInfo *resultRelInfo)
 	}
 }
 
+/*
+ * Find a column changed by the ON CONFLICT DO UPDATE SET clause that is part of
+ * a unique constraint, or InvalidAttrNumber when none changes. The result only
+ * depends on the statement, not on the routed row.
+ */
+static AttrNumber
+conflict_update_changed_unique_col(ModifyTable *mt, Relation rel)
+{
+	/* Columns covered by any unique index (PRIMARY KEY included). */
+	Bitmapset *unique_columns = ts_indexing_relation_get_unique_columns(rel);
+
+	if (unique_columns == NULL)
+		return InvalidAttrNumber;
+
+	/*
+	 * onConflictSet holds the SET expressions; its non-junk entries correspond
+	 * in order to the target column numbers in onConflictCols.
+	 */
+	ListCell *col_cell = list_head(mt->onConflictCols);
+	ListCell *set_cell;
+	foreach (set_cell, mt->onConflictSet)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, set_cell);
+
+		if (tle->resjunk)
+			continue;
+		if (col_cell == NULL)
+			break;
+
+		AttrNumber attno = lfirst_int(col_cell);
+		col_cell = lnext(mt->onConflictCols, col_cell);
+
+		if (!bms_is_member(attno, unique_columns))
+			continue;
+
+		/*
+		 * Allow the no-op "SET col = excluded.col". Planning rewrites the
+		 * excluded Var's varno to INNER_VAR, but varnosyn/varattnosyn still
+		 * carry the original reference to the excluded pseudo-relation.
+		 */
+		Expr *expr = tle->expr;
+		if (IsA(expr, RelabelType))
+			expr = ((RelabelType *) expr)->arg;
+		if (IsA(expr, Var))
+		{
+			Var *var = (Var *) expr;
+			if (var->varnosyn == mt->exclRelRTI && var->varattnosyn == attno)
+				continue;
+		}
+
+		return attno;
+	}
+
+	return InvalidAttrNumber;
+}
+
+/*
+ * Reject INSERT ... ON CONFLICT DO UPDATE on a compressed chunk when the SET
+ * clause changes a column that is part of a unique constraint.
+ *
+ * Like a plain UPDATE of a unique column, this could move a row onto a key held
+ * by a row that is still compressed and therefore invisible to the unique
+ * indexes, silently introducing a duplicate. Setting a key column to its own
+ * excluded value (SET col = excluded.col) does not change the value and stays
+ * allowed, as that is a common UPSERT idiom.
+ */
+static void
+error_on_compressed_unique_conflict_update(ChunkTupleRouting *ctr)
+{
+	ChunkInsertState *cis = ctr->cis;
+	ModifyTable *mt = ctr->mht_state ? ctr->mht_state->mt : NULL;
+
+	if (mt == NULL || cis->onConflictAction != ONCONFLICT_UPDATE || !cis->chunk_compressed)
+		return;
+
+	/* Result relation and ON CONFLICT columns share the root relation's attribute space. */
+	Relation rel = ctr->root_rri->ri_RelationDesc;
+
+	/*
+	 * The check is statement-constant but reaching it requires a compressed
+	 * target chunk, so compute it on the first such row and reuse it after that
+	 * instead of reopening every index per row.
+	 */
+	if (!ctr->conflict_update_col_checked)
+	{
+		ctr->conflict_update_col = conflict_update_changed_unique_col(mt, rel);
+		ctr->conflict_update_col_checked = true;
+	}
+
+	if (ctr->conflict_update_col == InvalidAttrNumber)
+		return;
+
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("cannot update column \"%s\" of a compressed chunk",
+					get_attname(RelationGetRelid(rel), ctr->conflict_update_col, false)),
+			 errdetail("ON CONFLICT DO UPDATE cannot change a column that is part of a unique "
+					   "constraint on a compressed chunk."),
+			 errhint("Decompress the chunk before running this statement.")));
+}
+
 
 /*
  * Check and execute the first qualifying MATCHED action. The current target
@@ -3112,12 +3148,8 @@ lmerge_matched:;
 
 				if (!ExecUpdatePrologue(context, resultRelInfo, tupleid, NULL, newslot, &result))
 				{
-#if PG16_LT
-					result = TM_Ok;
-#else
 					if (result == TM_Ok)
 						return NULL;
-#endif
 
 					/* if not TM_OK, it is concurrent update/delete */
 					break;
@@ -3151,14 +3183,10 @@ lmerge_matched:;
 #endif
 				if (!ExecDeletePrologue(context, resultRelInfo, tupleid, NULL, NULL, &result))
 				{
-#if PG16_LT
-					result = TM_Ok;
-#else
 					if (result == TM_Ok)
 						return NULL; /* "do nothing" */
 
 						/* if not TM_OK, it is concurrent update/delete */
-#endif
 					break;
 				}
 				result = ExecDeleteAct(context, resultRelInfo, tupleid, false);

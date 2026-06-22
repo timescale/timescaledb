@@ -269,16 +269,12 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	Bitmapset *uncompressed_attrs_found = NULL;
 	Bitmapset *selectedCols = NULL;
 
-#if PG16_LT
-	selectedCols = info->ht_rte->selectedCols;
-#else
 	if (info->ht_rte->perminfoindex > 0)
 	{
 		RTEPermissionInfo *perminfo =
 			getRTEPermissionInfo(context->root->parse->rteperminfos, info->ht_rte);
 		selectedCols = perminfo->selectedCols;
 	}
-#endif
 	/*
 	 * TODO this way to determine which columns are used is actually wrong, see
 	 * https://github.com/timescale/timescaledb/issues/4195#issuecomment-1104238863
@@ -577,9 +573,7 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 						  var->vartypmod,
 						  var->varcollid,
 						  var->varlevelsup);
-#if PG16_GE
 		new_var->varnullingrels = var->varnullingrels;
-#endif
 
 		if (!AttributeNumberIsValid(new_var->varattno))
 		{

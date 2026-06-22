@@ -56,7 +56,7 @@ jobs:
         || '' }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - name: Read configuration
       if: env.key
       id: setter
@@ -89,7 +89,7 @@ jobs:
           jq postgresql-client ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 200
 
@@ -127,7 +127,7 @@ jobs:
     - name: Build PostgreSQL ${{ needs.config.outputs.pg_latest }} if not in cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ needs.config.outputs.pg_latest }}/postgresql-${{ needs.config.outputs.pg_latest }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
@@ -241,7 +241,8 @@ jobs:
 
     - name: Check for reproducer
       id: repro
-      run: test -f ~/llm-fuzzer-repro.sql && echo "found=true" >> $GITHUB_OUTPUT || true
+      run: |
+        if [ -f ~/llm-fuzzer-repro.sql ]; then echo "found=true" >> "$GITHUB_OUTPUT"; fi
 
     - name: Rebuild after fuzzing
       if: steps.repro.outputs.found == 'true'

@@ -219,17 +219,21 @@ JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
 ORDER BY cc.chunk_id, ds.dimension_id;
 \endif
 
--- Show attnum of all regclass objects belonging to our extension
+-- Show attributes of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken
+-- attstattarget default is -1 in PG16 and NULL in later versions
 SELECT
-  att.attrelid::regclass,
-  att.attnum,
-  att.attname
+  a.attrelid::regclass, a.attnum, a.attname, a.atttypid::regtype, a.attlen, a.atttypmod,
+  a.attndims, a.attbyval, a.attalign, a.attstorage, a.attcompression, a.attnotnull,
+  a.atthasdef, a.atthasmissing, a.attidentity, a.attgenerated, a.attisdropped, a.attislocal,
+  a.attinhcount, a.attcollation::regcollation,
+  NULLIF(a.attstattarget, -1) AS attstattarget,
+  a.attacl, a.attoptions, a.attfdwoptions, a.attmissingval
 FROM pg_depend dep
   INNER JOIN pg_extension ext ON (dep.refobjid=ext.oid AND ext.extname = 'timescaledb')
-  INNER JOIN pg_attribute att ON (att.attrelid=dep.objid AND att.attnum > 0)
+  INNER JOIN pg_attribute a ON (a.attrelid=dep.objid AND a.attnum > 0)
 WHERE classid='pg_class'::regclass
-ORDER BY attrelid::regclass::text,att.attnum;
+ORDER BY attrelid::regclass::text COLLATE "C", a.attnum;
 
 -- Show constraints, stripping numeric prefixes so the legacy
 -- "<chunk_id>_<seq>_<parent>" form (2.27.1) and the new "<chunk_id>_<parent>"

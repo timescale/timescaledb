@@ -1738,11 +1738,7 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 		 * If indexes on metadata columns are added in the future,
 		 * this will need to handle index updates via update_indexes.
 		 */
-#if PG16_LT
-		bool update_indexes;
-#else
 		TU_UpdateIndexes update_indexes;
-#endif
 		simple_table_tuple_update(compressed_rel,
 								  &tid,
 								  update_slot,
