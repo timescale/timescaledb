@@ -21,10 +21,19 @@
 #include "compat/compat.h"
 
 #include "estimate.h"
+#include "func_cache.h"
 #include "gapfill.h"
 #include "gapfill_internal.h"
 #include "import/list.h"
 #include "utils.h"
+
+bool
+gapfill_is_extension_function(Oid funcid, const char *name)
+{
+	FuncInfo *finfo = ts_func_cache_get(funcid);
+
+	return finfo != NULL && strncmp(finfo->funcname, name, NAMEDATALEN) == 0;
+}
 
 static CustomScanMethods gapfill_plan_methods = {
 	.CustomName = "GapFill",
@@ -119,8 +128,7 @@ contains_nonconstant_expr(Node *node)
 static inline bool
 is_gapfill_function_call(FuncExpr *call)
 {
-	char *func_name = get_func_name(call->funcid);
-	return strncmp(func_name, GAPFILL_FUNCTION, NAMEDATALEN) == 0;
+	return gapfill_is_extension_function(call->funcid, GAPFILL_FUNCTION);
 }
 
 /*
@@ -129,9 +137,8 @@ is_gapfill_function_call(FuncExpr *call)
 static inline bool
 is_marker_function_call(FuncExpr *call)
 {
-	char *func_name = get_func_name(call->funcid);
-	return strncmp(func_name, GAPFILL_LOCF_FUNCTION, NAMEDATALEN) == 0 ||
-		   strncmp(func_name, GAPFILL_INTERPOLATE_FUNCTION, NAMEDATALEN) == 0;
+	return gapfill_is_extension_function(call->funcid, GAPFILL_LOCF_FUNCTION) ||
+		   gapfill_is_extension_function(call->funcid, GAPFILL_INTERPOLATE_FUNCTION);
 }
 
 /*
@@ -204,15 +211,11 @@ static bool
 gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 {
 	int num_groupby_pathkeys;
-#if PG16_LT
-	num_groupby_pathkeys = list_length(root->group_pathkeys);
-#else
-	/* In PG16 group_pathkeys can contain additional pathkeys
+	/* group_pathkeys can contain additional pathkeys
 	 * used for optimization on ordered aggregates.
 	 * We only want to deal with group by elements only here.
 	 */
 	num_groupby_pathkeys = root->num_groupby_pathkeys;
-#endif
 
 	if (list_length(subpath->pathkeys) != num_groupby_pathkeys)
 	{
@@ -577,14 +580,10 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 	}
 }
 
-static int
-estimate_gapfill_groups(PlannerInfo *root, int path_rows)
+static double
+estimate_gapfill_groups(PlannerInfo *root, double path_rows)
 {
-#if PG16_GE
 	List *group_exprs = get_sortgrouplist_exprs(root->processed_groupClause, root->processed_tlist);
-#else
-	List *group_exprs = get_sortgrouplist_exprs(root->parse->groupClause, root->parse->targetList);
-#endif
 	/* If we group on something beside time_bucket_gapfill, estimate number of groups */
 	List *group_exprs_without_gapfill = NULL;
 	if (list_length(group_exprs) > 1)
@@ -601,7 +600,7 @@ estimate_gapfill_groups(PlannerInfo *root, int path_rows)
 			group_exprs_without_gapfill = lappend(group_exprs_without_gapfill, group_expr);
 		}
 	}
-	int num_groups = 1;
+	double num_groups = 1.0;
 	if (group_exprs_without_gapfill != NULL)
 	{
 		num_groups = estimate_num_groups(root, group_exprs_without_gapfill, path_rows, NULL, NULL);
@@ -633,7 +632,7 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 
 	/* If we can estimate gapfills, we should estimate number of non-gapfill groups
 	 * as gapfills will be repeated for each group. */
-	int num_groups = 1;
+	double num_groups = 1.0;
 	if (gapfill_rows > 0)
 	{
 		num_groups = estimate_gapfill_groups(root, subpath->rows);
@@ -663,15 +662,11 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 		List *new_order = NIL;
 		PathKey *pk_func = NULL;
 		int num_groupby_pathkeys;
-#if PG16_LT
-		num_groupby_pathkeys = list_length(root->group_pathkeys);
-#else
-		/* In PG16 group_pathkeys can contain additional pathkeys
+		/* group_pathkeys can contain additional pathkeys
 		 * used for optimization on ordered aggregates.
 		 * We only want to deal with group by elements only here.
 		 */
 		num_groupby_pathkeys = root->num_groupby_pathkeys;
-#endif
 		int i;
 		/* subpath does not have correct order */
 		for (i = 0; i < num_groupby_pathkeys; i++)

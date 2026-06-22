@@ -38,18 +38,16 @@ jobs:
       fail-fast: false
       matrix:
         image: [
-            "timescaledb:latest-pg15",
             "timescaledb:latest-pg16",
             "timescaledb:latest-pg17",
             "timescaledb:latest-pg18",
-            "timescaledb-ha:pg15",
             "timescaledb-ha:pg16",
             "timescaledb-ha:pg17",
             "timescaledb-ha:pg18",
           ]
 
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Get version of latest release
       id: versions

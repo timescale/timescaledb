@@ -279,3 +279,66 @@ DROP TABLE gf8844_table1;
 DROP TABLE gf8844_table2;
 
 RESET timezone;
+
+-- Test that there is no overflow when number of gapfill groups exceeds INT_MAX
+CREATE TABLE gf_t1(t int, d int);
+INSERT INTO gf_t1 SELECT i % 10, i FROM generate_series(1, 50000) i;
+ANALYZE gf_t1;
+
+-- Cross join: 50000 * 50000 = 2.5e9 estimated rows, exceeding INT_MAX (2,147,483,647).
+-- GROUP BY with high-cardinality columns makes the aggregate estimate ~2.5e9 groups.
+EXPLAIN (costs off) SELECT time_bucket_gapfill(1, t1.t, 0, 10), t1.d, t2.d
+FROM gf_t1 t1, gf_t1 t2
+GROUP BY 1, 2, 3;
+
+drop table gf_t1 cascade;
+
+-- Issue #9971: a user-defined function named time_bucket_gapfill is not treated as ours
+CREATE TABLE gf9971(sensor_id int);
+INSERT INTO gf9971 VALUES (1), (2), (3);
+
+CREATE FUNCTION public.time_bucket_gapfill(bucket_width int, reading_time int, label text)
+RETURNS int AS $$
+BEGIN
+    RETURN reading_time / bucket_width * bucket_width;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+EXPLAIN (costs off) SELECT time_bucket_gapfill(10, sensor_id, 'label'::text)
+FROM gf9971
+WHERE sensor_id >= 0 AND sensor_id < 100
+GROUP BY 1;
+
+DROP FUNCTION public.time_bucket_gapfill(int, int, text);
+DROP TABLE gf9971;
+
+-- Issue #9971: user functions sharing a gapfill function name are not ours
+CREATE SCHEMA gf_userfn;
+CREATE FUNCTION gf_userfn.time_bucket_gapfill(v int, p text) RETURNS text
+  AS $$ BEGIN RETURN p || v::text; END; $$ LANGUAGE plpgsql IMMUTABLE;
+CREATE FUNCTION gf_userfn.locf(v int) RETURNS text
+  AS $$ BEGIN RETURN 'l' || v::text; END; $$ LANGUAGE plpgsql IMMUTABLE;
+CREATE FUNCTION gf_userfn.interpolate(v int) RETURNS text
+  AS $$ BEGIN RETURN 'i' || v::text; END; $$ LANGUAGE plpgsql IMMUTABLE;
+CREATE TABLE gf_userfn_t(ts timestamptz, val int);
+INSERT INTO gf_userfn_t VALUES ('2024-01-01 00:30', 1), ('2024-01-01 02:30', 2);
+
+-- same-named time_bucket_gapfill grouped on
+SELECT time_bucket_gapfill('1 hour', ts, '2024-01-01'::timestamptz, '2024-01-01 04:00'::timestamptz),
+       gf_userfn.time_bucket_gapfill(val, 'sensor_')
+FROM gf_userfn_t
+GROUP BY 1, 2;
+
+-- same-named locf and interpolate
+SELECT time_bucket_gapfill('1 hour', ts, '2024-01-01'::timestamptz, '2024-01-01 04:00'::timestamptz),
+       gf_userfn.locf(max(val))
+FROM gf_userfn_t GROUP BY 1;
+SELECT time_bucket_gapfill('1 hour', ts, '2024-01-01'::timestamptz, '2024-01-01 04:00'::timestamptz),
+       gf_userfn.interpolate(max(val))
+FROM gf_userfn_t GROUP BY 1;
+
+DROP TABLE gf_userfn_t;
+DROP FUNCTION gf_userfn.time_bucket_gapfill(int, text);
+DROP FUNCTION gf_userfn.locf(int);
+DROP FUNCTION gf_userfn.interpolate(int);
+DROP SCHEMA gf_userfn;

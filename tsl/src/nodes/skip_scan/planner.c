@@ -340,7 +340,6 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 		 * SELECT dev, dev FROM t; SELECT 1, dev FROM t; SELECT dev, time FROM t WHERE time = 100;
 		 */
 		SortGroupClause *distinct_clause = NULL;
-#if PG16_GE
 		foreach (lc, root->processed_distinctClause)
 		{
 			distinct_clause = (SortGroupClause *) lfirst(lc);
@@ -354,71 +353,7 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 				return NULL;
 			}
 		}
-#else
-		if (root->distinct_pathkeys)
-		{
-			foreach (lc, root->distinct_pathkeys)
-			{
-				PathKey *pathkey = (PathKey *) lfirst(lc);
-				if (pathkey->pk_eclass->ec_sortref)
-				{
-					foreach (lc, root->parse->distinctClause)
-					{
-						SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
-						if (clause->tleSortGroupRef == pathkey->pk_eclass->ec_sortref)
-						{
-							distinct_clause = clause;
-							break;
-						}
-					}
-					if (!distinct_clause)
-					{
-						return NULL;
-					}
-				}
-				/* We can get PathKey with ec_sortref = 0 in PG15
-				 * when False filter is not pushed into a relation with distinct column (i.e. it's
-				 * on top of a join), so need to support this case in PG15
-				 */
-				else
-				{
-					return NULL;
-				}
-
-				tlexpr = get_distint_clause_expr(root, distinct_clause);
-				if (tlexpr)
-				{
-					result = lappend(result, tlexpr);
-				}
-				else
-				{
-					return NULL;
-				}
-			}
-		}
-		/* In PG16+ we use LIMIT instead of UpperUniquePath for (numkeys = 0),
-		 * but in PG15- we would still create UpperUniquePath for (numkeys = 0), so handle this case
-		 * here
-		 */
-		else
-		{
-			foreach (lc, root->parse->distinctClause)
-			{
-				distinct_clause = lfirst_node(SortGroupClause, lc);
-				tlexpr = get_distint_clause_expr(root, distinct_clause);
-				if (tlexpr)
-				{
-					result = lappend(result, tlexpr);
-				}
-				else
-				{
-					return NULL;
-				}
-			}
-		}
-#endif
 	}
-#if PG16_GE
 	else if (stage == UPPERREL_GROUP_AGG)
 	{
 		/* Find all non-nested Aggref in the query target list */
@@ -486,7 +421,6 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 			}
 		}
 	}
-#endif
 	return result;
 }
 
@@ -526,19 +460,12 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 					return;
 				}
 
-#if PG16_GE
-				/* since PG16+ we no longer create UpperUniquePath with 0 numkeys,
-				 * we create LIMIT path instead, so shouldn't be here with 0 numkeys
-				 */
 				Assert(unique->numkeys >= 1);
-#endif
 				dpinfo->unique_path = (Path *) unique;
 				break;
 			}
 		}
 	}
-	/* Sorted inputs for Distinct aggs weren't supported until PG16 */
-#if PG16_GE
 	/* Look for Aggpath with eligible Distinct aggregates */
 	else if (dpinfo->stage == UPPERREL_GROUP_AGG)
 	{
@@ -573,7 +500,6 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 			}
 		}
 	}
-#endif
 	else
 	{
 		return;
@@ -1188,7 +1114,7 @@ static Var *
 get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *child_path,
 				 SkipKeyInfo *skinfo)
 {
-	RelOptInfo *rel = child_path->parent;
+	RelOptInfo *chunk_rel = child_path->parent;
 	RelOptInfo *indexed_rel = index_path->path.parent;
 
 	Assert(tlexpr && IsA(tlexpr, Var));
@@ -1196,33 +1122,32 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 
 	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
 
-	/* check whether a skip var is declared NOT NULL
-	 *  it's enough to check hypertable for NOT NULL
-	 *  as NOT NULL constraint will be propagated to and checked on all chunks
+	/*
+	 * Check whether a skip var is declared NOT NULL. It's enough to check
+	 * hypertable for NOT NULL, because the NOT NULL constraint will be
+	 * propagated to and checked on all chunks. Postgres doesn't set
+	 * RelOptInfo.notnullattnums for hypertable because it's an inheritance
+	 * parent, so check it against the catalog.
 	 */
-#if PG17_LT
 	skinfo->notnull = ts_get_attnotnull(ht_rte->relid, var->varattno);
-#else
-	RelOptInfo *baserel = ((Index) var->varno == rel->relid ? rel : rel->parent);
-	skinfo->notnull = bms_is_member(var->varattno, baserel->notnullattnums);
-#endif
 
 	/* If we are dealing with a hypertable Var extracted from distinctClause will point to
 	 * the parent hypertable while the IndexPath will be on a Chunk.
 	 * For a normal PG table they point to the same relation and we are done here. */
-	if ((Index) var->varno == rel->relid)
+	if ((Index) var->varno == chunk_rel->relid)
 	{
 		/* Get attribute number for distinct column on a normal PG table */
 		skinfo->indexed_column_attno = var->varattno;
 		return var;
 	}
 
-	RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
+	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 	RangeTblEntry *indexed_rte =
-		(indexed_rel == rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));
+		(indexed_rel == chunk_rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));
 
 	/* Check for hypertable */
-	if (!ts_is_hypertable(ht_rte->relid) || !bms_is_member(var->varno, rel->top_parent_relids))
+	if (!ts_is_hypertable(ht_rte->relid) ||
+		!bms_is_member(var->varno, chunk_rel->top_parent_relids))
 	{
 		return NULL;
 	}
@@ -1248,7 +1173,7 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 		skinfo->indexed_column_attno = var->varattno;
 	}
 
-	var->varno = rel->relid;
+	var->varno = chunk_rel->relid;
 
 	return var;
 }

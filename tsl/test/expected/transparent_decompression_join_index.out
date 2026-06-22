@@ -61,9 +61,9 @@ order by test.time;
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
          ->  Sort
-               Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
-               ->  Index Scan using compress_hyper_2_2_chunk_a_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_2_chunk
-                     Index Cond: ((_ts_meta_min_1 <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone))
+               Sort Key: compress_hyper_2_2_chunk._ts_meta_v2_last_time
+               ->  Index Scan using compress_hyper_2_2_chunk_a_b__ts_meta_v2_last_time__ts_meta_idx on compress_hyper_2_2_chunk
+                     Index Cond: ((_ts_meta_v2_last_time <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone) AND (_ts_meta_v2_first_time >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone))
    ->  Materialize
          ->  Unique
                ->  Sort
@@ -122,7 +122,7 @@ full join query_params q2
    ->  Hash Full Join
          Hash Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Index Scan using compress_hyper_2_2_chunk_a_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_2_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_a_b__ts_meta_v2_last_time__ts_meta_idx on compress_hyper_2_2_chunk
          ->  Hash
                ->  CTE Scan on query_params q
    ->  Hash

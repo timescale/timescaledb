@@ -13,6 +13,7 @@
 
 #include "chunk_constraint.h"
 #include "export.h"
+#include "hypercube.h"
 #include "hypertable.h"
 #include "ts_catalog/catalog.h"
 
@@ -68,12 +69,10 @@ typedef struct Chunk
 
 	/*
 	 * The hypercube defines the chunks position in the N-dimensional space.
-	 * Each of the N slices in the cube corresponds to a constraint on the
-	 * chunk table.
+	 * Each of the N slices in the cube corresponds to a CHECK constraint on
+	 * the chunk table.
 	 */
 	Hypercube *cube;
-	ChunkConstraints *constraints;
-
 } Chunk;
 
 /* This structure is used during the join of the chunk constraints to find
@@ -83,7 +82,6 @@ typedef struct ChunkStub
 {
 	int32 id;
 	Hypercube *cube;
-	ChunkConstraints *constraints;
 } ChunkStub;
 
 /*
@@ -107,13 +105,11 @@ typedef struct ChunkScanCtx
 	void *data;
 } ChunkScanCtx;
 
-/* Returns true if the stub has a full set of constraints, otherwise
- * false. Used to find a stub matching a point in an N-dimensional
- * hyperspace. */
+/* Returns true if the stub has a slice in every dimension. */
 static inline bool
 chunk_stub_is_complete(const ChunkStub *stub, const Hyperspace *space)
 {
-	return space->num_dimensions == stub->constraints->num_dimension_constraints;
+	return space->num_dimensions == stub->cube->num_slices;
 }
 
 /* The hash table entry for the ChunkScanCtx */
@@ -200,8 +196,6 @@ extern int ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemanam
 												const char *tablename, DropBehavior behavior);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
-extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,
-											 MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 
 extern TSDLLEXPORT bool ts_chunk_set_partial(Chunk *chunk);
@@ -212,13 +206,13 @@ extern TSDLLEXPORT bool ts_chunk_is_frozen(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
+extern TSDLLEXPORT void ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, Oid time_type, Oid arg_type,
 												 bool older_newer);
 extern TSDLLEXPORT Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
 									 const char *table_name, Oid chunk_table_relid, bool *created);
-extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_partial(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
@@ -228,7 +222,6 @@ extern TSDLLEXPORT bool ts_chunk_validate_chunk_status_for_operation(const Chunk
 																	 ChunkOperation cmd,
 																	 bool throw_error);
 
-extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(const Chunk *chunk);
 extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_chunk_status_text(PG_FUNCTION_ARGS);
@@ -242,8 +235,7 @@ extern Chunk *ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti
 												 const ChunkStub *stub,
 												 const ScanTupLock *slice_lock);
 
-extern TM_Result ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id,
-															 int32 *compressed_chunk_id);
+extern TM_Result ts_chunk_lock_for_creating_compressed_chunk(Chunk *chunk);
 extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);

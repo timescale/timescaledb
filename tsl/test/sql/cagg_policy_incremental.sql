@@ -199,7 +199,7 @@ FROM
 -- advance time by 3h so that job runs one more time
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '3 hour')::bigint * 1000000, true);
 
--- Should process all four batches in the past
+-- Should process all three batches in the past
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
@@ -495,10 +495,7 @@ WHERE materialization_id IN
 ORDER BY low;
 
 --verify that there is no duplicate/overlapping refreshes.
---Note that batch 1 and batch 12 contains 2 buckets instead of 1 bucket as set in the policy.
---This is due to the fact that we currently cut a batch of 30 days for monthly cagg,
---so first batch and batch containing February can have 2 buckets. After we have a cleaner solution to
---cut an exact batch size for variable-length buckets, this should be fixed.
+--Each batch should cover exactly 1 month (buckets_per_batch=1).
 
 SELECT * FROM sorted_bgw_log;
 
@@ -577,6 +574,398 @@ FROM
     ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
     EXCEPT
     (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+
+------------------------------------------------------------------------------------------
+-- Test variable-width bucket batching: demonstrates chunk gap skip and invalidation
+-- gap skip with non-null start/end offsets (no null-restoration).
+-- chunk_time_interval=25 days is intentionally not aligned with monthly buckets.
+--
+-- Chunk boundaries are fixed 25-day windows anchored to the Unix epoch
+-- (Jan 1 1970), so they fall at arbitrary calendar dates. The four data points land in:
+--   Mar 15 -> chunk [Feb 22, Mar 18): spans Feb and Mar bucket boundaries
+--   May 15 -> chunk [May  7, Jun  1): entirely within May
+--   Jun 10 -> chunk [Jun  1, Jun 26): entirely within June
+--   Oct 15 -> chunk [Oct  4, Oct 29): entirely within October
+--
+-- June is explicitly refreshed before the policy runs, consuming its invalidation.
+-- The sentinel [-inf, +inf] is cut into two residuals in mat_inval_log:
+--   left  [-inf,     May 31 23:59:59.999999]  (covers Mar and May)
+--   right [Jul 1,   +inf]                      (covers Oct and later)
+-- -> gap from Jun 1 to Jun 30 means June has no pending invalidation.
+--
+-- Expected batch behaviour (refresh_newest_first=false, buckets_per_batch=1,
+-- start_offset='10 years', end_offset='1 month'):
+--   Feb: batch [Feb 1, Mar 1) -- EMPTY: the Feb 22 chunk touches the Feb bucket but
+--        no data falls in February; illustrates a chunk intersecting a bucket boundary
+--   Mar: batch generated  (Mar chunk overlaps Mar bucket + left-residual inval)
+--   Apr: SKIPPED          (chunk gap: no chunks in April)
+--   May: batch generated  (May chunk + left-residual inval)
+--   Jun: SKIPPED          (invalidation gap: inval was consumed by explicit refresh)
+--   Jul-Sep: SKIPPED      (chunk gap)
+--   Oct: batch generated  (Oct chunk + right-residual inval)
+-- No null-restoration: start_offset and end_offset are both non-null.
+-- Final batches: [Feb 1, Mar 1),  [Mar 1, Apr 1),  [May 1, Jun 1),  [Oct 1, Nov 1).
+------------------------------------------------------------------------------------------
+-- Monthly bucket boundaries are at midnight UTC; set timezone to avoid PST-shift issues.
+SET timezone = 'UTC';
+CREATE TABLE sparse_data (
+    time TIMESTAMPTZ NOT NULL,
+    value INT
+);
+SELECT FROM create_hypertable('sparse_data', by_range('time', INTERVAL '25 days'));
+
+INSERT INTO sparse_data VALUES
+    ('2024-03-15 00:00:00+00', 3),   -- lands in chunk [Feb 22, Mar 18)
+    ('2024-05-15 00:00:00+00', 5),   -- lands in chunk [May  7, Jun  1)
+    ('2024-06-10 00:00:00+00', 6),   -- lands in chunk [Jun  1, Jun 26)
+    ('2024-10-15 00:00:00+00', 10);  -- lands in chunk [Oct  4, Oct 29)
+
+CREATE MATERIALIZED VIEW sparse_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 month'::interval, time) AS bucket, count(*) AS cnt
+FROM sparse_data
+GROUP BY bucket
+WITH NO DATA;
+
+-- Consume June's invalidation so the June bucket has no pending invalidation.
+CALL refresh_continuous_aggregate('sparse_cagg',
+    '2024-06-01'::timestamptz, '2024-07-01'::timestamptz);
+
+-- Validate dimension slices: four chunks showing the epoch-aligned boundaries.
+SELECT
+    _timescaledb_functions.to_timestamp(ds.range_start) AS range_start,
+    _timescaledb_functions.to_timestamp(ds.range_end)   AS range_end
+FROM _timescaledb_catalog.dimension_slice ds
+JOIN _timescaledb_catalog.dimension d ON d.id = ds.dimension_id
+JOIN _timescaledb_catalog.hypertable h ON h.id = d.hypertable_id
+WHERE h.table_name = 'sparse_data'
+ORDER BY ds.range_start;
+
+-- Validate invalidation log: two residuals with a gap over June.
+SELECT
+    _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+    _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'sparse_cagg'
+)
+ORDER BY lowest_modified_value;
+
+SELECT add_continuous_aggregate_policy('sparse_cagg',
+    start_offset => INTERVAL '10 years',
+    end_offset => INTERVAL '1 month',
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 1,
+    refresh_newest_first => false
+) AS sparse_job_id \gset
+
+-- Four batches expected: [Feb 1, Mar 1) empty, [Mar 1, Apr 1), [May 1, Jun 1), [Oct 1, Nov 1).
+-- Apr/Jul/Aug/Sep skipped (chunk gap), Jun skipped (invalidation gap).
+SET client_min_messages TO DEBUG1;
+CALL run_job(:sparse_job_id);
+RESET client_min_messages;
+
+------------------------------------------------------------------------------------------
+-- Similar test using a fixed 10-day bucket CAgg on the same sparse_data table.
+-- time_bucket('10 days', ...) uses Jan 3 2000 as origin. Relevant 2024 boundaries:
+--   Feb 16, Feb 26, Mar 7, Mar 17, Mar 27, ..., May 6, May 16, May 26,
+--   Jun 5, Jun 15, Jun 25, Jul 5, ..., Oct 3, Oct 13, Oct 23, Nov 2, ...
+--
+-- Refresh [Jun 5, Jun 25) consumes two 10-day June buckets, leaving:
+--   left  [-inf,     Jun  4 23:59:59.999999]
+--   right [Jun 25,  +inf]
+--
+-- start_offset='10 years': window start is far in the past; jump logic advances
+-- directly to cagg_current_bucket_start(Feb 22) = Feb 16, the bucket containing
+-- the earliest chunk. No null-restoration (start_offset non-null).
+-- Gaps are skipped by jumping to cagg_current_bucket_start(jump_target), the same
+-- as for variable-width buckets. The chunk starts May 7 and Oct 4 fall mid-bucket:
+--   cagg_current_bucket_start(May 7) = May 6  (bucket [May  6, May 16))
+--   cagg_current_bucket_start(Oct 4) = Oct 3  (bucket [Oct  3, Oct 13))
+-- so those batches start one day before the corresponding chunk.
+--
+-- Expected batches (buckets_per_batch=1, refresh_newest_first=false):
+--   Feb: [Feb 16, Feb 26)  EMPTY (no Feb data; illustrates chunk spanning bucket boundary)
+--   Mar (3 buckets): [Feb 26, Mar 7), [Mar 7, Mar 17), [Mar 17, Mar 27)
+--   Apr: SKIPPED  (chunk gap: no chunks in April)
+--   May (3 buckets): [May 6, May 16), [May 16, May 26), [May 26, Jun 5)
+--                    May 6 = bucket start of May 7 (first chunk boundary)
+--   Jun 5-Jun 25: SKIPPED  (invalidation gap: consumed by explicit refresh)
+--   Jun 25: batch [Jun 25, Jul 5)  (last Jun chunk + right residual)
+--   Jul-Sep: SKIPPED  (chunk gap)
+--   Oct (3 buckets): [Oct 3, Oct 13), [Oct 13, Oct 23), [Oct 23, Nov 2)
+--                    Oct 3 = bucket start of Oct 4 (first chunk boundary)
+------------------------------------------------------------------------------------------
+CREATE MATERIALIZED VIEW sparse_cagg_fixed
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('10 days'::interval, time) AS bucket, count(*) AS cnt
+FROM sparse_data
+GROUP BY bucket
+WITH NO DATA;
+
+-- Consume [Jun 5, Jun 25) to create an invalidation gap for those two June buckets.
+CALL refresh_continuous_aggregate('sparse_cagg_fixed',
+    '2024-06-05'::timestamptz, '2024-06-25'::timestamptz);
+
+-- Validate invalidation log: two residuals with a gap over [Jun 5, Jun 25).
+SELECT
+    _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+    _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'sparse_cagg_fixed'
+)
+ORDER BY lowest_modified_value;
+
+SELECT add_continuous_aggregate_policy('sparse_cagg_fixed',
+    start_offset => INTERVAL '10 years',
+    end_offset => INTERVAL '1 month',
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 1,
+    refresh_newest_first => false
+) AS fixed_job_id \gset
+
+-- Eleven batches expected: 1 empty in Feb, 3 in Mar, 3 in May, 1 at Jun 25, 3 in Oct.
+SET client_min_messages TO DEBUG1;
+CALL run_job(:fixed_job_id);
+RESET client_min_messages;
+
+------------------------------------------------------------------------------------------
+-- Same sparse_data as above but with buckets_per_batch=3 to show how the algorithm
+-- groups consecutive buckets and absorbs inval gaps into batch windows.
+--
+-- Pre-refresh [Jun 1, Jul 1) creates the same residuals as for sparse_cagg:
+--   left  [-inf,     May 31 23:59:59.999999]
+--   right [Jul  1,  +inf]
+--
+-- With buckets_per_batch=3 the algorithm advances exactly 3 bucket widths per batch
+-- from the starting position; gaps within a batch window are not spliced out.
+--
+-- Batch analysis (oldest-first):
+--   1. jump to Feb 1 (cagg_current_bucket_start of first chunk Feb 22),
+--      emit 3 months: [Feb 1, May 1)
+--        Feb: empty (no data in Feb bucket -- chunk [Feb 22, Mar 18) has only Mar data)
+--        Mar: 1 row (Mar 15)
+--        Apr: chunk gap (absorbed into batch, nothing materialized)
+--   2. cur = May 1; cagg_current_bucket_start(May 7) = May 1 = cur, no jump;
+--      emit 3 months: [May 1, Aug 1)
+--      The batch window intersects two invalidation ranges, so two sub-refreshes run:
+--        [May 1, Jun 1): 1 row (May 15), from left residual [-inf, May 31]
+--        [Jun 1, Jul 1): SKIPPED -- no invalidation covers Jun (consumed by pre-refresh);
+--                                   the Jun row from pre-refresh is preserved unchanged
+--        [Jul 1, Aug 1): 0 rows, from right residual [Jul 1, +inf); no chunk data in Jul
+--   3. cur = Aug 1; jump: Max(Oct 4, Jul 1) -> cagg_current_bucket_start(Oct 4) = Oct 1;
+--      emit 3 months: [Oct 1, Jan 1 2025)
+--        Oct: 1 row (Oct 15); Nov-Dec: chunk gaps (absorbed into batch)
+--
+-- Three batches produced (vs four with buckets_per_batch=1).
+------------------------------------------------------------------------------------------
+CREATE MATERIALIZED VIEW sparse_cagg_bp3
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 month'::interval, time) AS bucket, count(*) AS cnt
+FROM sparse_data
+GROUP BY bucket
+WITH NO DATA;
+
+-- Pre-refresh June to consume June's invalidation, creating the same inval gap.
+CALL refresh_continuous_aggregate('sparse_cagg_bp3',
+    '2024-06-01'::timestamptz, '2024-07-01'::timestamptz);
+
+SELECT add_continuous_aggregate_policy('sparse_cagg_bp3',
+    start_offset => INTERVAL '10 years',
+    end_offset => INTERVAL '1 month',
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 3,
+    refresh_newest_first => false
+) AS sparse_bp3_job_id \gset
+
+-- Three batches: [Feb 1, May 1), [May 1, Aug 1), [Oct 1, Jan 1 2025).
+-- Apr/Jul gaps and the Jun inval gap are absorbed inside batch windows.
+SET client_min_messages TO DEBUG1;
+CALL run_job(:sparse_bp3_job_id);
+RESET client_min_messages;
+
+------------------------------------------------------------------------------------------
+-- Test correct null-offset handling for BOTH start_offset=NULL and end_offset=NULL.
+--
+-- start_offset=NULL: window start capped to cagg_current_bucket_start(Feb 22) = Feb 1.
+--   Feb 1 is already a bucket boundary -> inscribing is a no-op.
+--   -> Feb bucket [Feb 1, Mar 1) gets its own dedicated batch.
+--
+-- end_offset=NULL: window end capped to cagg_next_bucket_start(Oct 29 - 1) = Nov 1.
+--   Nov 1 is already a bucket boundary -> inscribing is a no-op.
+--   -> Oct chunk [Oct 4, Oct 29) has range_start=Oct 4 < Nov 1, so it IS
+--      included in the dimension-slice scan; Oct gets a dedicated batch.
+--
+-- Inval log after refreshing June:
+--   left  [-inf,     May 31 23:59:59.999999]
+--   right [Jul 1,   +inf]
+--
+-- Merge scan over window [Feb 1, Nov 1):
+--   Feb: batch generated  (chunk [Feb 22, Mar 18) overlaps Feb bucket, left-residual inval)
+--   Mar: batch generated  (same chunk, left-residual inval covers Mar 15)
+--   Apr: SKIPPED          (chunk gap)
+--   May: batch generated  (chunk [May 7, Jun 1), left-residual inval)
+--   Jun: SKIPPED          (invalidation gap -- June already refreshed)
+--   Jul-Sep: SKIPPED      (chunk gap)
+--   Oct: batch generated  (chunk [Oct 4, Oct 29), right-residual inval [Jul 1, +inf))
+--
+-- Null-restoration (list_length=4 >= 2):
+--   first batch (Feb) start_isnull -> [-inf, Mar 1)   inserts 1 row: Feb 25
+--   last  batch (Oct) end_isnull   -> [Oct 1, +inf)   inserts 1 row: Oct 15
+-- Final batches: [-inf, Mar 1),  [Mar 1, Apr 1),  [May 1, Jun 1),  [Oct 1, +inf).
+------------------------------------------------------------------------------------------
+CREATE TABLE end_null_data (
+    time TIMESTAMPTZ NOT NULL,
+    value INT
+);
+SELECT FROM create_hypertable('end_null_data', by_range('time', INTERVAL '25 days'));
+
+-- Same chunk layout as sparse_data, with an extra Feb 25 row (bucket Feb 1) to show
+-- that the Feb bucket gets its own dedicated first batch: null-restored to [-inf, Mar 1),
+-- inserting Feb 25 separately from the Mar 15 row in the following [Mar 1, Apr 1) batch.
+INSERT INTO end_null_data VALUES
+    ('2024-02-25 00:00:00+00', 2),   -- lands in chunk [Feb 22, Mar 18), bucket Feb 1
+    ('2024-03-15 00:00:00+00', 3),   -- lands in chunk [Feb 22, Mar 18), bucket Mar 1
+    ('2024-05-15 00:00:00+00', 5),   -- lands in chunk [May  7, Jun  1)
+    ('2024-06-10 00:00:00+00', 6),   -- lands in chunk [Jun  1, Jun 26)
+    ('2024-10-15 00:00:00+00', 10);  -- lands in chunk [Oct  4, Oct 29)
+
+CREATE MATERIALIZED VIEW end_null_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 month'::interval, time) AS bucket, count(*) AS cnt
+FROM end_null_data
+GROUP BY bucket
+WITH NO DATA;
+
+-- Consume June's invalidation to create an inval gap over June.
+CALL refresh_continuous_aggregate('end_null_cagg',
+    '2024-06-01'::timestamptz, '2024-07-01'::timestamptz);
+
+-- Validate invalidation log: two residuals with a gap over June.
+SELECT
+    _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+    _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'end_null_cagg'
+)
+ORDER BY lowest_modified_value;
+
+SELECT add_continuous_aggregate_policy('end_null_cagg',
+    start_offset => NULL,
+    end_offset => NULL,
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 1,
+    refresh_newest_first => false
+) AS end_null_job_id \gset
+
+-- Four batches expected: [-inf, Mar 1), [Mar 1, Apr 1), [May 1, Jun 1), [Oct 1, +inf).
+-- Feb batch is the null-restored first batch (1 row: Feb 25).
+-- Oct batch is the null-restored last batch (1 row: Oct 15); Oct chunk now included
+-- because effective window end is Nov 1 (not Oct 1 as under the old inscribing bug).
+SET client_min_messages TO DEBUG1;
+CALL run_job(:end_null_job_id);
+RESET client_min_messages;
+
+DROP TABLE end_null_data CASCADE;
+
+-- Test: null end_offset — incremental and single-pass refresh set the same threshold.
+--
+-- A 3-day bucket is used so bucket boundaries are clearly distinct from both the
+-- chunk boundaries and the raw data timestamp, making any mismatch obvious.
+--
+-- Setup (1-month chunk interval ≈ 30 days from Unix epoch):
+--   data point    : 2024-01-05 12:00 UTC  (noon, not on any bucket boundary)
+--   chunk range   : [2023-12-19 00:00, 2024-01-18 00:00) UTC
+--   data bucket   : time_bucket('3 days', data) = 2024-01-03 → [Jan 03, Jan 06)
+--   threshold set by 1-pass refresh: cagg_next_bucket_start(data) = 2024-01-06 00:00 UTC
+--
+-- Before the fix the split function capped the window at chunk_end (Jan 18 UTC)
+-- instead of max-data's next bucket (Jan 06).  With buckets_per_batch=1 (batch_size
+-- = 3 days), that produces ten 3-day batches over the 30-day chunk:
+--   [Dec 19, Dec 22) ... [Jan 03, Jan 06) ... [Jan 15, Jan 18) → [Jan 15, INF)
+-- Newest-first processing:
+--   batch [Jan 15, INF): max_refresh → threshold = Jan 06 (from max data)
+--   batch [Jan 12, Jan 15): Jan 15 > Jan 06 → threshold advances to Jan 15
+-- The remaining older batches don't advance it further, so the final threshold is
+-- Jan 15 — 9 days past the value set by the single-pass refresh.
+--
+-- After the fix the window is capped at Jan 06, producing six 3-day batches:
+--   [Dec 19, Dec 22)  [Dec 22, Dec 25)  [Dec 25, Dec 28)
+--   [Dec 28, Dec 31)  [Dec 31, Jan 03)  [Jan 03, Jan 06) → [Jan 03, INF)
+-- Newest-first processing:
+--   batch [Jan 03, INF): max_refresh → threshold = Jan 06 (from max data)
+--   batch [Dec 31, Jan 03): Jan 03 < Jan 06 → no change  ← FIXED
+-- Final threshold = Jan 06, matching single-pass exactly.
+--
+-- Two separate hypertables (identical data) keep the thresholds independent so the
+-- run order cannot mask a discrepancy.
+CREATE TABLE threshold_sp_data (time TIMESTAMPTZ NOT NULL, val INT);
+SELECT FROM create_hypertable('threshold_sp_data', by_range('time', INTERVAL '1 month'));
+
+CREATE TABLE threshold_inc_data (time TIMESTAMPTZ NOT NULL, val INT);
+SELECT FROM create_hypertable('threshold_inc_data', by_range('time', INTERVAL '1 month'));
+
+INSERT INTO threshold_sp_data  VALUES ('2024-01-05 12:00:00+00', 1);
+INSERT INTO threshold_inc_data VALUES ('2024-01-05 12:00:00+00', 1);
+
+CREATE MATERIALIZED VIEW threshold_sp_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('3 days', time) AS bucket, count(*) AS cnt
+FROM threshold_sp_data GROUP BY 1 WITH NO DATA;
+
+CREATE MATERIALIZED VIEW threshold_inc_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('3 days', time) AS bucket, count(*) AS cnt
+FROM threshold_inc_data GROUP BY 1 WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('threshold_sp_cagg',
+    start_offset => NULL, end_offset => NULL,
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 0   -- single-pass
+) AS sp_job \gset
+
+SELECT add_continuous_aggregate_policy('threshold_inc_cagg',
+    start_offset => NULL, end_offset => NULL,
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 1   -- incremental: one 3-day batch at a time
+) AS inc_job \gset
+
+CALL run_job(:sp_job);
+CALL run_job(:inc_job);
+
+-- Both must equal 2024-01-06 00:00:00+00 = cagg_next_bucket_start(MAX(data) = Jan 05 12:00).
+-- Before the fix incremental_threshold was 2024-01-15 00:00:00+00 (9 days too far).
+SELECT
+    _timescaledb_functions.to_timestamp(t1.watermark) AS singlepass_threshold,
+    _timescaledb_functions.to_timestamp(t2.watermark) AS incremental_threshold
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold t1
+JOIN _timescaledb_catalog.continuous_aggs_invalidation_threshold t2
+  ON true
+WHERE t1.hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'threshold_sp_cagg')
+  AND t2.hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'threshold_inc_cagg');
+
+DROP TABLE threshold_sp_data CASCADE;
+
+-- Test: null end_offset on an empty hypertable hits the maxval_isnull branch and
+-- falls back to single-pass without error.  The DEBUG1 message confirms the path.
+TRUNCATE threshold_inc_data;
+SET client_min_messages TO DEBUG1;
+CALL run_job(:inc_job);
+RESET client_min_messages;
+
+DROP TABLE threshold_inc_data CASCADE;
+
+DROP TABLE sparse_data CASCADE;
+RESET timezone;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;

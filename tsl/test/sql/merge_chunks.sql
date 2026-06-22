@@ -19,16 +19,16 @@ create view partitions as
 select c.table_name, d.column_name, ds.range_start, ds.range_end
 from _timescaledb_catalog.hypertable h
 join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
-join _timescaledb_catalog.dimension d on (d.hypertable_id = h.id)
-join _timescaledb_catalog.dimension_slice ds on (d.id = ds.dimension_id)
-join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id and cc.dimension_slice_id = ds.id)
+join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
+join _timescaledb_catalog.dimension d on (d.id = ds.dimension_id)
 where h.table_name = 'mergeme'
-order by d.id, ds.range_start, ds.range_end;
+order by d.id, c.id, ds.range_start, ds.range_end;
 
 create view orphaned_slices as
-select ds.id, cc.constraint_name from _timescaledb_catalog.dimension_slice ds
-left join _timescaledb_catalog.chunk_constraint cc on (ds.id = cc.dimension_slice_id)
-where cc.constraint_name is null;
+select ds.id, format('constraint_%s', ds.id)::name as constraint_name
+from _timescaledb_catalog.dimension_slice ds
+left join _timescaledb_catalog.chunk c on (c.id = ds.chunk_id)
+where c.id is null;
 
 
 -----------------
@@ -327,7 +327,6 @@ from _timescaledb_catalog.compression_chunk_size ccs \gset
 create view compression_size_fraction as
 select
     ccs.chunk_id,
-    ccs.compressed_chunk_id,
     round(ccs.uncompressed_heap_size::numeric / :total_uncompressed_heap_size, 1) as uncompressed_heap_size_fraction,
     ccs.uncompressed_toast_size::numeric as uncompressed_toast_size_fraction,
     round(ccs.uncompressed_index_size::numeric / :total_uncompressed_index_size, 1) as uncompressed_index_size_fraction,

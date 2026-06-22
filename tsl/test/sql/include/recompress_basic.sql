@@ -9,13 +9,17 @@ SELECT
    c.schema_name as chunk_schema,
    c.table_name as chunk_name,
    c.status as chunk_status,
-   comp.schema_name as compressed_chunk_schema,
-   comp.table_name as compressed_chunk_name
+   comp_ns.nspname as compressed_chunk_schema,
+   comp_class.relname as compressed_chunk_name
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
-   LEFT JOIN _timescaledb_catalog.chunk comp
-ON comp.id = c.compressed_chunk_id
+   LEFT JOIN _timescaledb_catalog.compression_settings cs
+ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
+   LEFT JOIN pg_class comp_class
+ON cs.compress_relid = comp_class.oid
+   LEFT JOIN pg_namespace comp_ns
+ON comp_class.relnamespace = comp_ns.oid
 ;
 
 CREATE TABLE test2 (timec timestamptz NOT NULL, i integer ,

@@ -7,6 +7,7 @@
 #include <access/tsmapi.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_inherits.h>
 #include <commands/extension.h>
 #include <executor/nodeAgg.h>
 #include <miscadmin.h>
@@ -56,6 +57,7 @@
 #include "partitioning.h"
 #include "planner/planner.h"
 #include "sort_transform.h"
+#include "ts_catalog/compression_settings.h"
 #include "utils.h"
 
 #include "compat/compat.h"
@@ -121,6 +123,7 @@ static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, Lis
  */
 static const char *TS_CTE_EXPAND = "ts_expand";
 static const char *TS_FK_EXPAND = "ts_fk_expand";
+static const char *TS_CTE_COMPRESSED_RELATION = "ts_compressed_relation";
 
 /*
  * A simplehash hash table that records the chunks and their corresponding
@@ -184,6 +187,20 @@ rte_mark_for_fk_expansion(RangeTblEntry *rte)
 	 * initially for hypertables.
 	 */
 	Assert(!rte->inh);
+}
+
+void
+ts_rte_mark_compressed_relation(RangeTblEntry *rte)
+{
+	Assert(rte->rtekind == RTE_RELATION);
+	Assert(rte->ctename == NULL);
+	rte->ctename = (char *) TS_CTE_COMPRESSED_RELATION;
+}
+
+static bool
+ts_rte_is_compressed_relation(const RangeTblEntry *rte)
+{
+	return rte->ctename == TS_CTE_COMPRESSED_RELATION;
 }
 
 bool
@@ -447,20 +464,10 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 					if (ht)
 					{
 						/*
-						 * Mark hypertable RTEs we'd like to expand ourselves.
-						 * We always do this for SELECTs from hypertables.
-						 *
-						 * For DML, we also always expand the non-target relations.
-						 *
-						 * The hypertables that are not expanded by our custom code
-						 * here fall back to the standard Postgres inheritance
-						 * hierarchy expansion.
+						 * Hypertable expansion marking is done in the
+						 * get_relation_info_hook, which also handles
+						 * hypertables appearing after function	or view inlining.
 						 */
-						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							rte->inh && (Index) query->resultRelation != rti)
-						{
-							rte_mark_for_expansion(rte);
-						}
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 						{
@@ -691,13 +698,11 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 #ifdef USE_TELEMETRY
 			ts_telemetry_function_info_gather(parse);
 #endif
-#if PG16_GE
 			if (ts_guc_enable_optimizations &&
 				ts_cm_functions->continuous_agg_apply_rewrites_tsl != NULL)
 			{
 				context.rootquery = ts_cm_functions->continuous_agg_apply_rewrites_tsl(parse);
 			}
-#endif
 			/*
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */
@@ -1500,20 +1505,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			break;
 
 		case TS_REL_HYPERTABLE:
-			/*
-			 * Set the indexlist for a hypertable parent to NIL since we
-			 * should not try to do any index scans on hypertable parents,
-			 * similar to how it works for partitioned tables.
-			 *
-			 * This can happen when building a merge join path and computing
-			 * cost for it. See get_actual_variable_range().
-			 *
-			 * This has to be after the hypertable is expanded, since the
-			 * indexlist is used during hypertable expansion.
-			 */
-
-			rel->indexlist = NIL;
-
 			if (!rte->inh)
 			{
 				/*
@@ -1555,6 +1546,17 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	}
 
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+
+	/*
+	 * Fast path for compressed relation built by ColumnarScan.
+	 * Don't need to classify relation as we already know what it is.
+	 */
+	if (ts_rte_is_compressed_relation(rte))
+	{
+		ts_create_private_reloptinfo(rel);
+		return;
+	}
+
 	Query *query = root->parse;
 	Hypertable *ht;
 	const TsRelType type = ts_classify_relation(root, rel, &ht);
@@ -1565,15 +1567,21 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		{
 			/*
 			 * Mark hypertable RTEs we'd like to expand ourselves.
-			 * Hypertables inside inlineable functions don't get marked during
-			 * the query preprocessing step handled in preprocess_query().
-			 * Therefore we do an extra try here.
+			 * We always do this for SELECTs from hypertables.
 			 *
-			 * For the explanation of the logic, see the comments in
-			 * preprocess_query().
+			 * For DML, we also always expand the non-target relations.
+			 *
+			 * The hypertables that are not expanded by our custom code
+			 * here fall back to the standard Postgres inheritance
+			 * hierarchy expansion.
+			 *
+			 * `inhparent` goes to false in two cases: a hypertable without
+			 * chunks or a SELECT FROM ONLY hypertable. We still want to run our
+			 * hypertable expansion code for hypertables w/o chunks.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
+			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
+				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL &&
+				rel->relid != (Index) query->resultRelation)
 			{
 				rte_mark_for_expansion(rte);
 			}
@@ -1761,26 +1769,18 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			/* Check for DML on chunk directly */
 			if (!ht)
 			{
-				Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
-				if (!chunk)
+				/*
+				 * For operations on internal compressed chunks we block modifications
+				 * if the chunk belongs to a frozen chunk.
+				 * Direct modifications of uncompressed chunks is intercepted by chunk
+				 * tuple routing.
+				 * In all other cases of direct modification of chunks we dont interfere
+				 * and do not add a ModifyHypertable node.
+				 */
+				Oid uncompressed_relid = ts_relation_get_uncompressed_relid(rte->relid);
+				if (OidIsValid(uncompressed_relid))
 				{
-					/* Not a hypertable or chunk, continue */
-					new_pathlist = lappend(new_pathlist, path);
-					continue;
-				}
-
-				ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
-				if (ht->fd.compression_state == HypertableInternalCompressionTable)
-				{
-					/*
-					 * For operations on internal compressed chunks we block modifications
-					 * if the chunk belongs to a frozen chunk.
-					 * Direct modifications of uncompressed chunks is intercepted by chunk
-					 * tuple routing.
-					 * In all other cases of direct modification of chunks we dont interfere
-					 * and do not add a ModifyHypertable node.
-					 */
-					Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
+					Chunk *uncompressed = ts_chunk_get_by_relid(uncompressed_relid, true);
 					if (ts_chunk_is_frozen(uncompressed))
 					{
 						ereport(ERROR,
@@ -1792,6 +1792,16 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					new_pathlist = lappend(new_pathlist, path);
 					continue;
 				}
+
+				int32 hypertable_id = ts_chunk_get_hypertable_id_by_reloid(rte->relid);
+				if (hypertable_id == INVALID_HYPERTABLE_ID)
+				{
+					/* Not a hypertable or chunk, continue */
+					new_pathlist = lappend(new_pathlist, path);
+					continue;
+				}
+
+				ht = ts_hypertable_get_by_id(hypertable_id);
 			}
 
 			switch (mt->operation)

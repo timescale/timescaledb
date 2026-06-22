@@ -6,6 +6,8 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION ts_test_compression() RETURNS VOID
 AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_test_fastlanes() RETURNS VOID
+AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 \ir include/compression_utils.sql
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -18,6 +20,7 @@ create or replace function mix(x timestamptz) returns float4 as $$ select mix(ex
 ------------------
 
 SELECT ts_test_compression();
+SELECT ts_test_fastlanes();
 
 ------------------------
 -- BIGINT Compression --
@@ -494,6 +497,13 @@ DROP TABLE base_uuids;
 
 RESET timescaledb.enable_uuid_compression;
 DROP table uuid_set;
+
+
+-- Corrupt compressed data with zero header
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.compressed_data_in('AA=='::cstring);
+\set ON_ERROR_STOP 1
+
 
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --

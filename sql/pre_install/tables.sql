@@ -46,9 +46,9 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   associated_schema_name name NOT NULL,
   associated_table_prefix name NOT NULL,
   num_dimensions smallint NOT NULL,
-  chunk_sizing_func_schema name NOT NULL,
-  chunk_sizing_func_name name NOT NULL,
-  chunk_target_size bigint NOT NULL, -- size in bytes
+  chunk_sizing_func_schema name NOT NULL, -- unused
+  chunk_sizing_func_name name NOT NULL, -- unused
+  chunk_target_size bigint NOT NULL, -- unused
   compression_state smallint NOT NULL DEFAULT 0,
   compressed_hypertable_id integer,
   status int NOT NULL DEFAULT 0,
@@ -59,7 +59,6 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   CONSTRAINT hypertable_schema_name_check CHECK (schema_name != '_timescaledb_catalog'),
   -- internal compressed hypertables have compression state = 2
   CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
-  CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0),
   CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL))
 ) WITH (user_catalog_table = true);
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
@@ -114,25 +113,6 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '')
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension', 'id'), '');
 
--- A dimension slice defines a keyspace range along a dimension
--- axis. A chunk references a slice in each of its dimensions, forming
--- a hypercube.
-CREATE TABLE _timescaledb_catalog.dimension_slice (
-  id serial NOT NULL,
-  dimension_id integer NOT NULL,
-  range_start bigint NOT NULL,
-  range_end bigint NOT NULL,
-  -- table constraints
-  CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
-  CONSTRAINT dimension_slice_dimension_id_range_start_range_end_key UNIQUE (dimension_id, range_start, range_end),
-  CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
-  CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
-);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
-
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice', 'id'), '');
-
 -- A chunk is a partition (hypercube) in an N-dimensional
 -- hyperspace. Each chunk is associated with N constraints that define
 -- the chunk's hypercube. Tuples that fall within the chunk's
@@ -168,26 +148,29 @@ CREATE INDEX chunk_hypertable_id_creation_time_idx ON _timescaledb_catalog.chunk
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
 
--- A chunk constraint maps a dimension slice to a chunk. Each
--- constraint associated with a chunk will also be a table constraint
--- on the chunk's data table.
-CREATE TABLE _timescaledb_catalog.chunk_constraint (
+-- A dimension slice defines a keyspace range along a dimension
+-- axis for a single chunk. Each chunk owns exactly one slice per
+-- dimension, and together those slices form the chunk's hypercube.
+CREATE TABLE _timescaledb_catalog.dimension_slice (
+  id serial NOT NULL,
   chunk_id integer NOT NULL,
-  dimension_slice_id integer NULL,
-  constraint_name name NOT NULL,
-  hypertable_constraint_name name NULL,
+  dimension_id integer NOT NULL,
+  range_start bigint NOT NULL,
+  range_end bigint NOT NULL,
   -- table constraints
-  CONSTRAINT chunk_constraint_chunk_id_constraint_name_key UNIQUE (chunk_id, constraint_name),
-  CONSTRAINT chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id),
-  CONSTRAINT chunk_constraint_dimension_slice_id_fkey FOREIGN KEY (dimension_slice_id) REFERENCES _timescaledb_catalog.dimension_slice (id)
+  CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
+  CONSTRAINT dimension_slice_chunk_id_dimension_id_key UNIQUE (chunk_id, dimension_id),
+  CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
+  CONSTRAINT dimension_slice_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
 );
 
-CREATE INDEX chunk_constraint_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (dimension_slice_id);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
+CREATE INDEX dimension_slice_dimension_id_range_start_range_end_idx
+  ON _timescaledb_catalog.dimension_slice (dimension_id, range_start, range_end);
 
-CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint_name', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension_slice', 'id'), '');
 
 -- Track statistics for columns of chunks from a hypertable.
 -- Currently, we track the min/max range for a given column across chunks.
@@ -337,15 +320,6 @@ CREATE TABLE _timescaledb_catalog.metadata (
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$ WHERE key <> 'uuid' $$);
 
--- Log with events that will be sent out with the telemetry. The log
--- will be flushed after it has been sent out. We do not save it to
--- backups since it should not contain important data.
-CREATE TABLE _timescaledb_catalog.telemetry_event (
-       created timestamptz NOT NULL DEFAULT current_timestamp,
-       tag name NOT NULL,
-       body jsonb NOT NULL
-);
-
 CREATE TABLE _timescaledb_catalog.continuous_agg (
   mat_hypertable_id integer NOT NULL,
   raw_hypertable_id integer NOT NULL,
@@ -357,6 +331,7 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   direct_view_schema name NOT NULL,
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
+  schema_change_timestamp bigint,
   -- table constraints
   CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
   CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),

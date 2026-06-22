@@ -32,9 +32,6 @@ set(TEST_PGUSER
 set(TEST_DBNAME
     single
     CACHE STRING "The database name to use for tests")
-set(TEST_PGPORT_TEMP_INSTANCE
-    55432
-    CACHE STRING "The port to run a temporary test PostgreSQL instance on")
 set(TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/test_schedule)
 set(TEST_SCHEDULE_SHARED
     ${CMAKE_CURRENT_BINARY_DIR}/shared/test_schedule_shared)
@@ -75,8 +72,7 @@ file(
   NO_SOURCE_PERMISSIONS
   FILE_PERMISSIONS OWNER_READ OWNER_WRITE)
 
-set(PG_REGRESS_OPTS_BASE --host=${TEST_PGHOST}
-                         --dlpath=${PROJECT_BINARY_DIR}/src)
+set(PG_REGRESS_OPTS_BASE --dlpath=${PROJECT_BINARY_DIR}/src)
 
 set(PG_REGRESS_OPTS_EXTRA
     --create-role=${TEST_ROLE_SUPERUSER},${TEST_ROLE_DEFAULT_PERM_USER},${TEST_ROLE_DEFAULT_PERM_USER_2},${TEST_ROLE_1},${TEST_ROLE_2},${TEST_ROLE_3},${TEST_ROLE_4},${TEST_ROLE_READ_ONLY}
@@ -105,14 +101,15 @@ set(PG_ISOLATION_REGRESS_OPTS_INOUT
     --outputdir=${TEST_OUTPUT_DIR}/isolation --load-extension=timescaledb)
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE
-    --port=${TEST_PGPORT_TEMP_INSTANCE} --temp-instance=${TEST_CLUSTER}
+    --temp-instance=${TEST_CLUSTER}
     --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf)
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE_PGTEST
-    --port=${TEST_PGPORT_TEMP_INSTANCE} --temp-instance=${TEST_CLUSTER}
+    --temp-instance=${TEST_CLUSTER}
     --temp-config=${TEST_OUTPUT_DIR}/pgtest.conf)
 
-set(PG_REGRESS_OPTS_LOCAL_INSTANCE --port=${TEST_PGPORT_LOCAL})
+set(PG_REGRESS_OPTS_LOCAL_INSTANCE --host=${TEST_PGHOST}
+                                   --port=${TEST_PGPORT_LOCAL})
 
 if(PG_REGRESS)
   set(PG_REGRESS_ENV

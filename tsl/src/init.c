@@ -27,6 +27,7 @@
 #include "compression/create.h"
 #include "compression/recompress.h"
 #include "compression/sparse_index_bloom1.h"
+#include "continuous_aggs/add_column.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
@@ -51,10 +52,6 @@ TS_MODULE_MAGIC("timescaledb-tsl");
 
 #ifdef APACHE_ONLY
 #error "cannot compile the TSL for ApacheOnly mode"
-#endif
-
-#if PG16_LT
-extern void PGDLLEXPORT _PG_init(void);
 #endif
 
 /*
@@ -127,9 +124,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
-#if PG16_GE
+	.continuous_agg_add_column = continuous_agg_add_column,
 	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
-#endif
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
@@ -140,6 +136,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
 	.compressed_data_column_size = tsl_compressed_data_column_size,
 	.compressed_data_to_array = tsl_compressed_data_to_array,
+	.decompress_batch = tsl_decompress_batch,
 	.compressed_data_send = tsl_compressed_data_send,
 	.compressed_data_recv = tsl_compressed_data_recv,
 	.compressed_data_in = tsl_compressed_data_in,
@@ -169,6 +166,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.rebuild_columnstore = tsl_rebuild_columnstore,
+	.rebuild_sparse_index = tsl_rebuild_sparse_index,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,

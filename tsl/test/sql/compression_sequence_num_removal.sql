@@ -40,10 +40,12 @@ ORDER BY device_id DESC, time DESC;
 
 -- modify two chunks by adding sequence number to the segments
 -- and rebuild the index based on that column
-SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timescaledb_catalog.hypertable ht
+SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relname AS "CHUNK_FULL_NAME"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
+     pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND ch1.compressed_chunk_id = comp_ch.id
+AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
 LIMIT 1 \gset
@@ -64,10 +66,12 @@ CREATE INDEX ON :CHUNK_FULL_NAME (device_id, _ts_meta_sequence_num);
 SET timescaledb.restoring TO OFF;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timescaledb_catalog.hypertable ht
+SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relname AS "CHUNK_FULL_NAME"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
+     pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND ch1.compressed_chunk_id = comp_ch.id
+AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id OFFSET 2 LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
 LIMIT 1 \gset
@@ -127,10 +131,12 @@ VACUUM ANALYZE hyper;
 ORDER BY time;
 
 -- modify two chunks by adding sequence number to the segments
-SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timescaledb_catalog.hypertable ht
+SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relname AS "CHUNK_FULL_NAME"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
+     pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND ch1.compressed_chunk_id = comp_ch.id
+AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 
 SET ROLE :ROLE_SUPERUSER;
@@ -145,10 +151,12 @@ DELETE FROM :CHUNK_FULL_NAME WHERE _ts_meta_sequence_num IS NULL;
 SET timescaledb.restoring TO OFF;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timescaledb_catalog.hypertable ht
+SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relname AS "CHUNK_FULL_NAME"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
+     pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND ch1.compressed_chunk_id = comp_ch.id
+AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id OFFSET 3 LIMIT 1 \gset
 
 SET ROLE :ROLE_SUPERUSER;
@@ -193,10 +201,12 @@ INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2)
 SELECT compress_chunk(show_chunks('hyper'));
 VACUUM ANALYZE hyper;
 
-SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timescaledb_catalog.hypertable ht
+SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relname AS "CHUNK_FULL_NAME"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
+     pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND ch1.compressed_chunk_id = comp_ch.id
+AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 
 SET ROLE :ROLE_SUPERUSER;

@@ -11,14 +11,14 @@ SELECT
    c.schema_name as chunk_schema,
    c.table_name as chunk_name,
    c.status as chunk_status,
-   comp.schema_name as compressed_chunk_schema,
-   comp.table_name as compressed_chunk_name,
+   (select nspname from pg_class cl join pg_namespace n on n.oid = cl.relnamespace where cl.oid = cs.compress_relid) as compressed_chunk_schema,
+   (select relname from pg_class cl where cl.oid = cs.compress_relid) as compressed_chunk_name,
    c.id as chunk_id
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
-   LEFT JOIN _timescaledb_catalog.chunk comp
-ON comp.id = c.compressed_chunk_id
+   LEFT JOIN _timescaledb_catalog.compression_settings cs
+ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
 ;
 
 CREATE OR REPLACE VIEW compression_rowcnt_view AS
@@ -195,11 +195,14 @@ SELECT compress_chunk(:'chunk_to_compress_prep'); -- the output of the prepared 
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 
--- plan should be invalidated to return results from the uncompressed chunk also
-set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
+-- Plan should be invalidated to return results from the uncompressed chunk as well.
+-- Penalize MergeAppend for predictable plans on PG < 17.
+set enable_sort to off;
+set enable_indexscan to off;
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 EXECUTE p1;
 reset enable_sort;
+reset enable_indexscan;
 
 -- check plan again after recompression
 SELECT compress_chunk(:'chunk_to_compress_prep');
@@ -490,9 +493,9 @@ FROM generate_series(1, 500) t;
 SELECT compress_chunk(c) FROM show_chunks('segwise_no_overlap') c;
 
 -- Locate the compressed chunk for the metadata check.
-SELECT cc.schema_name || '.' || cc.table_name AS comp_table_segwise
+SELECT cs.compress_relid AS comp_table_segwise
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.chunk cc      ON cc.id = uc.compressed_chunk_id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 JOIN _timescaledb_catalog.hypertable h  ON h.id  = uc.hypertable_id
 WHERE h.table_name = 'segwise_no_overlap' \gset
 
@@ -517,3 +520,86 @@ SELECT count(*) AS desc_violations FROM (
 ) lagged WHERE prev IS NOT NULL AND prev < series_id;
 
 DROP TABLE segwise_no_overlap CASCADE;
+
+-- github issue #9836
+-- Use-after-free on scankey datums during segmentwise recompression. Detectable under ASAN builds.
+
+-- 64kB work_mem triggers ASAN detection; PG16 minimum is 1024kB.
+DO $$
+BEGIN
+  IF current_setting('server_version_num')::int >= 170000 THEN
+    PERFORM set_config('maintenance_work_mem', '64kB', false);
+  ELSE
+    PERFORM set_config('maintenance_work_mem', '1024kB', false);
+  END IF;
+END $$;
+
+CREATE TABLE segwise_uaf_scankeys(
+  ts timestamptz NOT NULL,
+  seg text NOT NULL,
+  pad text
+);
+
+SELECT create_hypertable(
+  'segwise_uaf_scankeys', 'ts',
+  chunk_time_interval => INTERVAL '7 days'
+);
+
+ALTER TABLE segwise_uaf_scankeys SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'seg',
+  timescaledb.compress_orderby = 'ts'
+);
+
+INSERT INTO segwise_uaf_scankeys
+SELECT '2024-01-01'::timestamptz + (i || 's')::interval,
+       seg, repeat('x', 1200)
+FROM generate_series(1, 12000) i,
+     (VALUES
+       ('aaaa_segment_alpha_' || repeat('A', 180)),
+       ('bbbb_segment_bravo_' || repeat('B', 180)),
+       ('cccc_segment_charlie_' || repeat('C', 180))
+     ) AS segs(seg);
+
+SELECT compress_chunk(c)
+FROM show_chunks('segwise_uaf_scankeys') c;
+
+INSERT INTO segwise_uaf_scankeys
+SELECT '2024-01-01'::timestamptz + ((i + 1000) || 's')::interval + '1us'::interval,
+       seg, repeat('y', 1200)
+FROM generate_series(1, 4000) i,
+     (VALUES
+       ('aaaa_segment_alpha_' || repeat('A', 180)),
+       ('bbbb_segment_bravo_' || repeat('B', 180)),
+       ('cccc_segment_charlie_' || repeat('C', 180))
+     ) AS segs(seg);
+
+SELECT compress_chunk(c)
+FROM show_chunks('segwise_uaf_scankeys') c;
+
+INSERT INTO segwise_uaf_scankeys
+SELECT '2024-01-01'::timestamptz + ((i + 3000) || 's')::interval + '2us'::interval,
+       seg, repeat('z', 1200)
+FROM generate_series(1, 8000) i,
+     (VALUES
+       ('aaaa_segment_alpha_' || repeat('A', 180)),
+       ('bbbb_segment_bravo_' || repeat('B', 180)),
+       ('cccc_segment_charlie_' || repeat('C', 180))
+     ) AS segs(seg);
+
+SELECT compress_chunk(c)
+FROM show_chunks('segwise_uaf_scankeys') c; -- should not segfault
+
+RESET maintenance_work_mem;
+DROP TABLE segwise_uaf_scankeys;
+
+-- get_compressed_chunk_index_for_recompression on an uncompressed chunk
+-- returns NULL instead of raising an internal error
+CREATE TABLE uncompressed_index (time timestamptz not null, a int);
+SELECT create_hypertable('uncompressed_index', 'time');
+INSERT INTO uncompressed_index VALUES ('2024-01-01', 1);
+SELECT _timescaledb_functions.get_compressed_chunk_index_for_recompression(c)
+FROM show_chunks('uncompressed_index') c;
+DROP TABLE uncompressed_index;
+
+

@@ -259,10 +259,11 @@ select * from settings;
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
 vacuum full analyze test_sparse_index;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_sparse_index') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_sparse_index') limit 1
 \gset
 
 select * from test.show_columns_ext(:'chunk'::regclass);
@@ -295,10 +296,11 @@ from generate_series(1, 10000) x;
 select count(compress_chunk(x)) from show_chunks('test_sparse_index') x;
 vacuum full analyze test_sparse_index;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_sparse_index') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_sparse_index') limit 1
 \gset
 
 select * from test.show_columns_ext(:'chunk'::regclass);
@@ -328,10 +330,11 @@ alter table test_sparse_index rename value to value_new;
 alter table test_sparse_index rename ts to ts_new;
 select * from settings;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_sparse_index') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_sparse_index') limit 1
 \gset
 
 select * from test.show_columns_ext(:'chunk'::regclass);
@@ -344,10 +347,11 @@ alter table test_sparse_index set (timescaledb.compress,
 
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_sparse_index') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_sparse_index') limit 1
 \gset
 
 select * from test.show_columns_ext(:'chunk'::regclass);
@@ -362,10 +366,11 @@ alter table test_sparse_index set (timescaledb.compress,
 
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_sparse_index') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_sparse_index') limit 1
 \gset
 
 select * from test.show_columns_ext(:'chunk'::regclass);
@@ -380,10 +385,11 @@ alter table test_sparse_index set (timescaledb.compress,
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
 vacuum full analyze test_sparse_index;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_sparse_index') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_sparse_index') limit 1
 \gset
 
 select * from test.show_columns_ext(:'chunk'::regclass);
@@ -397,10 +403,11 @@ alter table test_sparse_index reset (timescaledb.compress_segmentby,
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
 vacuum full analyze test_sparse_index;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_sparse_index') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_sparse_index') limit 1
 \gset
 
 select * from test.show_columns_ext(:'chunk'::regclass);
@@ -428,10 +435,11 @@ select * from settings;
 
 select count(compress_chunk(x)) from show_chunks('test_drop_sparse') x;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_drop_sparse') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_drop_sparse') limit 1
 \gset
 
 -- Show columns before drop
@@ -472,10 +480,11 @@ select * from settings;
 
 select count(compress_chunk(x)) from show_chunks('test_drop_sparse2') x;
 
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_drop_sparse2') limit 1)
+select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
+    join _timescaledb_catalog.compression_settings cs
+        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'test_drop_sparse2') limit 1
 \gset
 
 select * from test.show_columns_ext(:'chunk'::regclass);
@@ -502,3 +511,27 @@ select * from settings;
 
 reset timescaledb.auto_sparse_indexes;
 drop table test_orderby_default_noguc;
+
+-- Rename a column to a name that matches a sparse index type token
+create table test_rename_token(ts int not null, minmax int not null);
+select create_hypertable('test_rename_token', 'ts', chunk_time_interval => 100);
+alter table test_rename_token set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+insert into test_rename_token select 1,1;
+select compress_chunk(show_chunks('test_rename_token'));
+select * from settings;
+-- renaming to a type token must not corrupt the orderby minmax index
+alter table test_rename_token rename column minmax to bloom;
+select * from settings;
+alter table test_rename_token rename column bloom to firstlast;
+select * from settings;
+-- renaming an indexed column to a type token keeps the index intact
+alter table test_rename_token rename column ts to minmax;
+select * from settings;
+
+\set ON_ERROR_STOP 0
+alter table test_rename_token rename column minmax to _ts_meta_v2_first_minmax;
+alter table test_rename_token rename column minmax to _ts_meta_count;
+\set ON_ERROR_STOP 1
+
+drop table test_rename_token;
+

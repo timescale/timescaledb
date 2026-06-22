@@ -24,11 +24,9 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
+#include "nodes/miscnodes.h"
 #include "policy_utils.h"
 #include "utils.h"
-#if PG16_GE
-#include "nodes/miscnodes.h"
-#endif
 
 /* Check if the provided argument is infinity */
 bool
@@ -43,15 +41,6 @@ ts_if_offset_is_infinity(Datum arg, Oid argtype, bool is_start)
 	{
 		double val;
 		char *num = DatumGetCString(arg);
-#if PG16_LT
-		bool have_error = false;
-		val = float8in_internal_opt_error(num, NULL, "double precision", num, &have_error);
-
-		if (have_error)
-		{
-			return false;
-		}
-#else
 		ErrorSaveContext escontext = { .type = T_ErrorSaveContext };
 		val = float8in_internal(num, NULL, "double precision", num, (Node *) &escontext);
 
@@ -59,7 +48,6 @@ ts_if_offset_is_infinity(Datum arg, Oid argtype, bool is_start)
 		{
 			return false;
 		}
-#endif
 
 		arg = Float8GetDatum(val);
 	}

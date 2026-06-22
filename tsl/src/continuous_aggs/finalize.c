@@ -148,18 +148,12 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	rte->rtekind = RTE_RELATION;
 	rte->relkind = RELKIND_RELATION;
 	rte->tablesample = NULL;
-#if PG16_LT
-	rte->requiredPerms |= ACL_SELECT;
-	rte->insertedCols = NULL;
-	rte->updatedCols = NULL;
-#else
 	RTEPermissionInfo *perminfo = addRTEPermissionInfo(&final_selquery->rteperminfos, rte);
 	perminfo->selectedCols = NULL;
 	perminfo->relid = mattbladdress->objectId;
 	perminfo->requiredPerms |= ACL_SELECT;
 	perminfo->insertedCols = NULL;
 	perminfo->updatedCols = NULL;
-#endif
 
 	/* Aliases for column names for the materialization hypertable. */
 	ListCell *lc;
@@ -169,11 +163,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 		ColumnDef *cdef = lfirst_node(ColumnDef, lc);
 		rte->eref->colnames = lappend(rte->eref->colnames, makeString(cdef->colname));
 		attno = list_length(rte->eref->colnames) - FirstLowInvalidHeapAttributeNumber;
-#if PG16_LT
-		rte->selectedCols = bms_add_member(rte->selectedCols, attno);
-#else
 		perminfo->selectedCols = bms_add_member(perminfo->selectedCols, attno);
-#endif
 	}
 
 	/* Fixup targetlist with the correct rel information. */

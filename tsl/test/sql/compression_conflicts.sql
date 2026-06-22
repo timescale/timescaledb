@@ -148,6 +148,15 @@ INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_3') c
 \gset
 
+SELECT cs.compress_relid AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings cs WHERE cs.relid = :'CHUNK'::regclass \gset
+
+SELECT format('%I.%I', n.nspname, i.relname) AS "COMPRESSED_CHUNK_INDEX"
+FROM pg_index idx
+JOIN pg_class i ON i.oid = idx.indexrelid
+JOIN pg_namespace n ON n.oid = i.relnamespace
+WHERE idx.indrelid = :'COMPRESSED_CHUNK'::regclass
+LIMIT 1 \gset
+
 -- after compression no data should be in uncompressed chunk
 SELECT count(*) FROM ONLY :CHUNK;
 
@@ -161,15 +170,15 @@ INSERT INTO comp_conflicts_3 VALUES
 ('2020-01-01','d3', 'label', 0.3);
 -- should work the same without the index present
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 ROLLBACK;
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
   INSERT INTO comp_conflicts_3 VALUES
   ('2020-01-01','d1', 'label', 0.1),
   ('2020-01-01','d2', 'label', 0.2),
@@ -181,44 +190,44 @@ ROLLBACK;
 set timescaledb.debug_compression_path_info to on;
 -- ignore matching partial index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, label, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC)
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
+  CREATE INDEX partial_index ON :COMPRESSED_CHUNK (device, label, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC)
 	WHERE label LIKE 'missing';
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore matching covering index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_min_1, _ts_meta_max_1);
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
+  CREATE INDEX covering_index ON :COMPRESSED_CHUNK (device) INCLUDE (label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- out of order segmentby index, index is still usable
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
+  CREATE INDEX partial_index ON :COMPRESSED_CHUNK (label, device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- index with sequence number in the middle, index should be usable with single index scan key
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, label);
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
+  CREATE INDEX covering_index ON :COMPRESSED_CHUNK (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, label);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore expression index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
+  CREATE INDEX partial_index ON :COMPRESSED_CHUNK (device, lower(label), _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore non-btree index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_min_1, _ts_meta_max_1);
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
+  CREATE INDEX partial_index ON :COMPRESSED_CHUNK USING brin (device, label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 \set ON_ERROR_STOP 1
@@ -240,7 +249,7 @@ ROLLBACK;
 
 -- check if NULL handling works the same with the compressed index dropped
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 
   -- data for 1 segment (count = 1 value + 1 inserted) should be present in uncompressed chunk
@@ -263,7 +272,7 @@ ROLLBACK;
 -- should succeed since there are no conflicts in the values
 BEGIN;
 
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1', 'label', 0.1);
 
   -- no data should have move into uncompressed chunk for conflict check
@@ -285,7 +294,7 @@ ROLLBACK;
 
 -- same as above but no index
 BEGIN;
-  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_min_1__ts_me_idx;
+  DROP INDEX :COMPRESSED_CHUNK_INDEX;
   INSERT INTO comp_conflicts_3 VALUES
   ('2020-01-01 0:00:01','d1', 'label', 0.1),
   ('2020-01-01 0:00:01','d2', 'label', 0.2),
@@ -402,8 +411,10 @@ SELECT
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
+   LEFT JOIN _timescaledb_catalog.compression_settings cs
+ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
    LEFT JOIN _timescaledb_catalog.chunk comp
-ON comp.id = c.compressed_chunk_id;
+ON cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass;
 
 CREATE TABLE compressed_ht (
        time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -535,4 +546,148 @@ INSERT INTO test_i7672 VALUES
 ON CONFLICT DO NOTHING;
 
 SELECT * FROM test_i7672 t ORDER BY t;
+
+-- UPDATE of a unique constraint column on a compressed chunk
+-- a single chunk holds all rows so conflicts stay within the chunk
+CREATE TABLE comp_update_unique(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
+SELECT table_name FROM create_hypertable('comp_update_unique', 'time', chunk_time_interval => INTERVAL '10 years');
+ALTER TABLE comp_update_unique SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO comp_update_unique VALUES
+('2020-01-01','d1',0.1),
+('2020-01-01','d2',0.2),
+('2020-01-02','d1',0.3);
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_unique') c;
+
+-- updating a non-unique column is allowed
+UPDATE comp_update_unique SET value = 1.0 WHERE device = 'd1';
+SELECT * FROM comp_update_unique ORDER BY time, device;
+
+-- updating the segmentby unique column to a free value works; the new segment
+-- is decompressed up front so the unique index is enforced
+UPDATE comp_update_unique SET device = 'd3' WHERE device = 'd1' AND time = '2020-01-02';
+SELECT * FROM comp_update_unique ORDER BY time, device;
+
+-- updating the orderby unique column (time) within the chunk works
+UPDATE comp_update_unique SET time = '2020-01-03' WHERE device = 'd2';
+SELECT * FROM comp_update_unique ORDER BY time, device;
+
+-- a new value that is not constant cannot be derived and is rejected
+\set ON_ERROR_STOP 0
+UPDATE comp_update_unique SET device = device || '_x' WHERE device = 'd1';
+\set ON_ERROR_STOP 1
+
+DROP TABLE comp_update_unique;
+
+-- setting a unique segmentby column to NULL cannot prune batches and is rejected
+CREATE TABLE comp_update_null(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
+SELECT table_name FROM create_hypertable('comp_update_null', 'time', chunk_time_interval => INTERVAL '10 years');
+ALTER TABLE comp_update_null SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO comp_update_null VALUES ('2020-01-01','d1',0.1),('2020-01-01','d2',0.2);
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_null') c;
+\set ON_ERROR_STOP 0
+UPDATE comp_update_null SET device = NULL WHERE device = 'd1' AND time = '2020-01-01';
+\set ON_ERROR_STOP 1
+SELECT * FROM comp_update_null ORDER BY time, device;
+DROP TABLE comp_update_null;
+
+-- updating a unique column into a value that already exists in a row that is
+-- still compressed (a different segment) must be rejected as a unique violation
+CREATE TABLE comp_update_conflict(time timestamptz NOT NULL, device text, UNIQUE(time, device));
+SELECT table_name FROM create_hypertable('comp_update_conflict', 'time', chunk_time_interval => INTERVAL '10 years');
+ALTER TABLE comp_update_conflict SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO comp_update_conflict VALUES ('2020-01-01','d1'),('2020-01-01','d2');
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_conflict') c;
+-- (2020-01-01,d2) is in the d2 segment and stays compressed; moving the d1 row
+-- onto it must still be detected as a conflict
+\set ON_ERROR_STOP 0
+UPDATE comp_update_conflict SET device = 'd2' WHERE device = 'd1';
+\set ON_ERROR_STOP 1
+SELECT * FROM comp_update_conflict ORDER BY time, device;
+DROP TABLE comp_update_conflict;
+
+-- a dropped column shifts attribute numbers; the constant value is still derived
+CREATE TABLE comp_update_dropped(time timestamptz NOT NULL, junk int, device text, value float, UNIQUE(time, device));
+SELECT table_name FROM create_hypertable('comp_update_dropped', 'time', chunk_time_interval => INTERVAL '10 years');
+ALTER TABLE comp_update_dropped DROP COLUMN junk;
+ALTER TABLE comp_update_dropped SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO comp_update_dropped VALUES ('2020-01-01','d1',0.1),('2020-01-01','d2',0.2);
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_dropped') c;
+UPDATE comp_update_dropped SET device = 'd3' WHERE device = 'd1';
+SELECT * FROM comp_update_dropped ORDER BY time, device;
+DROP TABLE comp_update_dropped;
+
+-- a unique column that is neither segmentby nor orderby cannot prune batches and is rejected
+CREATE TABLE comp_update_noprune(time timestamptz NOT NULL, device text, tag text, value float, UNIQUE(time, device, tag));
+SELECT table_name FROM create_hypertable('comp_update_noprune', 'time', chunk_time_interval => INTERVAL '10 years');
+ALTER TABLE comp_update_noprune SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time');
+INSERT INTO comp_update_noprune VALUES ('2020-01-01','d1','a',0.1),('2020-01-01','d2','b',0.2);
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_noprune') c;
+-- updating tag (not segmentby, not orderby) cannot be pruned to specific batches
+\set ON_ERROR_STOP 0
+UPDATE comp_update_noprune SET tag = 'z' WHERE device = 'd1';
+\set ON_ERROR_STOP 1
+DROP TABLE comp_update_noprune;
+
+-- two unique indexes: only the index whose key changes is decompressed
+CREATE TABLE comp_update_multi(time timestamptz NOT NULL, a text, b int, UNIQUE(time, a), UNIQUE(time, b));
+SELECT table_name FROM create_hypertable('comp_update_multi', 'time', chunk_time_interval => INTERVAL '10 years');
+ALTER TABLE comp_update_multi SET (timescaledb.compress, timescaledb.compress_segmentby='a', timescaledb.compress_orderby='time, b');
+INSERT INTO comp_update_multi VALUES ('2020-01-01','a1',1),('2020-01-01','a2',2);
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_multi') c;
+-- a is segmentby (UNIQUE(time,a)); b has min/max metadata (UNIQUE(time,b)); both prunable
+UPDATE comp_update_multi SET a = 'a3' WHERE a = 'a1';
+UPDATE comp_update_multi SET b = 9 WHERE a = 'a2';
+SELECT * FROM comp_update_multi ORDER BY time, a;
+DROP TABLE comp_update_multi;
+
+-- updating the time column across a chunk boundary is row movement and stays unsupported
+CREATE TABLE comp_update_move(time timestamptz NOT NULL, device text, UNIQUE(time, device));
+SELECT table_name FROM create_hypertable('comp_update_move', 'time', chunk_time_interval => INTERVAL '1 day');
+ALTER TABLE comp_update_move SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO comp_update_move VALUES ('2020-01-01','d1'),('2020-01-05','d1');
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_update_move') c;
+\set ON_ERROR_STOP 0
+UPDATE comp_update_move SET time = '2020-01-05' WHERE time = '2020-01-01';
+\set ON_ERROR_STOP 1
+DROP TABLE comp_update_move;
+
+-- UPSERT (INSERT ... ON CONFLICT DO UPDATE) on compressed chunks
+CREATE TABLE comp_upsert(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
+SELECT table_name FROM create_hypertable('comp_upsert', 'time');
+ALTER TABLE comp_upsert SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO comp_upsert VALUES ('2020-01-01','d1',0.1),('2020-01-01','d2',0.2);
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_upsert') c;
+
+-- positive: ON CONFLICT DO UPDATE of a non-unique column resolves against compressed data
+INSERT INTO comp_upsert VALUES ('2020-01-01','d1',9.9)
+  ON CONFLICT (time, device) DO UPDATE SET value = excluded.value;
+SELECT * FROM comp_upsert ORDER BY time, device;
+
+-- positive: setting the conflict key columns to their own excluded value is a no-op and allowed
+INSERT INTO comp_upsert VALUES ('2020-01-01','d2',7.7)
+  ON CONFLICT (time, device) DO UPDATE SET device = excluded.device, value = excluded.value;
+SELECT * FROM comp_upsert ORDER BY time, device;
+
+-- positive: an insert that does not conflict is added normally
+INSERT INTO comp_upsert VALUES ('2020-01-01','d3',0.3)
+  ON CONFLICT (time, device) DO UPDATE SET value = excluded.value;
+SELECT * FROM comp_upsert ORDER BY time, device;
+
+-- negative: ON CONFLICT DO UPDATE that changes a unique column is rejected
+-- (it could move a row onto a key held by a still-compressed row, see #9978)
+\set ON_ERROR_STOP 0
+INSERT INTO comp_upsert VALUES ('2020-01-01','d1',1.1)
+  ON CONFLICT (time, device) DO UPDATE SET device = 'd9';
+\set ON_ERROR_STOP 1
+SELECT * FROM comp_upsert ORDER BY time, device;
+
+-- negative: with DML decompression disabled the conflict check cannot run
+SET timescaledb.enable_dml_decompression = false;
+\set ON_ERROR_STOP 0
+INSERT INTO comp_upsert VALUES ('2020-01-01','d1',5.5)
+  ON CONFLICT (time, device) DO UPDATE SET value = excluded.value;
+\set ON_ERROR_STOP 1
+RESET timescaledb.enable_dml_decompression;
+
+DROP TABLE comp_upsert;
 

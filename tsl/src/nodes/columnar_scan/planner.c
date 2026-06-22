@@ -28,6 +28,7 @@
 #include "compression/create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
+#include "import/createplan.h"
 #include "import/list.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/transform.h"
@@ -268,16 +269,12 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	Bitmapset *uncompressed_attrs_found = NULL;
 	Bitmapset *selectedCols = NULL;
 
-#if PG16_LT
-	selectedCols = info->ht_rte->selectedCols;
-#else
 	if (info->ht_rte->perminfoindex > 0)
 	{
 		RTEPermissionInfo *perminfo =
 			getRTEPermissionInfo(context->root->parse->rteperminfos, info->ht_rte);
 		selectedCols = perminfo->selectedCols;
 	}
-#endif
 	/*
 	 * TODO this way to determine which columns are used is actually wrong, see
 	 * https://github.com/timescale/timescaledb/issues/4195#issuecomment-1104238863
@@ -576,9 +573,7 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 						  var->vartypmod,
 						  var->varcollid,
 						  var->varlevelsup);
-#if PG16_GE
 		new_var->varnullingrels = var->varnullingrels;
-#endif
 
 		if (!AttributeNumberIsValid(new_var->varattno))
 		{
@@ -1010,49 +1005,6 @@ find_vectorized_quals(DecompressionMapContext *context, ColumnarScanPath *path, 
 }
 
 /*
- * Copy of the Postgres' static function from createplan.c.
- *
- * Some places in this file build Sort nodes that don't have a directly
- * corresponding Path node.  The cost of the sort is, or should have been,
- * included in the cost of the Path node we're working from, but since it's
- * not split out, we have to re-figure it using cost_sort().  This is just
- * to label the Sort node nicely for EXPLAIN.
- *
- * limit_tuples is as for cost_sort (in particular, pass -1 if no limit)
- */
-static void
-ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
-{
-	Plan *lefttree = plan->plan.lefttree;
-	Path sort_path; /* dummy for result of cost_sort */
-
-	/*
-	 * This function shouldn't have to deal with IncrementalSort plans because
-	 * they are only created from corresponding Path nodes.
-	 */
-	Assert(IsA(plan, Sort));
-
-	cost_sort(&sort_path,
-			  root,
-			  NIL,
-#if PG18_GE
-			  lefttree->disabled_nodes,
-#endif
-			  lefttree->total_cost,
-			  lefttree->plan_rows,
-			  lefttree->plan_width,
-			  0.0,
-			  work_mem,
-			  limit_tuples);
-	plan->plan.startup_cost = sort_path.startup_cost;
-	plan->plan.total_cost = sort_path.total_cost;
-	plan->plan.plan_rows = lefttree->plan_rows;
-	plan->plan.plan_width = lefttree->plan_width;
-	plan->plan.parallel_aware = false;
-	plan->plan.parallel_safe = lefttree->parallel_safe;
-}
-
-/*
  * Find a variable of the given relation somewhere in the expression tree.
  * Currently we use this to find the Var argument of time_bucket, when we prepare
  * the batch sorted merge parameters after using the monotonous sorting transform
@@ -1094,6 +1046,15 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	decompress_plan->methods = &columnar_scan_plan_methods;
 	decompress_plan->scan.scanrelid = dcpath->info->chunk_rel->relid;
 
+	/*
+	 * `clauses` is chunk_rel->baserestrictinfo plus any parameterized join
+	 * clauses PG attached for this path.  When every baserestrictinfo entry
+	 * was pushed to the compressed scan without recheck we can skip them on
+	 * plan.qual: the compressed scan enforces them on its own, and dropping
+	 * them lets ColumnarIndexScan apply for partial chunks too.  Param
+	 * clauses are not in baserestrictinfo, so they always stay on plan.qual.
+	 */
+	List *base_clauses = dcpath->info->chunk_rel->baserestrictinfo;
 	if (IsA(compressed_path, IndexPath))
 	{
 		/*
@@ -1106,6 +1067,16 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+			/*
+			 * Since we need the original quals for partial chunks we can't remove
+			 * them while pushing down to the compressed scan and only remove them
+			 * here.
+			 */
+			if (dcpath->all_quals_pushed_down && list_member_ptr(base_clauses, rinfo))
+			{
+				continue;
+			}
 
 			ListCell *indexclause_cell = NULL;
 			if (rinfo->parent_ec != NULL)
@@ -1140,6 +1111,12 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+			if (dcpath->all_quals_pushed_down && list_member_ptr(base_clauses, rinfo))
+			{
+				continue;
+			}
+
 			decompress_plan->scan.plan.qual =
 				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
 		}
@@ -1353,9 +1330,10 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			 * orderby.
 			 */
 			Assert(strategy == BTLessStrategyNumber || strategy == BTGreaterStrategyNumber);
-			char *meta_col_name = strategy == BTLessStrategyNumber ?
-									  column_segment_min_name(i + 1) :
-									  column_segment_max_name(i + 1);
+			char *lower_name;
+			char *upper_name;
+			orderby_sparse_metadata_names(dcpath->info->settings, i + 1, &lower_name, &upper_name);
+			char *meta_col_name = strategy == BTLessStrategyNumber ? lower_name : upper_name;
 
 			AttrNumber attr_position =
 				get_attnum(dcpath->info->compressed_rte->relid, meta_col_name);

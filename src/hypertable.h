@@ -9,10 +9,8 @@
 #include <nodes/primnodes.h>
 #include <utils/array.h>
 
-#include "chunk_adaptive.h"
 #include "dimension.h"
 #include "export.h"
-#include "hypertable_cache.h"
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "ts_catalog/catalog.h"
@@ -43,7 +41,6 @@ typedef struct Hypertable
 {
 	FormData_hypertable fd;
 	Oid main_table_relid;
-	Oid chunk_sizing_func;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
 	ChunkRangeSpace *range_space;
@@ -84,8 +81,7 @@ extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hy
 													   uint32 flags, DimensionInfo *time_dim_info,
 													   DimensionInfo *closed_dim_info,
 													   Name associated_schema_name,
-													   Name associated_table_prefix,
-													   ChunkSizingInfo *chunk_sizing_info);
+													   Name associated_table_prefix);
 extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id);
 
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
@@ -103,7 +99,6 @@ extern int ts_hypertable_scan_with_memory_context(const char *schema, const char
 												  tuple_found_func tuple_found, void *data,
 												  LOCKMODE lockmode, MemoryContext mctx);
 extern bool ts_hypertable_update_status_osm(Hypertable *ht);
-extern bool ts_hypertable_update_chunk_sizing(Hypertable *ht);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
@@ -155,6 +150,3 @@ extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, con
 										   data,                                                   \
 										   lockmode,                                               \
 										   CurrentMemoryContext)
-
-#define hypertable_adaptive_chunking_enabled(ht)                                                   \
-	(OidIsValid((ht)->chunk_sizing_func) && (ht)->fd.chunk_target_size > 0)

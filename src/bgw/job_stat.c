@@ -331,15 +331,13 @@ calculate_jitter_percent()
 }
 
 /* For failures we have backoff based on consecutive failures
- * along with a ceiling at schedule_interval * MAX_INTERVALS_BACKOFF / 1 minute
- * for jobs failing at runtime / for jobs failing to launch.
+ * along with a ceiling at schedule_interval * MAX_INTERVALS_BACKOFF.
  * We also limit the backoff in case of consecutive failures as we don't
  * want to pass in input that leads to out of range timestamps and don't want to
  * put off the next start time for the job indefinitely
  */
 static TimestampTz
-calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures, BgwJob *job,
-								bool launch_failure)
+calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures, BgwJob *job)
 {
 	float8 jitter = calculate_jitter_percent();
 
@@ -358,9 +356,6 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 
 	MemoryContext oldctx = CurrentMemoryContext;
 	ResourceOwner oldowner = CurrentResourceOwner;
-	/* 2^(consecutive_failures) - 1, at most 2^20 */
-	int64 max_slots = (INT64CONST(1) << (int64) multiplier) - INT64CONST(1);
-	int64 rand_backoff = rand() % (max_slots * USECS_PER_SEC);
 
 	if (!IS_VALID_TIMESTAMP(finish_time))
 	{
@@ -373,30 +368,17 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 		Datum ival;
 		/* ival_max is the ceiling = MAX_INTERVALS_BACKOFF * schedule_interval */
 		Datum ival_max;
-		// max wait time to launch job is 1 minute
-		Interval interval_max = { .time = 60000000 };
-		Interval retry_ival = { .time = 2000000 };
-		retry_ival.time += rand_backoff;
 
 		BeginInternalSubTransaction("next start on failure");
 
-		if (launch_failure)
-		{
-			// random backoff seconds in [2, 2 + 2^f]
-			ival = IntervalPGetDatum(&retry_ival);
-			ival_max = IntervalPGetDatum(&interval_max);
-		}
-		else
-		{
-			/* ival = retry_period * (consecutive_failures)  */
-			ival = DirectFunctionCall2(interval_mul,
-									   IntervalPGetDatum(&job->fd.retry_period),
-									   Float8GetDatum(multiplier));
-			/* ival_max is the ceiling = MAX_INTERVALS_BACKOFF * schedule_interval */
-			ival_max = DirectFunctionCall2(interval_mul,
-										   IntervalPGetDatum(&job->fd.schedule_interval),
-										   Float8GetDatum(MAX_INTERVALS_BACKOFF));
-		}
+		/* ival = retry_period * (consecutive_failures)  */
+		ival = DirectFunctionCall2(interval_mul,
+								   IntervalPGetDatum(&job->fd.retry_period),
+								   Float8GetDatum(multiplier));
+		/* ival_max is the ceiling = MAX_INTERVALS_BACKOFF * schedule_interval */
+		ival_max = DirectFunctionCall2(interval_mul,
+									   IntervalPGetDatum(&job->fd.schedule_interval),
+									   Float8GetDatum(MAX_INTERVALS_BACKOFF));
 
 		if (DatumGetInt32(DirectFunctionCall2(interval_cmp, ival, ival_max)) > 0)
 		{
@@ -452,16 +434,6 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	return res;
 }
 
-static TimestampTz
-calculate_next_start_on_failed_launch(int consecutive_failed_launches, BgwJob *job)
-{
-	TimestampTz now = ts_timer_get_current_timestamp();
-	TimestampTz failure_calc =
-		calculate_next_start_on_failure(now, consecutive_failed_launches, job, true);
-
-	return failure_calc;
-}
-
 /* For crashes, the logic is the similar as for failures except we also have
  *  a minimum wait after a crash that we wait, so that if an operator needs to disable the job,
  *  there will be enough time before another crash.
@@ -470,8 +442,7 @@ static TimestampTz
 calculate_next_start_on_crash(int consecutive_crashes, BgwJob *job)
 {
 	TimestampTz now = ts_timer_get_current_timestamp();
-	TimestampTz failure_calc =
-		calculate_next_start_on_failure(now, consecutive_crashes, job, false);
+	TimestampTz failure_calc = calculate_next_start_on_failure(now, consecutive_crashes, job);
 	TimestampTz min_time = TimestampTzPlusMilliseconds(now, MIN_WAIT_AFTER_CRASH_MS);
 
 	if (min_time > failure_calc)
@@ -546,8 +517,7 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 		{
 			fd->next_start = calculate_next_start_on_failure(fd->last_finish,
 															 fd->consecutive_failures,
-															 result_ctx->job,
-															 false);
+															 result_ctx->job);
 		}
 	}
 
@@ -828,13 +798,8 @@ ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job)
 }
 
 TimestampTz
-ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_failed_launches)
+ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job)
 {
-	/* give the system some room to breathe, wait before trying to launch again */
-	if (consecutive_failed_launches > 0)
-	{
-		return calculate_next_start_on_failed_launch(consecutive_failed_launches, job);
-	}
 	if (jobstat == NULL)
 	{
 		/* Never previously run - run right away */

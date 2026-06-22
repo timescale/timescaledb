@@ -21,7 +21,7 @@ jobs:
       pg_latest: ${{ github.event_name == 'pull_request' && steps.setter.outputs.PG_LATEST_ONLY || steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -34,7 +34,7 @@ jobs:
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [config, check_paths]
     container:
-      image: i386/debian:bookworm-slim@sha256:25df630e1c5d15797330d33e1cf3df6a20017c52eed3798109c7deb17d1a3d4a
+      image: i386/debian:bookworm-slim@sha256:cf360783aa5641b4eedb2edd89c3a339480e256132f4bbc4601ddca8a620a428
       options: --privileged --ulimit core=-1:-1 --ulimit fsize=-1:-1
       env:
         PG_SRC_DIR: pgbuild
@@ -70,6 +70,7 @@ jobs:
           compress_bloom_sparse_debug
           compress_compbloom_hash_pushdown
           compress_composite_bloom_debug
+          compress_observ-*
           compress_qualpushdown_saop
           compress_sort_transform
           compression_allocation
@@ -89,7 +90,6 @@ jobs:
           vector_agg_text
           vector_agg_uuid
           vectorized_aggregation
-          ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
@@ -117,7 +117,7 @@ jobs:
           icu-devtools
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -140,7 +140,7 @@ jobs:
     - name: Build PostgreSQL ${{ matrix.pg }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1

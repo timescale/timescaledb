@@ -61,7 +61,7 @@ CREATE USER not_priv;
 -- A user with no ownership on the Cagg cannot create index on it. -- This should fail
 \set ON_ERROR_STOP 0
 CREATE INDEX cagg_idx on mat_refresh_test(humidity);
-ERROR:  must be owner of hypertable "_materialized_hypertable_2"
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP USER not_priv;
@@ -141,12 +141,24 @@ REVOKE EXECUTE ON FUNCTION get_constant() FROM PUBLIC;
 select from alter_job(:cagg_job_id, max_runtime => NULL);
 ERROR:  insufficient permissions to alter job 1000
 --make sure that commands fail
+--all of these should report ownership errors referring to the continuous
+--aggregate (not the underlying view)
 ALTER MATERIALIZED VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
 ERROR:  must be owner of continuous aggregate "mat_refresh_test"
+ALTER MATERIALIZED VIEW mat_refresh_test RENAME TO mat_refresh_test_renamed;
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
+ALTER MATERIALIZED VIEW mat_refresh_test RENAME COLUMN location TO loc;
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
+ALTER MATERIALIZED VIEW mat_refresh_test SET SCHEMA custom_schema;
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
+ALTER MATERIALIZED VIEW mat_refresh_test OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
+ALTER MATERIALIZED VIEW mat_refresh_test ADD COLUMN dummy_col int;
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
 DROP MATERIALIZED VIEW mat_refresh_test;
-ERROR:  must be owner of view mat_refresh_test
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
 CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
-ERROR:  must be owner of view mat_refresh_test
+ERROR:  must be owner of continuous aggregate "mat_refresh_test"
 SELECT * FROM mat_refresh_test;
 ERROR:  permission denied for view mat_refresh_test
 -- Test permissions also when the watermark is not constified and the ACL checks

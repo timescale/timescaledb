@@ -204,17 +204,17 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 								 errmsg("operation not supported on OSM chunk tables")));
 					}
 
-					ChunkConstraints *ccs =
-						ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id,
-															 10,
-															 CurrentMemoryContext);
 					Assert(cmd->name);
 
-					for (int i = 0; i < ccs->num_constraints; i++)
+					for (int i = 0; i < chunk->cube->num_slices; i++)
 					{
-						ChunkConstraint *cc = &ccs->constraints[i];
+						char dim_check_name[NAMEDATALEN];
 
-						if (namestrcmp(&cc->fd.constraint_name, cmd->name) == 0)
+						snprintf(dim_check_name,
+								 NAMEDATALEN,
+								 "constraint_%d",
+								 chunk->cube->slices[i]->fd.id);
+						if (strcmp(dim_check_name, cmd->name) == 0)
 						{
 							ereport(ERROR,
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -760,6 +760,15 @@ process_alterviewschema(ProcessUtilityArgs *args)
 	schema = get_namespace_name(get_rel_namespace(relid));
 	name = get_rel_name(relid);
 
+	/* For a continuous aggregate, check ownership up front so the error refers
+	 * to the continuous aggregate rather than the underlying view, which is
+	 * what PG's own ownership check would report once the schema change is
+	 * dispatched as a view operation. */
+	if (ts_continuous_agg_find_by_relid(relid) != NULL)
+	{
+		ts_cagg_permissions_check(relid, GetUserId());
+	}
+
 	ts_continuous_agg_rename_view(schema, name, stmt->newschema, name, &stmt->objectType);
 }
 
@@ -867,24 +876,15 @@ process_copy(ProcessUtilityArgs *args)
 
 		if (!ht)
 		{
-			Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-			/* target is neither hypertable nor chunk so let postgres handle it */
-			if (!chunk)
+			/*
+			 * For operations on internal compressed chunks we block modifications
+			 * if the chunk belongs to a frozen chunk otherwise let postgres handle it.
+			 * Uncompressed frozen chunks are intercepted as part of tuple routing.
+			 */
+			Oid uncompressed_relid = ts_relation_get_uncompressed_relid(relid);
+			if (OidIsValid(uncompressed_relid))
 			{
-				ts_cache_release(&hcache);
-				return DDL_CONTINUE;
-			}
-
-			ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
-			if (ht->fd.compression_state == HypertableInternalCompressionTable)
-			{
-				/*
-				 * For operations on internal compressed chunks we block modifications
-				 * if the chunk belongs to a frozen chunk otherwise let postgres handle it.
-				 * Uncompressed frozen chunks are intercepted as part of tuple routing.
-				 */
-				Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
+				Chunk *uncompressed = ts_chunk_get_by_relid(uncompressed_relid, true);
 				if (ts_chunk_is_frozen(uncompressed))
 				{
 					ereport(ERROR,
@@ -896,6 +896,16 @@ process_copy(ProcessUtilityArgs *args)
 				ts_cache_release(&hcache);
 				return DDL_CONTINUE;
 			}
+
+			/* target is neither hypertable nor chunk so let postgres handle it */
+			int32 hypertable_id = ts_chunk_get_hypertable_id_by_reloid(relid);
+			if (hypertable_id == INVALID_HYPERTABLE_ID)
+			{
+				ts_cache_release(&hcache);
+				return DDL_CONTINUE;
+			}
+
+			ht = ts_hypertable_get_by_id(hypertable_id);
 		}
 	}
 
@@ -950,19 +960,15 @@ typedef void (*mt_process_chunk_t)(int32 hypertable_id, Oid chunk_relid, void *a
  * Returns the number of processed chunks, or -1 if the table was not a
  * hypertable.
  */
-static int
-foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
+static void
+foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg,
+			  bool propagate_to_compressed)
 {
 	List *chunks;
 	ListCell *lc;
-	int n = 0;
 	MemoryContext orig_mcxt = CurrentMemoryContext;
 	MemoryContext chunk_mcxt;
-
-	if (NULL == ht)
-	{
-		return -1;
-	}
+	Ensure(ht, "hypertable cannot be null");
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
@@ -975,58 +981,24 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 	foreach (lc, chunks)
 	{
 		MemoryContextSwitchTo(chunk_mcxt);
+		if (propagate_to_compressed)
+		{
+			Oid compressed_relid = ts_relation_get_compressed_relid(lfirst_oid(lc));
+			if (OidIsValid(compressed_relid))
+			{
+				process_chunk(ht, compressed_relid, arg);
+			}
+		}
 		process_chunk(ht, lfirst_oid(lc), arg);
 		MemoryContextSwitchTo(orig_mcxt);
 		MemoryContextReset(chunk_mcxt);
-		n++;
 	}
 
 	MemoryContextDelete(chunk_mcxt);
 	list_free(chunks);
-
-	return n;
 }
 
-/*
- * Applies a function to each compressed internal chunk of a hypertable.
- *
- * Returns the number of processed chunks, or -1 if the table was not a
- * hypertable.
- */
-static int
-foreach_compressed_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
-{
-	List *chunks;
-	ListCell *lc;
-	int n = 0;
-	MemoryContext orig_mcxt = CurrentMemoryContext;
-	MemoryContext chunk_mcxt;
-
-	if (!ht || !ht->fd.compressed_hypertable_id)
-	{
-		return -1;
-	}
-
-	chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-
-	chunk_mcxt = AllocSetContextCreate(orig_mcxt, "foreach_chunk", ALLOCSET_DEFAULT_SIZES);
-	foreach (lc, chunks)
-	{
-		Chunk *chunk = lfirst(lc);
-		MemoryContextSwitchTo(chunk_mcxt);
-		process_chunk(ht, chunk->table_id, arg);
-		MemoryContextReset(chunk_mcxt);
-		n++;
-	}
-
-	MemoryContextSwitchTo(orig_mcxt);
-	MemoryContextDelete(chunk_mcxt);
-	list_free(chunks);
-
-	return n;
-}
-
-static int
+static void
 foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t process_chunk,
 							   void *arg)
 {
@@ -1035,7 +1007,6 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	int32 hypertable_id;
 	List *chunks;
 	ListCell *lc;
-	int num_chunks = -1;
 
 	StartTransactionCommand();
 	MemoryContextSwitchTo(mctx);
@@ -1046,7 +1017,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	{
 		ts_cache_release(&hcache);
 		CommitTransactionCommand();
-		return -1;
+		return;
 	}
 
 	hypertable_id = ht->fd.id;
@@ -1055,16 +1026,13 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	ts_cache_release(&hcache);
 	CommitTransactionCommand();
 
-	num_chunks = list_length(chunks);
-	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, num_chunks);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, list_length(chunks));
 	foreach (lc, chunks)
 	{
 		process_chunk(hypertable_id, lfirst_oid(lc), arg);
 	}
 
 	list_free(chunks);
-
-	return num_chunks;
 }
 
 typedef struct VacuumCtx
@@ -1154,13 +1122,13 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 
 	/* If we have a compressed chunk make sure to analyze it as well */
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+	if (ts_chunk_is_compressed(chunk))
 	{
-		Chunk *comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
 		/* Compressed chunk might be missing due to concurrent operations */
-		if (comp_chunk)
+		if (OidIsValid(compressed_relid))
 		{
-			chunk_vacuum_rel = makeVacuumRelation(NULL, comp_chunk->table_id, NIL);
+			chunk_vacuum_rel = makeVacuumRelation(NULL, compressed_relid, NIL);
 			ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 		}
 	}
@@ -1255,14 +1223,12 @@ process_vacuum(ProcessUtilityArgs *args)
 	foreach (lc, stmt->options)
 	{
 		DefElem *opt = (DefElem *) lfirst(lc);
-#if PG16_GE
 		/* if "only_database_stats" is defined then don't execute our custom code and return to
 		 * the postgres execution for the proper validations */
 		if (is_vacuumcmd && strcmp(opt->defname, "only_database_stats") == 0)
 		{
 			return DDL_CONTINUE;
 		}
-#endif
 		if (strcmp(opt->defname, "full") == 0)
 		{
 			ctx.is_vacuumfull = defGetBoolean(opt);
@@ -1316,7 +1282,7 @@ process_vacuum(ProcessUtilityArgs *args)
 				if (ht)
 				{
 					ctx.ht_vacuum_rel = vacuum_rel;
-					foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
+					foreach_chunk(ht, add_chunk_to_vacuum, &ctx, false);
 				}
 			}
 			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
@@ -1381,7 +1347,7 @@ handle_truncate_hypertable(ProcessUtilityArgs *args, TruncateStmt *stmt, Hyperta
 	ts_chunk_delete_by_hypertable_id(ht->fd.id);
 
 	/* Drop the chunk tables */
-	foreach_chunk(ht, process_truncate_chunk, stmt);
+	foreach_chunk(ht, process_truncate_chunk, stmt, true);
 }
 
 /*
@@ -1565,17 +1531,18 @@ process_truncate(ProcessUtilityArgs *args)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
 						}
 						/* Truncate the compressed chunk too */
-						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+						if (ts_chunk_is_compressed(chunk))
 						{
-							Chunk *compressed_chunk =
-								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-							if (compressed_chunk != NULL)
+							Oid compressed_relid =
+								ts_relation_get_compressed_relid(chunk->table_id);
+							if (OidIsValid(compressed_relid))
 							{
 								/* Create list item into the same context of the list. */
 								oldctx = MemoryContextSwitchTo(parsetreectx);
-								rv = makeRangeVar(NameStr(compressed_chunk->fd.schema_name),
-												  NameStr(compressed_chunk->fd.table_name),
-												  -1);
+								char *schema_name =
+									get_namespace_name(get_rel_namespace(compressed_relid));
+								char *table_name = get_rel_name(compressed_relid);
+								rv = makeRangeVar(schema_name, table_name, -1);
 								MemoryContextSwitchTo(oldctx);
 								list_changed = true;
 							}
@@ -1712,7 +1679,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		{
 			Hypertable *ht;
 
-			if (ts_chunk_contains_compressed_data(chunk))
+			if (ts_relation_is_compressed_chunk_relation(chunk->table_id))
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1723,17 +1690,14 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
 			 *  it would be blocked if there are dependent objects */
-			if (stmt->behavior == DROP_CASCADE && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+			if (stmt->behavior == DROP_CASCADE && ts_chunk_is_compressed(chunk))
 			{
-				Chunk *compressed_chunk =
-					ts_chunk_get_by_id_with_slice_lock(chunk->fd.compressed_chunk_id,
-													   AccessExclusiveLock,
-													   &slice_lock,
-													   false);
+				Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
 				/* The chunk may have been delete by a CASCADE */
-				if (compressed_chunk != NULL)
+				if (OidIsValid(compressed_relid))
 				{
-					ts_chunk_drop(compressed_chunk, stmt->behavior, DEBUG1);
+					LockRelationOid(compressed_relid, AccessExclusiveLock);
+					ts_chunk_drop_by_relid(compressed_relid, stmt->behavior, DEBUG1);
 				}
 			}
 
@@ -1800,7 +1764,7 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				 *  We need to drop hypertable chunks before the hypertable to avoid the need
 				 *  to CASCADE such drops;
 				 */
-				foreach_chunk(ht, process_drop_table_chunk, stmt);
+				foreach_chunk(ht, process_drop_table_chunk, stmt, true);
 				/* The usual path for deleting an associated compressed hypertable uses
 				 * DROP_RESTRICT But if we are using DROP_CASCADE we should propagate that down to
 				 * the compressed hypertable.
@@ -1809,22 +1773,6 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				{
 					Hypertable *compressed_hypertable =
 						ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-					List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-					foreach (lc, chunks)
-					{
-						Chunk *chunk = lfirst(lc);
-
-						if (OidIsValid(chunk->table_id))
-						{
-							ObjectAddress chunk_addr = (ObjectAddress){
-								.classId = RelationRelationId,
-								.objectId = chunk->table_id,
-							};
-
-							/* Drop the postgres table */
-							performDeletion(&chunk_addr, stmt->behavior, 0);
-						}
-					}
 					ts_hypertable_drop(compressed_hypertable, DROP_CASCADE);
 				}
 			}
@@ -2138,7 +2086,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 					if (ht)
 					{
-						foreach_chunk(ht, add_chunk_oid, args);
+						foreach_chunk(ht, add_chunk_oid, args, false);
 					}
 				}
 
@@ -2222,6 +2170,12 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 
 		if (cagg)
 		{
+			/* Check ownership up front so the error refers to the continuous
+			 * aggregate rather than the underlying view, which is what PG's own
+			 * ownership check below would report after we rewrite the drop into
+			 * a DROP VIEW. */
+			ts_cagg_permissions_check(cagg->relid, GetUserId());
+
 			/* If there is at least one cagg, the drop should be treated as a
 			 * DROP VIEW. */
 			stmt->removeType = OBJECT_VIEW;
@@ -2346,13 +2300,12 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	ProcessUtilityArgs *args = arg;
 	ReindexStmt *stmt = (ReindexStmt *) args->parsetree;
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	switch (stmt->kind)
 	{
 		case REINDEX_OBJECT_TABLE:
-			stmt->relation->relname = NameStr(chunk->fd.table_name);
-			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
+			stmt->relation->relname = get_rel_name(chunk_relid);
+			stmt->relation->schemaname = get_namespace_name(get_rel_namespace(chunk_relid));
 			ExecReindex(NULL, stmt, false);
 			break;
 		case REINDEX_OBJECT_INDEX:
@@ -2396,7 +2349,7 @@ process_reindex(ProcessUtilityArgs *args)
 		case REINDEX_OBJECT_TABLE:
 			ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 
-			if (NULL != ht)
+			if (ht)
 			{
 				PreventCommandDuringRecovery("REINDEX");
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
@@ -2407,10 +2360,8 @@ process_reindex(ProcessUtilityArgs *args)
 							 errmsg("concurrent index creation on hypertables is not supported")));
 				}
 
-				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
-				{
-					result = DDL_DONE;
-				}
+				foreach_chunk(ht, reindex_chunk, args, true);
+				result = DDL_DONE;
 			}
 			break;
 
@@ -2450,6 +2401,16 @@ process_rename_view(Oid relid, RenameStmt *stmt)
 {
 	char *schema = get_namespace_name(get_rel_namespace(relid));
 	char *name = get_rel_name(relid);
+
+	/* For a continuous aggregate, check ownership up front so the error refers
+	 * to the continuous aggregate rather than the underlying view, which is
+	 * what PG's own ownership check would report once the rename is dispatched
+	 * as a view rename. */
+	if (ts_continuous_agg_find_by_relid(relid) != NULL)
+	{
+		ts_cagg_permissions_check(relid, GetUserId());
+	}
+
 	ts_continuous_agg_rename_view(schema, name, schema, stmt->newname, &stmt->renameType);
 }
 
@@ -2518,6 +2479,11 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		if (cagg)
 		{
 			is_cagg = true;
+
+			/* Check ownership up front so the error refers to the continuous
+			 * aggregate rather than one of the internal views, which is what
+			 * the ExecRenameStmt calls below would otherwise report. */
+			ts_cagg_permissions_check(relid, GetUserId());
 
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
@@ -2842,11 +2808,11 @@ process_rename_constraint_or_trigger(ProcessUtilityArgs *args, Cache *hcache, Oi
 
 		if (stmt->renameType == OBJECT_TABCONSTRAINT)
 		{
-			foreach_chunk(ht, rename_hypertable_constraint, stmt);
+			foreach_chunk(ht, rename_hypertable_constraint, stmt, false);
 		}
 		else if (stmt->renameType == OBJECT_TRIGGER)
 		{
-			foreach_chunk(ht, rename_hypertable_trigger, stmt);
+			foreach_chunk(ht, rename_hypertable_trigger, stmt, false);
 		}
 	}
 	else if (stmt->renameType == OBJECT_TABCONSTRAINT)
@@ -2956,20 +2922,13 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 	Assert(IsA(cmd->newowner, RoleSpec));
 
 	process_altertable_change_owner_bgw_jobs(ht->fd.id, newrole_oid);
-	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd);
+	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd, true);
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
-		ListCell *lc;
-		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		foreach (lc, chunks)
-		{
-			Chunk *chunk = lfirst(lc);
-			AlterTableInternal(chunk->table_id, list_make1(cmd), false);
-		}
 		process_altertable_change_owner(compressed_hypertable, cmd);
 	}
 }
@@ -3004,10 +2963,6 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 						 quote_identifier(get_namespace_name(nspcid)),
 						 quote_identifier(get_rel_name(chunk->table_id)));
 
-		/*
-		 * Before PG15 NULLs were always considered distinct, with
-		 * PG15 the behaviour became configurable.
-		 */
 		if (!stmt->nulls_not_distinct)
 		{
 			int i = 0;
@@ -3178,9 +3133,6 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 
 			break;
 		case AT_AddConstraint:
-#if PG16_LT
-		case AT_AddConstraintRecurse:
-#endif
 		{
 			Constraint *con = castNode(Constraint, info->cmd->def);
 			switch (con->contype)
@@ -3248,19 +3200,19 @@ process_altertable_add_constraint(Hypertable *ht, const AlterTableCmd *cmd,
 			get_relation_constraint_oid(ht->main_table_relid, constraint_name, false),
 	};
 
-	foreach_chunk(ht, process_add_constraint_chunk, &info);
+	foreach_chunk(ht, process_add_constraint_chunk, &info, false);
 }
 
 static void
 process_altertable_alter_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
 {
-	foreach_chunk(ht, alter_hypertable_constraint, cmd);
+	foreach_chunk(ht, alter_hypertable_constraint, cmd, false);
 }
 
 static void
 process_altertable_validate_constraint_end(Hypertable *ht, AlterTableCmd *cmd)
 {
-	foreach_chunk(ht, validate_hypertable_constraint, cmd);
+	foreach_chunk(ht, validate_hypertable_constraint, cmd, false);
 }
 
 /*
@@ -3360,7 +3312,7 @@ process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 {
 	if (cmd->subtype == AT_SetNotNull)
 	{
-		foreach_chunk(ht, validate_set_not_null, cmd);
+		foreach_chunk(ht, validate_set_not_null, cmd, false);
 	}
 
 	if (cmd->subtype == AT_DropNotNull)
@@ -3542,7 +3494,6 @@ typedef struct CreateIndexInfo
 	Oid main_table_relid;
 	HypertableIndexOptions extended_options;
 	MemoryContext mctx;
-	int64 partitions_done; /* for tracking chunk progress on PG15 */
 } CreateIndexInfo;
 
 /*
@@ -3587,12 +3538,7 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	index_close(hypertable_index_rel, NoLock);
 	table_close(chunk_rel, NoLock);
 
-#if PG16_GE
 	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
-#else
-	/* pgstat_progress_incr_param is not available before PG16 */
-	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, ++info->partitions_done);
-#endif
 	DEBUG_WAITPOINT("process_index_chunk_done");
 }
 
@@ -3698,12 +3644,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 
 	ts_catalog_restore_user(&sec_ctx);
 
-#if PG16_GE
 	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
-#else
-	/* pgstat_progress_incr_param is not available before PG16 */
-	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, ++info->partitions_done);
-#endif
 	DEBUG_WAITPOINT("process_index_chunk_multitransaction_done");
 
 	PopActiveSnapshot();
@@ -3840,7 +3781,14 @@ process_index_start(ProcessUtilityArgs *args)
 		stmt->relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
 	}
 
-	ts_hypertable_permissions_check_by_id(ht->fd.id);
+	if (cagg != NULL)
+	{
+		ts_cagg_permissions_check(cagg->relid, GetUserId());
+	}
+	else
+	{
+		ts_hypertable_permissions_check_by_id(ht->fd.id);
+	}
 
 	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &postgres_options);
 
@@ -3891,9 +3839,7 @@ process_index_start(ProcessUtilityArgs *args)
 		 * If this is an index creation for cagg, then we need to switch user as the current
 		 * user might not have permissions on the internal schema where cagg index will be
 		 * created.
-		 * Need to restore user soon after this step.
 		 */
-		ts_cagg_permissions_check(ht->main_table_relid, GetUserId());
 		SWITCH_TO_TS_USER(NameStr(cagg->data.direct_view_schema), uid, saved_uid, sec_ctx);
 	}
 
@@ -3964,7 +3910,7 @@ process_index_start(ProcessUtilityArgs *args)
 		list_free(chunks);
 
 		/* Recurse to each chunk and create a corresponding index. */
-		foreach_chunk(ht, process_index_chunk, &info);
+		foreach_chunk(ht, process_index_chunk, &info, false);
 
 		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(&hcache);
@@ -4427,9 +4373,6 @@ process_create_table_end(Node *parsetree)
 										  InvalidOid		 /* partitioning func */
 			);
 
-		ChunkSizingInfo *csi = ts_chunk_sizing_info_get_default_disabled(table_relid);
-		csi->colname = time_column;
-
 		CatalogSecurityContext sec_ctx;
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
@@ -4445,8 +4388,8 @@ process_create_table_end(Node *parsetree)
 											   NULL, /* associated_schema_name */
 										   has_associated_table_prefix ?
 											   &associated_table_prefix :
-											   NULL, /* associated_table_prefix */
-										   csi))
+											   NULL /* associated_table_prefix */
+										   ))
 		{
 			bool enable_columnstore;
 			if (ts_license_is_apache() &&
@@ -4674,7 +4617,7 @@ process_altertable_replica_identity(Hypertable *ht, AlterTableCmd *cmd)
 		}
 	}
 
-	foreach_chunk(ht, process_altertable_chunk_replica_identity, cmd);
+	foreach_chunk(ht, process_altertable_chunk_replica_identity, cmd, false);
 }
 
 static void
@@ -4706,20 +4649,12 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 	}
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
-	foreach_chunk(ht, process_altertable_chunk, cmd);
+	foreach_chunk(ht, process_altertable_chunk, cmd, true);
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
-
-		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		ListCell *lc;
-		foreach (lc, chunks)
-		{
-			Chunk *chunk = lfirst(lc);
-			AlterTableInternal(chunk->table_id, list_make1(cmd), false);
-		}
 		process_altertable_set_tablespace_end(compressed_hypertable, cmd);
 	}
 }
@@ -4765,14 +4700,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 static void
 process_altertable_chunk_propagate_to_compressed(AlterTableCmd *cmd, Oid relid)
 {
-	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-	if (chunk == NULL)
-	{
-		return;
-	}
-
-	if (ts_chunk_contains_compressed_data(chunk))
+	if (ts_relation_is_compressed_chunk_relation(relid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -4781,12 +4709,12 @@ process_altertable_chunk_propagate_to_compressed(AlterTableCmd *cmd, Oid relid)
 						 "instead.")));
 	}
 
-	/* set tablespace for compressed chunk */
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-	{
-		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+	Oid compressed_relid = ts_relation_get_compressed_relid(relid);
 
-		AlterTableInternal(compressed_chunk->table_id, list_make1(cmd), false);
+	/* set tablespace for compressed chunk */
+	if (OidIsValid(compressed_relid))
+	{
+		AlterTableInternal(compressed_relid, list_make1(cmd), false);
 	}
 }
 
@@ -4861,9 +4789,6 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			case AT_AddColumn:
-#if PG16_LT
-			case AT_AddColumnRecurse:
-#endif
 			{
 				ColumnDef *col;
 				ListCell *constraint_lc;
@@ -4884,18 +4809,12 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				break;
 			}
 			case AT_DropColumn:
-#if PG16_LT
-			case AT_DropColumnRecurse:
-#endif
 				if (ht)
 				{
 					process_altertable_drop_column(ht, cmd);
 				}
 				break;
 			case AT_AddConstraint:
-#if PG16_LT
-			case AT_AddConstraintRecurse:
-#endif
 				Assert(IsA(cmd->def, Constraint));
 
 				if (ht)
@@ -4926,6 +4845,23 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("hypertables do not support native "
 									"postgres partitioning")));
+				}
+				break;
+			}
+			case AT_AddInherit:
+			{
+				/* A plain table cannot inherit from a hypertable, since the
+				 * child would not be a chunk and its rows would be hidden from
+				 * queries on the hypertable. */
+				RangeVar *parent = castNode(RangeVar, cmd->def);
+				Oid parent_relid = RangeVarGetRelid(parent, NoLock, true);
+
+				if (OidIsValid(parent_relid) && ts_is_hypertable(parent_relid))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot inherit from hypertable \"%s\"",
+									get_rel_name(parent_relid))));
 				}
 				break;
 			}
@@ -4980,26 +4916,11 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	return (list_length(stmt->cmds) > 0) ? DDL_CONTINUE : DDL_DONE;
 }
 
-static void
-continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
-{
-	Oid ownerid = ts_rel_get_owner(view_relid);
-
-	if (!ts_has_owner_privs(GetUserId(), ownerid))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(view_relid))));
-	}
-}
-
 static List *
 process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const List *defelems)
 {
 	WithClauseResult *parse_results;
 	List *pg_options = NIL, *other_namespace_options = NIL, *cagg_options = NIL;
-
-	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
 	ts_with_clause_filter(defelems, &cagg_options, &other_namespace_options, &pg_options);
 
@@ -5078,7 +4999,41 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 		return DDL_CONTINUE;
 	}
 
-	continuous_agg_with_clause_perm_check(cagg, view_relid);
+	ts_cagg_permissions_check(view_relid, GetUserId());
+
+	/*
+	 * CAgg add column handler.
+	 * Split `stmt->cmds` into the GENERATED ALWAYS AS and everything else
+	 * (handled by the switch below). Process all ADD COLUMNs at once since
+	 * they require a rewrite of the view, and doing them one by one would
+	 * be inefficient.
+	 */
+	{
+		List *addcol_cmds = NIL;
+		List *other_cmds = NIL;
+		foreach (lc, stmt->cmds)
+		{
+			AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+			if (cmd->subtype == AT_AddColumn)
+			{
+				addcol_cmds = lappend(addcol_cmds, cmd);
+			}
+			else
+			{
+				other_cmds = lappend(other_cmds, cmd);
+			}
+		}
+
+		if (addcol_cmds != NIL)
+		{
+			AlterTableStmt addcol_stmt = *stmt;
+			addcol_stmt.cmds = addcol_cmds;
+			ts_cm_functions->continuous_agg_add_column(cagg, &addcol_stmt);
+			CommandCounterIncrement();
+
+			stmt->cmds = other_cmds;
+		}
+	}
 
 	foreach (lc, stmt->cmds)
 	{
@@ -5233,9 +5188,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		}
 		break;
 		case AT_AddConstraint:
-#if PG16_LT
-		case AT_AddConstraintRecurse:
-#endif
 		{
 			Constraint *stmt = (Constraint *) cmd->def;
 			const char *conname = stmt->conname;
@@ -5271,7 +5223,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DisableTrigAll:
 		case AT_EnableTrigUser:
 		case AT_DisableTrigUser:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
+			foreach_chunk(ht, process_altertable_chunk, cmd, false);
 			break;
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);
@@ -5293,15 +5245,11 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			process_altertable_alter_constraint_end(ht, cmd);
 			break;
 		case AT_ValidateConstraint:
-#if PG16_LT
-		case AT_ValidateConstraintRecurse:
-#endif
 			process_altertable_validate_constraint_end(ht, cmd);
 			break;
 		case AT_SetLogged:
 		case AT_SetUnLogged:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
-			foreach_compressed_chunk(ht, process_altertable_chunk, cmd);
+			foreach_chunk(ht, process_altertable_chunk, cmd, true);
 			break;
 		case AT_DropCluster:
 		case AT_SetNotNull:
@@ -5314,7 +5262,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ResetOptions:
 		case AT_ReAddStatistics:
 		case AT_SetCompression:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
+			foreach_chunk(ht, process_altertable_chunk, cmd, false);
 			break;
 		case AT_SetTableSpace:
 			process_altertable_set_tablespace_end(ht, cmd);
@@ -5350,15 +5298,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 */
 			break;
 		case AT_AddColumn:
-#if PG16_LT
-		case AT_AddColumnRecurse:
-#endif
 			/* this is handled for compressed hypertables by tsl code */
 			break;
 		case AT_DropColumn:
-#if PG16_LT
-		case AT_DropColumnRecurse:
-#endif
 		case AT_DropExpression:
 
 			/*
@@ -5367,9 +5309,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 */
 			break;
 		case AT_DropConstraint:
-#if PG16_LT
-		case AT_DropConstraintRecurse:
-#endif
 			/* drop constraints handled by process_ddl_sql_drop */
 			break;
 		case AT_ReAddComment:			   /* internal command never hit in our test
@@ -5989,11 +5928,7 @@ process_create_stmt(ProcessUtilityArgs *args)
 				pelem->location = -1;
 
 				PartitionSpec *partspec = makeNode(PartitionSpec);
-#if PG16_LT
-				partspec->strategy = pstrdup("range");
-#else
 				partspec->strategy = PARTITION_STRATEGY_RANGE;
-#endif
 				partspec->partParams = list_make1(pelem);
 				partspec->location = -1;
 				stmt->partspec = partspec;
@@ -6001,11 +5936,7 @@ process_create_stmt(ProcessUtilityArgs *args)
 			else
 			{
 				/* User has specified PARTITION BY clause */
-#if PG16_LT
-				if (strcmp(stmt->partspec->strategy, "range") != 0)
-#else
 				if (stmt->partspec->strategy != PARTITION_STRATEGY_RANGE)
-#endif
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -6214,7 +6145,10 @@ process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	Oid chunk_con_oid;
 
 	/* Inherited FKs share the parent's name on the chunk; drop the unmanaged
-	 * ones (PG cascades the rest via conparentid). */
+	 * ones (PG cascades the rest via conparentid). Foreign-table OSM chunks
+	 * also need explicit CHECK drops because PG inheritance does not flow
+	 * through to foreign tables, but ts_chunk_clone_check_constraints did put
+	 * the CHECK on the chunk at attach time. */
 	chunk_con_oid =
 		get_relation_constraint_oid(chunk_relid, hypertable_constraint_name, true /* missing_ok */);
 	if (OidIsValid(chunk_con_oid))
@@ -6224,7 +6158,8 @@ process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		if (HeapTupleIsValid(tup))
 		{
 			Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(tup);
-			bool drop_it = (con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid));
+			bool drop_it = (con->contype == CONSTRAINT_FOREIGN && !OidIsValid(con->conparentid)) ||
+						   (con->contype == CONSTRAINT_CHECK && IS_OSM_CHUNK(chunk));
 
 			ReleaseSysCache(tup);
 
@@ -6271,20 +6206,12 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 		/* Recurse to each chunk and drop the corresponding constraint */
-		foreach_chunk(ht, process_drop_constraint_on_chunk, (void *) constraint->constraint_name);
+		foreach_chunk(ht,
+					  process_drop_constraint_on_chunk,
+					  (void *) constraint->constraint_name,
+					  false);
 
 		ts_catalog_restore_user(&sec_ctx);
-	}
-	else
-	{
-		/* Cannot get the full chunk here because it's table might be dropped */
-		int32 chunk_id;
-		bool found = ts_chunk_get_id(constraint->schema, constraint->table, &chunk_id, true);
-
-		if (found)
-		{
-			ts_chunk_constraint_delete_by_constraint_name(chunk_id, constraint->constraint_name);
-		}
 	}
 }
 

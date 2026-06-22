@@ -1,0 +1,1 @@
+Fixes: #10056 Enforce CHECK, NOT NULL and view WITH CHECK OPTION constraints for direct compress inserts

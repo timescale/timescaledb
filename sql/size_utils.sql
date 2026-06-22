@@ -378,10 +378,10 @@ BEGIN
   SELECT compress_relid FROM _timescaledb_catalog.compression_settings INTO v_oid WHERE relid = relation;
 
   IF v_oid IS NOT NULL THEN
-    row_count := (SELECT CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 ELSE reltuples * _timescaledb_functions.estimate_compressed_batch_size(oid) END FROM pg_class WHERE oid = v_oid);
+    row_count := (SELECT CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 WHEN reltuples = 'Infinity'::float4 THEN 0 ELSE reltuples * _timescaledb_functions.estimate_compressed_batch_size(oid) END FROM pg_class WHERE oid = v_oid);
   END IF;
 
-  row_count := COALESCE((SELECT row_count + CASE WHEN reltuples < 0 OR relkind = 'p' THEN 0 ELSE reltuples END FROM pg_class WHERE oid = relation), 0);
+  row_count := COALESCE((SELECT row_count + CASE WHEN reltuples < 0 OR relkind = 'p' or reltuples = 'Infinity' THEN 0 ELSE reltuples END FROM pg_class WHERE oid = relation), 0);
 
   RETURN row_count;
 END
@@ -597,6 +597,7 @@ AS $$
 DECLARE
   v_compressed_chunk regclass;
   v_uncompressed_chunk regclass;
+  v_segmentby text[];
   v_index regclass;
   v_fixed_column_size integer;
   v_num_varlen_columns integer;
@@ -612,7 +613,7 @@ BEGIN
 
   v_compressed_chunk := $1;
 
-  SELECT relid INTO v_uncompressed_chunk FROM _timescaledb_catalog.compression_settings WHERE compress_relid = v_compressed_chunk;
+  SELECT relid, segmentby INTO v_uncompressed_chunk, v_segmentby FROM _timescaledb_catalog.compression_settings WHERE compress_relid = v_compressed_chunk;
   IF NOT FOUND THEN
     RETURN;
   END IF;
@@ -632,7 +633,11 @@ BEGIN
   v_tuple_data := v_tuple_data + 7 & ~7; -- align to 8 bytes
 
   IF v_num_varlen_columns > 0 THEN
-	  SELECT ' + (' || string_agg(format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod)), ' + ') || ')' FROM pg_attribute INTO v_varlen_query WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped AND attlen = -1;
+	  SELECT ' + (' || string_agg(
+	    CASE WHEN attname = ANY(v_segmentby)
+	      THEN format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
+	      ELSE format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
+	    END, ' + ') || ')' FROM pg_attribute INTO v_varlen_query WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped AND attlen = -1;
   END IF;
 
   EXECUTE format('SELECT sum(_ts_meta_count) FROM %s', v_compressed_chunk) INTO tuples;
@@ -643,7 +648,11 @@ BEGIN
   FOR v_index, v_varlen_query, v_columns IN
     SELECT
       i.indexrelid::regclass,
-      (SELECT ' + (' || string_agg(format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod)), ' + ' ORDER BY attnum) || ')' FROM pg_attribute att WHERE att.attrelid=i.indrelid AND attnum =ANY(i.indkey)),
+      (SELECT ' + (' || string_agg(
+         CASE WHEN attname = ANY(v_segmentby)
+           THEN format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
+           ELSE format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
+         END, ' + ' ORDER BY attnum) || ')' FROM pg_attribute att WHERE att.attrelid=i.indrelid AND attnum =ANY(i.indkey)),
       array_length(i.indkey,1) FROM pg_index i
     WHERE i.indrelid = v_uncompressed_chunk
   LOOP

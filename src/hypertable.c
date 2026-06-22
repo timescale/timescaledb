@@ -45,7 +45,6 @@
 #include "compat/compat.h"
 #include "bgw_policy/policy.h"
 #include "chunk.h"
-#include "chunk_adaptive.h"
 #include "copy.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
@@ -133,17 +132,6 @@ ts_hypertable_permissions_check_by_id(int32 hypertable_id)
 {
 	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id, false);
 	ts_hypertable_permissions_check(table_relid, GetUserId());
-}
-
-static Oid
-get_chunk_sizing_func_oid(const FormData_hypertable *fd)
-{
-	Oid argtype[] = { INT4OID, INT8OID, INT8OID };
-	return LookupFuncName(list_make2(makeString((char *) NameStr(fd->chunk_sizing_func_schema)),
-									 makeString((char *) NameStr(fd->chunk_sizing_func_name))),
-						  sizeof(argtype) / sizeof(argtype[0]),
-						  argtype,
-						  false);
 }
 
 static HeapTuple
@@ -266,7 +254,6 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 	h->space = ts_dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, ti->mctx);
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
-	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
 
 	if (ts_guc_enable_chunk_skipping)
 	{
@@ -892,6 +879,11 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 }
 
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
+/*
+ * Historical default chunk sizing function name. Adaptive chunking has been
+ * removed, but the catalog columns are retained and always store this value.
+ */
+#define DEFAULT_CHUNK_SIZING_FUNC_NAME "calculate_chunk_interval"
 static const size_t MAXIMUM_PREFIX_LENGTH = NAMEDATALEN - 16;
 
 static void
@@ -910,9 +902,8 @@ hypertable_insert_relation(Relation rel, FormData_hypertable *fd)
 
 static void
 hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
-				  Name associated_schema_name, Name associated_table_prefix,
-				  Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
-				  int64 chunk_target_size, int16 num_dimensions, bool compressed)
+				  Name associated_schema_name, Name associated_table_prefix, int16 num_dimensions,
+				  bool compressed)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -952,14 +943,14 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 
 	fd.num_dimensions = num_dimensions;
 
-	namestrcpy(&fd.chunk_sizing_func_schema, NameStr(*chunk_sizing_func_schema));
-	namestrcpy(&fd.chunk_sizing_func_name, NameStr(*chunk_sizing_func_name));
-
-	fd.chunk_target_size = chunk_target_size;
-	if (fd.chunk_target_size < 0)
-	{
-		fd.chunk_target_size = 0;
-	}
+	/*
+	 * Adaptive chunking has been removed. The chunk sizing columns are kept in
+	 * the catalog for backward compatibility and always store the historical
+	 * default values for a disabled configuration.
+	 */
+	namestrcpy(&fd.chunk_sizing_func_schema, FUNCTIONS_SCHEMA_NAME);
+	namestrcpy(&fd.chunk_sizing_func_name, DEFAULT_CHUNK_SIZING_FUNC_NAME);
+	fd.chunk_target_size = 0;
 
 	if (compressed)
 	{
@@ -1496,7 +1487,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 							  DimensionInfo *open_dim_info, DimensionInfo *closed_dim_info,
 							  Name associated_schema_name, Name associated_table_prefix,
 							  bool create_default_indexes, bool if_not_exists, bool migrate_data,
-							  text *target_size, Oid sizing_func, bool is_generic)
+							  bool is_generic)
 {
 	Cache *hcache;
 	Hypertable *ht;
@@ -1505,14 +1496,6 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 	uint32 flags = 0;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE);
-
-	ChunkSizingInfo chunk_sizing_info = {
-		.table_relid = table_relid,
-		.target_size = target_size,
-		.func = sizing_func,
-		.colname = NameStr(open_dim_info->colname),
-		.check_for_index = !create_default_indexes,
-	};
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -1567,8 +1550,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 												 open_dim_info,
 												 closed_dim_info,
 												 associated_schema_name,
-												 associated_table_prefix,
-												 &chunk_sizing_info);
+												 associated_table_prefix);
 
 		Assert(created);
 		ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
@@ -1595,8 +1577,6 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
  * if_not_exists           BOOLEAN = FALSE
  * partitioning_func       REGPROC = NULL
  * migrate_data            BOOLEAN = FALSE
- * chunk_target_size       TEXT = NULL
- * chunk_sizing_func       OID = NULL
  * time_partitioning_func  REGPROC = NULL
  */
 Datum
@@ -1615,9 +1595,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	bool if_not_exists = PG_ARGISNULL(8) ? false : PG_GETARG_BOOL(8);
 	regproc closed_partitioning_func = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9);
 	bool migrate_data = PG_ARGISNULL(10) ? false : PG_GETARG_BOOL(10);
-	text *target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11);
-	Oid sizing_func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12);
-	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
+	regproc open_partitioning_func = PG_ARGISNULL(11) ? InvalidOid : PG_GETARG_OID(11);
 
 	if (!OidIsValid(table_relid))
 	{
@@ -1667,22 +1645,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 										 create_default_indexes,
 										 if_not_exists,
 										 migrate_data,
-										 target_size,
-										 sizing_func,
 										 false);
-}
-
-static Oid
-get_sizing_func_oid()
-{
-	const char *sizing_func_name = "calculate_chunk_interval";
-	const int sizing_func_nargs = 3;
-	static Oid sizing_func_arg_types[] = { INT4OID, INT8OID, INT8OID };
-
-	return ts_get_function_oid(sizing_func_name,
-							   FUNCTIONS_SCHEMA_NAME,
-							   sizing_func_nargs,
-							   sizing_func_arg_types);
 }
 
 /*
@@ -1719,12 +1682,6 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	}
 
 	/*
-	 * Current implementation requires to provide a valid chunk sizing function
-	 * that is being used to populate hypertable catalog information.
-	 */
-	Oid sizing_func = get_sizing_func_oid();
-
-	/*
 	 * Fill in the rest of the info.
 	 */
 	dim_info->table_relid = table_relid;
@@ -1738,8 +1695,6 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 										 create_default_indexes,
 										 if_not_exists,
 										 migrate_data,
-										 NULL,
-										 sizing_func,
 										 true);
 }
 
@@ -1793,8 +1748,7 @@ ts_validate_basetable_columns(Relation *rel)
 bool
 ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flags,
 							   DimensionInfo *time_dim_info, DimensionInfo *closed_dim_info,
-							   Name associated_schema_name, Name associated_table_prefix,
-							   ChunkSizingInfo *chunk_sizing_info)
+							   Name associated_schema_name, Name associated_table_prefix)
 {
 	Cache *hcache;
 	Hypertable *ht;
@@ -1974,32 +1928,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	 */
 	ts_check_unsupported_triggers(table_relid);
 
-	if (NULL == chunk_sizing_info)
-	{
-		chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(table_relid);
-	}
-
-	/* Validate and set chunk sizing information */
-	if (OidIsValid(chunk_sizing_info->func))
-	{
-		ts_chunk_adaptive_sizing_info_validate(chunk_sizing_info);
-
-		if (chunk_sizing_info->target_size_bytes > 0)
-		{
-			ereport(NOTICE,
-					(errcode(ERRCODE_WARNING),
-					 errmsg("adaptive chunking is a BETA feature and is not recommended for "
-							"production deployments")));
-			time_dim_info->adaptive_chunking = true;
-		}
-	}
-	else
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("chunk sizing function cannot be NULL")));
-	}
-
 	/* Validate that the dimensions are OK */
 	ts_dimension_info_validate(time_dim_info);
 
@@ -2017,9 +1945,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  &table_name,
 					  associated_schema_name,
 					  associated_table_prefix,
-					  &chunk_sizing_info->func_schema,
-					  &chunk_sizing_info->func_name,
-					  chunk_sizing_info->target_size_bytes,
 					  DIMENSION_INFO_IS_SET(closed_dim_info) ? 2 : 1,
 					  false);
 
@@ -2348,7 +2273,6 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	Oid user_oid = GetUserId();
 	Oid tspc_oid = get_rel_tablespace(table_relid);
 	NameData schema_name, table_name, associated_schema_name;
-	ChunkSizingInfo *chunk_sizing_info;
 	LockRelationOid(table_relid, AccessExclusiveLock);
 	/*
 	 * Check that the user has permissions to make this table to a compressed
@@ -2365,12 +2289,6 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
 	namestrcpy(&table_name, get_rel_name(table_relid));
 
-	/* we don't use the chunking size info for managing the compressed table.
-	 * But need this to satisfy hypertable constraints
-	 */
-	chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(table_relid);
-	ts_chunk_sizing_func_validate(chunk_sizing_info->func, chunk_sizing_info);
-
 	/* Checks pass, now we can create the catalog information */
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
 	namestrcpy(&table_name, get_rel_name(table_relid));
@@ -2382,9 +2300,6 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 					  &table_name,
 					  &associated_schema_name,
 					  NULL,
-					  &chunk_sizing_info->func_schema,
-					  &chunk_sizing_info->func_name,
-					  chunk_sizing_info->target_size_bytes,
 					  0 /*num_dimensions*/,
 					  true);
 
@@ -2549,80 +2464,46 @@ ts_hypertable_update_status_osm(Hypertable *ht)
 	return true;
 }
 
-bool
-ts_hypertable_update_chunk_sizing(Hypertable *ht)
-{
-	FormData_hypertable form;
-	ItemPointerData tid;
-	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
-	Ensure(found, "hypertable id %d not found", ht->fd.id);
-
-	if (OidIsValid(ht->chunk_sizing_func))
-	{
-		const Dimension *dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
-		ChunkSizingInfo info = {
-			.table_relid = ht->main_table_relid,
-			.colname = dim == NULL ? NULL : NameStr(dim->fd.column_name),
-			.func = ht->chunk_sizing_func,
-		};
-
-		ts_chunk_adaptive_sizing_info_validate(&info);
-
-		namestrcpy(&form.chunk_sizing_func_schema, NameStr(info.func_schema));
-		namestrcpy(&form.chunk_sizing_func_name, NameStr(info.func_name));
-	}
-	else
-	{
-		elog(ERROR, "chunk sizing function cannot be NULL");
-	}
-	form.chunk_target_size = ht->fd.chunk_target_size;
-	hypertable_update_catalog_tuple(&tid, &form);
-	return true;
-}
-
 DimensionSlice *
 ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTupleMode tuplockmode,
 								LOCKMODE tablelockmode)
 {
-	ChunkConstraints *constraints =
-		ts_chunk_constraint_scan_by_chunk_id(osm_chunk_id, 1, CurrentMemoryContext);
+	List *slices = ts_dimension_slice_scan_by_chunk_id(osm_chunk_id, CurrentMemoryContext);
+	ListCell *lc;
 
-	for (int i = 0; i < constraints->num_constraints; i++)
+	foreach (lc, slices)
 	{
-		ChunkConstraint *cc = chunk_constraints_get(constraints, i);
-		if (is_dimension_constraint(cc))
+		DimensionSlice *slice = (DimensionSlice *) lfirst(lc);
+
+		if (slice->fd.dimension_id != time_dim_id)
 		{
-			ScanTupLock tuplock = {
-				.lockmode = tuplockmode,
-				.waitpolicy = LockWaitBlock,
-			};
-			/*
-			 * We cannot acquire a tuple lock when running in recovery mode
-			 * since that prevents scans on tiered hypertables from running
-			 * on a read-only secondary. Acquiring a tuple lock requires
-			 * assigning a transaction id for the current transaction state
-			 * which is not possible in recovery mode. So we only acquire the
-			 * lock if we are not in recovery mode.
-			 */
-			ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
-
-			if (!IsolationUsesXactSnapshot())
-			{
-				/* in read committed mode, we follow all updates to this tuple */
-				tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
-			}
-
-			DimensionSlice *dimslice =
-				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-													   tuplock_ptr,
-													   CurrentMemoryContext,
-													   tablelockmode);
-			if (dimslice->fd.dimension_id == time_dim_id)
-			{
-				return dimslice;
-			}
+			continue;
 		}
+
+		ScanTupLock tuplock = {
+			.lockmode = tuplockmode,
+			.waitpolicy = LockWaitBlock,
+		};
+		/*
+		 * We cannot acquire a tuple lock when running in recovery mode
+		 * since that prevents scans on tiered hypertables from running
+		 * on a read-only secondary. Acquiring a tuple lock requires
+		 * assigning a transaction id for the current transaction state
+		 * which is not possible in recovery mode. So we only acquire the
+		 * lock if we are not in recovery mode.
+		 */
+		ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
+
+		if (!IsolationUsesXactSnapshot())
+		{
+			/* in read committed mode, we follow all updates to this tuple */
+			tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+		}
+
+		return ts_dimension_slice_scan_by_id_and_lock(slice->fd.id,
+													  tuplock_ptr,
+													  CurrentMemoryContext,
+													  tablelockmode);
 	}
 	return NULL;
 }
@@ -2807,6 +2688,71 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	ts_dimension_slice_range_update(slice);
 
 	PG_RETURN_BOOL(overlap);
+}
+
+/*
+ * lock_osm_chunk_dimension_slice
+ * 0 hypertable REGCLASS
+ *
+ * Acquires a FOR UPDATE row lock on the dimension slice tuple belonging to the
+ * OSM chunk of the given hypertable. There is exactly one OSM chunk per
+ * hypertable, so this locks its single dimension slice entry. The lock is held
+ * until the end of the current transaction. Returns void.
+ *
+ * Like hypertable_osm_range_update this is meant to be used by OSM to
+ * coordinate access to the OSM chunk's dimension slice; it is not meant to run
+ * on a read-only secondary.
+ */
+TS_FUNCTION_INFO_V1(ts_lock_osm_chunk_dimension_slice);
+Datum
+ts_lock_osm_chunk_dimension_slice(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Hypertable *ht;
+	const Dimension *time_dim;
+	Cache *hcache;
+
+	Assert(!RecoveryInProgress());
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
+	Assert(ht != NULL);
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	Ensure(time_dim != NULL,
+		   "could not find time dimension for hypertable %s.%s",
+		   quote_identifier(NameStr(ht->fd.schema_name)),
+		   quote_identifier(NameStr(ht->fd.table_name)));
+
+	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+	if (osm_chunk_id == INVALID_CHUNK_ID)
+	{
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("no OSM chunk found for hypertable %s.%s",
+					   quote_identifier(NameStr(ht->fd.schema_name)),
+					   quote_identifier(NameStr(ht->fd.table_name))));
+	}
+
+	/*
+	 * Lock the OSM chunk's dimension slice tuple FOR UPDATE. The row lock is
+	 * held until the end of the current transaction.
+	 */
+	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
+															time_dim->fd.id,
+															LockTupleExclusive,
+															RowShareLock);
+
+	if (!slice)
+	{
+		ereport(ERROR,
+				errcode(ERRCODE_INTERNAL_ERROR),
+				errmsg("could not find time dimension slice for chunk %d", osm_chunk_id));
+	}
+
+	ts_cache_release(&hcache);
+
+	PG_RETURN_VOID();
 }
 
 TSDLLEXPORT bool

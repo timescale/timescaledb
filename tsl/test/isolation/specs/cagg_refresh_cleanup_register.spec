@@ -123,7 +123,7 @@ step "R4_refresh" {
     CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30');
 }
 step "R4_overlapping_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-05');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15');
 }
 
 session "A1"
@@ -220,11 +220,11 @@ step "P1_run_policy" {
 
 # Two refreshes wait for registration, one waits for cleanup before exiting. All blocked on an AccessExclusiveLock on continuous_aggs_jobs_refresh_ranges.
 # None of those refreshes overlaps, so all should succeed.
-permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh" "R4_refresh" "check_locks" "check_jobs" "L1_unlock" "check_locks" "check_jobs"
+permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh"("R2_refresh") "R4_refresh"("R3_refresh") "check_locks" "check_jobs" "L1_unlock"("R4_refresh") "check_locks" "check_jobs"
 
 # Two refreshes wait for registration, one waits for cleanup before exiting. All blocked on an AccessExclusiveLock on continuous_aggs_jobs_refresh_ranges.
 # Refreshes waiting for registration overlap with each other, so one should fail.
-permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh" "R4_overlapping_refresh" "check_locks" "check_jobs" "L1_unlock" "check_locks" "check_jobs"
+permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh"("R2_refresh") "R4_overlapping_refresh"("R3_refresh") "check_locks" "check_jobs" "L1_unlock"("R4_overlapping_refresh") "check_locks" "check_jobs"
 
 ## Refresh registers . But fails in txn2. Gets into catch block. Cleanup should succeed
 permutation "WP_before_txn2_start_enable" "R3_refresh" "check_jobs" "A1_revoke_perm" "WP_before_txn2_start_disable"("A1_revoke_perm") "check_jobs"

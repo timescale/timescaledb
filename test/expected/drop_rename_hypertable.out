@@ -201,7 +201,6 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | hypertable
  _timescaledb_catalog  | metadata
  _timescaledb_catalog  | tablespace
- _timescaledb_catalog  | telemetry_event
  _timescaledb_internal | bgw_job_stat
  _timescaledb_internal | bgw_job_stat_history
  _timescaledb_internal | bgw_policy_chunk_stats

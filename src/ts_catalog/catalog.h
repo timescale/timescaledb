@@ -36,7 +36,6 @@ typedef enum CatalogTable
 	DIMENSION,
 	DIMENSION_SLICE,
 	CHUNK,
-	CHUNK_CONSTRAINT,
 	CHUNK_REWRITE,
 	TABLESPACE,
 	BGW_JOB,
@@ -54,7 +53,6 @@ typedef enum CatalogTable
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	CONTINUOUS_AGGS_WATERMARK,
-	TELEMETRY_EVENT,
 	CHUNK_COLUMN_STATS,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
@@ -249,6 +247,7 @@ enum
 enum Anum_dimension_slice
 {
 	Anum_dimension_slice_id = 1,
+	Anum_dimension_slice_chunk_id,
 	Anum_dimension_slice_dimension_id,
 	Anum_dimension_slice_range_start,
 	Anum_dimension_slice_range_end,
@@ -260,6 +259,7 @@ enum Anum_dimension_slice
 typedef struct FormData_dimension_slice
 {
 	int32 id;
+	int32 chunk_id;
 	int32 dimension_id;
 	int64 range_start;
 	int64 range_end;
@@ -275,6 +275,16 @@ enum Anum_dimension_slice_id_idx
 
 #define Natts_dimension_slice_id_idx (_Anum_dimension_slice_id_idx_max - 1)
 
+enum Anum_dimension_slice_chunk_id_dimension_id_idx
+{
+	Anum_dimension_slice_chunk_id_dimension_id_idx_chunk_id = 1,
+	Anum_dimension_slice_chunk_id_dimension_id_idx_dimension_id,
+	_Anum_dimension_slice_chunk_id_dimension_id_idx_max,
+};
+
+#define Natts_dimension_slice_chunk_id_dimension_id_idx                                            \
+	(_Anum_dimension_slice_chunk_id_dimension_id_idx_max - 1)
+
 enum Anum_dimension_slice_dimension_id_range_start_range_end_idx
 {
 	Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id = 1,
@@ -289,6 +299,7 @@ enum Anum_dimension_slice_dimension_id_range_start_range_end_idx
 enum
 {
 	DIMENSION_SLICE_ID_IDX = 0,
+	DIMENSION_SLICE_CHUNK_ID_DIMENSION_ID_IDX,
 	DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
 	_MAX_DIMENSION_SLICE_INDEX,
 };
@@ -435,56 +446,6 @@ enum Anum_chunk_hypertable_id_creation_time_idx
 {
 	Anum_chunk_hypertable_id_creation_time_idx_hypertable_id = 1,
 	Anum_chunk_hypertable_id_creation_time_idx_creation_time,
-};
-
-/************************************
- *
- * Chunk constraint table definitions
- *
- ************************************/
-
-#define CHUNK_CONSTRAINT_TABLE_NAME "chunk_constraint"
-
-enum Anum_chunk_constraint
-{
-	Anum_chunk_constraint_chunk_id = 1,
-	Anum_chunk_constraint_dimension_slice_id,
-	Anum_chunk_constraint_constraint_name,
-	Anum_chunk_constraint_hypertable_constraint_name,
-	_Anum_chunk_constraint_max,
-};
-
-#define Natts_chunk_constraint (_Anum_chunk_constraint_max - 1)
-
-/* Do Not use GET_STRUCT with FormData_chunk_constraint. It contains NULLS */
-typedef struct FormData_chunk_constraint
-{
-	int32 chunk_id;
-	int32 dimension_slice_id;
-	NameData constraint_name;
-	NameData hypertable_constraint_name;
-} FormData_chunk_constraint;
-
-typedef FormData_chunk_constraint *Form_chunk_constraint;
-
-enum
-{
-	CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX = 0,
-	CHUNK_CONSTRAINT_DIMENSION_SLICE_ID_IDX,
-	_MAX_CHUNK_CONSTRAINT_INDEX,
-};
-
-enum Anum_chunk_constraint_dimension_slice_id_idx
-{
-	Anum_chunk_constraint_dimension_slice_id_idx_dimension_slice_id = 1,
-	_Anum_chunk_constraint_dimension_slice_id_idx_max,
-};
-
-enum Anum_chunk_constraint_chunk_id_constraint_name_idx
-{
-	Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id = 1,
-	Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
-	_Anum_chunk_constraint_chunk_id_constraint_name_idx_max,
 };
 
 /************************************
@@ -776,22 +737,6 @@ enum
 	_MAX_METADATA_INDEX,
 };
 
-/*
- * telemetry_event table definition
- */
-
-#define TELEMETRY_EVENT_TABLE_NAME "telemetry_event"
-
-enum Anum_telemetry_event
-{
-	Anum_telemetry_event_created = 1,
-	Anum_telemetry_event_tag,
-	Anum_telemetry_event_body,
-	_Anum_telemetry_event_max,
-};
-
-#define Natts_telemetry_event_max (_Anum_telemetry_event_max - 1)
-
 /****** BGW_POLICY_CHUNK_STATS TABLE definitions */
 #define BGW_POLICY_CHUNK_STATS_TABLE_NAME "bgw_policy_chunk_stats"
 
@@ -853,6 +798,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
+	Anum_continuous_agg_schema_change_timestamp,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -870,6 +816,7 @@ typedef struct FormData_continuous_agg
 	NameData direct_view_schema;
 	NameData direct_view_name;
 	bool materialized_only;
+	int64 schema_change_timestamp;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;

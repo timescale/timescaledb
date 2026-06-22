@@ -21,6 +21,11 @@ EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) INSERT INTO metrics SE
 -- EXPLAIN with large enough batch
 EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) INSERT INTO metrics SELECT '2025-01-01'::timestamptz, 'd1', i::float FROM generate_series(0,500) i;
 
+-- EXPLAIN with debug GUC disabled
+SET timescaledb.enable_optimizations TO OFF;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) INSERT INTO metrics SELECT '2025-01-01'::timestamptz, 'd1', i::float FROM generate_series(0,500) i;
+RESET timescaledb.enable_optimizations;
+
 -- simple test with compressed insert enabled
 BEGIN;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
@@ -113,7 +118,7 @@ INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interva
 INSERT INTO metrics SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where compressed_chunk_id IS NULL order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK order by 2;
 -- since the chunks are new status should be COMPRESSED, UNORDERED, PARTIAL and COMPRESSED, UNORDERED
@@ -129,7 +134,7 @@ INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interva
 INSERT INTO metrics SELECT '2025-01-05'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where compressed_chunk_id IS NULL order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should not see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK order by 2;
 -- since the chunks are new status should be COMPRESSED, UNORDERED, PARTIAL and COMPRESSED, UNORDERED
@@ -143,7 +148,7 @@ SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, floor(i), i::float FROM generate_series(0.0,9.8,0.2) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where compressed_chunk_id IS NULL \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL \gset
 -- should have 10 batches
 SELECT count(*) FROM :COMPRESSED_CHUNK;
 -- since the chunks are new status should be COMPRESSED
@@ -158,7 +163,7 @@ SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd'||i%2, i::float FROM generate_series(0,3000) i;
 INSERT INTO metrics SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd'||i%2, i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where compressed_chunk_id IS NULL order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should see overlapping batches per device
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, device from :COMPRESSED_CHUNK order by 4, 2;
 -- since the chunks are new status should be COMPRESSED, UNORDERED
@@ -173,7 +178,7 @@ SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd'||i%3, i::float FROM generate_series(0,3000) i;
 INSERT INTO metrics SELECT '2025-01-02'::timestamptz - (i || ' minute')::interval, 'd'||i%3, i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where compressed_chunk_id IS NULL order by 1 limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 limit 1 \gset
 -- should see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_min_2, _ts_meta_max_2 from :COMPRESSED_CHUNK order by 2, 4;
 -- since the chunks are new status should be COMPRESSED, UNORDERED
@@ -186,7 +191,7 @@ SET timescaledb.enable_direct_compress_insert = true;
 ALTER TABLE metrics ADD CONSTRAINT unique_time_device UNIQUE (time, device);
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE format('%I.%I', schema_name, table_name)::regclass IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
 ROLLBACK;
 
 -- test triggers prevent direct compress
@@ -196,7 +201,7 @@ CREATE OR REPLACE FUNCTION test_trigger() RETURNS TRIGGER AS $$ BEGIN RETURN NEW
 CREATE TRIGGER metrics_trigger BEFORE INSERT OR UPDATE ON metrics FOR EACH ROW EXECUTE FUNCTION test_trigger();
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE format('%I.%I', schema_name, table_name)::regclass IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
 ROLLBACK;
 
 -- test caggs with direct compress
@@ -205,7 +210,7 @@ SET timescaledb.enable_direct_compress_insert = true;
 CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value FROM metrics GROUP BY bucket, device WITH NO DATA;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE format('%I.%I', schema_name, table_name)::regclass IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
 ROLLBACK;
 
 -- cagg + direct compress where the cagg time column is segmentby.
@@ -513,4 +518,36 @@ INSERT INTO test_orderby_not_segmentby SELECT '2024-06-01'::timestamptz + (i||' 
     (i%5)+1, random() FROM generate_series(1,2000) i;
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
 ROLLBACK;
+
+-- Direct compress must still enforce CHECK and NOT NULL constraints
+CREATE TABLE metrics_check(time timestamptz NOT NULL, value int NOT NULL CHECK (value > 0))
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+SET timescaledb.enable_direct_compress_insert = true;
+\set ON_ERROR_STOP 0
+-- CHECK violation should be reported
+INSERT INTO metrics_check SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, CASE WHEN i = 50 THEN -1 ELSE i END FROM generate_series(1,100) i;
+-- NOT NULL violation should be reported
+INSERT INTO metrics_check SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, CASE WHEN i = 50 THEN NULL ELSE i END FROM generate_series(1,100) i;
+\set ON_ERROR_STOP 1
+-- valid rows insert and compress without error
+INSERT INTO metrics_check SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,100) i;
+SELECT count(*), min(value), max(value) FROM metrics_check;
+DROP TABLE metrics_check;
+RESET timescaledb.enable_direct_compress_insert;
+
+-- Direct compress must still enforce a view's WITH CHECK OPTION
+CREATE TABLE metrics_view(time timestamptz NOT NULL, value int)
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+CREATE VIEW metrics_view_pos AS SELECT * FROM metrics_view WHERE value > 0 WITH CHECK OPTION;
+SET timescaledb.enable_direct_compress_insert = true;
+\set ON_ERROR_STOP 0
+-- row not satisfying the view qual should be reported
+INSERT INTO metrics_view_pos SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, CASE WHEN i = 50 THEN -1 ELSE i END FROM generate_series(1,100) i;
+\set ON_ERROR_STOP 1
+-- valid rows insert without error
+INSERT INTO metrics_view_pos SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,100) i;
+SELECT count(*), min(value), max(value) FROM metrics_view;
+RESET timescaledb.enable_direct_compress_insert;
+DROP VIEW metrics_view_pos;
+DROP TABLE metrics_view;
 

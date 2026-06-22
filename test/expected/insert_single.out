@@ -229,41 +229,41 @@ SELECT * FROM "1dim_neg";
    19 | 21.2
    20 | 21.2
 
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name     | compressed_chunk_id | status | osm_chunk 
-----+---------------+-----------------------+-------------------+---------------------+--------+-----------
-  1 |             1 | one_Partition         | _hyper_1_1_chunk  |                     |      0 | f
-  2 |             1 | one_Partition         | _hyper_1_2_chunk  |                     |      0 | f
-  3 |             1 | one_Partition         | _hyper_1_3_chunk  |                     |      0 | f
-  4 |             2 | _timescaledb_internal | _hyper_2_4_chunk  |                     |      0 | f
-  5 |             3 | _timescaledb_internal | _hyper_3_5_chunk  |                     |      0 | f
-  6 |             3 | _timescaledb_internal | _hyper_3_6_chunk  |                     |      0 | f
-  7 |             3 | _timescaledb_internal | _hyper_3_7_chunk  |                     |      0 | f
-  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk  |                     |      0 | f
- 10 |             5 | _timescaledb_internal | _hyper_5_10_chunk |                     |      0 | f
- 11 |             6 | _timescaledb_internal | _hyper_6_11_chunk |                     |      0 | f
- 12 |             6 | _timescaledb_internal | _hyper_6_12_chunk |                     |      0 | f
- 13 |             6 | _timescaledb_internal | _hyper_6_13_chunk |                     |      0 | f
- 14 |             6 | _timescaledb_internal | _hyper_6_14_chunk |                     |      0 | f
- 15 |             6 | _timescaledb_internal | _hyper_6_15_chunk |                     |      0 | f
+SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name     | status | osm_chunk 
+----+---------------+-----------------------+-------------------+--------+-----------
+  1 |             1 | one_Partition         | _hyper_1_1_chunk  |      0 | f
+  2 |             1 | one_Partition         | _hyper_1_2_chunk  |      0 | f
+  3 |             1 | one_Partition         | _hyper_1_3_chunk  |      0 | f
+  4 |             2 | _timescaledb_internal | _hyper_2_4_chunk  |      0 | f
+  5 |             3 | _timescaledb_internal | _hyper_3_5_chunk  |      0 | f
+  6 |             3 | _timescaledb_internal | _hyper_3_6_chunk  |      0 | f
+  7 |             3 | _timescaledb_internal | _hyper_3_7_chunk  |      0 | f
+  8 |             3 | _timescaledb_internal | _hyper_3_8_chunk  |      0 | f
+ 10 |             5 | _timescaledb_internal | _hyper_5_10_chunk |      0 | f
+ 11 |             6 | _timescaledb_internal | _hyper_6_11_chunk |      0 | f
+ 12 |             6 | _timescaledb_internal | _hyper_6_12_chunk |      0 | f
+ 13 |             6 | _timescaledb_internal | _hyper_6_13_chunk |      0 | f
+ 14 |             6 | _timescaledb_internal | _hyper_6_14_chunk |      0 | f
+ 15 |             6 | _timescaledb_internal | _hyper_6_15_chunk |      0 | f
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;
- id | dimension_id |     range_start     |      range_end      
-----+--------------+---------------------+---------------------
-  1 |            1 | 1257892416000000000 | 1257895008000000000
-  2 |            1 | 1257897600000000000 | 1257900192000000000
-  3 |            1 | 1257985728000000000 | 1257988320000000000
-  4 |            2 |    1484784000000000 |    1485388800000000
-  5 |            3 |      -5184000000000 |      -2592000000000
-  6 |            3 |      -2592000000000 |                   0
-  7 |            3 |                   0 |       2592000000000
-  8 |            3 |     -28512000000000 |     -25920000000000
- 10 |            5 |      -2610000000000 |      -2609999000000
- 11 |            6 |                 -20 |                 -10
- 12 |            6 |                 -10 |                   0
- 13 |            6 |                   0 |                  10
- 14 |            6 |                  10 |                  20
- 15 |            6 |                  20 |                  30
+ id | chunk_id | dimension_id |     range_start     |      range_end      
+----+----------+--------------+---------------------+---------------------
+  1 |        1 |            1 | 1257892416000000000 | 1257895008000000000
+  2 |        2 |            1 | 1257897600000000000 | 1257900192000000000
+  3 |        3 |            1 | 1257985728000000000 | 1257988320000000000
+  4 |        4 |            2 |    1484784000000000 |    1485388800000000
+  5 |        5 |            3 |      -5184000000000 |      -2592000000000
+  6 |        6 |            3 |      -2592000000000 |                   0
+  7 |        7 |            3 |                   0 |       2592000000000
+  8 |        8 |            3 |     -28512000000000 |     -25920000000000
+ 10 |       10 |            5 |      -2610000000000 |      -2609999000000
+ 11 |       11 |            6 |                 -20 |                 -10
+ 12 |       12 |            6 |                 -10 |                   0
+ 13 |       13 |            6 |                   0 |                  10
+ 14 |       14 |            6 |                  10 |                  20
+ 15 |       15 |            6 |                  20 |                  30
 
 -- Create a three-dimensional table
 CREATE TABLE "3dim" (time timestamp, temp float, device text, location text);
@@ -405,7 +405,7 @@ INSERT INTO "test_tz" VALUES('2017-09-21 19:01:00', 21.2);
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_10_20_chunk');
   Constraint   | Type | Columns | Index |                                Expr                                | Deferrable | Deferred | Validated 
 ---------------+------+---------+-------+--------------------------------------------------------------------+------------+----------+-----------
- constraint_23 | c    | {time}  | -     | (("time" >= '01-20-2011'::date) AND ("time" < '01-27-2011'::date)) | f          | f        | t
+ constraint_24 | c    | {time}  | -     | (("time" >= '01-20-2011'::date) AND ("time" < '01-27-2011'::date)) | f          | f        | t
 
 SELECT * FROM test_tz;
            time           | temp 

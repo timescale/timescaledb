@@ -5,9 +5,6 @@
 **/CMakeCache.txt
 /sql/tests/unit/testoutputs.tmp
 /sql/timescaledb--*.sql
-/sql/pre_install/*.gen
-/sql/updates/*.gen
-/sql/updates/header.sql
 /data/
 /src/*.o
 /src/*.so
@@ -31,6 +28,7 @@ tags
 /compile_commands.json
 /.DS_Store
 /.clangd
+/.claude
 /.cache
 
 /CMakeSettings.json

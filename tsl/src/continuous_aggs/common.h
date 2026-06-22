@@ -79,6 +79,7 @@ typedef enum ContinuousAggRefreshCallContext
 {
 	CAGG_REFRESH_CREATION,
 	CAGG_REFRESH_WINDOW,
+	CAGG_REFRESH_WINDOW_BATCHED,
 	CAGG_REFRESH_POLICY,
 	CAGG_REFRESH_POLICY_BATCHED
 } ContinuousAggRefreshCallContext;
@@ -89,6 +90,11 @@ typedef struct ContinuousAggRefreshContext
 	int32 job_id;
 	int32 processing_batch;
 	int32 number_of_batches;
+	/* Batch configuration */
+	int32 buckets_per_batch;		 /* 0 = disabled */
+	int32 max_batches_per_execution; /* 0 = no limit */
+	bool refresh_newest_first;
+	bool force; /* re-materialize the whole window, ignoring invalidations */
 } ContinuousAggRefreshContext;
 
 #define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
@@ -173,3 +179,5 @@ extern bool caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List
 										   List *targetList, List *rtable, int ht_partcolno,
 										   StringInfo msg, bool is_cagg_create,
 										   const bool for_rewrites);
+extern void emit_up_to_date_notice(const ContinuousAgg *cagg,
+								   const ContinuousAggRefreshContext context);

@@ -100,8 +100,7 @@ select
     _timescaledb_functions.to_timestamp(ds.range_start) as range_start,
     _timescaledb_functions.to_timestamp(ds.range_end) as range_end
 from _timescaledb_catalog.chunk c
-join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id)
-join _timescaledb_catalog.dimension_slice ds on (ds.id = cc.dimension_slice_id)
+join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
 join _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
 order by range_start, range_end;
 create table splitme (time timestamptz not null, device int, location int, temp float, comment text);
@@ -214,7 +213,7 @@ NOTICE:  chunks after split are _timescaledb_internal._hyper_1_1_chunk (reltuple
 select * from chunk_info;
       chunk       | tam  | reltuples |   conname    |                                                                checkconstraint                                                                 
 ------------------+------+-----------+--------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_1_chunk | heap |         1 | constraint_1 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk | heap |         1 | constraint_2 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_2_chunk | heap |         1 | constraint_3 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
 
 select chunk_name, range_start, range_end
@@ -289,7 +288,7 @@ delete from _timescaledb_internal._hyper_1_2_chunk where time = '2024-01-04 23:0
 select * from chunk_info;
       chunk       | tam  | reltuples |   conname    |                                                                checkconstraint                                                                 
 ------------------+------+-----------+--------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_1_chunk | heap |       361 | constraint_1 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk | heap |       361 | constraint_2 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_2_chunk | heap |     43562 | constraint_3 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
 
 call split_chunk_validate('_timescaledb_internal._hyper_1_2_chunk');
@@ -297,8 +296,8 @@ NOTICE:  chunks after split are _timescaledb_internal._hyper_1_2_chunk (reltuple
 select * from chunk_info;
       chunk       | tam  | reltuples |   conname    |                                                                checkconstraint                                                                 
 ------------------+------+-----------+--------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_1_chunk | heap |       361 | constraint_1 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_2_chunk | heap |     28800 | constraint_3 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk | heap |       361 | constraint_2 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap |     28800 | constraint_4 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk | heap |     14762 | constraint_5 | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
 
 select chunk_name, range_start, range_end
@@ -417,8 +416,8 @@ alter table splitme drop column comment;
 select * from chunk_info;
       chunk       | tam  | reltuples |   conname    |                                                                checkconstraint                                                                 
 ------------------+------+-----------+--------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_1_chunk | heap |       361 | constraint_1 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_2_chunk | heap |     28800 | constraint_3 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk | heap |       361 | constraint_2 | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap |     28800 | constraint_4 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk | heap |     14762 | constraint_5 | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -443,8 +442,8 @@ vacuum analyze splitme;
 select * from chunk_info;
       chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 ------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_1_chunk | heap |      3241 | constraint_1  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_2_chunk | heap |     57600 | constraint_3  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap |     57600 | constraint_4  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk | heap |     29523 | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_7_chunk | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
 
@@ -453,8 +452,8 @@ NOTICE:  chunks after split are _timescaledb_internal._hyper_1_2_chunk (reltuple
 select * from chunk_info;
       chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 ------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_1_chunk | heap |      3241 | constraint_1  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_2_chunk | heap |     28800 | constraint_3  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk | heap |     28800 | constraint_12 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk | heap |     29523 | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_7_chunk | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_8_chunk | heap |     28800 | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
@@ -554,8 +553,8 @@ select * from chunk_info;
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
  _hyper_1_13_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_1_chunk  | heap |      3241 | constraint_1  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_2_chunk  | heap |         0 | constraint_3  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk  | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk  | heap |         0 | constraint_20 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk  | heap |     29523 | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_7_chunk  | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_8_chunk  | heap |     28800 | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
@@ -692,11 +691,11 @@ order by time;
  Sun Jan 07 09:03:11 2024 PST |      1 |   21 |       21
  Wed Jan 10 02:04:12 2024 PST |      1 |   17 |       32
 
-select table_name, status, compressed_chunk_id
+select table_name, status
 from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
-    table_name    | status | compressed_chunk_id 
-------------------+--------+---------------------
- _hyper_1_3_chunk |      9 |                  15
+    table_name    | status 
+------------------+--------
+ _hyper_1_3_chunk |      9
 
 analyze _timescaledb_internal._hyper_1_3_chunk;
 truncate chunk_summary_before_split;
@@ -716,8 +715,8 @@ select * from chunk_info;
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
  _hyper_1_13_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_1_chunk  | heap |      3241 | constraint_1  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_2_chunk  | heap |         0 | constraint_3  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk  | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk  | heap |         0 | constraint_20 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk  | heap |         2 | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_7_chunk  | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_8_chunk  | heap |     28800 | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
@@ -729,19 +728,19 @@ select * from chunk_info;
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
  _hyper_1_13_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_16_chunk | heap |         1 | constraint_23 | (("time" >= 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_1_chunk  | heap |      3241 | constraint_1  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_2_chunk  | heap |         0 | constraint_3  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
- _hyper_1_3_chunk  | heap |         1 | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk  | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk  | heap |         0 | constraint_20 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk  | heap |         1 | constraint_22 | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_7_chunk  | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_8_chunk  | heap |     28800 | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
 
-select table_name, status, compressed_chunk_id
+select table_name, status
 from _timescaledb_catalog.chunk
 where table_name in ('_hyper_1_3_chunk', '_hyper_1_16_chunk');
-    table_name     | status | compressed_chunk_id 
--------------------+--------+---------------------
- _hyper_1_16_chunk |      9 |                  17
- _hyper_1_3_chunk  |      9 |                  15
+    table_name     | status 
+-------------------+--------
+ _hyper_1_16_chunk |      9
+ _hyper_1_3_chunk  |      9
 
 -- Check that the non-compressed data rows ended up in separate partitions
 select *
@@ -974,16 +973,16 @@ select :'original_count_sum' = ((select sum(_ts_meta_count) from :compress_relid
 select * from chunk_info;
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_13_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:40 2024 PST'::timestamp with time zone))
+ _hyper_1_13_chunk | heap |         0 | constraint_26 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:40 2024 PST'::timestamp with time zone))
  _hyper_1_16_chunk | heap |         1 | constraint_23 | (("time" >= 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_19_chunk | heap |         0 | constraint_25 | (("time" >= 'Sun Jan 07 07:59:51 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_1_chunk  | heap |      3241 | constraint_1  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_21_chunk | heap |         0 | constraint_27 | (("time" >= 'Thu Jan 04 13:40:40 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 14:06:30 2024 PST'::timestamp with time zone))
+ _hyper_1_1_chunk  | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_21_chunk | heap |         0 | constraint_28 | (("time" >= 'Thu Jan 04 13:40:40 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 14:06:30 2024 PST'::timestamp with time zone))
  _hyper_1_23_chunk | heap |         0 | constraint_29 | (("time" >= 'Thu Jan 04 14:06:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_2_chunk  | heap |         0 | constraint_3  | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
- _hyper_1_3_chunk  | heap |         1 | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_2_chunk  | heap |         0 | constraint_20 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
+ _hyper_1_3_chunk  | heap |         1 | constraint_22 | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_7_chunk  | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_8_chunk  | heap |         0 | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 07:59:51 2024 PST'::timestamp with time zone))
+ _hyper_1_8_chunk  | heap |         0 | constraint_24 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 07:59:51 2024 PST'::timestamp with time zone))
 
 select count(*), min(time), max(time) from _timescaledb_internal._hyper_1_23_chunk;
  count |             min              |             max              
@@ -1042,7 +1041,7 @@ NOTICE:  compression size stats are OK
 select * from chunk_info where chunk in ('_hyper_1_25_chunk', '_hyper_1_27_chunk');
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_25_chunk | heap |         0 | constraint_30 | (("time" >= 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 12 22:30:00 2024 PST'::timestamp with time zone))
+ _hyper_1_25_chunk | heap |         0 | constraint_31 | (("time" >= 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 12 22:30:00 2024 PST'::timestamp with time zone))
  _hyper_1_27_chunk | heap |     34201 | constraint_32 | (("time" >= 'Fri Jan 12 22:30:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 17 16:00:00 2024 PST'::timestamp with time zone))
 
 -- Check that the distribution of data is such that one chunk has only

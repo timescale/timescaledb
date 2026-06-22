@@ -11,8 +11,6 @@ SELECT
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
-   LEFT JOIN _timescaledb_catalog.chunk comp
-ON comp.id = c.compressed_chunk_id
 ;
 CREATE TABLE sample_table (
        time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -158,8 +156,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         Filter: (sensor_id > 9)
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id > 9)
    ->  Index Scan using _hyper_1_1_chunk_sense_idx on _hyper_1_1_chunk
          Index Cond: (sensor_id > 9)
@@ -228,7 +225,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id = 7)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id = 7)
@@ -237,7 +234,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id < 2)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id < 2)
@@ -246,7 +243,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id > 3)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id > 3)
@@ -255,7 +252,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id <= 1)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id <= 1)
@@ -264,7 +261,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id >= 8)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id >= 8)
@@ -273,7 +270,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id >= 8) AND (sensor_id <= 10))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id >= 8) AND (sensor_id <= 10))
@@ -282,7 +279,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id <= 4) AND (sensor_id > '-5'::integer))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id <= 4) AND (sensor_id > '-5'::integer))
@@ -291,7 +288,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id > 6) AND (sensor_id < 10))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id > 6) AND (sensor_id < 10))
@@ -300,7 +297,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id <= 5) AND (sensor_id > '-1'::integer))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id <= 5) AND (sensor_id > '-1'::integer))
@@ -310,7 +307,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id > '-2'::integer)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id > '-2'::integer)
@@ -319,7 +316,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id < 11)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id < 11)
@@ -328,7 +325,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id >= 1) AND (sensor_id <= 8))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id >= 1) AND (sensor_id <= 8))
@@ -337,7 +334,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id > 0) AND (sensor_id < 9))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id > 0) AND (sensor_id < 9))
@@ -347,7 +344,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id > 2) AND (sensor_id < 7))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id > 2) AND (sensor_id < 7))
@@ -356,7 +353,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id >= 3) AND (sensor_id <= 6))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id >= 3) AND (sensor_id <= 6))
@@ -365,7 +362,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id > 4) AND (sensor_id <= 5))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id > 4) AND (sensor_id <= 5))
@@ -374,7 +371,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id >= 6) AND (sensor_id < 8))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id >= 6) AND (sensor_id < 8))
@@ -385,7 +382,7 @@ RESET timescaledb.enable_chunk_skipping;
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id < 1)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id < 1)
@@ -441,7 +438,7 @@ SET timescaledb.enable_chunk_skipping to ON;
  Custom Scan (ChunkAppend) on sample_table
    Chunks excluded during startup: 0
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_v2_first_time___idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id > length("substring"(version(), 1, 6)))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id > length("substring"(version(), 1, 6)))
@@ -776,3 +773,73 @@ SELECT * FROM attno WHERE id = 1 AND start > '2025-02-02T11:53:28Z'::date ORDER 
   1 | Thu Jan 01 00:01:00 2026 PST
   1 | Thu Jan 01 00:06:00 2026 PST
 
+-- Test for wrong allocation size of chunk stats storage
+CREATE TABLE sensor_readings(measured_at timestamptz NOT NULL, temperature int, humidity int);
+SELECT create_hypertable('sensor_readings', 'measured_at');
+       create_hypertable       
+-------------------------------
+ (10,public,sensor_readings,t)
+
+SELECT enable_chunk_skipping('sensor_readings', 'temperature');
+ enable_chunk_skipping 
+-----------------------
+ (17,t)
+
+RESET timescaledb.enable_chunk_skipping;
+-- Test chunk skipping with PG_INT64_MAX value
+SET timescaledb.enable_chunk_skipping = on;
+CREATE TABLE chunk_skip_bigint_max(
+    ts     timestamptz NOT NULL,
+    ranged bigint
+);
+SELECT * FROM create_hypertable('chunk_skip_bigint_max', 'ts',
+                         chunk_time_interval => interval '1 day');
+ hypertable_id | schema_name |      table_name       | created 
+---------------+-------------+-----------------------+---------
+            11 | public      | chunk_skip_bigint_max | t
+
+SELECT * FROM enable_chunk_skipping('chunk_skip_bigint_max', 'ranged');
+ column_stats_id | enabled 
+-----------------+---------
+              18 | t
+
+ALTER TABLE chunk_skip_bigint_max SET (timescaledb.compress);
+INSERT INTO chunk_skip_bigint_max VALUES ('2025-01-01', 9223372036854775806); -- PG_INT64_MAX - 1
+INSERT INTO chunk_skip_bigint_max VALUES ('2025-01-02', 9223372036854775807); -- PG_INT64_MAX
+SELECT compress_chunk(c) FROM show_chunks('chunk_skip_bigint_max') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_14_chunk
+ _timescaledb_internal._hyper_11_15_chunk
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged = 9223372036854775807;
+ count 
+-------
+     1
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged >= 9223372036854775807;
+ count 
+-------
+     1
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged > 9223372036854775806;
+ count 
+-------
+     1
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged = 9223372036854775806;
+ count 
+-------
+     1
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged >= 9223372036854775806;
+ count 
+-------
+     2
+
+SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged > 9223372036854775805;
+ count 
+-------
+     2
+
+RESET timescaledb.enable_chunk_skipping;

@@ -1,0 +1,78 @@
+name: "Build .deb artifacts (dev)"
+
+"on":
+  push:
+    branches: [main]
+
+# Avoid stacking dispatches when commits land in quick succession.
+# Note: this cancels pending dispatches, not the builds themselves on the
+# release-build-scripts side. Each dispatch that does fire builds to its own
+# SHA-keyed S3 prefix, so there's no artifact conflict either way.
+concurrency:
+  group: dev-deb-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch .deb build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+      WORKFLOW_REPO: timescale/release-build-scripts
+      WORKFLOW_FILE: timescaledb-apt.yml
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Compute build inputs
+        id: compute
+        run: |
+          set -euo pipefail
+          BASE=$(grep '^version = ' version.config | sed 's!^version = !!')
+          if [ -z "$BASE" ]; then
+            echo "::error::Could not extract version from version.config"
+            exit 1
+          fi
+          SHORT="${GITHUB_SHA:0:8}"
+          # ~ sorts before any character in Debian version comparison, so this
+          # always orders before any GA release of the same base version.
+          DEV_VERSION="${BASE}~dev.g${SHORT}"
+          # Replace / in branch names (e.g. users/brent/foo) for S3-friendly keys
+          BRANCH_KEY="${GITHUB_REF_NAME//\//_}"
+          echo "version=${DEV_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "short-sha=${SHORT}" >> "$GITHUB_OUTPUT"
+          echo "branch-key=${BRANCH_KEY}" >> "$GITHUB_OUTPUT"
+          echo "Building version: ${DEV_VERSION} from sha ${GITHUB_SHA}"
+
+      - name: Dispatch build
+        env:
+          VERSION: ${{ steps.compute.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh workflow run "${WORKFLOW_FILE}" \
+            -R "${WORKFLOW_REPO}" \
+            -f version="${VERSION}" \
+            -f commit="${GITHUB_SHA}" \
+            -f skip-dev-guards=true \
+            -f matrix-mode=slim \
+            -f upload-mode=s3 \
+            -f s3-bucket=timescaledb-build-artifacts \
+            -f s3-prefix="builds/${GITHUB_SHA}" \
+            -f aws-role-arn="${{ secrets.TIMESCALEDB_CI_S3_WRITER }}"
+
+      - name: Summary
+        if: always()
+        env:
+          VERSION: ${{ steps.compute.outputs.version }}
+        run: |
+          {
+            echo "## Dispatched dev .deb build"
+            echo ""
+            echo "**Version:** \`${VERSION}\`"
+            echo "**Build workflow:** https://github.com/${WORKFLOW_REPO}/actions/workflows/${WORKFLOW_FILE}"
+            echo "**S3 prefix (after build completes):** \`s3://timescaledb-build-artifacts/builds/${GITHUB_SHA}/\`"
+            echo "**Public URL prefix:** https://timescaledb-build-artifacts.s3.amazonaws.com/builds/${GITHUB_SHA}/"
+            echo "**Manifest URL (after build completes):** https://timescaledb-build-artifacts.s3.amazonaws.com/manifests/${GITHUB_SHA}.json"
+          } >> "$GITHUB_STEP_SUMMARY"

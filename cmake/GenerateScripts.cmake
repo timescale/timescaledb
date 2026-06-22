@@ -59,7 +59,7 @@ function(generate_downgrade_script)
   include(
     ${CMAKE_BINARY_DIR}/v${_downgrade_TARGET_VERSION}/cmake/ScriptFiles.cmake)
 
-  set(_downgrade_PRE_FILES "header.sql;${PRE_DOWNGRADE_FILES}")
+  set(_downgrade_PRE_FILES "header.sql;views_detached.sql;${PRE_DOWNGRADE_FILES}")
   set(_downgrade_POST_FILES "${PRE_INSTALL_FUNCTION_FILES};${SOURCE_FILES}" ${POST_UPDATE_FILES})
 
   # Fetch epilog from target version.
@@ -75,9 +75,7 @@ function(generate_downgrade_script)
   # Assemble the full file list: prolog + downgrade files + epilog
   set(_files)
   foreach(_downgrade_file ${_downgrade_PRE_FILES})
-    get_filename_component(_downgrade_filename ${_downgrade_file} NAME)
-    configure_file(${_downgrade_file} ${_downgrade_INPUT_DIRECTORY}/${_downgrade_filename} COPYONLY)
-    list(APPEND _files ${_downgrade_INPUT_DIRECTORY}/${_downgrade_filename})
+    list(APPEND _files ${CMAKE_CURRENT_SOURCE_DIR}/${_downgrade_file})
   endforeach()
   foreach(_downgrade_file ${_downgrade_FILES})
     list(APPEND _files ${_downgrade_INPUT_DIRECTORY}/${_downgrade_file})
@@ -96,8 +94,8 @@ function(generate_downgrade_script)
 
   file(WRITE ${_output} "")
   foreach(_file ${_files})
-    configure_file(${_file} ${_file}.gen @ONLY)
-    file(READ ${_file}.gen _contents)
+    file(READ ${_file} _contents)
+    string(CONFIGURE "${_contents}" _contents @ONLY)
     file(APPEND ${_output} "${_contents}")
   endforeach()
 

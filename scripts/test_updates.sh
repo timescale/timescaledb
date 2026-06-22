@@ -26,10 +26,9 @@ max_patch_version=$(echo "${MAX_VERSION}" | awk -F. '{print $3}')
 
 # Filter versions depending on the current postgres version
 # Minimum version for valid update paths are as follows:
-# PG 14 v8 2.5+
-# PG 15 v8 2.9+
 # PG 16 v8 2.13+
 # PG 17 v8 2.17+
+# PG 18 v8 2.23+
 for version in ${ALL_VERSIONS}; do
   minor_version=$(echo "${version}" | awk -F. '{print $2}')
   patch_version=$(echo "${version}" | awk -F. '{print $3}')
@@ -43,13 +42,9 @@ for version in ${ALL_VERSIONS}; do
     continue
   fi
 
-  if [ "${minor_version}" -le 8 ]; then
+  if [ "${minor_version}" -le 12 ]; then
     # not part of any valid update path
     continue
-  elif [ "${minor_version}" -le 12 ]; then
-    if [ "${PG_MAJOR_VERSION}" -le 15 ]; then
-        VERSIONS="${VERSIONS} ${version}"
-    fi
   elif [ "${minor_version}" -le 16 ]; then
     if [ "${PG_MAJOR_VERSION}" -le 16 ]; then
         VERSIONS="${VERSIONS} ${version}"
@@ -91,14 +86,9 @@ if [ -n "${VERSIONS}" ]; then
   for version in ${VERSIONS}; do
     ts_minor_version=$(echo "${version}" | awk -F. '{print $2}')
 
-    if [ "${ts_minor_version}" -ge 10 ]; then
-      TEST_REPAIR=true
-    else
-      TEST_REPAIR=false
-    fi
-
-
-    if [ "${ts_minor_version}" -ge 22 ]; then
+    if [ "${ts_minor_version}" -ge 25 ]; then
+        TEST_VERSION=v12
+    elif [ "${ts_minor_version}" -ge 22 ]; then
         TEST_VERSION=v11
     elif [ "${ts_minor_version}" -ge 20 ]; then
         TEST_VERSION=v10
@@ -108,7 +98,7 @@ if [ -n "${VERSIONS}" ]; then
         TEST_VERSION=v8
     fi
 
-    export TEST_VERSION TEST_REPAIR
+    export TEST_VERSION
 
     FROM_VERSION=${version} "${SCRIPT_DIR}/test_update_from_version.sh"
     return_code=$?

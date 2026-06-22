@@ -16,15 +16,15 @@ create view partitions as
 select c.table_name, d.column_name, ds.range_start, ds.range_end
 from _timescaledb_catalog.hypertable h
 join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
-join _timescaledb_catalog.dimension d on (d.hypertable_id = h.id)
-join _timescaledb_catalog.dimension_slice ds on (d.id = ds.dimension_id)
-join _timescaledb_catalog.chunk_constraint cc on (cc.chunk_id = c.id and cc.dimension_slice_id = ds.id)
+join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
+join _timescaledb_catalog.dimension d on (d.id = ds.dimension_id)
 where h.table_name = 'mergeme'
-order by d.id, ds.range_start, ds.range_end;
+order by d.id, c.id, ds.range_start, ds.range_end;
 create view orphaned_slices as
-select ds.id, cc.constraint_name from _timescaledb_catalog.dimension_slice ds
-left join _timescaledb_catalog.chunk_constraint cc on (ds.id = cc.dimension_slice_id)
-where cc.constraint_name is null;
+select ds.id, format('constraint_%s', ds.id)::name as constraint_name
+from _timescaledb_catalog.dimension_slice ds
+left join _timescaledb_catalog.chunk c on (c.id = ds.chunk_id)
+where c.id is null;
 -----------------
 -- Setup table --
 -----------------
@@ -208,15 +208,15 @@ select * from partitions;
     table_name    | column_name |     range_start      |      range_end      
 ------------------+-------------+----------------------+---------------------
  _hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
- _hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
  _hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
+ _hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
  _hyper_1_4_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_5_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_5_chunk | device      | -9223372036854775808 |           715827882
- _hyper_1_4_chunk | device      | -9223372036854775808 |           715827882
  _hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
  _hyper_1_2_chunk | device      |            715827882 |          1431655764
  _hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_4_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_5_chunk | device      | -9223372036854775808 |           715827882
 
 \set ON_ERROR_STOP 0
 -- can't merge 3 and 4
@@ -397,8 +397,7 @@ select * from mergeme where device = 1;
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         Filter: (device = 1)
-         ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_6_chunk
+         ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_v2_first_time__ts__idx on compress_hyper_2_6_chunk
                Index Cond: (device = 1)
    ->  Index Scan using _hyper_1_1_chunk_mergeme_device_time_idx on _hyper_1_1_chunk
          Index Cond: (device = 1)
@@ -569,29 +568,29 @@ select * from partitions;
     table_name     | column_name |     range_start      |      range_end      
 -------------------+-------------+----------------------+---------------------
  _hyper_1_1_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
- _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_4_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_12_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_5_chunk  | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_12_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
+ _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_4_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_5_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_12_chunk | device      | -9223372036854775808 |           715827882
- _hyper_1_10_chunk | device      |            715827882 |          1431655764
  _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_15_chunk | device      |            715827882 |          1431655764
- _hyper_1_13_chunk | device      |            715827882 |          1431655764
- _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
  _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+ _hyper_1_4_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_5_chunk  | device      | -9223372036854775808 |           715827882
+ _hyper_1_10_chunk | device      |            715827882 |          1431655764
+ _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_12_chunk | device      | -9223372036854775808 |           715827882
+ _hyper_1_13_chunk | device      |            715827882 |          1431655764
  _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_15_chunk | device      |            715827882 |          1431655764
+ _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
 
 -- Show which chunks are compressed. Their compression_chunk_size
 -- metadata should be merged.
@@ -627,7 +626,6 @@ from _timescaledb_catalog.compression_chunk_size ccs \gset
 create view compression_size_fraction as
 select
     ccs.chunk_id,
-    ccs.compressed_chunk_id,
     round(ccs.uncompressed_heap_size::numeric / :total_uncompressed_heap_size, 1) as uncompressed_heap_size_fraction,
     ccs.uncompressed_toast_size::numeric as uncompressed_toast_size_fraction,
     round(ccs.uncompressed_index_size::numeric / :total_uncompressed_index_size, 1) as uncompressed_index_size_fraction,
@@ -652,9 +650,9 @@ set timescaledb.enable_merge_multidim_chunks = true;
 ---
 begin;
 select * from compression_size_fraction;
- chunk_id | compressed_chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
-----------+---------------------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
-        1 |                  17 |                             1.0 |                                0 |                              1.0 |                           1.0 |                            1.0 |                            1.0 |                              1.0 |                               1.0 |                                 1.0
+ chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
+----------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
+        1 |                             1.0 |                                0 |                              1.0 |                           1.0 |                            1.0 |                            1.0 |                              1.0 |                               1.0 |                                 1.0
 
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
@@ -670,24 +668,24 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
     table_name     | column_name |     range_start      |      range_end      
 -------------------+-------------+----------------------+---------------------
+ _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
- _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_10_chunk | time        |     1704153600000000 |    1704240000000000
+ _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_13_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_15_chunk | time        |     1704326400000000 |    1704412800000000
+ _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_13_chunk | device      |            715827882 |          1431655764
- _hyper_1_15_chunk | device      |            715827882 |          1431655764
- _hyper_1_10_chunk | device      |            715827882 |          1431655764
  _hyper_1_2_chunk  | device      |            715827882 |          1431655764
  _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_10_chunk | device      |            715827882 |          1431655764
  _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_13_chunk | device      |            715827882 |          1431655764
  _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_15_chunk | device      |            715827882 |          1431655764
+ _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
@@ -698,26 +696,26 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
     table_name     | column_name |     range_start      |      range_end      
 -------------------+-------------+----------------------+---------------------
- _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
  _hyper_1_2_chunk  | time        |     1704067200000000 |    1704412800000000
+ _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
  _hyper_1_11_chunk | time        |     1704153600000000 |    1704240000000000
  _hyper_1_14_chunk | time        |     1704240000000000 |    1704326400000000
  _hyper_1_16_chunk | time        |     1704326400000000 |    1704412800000000
  _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
  _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
  _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+ _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_14_chunk | device      |           1431655764 | 9223372036854775807
+ _hyper_1_16_chunk | device      |           1431655764 | 9223372036854775807
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_11_chunk','_timescaledb_internal._hyper_1_14_chunk', '_timescaledb_internal._hyper_1_16_chunk']);
 -- Final merge, involving the two compressed chunks 1 and 2. The stats
 -- should also be merged.
 select * from compression_size_fraction;
- chunk_id | compressed_chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
-----------+---------------------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
-        1 |                  17 |                             1.0 |                                0 |                              1.0 |                           1.0 |                            1.0 |                            1.0 |                              1.0 |                               1.0 |                                 1.0
+ chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
+----------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
+        1 |                             1.0 |                                0 |                              1.0 |                           1.0 |                            1.0 |                            1.0 |                              1.0 |                               1.0 |                                 1.0
 
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
@@ -736,9 +734,9 @@ select * from partitions;
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_2_chunk']);
 select * from compression_size_fraction;
- chunk_id | compressed_chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
-----------+---------------------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
-        1 |                  17 |                             1.0 |                                0 |                              1.0 |                           1.0 |                            1.0 |                            1.0 |                              1.0 |                               1.0 |                                 1.0
+ chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
+----------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
+        1 |                             1.0 |                                0 |                              1.0 |                           1.0 |                            1.0 |                            1.0 |                              1.0 |                               1.0 |                                 1.0
 
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  count  |   sum   |     round     
@@ -1110,13 +1108,13 @@ SELECT compress_chunk(:'mso_c2');
 
 -- have different sparse indexes
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                        index                                                                                                                         
-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_11_33_chunk | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                  relid                   |                                                                                                                                                       index                                                                                                                                                        
+------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_11_33_chunk | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- Merge should not succeed
 \set ON_ERROR_STOP 0
@@ -1136,22 +1134,22 @@ SELECT compress_chunk(decompress_chunk(:'mso_c2'));
 
 -- have different JSONB but same logical sparse indexes
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                        index                                                                                                                         
-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_11_33_chunk | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                  relid                   |                                                                                                                                                       index                                                                                                                                                        
+------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_11_33_chunk | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- Merge should succeed
 CALL merge_chunks(:'mso_c1'::regclass, :'mso_c2'::regclass);
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                        index                                                                                                                         
-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                  relid                   |                                                                                                                                                       index                                                                                                                                                        
+------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE merge_sparse_order;

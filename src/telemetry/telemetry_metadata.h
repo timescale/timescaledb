@@ -11,5 +11,3 @@
 #include <export.h>
 
 extern void ts_telemetry_metadata_add_values(JsonbParseState *state);
-extern void ts_telemetry_events_add(JsonbParseState *state);
-extern void ts_telemetry_event_truncate(void);

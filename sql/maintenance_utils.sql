@@ -59,6 +59,11 @@ CREATE OR REPLACE PROCEDURE _timescaledb_functions.rebuild_columnstore(
     chunk REGCLASS
 ) AS '@MODULE_PATHNAME@', 'ts_rebuild_columnstore' LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.rebuild_sparse_index(
+    chunk REGCLASS,
+    force BOOLEAN = false
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_rebuild_sparse_index' LANGUAGE C VOLATILE;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.chunk_rewrite_cleanup()
 LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_chunk_rewrite_cleanup';
 
@@ -127,24 +132,8 @@ BEGIN
     _removed := _removed + 1;
     RAISE INFO 'Removing metadata of chunk % from hypertable %', _chunk_id, _hypertable_id;
 
-    WITH _dimension_slice_remove AS (
-        DELETE FROM _timescaledb_catalog.dimension_slice
-        USING _timescaledb_catalog.chunk_constraint
-        WHERE dimension_slice.id = chunk_constraint.dimension_slice_id
-        AND chunk_constraint.chunk_id = _chunk_id
-        AND NOT EXISTS (
-            SELECT FROM _timescaledb_catalog.chunk_constraint cc
-            WHERE cc.chunk_id <> _chunk_id
-            AND cc.dimension_slice_id = dimension_slice.id
-        )
-        RETURNING _timescaledb_catalog.dimension_slice.id
-    )
-    DELETE FROM _timescaledb_catalog.chunk_constraint
-    USING _dimension_slice_remove
-    WHERE chunk_constraint.dimension_slice_id = _dimension_slice_remove.id;
-
-    DELETE FROM _timescaledb_catalog.chunk_constraint
-    WHERE chunk_constraint.chunk_id = _chunk_id;
+    DELETE FROM _timescaledb_catalog.dimension_slice
+    WHERE chunk_id = _chunk_id;
 
     DELETE FROM _timescaledb_internal.bgw_policy_chunk_stats
     WHERE bgw_policy_chunk_stats.chunk_id = _chunk_id;

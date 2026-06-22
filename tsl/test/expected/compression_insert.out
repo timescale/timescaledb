@@ -26,22 +26,23 @@ SELECT count(*) FROM  test1;
 -------
     25
 
+SELECT compress_relid AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass \gset
 --we have 1 compressed row --
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
  count 
 -------
      1
 
 -- single and multi row insert into the compressed chunk --
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , 11, 16, 'new' ;
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
  count 
 -------
      1
 
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, i +5, 'clay'
 FROM (Select generate_series(10, 20, 1) i ) q;
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
  count 
 -------
      1
@@ -53,14 +54,14 @@ SELECT count(*) from test1;
 
 -- single row copy
 COPY test1 FROM STDIN DELIMITER ',';
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
  count 
 -------
      1
 
 -- multi row copy
 COPY test1 FROM STDIN DELIMITER ',';
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
  count 
 -------
      1
@@ -134,7 +135,7 @@ SELECT * from test1 WHERE i is NULL;
 --TEST 2 now alter the table and add a new column to it
 ALTER TABLE test1 ADD COLUMN newtcol varchar(400);
 --add rows with segments that overlap some of the previous ones
-SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT count(*) from :COMPRESSED_CHUNK;
  count 
 -------
      1
@@ -157,7 +158,7 @@ SELECT * FROM test1 WHERE b = 16 order by 1, 2, 3, 4, 5;
  Thu Jan 02 08:16:00 2020 PST | 16 | 16 | prev16    | this is the newtcol16
 
 --number of rows in the chunk
-SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT count(*) from :COMPRESSED_CHUNK;
  count 
 -------
      1
@@ -171,7 +172,7 @@ FROM show_chunks('test1') c;
 COPY test1 FROM STDIN DELIMITER ',';
 COPY test1 FROM STDIN DELIMITER ',';
 --number of rows in the chunk
-SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT count(*) from :COMPRESSED_CHUNK;
  count 
 -------
      1
@@ -721,7 +722,7 @@ VACUUM ANALYZE test_ordering;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
    ->  Sort
-         Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
          ->  Seq Scan on compress_hyper_14_21_chunk
 
 INSERT INTO test_ordering SELECT 1;
@@ -741,7 +742,7 @@ VACUUM ANALYZE test_ordering;
          Sort Key: test_ordering."time"
          ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
 
@@ -756,7 +757,7 @@ VACUUM ANALYZE test_ordering;
          Sort Key: test_ordering."time"
          ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
    ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
@@ -802,11 +803,11 @@ VACUUM ANALYZE test_ordering;
    Order: test_ordering."time"
    ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+               Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_last_time, compress_hyper_14_21_chunk._ts_meta_v2_first_time
                ->  Seq Scan on compress_hyper_14_21_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_13_22_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_23_chunk._ts_meta_min_1, compress_hyper_14_23_chunk._ts_meta_max_1
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_v2_last_time, compress_hyper_14_23_chunk._ts_meta_v2_first_time
                ->  Seq Scan on compress_hyper_14_23_chunk
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
@@ -1496,7 +1497,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('direct_compressed_insert') c;
 -------
      1
 
-SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+SELECT cs.compress_relid::text AS "CHUNK" FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk c ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id WHERE h.table_name = 'direct_compressed_insert' AND cs.compress_relid IS NOT NULL ORDER BY c.id DESC LIMIT 1 \gset
 CREATE TABLE compressed_batches AS SELECT * FROM :CHUNK;
 SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;
  _ts_meta_count | count 
@@ -1612,7 +1613,7 @@ SELECT compress_chunk(show_chunks('i9314'));
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
-   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_51_104_chunk
+   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_v2_last_time__ts_meta__idx on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
              time             | value | doubled 
@@ -1631,7 +1632,7 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
    ->  Sort
-         Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+         Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
          ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1666,7 +1667,7 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
    ->  Sort
-         Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+         Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
          ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1703,11 +1704,11 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
    Order: i9314."time"
    ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
          ->  Sort
-               Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
+               Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_51_104_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_50_105_chunk
          ->  Sort
-               Sort Key: compress_hyper_51_106_chunk._ts_meta_min_1
+               Sort Key: compress_hyper_51_106_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_51_106_chunk
 
 SELECT * FROM i9314 ORDER BY time;

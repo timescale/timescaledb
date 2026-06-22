@@ -50,14 +50,15 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
+cond_daily    |Sun Feb 08 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
 step L1_unlock: 
     COMMIT;
-
+ <waiting ...>
 step R2_refresh: <... completed>
 step R3_refresh: <... completed>
 step R4_refresh: <... completed>
+step L1_unlock: <... completed>
 step check_locks: 
     SELECT l.mode, l.granted
     FROM pg_locks l
@@ -104,7 +105,7 @@ step R3_refresh:
     CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
  <waiting ...>
 step R4_overlapping_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-05');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15');
  <waiting ...>
 step check_locks: 
     SELECT l.mode, l.granted
@@ -131,15 +132,16 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
+cond_daily    |Sun Feb 08 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
 step L1_unlock: 
     COMMIT;
-
+ <waiting ...>
 step R2_refresh: <... completed>
 step R3_refresh: <... completed>
 step R4_overlapping_refresh: <... completed>
 ERROR:  could not refresh continuous aggregate "cond_daily" due to a concurrent refresh
+step L1_unlock: <... completed>
 step check_locks: 
     SELECT l.mode, l.granted
     FROM pg_locks l
@@ -183,7 +185,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Sun Feb 15 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Sat Mar 07 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
 
 step A1_revoke_perm: 
   REVOKE SELECT on conditions FROM cagg_user;
@@ -228,7 +230,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Sun Feb 15 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Sat Mar 07 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
 
 step A1_revoke_mat_perm: 
   DO $$
@@ -363,7 +365,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Tue Mar 10 17:00:00 2026 PDT|Sat Mar 14 17:00:00 2026 PDT
 
 step K1_terminate: 
     DO $$

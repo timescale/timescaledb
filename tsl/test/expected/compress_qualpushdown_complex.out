@@ -80,9 +80,9 @@ segby = 1 AND mm1 = 1 AND blm1 = 1;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((mm1 = 1) AND (blm1 = 1))
-   ->  Index Scan using compress_hyper_2_2_chunk_segby__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_2_chunk
-         Index Cond: ((segby = 1) AND (_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1))
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_blm1, TEST-HASHES::bigint[])
+   ->  Index Scan using compress_hyper_2_2_chunk_segby__ts_meta_v2_first_ts__ts_met_idx on compress_hyper_2_2_chunk
+         Index Cond: (segby = 1)
+         Filter: ((_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_blm1, TEST-HASHES::bigint[]))
 
 explain (buffers off, costs off)
 SELECT * FROM complex_pushdown WHERE
@@ -100,7 +100,7 @@ ts < 5 OR ts > 100;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((ts < 5) OR (ts > 100))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: ((_ts_meta_min_1 < 5) OR (_ts_meta_max_1 > 100))
+         Filter: ((_ts_meta_v2_first_ts < 5) OR (_ts_meta_v2_last_ts > 100))
 
 explain (buffers off, costs off)
 SELECT * FROM complex_pushdown WHERE
@@ -135,7 +135,7 @@ segby = 1 AND mm1 % 10 = 1 AND blm1 = 1;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: ((mm1 % 10) = 1)
    Vectorized Filter: (blm1 = 1)
-   ->  Index Scan using compress_hyper_2_2_chunk_segby__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_2_chunk
+   ->  Index Scan using compress_hyper_2_2_chunk_segby__ts_meta_v2_first_ts__ts_met_idx on compress_hyper_2_2_chunk
          Index Cond: (segby = 1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_blm1, TEST-HASHES::bigint[])
 
@@ -403,6 +403,6 @@ blm1 = blm2 and segby in (1,2,3);
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (blm1 = blm2)
-   ->  Index Scan using compress_hyper_2_2_chunk_segby__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_2_chunk
+   ->  Index Scan using compress_hyper_2_2_chunk_segby__ts_meta_v2_first_ts__ts_met_idx on compress_hyper_2_2_chunk
          Index Cond: (segby = ANY ('{1,2,3}'::integer[]))
 

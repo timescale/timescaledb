@@ -1,52 +1,45 @@
--- Drop obsolete chunk_constraint rows for inherited CHECK constraints on
--- OSM chunks; PG inheritance handles propagation now.
-DELETE FROM _timescaledb_catalog.chunk_constraint cc
-USING _timescaledb_catalog.chunk c
-WHERE cc.chunk_id = c.id
-  AND c.osm_chunk
-  AND cc.dimension_slice_id IS NULL
-  AND cc.hypertable_constraint_name IS NOT NULL
-  AND cc.constraint_name = cc.hypertable_constraint_name;
 
--- Rename legacy chunk-side constraints to the names the new code recomputes:
--- FKs use the parent's name; unique/PK/exclusion/trigger use the deterministic
--- "<chunk_id>_<parent>" form
+-- the update script from 2.14.2 to 2.15.0 migrated _timescaledb_internal.bgw_job_stat_history with incorrect definition
+-- fix _timescaledb_internal.bgw_job_stat_history if definition is incorrect
 DO $$
-DECLARE
-    r RECORD;
 BEGIN
-    FOR r IN
-        SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
-               cc.constraint_name AS old_name,
-               CASE WHEN parent.contype = 'f' THEN cc.hypertable_constraint_name
-                    ELSE format('%s_%s', c.id, cc.hypertable_constraint_name)
-               END AS new_name
-        FROM _timescaledb_catalog.chunk_constraint cc
-        JOIN _timescaledb_catalog.chunk c ON c.id = cc.chunk_id
-        JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
-        JOIN pg_constraint parent
-            ON parent.conrelid = pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass
-            AND parent.conname = cc.hypertable_constraint_name
-            AND parent.contype IN ('f', 'u', 'p', 'x', 't')
-        WHERE cc.dimension_slice_id IS NULL
-          AND cc.hypertable_constraint_name IS NOT NULL
-    LOOP
-        IF r.old_name <> r.new_name THEN
-            EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
-                                      r.chunk_table, r.old_name, r.new_name);
-        END IF;
-    END LOOP;
+  IF EXISTS (SELECT FROM pg_attribute WHERE attrelid='_timescaledb_internal.bgw_job_stat_history'::regclass AND attname = 'id' AND atttypid <> 'bigint'::regtype) THEN
+
+    --
+    -- START bgw_job_stat_history
+    --
+    DROP VIEW IF EXISTS timescaledb_information.job_history;
+
+    CREATE TABLE _timescaledb_internal._tmp_bgw_job_stat_history AS SELECT * FROM _timescaledb_internal.bgw_job_stat_history;
+    CREATE TABLE _timescaledb_internal._tmp_job_stat_history_id_seq AS SELECT last_value, is_called FROM _timescaledb_internal.bgw_job_stat_history_id_seq;
+
+    DROP TABLE _timescaledb_internal.bgw_job_stat_history;
+
+    CREATE SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq MINVALUE 1;
+
+    CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
+      id BIGINT NOT NULL DEFAULT nextval('_timescaledb_internal.bgw_job_stat_history_id_seq'),
+      job_id INTEGER NOT NULL,
+      pid INTEGER,
+      execution_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      execution_finish TIMESTAMPTZ,
+      succeeded boolean,
+      data jsonb,
+      -- table constraints
+      CONSTRAINT bgw_job_stat_history_pkey PRIMARY KEY (id)
+    );
+
+    ALTER SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq OWNED BY _timescaledb_internal.bgw_job_stat_history.id;
+
+    INSERT INTO _timescaledb_internal.bgw_job_stat_history (id, job_id, pid, execution_start, execution_finish, succeeded, data) SELECT id, job_id, pid, execution_start, execution_finish, succeeded, data FROM _timescaledb_internal._tmp_bgw_job_stat_history;
+    SELECT setval('_timescaledb_internal.bgw_job_stat_history_id_seq', last_value, is_called) FROM _timescaledb_internal._tmp_job_stat_history_id_seq;
+
+    CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
+    REVOKE ALL ON _timescaledb_internal.bgw_job_stat_history FROM PUBLIC;
+    --
+    -- END bgw_job_stat_history
+    --
+
+  END IF;
 END
 $$;
-
--- Remove the chunk_constraint rows that mirrored non-dimensional constraints.
--- FK chunk-side constraints are now located by name through the event-trigger
--- hooks; unique/PK/exclusion/trigger constraints through the deterministic
--- "<chunk_id>_<parent>" name pattern.
-DELETE FROM _timescaledb_catalog.chunk_constraint
-WHERE dimension_slice_id IS NULL
-  AND hypertable_constraint_name IS NOT NULL;
-
-ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
-ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
-

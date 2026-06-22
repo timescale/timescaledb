@@ -553,7 +553,6 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 	{
 		/*check if this is a cont aggregate view */
 		int32 mat_id;
-		bool found;
 
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(user_htoid);
 
@@ -578,17 +577,6 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 		mat_id = cagg->data.mat_hypertable_id;
 		ht = ts_hypertable_get_by_id(mat_id);
 
-		found = policy_refresh_cagg_exists(mat_id);
-		if (!found)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("continuous aggregate policy does not exist for \"%s\"",
-							get_rel_name(user_htoid)),
-					 errmsg("setup a refresh policy for \"%s\" before setting up a columnstore "
-							"policy",
-							get_rel_name(user_htoid))));
-		}
 		if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		{
 			ereport(ERROR,

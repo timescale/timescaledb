@@ -178,8 +178,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 			DEBUG_WAITPOINT("insert_create_compressed");
 
-			lockres = ts_chunk_lock_for_creating_compressed_chunk(chunk->fd.id,
-																  &chunk->fd.compressed_chunk_id);
+			lockres = ts_chunk_lock_for_creating_compressed_chunk(chunk);
 
 			/*
 			 * Since the locking function blocks and follows the update chain,
@@ -191,15 +190,12 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 				   "compressed chunk. Lock result %d",
 				   lockres);
 
-			/* recheck whether compressed chunk exists after acquiring the lock */
-			if (!chunk->fd.compressed_chunk_id)
+			/* recheck whether the chunk got compressed after acquiring the lock */
+			if (!ts_chunk_is_compressed(chunk))
 			{
 				Hypertable *compressed_ht =
 					ts_hypertable_get_by_id(ctr->hypertable->fd.compressed_hypertable_id);
-				Chunk *compressed_chunk =
-					ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
-				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
-				chunk->fd.compressed_chunk_id = compressed_chunk->fd.id;
+				ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
 				created_compressed_chunk = true;
 
 				/* mark chunk as partial unless completely new chunk */

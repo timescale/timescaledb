@@ -9,19 +9,18 @@ name: Coccinelle
 jobs:
   coccinelle:
     name: Coccinelle
-    # coccinelle version in ubuntu-latest (20.04) is too old so we run
-    # this in jammy (22.04)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get update
-        sudo apt-get -y install coccinelle
+        sudo apt-get -y install --no-install-recommends coccinelle postgresql-server-dev-18
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
     - name: Run coccinelle
       run: |

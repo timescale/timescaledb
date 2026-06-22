@@ -29,5 +29,3 @@ typedef struct BatchMetadataBuilderFirstLast
 	int16 first_metadata_attr_offset;
 	int16 last_metadata_attr_offset;
 } BatchMetadataBuilderFirstLast;
-
-typedef struct RowCompressor RowCompressor;

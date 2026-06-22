@@ -21,6 +21,7 @@
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
 #include "bgw_policy/policy_utils.h"
+#include "continuous_aggs/refresh.h"
 #include "dimension.h"
 #include "guc.h"
 #include "jsonb_utils.h"
@@ -32,12 +33,8 @@
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
-/* Default buckets per batch is 1, which means that the job will refresh 1 bucket at a time */
-#define DEFAULT_BUCKETS_PER_BATCH 10
 /* Default max batches per execution is 0, which means no limit */
 #define DEFAULT_MAX_BATCHES_PER_EXECUTION 0
-/* Default refresh newest first is true, which means from newest data to the oldest */
-#define DEFAULT_REFRESH_NEWEST_FIRST true
 /* Default compress after refresh is false, which means compression does not run after refresh */
 #define DEFAULT_COMPRESS_AFTER_REFRESH false
 
@@ -628,7 +625,7 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 		elog(ERROR, "cache lookup failed");
 	}
 
-	RangeType *range = make_range_compat(typcache, &lower, &upper, false, NULL);
+	RangeType *range = make_range(typcache, &lower, &upper, false, NULL);
 
 	ListCell *lc;
 
@@ -671,7 +668,7 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 			.lower = false,
 		};
 
-		RangeType *range_job = make_range_compat(typcache, &lower_job, &upper_job, false, NULL);
+		RangeType *range_job = make_range(typcache, &lower_job, &upper_job, false, NULL);
 
 		elog(DEBUG1,
 			 "start_offset_job: " INT64_FORMAT ", end_offset_job: " INT64_FORMAT,
