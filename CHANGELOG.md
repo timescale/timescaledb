@@ -7,8 +7,17 @@
 This release contains performance improvements and bug fixes since the 2.28.0 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
+* [#9913](https://github.com/timescale/timescaledb/pull/9913) Fix potential crash on DML on compressed tables when the plan uses Bitmap Heap Scan
 * [#10091](https://github.com/timescale/timescaledb/pull/10091) Fix column rename for compressed chunks
 * [#10056](https://github.com/timescale/timescaledb/pull/10056) Enforce CHECK, NOT NULL and view WITH CHECK OPTION constraints for direct compress inserts
+* [#10059](https://github.com/timescale/timescaledb/pull/10059) Fix error when using first/last aggregates in a HAVING clause
+* [#10060](https://github.com/timescale/timescaledb/pull/10060) Fix first/last optimization returning the same value for aggregates that share the value column but order by different columns
+* [#10069](https://github.com/timescale/timescaledb/pull/10069) Fix bgw_job_stat_history definition
+* [#10073](https://github.com/timescale/timescaledb/pull/10073) Fix uncompressed size estimate for varlen
+* [#10089](https://github.com/timescale/timescaledb/pull/10089) Fix deleting every row on compressed hypertable with subquery returning constant false
+
+**Thanks**
+* @skrenes for reporting a problem with the job_history view when upgrading to 2.28.0
 
 ## 2.28.0 (2026-06-16)
 
