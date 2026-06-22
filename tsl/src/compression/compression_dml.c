@@ -80,9 +80,11 @@ static Relation find_matching_index(Relation comp_chunk_rel, List **index_filter
 									List **heap_filters);
 static tuple_filtering_constraints *get_batch_keys_for_unique_constraints(Relation relation);
 static bool decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chunk,
-												 List *predicates, EState *estate, bool has_joins);
+												 List *predicates, EState *estate,
+												 bool plan_requires_decompression);
 static bool decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk *chunk,
-													  EState *estate, bool has_joins);
+													  EState *estate,
+													  bool plan_requires_decompression);
 static BatchFilter *make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation,
 									 RegProcedure opcode, Const *value, bool is_null_check,
 									 bool is_null, bool is_array_op);
@@ -683,7 +685,7 @@ build_changed_key_filter(CompressionSettings *settings, Relation rel, Oid chunk_
  */
 static bool
 decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk *chunk,
-										  EState *estate, bool has_joins)
+										  EState *estate, bool plan_requires_decompression)
 {
 	ModifyTable *mt = ht_state->mt;
 
@@ -795,8 +797,11 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
 		}
 
 		/* Decompress the batches that could hold a row with the new key value. */
-		batches_decompressed |=
-			decompress_batches_for_update_delete(ht_state, chunk, predicates, estate, has_joins);
+		batches_decompressed |= decompress_batches_for_update_delete(ht_state,
+																	 chunk,
+																	 predicates,
+																	 estate,
+																	 plan_requires_decompression);
 	}
 
 	return batches_decompressed;
@@ -814,7 +819,8 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
  */
 static bool
 decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chunk,
-									 List *predicates, EState *estate, bool has_joins)
+									 List *predicates, EState *estate,
+									 bool plan_requires_decompression)
 {
 	/* process each chunk with its corresponding predicates */
 
@@ -838,7 +844,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	List *bloom_filters = NIL;
 
 	CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
-	bool delete_only = ht_state->mt->operation == CMD_DELETE && !has_joins &&
+	bool delete_only = ht_state->mt->operation == CMD_DELETE && !plan_requires_decompression &&
 					   can_delete_without_decompression(ht_state, settings, chunk, predicates);
 	InvalidationContext invalidation_ctx = { 0 };
 
@@ -1667,6 +1673,7 @@ struct decompress_chunk_context
 	/* indicates decompression actually occurred */
 	bool batches_decompressed;
 	bool has_joins;
+	bool has_onetime_filter;
 };
 
 static void decompress_chunk_plan_walker(Plan *plan, EState *estate,
@@ -1734,6 +1741,14 @@ decompress_chunk_plan_walker(Plan *plan, EState *estate, struct decompress_chunk
 		case T_HashJoin:
 			ctx->has_joins = true;
 			break;
+		case T_Result:
+		{
+			if (((Result *) plan)->resconstantqual)
+			{
+				ctx->has_onetime_filter = true;
+			}
+			break;
+		}
 		case T_Append:
 			foreach (lc, ((Append *) plan)->appendplans)
 			{
@@ -1791,11 +1806,13 @@ decompress_chunk_plan_walker(Plan *plan, EState *estate, struct decompress_chunk
 									get_rel_name(rte->relid))));
 				}
 
-				ctx->batches_decompressed |= decompress_batches_for_update_delete(ctx->ht_state,
-																				  current_chunk,
-																				  predicates,
-																				  estate,
-																				  ctx->has_joins);
+				ctx->batches_decompressed |=
+					decompress_batches_for_update_delete(ctx->ht_state,
+														 current_chunk,
+														 predicates,
+														 estate,
+														 (ctx->has_joins ||
+														  ctx->has_onetime_filter));
 
 				/*
 				 * For UPDATEs that change a unique key column, also decompress
@@ -1807,7 +1824,8 @@ decompress_chunk_plan_walker(Plan *plan, EState *estate, struct decompress_chunk
 					decompress_unique_update_conflict_batches(ctx->ht_state,
 															  current_chunk,
 															  estate,
-															  ctx->has_joins);
+															  (ctx->has_joins ||
+															   ctx->has_onetime_filter));
 			}
 		}
 
