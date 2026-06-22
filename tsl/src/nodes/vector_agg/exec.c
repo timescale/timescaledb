@@ -43,14 +43,14 @@
  */
 typedef struct ExprCacheEntry
 {
-	Expr *key;
+	Expr const *key;
 	CompressedColumnValues result; /* DT_Invalid means not yet computed */
 	uint32 status;				   /* required by simplehash */
 } ExprCacheEntry;
 
 #define SH_PREFIX expr_cache
 #define SH_ELEMENT_TYPE ExprCacheEntry
-#define SH_KEY_TYPE Expr *
+#define SH_KEY_TYPE Expr const *
 #define SH_KEY key
 #define SH_HASH_KEY(tb, key) murmurhash64((uint64) (key))
 #define SH_EQUAL(tb, a, b) ((a) == (b))
@@ -674,7 +674,9 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 		 * broader result is safe to cache, because it has the correct values
 		 * for all rows of a narrower result.
 		 */
-		cache_entry = expr_cache_lookup(expr_cache, (Expr *) argument);
+		cache_entry = expr_cache_lookup(expr_cache, argument);
+
+		Assert(!contain_volatile_functions((Node *) argument));
 	}
 
 	if (cache_entry != NULL && cache_entry->result.decompression_type != DT_Invalid)
