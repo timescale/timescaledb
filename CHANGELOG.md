@@ -8,6 +8,7 @@ This release contains performance improvements and bug fixes since the 2.28.0 re
 
 **Bugfixes**
 * [#10091](https://github.com/timescale/timescaledb/pull/10091) Fix column rename for compressed chunks
+* [#10056](https://github.com/timescale/timescaledb/pull/10056) Enforce CHECK, NOT NULL and view WITH CHECK OPTION constraints for direct compress inserts
 
 ## 2.28.0 (2026-06-16)
 
