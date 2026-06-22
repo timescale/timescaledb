@@ -519,3 +519,35 @@ INSERT INTO test_orderby_not_segmentby SELECT '2024-06-01'::timestamptz + (i||' 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
 ROLLBACK;
 
+-- Direct compress must still enforce CHECK and NOT NULL constraints
+CREATE TABLE metrics_check(time timestamptz NOT NULL, value int NOT NULL CHECK (value > 0))
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+SET timescaledb.enable_direct_compress_insert = true;
+\set ON_ERROR_STOP 0
+-- CHECK violation should be reported
+INSERT INTO metrics_check SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, CASE WHEN i = 50 THEN -1 ELSE i END FROM generate_series(1,100) i;
+-- NOT NULL violation should be reported
+INSERT INTO metrics_check SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, CASE WHEN i = 50 THEN NULL ELSE i END FROM generate_series(1,100) i;
+\set ON_ERROR_STOP 1
+-- valid rows insert and compress without error
+INSERT INTO metrics_check SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,100) i;
+SELECT count(*), min(value), max(value) FROM metrics_check;
+DROP TABLE metrics_check;
+RESET timescaledb.enable_direct_compress_insert;
+
+-- Direct compress must still enforce a view's WITH CHECK OPTION
+CREATE TABLE metrics_view(time timestamptz NOT NULL, value int)
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+CREATE VIEW metrics_view_pos AS SELECT * FROM metrics_view WHERE value > 0 WITH CHECK OPTION;
+SET timescaledb.enable_direct_compress_insert = true;
+\set ON_ERROR_STOP 0
+-- row not satisfying the view qual should be reported
+INSERT INTO metrics_view_pos SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, CASE WHEN i = 50 THEN -1 ELSE i END FROM generate_series(1,100) i;
+\set ON_ERROR_STOP 1
+-- valid rows insert without error
+INSERT INTO metrics_view_pos SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,100) i;
+SELECT count(*), min(value), max(value) FROM metrics_view;
+RESET timescaledb.enable_direct_compress_insert;
+DROP VIEW metrics_view_pos;
+DROP TABLE metrics_view;
+
