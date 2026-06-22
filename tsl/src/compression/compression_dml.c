@@ -1743,9 +1743,10 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 		{
 			ctx->has_joins = true;
 			break;
-		case T_Result:
+		}
+		case T_ResultState:
 		{
-			if (((Result *) plan)->resconstantqual)
+			if (((Result *) ps->plan)->resconstantqual)
 			{
 				ctx->has_onetime_filter = true;
 			}
@@ -1776,12 +1777,15 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 				}
 
-				batches_decompressed = decompress_batches_for_update_delete(ctx->ht_state,
-																			current_chunk,
-																			predicates,
-																			ps->state,
-																			(ctx->has_joins ||
-																			 ctx->has_onetime_filter));
+				batches_decompressed =
+					decompress_batches_for_update_delete(ctx->ht_state,
+														 current_chunk,
+														 predicates,
+														 ps->state,
+														 (ctx->has_joins ||
+														  ctx->has_onetime_filter));
+				ctx->batches_decompressed |= batches_decompressed;
+
 				/*
 				 * For UPDATEs that change a unique key column, also decompress
 				 * the batches that could hold a row with the new key value so
@@ -1794,8 +1798,6 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 															  ps->state,
 															  (ctx->has_joins ||
 															   ctx->has_onetime_filter));
-			}
-		}
 
 				/* This is a workaround specifically for bitmap heap scans:
 				 * during node initialization, initialize the scan state with the active snapshot
