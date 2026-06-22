@@ -6,21 +6,8 @@
 
 This release contains performance improvements and bug fixes since the 2.28.0 release. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.28.1**
-* 
-
-**Backward-Incompatible Changes**
-
-**Features**
-
 **Bugfixes**
-* 
-
-**New Settings**
-
-**GUCs**
-
-**Thanks**
+* [#10091](https://github.com/timescale/timescaledb/pull/10091) Fix column rename for compressed chunks
 
 ## 2.28.0 (2026-06-16)
 
