@@ -198,13 +198,39 @@ select i % 2, sum(abs(v - 500)), count(abs(v - 500)),
        sum(length(x)), count(length(x))
     from aggexpr group by i % 2 order by 1;
 
--- FILTER clause with hash grouping: FILTER aggregate excluded from CSE,
--- other aggregates still share.
+-- FILTER clause with hash grouping: FILTER aggregate excluded from CSE.
 select i % 2,
        sum(abs(v - 500)) filter (where b),
        count(abs(v - 500)),
        sum(abs(v - 500))
-    from aggexpr group by i % 2 order by 1;
+from aggexpr group by i % 2 order by 1
+;
+
+select x
+    , sum(abs(v - 500)) filter (where b)
+    , sum(abs(v - 500)) filter (where not b)
+from aggexpr
+group by 1 order by 1, 2, 3 limit 10
+;
+
+select x
+    , sum(abs(v - 500)) filter (where b)
+    , sum(abs(v - 500)) filter (where not b)
+    , sum(abs(v - 500))
+    , sum(abs(v - 500) + 1)
+from aggexpr
+group by 1 order by 1, 2, 3 limit 10
+;
+
+select x
+    , sum(abs(v - 500)) filter (where b)
+    , sum(v - 500) filter (where not b)
+    , sum(v - 500)
+    , sum(abs(v - 500))
+    , sum(abs(v - 500) + 1)
+from aggexpr
+group by 1 order by 1, 2, 3 limit 10
+;
 
 -- Two shared sibling subexpressions: abs(v - 500) and length(x) both appear
 -- in both aggregates. Tests that the refcount walker continues to sibling

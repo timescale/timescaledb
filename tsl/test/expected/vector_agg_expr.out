@@ -2076,18 +2076,80 @@ select i % 2, sum(abs(v - 500)), count(abs(v - 500)),
         1 |  303822 |   741 |  320 |   320
         $ | 1846700 |  4471 | 1484 |   742
 
--- FILTER clause with hash grouping: FILTER aggregate excluded from CSE,
--- other aggregates still share.
+-- FILTER clause with hash grouping: FILTER aggregate excluded from CSE.
 select i % 2,
        sum(abs(v - 500)) filter (where b),
        count(abs(v - 500)),
        sum(abs(v - 500))
-    from aggexpr group by i % 2 order by 1;
+from aggexpr group by i % 2 order by 1
+;
  ?column? |  sum   | count |   sum   
 ----------+--------+-------+---------
         0 | 101274 |  3720 | 1533439
         1 | 101436 |   741 |  303822
         $ | 202226 |  4471 | 1846700
+
+select x
+    , sum(abs(v - 500)) filter (where b)
+    , sum(abs(v - 500)) filter (where not b)
+from aggexpr
+group by 1 order by 1, 2, 3 limit 10
+;
+   x    |  sum   |  sum   
+--------+--------+--------
+ 0      |      $ |      $
+ 12     |      $ | 612328
+ 13     | 101193 | 203371
+ 1410   |    490 |      $
+ 14100  |    400 |      $
+ 141000 |    500 |      $
+ 141002 |      $ |    502
+ 141004 |      $ |    504
+ 141006 |    506 |      $
+ 141008 |      $ |    508
+
+select x
+    , sum(abs(v - 500)) filter (where b)
+    , sum(abs(v - 500)) filter (where not b)
+    , sum(abs(v - 500))
+    , sum(abs(v - 500) + 1)
+from aggexpr
+group by 1 order by 1, 2, 3 limit 10
+;
+   x    |  sum   |  sum   |  sum   |  sum   
+--------+--------+--------+--------+--------
+ 0      |      $ |      $ |      $ |      $
+ 12     |      $ | 612328 | 612328 | 613815
+ 13     | 101193 | 203371 | 304564 | 305306
+ 1410   |    490 |      $ |    490 |    491
+ 14100  |    400 |      $ |    400 |    401
+ 141000 |    500 |      $ |    500 |    501
+ 141002 |      $ |    502 |    502 |    503
+ 141004 |      $ |    504 |    504 |    505
+ 141006 |    506 |      $ |    506 |    507
+ 141008 |      $ |    508 |    508 |    509
+
+select x
+    , sum(abs(v - 500)) filter (where b)
+    , sum(v - 500) filter (where not b)
+    , sum(v - 500)
+    , sum(abs(v - 500))
+    , sum(abs(v - 500) + 1)
+from aggexpr
+group by 1 order by 1, 2, 3 limit 10
+;
+   x    |  sum   |  sum   |  sum   |  sum   |  sum   
+--------+--------+--------+--------+--------+--------
+ 0      |      $ |      $ |      $ |      $ |      $
+ 12     |      $ | 362828 | 362828 | 612328 | 613815
+ 13     | 101193 | 120037 | 179564 | 304564 | 305306
+ 1410   |    490 |      $ |   -490 |    490 |    491
+ 14100  |    400 |      $ |   -400 |    400 |    401
+ 141000 |    500 |      $ |    500 |    500 |    501
+ 141002 |      $ |    502 |    502 |    502 |    503
+ 141004 |      $ |    504 |    504 |    504 |    505
+ 141006 |    506 |      $ |    506 |    506 |    507
+ 141008 |      $ |    508 |    508 |    508 |    509
 
 -- Two shared sibling subexpressions: abs(v - 500) and length(x) both appear
 -- in both aggregates. Tests that the refcount walker continues to sibling
