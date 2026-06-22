@@ -27,11 +27,15 @@ static bool create_segment_filter_scankey(Relation in_rel, char *segment_filter_
  *
  * Unlike HeapKeyTest, this function takes into account SK_ISNULL
  * and works correctly when looking for null values.
+ *
+ * If slot attribute is NULL and key is NOT NULL,
+ * (key >= NULL) returns True for nulls_first
+ * and (key <= NULL) returns True for !nulls_first (i.e. for NULLS LAST).
  */
 bool
-slot_key_test(TupleTableSlot *compressed_slot, ScanKey key)
+slot_key_test(TupleTableSlot *compressed_slot, ScanKey key, bool nulls_first)
 {
-	/* No need to get the datum if we are only checking for NULLs */
+	/* No need to get the datum if we are only checking for NULL key */
 	if (key->sk_flags & SK_ISNULL)
 	{
 		return slot_attisnull(compressed_slot, key->sk_attno);
@@ -43,6 +47,20 @@ slot_key_test(TupleTableSlot *compressed_slot, ScanKey key)
 
 	if (is_null)
 	{
+		/* NULL < key i.e. NULL sorts before key argument */
+		if (nulls_first && (key->sk_strategy == BTLessStrategyNumber ||
+							key->sk_strategy == BTLessEqualStrategyNumber))
+		{
+			return true;
+		}
+
+		/* NULL > key i.e. NULL sorts after key argument */
+		if (!nulls_first && (key->sk_strategy == BTGreaterStrategyNumber ||
+							 key->sk_strategy == BTGreaterEqualStrategyNumber))
+		{
+			return true;
+		}
+
 		return false;
 	}
 

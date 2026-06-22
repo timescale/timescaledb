@@ -17,8 +17,6 @@
 #include "invalidation.h"
 #include "utils.h"
 
-#if PG16_GE
-
 static bool match_lists(List *src, List *tgt);
 
 /* Wrappers for common methods checking Cagg view query validity */
@@ -999,5 +997,3 @@ continuous_agg_apply_rewrites(Query *parse)
 	}
 	return result;
 }
-
-#endif

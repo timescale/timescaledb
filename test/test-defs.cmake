@@ -32,9 +32,6 @@ set(TEST_PGUSER
 set(TEST_DBNAME
     single
     CACHE STRING "The database name to use for tests")
-set(TEST_PGPORT_TEMP_INSTANCE
-    55432
-    CACHE STRING "The port to run a temporary test PostgreSQL instance on")
 set(TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/test_schedule)
 set(TEST_SCHEDULE_SHARED
     ${CMAKE_CURRENT_BINARY_DIR}/shared/test_schedule_shared)
@@ -104,11 +101,11 @@ set(PG_ISOLATION_REGRESS_OPTS_INOUT
     --outputdir=${TEST_OUTPUT_DIR}/isolation --load-extension=timescaledb)
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE
-    --port=${TEST_PGPORT_TEMP_INSTANCE} --temp-instance=${TEST_CLUSTER}
+    --temp-instance=${TEST_CLUSTER}
     --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf)
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE_PGTEST
-    --port=${TEST_PGPORT_TEMP_INSTANCE} --temp-instance=${TEST_CLUSTER}
+    --temp-instance=${TEST_CLUSTER}
     --temp-config=${TEST_OUTPUT_DIR}/pgtest.conf)
 
 set(PG_REGRESS_OPTS_LOCAL_INSTANCE --host=${TEST_PGHOST}

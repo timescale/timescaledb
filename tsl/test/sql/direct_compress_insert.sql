@@ -118,7 +118,7 @@ INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interva
 INSERT INTO metrics SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK order by 2;
 -- since the chunks are new status should be COMPRESSED, UNORDERED, PARTIAL and COMPRESSED, UNORDERED
@@ -134,7 +134,7 @@ INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interva
 INSERT INTO metrics SELECT '2025-01-05'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should not see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK order by 2;
 -- since the chunks are new status should be COMPRESSED, UNORDERED, PARTIAL and COMPRESSED, UNORDERED
@@ -148,7 +148,7 @@ SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, floor(i), i::float FROM generate_series(0.0,9.8,0.2) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL \gset
 -- should have 10 batches
 SELECT count(*) FROM :COMPRESSED_CHUNK;
 -- since the chunks are new status should be COMPRESSED
@@ -163,7 +163,7 @@ SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd'||i%2, i::float FROM generate_series(0,3000) i;
 INSERT INTO metrics SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd'||i%2, i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) order by 1 desc limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 desc limit 1 \gset
 -- should see overlapping batches per device
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, device from :COMPRESSED_CHUNK order by 4, 2;
 -- since the chunks are new status should be COMPRESSED, UNORDERED
@@ -178,7 +178,7 @@ SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd'||i%3, i::float FROM generate_series(0,3000) i;
 INSERT INTO metrics SELECT '2025-01-02'::timestamptz - (i || ' minute')::interval, 'd'||i%3, i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where format('%I.%I', schema_name, table_name)::regclass IN (SELECT compress_relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) order by 1 limit 1 \gset
+SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL order by 1 limit 1 \gset
 -- should see overlapping batches
 select _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_min_2, _ts_meta_max_2 from :COMPRESSED_CHUNK order by 2, 4;
 -- since the chunks are new status should be COMPRESSED, UNORDERED

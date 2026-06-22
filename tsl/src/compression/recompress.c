@@ -122,16 +122,16 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							"compression with no "
 							"order by")));
 		}
-		bool nullable_orderby = !is_chunk_orderby_nonnullable(settings);
-		if (nullable_orderby)
+		bool orderby_not_handling_nulls = !is_chunk_orderby_nullhandling(settings);
+		if (orderby_not_handling_nulls)
 		{
 			elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-				 "in-memory recompression is disabled due to nullable order by, "
+				 "in-memory recompression is disabled due to nullable order by with no firstlast, "
 				 "performing segmentwise decompress/compress on chunk \"%s.%s\"",
 				 NameStr(chunk->fd.schema_name),
 				 NameStr(chunk->fd.table_name));
 		}
-		recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
+		recompress_chunk_segmentwise_impl(chunk, orderby_not_handling_nulls);
 	}
 
 	PG_RETURN_OID(uncompressed_relid);
@@ -1063,6 +1063,7 @@ update_orderby_scankeys(Datum *values, bool *isnulls, int num_segmentby, int num
 static enum Batch_match_result
 handle_null_scan(int key_flags, bool nulls_first, enum Batch_match_result result)
 {
+	/* uncompressed tuple key is NULL */
 	if (key_flags & SK_ISNULL)
 	{
 		return nulls_first ? Tuple_before : Tuple_after;
@@ -1086,18 +1087,17 @@ match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby, ScanKey orde
 	if (num_orderby >= 1)
 	{
 		ScanKey key = &orderby_scankeys[0];
-		if (!slot_key_test(compressed_slot, key))
+		if (!slot_key_test(compressed_slot, key, nulls_first[0]))
 		{
 			return handle_null_scan(key->sk_flags, nulls_first[0], Tuple_before);
 		}
 
 		key = &orderby_scankeys[1];
-		if (!slot_key_test(compressed_slot, key))
+		if (!slot_key_test(compressed_slot, key, nulls_first[0]))
 		{
 			return handle_null_scan(key->sk_flags, nulls_first[0], Tuple_after);
 		}
 	}
-
 	return Tuple_match;
 }
 
@@ -1738,11 +1738,7 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 		 * If indexes on metadata columns are added in the future,
 		 * this will need to handle index updates via update_indexes.
 		 */
-#if PG16_LT
-		bool update_indexes;
-#else
 		TU_UpdateIndexes update_indexes;
-#endif
 		simple_table_tuple_update(compressed_rel,
 								  &tid,
 								  update_slot,
