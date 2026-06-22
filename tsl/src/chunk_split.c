@@ -28,6 +28,7 @@
 #include "compression/create.h"
 #include "debug_point.h"
 #include "hypercube.h"
+#include "hypertable_cache.h"
 #include "partitioning.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
