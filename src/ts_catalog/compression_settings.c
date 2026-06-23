@@ -416,6 +416,36 @@ ts_compression_settings_get(Oid relid)
 	return settings;
 }
 
+TSDLLEXPORT void
+ts_compression_settings_free(CompressionSettings *settings)
+{
+	if (settings == NULL)
+	{
+		return;
+	}
+	if (settings->fd.segmentby)
+	{
+		pfree(settings->fd.segmentby);
+	}
+	if (settings->fd.orderby)
+	{
+		pfree(settings->fd.orderby);
+	}
+	if (settings->fd.orderby_desc)
+	{
+		pfree(settings->fd.orderby_desc);
+	}
+	if (settings->fd.orderby_nullsfirst)
+	{
+		pfree(settings->fd.orderby_nullsfirst);
+	}
+	if (settings->fd.index)
+	{
+		pfree(settings->fd.index);
+	}
+	pfree(settings);
+}
+
 /*
  * Get the compression settings for a relation given its associated compressed
  * relation.
