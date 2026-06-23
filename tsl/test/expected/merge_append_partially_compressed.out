@@ -905,10 +905,7 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time DESC, x3 ASC, x
          ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_v2_last_time DESC, compress_hyper_4_8_chunk._ts_meta_v2_first_time DESC, compress_hyper_4_8_chunk._ts_meta_v2_first_x3, compress_hyper_4_8_chunk._ts_meta_v2_last_x3, compress_hyper_4_8_chunk._ts_meta_v2_first_x4, compress_hyper_4_8_chunk._ts_meta_v2_last_x4
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Index Scan using compress_hyper_4_8_chunk_x1_x2_x5__ts_meta_v2_last_time__ts_idx on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                Sort Method: quicksort 
@@ -1651,14 +1648,15 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test4') ch;
 INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
 VACUUM ANALYZE test4;
 set enable_hashagg TO false;
-SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+SELECT show_chunks('test4') AS "TEST4_CHUNK" LIMIT 1 \gset
+SELECT time, device FROM :TEST4_CHUNK GROUP BY time, device;
              time             | device 
 ------------------------------+--------
  Wed Jan 01 00:00:00 2025 PST | 
  Thu Jan 02 00:00:00 2025 PST | d
  Thu Jan 02 00:00:00 2025 PST | 
 
-EXPLAIN (buffers off, costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+EXPLAIN (buffers off, costs off, analyze, timing off, summary off) SELECT time, device FROM :TEST4_CHUNK GROUP BY time, device;
 --- QUERY PLAN ---
  Group (actual rows=3.00 loops=1)
    Group Key: _hyper_9_21_chunk."time", _hyper_9_21_chunk.device

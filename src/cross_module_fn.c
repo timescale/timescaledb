@@ -60,6 +60,7 @@ CROSSMODULE_WRAPPER(compressed_data_decompress_forward);
 CROSSMODULE_WRAPPER(compressed_data_decompress_reverse);
 CROSSMODULE_WRAPPER(compressed_data_column_size);
 CROSSMODULE_WRAPPER(compressed_data_to_array);
+CROSSMODULE_WRAPPER(decompress_batch);
 CROSSMODULE_WRAPPER(compressed_data_send);
 CROSSMODULE_WRAPPER(compressed_data_recv);
 CROSSMODULE_WRAPPER(compressed_data_in);
@@ -99,6 +100,7 @@ CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
 
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
+CROSSMODULE_WRAPPER(compact_chunk);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 CROSSMODULE_WRAPPER(merge_chunks);
 CROSSMODULE_WRAPPER(split_chunk);
@@ -367,6 +369,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.compressed_data_column_size = error_no_default_fn_pg_community,
 	.compressed_data_to_array = error_no_default_fn_pg_community,
+	.decompress_batch = error_no_default_fn_pg_community,
 	.deltadelta_compressor_append = error_no_default_fn_pg_community,
 	.deltadelta_compressor_finish = error_no_default_fn_pg_community,
 	.gorilla_compressor_append = error_no_default_fn_pg_community,
@@ -395,6 +398,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
+	.compact_chunk = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,

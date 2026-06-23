@@ -51,6 +51,77 @@
 #define RECOMPRESS_EXCLUSIVE_LOCK_TIMEOUT 5000 /* ms */
 #endif
 
+/*
+ * Scan state saved by compact_chunk_find_overlapping_batches.  The caller can
+ * inspect the result and then pass the same state to
+ * compact_chunk_recompress_overlapping_batches to continue without restarting
+ * the scan.
+ */
+typedef struct CompactChunkScanState
+{
+	ItemPointerData previous_tid;	   /* TID of the batch processed just before the current one */
+	ItemPointerData first_overlap_tid; /* TID of the first overlapping batch */
+
+	/* Segmentby key values of the current batch, for segment-group detection. */
+	Datum *seg_values;
+	bool *seg_isnull;
+
+	/* First-row and last-row orderby tuples of the current batch, read straight
+	 * from the index. */
+	Datum *curr_first;
+	bool *curr_first_isnull;
+	Datum *curr_last;
+	bool *curr_last_isnull;
+
+	/* Last-row orderby tuple of the batch processed just before the current
+	 * one. Holds copies so it survives advancing the index scan. */
+	Datum *prev_last;
+	bool *prev_last_isnull;
+
+	bool *isdesc; /* orderby column DESC settings */
+} CompactChunkScanState;
+
+static CompactChunkScanState *
+compact_chunk_scan_state_init(RecompressContext *recompress_ctx, CompressionSettings *settings)
+{
+	CompactChunkScanState *state = palloc(sizeof(CompactChunkScanState));
+	ItemPointerSetInvalid(&state->previous_tid);
+	ItemPointerSetInvalid(&state->first_overlap_tid);
+	state->seg_values = palloc(sizeof(Datum) * recompress_ctx->num_segmentby);
+	state->seg_isnull = palloc(sizeof(bool) * recompress_ctx->num_segmentby);
+	state->curr_first = palloc(sizeof(Datum) * recompress_ctx->num_orderby);
+	state->curr_first_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
+	state->curr_last = palloc(sizeof(Datum) * recompress_ctx->num_orderby);
+	state->curr_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
+	state->prev_last = palloc0(sizeof(Datum) * recompress_ctx->num_orderby);
+	state->prev_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
+	state->isdesc = palloc(sizeof(bool) * recompress_ctx->num_orderby);
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
+	{
+		state->prev_last_isnull[i] = true;
+		state->isdesc[i] = ts_array_get_element_bool(settings->fd.orderby_desc, i + 1);
+	}
+	return state;
+}
+
+static void
+compact_chunk_scan_state_reset(CompactChunkScanState *state, RecompressContext *recompress_ctx)
+{
+	ItemPointerSetInvalid(&state->previous_tid);
+	ItemPointerSetInvalid(&state->first_overlap_tid);
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
+	{
+		int key = recompress_ctx->num_segmentby + i;
+		if (!state->prev_last_isnull[i] && !recompress_ctx->key_byval[key] &&
+			PointerIsValid(DatumGetPointer(state->prev_last[i])))
+		{
+			pfree(DatumGetPointer(state->prev_last[i]));
+		}
+		state->prev_last[i] = (Datum) 0;
+		state->prev_last_isnull[i] = true;
+	}
+}
+
 static bool fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 													Relation uncompressed_chunk_rel,
 													Snapshot snapshot);
@@ -73,6 +144,26 @@ static bool check_changed_group(CompressedSegmentInfo *current_segment, Datum *v
 								bool *isnulls, int nsegmentby_cols);
 static void recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
 							   RowCompressor *row_compressor, BulkWriter *writer);
+static IndexScanDesc compact_chunk_begin_index_scan(Relation compressed_chunk_rel,
+													Relation index_rel, Snapshot snapshot);
+static void read_batch_firstlast(IndexScanDesc index_scan, RecompressContext *recompress_ctx,
+								 CompactChunkScanState *state);
+static void save_prev_last(CompactChunkScanState *state, RecompressContext *recompress_ctx);
+static bool batches_overlap_firstlast(RecompressContext *recompress_ctx, Datum *prev_last,
+									  bool *prev_last_isnull, Datum *curr_first,
+									  bool *curr_first_isnull);
+static void decompress_batch_to_tuplesort(TupleTableSlot *slot, TupleDesc tupdesc,
+										  RowDecompressor *decompressor,
+										  Tuplesortstate *recompress_tuplesortstate,
+										  Relation compressed_chunk_rel, Snapshot snapshot);
+static bool compact_chunk_find_overlapping_batches(Relation compressed_chunk_rel,
+												   IndexScanDesc index_scan,
+												   RecompressContext *recompress_ctx,
+												   CompactChunkScanState *state);
+static bool compact_chunk_recompress_overlapping_batches(
+	Relation compressed_chunk_rel, IndexScanDesc index_scan, Snapshot snapshot,
+	RecompressContext *recompress_ctx, CompactChunkScanState *state, RowCompressor *compressor,
+	RowDecompressor *decompressor, Tuplesortstate *recompress_tuplesortstate, BulkWriter *writer);
 static void try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel);
 
 /*
@@ -122,17 +213,56 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							"compression with no "
 							"order by")));
 		}
-		bool nullable_orderby = !is_chunk_orderby_nonnullable(settings);
-		if (nullable_orderby)
+		bool orderby_not_handling_nulls = !is_chunk_orderby_nullhandling(settings);
+		if (orderby_not_handling_nulls)
 		{
 			elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
-				 "in-memory recompression is disabled due to nullable order by, "
+				 "in-memory recompression is disabled due to nullable order by with no firstlast, "
 				 "performing segmentwise decompress/compress on chunk \"%s.%s\"",
 				 NameStr(chunk->fd.schema_name),
 				 NameStr(chunk->fd.table_name));
 		}
-		recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
+		recompress_chunk_segmentwise_impl(chunk, orderby_not_handling_nulls);
 	}
+
+	PG_RETURN_OID(uncompressed_relid);
+}
+
+/*
+ * Compact a chunk by recombining overlapping batches
+ *
+ * 0 uncompressed_chunk_id REGCLASS
+ */
+Datum
+tsl_compact_chunk(PG_FUNCTION_ARGS)
+{
+	Oid uncompressed_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
+
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+
+	if (!ts_chunk_is_compressed(chunk))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("trying to compact an uncompressed chunk %s.%s",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name))));
+	}
+
+	if (ts_chunk_is_partial(chunk))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("trying to compact a partially compressed chunk %s.%s",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name))));
+	}
+
+	uncompressed_relid = compact_chunk_impl(chunk);
 
 	PG_RETURN_OID(uncompressed_relid);
 }
@@ -204,6 +334,22 @@ compress_chunk_populate_recompress_ctx(CompressionSettings *settings,
 							compressed_chunk_rel,
 							recompress_ctx->orderby_scankeys);
 
+	/* Cache the sort support for each orderby column, used to compare batch
+	 * boundary values during compaction. The ordering operator fills in the
+	 * reverse flag (DESC) and the comparator, while the collation and nulls
+	 * ordering let ApplySortComparator place NULLs in total order for us. */
+	recompress_ctx->orderby_ssup = palloc0(sizeof(SortSupportData) * recompress_ctx->num_orderby);
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
+	{
+		int key = recompress_ctx->num_segmentby + i;
+		SortSupport ssup = &recompress_ctx->orderby_ssup[i];
+
+		ssup->ssup_cxt = CurrentMemoryContext;
+		ssup->ssup_collation = recompress_ctx->sort_collations[key];
+		ssup->ssup_nulls_first = recompress_ctx->nulls_first[key];
+		PrepareSortSupportFromOrderingOp(recompress_ctx->sort_operators[key], ssup);
+	}
+
 	return recompress_ctx;
 }
 
@@ -237,6 +383,7 @@ free_chunk_recompress_ctx(RecompressContext *recompress_ctx)
 		}
 	}
 
+	pfree(recompress_ctx->orderby_ssup);
 	pfree(recompress_ctx);
 }
 
@@ -746,6 +893,615 @@ finish:
 	table_close(compressed_chunk_rel, NoLock);
 }
 
+static IndexScanDesc
+compact_chunk_begin_index_scan(Relation compressed_chunk_rel, Relation index_rel, Snapshot snapshot)
+{
+	IndexScanDesc index_scan =
+		index_beginscan_compat(compressed_chunk_rel, index_rel, snapshot, NULL, 0, 0);
+	/* We use index tuples directly to fetch the values */
+	index_scan->xs_want_itup = true;
+	index_rescan(index_scan, NULL, 0, NULL, 0);
+	return index_scan;
+}
+
+/*
+ * Read the current batch's segmentby key values and the first-row / last-row
+ * orderby tuples from the index tuple into the scan state.
+ *
+ * Index key order is [segby1, ...segbyN, orderby_lower_1, orderby_upper_1, ...].
+ * The index stores a (lower, upper) metadata pair per orderby column. With
+ * firstlast metadata the lower/upper columns are the values of that column in
+ * the batch's boundary rows: ascending stores (first, last), descending stores
+ * (last, first). So curr_first/curr_last are exactly the orderby values in the
+ * batch's first and last rows.
+ */
+static void
+read_batch_firstlast(IndexScanDesc index_scan, RecompressContext *recompress_ctx,
+					 CompactChunkScanState *state)
+{
+	for (int i = 0; i < recompress_ctx->num_segmentby; i++)
+	{
+		state->seg_values[i] = index_getattr(index_scan->xs_itup,
+											 AttrOffsetGetAttrNumber(i),
+											 index_scan->xs_itupdesc,
+											 &state->seg_isnull[i]);
+	}
+
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
+	{
+		AttrNumber lower = AttrOffsetGetAttrNumber(recompress_ctx->num_segmentby + i * 2);
+		AttrNumber upper = lower + 1;
+		AttrNumber first_attno = state->isdesc[i] ? upper : lower;
+		AttrNumber last_attno = state->isdesc[i] ? lower : upper;
+
+		state->curr_first[i] = index_getattr(index_scan->xs_itup,
+											 first_attno,
+											 index_scan->xs_itupdesc,
+											 &state->curr_first_isnull[i]);
+		state->curr_last[i] = index_getattr(index_scan->xs_itup,
+											last_attno,
+											index_scan->xs_itupdesc,
+											&state->curr_last_isnull[i]);
+	}
+}
+
+/*
+ * Remember the current batch's last-row orderby tuple as the predecessor for
+ * the next batch. The index tuple is only valid for the current scan position,
+ * so pass-by-reference values are deep-copied to survive advancing the scan.
+ */
+static void
+save_prev_last(CompactChunkScanState *state, RecompressContext *recompress_ctx)
+{
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
+	{
+		int key = recompress_ctx->num_segmentby + i;
+
+		if (!state->prev_last_isnull[i] && !recompress_ctx->key_byval[key] &&
+			PointerIsValid(DatumGetPointer(state->prev_last[i])))
+		{
+			pfree(DatumGetPointer(state->prev_last[i]));
+		}
+
+		state->prev_last_isnull[i] = state->curr_last_isnull[i];
+		state->prev_last[i] = state->curr_last_isnull[i] ?
+								  (Datum) 0 :
+								  datumCopy(state->curr_last[i],
+											recompress_ctx->key_byval[key],
+											recompress_ctx->key_typlen[key]);
+	}
+}
+
+/*
+ * Decide whether two adjacent batches overlap from their boundary metadata.
+ *
+ * Batches are scanned in sort order, so the previous batch's last row and the
+ * current batch's first row are the touching boundaries. They overlap when the
+ * current batch's first row sorts strictly before the previous batch's last
+ * row. A boundary touch (the tuples are equal) is not an overlap.
+ *
+ * ApplySortComparator gives a total order that already accounts for the column
+ * direction (ASC/DESC) and the NULLS FIRST/LAST placement.
+ */
+static bool
+batches_overlap_firstlast(RecompressContext *recompress_ctx, Datum *prev_last,
+						  bool *prev_last_isnull, Datum *curr_first, bool *curr_first_isnull)
+{
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
+	{
+		int cmp = ApplySortComparator(prev_last[i],
+									  prev_last_isnull[i],
+									  curr_first[i],
+									  curr_first_isnull[i],
+									  &recompress_ctx->orderby_ssup[i]);
+
+		if (cmp < 0)
+		{
+			return false; /* prev sorts before curr: no overlap */
+		}
+
+		if (cmp > 0)
+		{
+			return true; /* curr sorts before prev: overlap */
+		}
+
+		/* Equal on this column, move on to the next one. */
+	}
+
+	/* The boundary tuples are equal across all columns: a touch, not an overlap. */
+	return false;
+}
+
+/*
+ * Decompress a compressed batch into the tuplesort and delete the original.
+ *
+ * The tuplesort sorts by the orderby keys, including their NULLS FIRST/LAST
+ * setting, so NULL orderby values land at the correct end of the sort with no
+ * special handling.
+ */
+static void
+decompress_batch_to_tuplesort(TupleTableSlot *slot, TupleDesc tupdesc,
+							  RowDecompressor *decompressor,
+							  Tuplesortstate *recompress_tuplesortstate,
+							  Relation compressed_chunk_rel, Snapshot snapshot)
+{
+	bool should_free;
+	HeapTuple compressed_tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+
+	heap_deform_tuple(compressed_tuple,
+					  tupdesc,
+					  decompressor->compressed_datums,
+					  decompressor->compressed_is_nulls);
+
+	int n_rows = decompress_batch(decompressor);
+
+	for (int i = 0; i < n_rows; i++)
+	{
+		tuplesort_puttupleslot(recompress_tuplesortstate, decompressor->decompressed_slots[i]);
+	}
+
+	row_decompressor_reset(decompressor);
+
+	if (!delete_tuple_for_recompression(compressed_chunk_rel, &slot->tts_tid, snapshot))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+				 errmsg("aborting compaction due to concurrent updates on "
+						"compressed data, retrying with next policy run")));
+	}
+
+	if (should_free)
+	{
+		heap_freetuple(compressed_tuple);
+	}
+}
+
+/*
+ * Scan the compressed chunk index in order, looking for the first batch that
+ * overlaps its predecessor in the same segment group.
+ *
+ * Returns true on the first overlap found without modifying the heap, recording
+ * the overlapping pair (previous_tid and first_overlap_tid) and the current
+ * batch's boundary tuples in state so the recompress pass can resume from here.
+ */
+static bool
+compact_chunk_find_overlapping_batches(Relation compressed_chunk_rel, IndexScanDesc index_scan,
+									   RecompressContext *recompress_ctx,
+									   CompactChunkScanState *state)
+{
+	TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
+
+	while (index_getnext_slot(index_scan, ForwardScanDirection, compressed_slot))
+	{
+		read_batch_firstlast(index_scan, recompress_ctx, state);
+
+		/* First batch overall or first batch of a new segment group: nothing to
+		 * compare against, just remember it as the predecessor. */
+		if (!ItemPointerIsValid(&state->previous_tid) ||
+			check_changed_group(recompress_ctx->current_segment,
+								state->seg_values,
+								state->seg_isnull,
+								recompress_ctx->num_segmentby))
+		{
+			ItemPointerCopy(&index_scan->xs_heaptid, &state->previous_tid);
+			update_current_segment(recompress_ctx->current_segment,
+								   state->seg_values,
+								   state->seg_isnull,
+								   recompress_ctx->num_segmentby);
+			save_prev_last(state, recompress_ctx);
+			continue;
+		}
+
+		if (batches_overlap_firstlast(recompress_ctx,
+									  state->prev_last,
+									  state->prev_last_isnull,
+									  state->curr_first,
+									  state->curr_first_isnull))
+		{
+			ItemPointerCopy(&index_scan->xs_heaptid, &state->first_overlap_tid);
+			ExecDropSingleTupleTableSlot(compressed_slot);
+			return true;
+		}
+
+		/* No overlap: this batch becomes the predecessor for the next one. */
+		ItemPointerCopy(&index_scan->xs_heaptid, &state->previous_tid);
+		save_prev_last(state, recompress_ctx);
+	}
+
+	ExecDropSingleTupleTableSlot(compressed_slot);
+	return false;
+}
+
+/*
+ * Recompress all overlapping batches in the compressed chunk.
+ *
+ * The caller runs a find pass first, so state->first_overlap_tid and
+ * state->previous_tid identify the first overlapping pair. They are fetched by
+ * TID and merged, then the main scan loop continues from where the find pass
+ * stopped, absorbing further overlapping batches in the same group.
+ *
+ * Overlapping batches are decompressed into recompress_tuplesortstate and
+ * re-compressed once the group ends. The tuplesort orders by the orderby keys
+ * including their NULLS FIRST/LAST setting, so NULL orderby values sort to the
+ * correct end on their own.
+ *
+ * Returns true if any overlapping batches were found and recompressed.
+ */
+static bool
+compact_chunk_recompress_overlapping_batches(
+	Relation compressed_chunk_rel, IndexScanDesc index_scan, Snapshot snapshot,
+	RecompressContext *recompress_ctx, CompactChunkScanState *state, RowCompressor *compressor,
+	RowDecompressor *decompressor, Tuplesortstate *recompress_tuplesortstate, BulkWriter *writer)
+{
+	TupleTableSlot *previous_compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
+	TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
+
+	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
+	bool overlapping = false;
+	bool found_overlaps = false;
+
+	/*
+	 * The find pass identified the first overlapping pair. Fetch both batches by
+	 * TID and decompress them into the shared tuplesort to start a merge group.
+	 */
+	if (ItemPointerIsValid(&state->first_overlap_tid))
+	{
+		bool found pg_attribute_unused();
+		bool call_again = false;
+		bool all_dead = false;
+
+		found = table_index_fetch_tuple(index_scan->xs_heapfetch,
+										&state->first_overlap_tid,
+										index_scan->xs_snapshot,
+										previous_compressed_slot,
+										&call_again,
+										&all_dead);
+		Assert(found);
+		decompress_batch_to_tuplesort(previous_compressed_slot,
+									  compressed_rel_tupdesc,
+									  decompressor,
+									  recompress_tuplesortstate,
+									  compressed_chunk_rel,
+									  snapshot);
+
+		found = table_index_fetch_tuple(index_scan->xs_heapfetch,
+										&state->previous_tid,
+										index_scan->xs_snapshot,
+										previous_compressed_slot,
+										&call_again,
+										&all_dead);
+		Assert(found);
+		decompress_batch_to_tuplesort(previous_compressed_slot,
+									  compressed_rel_tupdesc,
+									  decompressor,
+									  recompress_tuplesortstate,
+									  compressed_chunk_rel,
+									  snapshot);
+
+		overlapping = true;
+		found_overlaps = true;
+		CommandCounterIncrement();
+
+		/* The overlapping batch becomes the predecessor for the scan loop. */
+		ItemPointerCopy(&state->first_overlap_tid, &state->previous_tid);
+		update_current_segment(recompress_ctx->current_segment,
+							   state->seg_values,
+							   state->seg_isnull,
+							   recompress_ctx->num_segmentby);
+		save_prev_last(state, recompress_ctx);
+	}
+
+	while (index_getnext_slot(index_scan, ForwardScanDirection, compressed_slot))
+	{
+		read_batch_firstlast(index_scan, recompress_ctx, state);
+
+		/* First batch of a new segment group: close any open merge group before
+		 * starting fresh. */
+		if (!ItemPointerIsValid(&state->previous_tid) ||
+			check_changed_group(recompress_ctx->current_segment,
+								state->seg_values,
+								state->seg_isnull,
+								recompress_ctx->num_segmentby))
+		{
+			if (overlapping)
+			{
+				recompress_segment(recompress_tuplesortstate,
+								   compressed_chunk_rel,
+								   compressor,
+								   writer);
+				overlapping = false;
+			}
+
+			ItemPointerCopy(&index_scan->xs_heaptid, &state->previous_tid);
+			update_current_segment(recompress_ctx->current_segment,
+								   state->seg_values,
+								   state->seg_isnull,
+								   recompress_ctx->num_segmentby);
+			save_prev_last(state, recompress_ctx);
+			continue;
+		}
+
+		/* A batch joins the current group when it overlaps its predecessor; the
+		 * first batch that no longer overlaps closes the group. */
+		bool batch_overlaps = batches_overlap_firstlast(recompress_ctx,
+														state->prev_last,
+														state->prev_last_isnull,
+														state->curr_first,
+														state->curr_first_isnull);
+
+		if (batch_overlaps)
+		{
+			if (!overlapping)
+			{
+				bool found pg_attribute_unused() =
+					table_index_fetch_tuple(index_scan->xs_heapfetch,
+											&state->previous_tid,
+											index_scan->xs_snapshot,
+											previous_compressed_slot,
+											&index_scan->xs_heap_continue,
+											NULL);
+				Assert(found);
+
+				decompress_batch_to_tuplesort(previous_compressed_slot,
+											  compressed_rel_tupdesc,
+											  decompressor,
+											  recompress_tuplesortstate,
+											  compressed_chunk_rel,
+											  snapshot);
+
+				overlapping = true;
+				found_overlaps = true;
+			}
+
+			decompress_batch_to_tuplesort(compressed_slot,
+										  compressed_rel_tupdesc,
+										  decompressor,
+										  recompress_tuplesortstate,
+										  compressed_chunk_rel,
+										  snapshot);
+
+			CommandCounterIncrement();
+		}
+		else if (overlapping)
+		{
+			/* This batch no longer overlaps the group; recompress what we
+			 * gathered and let it start a fresh comparison. */
+			recompress_segment(recompress_tuplesortstate, compressed_chunk_rel, compressor, writer);
+			overlapping = false;
+			CommandCounterIncrement();
+		}
+
+		ItemPointerCopy(&index_scan->xs_heaptid, &state->previous_tid);
+		save_prev_last(state, recompress_ctx);
+	}
+
+	if (overlapping)
+	{
+		recompress_segment(recompress_tuplesortstate, compressed_chunk_rel, compressor, writer);
+	}
+
+	ExecDropSingleTupleTableSlot(previous_compressed_slot);
+	ExecDropSingleTupleTableSlot(compressed_slot);
+
+	return found_overlaps;
+}
+
+Oid
+compact_chunk_impl(Chunk *uncompressed_chunk)
+{
+	Oid uncompressed_chunk_id = uncompressed_chunk->table_id;
+
+	if (!ts_chunk_is_compressed(uncompressed_chunk))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("unexpected chunk status %d in chunk %s.%s",
+						uncompressed_chunk->fd.status,
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name))));
+	}
+
+	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	Ensure(compressed_chunk != NULL,
+		   "compressed chunk not found for chunk \"%s\"",
+		   get_rel_name(uncompressed_chunk->table_id));
+
+	ereport(DEBUG1,
+			(errmsg("acquiring locks for recompression: \"%s.%s\"",
+					NameStr(uncompressed_chunk->fd.schema_name),
+					NameStr(uncompressed_chunk->fd.table_name))));
+
+	/* Taking a ShareExclusiveLock on compressed chunk mostly to block DDL,
+	 * this could potentially be a RowExclusiveLock with enough testing.
+	 *
+	 * For uncompressed chunk, we just need to read so AccessShareLock is fine.
+	 */
+	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
+	Relation compressed_chunk_rel =
+		table_open(compressed_chunk->table_id, ShareUpdateExclusiveLock);
+
+	int count;
+	LOCKTAG locktag;
+	SET_LOCKTAG_RELATION(locktag, MyDatabaseId, uncompressed_chunk_id);
+
+	/* Check if any backends currently hold locks on the uncompressed chunk
+	 * that would conflict with ExclusiveLock. This detects concurrent DML
+	 * (which holds RowExclusiveLock) without actually acquiring ExclusiveLock
+	 * ourselves. If conflicts exist, we skip compaction to avoid blocking. */
+	GetLockConflicts(&locktag, ExclusiveLock, &count);
+
+	if (count > 0)
+	{
+		elog(WARNING,
+			 "delaying compaction on chunk %s.%s due to concurrent DML",
+			 NameStr(uncompressed_chunk->fd.schema_name),
+			 NameStr(uncompressed_chunk->fd.table_name));
+
+		/* Safe to drop the lock, we didn't change anything */
+		table_close(uncompressed_chunk_rel, NoLock);
+		table_close(compressed_chunk_rel, NoLock);
+
+		return uncompressed_chunk_id;
+	}
+
+	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
+	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
+
+	/*
+	 * Check if first orderby column is nullable. We need
+	 * additional null-handling logic during compaction if so.
+	 */
+	int num_orderby = ts_array_length(settings->fd.orderby);
+	Ensure(num_orderby > 0,
+		   "trying to compact chunk \"%s\" with no orderby columns",
+		   get_rel_name(uncompressed_chunk->table_id));
+
+	/*
+	 * Compaction reads each batch's exact boundary rows from the firstlast
+	 * sparse metadata. Skip chunks whose orderby columns lack it, which is only
+	 * possible with a legacy sparse index configuration.
+	 */
+	for (int pos = 1; pos <= num_orderby; pos++)
+	{
+		if (orderby_sparse_kind(settings, pos) != ORDERBY_SPARSE_FIRSTLAST)
+		{
+			ereport(WARNING,
+					(errmsg("skipping compaction on chunk %s.%s",
+							NameStr(uncompressed_chunk->fd.schema_name),
+							NameStr(uncompressed_chunk->fd.table_name)),
+					 errdetail("Orderby column \"%s\" has no firstlast sparse index.",
+							   ts_array_get_element_text(settings->fd.orderby, pos)),
+					 errhint("Recompress the chunk to add firstlast sparse index metadata for its "
+							 "orderby columns.")));
+			table_close(uncompressed_chunk_rel, NoLock);
+			table_close(compressed_chunk_rel, NoLock);
+			return uncompressed_chunk_id;
+		}
+	}
+
+	BulkWriter writer = bulk_writer_build(compressed_chunk_rel, 0);
+	Oid index_oid = get_compressed_chunk_index(writer.indexstate, settings);
+	Relation index_rel = index_open(index_oid, RowExclusiveLock);
+	ereport(DEBUG1,
+			(errmsg("locks acquired for compaction: \"%s.%s\"",
+					NameStr(uncompressed_chunk->fd.schema_name),
+					NameStr(uncompressed_chunk->fd.table_name))));
+
+	RecompressContext *recompress_ctx =
+		compress_chunk_populate_recompress_ctx(settings,
+											   uncompressed_chunk_rel,
+											   compressed_chunk_rel,
+											   index_rel,
+											   true);
+
+	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
+	IndexScanDesc index_scan =
+		compact_chunk_begin_index_scan(compressed_chunk_rel, index_rel, snapshot);
+
+	CompactChunkScanState *state = compact_chunk_scan_state_init(recompress_ctx, settings);
+
+	bool found_overlaps = compact_chunk_find_overlapping_batches(compressed_chunk_rel,
+																 index_scan,
+																 recompress_ctx,
+																 state);
+
+	if (found_overlaps)
+	{
+		/* Recompress the overlaps */
+		RowCompressor compressor;
+		RowDecompressor decompressor;
+		Tuplesortstate *recompress_tuplesortstate;
+
+		row_compressor_init(&compressor,
+							settings,
+							RelationGetDescr(uncompressed_chunk_rel),
+							RelationGetDescr(compressed_chunk_rel));
+		decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
+										  RelationGetDescr(uncompressed_chunk_rel),
+										  RelationGetRelid(compressed_chunk_rel),
+										  RelationGetRelid(uncompressed_chunk_rel));
+		/* Used for gathering and resorting the tuples that should be recompressed together.
+		 * Since we are working on a per-segment level here, we only need to sort them
+		 * based on the orderby settings.
+		 */
+		recompress_tuplesortstate =
+			tuplesort_begin_heap(uncompressed_rel_tupdesc,
+								 recompress_ctx->num_orderby,
+								 &recompress_ctx->sort_keys[recompress_ctx->num_segmentby],
+								 &recompress_ctx->sort_operators[recompress_ctx->num_segmentby],
+								 &recompress_ctx->sort_collations[recompress_ctx->num_segmentby],
+								 &recompress_ctx->nulls_first[recompress_ctx->num_segmentby],
+								 maintenance_work_mem,
+								 NULL,
+								 false);
+
+		compact_chunk_recompress_overlapping_batches(compressed_chunk_rel,
+													 index_scan,
+													 snapshot,
+													 recompress_ctx,
+													 state,
+													 &compressor,
+													 &decompressor,
+													 recompress_tuplesortstate,
+													 &writer);
+		row_compressor_close(&compressor);
+		row_decompressor_close(&decompressor);
+		tuplesort_end(recompress_tuplesortstate);
+	}
+
+	/* At this point, we have resolved all the overlaps.
+	 * Try to switch the chunk status if we can get the exclusive lock
+	 */
+	if (ConditionalLockRelation(compressed_chunk_rel, ExclusiveLock))
+	{
+		/*
+		 * Use a fresh snapshot for the verification scan. If recompression
+		 * happened, the original snapshot predates the CommandCounterIncrement()
+		 * calls made during recompression, so it would still see the deleted
+		 * batches and miss the newly inserted ones. A fresh snapshot correctly
+		 * reflects the post-recompression state.
+		 */
+		index_endscan(index_scan);
+		UnregisterSnapshot(snapshot);
+		snapshot = RegisterSnapshot(GetTransactionSnapshot());
+		index_scan = compact_chunk_begin_index_scan(compressed_chunk_rel, index_rel, snapshot);
+		compact_chunk_scan_state_reset(state, recompress_ctx);
+		found_overlaps = compact_chunk_find_overlapping_batches(compressed_chunk_rel,
+																index_scan,
+																recompress_ctx,
+																state);
+		if (!found_overlaps)
+		{
+			/*
+			 * Only clear UNORDERED status from chunk.
+			 */
+			if (ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_UNORDERED))
+			{
+				ereport(DEBUG1,
+						(errmsg("cleared unordered chunk status for compaction: \"%s.%s\"",
+								NameStr(uncompressed_chunk->fd.schema_name),
+								NameStr(uncompressed_chunk->fd.table_name))));
+			}
+
+			/* changed chunk status, so invalidate any plans involving this chunk */
+			CacheInvalidateRelcacheByRelid(uncompressed_chunk->table_id);
+		}
+	}
+
+	index_endscan(index_scan);
+	UnregisterSnapshot(snapshot);
+	index_close(index_rel, NoLock);
+
+	bulk_writer_close(&writer);
+
+	free_chunk_recompress_ctx(recompress_ctx);
+
+	table_close(uncompressed_chunk_rel, NoLock);
+	table_close(compressed_chunk_rel, NoLock);
+
+	return uncompressed_chunk_id;
+}
+
 /*
  * perform_recompression expects appropriate permissions and checks have already been done.
  * Relations must have appropriate locks and the CompressionSettings of compressed_chunk and
@@ -1063,6 +1819,7 @@ update_orderby_scankeys(Datum *values, bool *isnulls, int num_segmentby, int num
 static enum Batch_match_result
 handle_null_scan(int key_flags, bool nulls_first, enum Batch_match_result result)
 {
+	/* uncompressed tuple key is NULL */
 	if (key_flags & SK_ISNULL)
 	{
 		return nulls_first ? Tuple_before : Tuple_after;
@@ -1086,18 +1843,17 @@ match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby, ScanKey orde
 	if (num_orderby >= 1)
 	{
 		ScanKey key = &orderby_scankeys[0];
-		if (!slot_key_test(compressed_slot, key))
+		if (!slot_key_test(compressed_slot, key, nulls_first[0]))
 		{
 			return handle_null_scan(key->sk_flags, nulls_first[0], Tuple_before);
 		}
 
 		key = &orderby_scankeys[1];
-		if (!slot_key_test(compressed_slot, key))
+		if (!slot_key_test(compressed_slot, key, nulls_first[0]))
 		{
 			return handle_null_scan(key->sk_flags, nulls_first[0], Tuple_after);
 		}
 	}
-
 	return Tuple_match;
 }
 
@@ -1738,11 +2494,7 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 		 * If indexes on metadata columns are added in the future,
 		 * this will need to handle index updates via update_indexes.
 		 */
-#if PG16_LT
-		bool update_indexes;
-#else
 		TU_UpdateIndexes update_indexes;
-#endif
 		simple_table_tuple_update(compressed_rel,
 								  &tid,
 								  update_slot,

@@ -52,10 +52,11 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i',
 -- Verify we are not generating unordered chunks
 BEGIN;
   SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
-  SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
-    FROM _timescaledb_catalog.chunk ch
-    JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
-    JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test2' LIMIT 1 \gset
+  SELECT cs.compress_relid::text AS "CHUNK"
+    FROM _timescaledb_catalog.compression_settings cs
+    JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+    JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test2'
+    WHERE cs.compress_relid IS NOT NULL LIMIT 1 \gset
 
   -- We want to sure we are not fully recompressing them which will make
   -- the chunk contain multiple batches per segment group
@@ -72,10 +73,11 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i',
 -- Verify we are fully recompressing unordered chunks
 BEGIN;
   SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
-  SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
-    FROM _timescaledb_catalog.chunk ch
-    JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
-    JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test2' LIMIT 1 \gset
+  SELECT cs.compress_relid::text AS "CHUNK"
+    FROM _timescaledb_catalog.compression_settings cs
+    JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+    JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test2'
+    WHERE cs.compress_relid IS NOT NULL LIMIT 1 \gset
 
   -- Not using time as first column in orderby makes the merged chunks unordered
   -- We want to sure we are fully recompressing them which will make only
@@ -155,15 +157,15 @@ SELECT
 
 SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
 
-SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
-  FROM _timescaledb_catalog.chunk ch
-  JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
-  JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test5' \gset
+SELECT cs.compress_relid::text AS "CHUNK"
+  FROM _timescaledb_catalog.compression_settings cs
+  JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+  JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test5'
+  WHERE cs.compress_relid IS NOT NULL \gset
 
-SELECT format('%I.%I', schemaname, indexname) AS "INDEXNAME"
+SELECT format('%I.%I', i.schemaname, i.indexname) AS "INDEXNAME"
 FROM pg_indexes i
-INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.compress_relid = format('%I.%I', i.schemaname, i.tablename)::regclass
 LIMIT 1 \gset
 
 

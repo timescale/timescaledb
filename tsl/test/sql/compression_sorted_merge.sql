@@ -331,11 +331,13 @@ SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 
--- Test with null values: should not optimize
-set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+-- Test with null values: should optimize with firstlast index
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
 
+-- should not optimize (NULL order wrong)
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 

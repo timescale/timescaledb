@@ -21,14 +21,13 @@
 #include <parser/parsetree.h>
 
 #include "guc.h"
+#include "import/createplan.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
 #include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
 
-static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,
-					   Oid *collations, bool *nullsFirst);
 static Plan *adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
 							  List *tlist, AttrNumber *sortColIdx);
 
@@ -78,7 +77,7 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 		Assert(!IsA(plan, Sort));
 
 		plan = (Plan *)
-			make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
+			ts_make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
 	}
 	return plan;
 }
@@ -322,32 +321,6 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	cscan->custom_private = custom_private;
 
 	return &cscan->scan.plan;
-}
-
-/*
- * make_sort --- basic routine to build a Sort plan node
- *
- * Caller must have built the sortColIdx, sortOperators, collations, and
- * nullsFirst arrays already.
- */
-static Sort *
-make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators, Oid *collations,
-		  bool *nullsFirst)
-{
-	Sort *node = makeNode(Sort);
-	Plan *plan = &node->plan;
-
-	plan->targetlist = lefttree->targetlist;
-	plan->qual = NIL;
-	plan->lefttree = lefttree;
-	plan->righttree = NULL;
-	node->numCols = numCols;
-	node->sortColIdx = sortColIdx;
-	node->sortOperators = sortOperators;
-	node->collations = collations;
-	node->nullsFirst = nullsFirst;
-
-	return node;
 }
 
 Scan *
