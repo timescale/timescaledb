@@ -162,6 +162,8 @@ select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb
 ERROR:  the argument type bit lacks an extended hash function
 select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
 ERROR:  the argument type bit lacks an extended hash function
+select _timescaledb_functions.bloom1_contains(_timescaledb_functions.bloom1in('\x'::cstring), 1);
+ERROR:  the compressed data is corrupt
 \set ON_ERROR_STOP 1
 -- Test that the "contains" function cope with different source chunks.
 create table detoaster(ts int, tag text) with (tsdb.hypertable,
@@ -177,13 +179,11 @@ select count(compress_chunk(x)) from show_chunks('detoaster') x;
 
 with chunks as (
   select
-    row_number() over (order by cc.table_name) index,
-    cc.schema_name || '.' || cc.table_name chunk
+    row_number() over (order by cs.compress_relid::text) index,
+    cs.compress_relid::text chunk
   from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
       on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-    join _timescaledb_catalog.chunk cc
-      on cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
   where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'detoaster')
 )

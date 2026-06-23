@@ -57,10 +57,13 @@ SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_intern
 
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
 
+SELECT compress_relid AS "COMPRESSED_CHUNK_1" FROM _timescaledb_catalog.compression_settings WHERE relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass \gset
+SELECT compress_relid AS "COMPRESSED_CHUNK_2" FROM _timescaledb_catalog.compression_settings WHERE relid = '_timescaledb_internal._hyper_1_2_chunk'::regclass \gset
+
 \set ON_ERROR_STOP 0
 
 -- Cannot merge chunks internal compressed chunks, no dimensions on them.
-SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal.compress_hyper_2_10_chunk','_timescaledb_internal.compress_hyper_2_11_chunk', 1);
+SELECT _timescaledb_internal.test_merge_chunks_on_dimension(:'COMPRESSED_CHUNK_1',:'COMPRESSED_CHUNK_2', 1);
 
 \set ON_ERROR_STOP 1
 

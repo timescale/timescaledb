@@ -22,11 +22,14 @@ SELECT count(*) FROM _timescaledb_internal._hyper_1_1_chunk;
 -- compress these rows, we do this to get compressed row data for the test
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 
+-- look up the compressed chunk relation for the chunk
+SELECT compress_relid AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass \gset
+
 -- create custom compressed chunk table
-CREATE TABLE _timescaledb_internal.custom_compressed_chunk( LIKE _timescaledb_internal.compress_hyper_2_2_chunk);
+CREATE TABLE _timescaledb_internal.custom_compressed_chunk( LIKE :COMPRESSED_CHUNK);
 
 -- copy compressed row from compressed table into custom compressed chunk table
-INSERT INTO "_timescaledb_internal"."custom_compressed_chunk" SELECT * FROM "_timescaledb_internal"."compress_hyper_2_2_chunk";
+INSERT INTO "_timescaledb_internal"."custom_compressed_chunk" SELECT * FROM :COMPRESSED_CHUNK;
 
 -- decompress the rows, moving them back to uncompressed space
 SELECT decompress_chunk('"_timescaledb_internal"."_hyper_1_1_chunk"');

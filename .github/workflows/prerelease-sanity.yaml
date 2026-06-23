@@ -35,7 +35,6 @@ jobs:
           # For pull request event, the default checkout HEAD is the GitHub
           # "merge" reference for the pull request (pull/.../merge).
           base=$(git rev-parse @^1)
-          head=$(git rev-parse @^2)
           git fetch origin "${base}"
 
           # PR that modifies the workflow.

@@ -71,11 +71,12 @@ typedef struct FirstLastAggInfo
 	MinMaxAggInfo *m_agg_info; /* reusing MinMaxAggInfo to avoid code
 								* duplication */
 	Expr *sort;				   /* Expression to use for ORDER BY */
+	Aggref *aggref;			   /* Aggref node for this aggregate */
 } FirstLastAggInfo;
 
 typedef struct MutatorContext
 {
-	MinMaxAggPath *mm_path;
+	List *first_last_aggs;
 } MutatorContext;
 
 static bool find_first_last_aggs_walker(Node *node, List **context);
@@ -83,7 +84,7 @@ static bool build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, 
 								  Oid sortop, bool reverse_sort, bool nulls_first);
 static void first_last_qp_callback(PlannerInfo *root, void *extra);
 static Node *mutate_aggref_node(Node *node, MutatorContext *context);
-static void replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path);
+static void replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path, List *first_last_aggs);
 
 /*
  * mutate_aggref_node
@@ -103,16 +104,17 @@ mutate_aggref_node(Node *node, MutatorContext *context)
 		Aggref *aggref = (Aggref *) node;
 
 		/* See if the Aggref should be replaced by a Param */
-		if (context->mm_path != NULL && list_length(aggref->args) == 2)
+		if (list_length(aggref->args) == 2)
 		{
-			TargetEntry *curTarget = (TargetEntry *) linitial(aggref->args);
 			ListCell *cell;
 
-			foreach (cell, context->mm_path->mmaggregates)
+			/* match on aggregate, value and sort expression */
+			foreach (cell, context->first_last_aggs)
 			{
-				MinMaxAggInfo *mminfo = (MinMaxAggInfo *) lfirst(cell);
+				FirstLastAggInfo *fl_info = (FirstLastAggInfo *) lfirst(cell);
+				MinMaxAggInfo *mminfo = fl_info->m_agg_info;
 
-				if (mminfo->aggfnoid == aggref->aggfnoid && equal(mminfo->target, curTarget->expr))
+				if (equal(fl_info->aggref, aggref))
 				{
 					return (Node *) copyObject(mminfo->param);
 				}
@@ -132,15 +134,19 @@ mutate_aggref_node(Node *node, MutatorContext *context)
  *
  */
 void
-replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path)
+replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path, List *first_last_aggs)
 {
 	MutatorContext context;
 
-	context.mm_path = minmaxagg_path;
+	context.first_last_aggs = first_last_aggs;
 
 	((Path *) minmaxagg_path)->pathtarget->exprs =
 		(List *) mutate_aggref_node((Node *) ((Path *) minmaxagg_path)->pathtarget->exprs,
 									(void *) &context);
+
+	/* HAVING quals can also reference first/last aggregates */
+	minmaxagg_path->quals =
+		(List *) mutate_aggref_node((Node *) minmaxagg_path->quals, (void *) &context);
 }
 
 static StrategyNumber
@@ -251,16 +257,18 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	/*
 	 * Reject unoptimizable cases.
 	 *
-	 * We don't handle the case when agg function is in ORDER BY. The reason
-	 * being is that we replace Aggref node before sort keys are being
-	 * generated.
+	 * We don't handle the case when a first/last function is in ORDER BY or
+	 * DISTINCT because we replace the Aggref node before sort keys are being
+	 * generated, so the sort keys could not be matched to the modified path
+	 * target.
 	 *
 	 * We don't handle GROUP BY or windowing, because our current
 	 * implementations of grouping require looking at all the rows anyway, and
 	 * so there's not much point in optimizing FIRST/LAST.
 	 */
 	if (parse->groupClause || list_length(parse->groupingSets) > 1 || parse->hasWindowFuncs ||
-		contains_first_last_node(parse->sortClause, tlist))
+		contains_first_last_node(parse->sortClause, tlist) ||
+		contains_first_last_node(parse->distinctClause, tlist))
 	{
 		return;
 	}
@@ -413,7 +421,7 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 										   mm_agg_list,
 										   (List *) parse->havingQual);
 	/* Let's replace Aggref node since we will use subquery we've generated  */
-	replace_aggref_in_tlist(minmaxagg_path);
+	replace_aggref_in_tlist(minmaxagg_path, first_last_aggs);
 	add_path(grouped_rel, (Path *) minmaxagg_path);
 }
 
@@ -506,10 +514,7 @@ find_first_last_aggs_walker(Node *node, List **context)
 		aggsortop = get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy);
 		if (!OidIsValid(aggsortop))
 		{
-			elog(ERROR,
-				 "Cannot resolve sort operator for function \"%s\" and type \"%s\"",
-				 format_procedure(aggref->aggfnoid),
-				 format_type_be(sort_oid));
+			return true; /* can't optimize, let runtime handle the error */
 		}
 
 		/* Used in projection */
@@ -532,8 +537,9 @@ find_first_last_aggs_walker(Node *node, List **context)
 		 */
 		foreach (l, *context)
 		{
-			mminfo = (MinMaxAggInfo *) lfirst(l);
-			if (mminfo->aggfnoid == aggref->aggfnoid && equal(mminfo->target, value->expr))
+			FirstLastAggInfo *existing = (FirstLastAggInfo *) lfirst(l);
+
+			if (equal(existing->aggref, aggref))
 			{
 				return false;
 			}
@@ -551,6 +557,7 @@ find_first_last_aggs_walker(Node *node, List **context)
 		fl_info = palloc(sizeof(FirstLastAggInfo));
 
 		fl_info->m_agg_info = mminfo;
+		fl_info->aggref = aggref;
 		fl_info->sort = sort->expr;
 		*context = lappend(*context, fl_info);
 

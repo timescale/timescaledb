@@ -114,18 +114,18 @@ step "s5_show_running_jobs" {
          to_timestamp(r.end_range / 1000000) AT TIME ZONE 'UTC' AS end_ts_utc
   FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
   JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
-  ORDER BY ca.user_view_name;
+  ORDER BY ca.user_view_name, start_range;
 }
 
 # TEST: when 2 concurrent refresh processes on cagg1 and cagg2 start, 1 will wait for the other one to finish registration
 ## block the processes before they register, then block again before they finish cagg invalidation processing
 ## so that we can see the active ranges before the refresh processes exit.
-permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg1_refresh" "s2_run_cagg2_overlap_refresh" "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"
+permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg1_refresh" "s2_run_cagg2_overlap_refresh"("s1_run_cagg1_refresh") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"("s2_run_cagg2_overlap_refresh")
 
 # TEST: Check that two overlapping refresh on cagg2 will not run concurrently. overlap refresh job will fail.
 ## so we will see only 1 running job.
-permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg2_overlap_refresh" "s2_run_cagg2_overlap_refresh" "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"
+permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg2_overlap_refresh" "s2_run_cagg2_overlap_refresh"("s1_run_cagg2_overlap_refresh") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"("s2_run_cagg2_overlap_refresh")
 
 # TEST: Check that two non-overlapping refresh on cagg2 will run concurrently
 ## we should see both jobs
-permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg2_nonoverlap_refresh" "s2_run_cagg2_overlap_refresh"(s1_run_cagg2_nonoverlap_refresh) "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"
+permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg2_nonoverlap_refresh" "s2_run_cagg2_overlap_refresh"("s1_run_cagg2_nonoverlap_refresh") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"("s2_run_cagg2_overlap_refresh")
