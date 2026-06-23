@@ -235,12 +235,8 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 	memcpy(onconfl, ht_rri->ri_onConflict, sizeof(OnConflictSetState));
 	chunk_rri->ri_onConflict = onconfl;
 
-#if PG16_LT
-	chunk_rri->ri_RootToPartitionMap = map;
-#else
 	chunk_rri->ri_RootToChildMap = map;
 	chunk_rri->ri_RootToChildMapValid = true;
-#endif
 
 	Assert(mt->onConflictSet);
 	Assert(ht_rri->ri_onConflict != NULL);

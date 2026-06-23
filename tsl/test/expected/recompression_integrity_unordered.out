@@ -55,7 +55,8 @@ SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed res
 \gset
 -- Store initial compressed chunk info before recompression
 SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
-        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME"
+        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
+        cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -88,7 +89,8 @@ SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
  _timescaledb_internal._hyper_1_1_chunk
 
 -- Get info for the new compressed chunk
-SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
+  cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -105,16 +107,15 @@ LIMIT 1 \gset
 :QUERY1
 :QUERY2
 \o
--- Check if a new chunk was created (this will show in the output)
 SELECT
-  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :'OLD_COMPRESSED_CHUNK_NAME' = :'NEW_COMPRESSED_CHUNK_NAME' THEN
+  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :OLD_COMPRESSED_CHUNK_OID = :NEW_COMPRESSED_CHUNK_OID THEN
     'ERROR: Recompression did not create a new chunk'
   ELSE
-    'SUCCESS: New chunk created, old_chunk=' || :'OLD_COMPRESSED_CHUNK_NAME' || ', new_chunk=' || :'NEW_COMPRESSED_CHUNK_NAME'
+    'SUCCESS: New chunk created was created'
   END AS recompression_status;
-                                                              recompression_status                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------
- SUCCESS: New chunk created, old_chunk=_timescaledb_internal.compress_hyper_2_2_chunk, new_chunk=_timescaledb_internal.compress_hyper_2_3_chunk
+          recompression_status          
+----------------------------------------
+ SUCCESS: New chunk created was created
 
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
@@ -177,7 +178,8 @@ SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed res
 \gset
 -- Store initial compressed chunk info before recompression
 SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
-        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME"
+        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
+        cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -210,7 +212,8 @@ SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
  _timescaledb_internal._hyper_3_4_chunk
 
 -- Get info for the new compressed chunk
-SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
+  cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -229,16 +232,15 @@ LIMIT 1 \gset
 :QUERY1
 :QUERY2
 \o
--- Check if a new chunk was created (this will show in the output)
 SELECT
-  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :'OLD_COMPRESSED_CHUNK_NAME' = :'NEW_COMPRESSED_CHUNK_NAME' THEN
+  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :OLD_COMPRESSED_CHUNK_OID = :NEW_COMPRESSED_CHUNK_OID THEN
     'ERROR: Recompression did not create a new chunk'
   ELSE
-    'SUCCESS: New chunk created, old_chunk=' || :'OLD_COMPRESSED_CHUNK_NAME' || ', new_chunk=' || :'NEW_COMPRESSED_CHUNK_NAME'
+    'SUCCESS: New chunk created was created'
   END AS recompression_status;
-                                                              recompression_status                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------
- SUCCESS: New chunk created, old_chunk=_timescaledb_internal.compress_hyper_4_5_chunk, new_chunk=_timescaledb_internal.compress_hyper_4_6_chunk
+          recompression_status          
+----------------------------------------
+ SUCCESS: New chunk created was created
 
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
@@ -303,7 +305,8 @@ SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed res
 \gset
 -- Store initial compressed chunk info before recompression
 SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
-        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME"
+        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
+        cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -336,7 +339,8 @@ SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
  _timescaledb_internal._hyper_5_7_chunk
 
 -- Get info for the new compressed chunk
-SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
+  cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -355,16 +359,15 @@ LIMIT 1 \gset
 :QUERY1
 :QUERY2
 \o
--- Check if a new chunk was created (this will show in the output)
 SELECT
-  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :'OLD_COMPRESSED_CHUNK_NAME' = :'NEW_COMPRESSED_CHUNK_NAME' THEN
+  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :OLD_COMPRESSED_CHUNK_OID = :NEW_COMPRESSED_CHUNK_OID THEN
     'ERROR: Recompression did not create a new chunk'
   ELSE
-    'SUCCESS: New chunk created, old_chunk=' || :'OLD_COMPRESSED_CHUNK_NAME' || ', new_chunk=' || :'NEW_COMPRESSED_CHUNK_NAME'
+    'SUCCESS: New chunk created was created'
   END AS recompression_status;
-                                                              recompression_status                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------
- SUCCESS: New chunk created, old_chunk=_timescaledb_internal.compress_hyper_6_8_chunk, new_chunk=_timescaledb_internal.compress_hyper_6_9_chunk
+          recompression_status          
+----------------------------------------
+ SUCCESS: New chunk created was created
 
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
@@ -411,7 +414,8 @@ SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed res
 \gset
 -- Store initial compressed chunk info before recompression
 SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
-        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME"
+        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
+        cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -445,7 +449,8 @@ SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
  _timescaledb_internal._hyper_7_10_chunk
 
 -- Get info for the new compressed chunk
-SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
+  cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -463,16 +468,15 @@ LIMIT 1 \gset
 :QUERY1
 :QUERY2
 \o
--- Check if a new chunk was created (this will show in the output)
 SELECT
-  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :'OLD_COMPRESSED_CHUNK_NAME' = :'NEW_COMPRESSED_CHUNK_NAME' THEN
+  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :OLD_COMPRESSED_CHUNK_OID = :NEW_COMPRESSED_CHUNK_OID THEN
     'ERROR: Recompression did not create a new chunk'
   ELSE
-    'SUCCESS: New chunk created, old_chunk=' || :'OLD_COMPRESSED_CHUNK_NAME' || ', new_chunk=' || :'NEW_COMPRESSED_CHUNK_NAME'
+    'SUCCESS: New chunk created was created'
   END AS recompression_status;
-                                                               recompression_status                                                               
---------------------------------------------------------------------------------------------------------------------------------------------------
- SUCCESS: New chunk created, old_chunk=_timescaledb_internal.compress_hyper_8_11_chunk, new_chunk=_timescaledb_internal.compress_hyper_8_12_chunk
+          recompression_status          
+----------------------------------------
+ SUCCESS: New chunk created was created
 
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
@@ -512,7 +516,8 @@ SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed res
 \gset
 -- Store initial compressed chunk info before recompression
 SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
-        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME"
+        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
+        cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -544,7 +549,8 @@ SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
  _timescaledb_internal._hyper_9_13_chunk
 
 -- Get info for the new compressed chunk
-SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
+  cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -563,16 +569,15 @@ LIMIT 1 \gset
 :QUERY1
 :QUERY2
 \o
--- Check if a new chunk was created (this will show in the output)
 SELECT
-  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :'OLD_COMPRESSED_CHUNK_NAME' = :'NEW_COMPRESSED_CHUNK_NAME' THEN
+  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :OLD_COMPRESSED_CHUNK_OID = :NEW_COMPRESSED_CHUNK_OID THEN
     'ERROR: Recompression did not create a new chunk'
   ELSE
-    'SUCCESS: New chunk created, old_chunk=' || :'OLD_COMPRESSED_CHUNK_NAME' || ', new_chunk=' || :'NEW_COMPRESSED_CHUNK_NAME'
+    'SUCCESS: New chunk created was created'
   END AS recompression_status;
-                                                                recompression_status                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------
- SUCCESS: New chunk created, old_chunk=_timescaledb_internal.compress_hyper_10_14_chunk, new_chunk=_timescaledb_internal.compress_hyper_10_15_chunk
+          recompression_status          
+----------------------------------------
+ SUCCESS: New chunk created was created
 
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
@@ -596,7 +601,8 @@ SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed res
 \gset
 -- Store initial compressed chunk info before recompression
 SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
-        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME"
+        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
+        cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -627,7 +633,8 @@ SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
  _timescaledb_internal._hyper_9_13_chunk
 
 -- Get info for the new compressed chunk
-SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
+  cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -646,16 +653,15 @@ LIMIT 1 \gset
 :QUERY1
 :QUERY2
 \o
--- Check if a new chunk was created (this will show in the output)
 SELECT
-  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :'OLD_COMPRESSED_CHUNK_NAME' = :'NEW_COMPRESSED_CHUNK_NAME' THEN
+  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :OLD_COMPRESSED_CHUNK_OID = :NEW_COMPRESSED_CHUNK_OID THEN
     'ERROR: Recompression did not create a new chunk'
   ELSE
-    'SUCCESS: New chunk created, old_chunk=' || :'OLD_COMPRESSED_CHUNK_NAME' || ', new_chunk=' || :'NEW_COMPRESSED_CHUNK_NAME'
+    'SUCCESS: New chunk created was created'
   END AS recompression_status;
-                                                                recompression_status                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------
- SUCCESS: New chunk created, old_chunk=_timescaledb_internal.compress_hyper_10_15_chunk, new_chunk=_timescaledb_internal.compress_hyper_10_16_chunk
+          recompression_status          
+----------------------------------------
+ SUCCESS: New chunk created was created
 
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
@@ -679,7 +685,8 @@ SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed res
 \gset
 -- Store initial compressed chunk info before recompression
 SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
-        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME"
+        cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
+        cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -710,7 +717,8 @@ SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
  _timescaledb_internal._hyper_9_13_chunk
 
 -- Get info for the new compressed chunk
-SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
+  cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
@@ -729,16 +737,15 @@ LIMIT 1 \gset
 :QUERY1
 :QUERY2
 \o
--- Check if a new chunk was created (this will show in the output)
 SELECT
-  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :'OLD_COMPRESSED_CHUNK_NAME' = :'NEW_COMPRESSED_CHUNK_NAME' THEN
+  CASE WHEN :'NEW_COMPRESSED_CHUNK_NAME' IS NULL OR :OLD_COMPRESSED_CHUNK_OID = :NEW_COMPRESSED_CHUNK_OID THEN
     'ERROR: Recompression did not create a new chunk'
   ELSE
-    'SUCCESS: New chunk created, old_chunk=' || :'OLD_COMPRESSED_CHUNK_NAME' || ', new_chunk=' || :'NEW_COMPRESSED_CHUNK_NAME'
+    'SUCCESS: New chunk created was created'
   END AS recompression_status;
-                                                                recompression_status                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------
- SUCCESS: New chunk created, old_chunk=_timescaledb_internal.compress_hyper_10_16_chunk, new_chunk=_timescaledb_internal.compress_hyper_10_17_chunk
+          recompression_status          
+----------------------------------------
+ SUCCESS: New chunk created was created
 
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD

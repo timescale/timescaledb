@@ -1223,28 +1223,6 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 					 errdetail("The new chunk can contain only the columns present in parent.")));
 		}
 
-		/*
-		 * PG16 and later does not allow generated columns on child tables if the parent
-		 * column is not generated. This is a change from PG15 and earlier, where the
-		 * child column could be generated even if the parent was not.
-		 * We check if a generated column is also generated in the parent here to disallow
-		 * this behavior in PG15 too.
-		 *
-		 * The case when the parent column is generated and the child column is not is handled
-		 * by Postgres code, which will throw an error.
-		 *
-		 * This check can be removed once we drop support for PG15.
-		 */
-		if (att->attgenerated && !get_attgenerated(ht->main_table_relid, ht_attnum))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("column \"%s\" in chunk table must not be a generated column",
-							NameStr(att->attname)),
-					 errdetail("Chunk column must be generated if and only if parent column is "
-							   "also generated")));
-		}
-
 		/* Check that the chunk column has the same expression as the hypertable column */
 		if (att->attgenerated && get_attgenerated(ht->main_table_relid, ht_attnum))
 		{

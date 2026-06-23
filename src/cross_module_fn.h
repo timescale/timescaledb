@@ -174,6 +174,7 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;
+	PGFunction compact_chunk;
 	PGFunction get_compressed_chunk_index_for_recompression;
 
 	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);

@@ -18,7 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
-      pg15_latest: ${{ steps.config.outputs.pg15_latest_win }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest_win }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest_win }}
       pg18_latest: ${{ steps.config.outputs.pg18_latest_win }}
@@ -63,7 +62,6 @@ jobs:
       fail-fast: false
       matrix:
         versions:
-          - { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
           - { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
           - { pg: 17, pg_version: "${{ needs.config.outputs.pg17_latest }}" }
           - { pg: 18, pg_version: "${{ needs.config.outputs.pg18_latest }}" }
@@ -72,8 +70,6 @@ jobs:
         event_name: ["${{ github.event_name }}"]
         run_installcheck: ["${{ needs.check_paths.outputs.run_installcheck }}"]
         exclude:
-          - versions: { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
-            run_installcheck: false
           - versions: { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
             run_installcheck: false
     env:

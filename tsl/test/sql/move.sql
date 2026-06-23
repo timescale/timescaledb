@@ -107,4 +107,4 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk') as ch;
 SELECT true INTO move_chunk_compressed FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace1', verbose=>TRUE);
 SELECT * FROM test.show_subtables('cluster_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
-SELECT * FROM test.show_indexesp('_timescaledb_internal.compress_hyper%_chunk');
+SELECT * FROM test.show_indexesp((SELECT compress_relid::text FROM _timescaledb_catalog.compression_settings WHERE relid = '_timescaledb_internal._hyper_1_2_chunk'::regclass));

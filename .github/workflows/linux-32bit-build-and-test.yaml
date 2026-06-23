@@ -90,7 +90,6 @@ jobs:
           vector_agg_text
           vector_agg_uuid
           vectorized_aggregation
-          ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
@@ -141,7 +140,7 @@ jobs:
     - name: Build PostgreSQL ${{ matrix.pg }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1

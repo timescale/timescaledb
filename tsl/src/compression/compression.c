@@ -201,11 +201,7 @@ truncate_relation(Oid table_oid)
 
 	CheckTableForSerializableConflictIn(rel);
 
-#if PG16_LT
-	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
-#else
 	RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
-#endif
 
 	toast_relid = rel->rd_rel->reltoastrelid;
 
@@ -214,11 +210,7 @@ truncate_relation(Oid table_oid)
 	if (OidIsValid(toast_relid))
 	{
 		rel = table_open(toast_relid, AccessExclusiveLock);
-#if PG16_LT
-		RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
-#else
 		RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
-#endif
 		table_close(rel, NoLock);
 	}
 
@@ -3095,10 +3087,8 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 
 	header.compression_algorithm = pq_getmsgbyte(buf);
 
-	if (header.compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
-	{
-		elog(ERROR, "invalid compression algorithm %d", header.compression_algorithm);
-	}
+	CheckCompressedData(header.compression_algorithm > 0 &&
+						header.compression_algorithm < _END_COMPRESSION_ALGORITHMS);
 
 	return definitions[header.compression_algorithm].compressed_data_recv(buf);
 }
@@ -3245,10 +3235,10 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 	return HeapTupleGetDatum(tuple);
 }
 
-extern Datum
-tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
+bool
+compressed_data_has_nulls(Datum compressed_data)
 {
-	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
+	const CompressedDataHeader *header = get_compressed_data_header(compressed_data);
 	bool has_nulls = false;
 
 	switch (header->compression_algorithm)
@@ -3279,7 +3269,13 @@ tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
 			break;
 	}
 
-	return BoolGetDatum(has_nulls);
+	return has_nulls;
+}
+
+extern Datum
+tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
+{
+	return BoolGetDatum(compressed_data_has_nulls(PG_GETARG_DATUM(0)));
 }
 
 extern CompressionStorage

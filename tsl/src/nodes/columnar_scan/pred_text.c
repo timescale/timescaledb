@@ -10,9 +10,7 @@
 
 #include "compat/compat.h"
 
-#if PG16_GE
 #include <varatt.h>
-#endif
 
 static void
 vector_const_text_comparison(const ArrowArray *arrow, const Datum constdatum, bool needequal,
