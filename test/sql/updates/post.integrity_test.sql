@@ -5,8 +5,17 @@
 -- We do not dump the size of the tables here since that might differ
 -- between an updated node and a restored node. For examples, stats
 -- tables can have different sizes, and this is not relevant for an
--- update test.
-\dt _timescaledb_internal.*
+-- update test. This mirrors \dt _timescaledb_internal.* but normalizes the
+-- chunk relation names, which are renumbered and renamed across the upgrade.
+SELECT n.nspname AS "Schema",
+       pg_temp.normalize_chunk(c.relname) AS "Name",
+       'table' AS "Type",
+       pg_catalog.pg_get_userbyid(c.relowner) AS "Owner"
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = '_timescaledb_internal'
+  AND c.relkind = 'r'
+ORDER BY 1, 2, 4;
 
 CREATE OR REPLACE FUNCTION timescaledb_integrity_test()
     RETURNS VOID LANGUAGE PLPGSQL STABLE AS
