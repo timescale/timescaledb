@@ -73,26 +73,30 @@ GRANT MAINTAIN ON TABLE metrics TO r_maintain;
         |         |       | r_maintain=m/super_user        |                   | 
 
 \dp _timescaledb_internal._hyper_*
-                                                Access privileges
-        Schema         |       Name       | Type  |       Access privileges        | Column privileges | Policies 
------------------------+------------------+-------+--------------------------------+-------------------+----------
- _timescaledb_internal | _hyper_1_1_chunk | table | super_user=arwdDxtm/super_user+|                   | 
-                       |                  |       | r_maintain=m/super_user        |                   | 
- _timescaledb_internal | _hyper_1_2_chunk | table | super_user=arwdDxtm/super_user+|                   | 
-                       |                  |       | r_maintain=m/super_user        |                   | 
+                                                      Access privileges
+        Schema         |            Name             | Type  |       Access privileges        | Column privileges | Policies 
+-----------------------+-----------------------------+-------+--------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_1_1_chunk            | table | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | r_maintain=m/super_user        |                   | 
+ _timescaledb_internal | _hyper_1_1_chunk_compressed | table | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | r_maintain=m/super_user        |                   | 
+ _timescaledb_internal | _hyper_1_2_chunk            | table | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | r_maintain=m/super_user        |                   | 
+ _timescaledb_internal | _hyper_1_2_chunk_compressed | table | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | r_maintain=m/super_user        |                   | 
 
 \dp _timescaledb_internal.*compress*
-                                                    Access privileges
-        Schema         |           Name           | Type  |       Access privileges        | Column privileges | Policies 
------------------------+--------------------------+-------+--------------------------------+-------------------+----------
- _timescaledb_internal | _compressed_hypertable_2 | table | super_user=arwdDxtm/super_user+|                   | 
-                       |                          |       | r_maintain=m/super_user        |                   | 
- _timescaledb_internal | compress_hyper_2_3_chunk | table | super_user=arwdDxtm/super_user+|                   | 
-                       |                          |       | r_maintain=m/super_user        |                   | 
- _timescaledb_internal | compress_hyper_2_4_chunk | table | super_user=arwdDxtm/super_user+|                   | 
-                       |                          |       | r_maintain=m/super_user        |                   | 
- _timescaledb_internal | compressed_chunk_stats   | view  | super_user=arwdDxtm/super_user+|                   | 
-                       |                          |       | =r/super_user                  |                   | 
+                                                      Access privileges
+        Schema         |            Name             | Type  |       Access privileges        | Column privileges | Policies 
+-----------------------+-----------------------------+-------+--------------------------------+-------------------+----------
+ _timescaledb_internal | _compressed_hypertable_2    | table | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | r_maintain=m/super_user        |                   | 
+ _timescaledb_internal | _hyper_1_1_chunk_compressed | table | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | r_maintain=m/super_user        |                   | 
+ _timescaledb_internal | _hyper_1_2_chunk_compressed | table | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | r_maintain=m/super_user        |                   | 
+ _timescaledb_internal | compressed_chunk_stats      | view  | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | =r/super_user                  |                   | 
 
 REVOKE MAINTAIN ON TABLE metrics FROM r_maintain;
 -- check privilege got removed from all the chunks
@@ -103,19 +107,21 @@ REVOKE MAINTAIN ON TABLE metrics FROM r_maintain;
  public | metrics | table | super_user=arwdDxtm/super_user |                   | 
 
 \dp _timescaledb_internal._hyper_*
-                                                Access privileges
-        Schema         |       Name       | Type  |       Access privileges        | Column privileges | Policies 
------------------------+------------------+-------+--------------------------------+-------------------+----------
- _timescaledb_internal | _hyper_1_1_chunk | table | super_user=arwdDxtm/super_user |                   | 
- _timescaledb_internal | _hyper_1_2_chunk | table | super_user=arwdDxtm/super_user |                   | 
+                                                      Access privileges
+        Schema         |            Name             | Type  |       Access privileges        | Column privileges | Policies 
+-----------------------+-----------------------------+-------+--------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_1_1_chunk            | table | super_user=arwdDxtm/super_user |                   | 
+ _timescaledb_internal | _hyper_1_1_chunk_compressed | table | super_user=arwdDxtm/super_user |                   | 
+ _timescaledb_internal | _hyper_1_2_chunk            | table | super_user=arwdDxtm/super_user |                   | 
+ _timescaledb_internal | _hyper_1_2_chunk_compressed | table | super_user=arwdDxtm/super_user |                   | 
 
 \dp _timescaledb_internal.*compress*
-                                                    Access privileges
-        Schema         |           Name           | Type  |       Access privileges        | Column privileges | Policies 
------------------------+--------------------------+-------+--------------------------------+-------------------+----------
- _timescaledb_internal | _compressed_hypertable_2 | table | super_user=arwdDxtm/super_user |                   | 
- _timescaledb_internal | compress_hyper_2_3_chunk | table | super_user=arwdDxtm/super_user |                   | 
- _timescaledb_internal | compress_hyper_2_4_chunk | table | super_user=arwdDxtm/super_user |                   | 
- _timescaledb_internal | compressed_chunk_stats   | view  | super_user=arwdDxtm/super_user+|                   | 
-                       |                          |       | =r/super_user                  |                   | 
+                                                      Access privileges
+        Schema         |            Name             | Type  |       Access privileges        | Column privileges | Policies 
+-----------------------+-----------------------------+-------+--------------------------------+-------------------+----------
+ _timescaledb_internal | _compressed_hypertable_2    | table | super_user=arwdDxtm/super_user |                   | 
+ _timescaledb_internal | _hyper_1_1_chunk_compressed | table | super_user=arwdDxtm/super_user |                   | 
+ _timescaledb_internal | _hyper_1_2_chunk_compressed | table | super_user=arwdDxtm/super_user |                   | 
+ _timescaledb_internal | compressed_chunk_stats      | view  | super_user=arwdDxtm/super_user+|                   | 
+                       |                             |       | =r/super_user                  |                   | 
 

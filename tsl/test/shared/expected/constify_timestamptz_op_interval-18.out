@@ -113,7 +113,7 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval;
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
          Vectorized Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-         ->  Seq Scan on compress_hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk_compressed
                Filter: (_ts_meta_v2_last_time < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
@@ -127,7 +127,7 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
    Vectorized Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-   ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_first_time__idx on compress_hyper_X_X_chunk
+   ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed
          Index Cond: ((device_id = 1) AND (_ts_meta_v2_last_time < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval)))
 
 -- month/year intervals are not constified

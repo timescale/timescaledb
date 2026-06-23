@@ -1528,13 +1528,13 @@ SELECT show_chunks('test_table_scheduler');
  _timescaledb_internal._hyper_1_8_chunk
 
 select hypertable_schema, hypertable_name, chunk_schema, chunk_name, is_compressed from timescaledb_information.chunks ;
-   hypertable_schema   |      hypertable_name       |     chunk_schema      |    chunk_name     | is_compressed 
------------------------+----------------------------+-----------------------+-------------------+---------------
- public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_5_chunk  | t
- public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_6_chunk  | f
- public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_7_chunk  | f
- public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_8_chunk  | f
- _timescaledb_internal | _materialized_hypertable_2 | _timescaledb_internal | _hyper_2_10_chunk | f
+   hypertable_schema   |      hypertable_name       |     chunk_schema      |    chunk_name    | is_compressed 
+-----------------------+----------------------------+-----------------------+------------------+---------------
+ public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_5_chunk | t
+ public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_6_chunk | f
+ public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_7_chunk | f
+ public                | test_table_scheduler       | _timescaledb_internal | _hyper_1_8_chunk | f
+ _timescaledb_internal | _materialized_hypertable_2 | _timescaledb_internal | _hyper_2_9_chunk | f
 
 select avg_a from cagg_scheduler ORDER BY 1;
        avg_a        

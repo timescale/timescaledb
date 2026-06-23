@@ -547,12 +547,12 @@ where _ts_meta_min_1 <= :'split_point' and _ts_meta_max_1 >= :'split_point';
            1000 |     10 | Thu Jan 04 13:13:30 2024 PST | Fri Jan 05 03:09:40 2024 PST
 
 call split_chunk_validate('_timescaledb_internal._hyper_1_2_chunk', split_at => :'split_point');
-NOTICE:  chunks after split are _timescaledb_internal._hyper_1_2_chunk (reltuples 0) and _timescaledb_internal._hyper_1_13_chunk (reltuples 0)
+NOTICE:  chunks after split are _timescaledb_internal._hyper_1_2_chunk (reltuples 0) and _timescaledb_internal._hyper_1_12_chunk (reltuples 0)
 NOTICE:  compression size stats are OK
 select * from chunk_info;
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_13_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_12_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_1_chunk  | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_2_chunk  | heap |         0 | constraint_20 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk  | heap |     29523 | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
@@ -565,7 +565,7 @@ select * from chunk_slices where hypertable_name = 'splitme';
  splitme         | _hyper_1_7_chunk  | Wed Dec 27 16:00:00 2023 PST | Wed Jan 03 16:00:00 2024 PST
  splitme         | _hyper_1_1_chunk  | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
  splitme         | _hyper_1_2_chunk  | Thu Jan 04 00:00:00 2024 PST | Thu Jan 04 13:40:30 2024 PST
- splitme         | _hyper_1_13_chunk | Thu Jan 04 13:40:30 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ splitme         | _hyper_1_12_chunk | Thu Jan 04 13:40:30 2024 PST | Fri Jan 05 16:00:00 2024 PST
  splitme         | _hyper_1_8_chunk  | Fri Jan 05 16:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST
  splitme         | _hyper_1_3_chunk  | Sun Jan 07 08:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
 
@@ -577,14 +577,14 @@ select show_chunks('splitme');
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_7_chunk
  _timescaledb_internal._hyper_1_8_chunk
- _timescaledb_internal._hyper_1_13_chunk
+ _timescaledb_internal._hyper_1_12_chunk
 
 -- Still no data in non-compressed relations after split.
 select * from only _timescaledb_internal._hyper_1_2_chunk;
  time | device | temp | location 
 ------+--------+------+----------
 
-select * from only _timescaledb_internal._hyper_1_13_chunk;
+select * from only _timescaledb_internal._hyper_1_12_chunk;
  time | device | temp | location 
 ------+--------+------+----------
 
@@ -610,7 +610,7 @@ from :compress_relid;
              29 |     10 | Thu Jan 04 13:13:30 2024 PST | Thu Jan 04 13:39:40 2024 PST
 
 select compress_relid from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_13_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_12_chunk'::regclass \gset
 select _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1
 from :compress_relid;
  _ts_meta_count | device |        _ts_meta_min_1        |        _ts_meta_max_1        
@@ -648,14 +648,14 @@ from :compress_relid;
 -- on compressed chunks
 create table chunk_data_after_split as
 select * from _timescaledb_internal._hyper_1_2_chunk;
-insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_13_chunk;
+insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_12_chunk;
 -- All data should be compressed so these queries should not return
 -- anything
 select * from only _timescaledb_internal._hyper_1_2_chunk;
  time | device | temp | location 
 ------+--------+------+----------
 
-select * from only _timescaledb_internal._hyper_1_13_chunk;
+select * from only _timescaledb_internal._hyper_1_12_chunk;
  time | device | temp | location 
 ------+--------+------+----------
 
@@ -714,7 +714,7 @@ select * from chunk_summary_before_split;
 select * from chunk_info;
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_13_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_12_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_1_chunk  | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_2_chunk  | heap |         0 | constraint_20 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk  | heap |         2 | constraint_5  | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
@@ -726,8 +726,8 @@ call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
 select * from chunk_info;
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_13_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_16_chunk | heap |         1 | constraint_23 | (("time" >= 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_12_chunk | heap |         0 | constraint_21 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_13_chunk | heap |         1 | constraint_23 | (("time" >= 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_1_chunk  | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_2_chunk  | heap |         0 | constraint_20 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk  | heap |         1 | constraint_22 | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone))
@@ -736,10 +736,10 @@ select * from chunk_info;
 
 select table_name, status
 from _timescaledb_catalog.chunk
-where table_name in ('_hyper_1_3_chunk', '_hyper_1_16_chunk');
+where table_name in ('_hyper_1_3_chunk', '_hyper_1_13_chunk');
     table_name     | status 
 -------------------+--------
- _hyper_1_16_chunk |      9
+ _hyper_1_13_chunk |      9
  _hyper_1_3_chunk  |      9
 
 -- Check that the non-compressed data rows ended up in separate partitions
@@ -751,7 +751,7 @@ order by time;
  Sun Jan 07 09:03:11 2024 PST |      1 |   21 |       21
 
 select *
-from ONLY _timescaledb_internal._hyper_1_16_chunk
+from ONLY _timescaledb_internal._hyper_1_13_chunk
 order by time;
              time             | device | temp | location 
 ------------------------------+--------+------+----------
@@ -760,7 +760,7 @@ order by time;
 -- Show aggregate summary. Should be equal to summary before split
 truncate chunk_data_after_split;
 insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_3_chunk;
-insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_16_chunk;
+insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_13_chunk;
 truncate chunk_summary_after_split;
 insert into chunk_summary_after_split
 select
@@ -796,7 +796,7 @@ select
     sum(device) as device_sum,
     sum(location) as location_sum,
     round(sum(temp)::numeric, 5) as temp_sum
-    from _timescaledb_internal._hyper_1_16_chunk;
+    from _timescaledb_internal._hyper_1_13_chunk;
  count | device_sum | location_sum |  temp_sum   
 -------+------------+--------------+-------------
    724 |       4071 |         4271 | 14876.11546
@@ -807,8 +807,8 @@ where hypertable_name = 'splitme'
 order by chunk_name, range_start, range_end;
     chunk_name     |         range_start          |          range_end           | is_compressed 
 -------------------+------------------------------+------------------------------+---------------
- _hyper_1_13_chunk | Thu Jan 04 13:40:30 2024 PST | Fri Jan 05 16:00:00 2024 PST | t
- _hyper_1_16_chunk | Tue Jan 09 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST | t
+ _hyper_1_12_chunk | Thu Jan 04 13:40:30 2024 PST | Fri Jan 05 16:00:00 2024 PST | t
+ _hyper_1_13_chunk | Tue Jan 09 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST | t
  _hyper_1_1_chunk  | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST | f
  _hyper_1_2_chunk  | Thu Jan 04 00:00:00 2024 PST | Thu Jan 04 13:40:30 2024 PST | t
  _hyper_1_3_chunk  | Sun Jan 07 08:00:00 2024 PST | Tue Jan 09 00:00:00 2024 PST | t
@@ -816,7 +816,7 @@ order by chunk_name, range_start, range_end;
  _hyper_1_8_chunk  | Fri Jan 05 16:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST | f
 
 select compress_relid from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_16_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_13_chunk'::regclass \gset
 select count(*) from :compress_relid;
  count 
 -------
@@ -836,7 +836,7 @@ select :'split_point';
  Sun Jan 07 07:59:50 2024 PST
 
 call split_chunk_validate('_timescaledb_internal._hyper_1_8_chunk', split_at => :'split_point'::timestamptz + interval '1 second');
-NOTICE:  chunks after split are _timescaledb_internal._hyper_1_8_chunk (reltuples 0) and _timescaledb_internal._hyper_1_19_chunk (reltuples 0)
+NOTICE:  chunks after split are _timescaledb_internal._hyper_1_8_chunk (reltuples 0) and _timescaledb_internal._hyper_1_14_chunk (reltuples 0)
 NOTICE:  compression size stats are OK
 --
 -- Show new chunk ranges. Note that, because the original chunk was
@@ -853,9 +853,9 @@ where hypertable_name = 'splitme'
 order by chunk_name, range_start, range_end;
     chunk_name     |         range_start          |          range_end           | is_compressed 
 -------------------+------------------------------+------------------------------+---------------
- _hyper_1_13_chunk | Thu Jan 04 13:40:30 2024 PST | Fri Jan 05 16:00:00 2024 PST | t
- _hyper_1_16_chunk | Tue Jan 09 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST | t
- _hyper_1_19_chunk | Sun Jan 07 07:59:51 2024 PST | Sun Jan 07 08:00:00 2024 PST | t
+ _hyper_1_12_chunk | Thu Jan 04 13:40:30 2024 PST | Fri Jan 05 16:00:00 2024 PST | t
+ _hyper_1_13_chunk | Tue Jan 09 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST | t
+ _hyper_1_14_chunk | Sun Jan 07 07:59:51 2024 PST | Sun Jan 07 08:00:00 2024 PST | t
  _hyper_1_1_chunk  | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST | f
  _hyper_1_2_chunk  | Thu Jan 04 00:00:00 2024 PST | Thu Jan 04 13:40:30 2024 PST | t
  _hyper_1_3_chunk  | Sun Jan 07 08:00:00 2024 PST | Tue Jan 09 00:00:00 2024 PST | t
@@ -870,7 +870,7 @@ select count(*) from :compress_relid;
     30
 
 select compress_relid from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_19_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_14_chunk'::regclass \gset
 select count(*) from :compress_relid;
  count 
 -------
@@ -881,7 +881,7 @@ select count(*) from _timescaledb_internal._hyper_1_8_chunk;
 -------
  28800
 
-select count(*) from _timescaledb_internal._hyper_1_19_chunk;
+select count(*) from _timescaledb_internal._hyper_1_14_chunk;
  count 
 -------
      0
@@ -896,7 +896,7 @@ select count(*) from _timescaledb_internal._hyper_1_19_chunk;
 --------------------------------------------------------------------
 --------------------------------------------------------------------
 select compress_relid from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_13_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_12_chunk'::regclass \gset
 select sum(_ts_meta_count) as original_count_sum from :compress_relid \gset
 select _ts_meta_count as meta_count, _ts_meta_min_1 as meta_min, _ts_meta_max_1 as meta_max, _ts_meta_min_1 as split_point_min, _ts_meta_max_1 as split_point_max
 from :compress_relid order by meta_min limit 1 offset 2 \gset
@@ -909,11 +909,11 @@ select :'meta_count' as meta_count, :'split_point_min' as split_point_min, :'spl
  35         | Thu Jan 04 13:40:40 2024 PST | Thu Jan 04 14:06:30 2024 PST
 
 -- Split with a split point at min value
-call split_chunk_validate('_timescaledb_internal._hyper_1_13_chunk', split_at => :'split_point_min');
-NOTICE:  chunks after split are _timescaledb_internal._hyper_1_13_chunk (reltuples 0) and _timescaledb_internal._hyper_1_21_chunk (reltuples 0)
+call split_chunk_validate('_timescaledb_internal._hyper_1_12_chunk', split_at => :'split_point_min');
+NOTICE:  chunks after split are _timescaledb_internal._hyper_1_12_chunk (reltuples 0) and _timescaledb_internal._hyper_1_15_chunk (reltuples 0)
 NOTICE:  compression size stats are OK
 select compress_relid as compress_relid2 from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_21_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_15_chunk'::regclass \gset
 -- The segment should remain intact, and be completely in the "new"
 -- chunk (to the "right side" of the split)
 select _ts_meta_count, _ts_meta_min_1 as meta_min, _ts_meta_max_1 as meta_max
@@ -943,11 +943,11 @@ select :'original_count_sum' = ((select sum(_ts_meta_count) from :compress_relid
 -- new segment to the "right side" of the split (i.e., in the new
 -- chunk)
 select sum(_ts_meta_count) as original_count_sum from :compress_relid2 \gset
-call split_chunk_validate('_timescaledb_internal._hyper_1_21_chunk', split_at => :'split_point_max');
-NOTICE:  chunks after split are _timescaledb_internal._hyper_1_21_chunk (reltuples 0) and _timescaledb_internal._hyper_1_23_chunk (reltuples 0)
+call split_chunk_validate('_timescaledb_internal._hyper_1_15_chunk', split_at => :'split_point_max');
+NOTICE:  chunks after split are _timescaledb_internal._hyper_1_15_chunk (reltuples 0) and _timescaledb_internal._hyper_1_16_chunk (reltuples 0)
 NOTICE:  compression size stats are OK
 select compress_relid as compress_relid3 from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_23_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_16_chunk'::regclass \gset
 select _ts_meta_count, _ts_meta_min_1 as meta_min, _ts_meta_max_1 as meta_max
 from :compress_relid2
 where _ts_meta_min_1 = :'split_point_min' and _ts_meta_count = (:'meta_count' - 1)
@@ -973,23 +973,23 @@ select :'original_count_sum' = ((select sum(_ts_meta_count) from :compress_relid
 select * from chunk_info;
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_13_chunk | heap |         0 | constraint_26 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:40 2024 PST'::timestamp with time zone))
- _hyper_1_16_chunk | heap |         1 | constraint_23 | (("time" >= 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_19_chunk | heap |         0 | constraint_25 | (("time" >= 'Sun Jan 07 07:59:51 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_12_chunk | heap |         0 | constraint_26 | (("time" >= 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:40 2024 PST'::timestamp with time zone))
+ _hyper_1_13_chunk | heap |         1 | constraint_23 | (("time" >= 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_14_chunk | heap |         0 | constraint_25 | (("time" >= 'Sun Jan 07 07:59:51 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_15_chunk | heap |         0 | constraint_28 | (("time" >= 'Thu Jan 04 13:40:40 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 14:06:30 2024 PST'::timestamp with time zone))
+ _hyper_1_16_chunk | heap |         0 | constraint_29 | (("time" >= 'Thu Jan 04 14:06:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_1_chunk  | heap |      3241 | constraint_2  | (("time" >= 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone))
- _hyper_1_21_chunk | heap |         0 | constraint_28 | (("time" >= 'Thu Jan 04 13:40:40 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 14:06:30 2024 PST'::timestamp with time zone))
- _hyper_1_23_chunk | heap |         0 | constraint_29 | (("time" >= 'Thu Jan 04 14:06:30 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_2_chunk  | heap |         0 | constraint_20 | (("time" >= 'Thu Jan 04 00:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 13:40:30 2024 PST'::timestamp with time zone))
  _hyper_1_3_chunk  | heap |         1 | constraint_22 | (("time" >= 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_7_chunk  | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_8_chunk  | heap |         0 | constraint_24 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 07:59:51 2024 PST'::timestamp with time zone))
 
-select count(*), min(time), max(time) from _timescaledb_internal._hyper_1_23_chunk;
+select count(*), min(time), max(time) from _timescaledb_internal._hyper_1_16_chunk;
  count |             min              |             max              
 -------+------------------------------+------------------------------
  18642 | Thu Jan 04 14:06:30 2024 PST | Fri Jan 05 15:59:50 2024 PST
 
-select max(time) as max_time from _timescaledb_internal._hyper_1_23_chunk \gset
+select max(time) as max_time from _timescaledb_internal._hyper_1_16_chunk \gset
 --------------------------------------------------------
 --------------------------------------------------------
 -- Split a partial chunk so that the compressed data ends up in one
@@ -1000,17 +1000,17 @@ select max(time) as max_time from _timescaledb_internal._hyper_1_23_chunk \gset
 insert into splitme (time, device, temp)
 select t, ceil(random()*10), random()*40
 from generate_series('2024-01-10 23:00'::timestamptz, '2024-01-12 22:00:00 PST', '10s') t;
-call convert_to_columnstore('_timescaledb_internal._hyper_1_25_chunk');
-select * from chunk_info where chunk = '_hyper_1_25_chunk';
+call convert_to_columnstore('_timescaledb_internal._hyper_1_17_chunk');
+select * from chunk_info where chunk = '_hyper_1_17_chunk';
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_25_chunk | heap |        -1 | constraint_30 | (("time" >= 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 17 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_17_chunk | heap |        -1 | constraint_30 | (("time" >= 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 17 16:00:00 2024 PST'::timestamp with time zone))
 
 -- Check that all data is compressed
 select compress_relid as compress_relid
 from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_25_chunk'::regclass \gset
-select count(*) from only _timescaledb_internal._hyper_1_25_chunk;
+where relid = '_timescaledb_internal._hyper_1_17_chunk'::regclass \gset
+select count(*) from only _timescaledb_internal._hyper_1_17_chunk;
  count 
 -------
      0
@@ -1024,7 +1024,7 @@ select count(*) from :compress_relid;
 insert into splitme (time, device, temp)
 select t, ceil(random()*10), random()*40
 from generate_series('2024-01-12 23:00'::timestamptz, '2024-01-16 22:00:00 PST', '10s') t;
-select count(*) from only _timescaledb_internal._hyper_1_25_chunk;
+select count(*) from only _timescaledb_internal._hyper_1_17_chunk;
  count 
 -------
  34201
@@ -1035,21 +1035,21 @@ select count(*) from :compress_relid;
     20
 
 -- Split at a point between the compressed and non-compressed data
-call split_chunk_validate('_timescaledb_internal._hyper_1_25_chunk', split_at => '2024-01-12 22:30'::timestamptz);
-NOTICE:  chunks after split are _timescaledb_internal._hyper_1_25_chunk (reltuples 0) and _timescaledb_internal._hyper_1_27_chunk (reltuples 34201)
+call split_chunk_validate('_timescaledb_internal._hyper_1_17_chunk', split_at => '2024-01-12 22:30'::timestamptz);
+NOTICE:  chunks after split are _timescaledb_internal._hyper_1_17_chunk (reltuples 0) and _timescaledb_internal._hyper_1_18_chunk (reltuples 34201)
 NOTICE:  compression size stats are OK
-select * from chunk_info where chunk in ('_hyper_1_25_chunk', '_hyper_1_27_chunk');
+select * from chunk_info where chunk in ('_hyper_1_17_chunk', '_hyper_1_18_chunk');
        chunk       | tam  | reltuples |    conname    |                                                                checkconstraint                                                                 
 -------------------+------+-----------+---------------+------------------------------------------------------------------------------------------------------------------------------------------------
- _hyper_1_25_chunk | heap |         0 | constraint_31 | (("time" >= 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 12 22:30:00 2024 PST'::timestamp with time zone))
- _hyper_1_27_chunk | heap |     34201 | constraint_32 | (("time" >= 'Fri Jan 12 22:30:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 17 16:00:00 2024 PST'::timestamp with time zone))
+ _hyper_1_17_chunk | heap |         0 | constraint_31 | (("time" >= 'Wed Jan 10 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 12 22:30:00 2024 PST'::timestamp with time zone))
+ _hyper_1_18_chunk | heap |     34201 | constraint_32 | (("time" >= 'Fri Jan 12 22:30:00 2024 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 17 16:00:00 2024 PST'::timestamp with time zone))
 
 -- Check that the distribution of data is such that one chunk has only
 -- compressed data and the other only non-compressed data.
 select compress_relid as compress_relid2
 from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_27_chunk'::regclass \gset
-select count(*) from only _timescaledb_internal._hyper_1_25_chunk;
+where relid = '_timescaledb_internal._hyper_1_18_chunk'::regclass \gset
+select count(*) from only _timescaledb_internal._hyper_1_17_chunk;
  count 
 -------
      0
@@ -1059,7 +1059,7 @@ select count(*) from :compress_relid;
 -------
     20
 
-select count(*) from only _timescaledb_internal._hyper_1_27_chunk;
+select count(*) from only _timescaledb_internal._hyper_1_18_chunk;
  count 
 -------
  34201
@@ -1108,8 +1108,8 @@ call convert_to_columnstore(:'chunk2');
 select * from show_chunks('time_part_func');
                show_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_5_29_chunk
- _timescaledb_internal._hyper_5_30_chunk
+ _timescaledb_internal._hyper_5_19_chunk
+ _timescaledb_internal._hyper_5_20_chunk
 
 select to_timestamp(1736320400::float8);
          to_timestamp         
@@ -1157,7 +1157,7 @@ WHERE pubname = 'test_split_pub'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename     
 -----------------------+-------------------
- _timescaledb_internal | _hyper_7_34_chunk
+ _timescaledb_internal | _hyper_7_22_chunk
  public                | pub_split_test
 
 SELECT show_chunks('pub_split_test') chunk_to_split \gset
@@ -1169,8 +1169,8 @@ WHERE pubname = 'test_split_pub'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename     
 -----------------------+-------------------
- _timescaledb_internal | _hyper_7_34_chunk
- _timescaledb_internal | _hyper_7_35_chunk
+ _timescaledb_internal | _hyper_7_22_chunk
+ _timescaledb_internal | _hyper_7_23_chunk
  public                | pub_split_test
 
 -- Cleanup

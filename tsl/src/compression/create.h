@@ -24,8 +24,10 @@ bool tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_op
 void tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def);
 void tsl_process_compress_table_drop_column(Hypertable *ht, char *name);
 void tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt);
-Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
-							 bool skip_segmentby_default, CompressionSettings *settings);
+Oid create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
+						  bool skip_segmentby_default, CompressionSettings *settings);
+NameData build_compressed_relation_name(const Chunk *chunk);
+void rename_compressed_chunk_for_replacement(Oid compressed_relid);
 
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);

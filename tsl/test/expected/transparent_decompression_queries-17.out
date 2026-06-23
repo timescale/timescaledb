@@ -66,7 +66,7 @@ INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM 
 SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_5_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 VACUUM ANALYZE merge_sort;
 -- this should have a MergeAppend with children wrapped in Sort nodes
@@ -86,29 +86,29 @@ GROUP BY 2, 3;
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=535681.00 loops=1)
                Sort Key: merge_sort.device_id, merge_sort.measure_id
-               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=86400.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_3_chunk (actual rows=86400.00 loops=1)
                      Vectorized Filter: ("time" < "timestamp"(now()))
-                     ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_v2__idx on compress_hyper_4_10_chunk (actual rows=87.00 loops=1)
+                     ->  Index Scan using _hyper_3_3_chunk_compressed_device_id_measure_id__ts_meta_v_idx on _hyper_3_3_chunk_compressed (actual rows=87.00 loops=1)
                            Index Cond: (_ts_meta_v2_first_time < now())
+               ->  Sort (actual rows=120960.00 loops=1)
+                     Sort Key: _hyper_3_4_chunk.device_id, _hyper_3_4_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_4_chunk (actual rows=120960.00 loops=1)
+                           Filter: ("time" < now())
+               ->  Sort (actual rows=120960.00 loops=1)
+                     Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_3_5_chunk (actual rows=120960.00 loops=1)
+                           Filter: ("time" < now())
                ->  Sort (actual rows=120960.00 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_6_chunk (actual rows=120960.00 loops=1)
                            Filter: ("time" < now())
-               ->  Sort (actual rows=120960.00 loops=1)
+               ->  Sort (actual rows=86401.00 loops=1)
                      Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=120960.00 loops=1)
-                           Filter: ("time" < now())
-               ->  Sort (actual rows=120960.00 loops=1)
-                     Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_8_chunk (actual rows=120960.00 loops=1)
-                           Filter: ("time" < now())
-               ->  Sort (actual rows=86401.00 loops=1)
-                     Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=86401.00 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=86401.00 loops=1)
                            Filter: ("time" < now())
 
 -- this should exclude the decompressed chunk
@@ -129,24 +129,24 @@ GROUP BY 2, 3;
          ->  Merge Append (actual rows=380160.00 loops=1)
                Sort Key: merge_sort.device_id, merge_sort.measure_id
                ->  Sort (actual rows=51839.00 loops=1)
-                     Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
+                     Sort Key: _hyper_3_4_chunk.device_id, _hyper_3_4_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Index Scan using _hyper_3_6_chunk_merge_sort_time_idx on _hyper_3_6_chunk (actual rows=51839.00 loops=1)
+                     ->  Index Scan using _hyper_3_4_chunk_merge_sort_time_idx on _hyper_3_4_chunk (actual rows=51839.00 loops=1)
                            Index Cond: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
                ->  Sort (actual rows=120960.00 loops=1)
-                     Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
+                     Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=120960.00 loops=1)
+                     ->  Seq Scan on _hyper_3_5_chunk (actual rows=120960.00 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
                ->  Sort (actual rows=120960.00 loops=1)
-                     Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
+                     Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_8_chunk (actual rows=120960.00 loops=1)
+                     ->  Seq Scan on _hyper_3_6_chunk (actual rows=120960.00 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
                ->  Sort (actual rows=86401.00 loops=1)
-                     Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
+                     Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=86401.00 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=86401.00 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
 
 RESET enable_hashagg;
@@ -186,7 +186,7 @@ WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                Filter: check_equal_228(rtt)
                Rows Removed by Filter: 2
-               ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
 
 -- test pseudoconstant qual #3241
 CREATE TABLE pseudo(time timestamptz NOT NULL);
@@ -198,9 +198,9 @@ SELECT create_hypertable('pseudo','time');
 ALTER TABLE pseudo SET (timescaledb.compress);
 INSERT INTO pseudo SELECT '2000-01-01';
 SELECT compress_chunk(show_chunks('pseudo'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_5_11_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_8_chunk
 
 SELECT * FROM pseudo WHERE now() IS NOT NULL;
              time             
@@ -248,10 +248,10 @@ ALTER TABLE options_data SET (timescaledb.compress,
 SELECT compress_chunk(ch) FROM show_chunks('options_data', older_than=> '2023-12-05') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_7_13_chunk
- _timescaledb_internal._hyper_7_14_chunk
- _timescaledb_internal._hyper_7_15_chunk
- _timescaledb_internal._hyper_7_16_chunk
+ _timescaledb_internal._hyper_7_9_chunk
+ _timescaledb_internal._hyper_7_10_chunk
+ _timescaledb_internal._hyper_7_11_chunk
+ _timescaledb_internal._hyper_7_12_chunk
 
 VACUUM ANALYZE options_data;
 SELECT max(date) AS date FROM options_data WHERE contract_code='CONTRACT2023-12-03 04:00:00+01';
@@ -270,13 +270,13 @@ INSERT INTO i8918 VALUES ('2020-01-01'::timestamptz, 1, 'hedgehog', 1);
 SELECT compress_chunk(show_chunks('i8918'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_9_22_chunk
+ _timescaledb_internal._hyper_9_14_chunk
 
 SET enable_hashagg TO off;
 EXPLAIN (costs off, buffers off, analyze, timing off, summary off) SELECT sensor_id, enum_type, count(*) FROM i8918 GROUP BY sensor_id, enum_type;
 --- QUERY PLAN ---
  GroupAggregate (actual rows=2.00 loops=1)
-   Group Key: _hyper_9_22_chunk.sensor_id, _hyper_9_22_chunk.enum_type
-   ->  Custom Scan (ColumnarScan) on _hyper_9_22_chunk (actual rows=2.00 loops=1)
-         ->  Index Scan using compress_hyper_10_23_chunk_sensor_id__ts_meta_v2_first_enum_idx on compress_hyper_10_23_chunk (actual rows=1.00 loops=1)
+   Group Key: _hyper_9_14_chunk.sensor_id, _hyper_9_14_chunk.enum_type
+   ->  Custom Scan (ColumnarScan) on _hyper_9_14_chunk (actual rows=2.00 loops=1)
+         ->  Index Scan using _hyper_9_14_chunk_compressed_sensor_id__ts_meta_v2_first_en_idx on _hyper_9_14_chunk_compressed (actual rows=1.00 loops=1)
 
