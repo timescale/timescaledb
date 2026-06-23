@@ -12,9 +12,11 @@ This release contains performance improvements and bug fixes since the 2.28.0 re
 * [#10056](https://github.com/timescale/timescaledb/pull/10056) Enforce CHECK, NOT NULL and view WITH CHECK OPTION constraints for direct compress inserts
 * [#10059](https://github.com/timescale/timescaledb/pull/10059) Fix error when using first/last aggregates in a HAVING clause
 * [#10060](https://github.com/timescale/timescaledb/pull/10060) Fix first/last optimization returning the same value for aggregates that share the value column but order by different columns
+* [#10061](https://github.com/timescale/timescaledb/pull/10061) Fix internal error in first/last for unsortable types
 * [#10069](https://github.com/timescale/timescaledb/pull/10069) Fix bgw_job_stat_history definition
 * [#10073](https://github.com/timescale/timescaledb/pull/10073) Fix uncompressed size estimate for varlen
 * [#10089](https://github.com/timescale/timescaledb/pull/10089) Fix deleting every row on compressed hypertable with subquery returning constant false
+* [#10094](https://github.com/timescale/timescaledb/pull/10094) Fix use-after-free in ALTER TABLE ADD CONSTRAINT
 
 **Thanks**
 * @skrenes for reporting a problem with the job_history view when upgrading to 2.28.0
