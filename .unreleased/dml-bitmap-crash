@@ -1,1 +1,0 @@
-Fixes: #9913: Potential crash on DML on compressed tables when the plan uses Bitmap Heap Scan
