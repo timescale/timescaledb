@@ -68,12 +68,11 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
  _hyper_1_1_chunk | 32 kB        | 40 kB
 
 SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
- id | hypertable_id |      schema_name      |        table_name        | status | osm_chunk 
-----+---------------+-----------------------+--------------------------+--------+-----------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk         |      1 | f
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk         |      0 | f
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk         |      0 | f
-  4 |             2 | _timescaledb_internal | compress_hyper_2_4_chunk |      0 | f
+ id | hypertable_id |      schema_name      |    table_name    | status | osm_chunk 
+----+---------------+-----------------------+------------------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |      1 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |      0 | f
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |      0 | f
 
 -- TEST 4 --
 --cannot set another policy
@@ -157,8 +156,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name    | before_compression_total_bytes | after_compression_total_bytes 
 ------------------+--------------------------------+-------------------------------
+ _hyper_3_4_chunk |                          24576 |                         40960
  _hyper_3_5_chunk |                          24576 |                         40960
- _hyper_3_6_chunk |                          24576 |                         40960
 
 --integer tests
 CREATE TABLE test_table_integer(time INTEGER, val INTEGER);
@@ -189,8 +188,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_5_12_chunk |                          24576 |                         40960
- _hyper_5_13_chunk |                          24576 |                         40960
+ _hyper_5_10_chunk |                          24576 |                         40960
+ _hyper_5_9_chunk  |                          24576 |                         40960
 
 --bigint test
 CREATE TABLE test_table_bigint(time BIGINT, val BIGINT);
@@ -221,8 +220,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_7_19_chunk |                          24576 |                         40960
- _hyper_7_20_chunk |                          24576 |                         40960
+ _hyper_7_14_chunk |                          24576 |                         40960
+ _hyper_7_15_chunk |                          24576 |                         40960
 
 --TEST 8
 --hypertable owner lacks permission to start background worker
@@ -302,7 +301,7 @@ SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
 set client_min_messages TO LOG;
 CALL run_job(:job_id);
 LOG:  statement: CALL run_job(1004);
-LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_40_chunk
+LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_33_chunk
 set client_min_messages TO NOTICE;
 LOG:  statement: set client_min_messages TO NOTICE;
 SELECT count(*) FROM timescaledb_information.chunks
@@ -349,7 +348,7 @@ SELECT compress_chunk(c)
 FROM show_chunks('test2') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_14_62_chunk
+ _timescaledb_internal._hyper_14_54_chunk
 
 ---insert into the middle of the range ---
 INSERT INTO test2 values ( '2020-01-03 10:01:00+00', 20, 11, '2row');
@@ -374,7 +373,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            9 | _hyper_14_62_chunk
+            9 | _hyper_14_54_chunk
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as "COMP_CHUNK_NAME",
         chunk_schema || '.' || chunk_name as "CHUNK_NAME"
@@ -388,7 +387,7 @@ SELECT count(*) from test2;
 SELECT compress_chunk(:'CHUNK_NAME'::regclass);
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_14_62_chunk
+ _timescaledb_internal._hyper_14_54_chunk
 
 -- Demonstrate that no locks are held on the hypertable, chunk, or the
 -- compressed chunk after recompress_chunk has executed.
@@ -405,7 +404,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            1 | _hyper_14_62_chunk
+            1 | _hyper_14_54_chunk
 
 --- insert into a compressed chunk again + a new chunk--
 INSERT INTO test2 values ( '2020-01-03 11:01:03+00', 20, 11, '33row'),
@@ -429,10 +428,10 @@ SELECT chunk_status,
        compressed_chunk_name as "COMPRESSED_CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
- chunk_status |     CHUNK_NAME     |   COMPRESSED_CHUNK_NAME    
---------------+--------------------+----------------------------
-            9 | _hyper_14_62_chunk | compress_hyper_15_63_chunk
-            0 | _hyper_14_64_chunk | 
+ chunk_status |     CHUNK_NAME     |     COMPRESSED_CHUNK_NAME     
+--------------+--------------------+-------------------------------
+            9 | _hyper_14_54_chunk | _hyper_14_54_chunk_compressed
+            0 | _hyper_14_55_chunk | 
 
 SELECT add_compression_policy AS job_id
   FROM add_compression_policy('test2', '30d'::interval) \gset
@@ -447,36 +446,36 @@ SELECT chunk_status,
        compressed_chunk_name as "COMPRESSED_CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
- chunk_status |     CHUNK_NAME     |   COMPRESSED_CHUNK_NAME    
---------------+--------------------+----------------------------
-            1 | _hyper_14_62_chunk | compress_hyper_15_63_chunk
-            1 | _hyper_14_64_chunk | compress_hyper_15_65_chunk
+ chunk_status |     CHUNK_NAME     |     COMPRESSED_CHUNK_NAME     
+--------------+--------------------+-------------------------------
+            1 | _hyper_14_54_chunk | _hyper_14_54_chunk_compressed
+            1 | _hyper_14_55_chunk | _hyper_14_55_chunk_compressed
 
 \set ON_ERROR_STOP 0
 -- call compress_chunk when status is not unordered
 SELECT compress_chunk(:'CHUNK_NAME'::regclass);
-psql:include/recompress_basic.sql:111: NOTICE:  chunk "_hyper_14_62_chunk" is already converted to columnstore
+psql:include/recompress_basic.sql:111: NOTICE:  chunk "_hyper_14_54_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_14_62_chunk
+ _timescaledb_internal._hyper_14_54_chunk
 
 -- This will succeed and compress the chunk for the test below.
 SELECT compress_chunk(:'CHUNK_NAME'::regclass);
-psql:include/recompress_basic.sql:114: NOTICE:  chunk "_hyper_14_62_chunk" is already converted to columnstore
+psql:include/recompress_basic.sql:114: NOTICE:  chunk "_hyper_14_54_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_14_62_chunk
+ _timescaledb_internal._hyper_14_54_chunk
 
 --now decompress it , then try and recompress
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_14_62_chunk
+ _timescaledb_internal._hyper_14_54_chunk
 
 SELECT compress_chunk(:'CHUNK_NAME'::regclass);
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_14_62_chunk
+ _timescaledb_internal._hyper_14_54_chunk
 
 \set ON_ERROR_STOP 1
 -- test recompress policy
@@ -629,7 +628,7 @@ ORDER BY c.id
 LIMIT 1;
  id | status 
 ----+--------
- 69 |      9
+ 57 |      9
 
 -- freeze first chunk
 SELECT _timescaledb_functions.freeze_chunk(:'first_chunk');
@@ -646,7 +645,7 @@ ORDER BY c.id
 LIMIT 1;
  id | status 
 ----+--------
- 69 |     13
+ 57 |     13
 
 --should recompress all chunks except first since its frozen
 CALL run_job(:compressjob_id);
@@ -659,7 +658,7 @@ ORDER BY c.id
 LIMIT 1;
  id | status 
 ----+--------
- 69 |     13
+ 57 |     13
 
 -- unfreeze first chunk
 SELECT _timescaledb_functions.unfreeze_chunk(:'first_chunk');
@@ -678,7 +677,7 @@ ORDER BY c.id
 LIMIT 1;
  id | status 
 ----+--------
- 69 |      1
+ 57 |      1
 
 --TEST 8
 --reindexing in recompression policy
@@ -709,14 +708,14 @@ SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','false'), next_start =>
 -- do an INSERT so recompress has something to do
 INSERT INTO metrics2 SELECT '2000-01-01' FROM generate_series(1,3000);
 SELECT chunk_schema, chunk_name FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2' AND chunk_status = 9 LIMIT 1; \gset
-     chunk_schema      |     chunk_name      
------------------------+---------------------
- _timescaledb_internal | _hyper_20_131_chunk
+     chunk_schema      |     chunk_name     
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_20_88_chunk
 
 SELECT format('%I.%I', :'chunk_schema', :'chunk_name') AS "RECOMPRESS_CHUNK_NAME"; \gset
-           RECOMPRESS_CHUNK_NAME           
--------------------------------------------
- _timescaledb_internal._hyper_20_131_chunk
+          RECOMPRESS_CHUNK_NAME           
+------------------------------------------
+ _timescaledb_internal._hyper_20_88_chunk
 
 -- get size of the chunk that needs recompression
 VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;

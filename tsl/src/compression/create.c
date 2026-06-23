@@ -120,6 +120,45 @@ compression_column_segment_metadata_name(const char *type, int16 column_index)
 	return buf;
 }
 
+NameData
+build_compressed_relation_name(const Chunk *chunk)
+{
+	NameData name;
+	int ret = snprintf(NameStr(name), NAMEDATALEN, "%s_compressed", NameStr(chunk->fd.table_name));
+	if (ret < 0 || ret >= NAMEDATALEN)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_NAME_TOO_LONG), errmsg("bad compressed chunk internal name")));
+	}
+	return name;
+}
+
+/*
+ * Rename an existing compressed chunk relation out of the way.
+ *
+ * Recompression creates a new compressed relation and only drops the old one
+ * afterwards, so the old relation must give up its name first or the create
+ * would collide. Renaming keeps the relation OID, so any open relation handle
+ * and in-progress reads on the old compressed chunk remain valid until it is
+ * dropped.
+ */
+void
+rename_compressed_chunk_for_replacement(Oid compressed_relid)
+{
+	char tmp_name[NAMEDATALEN];
+	int ret = snprintf(tmp_name, NAMEDATALEN, "compress_old_%u", compressed_relid);
+	if (ret < 0 || ret >= NAMEDATALEN)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_NAME_TOO_LONG), errmsg("bad compressed chunk internal name")));
+	}
+
+	LockRelationOid(compressed_relid, AccessExclusiveLock);
+	RenameRelationInternal(compressed_relid, tmp_name, true, false);
+	/* Make the freed name visible to the subsequent create. */
+	CommandCounterIncrement();
+}
+
 /*
  * Validate that compression settings don't exceed PostgreSQL's INDEX_MAX_KEYS limit.
  *
@@ -875,57 +914,33 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
  * If table_id is InvalidOid, create a new table.
  *
  */
-Chunk *
+Oid
 create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 					  bool skip_segmentby_default, CompressionSettings *settings)
 {
-	Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
-	Chunk *compress_chunk;
+	char table_name[NAMEDATALEN];
 	int namelen;
 	Oid tablespace_oid;
 	bool settings_provided = (settings != NULL);
-	Assert(compress_ht->space->num_dimensions == 0);
-
-	/* Create a new catalog entry for chunk based on uncompressed chunk */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	compress_chunk =
-		ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK), 0, RELKIND_RELATION);
-	ts_catalog_restore_user(&sec_ctx);
-
-	compress_chunk->fd.hypertable_id = compress_ht->fd.id;
-	compress_chunk->hypertable_relid = compress_ht->main_table_relid;
-	namestrcpy(&compress_chunk->fd.schema_name, INTERNAL_SCHEMA_NAME);
 
 	if (OidIsValid(table_id))
 	{
-		Relation table_rel = table_open(table_id, AccessShareLock);
-		strncpy(NameStr(compress_chunk->fd.table_name),
-				RelationGetRelationName(table_rel),
-				NAMEDATALEN);
-		table_close(table_rel, AccessShareLock);
+		LockRelationOid(table_id, AccessShareLock);
 	}
 	else
 	{
 		/* Fail if we overflow the name limit */
-		namelen = snprintf(NameStr(compress_chunk->fd.table_name),
-						   NAMEDATALEN,
-						   "compress%s_%d_chunk",
-						   NameStr(compress_ht->fd.associated_table_prefix),
-						   compress_chunk->fd.id);
+		namelen =
+			snprintf(table_name, NAMEDATALEN, "%s_compressed", NameStr(src_chunk->fd.table_name));
 
 		if (namelen >= NAMEDATALEN)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_NAME_TOO_LONG),
-					 errmsg("invalid name \"%s\" for compressed chunk",
-							NameStr(compress_chunk->fd.table_name)),
+					 errmsg("invalid name \"%s\" for compressed chunk", table_name),
 					 errdetail("The associated table prefix is too long.")));
 		}
 	}
-
-	/* Insert chunk */
-	ts_chunk_insert_lock(compress_chunk, RowExclusiveLock);
 
 	/* Create the actual table relation for the chunk
 	 * Note that we have to pick the tablespace here as the compressed ht doesn't have dimensions
@@ -964,21 +979,13 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 										  skip_segmentby_default);
 	}
 
-	if (OidIsValid(table_id))
-	{
-		compress_chunk->table_id = table_id;
-	}
-	else
+	if (!OidIsValid(table_id))
 	{
 		List *column_defs = build_columndefs(settings, src_chunk->table_id);
-		compress_chunk->table_id = compression_chunk_create(src_chunk,
-															compress_chunk,
-															column_defs,
-															tablespace_oid,
-															settings);
+		table_id = compression_table_create(src_chunk, column_defs, tablespace_oid, settings);
 	}
 
-	if (!OidIsValid(compress_chunk->table_id))
+	if (!OidIsValid(table_id))
 	{
 		elog(ERROR, "could not create columnstore chunk table");
 	}
@@ -986,32 +993,17 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 	/* Materialize current compression settings for this chunk */
 	if (!settings_provided)
 	{
-		ts_compression_settings_materialize(settings,
-											src_chunk->table_id,
-											compress_chunk->table_id);
+		ts_compression_settings_materialize(settings, src_chunk->table_id, table_id);
 	}
 	else
 	{
-		settings->fd.compress_relid = compress_chunk->table_id;
+		settings->fd.compress_relid = table_id;
 		ts_compression_settings_update(settings);
 	}
 
-	/* if the src chunk is not in the default tablespace, the compressed indexes
-	 * should also be in a non-default tablespace. IN the usual case, this is inferred
-	 * from the hypertable's and chunk's tablespace info. We do not propagate
-	 * attach_tablespace settings to the compressed hypertable. So we have to explicitly
-	 * pass the tablespace information here
-	 */
-	ts_chunk_index_create_all(compress_chunk->fd.hypertable_id,
-							  compress_chunk->hypertable_relid,
-							  compress_chunk->fd.id,
-							  compress_chunk->table_id,
-							  tablespace_oid);
+	ts_chunk_set_compressed(src_chunk);
 
-	/* Associate the source chunk with the new compressed chunk. */
-	ts_chunk_set_compressed_chunk(src_chunk, compress_chunk->fd.id);
-
-	return compress_chunk;
+	return table_id;
 }
 
 /* Add  the hypertable time column to the end of the orderby list if
@@ -2268,22 +2260,27 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 		return;
 	}
 
-	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
 	ListCell *lc;
 	Oid coloid = LookupTypeNameOid(NULL, orig_def->typeName, false);
 
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		if (!OidIsValid(compressed_relid))
+		{
+			continue;
+		}
 		/* don't add column if it already exists */
-		if (get_attnum(chunk->table_id, orig_def->colname) != InvalidAttrNumber)
+		if (get_attnum(compressed_relid, orig_def->colname) != InvalidAttrNumber)
 		{
 			return;
 		}
 		ColumnDef *coldef = build_columndef_singlecolumn(orig_def->colname, coloid);
 		CompressionSettings *settings =
-			ts_compression_settings_get_by_compress_relid(chunk->table_id);
-		add_column_to_compression_table(chunk->table_id, settings, coldef);
+			ts_compression_settings_get_by_compress_relid(compressed_relid);
+		add_column_to_compression_table(compressed_relid, settings, coldef);
 	}
 }
 
@@ -2316,18 +2313,23 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 						"columnstore enabled")));
 	}
 
-	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
 	ListCell *lc;
 	int num_chunks = list_length(chunks);
 	CompressionSettings **chunk_settings = palloc(sizeof(CompressionSettings *) * num_chunks);
 
-	int i = 0;
+	int num_compressed = 0;
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		if (!OidIsValid(compressed_relid))
+		{
+			continue;
+		}
 		CompressionSettings *settings =
-			ts_compression_settings_get_by_compress_relid(chunk->table_id);
-		chunk_settings[i++] = settings;
+			ts_compression_settings_get_by_compress_relid(compressed_relid);
+		chunk_settings[num_compressed++] = settings;
 		if (ts_array_is_member(settings->fd.segmentby, name) ||
 			ts_array_is_member(settings->fd.orderby, name))
 		{
@@ -2340,7 +2342,7 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
-		for (int i = 0; i < num_chunks; i++)
+		for (int i = 0; i < num_compressed; i++)
 		{
 			CompressionSettings *comp_settings = chunk_settings[i];
 			drop_column_from_compression_table(comp_settings, name);
@@ -2435,19 +2437,26 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 
 	RenameStmt *compressed_col_stmt = (RenameStmt *) copyObject(stmt);
 	RenameStmt *compressed_index_stmt = (RenameStmt *) copyObject(stmt);
-	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
 	CompressionSettings *ht_settings = NULL;
 	ListCell *lc;
 
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		if (!OidIsValid(compressed_relid))
+		{
+			continue;
+		}
 		compressed_col_stmt->relation =
-			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+			makeRangeVar(get_namespace_name(get_rel_namespace(compressed_relid)),
+						 get_rel_name(compressed_relid),
+						 -1);
 		ExecRenameStmt(compressed_col_stmt);
 
 		List *rename_from_to = NIL;
-		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		CompressionSettings *settings = ts_compression_settings_get(compressed_relid);
 		if (!settings || settings->fd.index == NULL)
 		{
 			/* only lookup ht settings if we haven't already */
@@ -2575,7 +2584,7 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 				Assert(from_to != NULL);
 				Assert(from_to->from != NULL);
 				Assert(from_to->to != NULL);
-				if (get_attnum(chunk->table_id, from_to->from) == InvalidAttrNumber)
+				if (get_attnum(compressed_relid, from_to->from) == InvalidAttrNumber)
 				{
 					continue;
 				}

@@ -1775,9 +1775,11 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
 	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-	Chunk *new_compressed_chunk =
+	/* Free the deterministic compressed chunk name before creating the new one. */
+	rename_compressed_chunk_for_replacement(compressed_relid);
+	Oid new_compressed_relid =
 		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false, new_settings);
-	Relation new_compressed_chunk_rel = table_open(new_compressed_chunk->table_id, lockmode);
+	Relation new_compressed_chunk_rel = table_open(new_compressed_relid, lockmode);
 
 	perform_recompression(recompress_ctx,
 						  compressed_chunk_rel,

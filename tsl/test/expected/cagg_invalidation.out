@@ -1566,7 +1566,7 @@ EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_insert;
  Append
    ->  Seq Scan on _hyper_18_60_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_18_62_chunk
-         ->  Seq Scan on compress_hyper_19_63_chunk
+         ->  Seq Scan on _hyper_18_62_chunk_compressed
 
 RESET timescaledb.enable_direct_compress_insert;
 -- test direct compress copy invalidation
@@ -1606,13 +1606,13 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_copy;
 --- QUERY PLAN ---
  Append
-   ->  Seq Scan on _hyper_21_64_chunk
+   ->  Seq Scan on _hyper_21_63_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_21_65_chunk
+         ->  Seq Scan on _hyper_21_65_chunk_compressed
    ->  Custom Scan (ColumnarScan) on _hyper_21_66_chunk
-         ->  Seq Scan on compress_hyper_22_67_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_21_68_chunk
-         ->  Seq Scan on compress_hyper_22_69_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_21_70_chunk
-         ->  Seq Scan on compress_hyper_22_71_chunk
+         ->  Seq Scan on _hyper_21_66_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_21_67_chunk
+         ->  Seq Scan on _hyper_21_67_chunk_compressed
 
 RESET timescaledb.enable_direct_compress_copy;
 -- test direct compress invalidation with custom partitioning function (not supported atm)
@@ -1636,7 +1636,7 @@ NOTICE:  refreshing continuous aggregate "cagg_inval_update"
 -- check setting to NULL is handled gracefully
 \set ON_ERROR_STOP 0
 UPDATE inval_update SET time = NULL WHERE time = '2025-01-01';
-ERROR:  null value in column "time" of relation "_hyper_25_72_chunk" violates not-null constraint
+ERROR:  null value in column "time" of relation "_hyper_25_68_chunk" violates not-null constraint
 \set ON_ERROR_STOP 1
 UPDATE inval_update SET time = '2025-01-01 00:00:23' WHERE time = '2025-01-01';
 -- should have 1 entries now
@@ -1877,8 +1877,8 @@ DEBUG:  refreshing continuous aggregate "cagg_4hrs" from 4714-11-24 00:00:00+00 
 DEBUG:  hypertable 31 existing watermark >= new invalidation threshold 1577858400000000 1577851200000000
 DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4hrs" in window [ 4714-11-24 00:00:00+00 BC, 2020-01-01 04:00:00+00 ]
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_32"
-DEBUG:  building index "_hyper_32_95_chunk__materialized_hypertable_32_bucket_idx" on table "_hyper_32_95_chunk" serially
-DEBUG:  index "_hyper_32_95_chunk__materialized_hypertable_32_bucket_idx" can safely use deduplication
+DEBUG:  building index "_hyper_32_91_chunk__materialized_hypertable_32_bucket_idx" on table "_hyper_32_91_chunk" serially
+DEBUG:  index "_hyper_32_91_chunk__materialized_hypertable_32_bucket_idx" can safely use deduplication
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_32"
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
@@ -1913,6 +1913,6 @@ ORDER BY 1,2;
 
 DROP TABLE test_data CASCADE;
 NOTICE:  drop cascades to 4 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_95_chunk
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_94_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_91_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_90_chunk
 RESET timezone;

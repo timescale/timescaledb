@@ -44,11 +44,11 @@ explain (buffers off, costs off) select distinct on (s0, s1) ts_debug_allocated_
                Sort Key: mvagg.s0, mvagg.s1, mvagg.t DESC
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
-                     ->  Index Scan using compress_hyper_2_3_chunk_s0_s1__ts_meta_v2_first_t__ts_meta_idx on compress_hyper_2_3_chunk
+                     ->  Index Scan using _hyper_1_1_chunk_compressed_s0_s1__ts_meta_v2_first_t__ts_m_idx on _hyper_1_1_chunk_compressed
                            Index Cond: ((_ts_meta_v2_first_t >= '-1'::integer) AND (_ts_meta_v2_last_t < 1000000))
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
-                     ->  Index Scan using compress_hyper_2_4_chunk_s0_s1__ts_meta_v2_first_t__ts_meta_idx on compress_hyper_2_4_chunk
+                     ->  Index Scan using _hyper_1_2_chunk_compressed_s0_s1__ts_meta_v2_first_t__ts_m_idx on _hyper_1_2_chunk_compressed
                            Index Cond: ((_ts_meta_v2_first_t >= '-1'::integer) AND (_ts_meta_v2_last_t < 1000000))
 
 truncate log;
@@ -79,12 +79,12 @@ explain (buffers off, costs off) select ts_debug_allocated_bytes() bytes,
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
-                     ->  Seq Scan on compress_hyper_2_3_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
                            Filter: ((_ts_meta_v2_first_t >= '-1'::integer) AND (_ts_meta_v2_last_t < 1000000))
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
-                     ->  Seq Scan on compress_hyper_2_4_chunk
+                     ->  Seq Scan on _hyper_1_2_chunk_compressed
                            Filter: ((_ts_meta_v2_first_t >= '-1'::integer) AND (_ts_meta_v2_last_t < 1000000))
 
 \set ECHO none

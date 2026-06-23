@@ -298,5 +298,5 @@ WHERE parent.hypertable_id = (SELECT mat_hypertable_id
 
 DROP FUNCTION cagg_analyze_count_analyzed(name);
 DROP MATERIALIZED VIEW cagg_analyze_view;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_17_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_9_chunk
 DROP TABLE cagg_analyze_src;

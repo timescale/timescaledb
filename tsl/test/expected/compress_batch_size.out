@@ -46,7 +46,7 @@ from (
 ;
 select count(compress_chunk(x)) from show_chunks('batch_size') x;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
  count 
 -------
      3
@@ -63,8 +63,8 @@ alter table batch_size set (tsdb.compress,
 NOTICE:  updated compression settings will only apply to future compressions
 select count(compress_chunk(x)) from show_chunks('batch_size') x;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
 NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
  count 
 -------
      4
