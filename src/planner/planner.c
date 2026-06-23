@@ -1166,7 +1166,7 @@ rte_should_expand(const RangeTblEntry *rte)
 }
 
 static void
-expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+expand_hypertable(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	Hypertable *ht;
 	double total_pages;
@@ -1408,18 +1408,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	/* Check for unexpanded hypertable */
 	if (rte_should_expand(rte))
 	{
-		expand_hypertables(root, rel, rti, rte);
-	}
-
-	if (ts_guc_enable_optimizations)
-	{
-		ts_planner_constraint_cleanup(root, rel);
-	}
-
-	/* Call other extensions. Do it after table expansion. */
-	if (prev_set_rel_pathlist_hook != NULL)
-	{
-		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+		expand_hypertable(root, rel, rti, rte);
 	}
 
 	switch (reltype)
@@ -1468,6 +1457,17 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		default:
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
+	}
+
+	if (ts_guc_enable_optimizations)
+	{
+		ts_planner_constraint_cleanup(root, rel);
+	}
+
+	/* Call other extensions. Do it after table expansion. */
+	if (prev_set_rel_pathlist_hook != NULL)
+	{
+		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
 	}
 }
 
