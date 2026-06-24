@@ -409,3 +409,27 @@ BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE
 -- clean up dml artefacts to prevent plan switches on subsequent tests
 VACUUM FULL ANALYZE metrics_compressed;
 
+-- Test issue #10072: DELETE on compressed hypertable with subquery returning constant false should not delete any rows
+CREATE TABLE t10072 (ts timestamptz NOT NULL, payload text);
+SELECT count(*) FROM create_hypertable('t10072', 'ts');
+INSERT INTO t10072
+SELECT '2025-01-01'::timestamptz + (g || ' min')::interval,
+       'parcel-' || g
+FROM generate_series(1, 5) g;
+
+ALTER TABLE t10072 SET (timescaledb.compress, timescaledb.compress_orderby='ts DESC');
+SELECT count(compress_chunk(chunk_name)) FROM show_chunks('t10072') chunk_name;
+-- Should be fully compressed
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t10072') chunk;
+
+SELECT count(*) FROM t10072;
+
+-- Should delete 0 rows
+DELETE FROM t10072 WHERE EXISTS (SELECT 1 WHERE false);
+
+SELECT count(*) FROM t10072;
+
+-- Should be partial as rows were decompressed for subquery predicate
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t10072') chunk;
+
+drop table t10072 cascade;

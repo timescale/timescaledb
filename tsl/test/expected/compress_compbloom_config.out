@@ -5,7 +5,7 @@
 -- Config tests
 -------------------------------------------------------------------
 CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
-CREATE VIEW compressedcols AS select relname,attname,c.oid as reloid,attnum from pg_attribute a, pg_class c where c.oid=a.attrelid and relname like '%compress_hyper_%chunk' order by c.oid asc, a.attnum asc;
+CREATE VIEW compressedcols AS select h.table_name as relname, a.attname, cs.compress_relid as reloid, a.attnum from _timescaledb_catalog.compression_settings cs join _timescaledb_catalog.chunk ch on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass join _timescaledb_catalog.hypertable h on ch.hypertable_id = h.id join pg_attribute a on a.attrelid = cs.compress_relid order by cs.compress_relid asc, a.attnum asc;
 CREATE TABLE t(a int, b int, c int, d int, e int, f int, g int, h int, i int);
 SELECT create_hypertable('t', 'a');
  create_hypertable 
@@ -74,29 +74,29 @@ select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,in
 
 -- Check the auto generated compressed columns
 select relname,attname from compressedcols order by 1,2;
-         relname          |            attname            
---------------------------+-------------------------------
- compress_hyper_4_2_chunk | _ts_meta_count
- compress_hyper_4_2_chunk | _ts_meta_max_1
- compress_hyper_4_2_chunk | _ts_meta_max_2
- compress_hyper_4_2_chunk | _ts_meta_min_1
- compress_hyper_4_2_chunk | _ts_meta_min_2
- compress_hyper_4_2_chunk | regress-test-bloom_c
- compress_hyper_4_2_chunk | regress-test-bloom_ed4b_a_b_c
- compress_hyper_4_2_chunk | _ts_meta_v2_first_a
- compress_hyper_4_2_chunk | _ts_meta_v2_first_b
- compress_hyper_4_2_chunk | _ts_meta_v2_last_a
- compress_hyper_4_2_chunk | _ts_meta_v2_last_b
- compress_hyper_4_2_chunk | a
- compress_hyper_4_2_chunk | b
- compress_hyper_4_2_chunk | c
- compress_hyper_4_2_chunk | cmax
- compress_hyper_4_2_chunk | cmin
- compress_hyper_4_2_chunk | ctid
- compress_hyper_4_2_chunk | d
- compress_hyper_4_2_chunk | tableoid
- compress_hyper_4_2_chunk | xmax
- compress_hyper_4_2_chunk | xmin
+ relname |            attname            
+---------+-------------------------------
+ u       | _ts_meta_count
+ u       | _ts_meta_max_1
+ u       | _ts_meta_max_2
+ u       | _ts_meta_min_1
+ u       | _ts_meta_min_2
+ u       | regress-test-bloom_c
+ u       | regress-test-bloom_ed4b_a_b_c
+ u       | _ts_meta_v2_first_a
+ u       | _ts_meta_v2_first_b
+ u       | _ts_meta_v2_last_a
+ u       | _ts_meta_v2_last_b
+ u       | a
+ u       | b
+ u       | c
+ u       | cmax
+ u       | cmin
+ u       | ctid
+ u       | d
+ u       | tableoid
+ u       | xmax
+ u       | xmin
 
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("a","b","c")');
 NOTICE:  updated compression settings will only apply to future compressions
@@ -145,36 +145,36 @@ select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,in
  _timescaledb_internal._hyper_5_3_chunk | _timescaledb_internal.compress_hyper_6_4_chunk |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a_01234567890123456789", "b_01234567890123456789", "c_01234567890123456789", "d_01234567890123456789", "e_01234567890123456789"], "source": "default"}, {"type": "bloom", "column": "c_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "d_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "e_01234567890123456789", "source": "default"}, {"type": "minmax", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "firstlast", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "minmax", "column": "a_01234567890123456789", "source": "orderby"}, {"type": "firstlast", "column": "a_01234567890123456789", "source": "orderby"}]
 
 select relname,attname from compressedcols order by 1,2;
-         relname          |                             attname                             
---------------------------+-----------------------------------------------------------------
- compress_hyper_6_4_chunk | _ts_meta_count
- compress_hyper_6_4_chunk | _ts_meta_max_1
- compress_hyper_6_4_chunk | _ts_meta_max_2
- compress_hyper_6_4_chunk | _ts_meta_min_1
- compress_hyper_6_4_chunk | _ts_meta_min_2
- compress_hyper_6_4_chunk | regress-test-bloom_76d9_a_01234567890123456789_b_01234567890123
- compress_hyper_6_4_chunk | regress-test-bloom_c_01234567890123456789
- compress_hyper_6_4_chunk | regress-test-bloom_d_01234567890123456789
- compress_hyper_6_4_chunk | regress-test-bloom_e_01234567890123456789
- compress_hyper_6_4_chunk | _ts_meta_v2_first_a_01234567890123456789
- compress_hyper_6_4_chunk | _ts_meta_v2_first_b_01234567890123456789
- compress_hyper_6_4_chunk | _ts_meta_v2_last_a_01234567890123456789
- compress_hyper_6_4_chunk | _ts_meta_v2_last_b_01234567890123456789
- compress_hyper_6_4_chunk | a_01234567890123456789
- compress_hyper_6_4_chunk | b_01234567890123456789
- compress_hyper_6_4_chunk | c_01234567890123456789
- compress_hyper_6_4_chunk | cmax
- compress_hyper_6_4_chunk | cmin
- compress_hyper_6_4_chunk | ctid
- compress_hyper_6_4_chunk | d_01234567890123456789
- compress_hyper_6_4_chunk | e_01234567890123456789
- compress_hyper_6_4_chunk | f_01234567890123456789
- compress_hyper_6_4_chunk | g_01234567890123456789
- compress_hyper_6_4_chunk | h_01234567890123456789
- compress_hyper_6_4_chunk | i_01234567890123456789
- compress_hyper_6_4_chunk | tableoid
- compress_hyper_6_4_chunk | xmax
- compress_hyper_6_4_chunk | xmin
+ relname |                             attname                             
+---------+-----------------------------------------------------------------
+ v       | _ts_meta_count
+ v       | _ts_meta_max_1
+ v       | _ts_meta_max_2
+ v       | _ts_meta_min_1
+ v       | _ts_meta_min_2
+ v       | regress-test-bloom_76d9_a_01234567890123456789_b_01234567890123
+ v       | regress-test-bloom_c_01234567890123456789
+ v       | regress-test-bloom_d_01234567890123456789
+ v       | regress-test-bloom_e_01234567890123456789
+ v       | _ts_meta_v2_first_a_01234567890123456789
+ v       | _ts_meta_v2_first_b_01234567890123456789
+ v       | _ts_meta_v2_last_a_01234567890123456789
+ v       | _ts_meta_v2_last_b_01234567890123456789
+ v       | a_01234567890123456789
+ v       | b_01234567890123456789
+ v       | c_01234567890123456789
+ v       | cmax
+ v       | cmin
+ v       | ctid
+ v       | d_01234567890123456789
+ v       | e_01234567890123456789
+ v       | f_01234567890123456789
+ v       | g_01234567890123456789
+ v       | h_01234567890123456789
+ v       | i_01234567890123456789
+ v       | tableoid
+ v       | xmax
+ v       | xmin
 
 -- Make sure the duplicate column detection works for long column names
 \set ON_ERROR_STOP 0

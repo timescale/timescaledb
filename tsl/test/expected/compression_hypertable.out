@@ -127,7 +127,7 @@ SELECT DISTINCT attname, attstattarget
 
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
-  WHERE attrelid in (SELECT format('%I.%I', schema_name, table_name)::regclass FROM _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = 2)
+  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1'))
     AND attnum > 0
   ORDER BY attname;
         attname         | attstattarget 
@@ -144,24 +144,31 @@ SELECT DISTINCT attname, attstattarget
 
 -- Test that the GUC to disable bulk decompression works.
 vacuum analyze test1;
+SELECT format('%I.%I', ch.schema_name, ch.table_name) AS chunk
+  FROM _timescaledb_catalog.chunk ch
+  JOIN _timescaledb_catalog.hypertable h ON ch.hypertable_id = h.id
+ WHERE h.table_name = 'test1'
+ ORDER BY ch.id
+ LIMIT 1
+\gset
 explain (analyze, verbose, timing off, buffers off, costs off, summary off)
-select * from _timescaledb_internal._hyper_1_10_chunk;
+select * from :chunk;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24.00 loops=1)
-   Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=15.00 loops=1)
+   Output: _hyper_1_1_chunk."Time", _hyper_1_1_chunk.i, _hyper_1_1_chunk.b, _hyper_1_1_chunk.t
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk."_ts_meta_v2_first_Time", compress_hyper_2_55_chunk."_ts_meta_v2_last_Time", compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_65_chunk (actual rows=1.00 loops=1)
+         Output: compress_hyper_2_65_chunk._ts_meta_count, compress_hyper_2_65_chunk._ts_meta_min_1, compress_hyper_2_65_chunk._ts_meta_max_1, compress_hyper_2_65_chunk."_ts_meta_v2_first_Time", compress_hyper_2_65_chunk."_ts_meta_v2_last_Time", compress_hyper_2_65_chunk."Time", compress_hyper_2_65_chunk.i, compress_hyper_2_65_chunk.b, compress_hyper_2_65_chunk.t
 
 set timescaledb.enable_bulk_decompression to false;
 explain (analyze, verbose, timing off, buffers off, costs off, summary off)
-select * from _timescaledb_internal._hyper_1_10_chunk;
+select * from :chunk;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24.00 loops=1)
-   Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=15.00 loops=1)
+   Output: _hyper_1_1_chunk."Time", _hyper_1_1_chunk.i, _hyper_1_1_chunk.b, _hyper_1_1_chunk.t
    Bulk Decompression: false
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk."_ts_meta_v2_first_Time", compress_hyper_2_55_chunk."_ts_meta_v2_last_Time", compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_65_chunk (actual rows=1.00 loops=1)
+         Output: compress_hyper_2_65_chunk._ts_meta_count, compress_hyper_2_65_chunk._ts_meta_min_1, compress_hyper_2_65_chunk._ts_meta_max_1, compress_hyper_2_65_chunk."_ts_meta_v2_first_Time", compress_hyper_2_65_chunk."_ts_meta_v2_last_Time", compress_hyper_2_65_chunk."Time", compress_hyper_2_65_chunk.i, compress_hyper_2_65_chunk.b, compress_hyper_2_65_chunk.t
 
 reset timescaledb.enable_bulk_decompression;
 TRUNCATE test1;
@@ -175,7 +182,7 @@ SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
 --
 
 /* the compressed table should not have chunks */
-SELECT count(*) FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2;
+SELECT count(*) FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1');
  count 
 -------
      0
@@ -360,7 +367,7 @@ SELECT DISTINCT attname, attstattarget
 
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
-  WHERE attrelid in (SELECT format('%I.%I', schema_name, table_name)::regclass FROM _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = 6)
+  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test4'))
     AND attnum > 0
   ORDER BY attname;
          attname         | attstattarget 

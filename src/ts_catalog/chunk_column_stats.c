@@ -27,10 +27,12 @@
 #include <utils/syscache.h>
 
 #include "chunk.h"
-#include "chunk_column_stats.h"
 #include "dimension_slice.h"
 #include "guc.h"
+#include "hypertable_cache.h"
 #include "ts_catalog/catalog.h"
+
+#include "chunk_column_stats.h"
 
 /*
  * Enable chunk column stats attributes
