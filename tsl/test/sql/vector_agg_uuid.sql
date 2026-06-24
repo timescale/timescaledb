@@ -120,10 +120,7 @@ where u is not null;
 select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
 
 SET timescaledb.debug_require_vector_agg = 'require';
-
----- Uncomment to generate reference.
---set timescaledb.enable_vectorized_aggregation to off;
---set timescaledb.debug_require_vector_agg = 'allow';
+-- /* uncomment to generate reference */ set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 
 SELECT ver, u, ts, uuid_ts from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
