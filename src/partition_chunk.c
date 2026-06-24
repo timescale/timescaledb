@@ -20,6 +20,8 @@
 #include "guc.h"
 #include "hypercube.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
+
 #include "partition_chunk.h"
 
 void _executor_init(void);

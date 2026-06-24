@@ -383,4 +383,27 @@ CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
 \set ON_ERROR_STOP 1
 ROLLBACK;
 
+DROP TABLE metrics CASCADE;
 
+-- test CHECK constraint on multiple compressed chunks
+-- reproduces use-after-free only detectable with sanitizers (#10045)
+CREATE TABLE sensor_readings(ts timestamptz NOT NULL, val int);
+SELECT create_hypertable('sensor_readings', 'ts', chunk_time_interval => INTERVAL '1 day');
+
+INSERT INTO sensor_readings VALUES ('2024-01-01', 1), ('2024-01-02', NULL);
+SELECT count(*) AS num_chunks FROM show_chunks('sensor_readings');
+
+ALTER TABLE sensor_readings SET (tsdb.compress);
+SELECT compress_chunk(c) FROM show_chunks('sensor_readings') c;
+
+\set ON_ERROR_STOP 0
+ALTER TABLE sensor_readings ADD CONSTRAINT val_notnull CHECK (val IS NOT NULL);
+\set ON_ERROR_STOP 1
+
+-- check successful ALTER
+DELETE FROM sensor_readings WHERE val IS NULL;
+ALTER TABLE sensor_readings ADD CONSTRAINT val_notnull CHECK (val IS NOT NULL);
+\set ON_ERROR_STOP 0
+INSERT INTO sensor_readings VALUES ('2024-01-01', 1), ('2024-01-02', NULL);
+\set ON_ERROR_STOP 1
+DROP TABLE sensor_readings CASCADE;

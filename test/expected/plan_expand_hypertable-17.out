@@ -1109,6 +1109,221 @@ time_bucket exclusion
          ->  Seq Scan on _hyper_1_3_chunk
                Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time", '5'::bigint)))
 
+-- Must be disabled by the optimizations GUC.
+set timescaledb.enable_optimizations to off;
+:PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 10::bigint ORDER BY time;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: hyper."time"
+   ->  Append
+         ->  Seq Scan on hyper hyper_1
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_1_chunk hyper_2
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_2_chunk hyper_3
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_3_chunk hyper_4
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_4_chunk hyper_5
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_5_chunk hyper_6
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_6_chunk hyper_7
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_7_chunk hyper_8
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_8_chunk hyper_9
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_9_chunk hyper_10
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_10_chunk hyper_11
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_11_chunk hyper_12
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_12_chunk hyper_13
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_13_chunk hyper_14
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_14_chunk hyper_15
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_15_chunk hyper_16
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_16_chunk hyper_17
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_17_chunk hyper_18
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_18_chunk hyper_19
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_19_chunk hyper_20
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_20_chunk hyper_21
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_21_chunk hyper_22
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_22_chunk hyper_23
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_23_chunk hyper_24
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_24_chunk hyper_25
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_25_chunk hyper_26
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_26_chunk hyper_27
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_27_chunk hyper_28
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_28_chunk hyper_29
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_29_chunk hyper_30
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_30_chunk hyper_31
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_31_chunk hyper_32
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_32_chunk hyper_33
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_33_chunk hyper_34
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_34_chunk hyper_35
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_35_chunk hyper_36
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_36_chunk hyper_37
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_37_chunk hyper_38
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_38_chunk hyper_39
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_39_chunk hyper_40
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_40_chunk hyper_41
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_41_chunk hyper_42
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_42_chunk hyper_43
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_43_chunk hyper_44
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_44_chunk hyper_45
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_45_chunk hyper_46
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_46_chunk hyper_47
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_47_chunk hyper_48
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_48_chunk hyper_49
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_49_chunk hyper_50
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_50_chunk hyper_51
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_51_chunk hyper_52
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_52_chunk hyper_53
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_53_chunk hyper_54
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_54_chunk hyper_55
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_55_chunk hyper_56
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_56_chunk hyper_57
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_57_chunk hyper_58
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_58_chunk hyper_59
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_59_chunk hyper_60
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_60_chunk hyper_61
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_61_chunk hyper_62
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_62_chunk hyper_63
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_63_chunk hyper_64
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_64_chunk hyper_65
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_65_chunk hyper_66
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_66_chunk hyper_67
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_67_chunk hyper_68
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_68_chunk hyper_69
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_69_chunk hyper_70
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_70_chunk hyper_71
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_71_chunk hyper_72
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_72_chunk hyper_73
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_73_chunk hyper_74
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_74_chunk hyper_75
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_75_chunk hyper_76
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_76_chunk hyper_77
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_77_chunk hyper_78
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_78_chunk hyper_79
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_79_chunk hyper_80
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_80_chunk hyper_81
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_81_chunk hyper_82
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_82_chunk hyper_83
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_83_chunk hyper_84
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_84_chunk hyper_85
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_85_chunk hyper_86
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_86_chunk hyper_87
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_87_chunk hyper_88
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_88_chunk hyper_89
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_89_chunk hyper_90
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_90_chunk hyper_91
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_91_chunk hyper_92
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_92_chunk hyper_93
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_93_chunk hyper_94
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_94_chunk hyper_95
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_95_chunk hyper_96
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_96_chunk hyper_97
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_97_chunk hyper_98
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_98_chunk hyper_99
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_99_chunk hyper_100
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_100_chunk hyper_101
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_101_chunk hyper_102
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+         ->  Seq Scan on _hyper_1_102_chunk hyper_103
+               Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
+
+reset timescaledb.enable_optimizations;
 \qecho timestamp time_bucket exclusion
 timestamp time_bucket exclusion
 SELECT count(DISTINCT tableoid) FROM metrics_timestamp;

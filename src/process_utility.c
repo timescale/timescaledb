@@ -2938,6 +2938,7 @@ typedef struct ChunkConstraintInfo
 	const AlterTableCmd *cmd;
 	const char *constraint_name;
 	Oid hypertable_constraint_oid;
+	const char *check_expr_deparsed;
 } ChunkConstraintInfo;
 
 /*
@@ -3048,21 +3049,13 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 }
 
 static void
-validate_check_constraint(Chunk *chunk, Constraint *con)
+validate_check_constraint(Chunk *chunk, const char *conname, const char *deparsed)
 {
 	if (ts_chunk_is_compressed(chunk))
 	{
 		StringInfoData command;
 		Oid nspcid = get_rel_namespace(chunk->table_id);
-
-		ParseState *pstate = make_parsestate(NULL);
 		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
-		ParseNamespaceItem *nsitem =
-			addRangeTableEntryForRelation(pstate, rel, AccessShareLock, NULL, false, true);
-		addNSItemToQuery(pstate, nsitem, true, true, true);
-		List *context = deparse_context_for(get_rel_name(chunk->table_id), chunk->table_id);
-		Node *tf = transformExpr(pstate, con->raw_expr, EXPR_KIND_CHECK_CONSTRAINT);
-		char *deparsed = deparse_expression(tf, context, false, false);
 
 		initStringInfo(&command);
 		appendStringInfo(&command,
@@ -3100,9 +3093,9 @@ validate_check_constraint(Chunk *chunk, Constraint *con)
 			ereport(ERROR,
 					(errcode(ERRCODE_CHECK_VIOLATION),
 					 errmsg("check constraint \"%s\" of relation \"%s\" is violated by some row",
-							con->conname,
+							conname,
 							RelationGetRelationName(rel)),
-					 errtableconstraint(rel, con->conname)));
+					 errtableconstraint(rel, conname)));
 		}
 
 		table_close(rel, NoLock);
@@ -3163,7 +3156,8 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 #endif
 				case CONSTR_CHECK:
 				{
-					validate_check_constraint(chunk, con);
+					Assert(info->check_expr_deparsed != NULL);
+					validate_check_constraint(chunk, con->conname, info->check_expr_deparsed);
 					break;
 				}
 				default:
@@ -3189,6 +3183,43 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	ts_chunk_constraint_create_on_chunk(ht, chunk, info->hypertable_constraint_oid);
 }
 
+/*
+ * Transform and deparse a CHECK constraint expression using the given
+ * relation. This must be done once as it is unsafe to call
+ * repeatedly on the same node.
+ *
+ * Returns NULL if the command is not a CHECK constraint with a raw expression.
+ */
+static const char *
+deparse_check_constraint_expr(Oid relid, const AlterTableCmd *cmd)
+{
+	if (cmd->subtype != AT_AddConstraint)
+	{
+		return NULL;
+	}
+
+	Constraint *con = castNode(Constraint, cmd->def);
+	if (con->contype != CONSTR_CHECK)
+	{
+		return NULL;
+	}
+
+	/* For hypertable's ALTER TABLE ADD CONSTRAINT raw_expr should always be set */
+	Assert(con->raw_expr != NULL);
+
+	ParseState *pstate = make_parsestate(NULL);
+	Relation rel = table_open(relid, AccessShareLock);
+	ParseNamespaceItem *nsitem =
+		addRangeTableEntryForRelation(pstate, rel, AccessShareLock, NULL, false, true);
+	addNSItemToQuery(pstate, nsitem, true, true, true);
+	List *context = deparse_context_for(get_rel_name(relid), relid);
+	Node *tf = transformExpr(pstate, con->raw_expr, EXPR_KIND_CHECK_CONSTRAINT);
+	const char *deparsed = deparse_expression(tf, context, false, false);
+	table_close(rel, NoLock);
+	free_parsestate(pstate);
+	return deparsed;
+}
+
 static void
 process_altertable_add_constraint(Hypertable *ht, const AlterTableCmd *cmd,
 								  const char *constraint_name)
@@ -3198,6 +3229,7 @@ process_altertable_add_constraint(Hypertable *ht, const AlterTableCmd *cmd,
 		.constraint_name = constraint_name,
 		.hypertable_constraint_oid =
 			get_relation_constraint_oid(ht->main_table_relid, constraint_name, false),
+		.check_expr_deparsed = deparse_check_constraint_expr(ht->main_table_relid, cmd),
 	};
 
 	foreach_chunk(ht, process_add_constraint_chunk, &info, false);
