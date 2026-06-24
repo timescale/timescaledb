@@ -26,7 +26,7 @@ jobs:
       matrix:
         arch: [ "x86", "ARM" ]
         image: [ "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04" ]
-        pg: [ 15, 16, 17, 18 ]
+        pg: [ 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -35,10 +35,6 @@ jobs:
             runner: "ubuntu-latest"
           - arch: "ARM"
             runner: "cloud-image-runner-ubuntu-24-arm64"
-        exclude:
-          - image: "ubuntu:26.04"
-            pg: 15
-
 
     steps:
     - name: Add repositories
@@ -51,9 +47,9 @@ jobs:
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
           > /etc/apt/sources.list.d/timescaledb.list
         if [ "${{ matrix.image }}" = "ubuntu:22.04" ]; then
-          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+          wget --quiet --tries=6 --waitretry=15 -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
         else
-          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
+          wget --quiet --tries=6 --waitretry=15 -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
         fi
 
 
@@ -79,7 +75,7 @@ jobs:
     - name: Get version of latest release
       id: versions
       run: |
-        version=$(wget -q https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
+        version=$(wget -q --tries=6 --waitretry=15 https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
         echo "version=${version}"
         echo "version=${version}" >>$GITHUB_OUTPUT
 
@@ -101,7 +97,7 @@ jobs:
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
-        prev_version=$(wget --quiet -O - \
+        prev_version=$(wget --quiet --tries=6 --waitretry=15 -O - \
         https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config \
           | grep previous_version | sed -e 's!previous_version = !!')
         sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}'" \

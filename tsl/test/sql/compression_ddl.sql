@@ -81,9 +81,9 @@ WHERE hypertable.table_name like 'test1' \gset
 
 SELECT count(*) as "COUNT_CHUNKS_COMPRESSED"
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1' \gset
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+WHERE hypertable.table_name like 'test1' \gset
 
 ALTER TABLE test1 SET TABLESPACE tablespace1;
 
@@ -96,14 +96,12 @@ SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
 FROM pg_tables WHERE tablespace = 'tablespace2';
 
 SELECT
-    comp_chunk.schema_name|| '.' || comp_chunk.table_name as "COMPRESSED_CHUNK_NAME",
+    cs.compress_relid::text as "COMPRESSED_CHUNK_NAME",
     uncomp_chunk.schema_name|| '.' || uncomp_chunk.table_name as "UNCOMPRESSED_CHUNK_NAME"
-FROM _timescaledb_catalog.chunk comp_chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (comp_chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.compress_relid = format('%I.%I', comp_chunk.schema_name, comp_chunk.table_name)::regclass)
-INNER JOIN _timescaledb_catalog.chunk uncomp_chunk ON (cs.relid = format('%I.%I', uncomp_chunk.schema_name, uncomp_chunk.table_name)::regclass)
-WHERE uncomp_hyper.table_name like 'test1' ORDER BY comp_chunk.id LIMIT 1\gset
+FROM _timescaledb_catalog.chunk uncomp_chunk
+INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (uncomp_chunk.hypertable_id = uncomp_hyper.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', uncomp_chunk.schema_name, uncomp_chunk.table_name)::regclass)
+WHERE uncomp_hyper.table_name like 'test1' ORDER BY uncomp_chunk.id LIMIT 1\gset
 
 -- ensure compression chunk cannot be moved directly
 SELECT tablename
@@ -171,9 +169,9 @@ WHERE hypertable.table_name like 'test1';
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1';
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+WHERE hypertable.table_name like 'test1';
 
 
 SELECT chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME"
@@ -197,9 +195,9 @@ WHERE chunk.id IS NULL;
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1';
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+WHERE hypertable.table_name like 'test1';
 
 SELECT drop_chunks('test1', older_than => '2018-03-10'::TIMESTAMPTZ);
 
@@ -211,20 +209,20 @@ WHERE hypertable.table_name like 'test1';
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1';
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+WHERE hypertable.table_name like 'test1';
 
 SELECT chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
-SELECT chunk.schema_name|| '.' || chunk.table_name as "COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::text as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1' ORDER BY chunk.id LIMIT 1
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1
 \gset
 
 \set ON_ERROR_STOP 0
@@ -234,10 +232,9 @@ SELECT _timescaledb_functions.drop_chunk(:'COMPRESSED_CHUNK_NAME');
 
 SELECT
     chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME",
-    comp_chunk.schema_name|| '.' || comp_chunk.table_name as "COMPRESSED_CHUNK_NAME"
+    cs.compress_relid::text as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
-INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (cs.compress_relid = format('%I.%I', comp_chunk.schema_name, comp_chunk.table_name)::regclass)
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
@@ -259,16 +256,15 @@ WHERE hypertable.table_name like 'test1';
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1';
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+WHERE hypertable.table_name like 'test1';
 
 SELECT
     chunk.schema_name|| '.' || chunk.table_name as "UNCOMPRESSED_CHUNK_NAME",
-    comp_chunk.schema_name|| '.' || comp_chunk.table_name as "COMPRESSED_CHUNK_NAME"
+    cs.compress_relid::text as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
-INNER JOIN _timescaledb_catalog.chunk comp_chunk ON (cs.compress_relid = format('%I.%I', comp_chunk.schema_name, comp_chunk.table_name)::regclass)
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1 \gset
 
@@ -292,9 +288,9 @@ WHERE hypertable.table_name like 'test1';
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1';
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+WHERE hypertable.table_name like 'test1';
 
 --make sure there are no orphaned  _timescaledb_catalog.compression_chunk_size entries (should be 0)
 SELECT count(*) as orphaned_compression_chunk_size
@@ -366,11 +362,11 @@ SELECT count(*) FROM test1_cont_view;
 
 SET timezone TO 'America/Los_Angeles';
 
-SELECT chunk.schema_name|| '.' || chunk.table_name as "COMPRESSED_CHUNK_NAME"
+SELECT cs.compress_relid::text as "COMPRESSED_CHUNK_NAME"
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1' ORDER BY chunk.id LIMIT 1
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', chunk.schema_name, chunk.table_name)::regclass)
+WHERE hypertable.table_name like 'test1' ORDER BY chunk.id LIMIT 1
 \gset
 
 SELECT add_compression_policy('test1', interval '1 day') AS compression_job_id \gset

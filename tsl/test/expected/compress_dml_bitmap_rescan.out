@@ -1,0 +1,57 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Check the proper handling of Bitmap Heap Scan under compressed DML.
+DROP TABLE IF EXISTS partial_bhs_delete_returning_crash CASCADE;
+NOTICE:  table "partial_bhs_delete_returning_crash" does not exist, skipping
+CREATE TABLE partial_bhs_delete_returning_crash (id int NOT NULL, ts timestamptz NOT NULL);
+SELECT create_hypertable('partial_bhs_delete_returning_crash', 'ts');
+                create_hypertable                
+-------------------------------------------------
+ (1,public,partial_bhs_delete_returning_crash,t)
+
+ALTER TABLE partial_bhs_delete_returning_crash SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'id'
+);
+-- compressed batch outside the DELETE qual
+INSERT INTO partial_bhs_delete_returning_crash
+SELECT 1, '2026-04-15 00:00'::timestamptz + (g * interval '5 min')
+FROM generate_series(0, 11) g;
+SELECT compress_chunk(c) FROM show_chunks('partial_bhs_delete_returning_crash') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+-- uncompressed rows inside the DELETE qual, in the same chunk
+INSERT INTO partial_bhs_delete_returning_crash
+SELECT 1, '2026-04-15 06:00'::timestamptz + (g * interval '5 min')
+FROM generate_series(0, 11) g;
+-- used to crash
+SET enable_indexscan = off;
+SET enable_seqscan = off;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, BUFFERS OFF, SUMMARY OFF)
+DELETE FROM partial_bhs_delete_returning_crash
+WHERE id = 1 AND ts >= '2026-04-15 06:00' AND ts <  '2026-04-15 07:00'
+RETURNING id, ts
+;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=12.00 loops=1)
+   Batches scanned: 1
+   Compressed batches filtered: 1
+   ->  Delete on partial_bhs_delete_returning_crash (actual rows=12.00 loops=1)
+         Delete on _hyper_1_1_chunk partial_bhs_delete_returning_crash_1
+         ->  Bitmap Heap Scan on _hyper_1_1_chunk partial_bhs_delete_returning_crash_1 (actual rows=12.00 loops=1)
+               Recheck Cond: ((ts >= 'Wed Apr 15 06:00:00 2026 PDT'::timestamp with time zone) AND (ts < 'Wed Apr 15 07:00:00 2026 PDT'::timestamp with time zone))
+               Filter: (id = 1)
+               Heap Blocks: exact=1
+               ->  Bitmap Index Scan on _hyper_1_1_chunk_partial_bhs_delete_returning_crash_ts_idx (actual rows=12.00 loops=1)
+                     Index Cond: ((ts >= 'Wed Apr 15 06:00:00 2026 PDT'::timestamp with time zone) AND (ts < 'Wed Apr 15 07:00:00 2026 PDT'::timestamp with time zone))
+
+SELECT COUNT(*) FROM partial_bhs_delete_returning_crash
+WHERE id = 1 AND ts >= '2026-04-15 06:00' AND ts <  '2026-04-15 07:00'
+;
+ count 
+-------
+     0
+

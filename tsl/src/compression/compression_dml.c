@@ -80,9 +80,11 @@ static Relation find_matching_index(Relation comp_chunk_rel, List **index_filter
 									List **heap_filters);
 static tuple_filtering_constraints *get_batch_keys_for_unique_constraints(Relation relation);
 static bool decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chunk,
-												 List *predicates, EState *estate, bool has_joins);
+												 List *predicates, EState *estate,
+												 bool plan_requires_decompression);
 static bool decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk *chunk,
-													  EState *estate, bool has_joins);
+													  EState *estate,
+													  bool plan_requires_decompression);
 static BatchFilter *make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation,
 									 RegProcedure opcode, Const *value, bool is_null_check,
 									 bool is_null, bool is_array_op);
@@ -683,7 +685,7 @@ build_changed_key_filter(CompressionSettings *settings, Relation rel, Oid chunk_
  */
 static bool
 decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk *chunk,
-										  EState *estate, bool has_joins)
+										  EState *estate, bool plan_requires_decompression)
 {
 	ModifyTable *mt = ht_state->mt;
 
@@ -795,8 +797,11 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
 		}
 
 		/* Decompress the batches that could hold a row with the new key value. */
-		batches_decompressed |=
-			decompress_batches_for_update_delete(ht_state, chunk, predicates, estate, has_joins);
+		batches_decompressed |= decompress_batches_for_update_delete(ht_state,
+																	 chunk,
+																	 predicates,
+																	 estate,
+																	 plan_requires_decompression);
 	}
 
 	return batches_decompressed;
@@ -814,8 +819,18 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
  */
 static bool
 decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chunk,
-									 List *predicates, EState *estate, bool has_joins)
+									 List *predicates, EState *estate,
+									 bool plan_requires_decompression)
 {
+	/*
+	 * Constify the stable functions and query parameters in the predicates.
+	 * This doesn't evaluate the join parameters (PARAM_EXEC) which are supplied
+	 * differently and would have to be evaluated on every rescan.
+	 */
+	PlannerGlobal glob = { .boundParams = estate->es_param_list_info };
+	PlannerInfo root = { .glob = &glob };
+	predicates = (List *) estimate_expression_value(&root, (Node *) predicates);
+
 	/* process each chunk with its corresponding predicates */
 
 	List *heap_filters = NIL;
@@ -838,7 +853,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	List *bloom_filters = NIL;
 
 	CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
-	bool delete_only = ht_state->mt->operation == CMD_DELETE && !has_joins &&
+	bool delete_only = ht_state->mt->operation == CMD_DELETE && !plan_requires_decompression &&
 					   can_delete_without_decompression(ht_state, settings, chunk, predicates);
 	InvalidationContext invalidation_ctx = { 0 };
 
@@ -1138,18 +1153,10 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		{
 			/* filter tuple based on compress_orderby columns */
 			valid = false;
-#if PG16_LT
-			HeapKeyTest(compressed_tuple,
-						RelationGetDescr(in_rel),
-						num_heap_scankeys,
-						heap_scankeys,
-						valid);
-#else
 			valid = HeapKeyTest(compressed_tuple,
 								RelationGetDescr(in_rel),
 								num_heap_scankeys,
 								heap_scankeys);
-#endif
 			if (!valid)
 			{
 				stats.batches_filtered_compressed++;
@@ -1667,79 +1674,107 @@ struct decompress_chunk_context
 	/* indicates decompression actually occurred */
 	bool batches_decompressed;
 	bool has_joins;
+	bool has_onetime_filter;
 };
 
-static bool decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx);
+static void decompress_chunk_plan_walker(Plan *plan, EState *estate,
+										 struct decompress_chunk_context *ctx);
 
+/*
+ * Find every chunk Scan in the DML's subplan that targets a compressed
+ * target relation, and decompress the matching batches into the
+ * uncompressed chunk. This is invoked from modify_hypertable_exec before
+ * the subplan of ModifyTable is initialized, so it walks the saved Plan tree.
+ */
 bool
 decompress_target_segments(ModifyHypertableState *ht_state)
 {
-	ModifyTableState *ps =
-		linitial_node(ModifyTableState, castNode(CustomScanState, ht_state)->custom_ps);
-
+	CustomScanState *css = castNode(CustomScanState, ht_state);
 	struct decompress_chunk_context ctx = {
 		.ht_state = ht_state,
-		.relids = castNode(ModifyTable, ps->ps.plan)->resultRelations,
+		.relids = ht_state->mt->resultRelations,
 	};
 	Assert(ctx.relids);
 
-	decompress_chunk_walker(&ps->ps, &ctx);
+	Assert(ht_state->deferred_modify_table_subplan != NULL);
+	decompress_chunk_plan_walker(ht_state->deferred_modify_table_subplan, css->ss.ps.state, &ctx);
 	return ctx.batches_decompressed;
 }
 
-static bool
-decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
+static void
+decompress_chunk_plan_walker(Plan *plan, EState *estate, struct decompress_chunk_context *ctx)
 {
-	RangeTblEntry *rte = NULL;
-	bool needs_decompression = false;
-	bool should_rescan = false;
-	bool batches_decompressed = false;
-	List *predicates = NIL;
-	Chunk *current_chunk;
-	if (ps == NULL)
+	if (plan == NULL)
 	{
-		return false;
+		return;
 	}
 
-	switch (nodeTag(ps))
+	bool needs_decompression = false;
+	List *predicates = NIL;
+	ListCell *lc;
+
+	switch (nodeTag(plan))
 	{
 		/* Note: IndexOnlyScans will never be selected for target
 		 * tables because system columns are necessary in order to modify the
 		 * data and those columns cannot be a part of the index
 		 */
-		case T_IndexScanState:
-		{
+		case T_IndexScan:
 			/* Get the index quals on the original table and also include
 			 * any filters that are used for filtering heap tuples
 			 */
-			predicates = list_union(((IndexScan *) ps->plan)->indexqualorig, ps->plan->qual);
+			predicates = list_union(((IndexScan *) plan)->indexqualorig, plan->qual);
 			needs_decompression = true;
 			break;
-		}
-		case T_BitmapHeapScanState:
-			predicates = list_union(((BitmapHeapScan *) ps->plan)->bitmapqualorig, ps->plan->qual);
-			needs_decompression = true;
-			should_rescan = true;
-			break;
-		case T_SeqScanState:
-		case T_SampleScanState:
-		case T_TidScanState:
-		case T_TidRangeScanState:
-		{
-			predicates = list_copy(ps->plan->qual);
+		case T_BitmapHeapScan:
+			predicates = list_union(((BitmapHeapScan *) plan)->bitmapqualorig, plan->qual);
 			needs_decompression = true;
 			break;
-		}
-		case T_NestLoopState:
-		case T_MergeJoinState:
-		case T_HashJoinState:
-		{
+		case T_SeqScan:
+		case T_SampleScan:
+		case T_TidScan:
+		case T_TidRangeScan:
+			predicates = list_copy(plan->qual);
+			needs_decompression = true;
+			break;
+		case T_NestLoop:
+		case T_MergeJoin:
+		case T_HashJoin:
 			ctx->has_joins = true;
+			break;
+		case T_Append:
+			foreach (lc, ((Append *) plan)->appendplans)
+			{
+				decompress_chunk_plan_walker(lfirst(lc), estate, ctx);
+			}
+			break;
+		case T_MergeAppend:
+			foreach (lc, ((MergeAppend *) plan)->mergeplans)
+			{
+				decompress_chunk_plan_walker(lfirst(lc), estate, ctx);
+			}
+			break;
+		case T_SubqueryScan:
+			decompress_chunk_plan_walker(((SubqueryScan *) plan)->subplan, estate, ctx);
+			break;
+		case T_CustomScan:
+			foreach (lc, ((CustomScan *) plan)->custom_plans)
+			{
+				decompress_chunk_plan_walker(lfirst(lc), estate, ctx);
+			}
+			break;
+		case T_Result:
+		{
+			if (((Result *) plan)->resconstantqual)
+			{
+				ctx->has_onetime_filter = true;
+			}
 			break;
 		}
 		default:
 			break;
 	}
+
 	if (needs_decompression)
 	{
 		/*
@@ -1747,11 +1782,13 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 		 * target of the DML statement not chunk scan on joined hypertables
 		 * even when it is a self join
 		 */
-		int scanrelid = ((Scan *) ps->plan)->scanrelid;
+		int scanrelid = ((Scan *) plan)->scanrelid;
+
 		if (list_member_int(ctx->relids, scanrelid))
 		{
-			rte = rt_fetch(scanrelid, ps->state->es_range_table);
-			current_chunk = ts_chunk_get_by_relid(rte->relid, false);
+			RangeTblEntry *rte = rt_fetch(scanrelid, estate->es_range_table);
+			Chunk *current_chunk = ts_chunk_get_by_relid(rte->relid, false);
+
 			if (current_chunk && ts_chunk_is_compressed(current_chunk))
 			{
 				if (!ts_guc_enable_dml_decompression)
@@ -1762,12 +1799,21 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 				}
 
-				batches_decompressed = decompress_batches_for_update_delete(ctx->ht_state,
-																			current_chunk,
-																			predicates,
-																			ps->state,
-																			ctx->has_joins);
-				ctx->batches_decompressed |= batches_decompressed;
+				if (ts_chunk_is_frozen(current_chunk))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							 errmsg("cannot update/delete rows from chunk \"%s\" as it is frozen",
+									get_rel_name(rte->relid))));
+				}
+
+				ctx->batches_decompressed |=
+					decompress_batches_for_update_delete(ctx->ht_state,
+														 current_chunk,
+														 predicates,
+														 estate,
+														 (ctx->has_joins ||
+														  ctx->has_onetime_filter));
 
 				/*
 				 * For UPDATEs that change a unique key column, also decompress
@@ -1778,39 +1824,20 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 				ctx->batches_decompressed |=
 					decompress_unique_update_conflict_batches(ctx->ht_state,
 															  current_chunk,
-															  ps->state,
-															  ctx->has_joins);
-
-				/* This is a workaround specifically for bitmap heap scans:
-				 * during node initialization, initialize the scan state with the active snapshot
-				 * but since we are inserting data to be modified during the same query, they end up
-				 * missing that data by using a snapshot which doesn't account for this decompressed
-				 * data. To circumvent this issue, we change the internal scan state to use the
-				 * transaction snapshot and execute a rescan so the scan state is set correctly and
-				 * includes the new data.
-				 *
-				 * From PG17 this has changed since the scan state is not initialized with
-				 * the node.
-				 */
-				if (should_rescan)
-				{
-					ScanState *ss = ((ScanState *) ps);
-					if (ss && ss->ss_currentScanDesc)
-					{
-						ss->ss_currentScanDesc->rs_snapshot = GetActiveSnapshot();
-						table_rescan(ss->ss_currentScanDesc, NULL);
-					}
-				}
+															  estate,
+															  (ctx->has_joins ||
+															   ctx->has_onetime_filter));
 			}
+		}
+
+		if (predicates)
+		{
+			pfree(predicates);
 		}
 	}
 
-	if (predicates)
-	{
-		pfree(predicates);
-	}
-
-	return planstate_tree_walker(ps, decompress_chunk_walker, ctx);
+	decompress_chunk_plan_walker(plan->lefttree, estate, ctx);
+	decompress_chunk_plan_walker(plan->righttree, estate, ctx);
 }
 
 /*
@@ -1940,15 +1967,6 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 	*num_mem_scankeys = 0;
 	List *eq_preds = NIL;
 
-	/*
-	 * We dont want to forward boundParams from the execution state here
-	 * as we dont want to constify join params in the predicates.
-	 * Constifying JOIN params would not be safe as we don't redo
-	 * this part in rescan.
-	 */
-	PlannerGlobal glob = { .boundParams = NULL };
-	PlannerInfo root = { .glob = &glob };
-
 	foreach (lc, predicates)
 	{
 		Node *node = copyObject(lfirst(lc));
@@ -1973,12 +1991,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 
 				if (!IsA(expr, Const))
 				{
-					expr = (Expr *) estimate_expression_value(&root, (Node *) expr);
-
-					if (!IsA(expr, Const))
-					{
-						continue;
-					}
+					continue;
 				}
 
 				arg_value = castNode(Const, expr);
@@ -2178,11 +2191,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 
 				if (!IsA(expr, Const))
 				{
-					expr = (Expr *) estimate_expression_value(&root, (Node *) expr);
-					if (!IsA(expr, Const))
-					{
-						continue;
-					}
+					continue;
 				}
 
 				Const *arg_value = castNode(Const, expr);
@@ -2637,16 +2646,15 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 	 * If there are any DELETE row triggers on the hypertable we skip the optimization
 	 * to delete compressed batches directly.
 	 */
-	ModifyTableState *ps =
-		linitial_node(ModifyTableState, castNode(CustomScanState, ht_state)->custom_ps);
-	if (ps->rootResultRelInfo->ri_TrigDesc)
+	Relation rel = table_open(ht_state->ht->main_table_relid, AccessShareLock);
+	TriggerDesc *trigdesc = rel->trigdesc;
+	bool has_row_trigger =
+		trigdesc != NULL && (trigdesc->trig_delete_before_row || trigdesc->trig_delete_after_row ||
+							 trigdesc->trig_delete_instead_row);
+	table_close(rel, AccessShareLock);
+	if (has_row_trigger)
 	{
-		TriggerDesc *trigdesc = ps->rootResultRelInfo->ri_TrigDesc;
-		if (trigdesc->trig_delete_before_row || trigdesc->trig_delete_after_row ||
-			trigdesc->trig_delete_instead_row)
-		{
-			return false;
-		}
+		return false;
 	}
 
 	foreach (lc, predicates)

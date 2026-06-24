@@ -155,12 +155,8 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 	Relation pkrel = table_open(chunk->table_id, AccessShareLock);
 
 	/* Map the foreign key columns on the hypertable side to the chunk columns */
-#if PG16_GE
 	AttrMap *attmap =
 		build_attrmap_by_name(RelationGetDescr(pkrel), RelationGetDescr(parentRel), false);
-#else
-	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(pkrel), RelationGetDescr(parentRel));
-#endif
 	for (int i = 0; i < numfks; i++)
 	{
 		mapped_confkey[i] = attmap->attnums[confkey[i] - 1];

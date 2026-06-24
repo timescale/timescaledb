@@ -1568,11 +1568,6 @@ ts_get_node_name(Node *node)
 		/*
 		 * plan nodes (plannodes.h)
 		 */
-#if PG16_LT
-		NODE_CASE(Plan);
-		NODE_CASE(Scan);
-		NODE_CASE(Join);
-#endif
 		NODE_CASE(Result);
 		NODE_CASE(ProjectSet);
 		NODE_CASE(ModifyTable);

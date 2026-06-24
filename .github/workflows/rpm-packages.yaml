@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [ "rockylinux:8", "rockylinux:9", "rockylinux:10" ]
-        pg: [ 15, 16, 17, 18 ]
+        pg: [ 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
@@ -32,9 +32,6 @@ jobs:
         exclude:
           - image: "rockylinux:8"
             pg: 18
-          - image: "rockylinux:10"
-            pg: 15
-
 
     steps:
     - name: Add postgres repositories
@@ -76,7 +73,7 @@ jobs:
     - name: Get version of latest release
       id: versions
       run: |
-        version=$(wget -q https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
+        version=$(wget -q --tries=6 --waitretry=15 https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
         echo "version=${version}"
         echo "version=${version}" >>$GITHUB_OUTPUT
 
@@ -99,7 +96,7 @@ jobs:
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
-        prev_version=$(wget --quiet -O - \
+        prev_version=$(wget --quiet --tries=6 --waitretry=15 -O - \
           https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config \
           | grep previous_version | sed -e 's!previous_version = !!')
         yum downgrade -y timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}-${prev_version}

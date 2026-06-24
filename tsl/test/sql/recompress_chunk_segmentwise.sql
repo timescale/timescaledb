@@ -11,16 +11,14 @@ SELECT
    c.schema_name as chunk_schema,
    c.table_name as chunk_name,
    c.status as chunk_status,
-   comp.schema_name as compressed_chunk_schema,
-   comp.table_name as compressed_chunk_name,
+   (select nspname from pg_class cl join pg_namespace n on n.oid = cl.relnamespace where cl.oid = cs.compress_relid) as compressed_chunk_schema,
+   (select relname from pg_class cl where cl.oid = cs.compress_relid) as compressed_chunk_name,
    c.id as chunk_id
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
    LEFT JOIN _timescaledb_catalog.compression_settings cs
 ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
-   LEFT JOIN _timescaledb_catalog.chunk comp
-ON cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass
 ;
 
 CREATE OR REPLACE VIEW compression_rowcnt_view AS
@@ -197,11 +195,14 @@ SELECT compress_chunk(:'chunk_to_compress_prep'); -- the output of the prepared 
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 
--- plan should be invalidated to return results from the uncompressed chunk also
-set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
+-- Plan should be invalidated to return results from the uncompressed chunk as well.
+-- Penalize MergeAppend for predictable plans on PG < 17.
+set enable_sort to off;
+set enable_indexscan to off;
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 EXECUTE p1;
 reset enable_sort;
+reset enable_indexscan;
 
 -- check plan again after recompression
 SELECT compress_chunk(:'chunk_to_compress_prep');

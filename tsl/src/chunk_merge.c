@@ -38,6 +38,7 @@
 #include "chunk_index.h"
 #include "debug_point.h"
 #include "hypercube.h"
+#include "hypertable_cache.h"
 #include "import/heapswap.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_rewrite.h"

@@ -70,9 +70,9 @@ WHERE hypertable.table_name like 'test_retention_table';
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test_retention_table';
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+WHERE hypertable.table_name like 'test_retention_table';
 
 SELECT show_chunks('test_retention_table');
 
@@ -88,9 +88,9 @@ WHERE hypertable.table_name like 'test_retention_table';
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test_retention_table';
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+WHERE hypertable.table_name like 'test_retention_table';
 
 ------------------------------
 -- Test reorder policy runs on compressed tables. Reorder policy job must skip compressed chunks
@@ -125,9 +125,9 @@ WHERE hypertable.table_name like 'test_reorder_chunks_table';
 -- and 2 compressed ones:
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (chunk.hypertable_id = comp_hyper.id)
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test_reorder_chunks_table';
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+WHERE hypertable.table_name like 'test_reorder_chunks_table';
 
 -- enable reorder policy
 SELECT add_reorder_policy('test_reorder_chunks_table', 'test_reorder_chunks_table_time_idx') AS reorder_job_id \gset

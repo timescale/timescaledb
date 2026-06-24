@@ -621,7 +621,6 @@ get_pgversion_string()
 	major = server_version_num / 10000;
 	patch = server_version_num % 100;
 
-	Assert(major >= PG_MAJOR_MIN);
 	initStringInfo(&buf);
 	appendStringInfo(&buf, "%d.%d", major, patch);
 

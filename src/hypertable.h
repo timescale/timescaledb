@@ -11,7 +11,6 @@
 
 #include "dimension.h"
 #include "export.h"
-#include "hypertable_cache.h"
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "ts_catalog/catalog.h"

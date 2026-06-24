@@ -133,11 +133,7 @@ typedef struct ModifyTableContext
 typedef struct UpdateContext
 {
 	bool		crossPartUpdate;	/* was it a cross-partition update? */
-#if PG16_LT
-	bool updateIndexes; /* index update required? */
-#else
 	TU_UpdateIndexes updateIndexes; /* Which index updates are required? */
-#endif
 
 	/*
 	 * Lock mode to acquire on the latest tuple version before performing
@@ -1696,20 +1692,12 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 	List	   *recheckIndexes = NIL;
 
 	/* insert index entries for tuple if necessary */
-#if PG15
-	if (resultRelInfo->ri_NumIndices > 0 && updateCxt->updateIndexes)
-		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
-											   slot, context->estate,
-											   true, false,
-											   NULL, NIL);
-#else
 	if (resultRelInfo->ri_NumIndices > 0 && (updateCxt->updateIndexes != TU_None))
 		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
 											   slot, context->estate,
 											   true, false,
 											   NULL, NIL,
 											   (updateCxt->updateIndexes == TU_Summarizing));
-#endif
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
@@ -1803,9 +1791,7 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	}
 	else
 	{
-#if PG16_GE
 		ItemPointerData lockedtid;
-#endif
 
 		/*
 		 * If we generate a new candidate tuple after EvalPlanQual testing, we
@@ -1815,9 +1801,7 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		 * to do them again.)
 		 */
 redo_act:
-#if PG16_GE
 		lockedtid = *tupleid;
-#endif
 		result = ExecUpdateAct(context, resultRelInfo, tupleid, oldtuple, slot,
 							   canSetTag, &updateCxt);
 
@@ -1911,7 +1895,6 @@ redo_act:
 								ExecInitUpdateProjection(context->mtstate,
 														 resultRelInfo);
 
-#if PG16_GE
 							if (resultRelInfo->ri_needLockTagTuple)
 							{
 								UnlockTuple(resultRelationDesc,
@@ -1919,7 +1902,6 @@ redo_act:
 								LockTuple(resultRelationDesc,
 										  tupleid, InplaceUpdateTupleLock);
 							}
-#endif
 
 							/* Fetch the most recent version of old tuple. */
 							oldSlot = resultRelInfo->ri_oldTupleSlot;
@@ -2051,9 +2033,7 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 	 * supporting this; we'd just need to handle LOCKTAG_TUPLE like the other
 	 * ExecUpdate() caller.
 	 */
-#if PG16_GE
 	Assert(!resultRelInfo->ri_needLockTagTuple);
-#endif
 
 	/* Determine lock mode to use */
 	lockmode = ExecUpdateLockMode(context->estate, resultRelInfo);
@@ -2332,54 +2312,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	context.estate = estate;
 
 	/*
-	 * For UPDATE/DELETE/MERGE on compressed hypertable, decompress chunks and
-	 * move rows to uncompressed chunks. For MERGE, decompression is needed
-	 * even for DO NOTHING or INSERT-only actions because the join evaluation
-	 * must see the actual rows to correctly determine matched vs not-matched.
-	 */
-	if ((operation == CMD_DELETE || operation == CMD_UPDATE || operation == CMD_MERGE) &&
-		!ht_state->comp_chunks_processed)
-	{
-		/* Modify snapshot only if something got decompressed */
-		if (ts_cm_functions->decompress_target_segments &&
-			ts_cm_functions->decompress_target_segments(ht_state))
-		{
-			ht_state->comp_chunks_processed = true;
-			/*
-			 * save snapshot set during ExecutorStart(), since this is the same
-			 * snapshot used to SeqScan of uncompressed chunks
-			 */
-			ht_state->snapshot = estate->es_snapshot;
-
-			CommandCounterIncrement();
-			/* use a static copy of current transaction snapshot
-			 * this needs to be a copy so we don't read trigger updates
-			 */
-			estate->es_snapshot = RegisterSnapshot(GetTransactionSnapshot());
-			/* mark rows visible */
-			estate->es_output_cid = GetCurrentCommandId(true);
-
-			if (ts_guc_max_tuples_decompressed_per_dml > 0)
-			{
-				if (ht_state->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-							 errmsg("tuple decompression limit exceeded by operation"),
-							 errdetail("current limit: %d, tuples decompressed: %lld",
-									   ts_guc_max_tuples_decompressed_per_dml,
-									   (long long int) ht_state->tuples_decompressed),
-							 errhint("Consider increasing "
-									 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
-									 "set to 0 (unlimited).")));
-				}
-			}
-		}
-		/* Account for tuples deleted via batch DELETE in compressed chunks */
-		if (operation == CMD_DELETE && ht_state->tuples_deleted > 0)
-			estate->es_processed += ht_state->tuples_deleted;
-	}
-	/*
 	 * Fetch rows from subplan, and execute the required table modification
 	 * for each row.
 	 */
@@ -2550,6 +2482,14 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					ExecComputeStoredGenerated(ctr->root_rri, estate, hypertable_slot, CMD_INSERT);
 				}
 
+				/* check WITH CHECK OPTIONs against the hypertable tuple
+				 * before it is mapped to chunk format below */
+				if (ctr->root_rri->ri_WithCheckOptions != NIL)
+				{
+					ExecWithCheckOptions(WCO_RLS_INSERT_CHECK, ctr->root_rri, hypertable_slot, estate);
+					ExecWithCheckOptions(WCO_VIEW_CHECK, ctr->root_rri, hypertable_slot, estate);
+				}
+
 				/*
 				 * Convert the slot to the chunk's rowtype if the chunk's
 				 * TupleDesc differs from the hypertable (e.g. due to dropped
@@ -2563,6 +2503,14 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					chunk_slot = execute_attr_map_slot(ctr->cis->hyper_to_chunk_map->attrMap,
 													   hypertable_slot,
 													   ctr->cis->slot);
+
+				/* enforce NOT NULL and CHECK constraints */
+				ResultRelInfo *chunk_rri = ctr->cis->result_relation_info;
+				if (chunk_rri->ri_RelationDesc->rd_att->constr)
+				{
+					chunk_slot->tts_tableOid = RelationGetRelid(ctr->cis->rel);
+					ExecConstraints(chunk_rri, chunk_slot, estate);
+				}
 
 				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, chunk_slot);
 				estate->es_processed++;
@@ -3216,12 +3164,8 @@ lmerge_matched:;
 
 				if (!ExecUpdatePrologue(context, resultRelInfo, tupleid, NULL, newslot, &result))
 				{
-#if PG16_LT
-					result = TM_Ok;
-#else
 					if (result == TM_Ok)
 						return NULL;
-#endif
 
 					/* if not TM_OK, it is concurrent update/delete */
 					break;
@@ -3255,14 +3199,10 @@ lmerge_matched:;
 #endif
 				if (!ExecDeletePrologue(context, resultRelInfo, tupleid, NULL, NULL, &result))
 				{
-#if PG16_LT
-					result = TM_Ok;
-#else
 					if (result == TM_Ok)
 						return NULL; /* "do nothing" */
 
 						/* if not TM_OK, it is concurrent update/delete */
-#endif
 					break;
 				}
 				result = ExecDeleteAct(context, resultRelInfo, tupleid, false);
@@ -3400,11 +3340,11 @@ lmerge_matched:;
 						 * with NOT MATCHED actions.
 						 */
 						if (TupIsNull(epqslot))
-							return false;
+							return NULL;
 
 						(void) ExecGetJunkAttribute(epqslot, resultRelInfo->ri_RowIdAttNo, &isNull);
 						if (isNull)
-							return false;
+							return NULL;
 
 						/*
 						 * When a tuple was updated and

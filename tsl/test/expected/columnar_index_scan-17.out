@@ -954,16 +954,19 @@ SHOW timescaledb.enable_columnarindexscan;
 -- simple query with count without grouping
 :PREFIX SELECT device, count(*) FROM metrics GROUP BY device;
 --- QUERY PLAN ---
- Finalize HashAggregate
+ Finalize GroupAggregate
    Group Key: metrics.device
-   ->  Append
-         ->  Partial HashAggregate
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_2_chunk
-         ->  Partial HashAggregate
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
-               ->  Seq Scan on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
 
 -- simple query with count with grouping
 :PREFIX SELECT device, count(*) FROM metrics GROUP BY device ORDER BY device;
@@ -975,9 +978,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -994,9 +995,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1006,16 +1005,19 @@ SHOW timescaledb.enable_columnarindexscan;
 -- simple query with 1 max aggregate that can use optimization
 :PREFIX SELECT device, max(time) FROM metrics GROUP BY device;
 --- QUERY PLAN ---
- Finalize HashAggregate
+ Finalize GroupAggregate
    Group Key: metrics.device
-   ->  Append
-         ->  Partial HashAggregate
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_2_chunk
-         ->  Partial HashAggregate
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
-               ->  Seq Scan on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
 
 -- simple query with 1 min aggregate that can use optimization
 :PREFIX SELECT sensor, min(time) FROM metrics GROUP BY sensor ORDER BY sensor;
@@ -1046,9 +1048,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1065,9 +1065,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1084,9 +1082,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1102,9 +1098,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1234,9 +1228,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device, compress_hyper_2_2_chunk.sensor
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
                ->  Sort
@@ -1252,9 +1244,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device, compress_hyper_2_2_chunk.sensor
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
                ->  Sort
@@ -1266,39 +1256,37 @@ SHOW timescaledb.enable_columnarindexscan;
 --- QUERY PLAN ---
  Finalize GroupAggregate
    Group Key: metrics.device
-   ->  Sort
+   ->  Merge Append
          Sort Key: metrics.device
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
-                                 Index Cond: (device = ANY ('{d1,d2}'::text[]))
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Sort
-                           Sort Key: _hyper_1_1_chunk.device
-                           ->  Seq Scan on _hyper_1_1_chunk
-                                 Filter: (device = ANY ('{d1,d2}'::text[]))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+                           Index Cond: (device = ANY ('{d1,d2}'::text[]))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: (device = ANY ('{d1,d2}'::text[]))
 
 :PREFIX SELECT device, min(time) FROM metrics WHERE device =ANY(ARRAY['d1','d2']) AND sensor='B' GROUP BY device;
 --- QUERY PLAN ---
  Finalize GroupAggregate
    Group Key: metrics.device
-   ->  Sort
+   ->  Merge Append
          Sort Key: metrics.device
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
-                                 Index Cond: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Sort
-                           Sort Key: _hyper_1_1_chunk.device
-                           ->  Seq Scan on _hyper_1_1_chunk
-                                 Filter: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+                           Index Cond: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
 
 :PREFIX SELECT device, first(value3, time) FROM metrics WHERE device = 'd1' GROUP BY device;
 --- QUERY PLAN ---
@@ -1317,73 +1305,73 @@ SHOW timescaledb.enable_columnarindexscan;
 --- QUERY PLAN ---
  Finalize GroupAggregate
    Group Key: metrics.device
-   ->  Sort
+   ->  Merge Append
          Sort Key: metrics.device
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
-                                 Index Cond: (device = ANY ('{d1,d2}'::text[]))
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Sort
-                           Sort Key: _hyper_1_1_chunk.device
-                           ->  Seq Scan on _hyper_1_1_chunk
-                                 Filter: (device = ANY ('{d1,d2}'::text[]))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+                           Index Cond: (device = ANY ('{d1,d2}'::text[]))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: (device = ANY ('{d1,d2}'::text[]))
 
 :PREFIX SELECT device, min(time) FROM metrics GROUP BY device,sensor HAVING device =ANY(ARRAY['d1','d2']) AND sensor='B';
 --- QUERY PLAN ---
  Finalize GroupAggregate
    Group Key: metrics.device
-   ->  Sort
+   ->  Merge Append
          Sort Key: metrics.device
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
-                                 Index Cond: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Sort
-                           Sort Key: _hyper_1_1_chunk.device
-                           ->  Seq Scan on _hyper_1_1_chunk
-                                 Filter: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+                           Index Cond: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
 
 :PREFIX SELECT device, first(value3, time) FROM metrics GROUP BY device HAVING device IN ('d1','d2') ORDER BY device;
 --- QUERY PLAN ---
  Finalize GroupAggregate
    Group Key: metrics.device
-   ->  Sort
+   ->  Merge Append
          Sort Key: metrics.device
-         ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
-                                 Index Cond: (device = ANY ('{d1,d2}'::text[]))
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Sort
-                           Sort Key: _hyper_1_1_chunk.device
-                           ->  Seq Scan on _hyper_1_1_chunk
-                                 Filter: (device = ANY ('{d1,d2}'::text[]))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+                           Index Cond: (device = ANY ('{d1,d2}'::text[]))
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: (device = ANY ('{d1,d2}'::text[]))
 
 -- HAVING with aggregate function
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING min(value) > 20;
 --- QUERY PLAN ---
- Finalize HashAggregate
+ Finalize GroupAggregate
    Group Key: metrics.device
    Filter: (min(metrics.value) > '20'::double precision)
-   ->  Append
-         ->  Partial HashAggregate
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_2_chunk
-         ->  Partial HashAggregate
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
-               ->  Seq Scan on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
 
 :PREFIX SELECT device, max(value) FROM metrics GROUP BY device HAVING min(value) < 25;
 --- QUERY PLAN ---
@@ -1395,9 +1383,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1406,34 +1392,38 @@ SHOW timescaledb.enable_columnarindexscan;
 
 :PREFIX SELECT device, first(value3, time) FROM metrics GROUP BY device HAVING first(value3, time) > 5 ORDER BY device;
 --- QUERY PLAN ---
- Sort
-   Sort Key: metrics.device
-   ->  Finalize HashAggregate
-         Group Key: metrics.device
-         Filter: (first(metrics.value3, metrics."time") > '5'::double precision)
-         ->  Append
-               ->  Partial HashAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Seq Scan on compress_hyper_2_2_chunk
-               ->  Partial HashAggregate
-                     Group Key: _hyper_1_1_chunk.device
+ Finalize GroupAggregate
+   Group Key: metrics.device
+   Filter: (first(metrics.value3, metrics."time") > '5'::double precision)
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
                      ->  Seq Scan on _hyper_1_1_chunk
 
 -- HAVING
 :PREFIX SELECT device, min(time) FROM metrics GROUP BY device HAVING min(time) > '2025-01-01 00:30:00 PST';
 --- QUERY PLAN ---
- Finalize HashAggregate
+ Finalize GroupAggregate
    Group Key: metrics.device
    Filter: (min(metrics."time") > 'Wed Jan 01 00:30:00 2025 PST'::timestamp with time zone)
-   ->  Append
-         ->  Partial HashAggregate
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_2_chunk
-         ->  Partial HashAggregate
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
-               ->  Seq Scan on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
 
 -- tableoid doesnt prevent optimization
 :PREFIX SELECT tableoid, device, max(time) FROM metrics GROUP BY device, tableoid;
@@ -1458,9 +1448,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1477,9 +1465,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1496,9 +1482,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1515,9 +1499,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1533,9 +1515,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1552,9 +1532,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1571,9 +1549,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1590,9 +1566,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1609,9 +1583,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1627,9 +1599,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1645,9 +1615,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1663,9 +1631,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1682,9 +1648,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1700,9 +1664,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1719,9 +1681,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device, compress_hyper_2_2_chunk.sensor
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
                ->  Sort
@@ -1738,9 +1698,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1757,9 +1715,7 @@ SHOW timescaledb.enable_columnarindexscan;
                ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
                      ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Sort
-                                 Sort Key: compress_hyper_2_2_chunk.device
-                                 ->  Seq Scan on compress_hyper_2_2_chunk
+                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
                      ->  Sort
@@ -1775,9 +1731,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1797,9 +1751,7 @@ SELECT * FROM agg_data ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1818,9 +1770,7 @@ SELECT * FROM agg_data ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1842,9 +1792,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -1900,9 +1848,7 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
                      ->  Partial GroupAggregate
                            Group Key: _hyper_1_1_chunk.device
                            ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                                 ->  Sort
-                                       Sort Key: compress_hyper_2_2_chunk.device
-                                       ->  Seq Scan on compress_hyper_2_2_chunk
+                                 ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
                      ->  Partial GroupAggregate
                            Group Key: _hyper_1_1_chunk.device
                            ->  Sort
@@ -1915,9 +1861,7 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
                      ->  Partial GroupAggregate
                            Group Key: _hyper_1_1_chunk_1.device
                            ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1
-                                 ->  Sort
-                                       Sort Key: compress_hyper_2_2_chunk_1.device
-                                       ->  Seq Scan on compress_hyper_2_2_chunk compress_hyper_2_2_chunk_1
+                                 ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk compress_hyper_2_2_chunk_1
                      ->  Partial GroupAggregate
                            Group Key: _hyper_1_1_chunk_1.device
                            ->  Sort
@@ -1959,16 +1903,19 @@ ORDER BY device;
    ->  WindowAgg
          ->  Sort
                Sort Key: (max(metrics."time"))
-               ->  Finalize HashAggregate
+               ->  Finalize GroupAggregate
                      Group Key: metrics.device
-                     ->  Append
-                           ->  Partial HashAggregate
+                     ->  Merge Append
+                           Sort Key: metrics.device
+                           ->  Partial GroupAggregate
                                  Group Key: _hyper_1_1_chunk.device
                                  ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                                       ->  Seq Scan on compress_hyper_2_2_chunk
-                           ->  Partial HashAggregate
+                                       ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+                           ->  Partial GroupAggregate
                                  Group Key: _hyper_1_1_chunk.device
-                                 ->  Seq Scan on _hyper_1_1_chunk
+                                 ->  Sort
+                                       Sort Key: _hyper_1_1_chunk.device
+                                       ->  Seq Scan on _hyper_1_1_chunk
 
 :PREFIX SELECT device, max(time), lead(device) OVER (PARTITION BY device) from metrics GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
@@ -1980,9 +1927,7 @@ ORDER BY device;
                ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
                      ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Sort
-                                 Sort Key: compress_hyper_2_2_chunk.device
-                                 ->  Seq Scan on compress_hyper_2_2_chunk
+                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
                      ->  Sort
@@ -2085,16 +2030,19 @@ ORDER BY device;
 -- aggregate on segmentby column does not use optimization
 :PREFIX SELECT device, min(sensor) FROM metrics GROUP BY device;
 --- QUERY PLAN ---
- Finalize HashAggregate
+ Finalize GroupAggregate
    Group Key: metrics.device
-   ->  Append
-         ->  Partial HashAggregate
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_2_chunk
-         ->  Partial HashAggregate
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
-               ->  Seq Scan on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
 
 -- aggregate on column without metadata
 :PREFIX SELECT min(value2) FROM metrics GROUP BY device ORDER BY device;
@@ -2106,9 +2054,7 @@ ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2145,9 +2091,7 @@ ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2217,9 +2161,7 @@ ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2235,9 +2177,7 @@ ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2254,9 +2194,7 @@ ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2273,9 +2211,7 @@ ORDER BY device;
    ->  Merge Append
          Sort Key: metrics.device, metrics.sensor
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_2_2_chunk.device, compress_hyper_2_2_chunk.sensor
-                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Sort
                Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
                ->  Seq Scan on _hyper_1_1_chunk
@@ -2292,9 +2228,7 @@ ORDER BY device;
          ->  Merge Append
                Sort Key: metrics.device, metrics.sensor
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device, compress_hyper_2_2_chunk.sensor
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
                ->  Sort
                      Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
                      ->  Seq Scan on _hyper_1_1_chunk
@@ -2339,18 +2273,19 @@ ORDER BY device;
 -- aggregate only in HAVING (not in SELECT)
 :PREFIX SELECT device FROM metrics GROUP BY device HAVING min(value) > 10 ORDER BY device;
 --- QUERY PLAN ---
- Sort
-   Sort Key: metrics.device
-   ->  Finalize HashAggregate
-         Group Key: metrics.device
-         Filter: (min(metrics.value) > '10'::double precision)
-         ->  Append
-               ->  Partial HashAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Seq Scan on compress_hyper_2_2_chunk
-               ->  Partial HashAggregate
-                     Group Key: _hyper_1_1_chunk.device
+ Finalize GroupAggregate
+   Group Key: metrics.device
+   Filter: (min(metrics.value) > '10'::double precision)
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
                      ->  Seq Scan on _hyper_1_1_chunk
 
 -- GROUP BY ordinal position
@@ -2363,9 +2298,7 @@ ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2392,9 +2325,7 @@ ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2425,9 +2356,7 @@ ORDER BY device;
    ->  Merge Append
          Sort Key: metrics.device
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_2_2_chunk.device
-                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Sort
                Sort Key: _hyper_1_1_chunk.device
                ->  Seq Scan on _hyper_1_1_chunk
@@ -2442,9 +2371,7 @@ ORDER BY device;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2462,9 +2389,7 @@ SET enable_partitionwise_aggregate = on;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2482,9 +2407,7 @@ SET enable_partitionwise_aggregate = off;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2526,9 +2449,7 @@ SET enable_partitionwise_aggregate = off;
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_1_1_chunk.device
                ->  Sort
@@ -2540,16 +2461,19 @@ SET enable_partitionwise_aggregate = off;
 --- QUERY PLAN ---
  Sort
    Sort Key: (sum(compress_hyper_2_2_chunk._ts_meta_count))
-   ->  Finalize HashAggregate
+   ->  Finalize GroupAggregate
          Group Key: metrics.device
-         ->  Append
-               ->  Partial HashAggregate
+         ->  Merge Append
+               Sort Key: metrics.device
+               ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
                      ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Seq Scan on compress_hyper_2_2_chunk
-               ->  Partial HashAggregate
+                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+               ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
-                     ->  Seq Scan on _hyper_1_1_chunk
+                     ->  Sort
+                           Sort Key: _hyper_1_1_chunk.device
+                           ->  Seq Scan on _hyper_1_1_chunk
 
 -- WHERE mixes segmentby and non-segmentby column
 :PREFIX SELECT device, count(*) FROM metrics WHERE device = 'd1' AND value > 10 GROUP BY device ORDER BY device;
@@ -2597,35 +2521,37 @@ SET enable_partitionwise_aggregate = off;
 -- HAVING with NOT around Aggref
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING NOT (min(value) > 10) ORDER BY device;
 --- QUERY PLAN ---
- Sort
-   Sort Key: metrics.device
-   ->  Finalize HashAggregate
-         Group Key: metrics.device
-         Filter: (min(metrics.value) <= '10'::double precision)
-         ->  Append
-               ->  Partial HashAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Seq Scan on compress_hyper_2_2_chunk
-               ->  Partial HashAggregate
-                     Group Key: _hyper_1_1_chunk.device
+ Finalize GroupAggregate
+   Group Key: metrics.device
+   Filter: (min(metrics.value) <= '10'::double precision)
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
                      ->  Seq Scan on _hyper_1_1_chunk
 
 -- HAVING with Aggref IS NULL
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING min(value) IS NULL ORDER BY device;
 --- QUERY PLAN ---
- Sort
-   Sort Key: metrics.device
-   ->  Finalize HashAggregate
-         Group Key: metrics.device
-         Filter: (min(metrics.value) IS NULL)
-         ->  Append
-               ->  Partial HashAggregate
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-                           ->  Seq Scan on compress_hyper_2_2_chunk
-               ->  Partial HashAggregate
-                     Group Key: _hyper_1_1_chunk.device
+ Finalize GroupAggregate
+   Group Key: metrics.device
+   Filter: (min(metrics.value) IS NULL)
+   ->  Merge Append
+         Sort Key: metrics.device
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_1_1_chunk.device
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.device
                      ->  Seq Scan on _hyper_1_1_chunk
 
 -- GROUP BY with explicit collation (not a bare Var)
@@ -2657,9 +2583,7 @@ SET enable_partitionwise_aggregate = off;
          ->  Merge Append
                Sort Key: m1.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m1_1
-                     ->  Sort
-                           Sort Key: compress_hyper_2_2_chunk.device
-                           ->  Seq Scan on compress_hyper_2_2_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk
                ->  Sort
                      Sort Key: m1_1.device
                      ->  Seq Scan on _hyper_1_1_chunk m1_1
@@ -2667,9 +2591,7 @@ SET enable_partitionwise_aggregate = off;
                ->  Merge Append
                      Sort Key: m2.device
                      ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2_1
-                           ->  Sort
-                                 Sort Key: compress_hyper_2_2_chunk_1.device
-                                 ->  Seq Scan on compress_hyper_2_2_chunk compress_hyper_2_2_chunk_1
+                           ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_v2_last_tim_idx on compress_hyper_2_2_chunk compress_hyper_2_2_chunk_1
                      ->  Sort
                            Sort Key: m2_1.device
                            ->  Seq Scan on _hyper_1_1_chunk m2_1
