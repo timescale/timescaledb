@@ -8,4 +8,4 @@
 # The repro must not require superuser privileges.
 set -xeu
 
-psql -v ON_ERROR_STOP=0 -f $1
+psql -v ON_ERROR_STOP=0 -f "$1"
