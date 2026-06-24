@@ -252,6 +252,7 @@ SELECT _timescaledb_functions.unfreeze_chunk(chunk) FROM show_chunks('rebuild_er
  t
 
 -- guc disabled, decompress/compress fallback
+SET timescaledb.debug_compression_path_info = on;
 SET timescaledb.enable_in_memory_recompression = false;
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
  hypertable_name |                  chunk                   |                 compressed_chunk                 |    status    
@@ -259,6 +260,7 @@ SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
  rebuild_error   | _timescaledb_internal._hyper_11_16_chunk | _timescaledb_internal.compress_hyper_12_17_chunk | {COMPRESSED}
 
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
+INFO:  using tuplesort to scan rows from "_hyper_11_16_chunk" for converting to columnstore
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
  hypertable_name |                  chunk                   |                 compressed_chunk                 |    status    
 -----------------+------------------------------------------+--------------------------------------------------+--------------
@@ -273,12 +275,14 @@ SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
  rebuild_error   | _timescaledb_internal._hyper_11_16_chunk | _timescaledb_internal.compress_hyper_12_18_chunk | {COMPRESSED}
 
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
+INFO:  using tuplesort to scan rows from "_hyper_11_16_chunk" for converting to columnstore
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
  hypertable_name |                  chunk                   |                 compressed_chunk                 |    status    
 -----------------+------------------------------------------+--------------------------------------------------+--------------
  rebuild_error   | _timescaledb_internal._hyper_11_16_chunk | _timescaledb_internal.compress_hyper_12_19_chunk | {COMPRESSED}
 
 RESET timescaledb.enable_optimizations;
+RESET timescaledb.debug_compression_path_info;
 DROP TABLE rebuild_error CASCADE;
 CREATE TABLE rebuild_no_orderby (col1 INT NOT NULL, device INT);
 SELECT create_hypertable('rebuild_no_orderby', 'col1', chunk_time_interval => 10);

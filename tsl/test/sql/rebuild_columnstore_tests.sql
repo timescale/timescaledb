@@ -199,6 +199,8 @@ CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 SELECT _timescaledb_functions.unfreeze_chunk(chunk) FROM show_chunks('rebuild_error') AS chunk;
 
 -- guc disabled, decompress/compress fallback
+SET timescaledb.debug_compression_path_info = on;
+
 SET timescaledb.enable_in_memory_recompression = false;
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
@@ -211,6 +213,8 @@ SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
 RESET timescaledb.enable_optimizations;
+
+RESET timescaledb.debug_compression_path_info;
 
 DROP TABLE rebuild_error CASCADE;
 
