@@ -223,13 +223,6 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 * startup costs on a hypertable */
 		if (child_rel->consider_startup)
 			parent_rel->consider_startup = true;
-
-		/*
-		 * This calculation is done by make_one_rel, but it happens before our
-		 * hypertable expansion, so we have to account for newly expanded chunks
-		 * separately.
-		 */
-		root->total_table_pages += child_rel->pages;
 	}
 
 	/* Add paths to the append relation. */

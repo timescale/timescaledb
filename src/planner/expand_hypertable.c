@@ -1518,6 +1518,16 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 			Assert(chunk->table_id == root->simple_rte_array[child_rtindex]->relid);
 			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunk;
 		}
+
+		/*
+		 * This calculation is done by make_one_rel, but it happens before our
+		 * hypertable expansion, so we have to account for newly expanded chunks
+		 * separately.
+		 */
+		if (!IS_DUMMY_REL(child_rel))
+		{
+			root->total_table_pages += child_rel->pages;
+		}
 	}
 }
 
