@@ -150,7 +150,7 @@ VACUUM ANALYZE metrics_ordered_idx2;
  Limit (actual rows=10.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_11_chunk (actual rows=10.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
-               Sort Key: compress_hyper_4_12_chunk._ts_meta_v2_first_time DESC, compress_hyper_4_12_chunk._ts_meta_v2_last_time DESC, compress_hyper_4_12_chunk._ts_meta_v2_last_v0, compress_hyper_4_12_chunk._ts_meta_v2_first_v0
+               Sort Key: compress_hyper_4_12_chunk._ts_meta_v2_first_time DESC, compress_hyper_4_12_chunk._ts_meta_v2_last_time DESC, compress_hyper_4_12_chunk._ts_meta_v2_first_v0, compress_hyper_4_12_chunk._ts_meta_v2_last_v0
                Sort Method: quicksort 
                ->  Index Scan using compress_hyper_4_12_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_4_12_chunk (actual rows=5.00 loops=1)
                      Index Cond: ((device_id = 3) AND (device_id_peer = 3))
