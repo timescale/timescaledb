@@ -7,7 +7,7 @@
 -------------------------------------------------------------------
 
 CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
-CREATE VIEW compressedcols AS select relname,attname,c.oid as reloid,attnum from pg_attribute a, pg_class c where c.oid=a.attrelid and relname like '%compress_hyper_%chunk' order by c.oid asc, a.attnum asc;
+CREATE VIEW compressedcols AS select h.table_name as relname, a.attname, cs.compress_relid as reloid, a.attnum from _timescaledb_catalog.compression_settings cs join _timescaledb_catalog.chunk ch on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass join _timescaledb_catalog.hypertable h on ch.hypertable_id = h.id join pg_attribute a on a.attrelid = cs.compress_relid order by cs.compress_relid asc, a.attnum asc;
 
 CREATE TABLE t(a int, b int, c int, d int, e int, f int, g int, h int, i int);
 SELECT create_hypertable('t', 'a');

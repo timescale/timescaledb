@@ -79,15 +79,12 @@ INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht
 WHERE
   attname = 'bigintcol';
 
---check count on internal compression table too i.e. all the chunks have
+--check count on compressed chunks too i.e. all the chunks have
 --the correct column name
-SELECT format('%I.%I', cht.schema_name, cht.table_name) AS "COMPRESSION_TBLNM"
-FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
-WHERE ht.table_name = 'test1' and cht.id = ht.compressed_hypertable_id \gset
-
 SELECT count(*) FROM pg_attribute att
-INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-INNER JOIN _timescaledb_catalog.hypertable ht ON ht.compressed_hypertable_id = ch.hypertable_id AND ht.table_name = 'test1'
+INNER JOIN _timescaledb_catalog.compression_settings cs ON att.attrelid = cs.compress_relid
+INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname = 'bigintcol';
 
@@ -101,8 +98,9 @@ SELECT * from timescaledb_information.compression_settings
 WHERE hypertable_name = 'test1' and attname like 'ccc%';
 
 SELECT count(*) FROM pg_attribute att
-INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-INNER JOIN _timescaledb_catalog.hypertable ht ON ht.compressed_hypertable_id = ch.hypertable_id AND ht.table_name = 'test1'
+INNER JOIN _timescaledb_catalog.compression_settings cs ON att.attrelid = cs.compress_relid
+INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname like 'ccc%a';
 
