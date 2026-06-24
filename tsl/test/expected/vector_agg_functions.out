@@ -7158,19 +7158,13 @@ select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
  11 |     1 |  65
  12 |     1 |  65
 
--- NaN handling in minmax is different from other functions.
-select s, min(cfloat4), max(cfloat4) from aggfns group by s order by s;
- s |    min    |   max    
----+-----------+----------
- 0 |  -49.9949 |  49.9995
- 1 |  -49.9974 |      NaN
- 2 |  -49.9991 | Infinity
- 3 | -Infinity |  49.9979
- 4 |  -49.9999 |  49.9946
- 5 |  -49.9942 |  49.9992
- 6 |  -49.9995 |  49.9956
- 7 |  -49.9984 |  49.9969
- 8 |  -49.9969 |  49.9997
- 9 |  -49.9911 |  49.9899
+-- NaN handling in Postgres minmax is different from other functions -- it treats
+-- NaN as bigger than any number. This test has a filter that ensures that
+-- NaNs go first in the source data, because some potentially buggy conditions
+-- can be only triggered in this case.
+select ss, min(cfloat4), max(cfloat4) from aggfns where cfloat4 = any(array['nan'::float4, 33.308792]) group by ss order by ss;
+ ss |   min   | max 
+----+---------+-----
+ 11 | 33.3088 | NaN
 
 reset max_parallel_workers_per_gather;
