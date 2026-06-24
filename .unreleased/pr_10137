@@ -1,0 +1,1 @@
+Fixes: #10137 Fix column ordering on firstlast based sparse indexes
