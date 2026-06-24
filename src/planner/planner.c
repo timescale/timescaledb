@@ -1183,13 +1183,10 @@ rte_should_expand(const RangeTblEntry *rte)
 static void
 expand_hypertable(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
-	Hypertable *ht;
-	double total_pages;
-
 	Assert(rte_should_expand(rte));
 	Assert(rti == rel->relid);
 
-	ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_NOCREATE);
+	Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_NOCREATE);
 	Assert(ht != NULL);
 	ts_plan_expand_hypertable_chunks(ht, root, rel, rte->ctename != TS_FK_EXPAND);
 
