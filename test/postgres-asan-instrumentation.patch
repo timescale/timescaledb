@@ -14,17 +14,21 @@ index 2c50575b37..11b6c688c7 100644
 +
  	char		stack_top_loc;
  	long		stack_depth;
-
+ 
 diff --git a/src/include/utils/memdebug.h b/src/include/utils/memdebug.h
 index e88b4c6e8e..4ccbbf0146 100644
 --- a/src/include/utils/memdebug.h
 +++ b/src/include/utils/memdebug.h
 @@ -19,6 +19,31 @@
-
+ 
  #ifdef USE_VALGRIND
  #include <valgrind/memcheck.h>
 +
 +#elif __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
++
++#ifndef CLOBBER_FREED_MEMORY
++#error "This patch requires CLOBBER_FREED_MEMORY (included by --cassert) to work properly"
++#endif
 +
 +#include <sanitizer/asan_interface.h>
 +
@@ -51,73 +55,3 @@ index e88b4c6e8e..4ccbbf0146 100644
  #else
  #define VALGRIND_CHECK_MEM_IS_DEFINED(addr, size)			do {} while (0)
  #define VALGRIND_CREATE_MEMPOOL(context, redzones, zeroed)	do {} while (0)
-diff --git a/src/backend/utils/mmgr/mcxt.c b/src/backend/utils/mmgr/mcxt.c
---- a/src/backend/utils/mmgr/mcxt.c
-+++ b/src/backend/utils/mmgr/mcxt.c
-@@ -1549,17 +1549,13 @@
- void
- pfree(void *pointer)
- {
--#ifdef USE_VALGRIND
- 	MemoryContextMethodID method = GetMemoryChunkMethodID(pointer);
- 	MemoryContext context = GetMemoryChunkContext(pointer);
--#endif
-
- 	MCXT_METHOD(pointer, free_p) (pointer);
-
--#ifdef USE_VALGRIND
- 	if (method != MCTX_ALIGNED_REDIRECT_ID)
- 		VALGRIND_MEMPOOL_FREE(context, pointer);
--#endif
- }
-
- /*
-@@ -1569,12 +1565,8 @@
- void *
- repalloc(void *pointer, Size size)
- {
--#ifdef USE_VALGRIND
- 	MemoryContextMethodID method = GetMemoryChunkMethodID(pointer);
--#endif
--#if defined(USE_ASSERT_CHECKING) || defined(USE_VALGRIND)
- 	MemoryContext context = GetMemoryChunkContext(pointer);
--#endif
- 	void	   *ret;
-
- 	AssertNotInCriticalSection(context);
-@@ -1597,10 +1589,8 @@
- 	 */
- 	ret = MCXT_METHOD(pointer, realloc) (pointer, size, 0);
-
--#ifdef USE_VALGRIND
- 	if (method != MCTX_ALIGNED_REDIRECT_ID)
- 		VALGRIND_MEMPOOL_CHANGE(context, pointer, ret, size);
--#endif
-
- 	return ret;
- }
-@@ -1613,9 +1603,7 @@
- void *
- repalloc_extended(void *pointer, Size size, int flags)
- {
--#if defined(USE_ASSERT_CHECKING) || defined(USE_VALGRIND)
- 	MemoryContext context = GetMemoryChunkContext(pointer);
--#endif
- 	void	   *ret;
-
- 	AssertNotInCriticalSection(context);
-diff --git a/src/backend/utils/mmgr/aset.c b/src/backend/utils/mmgr/aset.c
---- a/src/backend/utils/mmgr/aset.c
-+++ b/src/backend/utils/mmgr/aset.c
-@@ -1267,11 +1267,9 @@
- 		 * Make sure not to mark too many bytes in case chunk->requested_size
- 		 * < size < oldchksize.
- 		 */
--#ifdef USE_VALGRIND
- 		if (Min(size, oldchksize) > chunk->requested_size)
- 			VALGRIND_MAKE_MEM_UNDEFINED((char *) pointer + chunk->requested_size,
- 										Min(size, oldchksize) - chunk->requested_size);
--#endif
- #endif
-
- 		chunk->requested_size = size;
