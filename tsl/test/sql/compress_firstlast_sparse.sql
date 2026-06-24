@@ -38,9 +38,8 @@ alter table fl_basic set (timescaledb.compress,
     timescaledb.compress_index = 'firstlast("value")');
 select count(compress_chunk(x)) from show_chunks('fl_basic') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_basic')
 \gset
@@ -61,9 +60,8 @@ alter table fl_nulls set (timescaledb.compress,
     timescaledb.compress_index = 'firstlast("value")');
 select count(compress_chunk(x)) from show_chunks('fl_nulls') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_nulls')
 \gset
@@ -85,9 +83,8 @@ alter table fl_mixed set (timescaledb.compress,
     timescaledb.compress_index = 'firstlast("value")');
 select count(compress_chunk(x)) from show_chunks('fl_mixed') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_mixed')
 \gset
@@ -108,9 +105,8 @@ alter table fl_firstnull set (timescaledb.compress,
     timescaledb.compress_index = 'firstlast("value")');
 select count(compress_chunk(x)) from show_chunks('fl_firstnull') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_firstnull')
 \gset
@@ -131,9 +127,8 @@ alter table fl_lastnull set (timescaledb.compress,
     timescaledb.compress_index = 'firstlast("value")');
 select count(compress_chunk(x)) from show_chunks('fl_lastnull') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_lastnull')
 \gset
@@ -154,9 +149,8 @@ alter table fl_single set (timescaledb.compress,
     timescaledb.compress_index = 'firstlast("value")');
 select count(compress_chunk(x)) from show_chunks('fl_single') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_single')
 \gset
@@ -176,9 +170,8 @@ alter table fl_multi set (timescaledb.compress,
     timescaledb.compress_index = 'firstlast("value")');
 select count(compress_chunk(x)) from show_chunks('fl_multi') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_multi')
 \gset
@@ -202,9 +195,8 @@ select count(compress_chunk(x)) from show_chunks('fl_recompress') x;
 insert into fl_recompress values (6, 600);
 select count(compress_chunk(x, recompress:=true)) from show_chunks('fl_recompress') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_recompress')
 \gset
@@ -333,12 +325,11 @@ select count(compress_chunk(x)) from show_chunks('fl_push_recompress') x;
 insert into fl_push_recompress values (1600, 16000);
 select count(compress_chunk(x, recompress:=true)) from show_chunks('fl_push_recompress') x;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_push_recompress')
-order by ch.id
+order by uc.id desc
 limit 1
 \gset
 
@@ -375,12 +366,11 @@ SELECT i, i FROM generate_series(101, 200) i;
 -- Should work correctly after renaming
 SELECT compress_chunk(c) FROM show_chunks('sensor_readings') c;
 
-select ch.schema_name || '.' || ch.table_name as compressed_chunk
-from _timescaledb_catalog.chunk ch
-inner join _timescaledb_catalog.compression_settings cs on cs.compress_relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+select cs.compress_relid::text as compressed_chunk
+from _timescaledb_catalog.compression_settings cs
 inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
 where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'sensor_readings')
-order by ch.id
+order by uc.id
 limit 1
 \gset
 -- should see firstlast metadata columns also renamed

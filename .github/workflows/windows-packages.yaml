@@ -43,6 +43,7 @@ jobs:
         echo "version=$version" >>$env:GITHUB_OUTPUT
 
     - name: Install PostgreSQL ${{ matrix.pg }}
+      shell: pwsh
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
@@ -50,7 +51,13 @@ jobs:
         choco config set commandExecutionTimeoutSeconds 600
         choco uninstall postgresql --yes
         winget install --id PostgreSQL.PostgreSQL.${{ matrix.pg }} --accept-source-agreements --accept-package-agreements --disable-interactivity
-        choco install wget
+        winget install --id=JernejSimoncic.Wget -e --accept-source-agreements --accept-package-agreements --disable-interactivity
+        wget --version
+
+    - name: Add winget shims to PATH
+      shell: pwsh
+      run: |
+        echo "$env:LOCALAPPDATA\Microsoft\WinGet\Links" >> $env:GITHUB_PATH
 
     - name: Download TimescaleDB
       run: "wget --quiet --tries=6 --waitretry=15 -O timescaledb.zip 'https://github.com/timescale/timescaledb/releases/download/\

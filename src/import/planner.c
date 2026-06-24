@@ -39,7 +39,6 @@
 #include "compat/compat.h"
 #include "planner.h"
 
-
 /* copied verbatim from planner.c */
 struct PathTarget *
 ts_make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_target)

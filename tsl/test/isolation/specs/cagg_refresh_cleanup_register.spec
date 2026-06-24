@@ -74,8 +74,6 @@ step "WP_before_txn2_start_enable"  { SELECT debug_waitpoint_enable('cagg_refres
 step "WP_before_txn2_start_disable"  { SELECT debug_waitpoint_release('cagg_refresh_after_register'); }
 step "WP_after_register_enable"  { SELECT debug_waitpoint_enable('cagg_refresh_after_register'); }
 step "WP_after_register_disable"  { SELECT debug_waitpoint_release('cagg_refresh_after_register'); }
-step "WP_enable_after_refresh"  { SELECT debug_waitpoint_enable('after_cagg_refresh_window'); }
-step "WP_disable_after_refresh"  { SELECT debug_waitpoint_release('after_cagg_refresh_window'); }
 
 # Session K1: terminate R1's backend so its PID becomes dead in the
 # registration table, then wait until the process is gone.
@@ -222,11 +220,11 @@ step "P1_run_policy" {
 
 # Two refreshes wait for registration, one waits for cleanup before exiting. All blocked on an AccessExclusiveLock on continuous_aggs_jobs_refresh_ranges.
 # None of those refreshes overlaps, so all should succeed.
-permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "WP_enable_after_refresh" "R3_refresh"("R2_refresh") "R4_refresh"("R3_refresh") "check_locks" "check_jobs" "L1_unlock" "WP_disable_after_refresh" "check_locks" "check_jobs"
+permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh"("R2_refresh") "R4_refresh"("R3_refresh") "check_locks" "check_jobs" "L1_unlock"("R4_refresh") "check_locks" "check_jobs"
 
 # Two refreshes wait for registration, one waits for cleanup before exiting. All blocked on an AccessExclusiveLock on continuous_aggs_jobs_refresh_ranges.
 # Refreshes waiting for registration overlap with each other, so one should fail.
-permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "WP_after_register_enable" "R3_refresh"("R2_refresh") "R4_overlapping_refresh"("R3_refresh") "check_locks" "check_jobs" "L1_unlock" "WP_after_register_disable" "check_locks" "check_jobs"
+permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh"("R2_refresh") "R4_overlapping_refresh"("R3_refresh") "check_locks" "check_jobs" "L1_unlock"("R4_overlapping_refresh") "check_locks" "check_jobs"
 
 ## Refresh registers . But fails in txn2. Gets into catch block. Cleanup should succeed
 permutation "WP_before_txn2_start_enable" "R3_refresh" "check_jobs" "A1_revoke_perm" "WP_before_txn2_start_disable"("A1_revoke_perm") "check_jobs"

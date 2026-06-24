@@ -312,8 +312,9 @@ INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
 VACUUM ANALYZE test4;
 
 set enable_hashagg TO false;
-SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
-EXPLAIN (buffers off, costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+SELECT show_chunks('test4') AS "TEST4_CHUNK" LIMIT 1 \gset
+SELECT time, device FROM :TEST4_CHUNK GROUP BY time, device;
+EXPLAIN (buffers off, costs off, analyze, timing off, summary off) SELECT time, device FROM :TEST4_CHUNK GROUP BY time, device;
 
 reset timescaledb.enable_decompression_sorted_merge;
 reset max_parallel_workers_per_gather;

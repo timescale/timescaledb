@@ -848,3 +848,53 @@ select * from settings;
 
 reset timescaledb.auto_sparse_indexes;
 drop table test_orderby_default_noguc;
+-- Rename a column to a name that matches a sparse index type token
+create table test_rename_token(ts int not null, minmax int not null);
+select create_hypertable('test_rename_token', 'ts', chunk_time_interval => 100);
+        create_hypertable        
+---------------------------------
+ (13,public,test_rename_token,t)
+
+alter table test_rename_token set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+insert into test_rename_token select 1,1;
+select compress_chunk(show_chunks('test_rename_token'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_13_17_chunk
+
+select * from settings;
+                  relid                   |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                         index                                                         
+------------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------
+ test_rename_token                        |                                                  |           | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ _timescaledb_internal._hyper_13_17_chunk | _timescaledb_internal.compress_hyper_14_18_chunk |           | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+
+-- renaming to a type token must not corrupt the orderby minmax index
+alter table test_rename_token rename column minmax to bloom;
+select * from settings;
+                  relid                   |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                         index                                                         
+------------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------
+ test_rename_token                        |                                                  |           | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ _timescaledb_internal._hyper_13_17_chunk | _timescaledb_internal.compress_hyper_14_18_chunk |           | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+
+alter table test_rename_token rename column bloom to firstlast;
+select * from settings;
+                  relid                   |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                         index                                                         
+------------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------
+ test_rename_token                        |                                                  |           | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ _timescaledb_internal._hyper_13_17_chunk | _timescaledb_internal.compress_hyper_14_18_chunk |           | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+
+-- renaming an indexed column to a type token keeps the index intact
+alter table test_rename_token rename column ts to minmax;
+select * from settings;
+                  relid                   |                  compress_relid                  | segmentby | orderby  | orderby_desc | orderby_nullsfirst |                                                             index                                                             
+------------------------------------------+--------------------------------------------------+-----------+----------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------
+ test_rename_token                        |                                                  |           | {minmax} | {f}          | {f}                | [{"type": "minmax", "column": "minmax", "source": "orderby"}, {"type": "firstlast", "column": "minmax", "source": "orderby"}]
+ _timescaledb_internal._hyper_13_17_chunk | _timescaledb_internal.compress_hyper_14_18_chunk |           | {minmax} | {f}          | {f}                | [{"type": "minmax", "column": "minmax", "source": "orderby"}, {"type": "firstlast", "column": "minmax", "source": "orderby"}]
+
+\set ON_ERROR_STOP 0
+alter table test_rename_token rename column minmax to _ts_meta_v2_first_minmax;
+ERROR:  cannot convert tables with reserved column prefix '_ts_meta_' to columnstore
+alter table test_rename_token rename column minmax to _ts_meta_count;
+ERROR:  cannot convert tables with reserved column prefix '_ts_meta_' to columnstore
+\set ON_ERROR_STOP 1
+drop table test_rename_token;

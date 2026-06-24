@@ -135,13 +135,11 @@ select count(compress_chunk(x)) from show_chunks('detoaster') x;
 
 with chunks as (
   select
-    row_number() over (order by cc.table_name) index,
-    cc.schema_name || '.' || cc.table_name chunk
+    row_number() over (order by cs.compress_relid::text) index,
+    cs.compress_relid::text chunk
   from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
       on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-    join _timescaledb_catalog.chunk cc
-      on cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
   where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'detoaster')
 )

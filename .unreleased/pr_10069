@@ -1,2 +1,0 @@
-Fixes: #10069 Fix bgw_job_stat_history definition
-Thanks: @skrenes for reporting a problem with the job_history view when upgrading to 2.28.0
