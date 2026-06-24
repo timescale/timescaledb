@@ -3340,11 +3340,11 @@ lmerge_matched:;
 						 * with NOT MATCHED actions.
 						 */
 						if (TupIsNull(epqslot))
-							return false;
+							return NULL;
 
 						(void) ExecGetJunkAttribute(epqslot, resultRelInfo->ri_RowIdAttNo, &isNull);
 						if (isNull)
-							return false;
+							return NULL;
 
 						/*
 						 * When a tuple was updated and
