@@ -1206,30 +1206,6 @@ expand_hypertable(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *
 		ts_set_rel_size(root, rel, rti, rte);
 	}
 
-	total_pages = 0;
-	for (int i = 1; i < root->simple_rel_array_size; i++)
-	{
-		RelOptInfo *brel = root->simple_rel_array[i];
-
-		if (brel == NULL)
-		{
-			continue;
-		}
-
-		Assert(brel->relid == (Index) i); /* sanity check on array */
-
-		if (IS_DUMMY_REL(brel))
-		{
-			continue;
-		}
-
-		if (IS_SIMPLE_REL(brel))
-		{
-			total_pages += (double) brel->pages;
-		}
-	}
-	root->total_table_pages = total_pages;
-
 	/*
 	 * We are past the point at which postgres will add paths for the children,
 	 * so we have to do it ourselves. set_append_rel_pathlist will eventually
@@ -1420,12 +1396,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	reltype = ts_classify_relation(root, rel, &ht);
 
-	/* Check for unexpanded hypertable */
-	if (rte_should_expand(rte))
-	{
-		expand_hypertable(root, rel, rti, rte);
-	}
-
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
@@ -1455,17 +1425,21 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		case TS_REL_HYPERTABLE:
 			if (!rte->inh)
 			{
-				/*
-				 * This happens with SELECT FROM ONLY hypertable or with an
-				 * empty hypertable. Mark it as dummy, otherwise we'll get a
-				 * scan on hypertable relation itself. It's always empty, so
-				 * this scan is useless and looks misleading.
-				 */
-				mark_dummy_rel(rel);
-			}
-			else
-			{
-				apply_optimizations(root, reltype, rel, rte, ht);
+				if (ts_rte_is_marked_for_expansion(rte))
+				{
+					expand_hypertable(root, rel, rti, rte);
+					apply_optimizations(root, reltype, rel, rte, ht);
+				}
+				else
+				{
+					/*
+					 * This happens with SELECT FROM ONLY hypertable or with an
+					 * empty hypertable. Mark it as dummy, otherwise we'll get a
+					 * scan on hypertable relation itself. It's always empty, so
+					 * this scan is useless and looks misleading.
+					 */
+					mark_dummy_rel(rel);
+				}
 			}
 			break;
 
