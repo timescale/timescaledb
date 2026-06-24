@@ -1585,8 +1585,13 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			{
 				rte_mark_for_expansion(rte);
 			}
+
 			ts_create_private_reloptinfo(rel);
-			ts_plan_expand_timebucket_annotate(root, rel);
+
+			if (ts_guc_enable_optimizations)
+			{
+				ts_plan_expand_timebucket_annotate(root, rel);
+			}
 			break;
 		}
 		case TS_REL_CHUNK_STANDALONE:
