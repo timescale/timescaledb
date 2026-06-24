@@ -1,0 +1,1 @@
+Implements: #10010 Skip classifying compressed relations to speed up planning

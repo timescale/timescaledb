@@ -30,18 +30,18 @@ SELECT compress_chunk(c) FROM show_chunks('t') c;
 
 -- Check the bloom column names in the compressed chunk
 SELECT
-      relname,
-      attname
+      h.table_name AS relname,
+      a.attname
 FROM
-      pg_attribute a,
-      pg_class c
+      _timescaledb_catalog.compression_settings cs
+      JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+      JOIN _timescaledb_catalog.hypertable h ON ch.hypertable_id = h.id
+      JOIN pg_attribute a ON a.attrelid = cs.compress_relid
 WHERE
-      c.oid=a.attrelid AND
-      attname LIKE '%_ts_meta%bloom%a_b_c%' AND
-      relname LIKE '%chunk'
+      a.attname LIKE '%_ts_meta%bloom%a_b_c%'
 ORDER BY
-      relname::text COLLATE "C",
-      attname::text COLLATE "C";
+      h.table_name COLLATE "C",
+      a.attname::text COLLATE "C";
 
 -- Verify the assumption that the zero byte separator used in the
 -- bloom column names is not allowed in Postgres column names:
