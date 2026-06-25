@@ -238,7 +238,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 					 * The default value always has a long varlena header, but
 					 * we are going to use short if it fits.
 					 */
-					const int32 value_bytes = VARSIZE_ANY_EXHDR(value);
+					const int32 value_bytes = VARSIZE_ANY_EXHDR(DatumGetPointer(value));
 					if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 					{
 						/* Short varlena, no alignment. */
@@ -256,7 +256,9 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 						offset += VARHDRSZ;
 					}
 
-					memcpy(&serialized_key_storage[offset], VARDATA_ANY(value), value_bytes);
+					memcpy(&serialized_key_storage[offset],
+						   VARDATA_ANY(DatumGetPointer(value)),
+						   value_bytes);
 
 					offset += value_bytes;
 				}
@@ -404,8 +406,10 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 	const HashingStrategy *hashing = &policy->hashing;
 	const int num_key_columns = policy->num_grouping_columns;
 	const Datum serialized_key_datum = hashing->output_keys[current_key];
-	const uint8 *serialized_key = (const uint8 *) VARDATA_ANY(serialized_key_datum);
-	PG_USED_FOR_ASSERTS_ONLY const int key_data_bytes = VARSIZE_ANY_EXHDR(serialized_key_datum);
+	const uint8 *serialized_key =
+		(const uint8 *) VARDATA_ANY(DatumGetPointer(serialized_key_datum));
+	PG_USED_FOR_ASSERTS_ONLY const int key_data_bytes =
+		VARSIZE_ANY_EXHDR(DatumGetPointer(serialized_key_datum));
 	const uint8 *restrict ptr = serialized_key;
 
 	/*
@@ -418,9 +422,9 @@ serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSl
 
 	DEBUG_PRINT("emit key #%d, with header %ld without %d bytes: ",
 				current_key,
-				VARSIZE_ANY(serialized_key_datum),
+				VARSIZE_ANY(DatumGetPointer(serialized_key_datum)),
 				key_data_bytes);
-	for (size_t i = 0; i < VARSIZE_ANY(serialized_key_datum); i++)
+	for (size_t i = 0; i < VARSIZE_ANY(DatumGetPointer(serialized_key_datum)); i++)
 	{
 		DEBUG_PRINT("%.2x.", ((const uint8 *) serialized_key_datum)[i]);
 	}

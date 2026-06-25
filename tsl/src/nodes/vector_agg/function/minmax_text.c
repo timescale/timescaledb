@@ -136,8 +136,8 @@ FUNCTION_NAME(scalar)(void *agg_state, Datum constvalue, bool constisnull, int n
 		return;
 	}
 
-	BytesView value = { .data = (const uint8 *) VARDATA_ANY(constvalue),
-						.len = VARSIZE_ANY_EXHDR(constvalue) };
+	BytesView value = { .data = (const uint8 *) VARDATA_ANY(DatumGetPointer(constvalue)),
+						.len = VARSIZE_ANY_EXHDR(DatumGetPointer(constvalue)) };
 	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
 	FUNCTION_NAME(one)(agg_state, value);
 	MemoryContextSwitchTo(old);

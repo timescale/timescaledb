@@ -171,7 +171,7 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 		}
 		case DT_ArrowText:
 		{
-			const Size result_bytes = VARSIZE_ANY_EXHDR(datum);
+			const Size result_bytes = VARSIZE_ANY_EXHDR(DatumGetPointer(datum));
 			const Size required_body_bytes =
 				pad_to_multiple(64, columnar_result->current_offset + result_bytes);
 			if (required_body_bytes > MaxAllocSize)
@@ -203,7 +203,7 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 			}
 
 			memcpy(&columnar_result->body_buffer[columnar_result->current_offset],
-				   VARDATA_ANY(datum),
+				   VARDATA_ANY(DatumGetPointer(datum)),
 				   result_bytes);
 			/* offset_buffer should be allocated for ArrowText type */
 			Assert(columnar_result->offset_buffer != NULL);
