@@ -36,6 +36,9 @@ BEGIN
 
     CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
     REVOKE ALL ON _timescaledb_internal.bgw_job_stat_history FROM PUBLIC;
+
+    DROP TABLE _timescaledb_internal._tmp_bgw_job_stat_history;
+    DROP TABLE _timescaledb_internal._tmp_job_stat_history_id_seq;
     --
     -- END bgw_job_stat_history
     --
