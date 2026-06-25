@@ -10,6 +10,7 @@
 
 #include <postgres.h>
 
+#include <math.h>
 #include <mb/pg_wchar.h>
 #include <utils/date.h>
 #include <utils/fmgroids.h>
