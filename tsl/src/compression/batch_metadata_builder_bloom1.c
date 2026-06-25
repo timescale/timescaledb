@@ -1104,8 +1104,9 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 	bool nulls[_out_columns] = { 0 };
 
 	Datum toasted = PG_GETARG_DATUM(0);
-	values[out_toast_header] = Int32GetDatum(((varattrib_1b *) toasted)->va_header);
-	values[out_toasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(toasted));
+	struct varlena *toasted_va = (struct varlena *) DatumGetPointer(toasted);
+	values[out_toast_header] = Int32GetDatum(((varattrib_1b *) toasted_va)->va_header);
+	values[out_toasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(toasted_va));
 
 	struct varlena *detoasted = PG_DETOAST_DATUM(toasted);
 	values[out_detoasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(detoasted));
@@ -1119,10 +1120,10 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 
 	values[out_estimated_elements] = Int32GetDatum(bloom1_estimate_ndistinct(detoasted));
 
-	if (VARATT_IS_EXTERNAL_ONDISK(toasted))
+	if (VARATT_IS_EXTERNAL_ONDISK(toasted_va))
 	{
 		struct varatt_external toast_pointer;
-		VARATT_EXTERNAL_GET_POINTER(toast_pointer, toasted);
+		VARATT_EXTERNAL_GET_POINTER(toast_pointer, toasted_va);
 
 		if (TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer))
 		{
@@ -1133,9 +1134,9 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 			nulls[out_compressed_bytes] = true;
 		}
 	}
-	else if (VARATT_IS_COMPRESSED(toasted))
+	else if (VARATT_IS_COMPRESSED(toasted_va))
 	{
-		values[out_compressed_bytes] = VARDATA_COMPRESSED_GET_EXTSIZE(toasted);
+		values[out_compressed_bytes] = VARDATA_COMPRESSED_GET_EXTSIZE(toasted_va);
 	}
 	else
 	{
