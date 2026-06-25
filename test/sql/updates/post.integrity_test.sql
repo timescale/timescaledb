@@ -25,6 +25,24 @@ BEGIN
         LOOP
           RAISE EXCEPTION 'Missing dimension slice for chunk % on dimension %.', gap.chunk_id, gap.dimension_id;
         END LOOP;
+
+        -- Every dimensional CHECK named constraint_<n> on a chunk must point at
+        -- a slice that the chunk actually owns.
+        FOR gap IN
+        SELECT ch.id AS chunk_id,
+               substring(pc.conname FROM 'constraint_([0-9]+)')::int AS slice_id
+        FROM _timescaledb_catalog.chunk ch
+        JOIN pg_constraint pc
+            ON pc.conrelid = pg_catalog.format('%I.%I', ch.schema_name, ch.table_name)::regclass
+           AND pc.contype = 'c'
+           AND pc.conname ~ '^constraint_[0-9]+$'
+        WHERE NOT ch.osm_chunk
+          AND NOT EXISTS (SELECT 1 FROM _timescaledb_catalog.dimension_slice ds
+                          WHERE ds.chunk_id = ch.id
+                            AND ds.id = substring(pc.conname FROM 'constraint_([0-9]+)')::int)
+        LOOP
+          RAISE EXCEPTION 'Chunk % has stale dimensional CHECK constraint_%.', gap.chunk_id, gap.slice_id;
+        END LOOP;
     ELSE
         FOR gap IN
         SELECT ch.id AS chunk_id, d.id AS dimension_id
