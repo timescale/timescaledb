@@ -119,8 +119,8 @@ test_eviction()
 	}
 
 	elog(NOTICE,
-		 "Eviction test completed: %d evictions, %d slots, average lifespan %.2f, lifespan stddev "
-		 "%.2f, min lifespan %d, max lifespan %d",
+		 "Eviction test completed: %d evictions, %d slots, average lifespan %.0f, lifespan stddev "
+		 "%.0f, min lifespan %d, max lifespan %d",
 		 num_evictions,
 		 NUM_SLOTS,
 		 (double) sum_lifespan / num_evictions,
