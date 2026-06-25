@@ -68,10 +68,12 @@ DO $$
 DECLARE
     r RECORD;
 BEGIN
+    -- Move every CHECK that needs a new id to a temporary name. The
+    -- "constraint_tmp_" prefix never clashes with the "constraint_<id>" names.
     FOR r IN
         SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
                format('constraint_%s', tmp.id)::name AS old_name,
-               format('constraint_%s', ds.id)::name AS new_name
+               format('constraint_tmp_%s', ds.id)::name AS tmp_name
         FROM _timescaledb_internal.tmp_dimension_slice tmp
         JOIN _timescaledb_catalog.chunk c ON c.id = tmp.chunk_id
         JOIN _timescaledb_catalog.dimension_slice ds
@@ -87,7 +89,30 @@ BEGIN
           )
     LOOP
         EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
-                                  r.chunk_table, r.old_name, r.new_name);
+                                  r.chunk_table, r.old_name, r.tmp_name);
+    END LOOP;
+
+    -- Move the temporary names to their final constraint_<kept_id> names.
+    FOR r IN
+        SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
+               format('constraint_tmp_%s', ds.id)::name AS tmp_name,
+               format('constraint_%s', ds.id)::name AS new_name
+        FROM _timescaledb_internal.tmp_dimension_slice tmp
+        JOIN _timescaledb_catalog.chunk c ON c.id = tmp.chunk_id
+        JOIN _timescaledb_catalog.dimension_slice ds
+            ON ds.dimension_id = tmp.dimension_id
+           AND ds.range_start = tmp.range_start
+           AND ds.range_end = tmp.range_end
+        WHERE tmp.id <> ds.id
+          AND EXISTS (
+              SELECT 1 FROM pg_constraint pc
+              WHERE pc.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
+                AND pc.conname = format('constraint_tmp_%s', ds.id)::name
+                AND pc.contype = 'c'
+          )
+    LOOP
+        EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
+                                  r.chunk_table, r.tmp_name, r.new_name);
     END LOOP;
 END
 $$;
