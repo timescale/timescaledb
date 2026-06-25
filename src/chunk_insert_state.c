@@ -43,8 +43,6 @@ prepare_constr_expr(Expr *node)
 	node = expression_planner(node);
 	result = ExecInitExpr(node, NULL);
 
-	/* LOOK HERE */
-
 	return result;
 }
 
