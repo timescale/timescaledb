@@ -1053,25 +1053,82 @@ get_hypertable_publication_filters(Oid puboid, const Chunk *chunk, List **column
 	ReleaseSysCache(pubtuple);
 }
 
+/* Add the given chunk to the given publication.
+ *
+ * NB: it is expected that this method is called for a chunk immediately
+ * following chunk creation when ts_guc_enable_chunk_auto_publication=on.
+ * If this is called at some other point in time where the chunk has
+ * already been added to the publication, it will propagate an error.
+ */
 static void
 chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 {
+	volatile Relation chunk_rel = NULL;
+	volatile bool triggerStartOk = false;
+
 	PublicationRelInfo pri = { 0 };
-	Relation chunk_rel;
 	List *columns = NIL;
 	Node *whereClause = NULL;
 
+	/* Fetch data needed for updating the target publication. */
 	get_hypertable_publication_filters(puboid, chunk, &columns, &whereClause);
-
 	chunk_rel = table_open(chunk->table_id, AccessShareLock);
-
 	pri.relation = chunk_rel;
 	pri.columns = columns;
 	pri.whereClause = whereClause;
 
-	publication_add_relation(puboid, &pri, true);
+	/* Build DDL modes for event triggers. */
+	PublicationTable pubtable = {
+		.type = T_PublicationTable,
+		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
+								 (char *) NameStr(chunk->fd.table_name),
+								 -1),
+		.whereClause = whereClause,
+		.columns = columns,
+	};
+	PublicationObjSpec pubobj = {
+		.type = T_PublicationObjSpec,
+		.pubobjtype = PUBLICATIONOBJ_TABLE,
+		.pubtable = &pubtable,
+		.location = -1,
+	};
+	AlterPublicationStmt stmt = {
+		.type = T_AlterPublicationStmt,
+		.pubname = GetPublication(puboid)->name,
+		.pubobjects = list_make1(&pubobj),
+		.action = AP_AddObjects,
+	};
 
-	table_close(chunk_rel, AccessShareLock);
+	if (ts_guc_enable_event_triggers)
+	{
+		triggerStartOk = EventTriggerBeginCompleteQuery();
+		EventTriggerDDLCommandStart((Node *) &stmt);
+	}
+
+	PG_TRY();
+	{
+		/* if_not_exists=false (instead of true) because we take it as an invariant that
+		 * this method is ONLY called immediately following chunk creation when chunk auto
+		 * pub is enabled. We rely on the error propagating functionality here
+		 * in order to invalidate the ddl_command_start, which should only happen in
+		 * the case of allocation errors, etc. */
+		ObjectAddress pubAddress = publication_add_relation(puboid, &pri, false);
+
+		if (ts_guc_enable_event_triggers)
+		{
+			EventTriggerCollectSimpleCommand(pubAddress, InvalidObjectAddress, (Node *) &stmt);
+			EventTriggerDDLCommandEnd((Node *) &stmt);
+		}
+	}
+	PG_FINALLY();
+	{
+		if (triggerStartOk)
+		{
+			EventTriggerEndCompleteQuery();
+		}
+		table_close(chunk_rel, AccessShareLock);
+	}
+	PG_END_TRY();
 }
 
 static void
@@ -1084,6 +1141,13 @@ chunk_add_to_publications(const Chunk *chunk)
 	foreach (lc, puboids)
 	{
 		Oid puboid = lfirst_oid(lc);
+
+		/* Previous iteration may have dropped the publication target of this iteration. */
+		if (!SearchSysCacheExists1(PUBLICATIONOID, ObjectIdGetDatum(puboid)))
+		{
+			continue;
+		}
+
 		chunk_add_to_publication(puboid, chunk);
 	}
 }
