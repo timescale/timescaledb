@@ -18,6 +18,8 @@ typedef struct VectorAggDef VectorAggDef;
 
 typedef struct GroupingColumn GroupingColumn;
 
+struct expr_cache_hash;
+
 /*
  * This is a common interface for grouping policies which define how the rows
  * are grouped for aggregation -- e.g. there can be an implementation for no
@@ -32,10 +34,12 @@ typedef struct GroupingPolicy
 	void (*gp_reset)(GroupingPolicy *gp);
 
 	/*
-	 * Aggregate a single compressed batch.
+	 * Aggregate a single compressed batch. The expr_cache is an opaque
+	 * per-batch cache of expression evaluation results, forwarded to
+	 * vector_slot_evaluate_expression.
 	 */
 	void (*gp_add_batch)(GroupingPolicy *gp, DecompressContext *dcontext,
-						 TupleTableSlot *vector_slot);
+						 TupleTableSlot *vector_slot, struct expr_cache_hash *expr_cache);
 
 	/*
 	 * Is a partial aggregation result ready?

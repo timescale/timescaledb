@@ -92,6 +92,17 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 -- can't do index scan when using FIRST/LAST in ORDER BY
 :PREFIX SELECT last(temp, time) FROM btest ORDER BY last(temp, time);
 
+-- do index scan when using FIRST/LAST in HAVING
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(temp, time) > 0;
+
+-- HAVING references a FIRST/LAST aggregate not present in the target list
+:PREFIX SELECT first(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+
+-- DISTINCT in HAVING while the target list has the same aggregate without DISTINCT
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(DISTINCT temp, time) > 0;
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(DISTINCT temp, time) IS NOT NULL;
+
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
 
@@ -120,6 +131,25 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 -- test nested FIRST/LAST in ORDER BY - no optimization possible
 :PREFIX SELECT abs(last(temp, time)) FROM btest ORDER BY abs(last(temp,time));
 
+ROLLBACK;
+
+-- two FIRST/LAST sharing the value column but ordering on different columns
+BEGIN;
+CREATE TABLE bookend_two_orderings(time timestamptz NOT NULL, time_alt timestamptz NOT NULL, val int NOT NULL);
+SELECT schema_name, table_name, created FROM create_hypertable('bookend_two_orderings', 'time');
+INSERT INTO bookend_two_orderings
+SELECT '2025-01-01'::timestamptz + g * interval '1 minute',
+       '2025-01-01'::timestamptz + (201 - g) * interval '1 minute',
+       g
+FROM generate_series(1, 200) g;
+CREATE INDEX ON bookend_two_orderings(time);
+CREATE INDEX ON bookend_two_orderings(time_alt);
+:PREFIX SELECT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+:PREFIX SELECT last(val, time), last(val, time_alt) FROM bookend_two_orderings;
+-- DISTINCT sorts on the first/last results, so the optimization must be skipped
+SET enable_hashagg = off;
+:PREFIX SELECT DISTINCT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+RESET enable_hashagg;
 ROLLBACK;
 
 -- Test with NULL numeric values

@@ -148,12 +148,13 @@ INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_3') c
 \gset
 
-SELECT format('%I.%I', i.schemaname, i.indexname) AS "COMPRESSED_CHUNK_INDEX"
-FROM pg_indexes i
-JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name AND i.tablename = cc.table_name
-JOIN _timescaledb_catalog.compression_settings cs ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-JOIN _timescaledb_catalog.chunk uc ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-WHERE format('%I.%I', uc.schema_name, uc.table_name) = :'CHUNK'
+SELECT cs.compress_relid AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings cs WHERE cs.relid = :'CHUNK'::regclass \gset
+
+SELECT format('%I.%I', n.nspname, i.relname) AS "COMPRESSED_CHUNK_INDEX"
+FROM pg_index idx
+JOIN pg_class i ON i.oid = idx.indexrelid
+JOIN pg_namespace n ON n.oid = i.relnamespace
+WHERE idx.indrelid = :'COMPRESSED_CHUNK'::regclass
 LIMIT 1 \gset
 
 -- after compression no data should be in uncompressed chunk
@@ -190,7 +191,7 @@ set timescaledb.debug_compression_path_info to on;
 -- ignore matching partial index
 BEGIN;
   DROP INDEX :COMPRESSED_CHUNK_INDEX;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, label, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC)
+  CREATE INDEX partial_index ON :COMPRESSED_CHUNK (device, label, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC)
 	WHERE label LIKE 'missing';
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
@@ -198,35 +199,35 @@ ROLLBACK;
 -- ignore matching covering index
 BEGIN;
   DROP INDEX :COMPRESSED_CHUNK_INDEX;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_min_1, _ts_meta_max_1);
+  CREATE INDEX covering_index ON :COMPRESSED_CHUNK (device) INCLUDE (label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- out of order segmentby index, index is still usable
 BEGIN;
   DROP INDEX :COMPRESSED_CHUNK_INDEX;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+  CREATE INDEX partial_index ON :COMPRESSED_CHUNK (label, device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- index with sequence number in the middle, index should be usable with single index scan key
 BEGIN;
   DROP INDEX :COMPRESSED_CHUNK_INDEX;
-  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, label);
+  CREATE INDEX covering_index ON :COMPRESSED_CHUNK (device, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC, label);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore expression index
 BEGIN;
   DROP INDEX :COMPRESSED_CHUNK_INDEX;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
+  CREATE INDEX partial_index ON :COMPRESSED_CHUNK (device, lower(label), _ts_meta_min_1 DESC, _ts_meta_max_1 DESC);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 
 -- ignore non-btree index
 BEGIN;
   DROP INDEX :COMPRESSED_CHUNK_INDEX;
-  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_min_1, _ts_meta_max_1);
+  CREATE INDEX partial_index ON :COMPRESSED_CHUNK USING brin (device, label, _ts_meta_min_1, _ts_meta_max_1);
   INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 ROLLBACK;
 \set ON_ERROR_STOP 1

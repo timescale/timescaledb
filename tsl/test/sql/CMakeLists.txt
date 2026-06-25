@@ -27,6 +27,7 @@ set(TEST_FILES
     chunk_publication_compression.sql
     columnar_scan_cost.sql
     columnstore_aliases.sql
+    compact_chunk.sql
     compress_auto_sparse_index.sql
     compress_batch_size.sql
     compress_bitmap_scan.sql
@@ -41,10 +42,12 @@ set(TEST_FILES
     compress_compbloom_manual_config.sql
     compress_compbloom_naming.sql
     compress_compbloom_upsert.sql
-    compress_firstlast_sparse.sql
     compress_default.sql
+    compress_dml_aux.sql
+    compress_dml_bitmap_rescan.sql
     compress_dml_copy.sql
     compress_explain.sql
+    compress_firstlast_sparse.sql
     compress_float8_corrupt.sql
     compress_qualpushdown_complex.sql
     compress_qualpushdown_saop.sql
@@ -157,6 +160,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_bools.sql
     compression_bool_vectorized.sql
     compression_ddl.sql
+    compression_delete_bitmapscan.sql
     compression_errors.sql
     compression_hypertable.sql
     compression_merge.sql
@@ -208,7 +212,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vacuum.sql)
 
   list(APPEND TEST_TEMPLATES compression_update_delete.sql.in
-       compression_delete_bitmapscan.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
@@ -225,6 +228,9 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
 
   list(APPEND TEST_FILES privilege_maintain.sql
        merge_append_partially_compressed.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES vector_agg_expr_debug.sql)
+  endif(CMAKE_BUILD_TYPE MATCHES Debug)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))

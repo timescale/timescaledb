@@ -511,3 +511,27 @@ select * from settings;
 
 reset timescaledb.auto_sparse_indexes;
 drop table test_orderby_default_noguc;
+
+-- Rename a column to a name that matches a sparse index type token
+create table test_rename_token(ts int not null, minmax int not null);
+select create_hypertable('test_rename_token', 'ts', chunk_time_interval => 100);
+alter table test_rename_token set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+insert into test_rename_token select 1,1;
+select compress_chunk(show_chunks('test_rename_token'));
+select * from settings;
+-- renaming to a type token must not corrupt the orderby minmax index
+alter table test_rename_token rename column minmax to bloom;
+select * from settings;
+alter table test_rename_token rename column bloom to firstlast;
+select * from settings;
+-- renaming an indexed column to a type token keeps the index intact
+alter table test_rename_token rename column ts to minmax;
+select * from settings;
+
+\set ON_ERROR_STOP 0
+alter table test_rename_token rename column minmax to _ts_meta_v2_first_minmax;
+alter table test_rename_token rename column minmax to _ts_meta_count;
+\set ON_ERROR_STOP 1
+
+drop table test_rename_token;
+

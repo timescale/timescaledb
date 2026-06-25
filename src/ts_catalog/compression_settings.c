@@ -633,6 +633,12 @@ compression_settings_rename_column(CompressionSettings *settings, const char *ol
 						continue;
 					}
 
+					/* Skip all but `column` key. */
+					if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyCol]) != 0)
+					{
+						continue;
+					}
+
 					ListCell *value_cell = NULL;
 					foreach (value_cell, pair->values)
 					{

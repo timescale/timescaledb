@@ -1,0 +1,2 @@
+Implements: #9917 Decompress less data in DML on compressed hypertable by accounting for the prepared statement parameters
+Thanks: @MaximeEthon for reporting an issue with prepared statement parameters in DML decompression

@@ -20,16 +20,18 @@ FROM show_chunks('test1') c;
 
 SELECT count(*) FROM  test1;
 
+SELECT compress_relid AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass \gset
+
 --we have 1 compressed row --
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
 
 -- single and multi row insert into the compressed chunk --
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , 11, 16, 'new' ;
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
 
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, i +5, 'clay'
 FROM (Select generate_series(10, 20, 1) i ) q;
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
 
 SELECT count(*) from test1;
 
@@ -37,7 +39,7 @@ SELECT count(*) from test1;
 COPY test1 FROM STDIN DELIMITER ',';
 2020-01-02 11:16:00-05,11,16,copy
 \.
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
 
 -- multi row copy
 COPY test1 FROM STDIN DELIMITER ',';
@@ -45,7 +47,7 @@ COPY test1 FROM STDIN DELIMITER ',';
 2020-01-02 11:16:00-05,12,17,multicopy
 2020-01-02 11:16:00-05,13,18,multicopy
 \.
-SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT COUNT(*) from :COMPRESSED_CHUNK;
 
 --Verify that all the data went into the initial chunk
 SELECT count(*)
@@ -74,14 +76,14 @@ SELECT * from test1 WHERE i is NULL;
 --TEST 2 now alter the table and add a new column to it
 ALTER TABLE test1 ADD COLUMN newtcol varchar(400);
 --add rows with segments that overlap some of the previous ones
-SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT count(*) from :COMPRESSED_CHUNK;
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , 100, 101, 'prev101', 'this is the newtcol101';
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, 16, 'prev16', 'this is the newtcol16'
 FROM (Select generate_series(11, 16, 1) i ) q;
 SELECT * FROM test1 WHERE b = 16 order by 1, 2, 3, 4, 5;
 
 --number of rows in the chunk
-SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT count(*) from :COMPRESSED_CHUNK;
 SELECT count(*)
 FROM show_chunks('test1') c;
 
@@ -96,7 +98,7 @@ COPY test1 FROM STDIN DELIMITER ',';
 \.
 
 --number of rows in the chunk
-SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+SELECT count(*) from :COMPRESSED_CHUNK;
 SELECT count(*)
 FROM show_chunks('test1') c;
 
@@ -1121,7 +1123,7 @@ CREATE TABLE direct_compressed_insert (time timestamptz) WITH (tsdb.hypertable);
 
 INSERT INTO direct_compressed_insert SELECT generate_series('2024-01-01'::timestamptz, '2024-01-01 1:00:00'::timestamptz, '1 second');
 SELECT count(compress_chunk(c)) FROM show_chunks('direct_compressed_insert') c;
-SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+SELECT cs.compress_relid::text AS "CHUNK" FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk c ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id WHERE h.table_name = 'direct_compressed_insert' AND cs.compress_relid IS NOT NULL ORDER BY c.id DESC LIMIT 1 \gset
 
 CREATE TABLE compressed_batches AS SELECT * FROM :CHUNK;
 SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;

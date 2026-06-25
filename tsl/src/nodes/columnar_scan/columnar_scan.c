@@ -5,8 +5,6 @@
  */
 
 #include <postgres.h>
-#include "chunk.h"
-#include "hypertable_cache.h"
 #include <catalog/pg_operator.h>
 #include <math.h>
 #include <miscadmin.h>
@@ -21,8 +19,6 @@
 #include <optimizer/paths.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
-#include <planner.h>
-#include <planner/planner.h>
 #include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
@@ -30,16 +26,20 @@
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#include "chunk.h"
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
+#include "hypertable_cache.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/qual_pushdown.h"
+#include "planner.h"
+#include "planner/planner.h"
 #include "ts_catalog/array_utils.h"
 #include "utils.h"
 
@@ -1733,15 +1733,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			continue;
 		}
 
-		if (decompression_path == chunk_path_no_sort)
-		{
-			/*
-			 * We can't use the unsorted decompression path directly because it
-			 * doesn't have the sort projection cost workaround.
-			 */
-			continue;
-		}
-
 		if (!bms_is_empty(chunk_rel->lateral_relids) || !bms_is_empty(req_outer))
 		{
 			/*
@@ -1755,10 +1746,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			/*
 			 * We have to remove the explicit Sort, otherwise it will lead to
 			 * planning time regression because of double call of
-			 * prepare_sort_from_pathkeys() in MergeAppend plan creation. Still,
-			 * we have to use the copy of ColumnarScan path that we created
-			 * for explicit sorting, because it has the sort projection cost
-			 * workaround.
+			 * prepare_sort_from_pathkeys() in MergeAppend plan creation.
 			 */
 			decompression_path = castNode(SortPath, decompression_path)->subpath;
 		}
@@ -2378,6 +2366,9 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	info->compressed_rte = columnar_scan_make_rte(info->settings->fd.compress_relid,
 												  info->chunk_rte->rellockmode,
 												  root->parse);
+
+	/* mark RTE to skip ts_classify_relation */
+	ts_rte_mark_compressed_relation(info->compressed_rte);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
 
 	root->parse->rtable = lappend(root->parse->rtable, info->compressed_rte);
