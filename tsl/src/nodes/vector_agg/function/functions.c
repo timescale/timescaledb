@@ -5,6 +5,7 @@
  */
 
 #include <limits.h>
+#include <math.h>
 
 #include <postgres.h>
 
