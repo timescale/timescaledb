@@ -569,6 +569,12 @@ time_bucket_width_to_integral(const Const *width, Oid bucket_type, int64 integra
 		default:
 			return false;
 	}
+
+	if (*integral_width == 0)
+	{
+		return false;
+	}
+
 	return true;
 }
 
