@@ -187,7 +187,7 @@ typedef struct WatermarkConstEntry
  * We maintain a hash map (hypertable id -> constant) to ensure we use the same constant
  * for the same watermark across the while query.
  */
-static HTAB *pg_nodiscard
+pg_nodiscard static HTAB *
 init_watermark_map()
 {
 	struct HASHCTL hctl = {
