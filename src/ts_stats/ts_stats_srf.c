@@ -13,6 +13,7 @@
 #include <miscadmin.h>
 #include <utils/builtins.h>
 #include <utils/timestamp.h>
+#include <utils/tuplestore.h>
 
 /*
  * SRF Pushdown args:

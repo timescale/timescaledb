@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/attmap.h>
 #include <access/xact.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
