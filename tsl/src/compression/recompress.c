@@ -10,6 +10,8 @@
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
+#include <storage/latch.h>
+#include <storage/lock.h>
 #include <utils/datum.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
@@ -17,7 +19,9 @@
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/tuplesort.h>
 #include <utils/typcache.h>
+#include <utils/wait_event.h>
 
 #include "api.h"
 #include "batch_metadata_builder.h"
