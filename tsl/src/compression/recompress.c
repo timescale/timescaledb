@@ -1414,6 +1414,14 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 
 	BulkWriter writer = bulk_writer_build(compressed_chunk_rel, 0);
 	Oid index_oid = get_compressed_chunk_index(writer.indexstate, settings);
+	if (!OidIsValid(index_oid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("could not find index on compressed chunk \"%s.%s\" for compaction",
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name))));
+	}
 	Relation index_rel = index_open(index_oid, RowExclusiveLock);
 	ereport(DEBUG1,
 			(errmsg("locks acquired for compaction: \"%s.%s\"",

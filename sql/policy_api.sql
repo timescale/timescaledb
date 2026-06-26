@@ -44,6 +44,23 @@ CREATE OR REPLACE FUNCTION @extschema@.remove_reorder_policy(hypertable REGCLASS
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_remove'
 LANGUAGE C VOLATILE STRICT;
 
+/* compaction policy */
+CREATE OR REPLACE FUNCTION @extschema@.add_compaction_policy(
+    hypertable REGCLASS,
+    if_not_exists BOOL = false,
+    schedule_interval INTERVAL = NULL,
+    initial_start TIMESTAMPTZ = NULL,
+    timezone TEXT = NULL,
+    max_chunks INTEGER = NULL,
+    inactive_for INTERVAL = NULL
+) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_policy_compaction_add'
+LANGUAGE C VOLATILE; -- not strict because we need to set a default schedule_interval
+
+CREATE OR REPLACE FUNCTION @extschema@.remove_compaction_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_policy_compaction_remove'
+LANGUAGE C VOLATILE STRICT;
+
 /* compression policy */
 CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(
     hypertable REGCLASS,
