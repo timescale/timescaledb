@@ -7,6 +7,7 @@
 #include <fmgr.h>
 #include <storage/ipc.h>
 
+#include "bgw_policy/compaction_api.h"
 #include "bgw_policy/compression_api.h"
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/job.h"
@@ -83,6 +84,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_check = policy_reorder_check,
 	.policy_reorder_remove = policy_reorder_remove,
+	.policy_compaction_add = policy_compaction_add,
+	.policy_compaction_check = policy_compaction_check,
+	.policy_compaction_remove = policy_compaction_remove,
 	.policy_retention_add = policy_retention_add,
 	.policy_retention_proc = policy_retention_proc,
 	.policy_retention_check = policy_retention_check,

@@ -145,3 +145,9 @@ ALTER TABLE _timescaledb_catalog.compression_chunk_size
 -- END repopulate chunk.compressed_chunk_id
 --
 
+-- Remove compaction policy jobs since the policy does not exist in the older version.
+DELETE FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_compaction';
+DROP FUNCTION IF EXISTS @extschema@.add_compaction_policy(REGCLASS, BOOL, INTERVAL, TIMESTAMPTZ, TEXT, INTEGER, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.remove_compaction_policy(REGCLASS, BOOL);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compaction(INTEGER, JSONB);
+DROP FUNCTION IF EXISTS _timescaledb_functions.policy_compaction_check(JSONB);
