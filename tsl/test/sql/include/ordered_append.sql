@@ -46,6 +46,15 @@ ORDER BY time DESC,
   device_id
 LIMIT 1;
 
+-- window function ordering by time combined with the opposite final ORDER BY direction
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+
 -- test RECORD in targetlist
 :PREFIX
 SELECT (time,
@@ -83,8 +92,7 @@ ORDER BY device_id,
 LIMIT 1;
 RESET enable_seqscan;
 
--- test equality constraint on ORDER BY prefix
--- currently not optimized
+-- equality constraint on the ORDER BY prefix leaves time as the effective order
 SET enable_seqscan TO false;
 SET enable_indexonlyscan TO false;
 :PREFIX

@@ -1,0 +1,1 @@
+Fixes: #10014 Fix wrong row order for ordered append with window functions

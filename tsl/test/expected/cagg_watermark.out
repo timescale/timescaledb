@@ -1327,30 +1327,26 @@ UNION ALL
  Append (actual rows=6.00 loops=1)
    ->  Finalize GroupAggregate (actual rows=0.00 loops=1)
          Group Key: (time_bucket('5'::bigint, small_integer_ht."time"))
-         ->  Sort (actual rows=0.00 loops=1)
-               Sort Key: (time_bucket('5'::bigint, small_integer_ht."time"))
-               Sort Method: quicksort 
-               ->  Custom Scan (ChunkAppend) on small_integer_ht (actual rows=0.00 loops=1)
-                     Chunks excluded during startup: 3
+         ->  Custom Scan (ChunkAppend) on small_integer_ht (actual rows=0.00 loops=1)
+               Order: time_bucket('5'::bigint, small_integer_ht."time")
+               Chunks excluded during startup: 3
    ->  Finalize GroupAggregate (actual rows=6.00 loops=1)
          Group Key: (time_bucket('5'::bigint, small_integer_ht_1."time"))
-         ->  Sort (actual rows=6.00 loops=1)
-               Sort Key: (time_bucket('5'::bigint, small_integer_ht_1."time"))
-               Sort Method: quicksort 
-               ->  Custom Scan (ChunkAppend) on small_integer_ht small_integer_ht_1 (actual rows=6.00 loops=1)
-                     Chunks excluded during startup: 0
-                     ->  Partial GroupAggregate (actual rows=2.00 loops=1)
-                           Group Key: time_bucket('5'::bigint, _hyper_14_61_chunk."time")
-                           ->  Index Only Scan Backward using _hyper_14_61_chunk_small_integer_ht_time_idx on _hyper_14_61_chunk (actual rows=10.00 loops=1)
-                                 Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
-                     ->  Partial GroupAggregate (actual rows=2.00 loops=1)
-                           Group Key: time_bucket('5'::bigint, _hyper_14_62_chunk."time")
-                           ->  Index Only Scan Backward using _hyper_14_62_chunk_small_integer_ht_time_idx on _hyper_14_62_chunk (actual rows=10.00 loops=1)
-                                 Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
-                     ->  Partial GroupAggregate (actual rows=2.00 loops=1)
-                           Group Key: time_bucket('5'::bigint, _hyper_14_63_chunk."time")
-                           ->  Index Only Scan Backward using _hyper_14_63_chunk_small_integer_ht_time_idx on _hyper_14_63_chunk (actual rows=6.00 loops=1)
-                                 Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
+         ->  Custom Scan (ChunkAppend) on small_integer_ht small_integer_ht_1 (actual rows=6.00 loops=1)
+               Order: time_bucket('5'::bigint, small_integer_ht_1."time")
+               Chunks excluded during startup: 0
+               ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                     Group Key: time_bucket('5'::bigint, _hyper_14_61_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_14_61_chunk_small_integer_ht_time_idx on _hyper_14_61_chunk (actual rows=10.00 loops=1)
+                           Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
+               ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                     Group Key: time_bucket('5'::bigint, _hyper_14_62_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_14_62_chunk_small_integer_ht_time_idx on _hyper_14_62_chunk (actual rows=10.00 loops=1)
+                           Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
+               ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                     Group Key: time_bucket('5'::bigint, _hyper_14_63_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_14_63_chunk_small_integer_ht_time_idx on _hyper_14_63_chunk (actual rows=6.00 loops=1)
+                           Index Cond: ("time" < COALESCE((_timescaledb_functions.cagg_watermark(15))::integer, (_timescaledb_functions.cagg_watermark(15))::integer))
 
 -- test with non constant value of the watermark function (should not be constified)
 :EXPLAIN_ANALYZE  SELECT bucket, device, max

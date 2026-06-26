@@ -2594,8 +2594,8 @@ ordered append on skip_scan_ht
 :PREFIX SELECT DISTINCT ON (time) time FROM :TABLE WHERE time BETWEEN 0 AND 5000;
 --- QUERY PLAN ---
  Unique (actual rows=1000.00 loops=1)
-   ->  Merge Append (actual rows=1000.00 loops=1)
-         Sort Key: skip_scan_ht."time"
+   ->  Custom Scan (ChunkAppend) on skip_scan_ht (actual rows=1000.00 loops=1)
+         Order: skip_scan_ht."time"
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=250.00 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_idx on _hyper_1_1_chunk (actual rows=250.00 loops=1)
                      Index Cond: ("time" > NULL::integer)
@@ -3046,15 +3046,15 @@ WHERE CLAUSES
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
 --- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
-   ->  Merge Append (actual rows=1.00 loops=1)
-         Sort Key: skip_scan_ht."time" DESC
-         ->  Index Scan Backward using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
-               Index Cond: (dev = 1)
-         ->  Index Scan Backward using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
-               Index Cond: (dev = 1)
-         ->  Index Scan Backward using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Index Cond: (dev = 1)
+   ->  Custom Scan (ChunkAppend) on skip_scan_ht (actual rows=1.00 loops=1)
+         Order: skip_scan_ht."time" DESC
          ->  Index Scan Backward using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               Index Cond: (dev = 1)
+         ->  Index Scan Backward using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (never executed)
+               Index Cond: (dev = 1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (never executed)
+               Index Cond: (dev = 1)
+         ->  Index Scan Backward using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (never executed)
                Index Cond: (dev = 1)
 
 :PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE dev = 1 and time = 100 ORDER BY dev, time DESC;
@@ -3341,19 +3341,20 @@ DEALLOCATE prep;
                            Index Cond: (dev > NULL::integer)
    ->  Result (actual rows=909.00 loops=11)
          ->  Unique (actual rows=909.00 loops=11)
-               ->  Merge Append (actual rows=909.00 loops=11)
-                     Sort Key: skip_scan_ht_1."time"
-                     ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227.00 loops=11)
-                           ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227.00 loops=11)
+               ->  Custom Scan (ChunkAppend) on skip_scan_ht skip_scan_ht_1 (actual rows=909.00 loops=11)
+                     Order: skip_scan_ht_1."time"
+                     Hypertables excluded during runtime: 0
+                     ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=250.00 loops=10)
+                           ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=250.00 loops=10)
                                  Index Cond: (dev = skip_scan_ht.dev)
-                     ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227.00 loops=11)
-                           ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227.00 loops=11)
+                     ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=250.00 loops=10)
+                           ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=250.00 loops=10)
                                  Index Cond: (dev = skip_scan_ht.dev)
-                     ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227.00 loops=11)
-                           ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227.00 loops=11)
+                     ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=250.00 loops=10)
+                           ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=250.00 loops=10)
                                  Index Cond: (dev = skip_scan_ht.dev)
-                     ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227.00 loops=11)
-                           ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227.00 loops=11)
+                     ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=250.00 loops=10)
+                           ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=250.00 loops=10)
                                  Index Cond: (dev = skip_scan_ht.dev)
 
 :PREFIX SELECT time, dev, NULL, 'q9_2' FROM (SELECT b.* FROM
@@ -3377,19 +3378,20 @@ DEALLOCATE prep;
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11.00 loops=1)
                            Index Cond: (dev > NULL::integer)
    ->  Unique (actual rows=909.00 loops=11)
-         ->  Merge Append (actual rows=909.00 loops=11)
-               Sort Key: skip_scan_ht_1."time"
-               ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227.00 loops=11)
-                     ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227.00 loops=11)
+         ->  Custom Scan (ChunkAppend) on skip_scan_ht skip_scan_ht_1 (actual rows=909.00 loops=11)
+               Order: skip_scan_ht_1."time"
+               Hypertables excluded during runtime: 0
+               ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=250.00 loops=10)
+                     ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=250.00 loops=10)
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
-               ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227.00 loops=11)
-                     ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227.00 loops=11)
+               ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=250.00 loops=10)
+                     ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=250.00 loops=10)
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
-               ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227.00 loops=11)
-                     ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227.00 loops=11)
+               ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=250.00 loops=10)
+                     ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=250.00 loops=10)
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
-               ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227.00 loops=11)
-                     ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227.00 loops=11)
+               ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=250.00 loops=10)
+                     ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=250.00 loops=10)
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
 
 -- Test that the multi-column DISTINCT emulation is equivalent to a real multi-column DISTINCT
@@ -3414,19 +3416,20 @@ DEALLOCATE prep;
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=11.00 loops=1)
                            Index Cond: (dev > NULL::integer)
    ->  Unique (actual rows=909.00 loops=11)
-         ->  Merge Append (actual rows=909.00 loops=11)
-               Sort Key: skip_scan_ht_1."time"
-               ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227.00 loops=11)
-                     ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227.00 loops=11)
+         ->  Custom Scan (ChunkAppend) on skip_scan_ht skip_scan_ht_1 (actual rows=909.00 loops=11)
+               Order: skip_scan_ht_1."time"
+               Hypertables excluded during runtime: 0
+               ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=250.00 loops=10)
+                     ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=250.00 loops=10)
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
-               ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227.00 loops=11)
-                     ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227.00 loops=11)
+               ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=250.00 loops=10)
+                     ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=250.00 loops=10)
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
-               ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227.00 loops=11)
-                     ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227.00 loops=11)
+               ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=250.00 loops=10)
+                     ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=250.00 loops=10)
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
-               ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227.00 loops=11)
-                     ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227.00 loops=11)
+               ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=250.00 loops=10)
+                     ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=250.00 loops=10)
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
 
 :PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
@@ -3490,19 +3493,20 @@ UNION SELECT b.* FROM
                                        ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=11.00 loops=1)
                                              Index Cond: (dev > NULL::integer)
                      ->  Unique (actual rows=909.00 loops=11)
-                           ->  Merge Append (actual rows=909.00 loops=11)
-                                 Sort Key: skip_scan_ht_2."time"
-                                 ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_2 (actual rows=227.00 loops=11)
-                                       ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_2 (actual rows=227.00 loops=11)
+                           ->  Custom Scan (ChunkAppend) on skip_scan_ht skip_scan_ht_2 (actual rows=909.00 loops=11)
+                                 Order: skip_scan_ht_2."time"
+                                 Hypertables excluded during runtime: 0
+                                 ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_2 (actual rows=250.00 loops=10)
+                                       ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_2 (actual rows=250.00 loops=10)
                                              Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
-                                 ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_2 (actual rows=227.00 loops=11)
-                                       ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_2 (actual rows=227.00 loops=11)
+                                 ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_2 (actual rows=250.00 loops=10)
+                                       ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_2 (actual rows=250.00 loops=10)
                                              Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
-                                 ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_2 (actual rows=227.00 loops=11)
-                                       ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_2 (actual rows=227.00 loops=11)
+                                 ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_2 (actual rows=250.00 loops=10)
+                                       ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_2 (actual rows=250.00 loops=10)
                                              Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
-                                 ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227.00 loops=11)
-                                       ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227.00 loops=11)
+                                 ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=250.00 loops=10)
+                                       ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=250.00 loops=10)
                                              Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
 
 -- SkipScan into INSERT
@@ -5781,19 +5785,19 @@ WHERE CLAUSES
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
 --- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
-   ->  Merge Append (actual rows=1.00 loops=1)
-         Sort Key: skip_scan_htc."time" DESC
-         ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_4_34_chunk_dev__ts_meta_v2_first_time__ts_me_idx on compress_hyper_4_34_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_4_35_chunk_dev__ts_meta_v2_first_time__ts_me_idx on compress_hyper_4_35_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_4_36_chunk_dev__ts_meta_v2_first_time__ts_me_idx on compress_hyper_4_36_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
+   ->  Custom Scan (ChunkAppend) on skip_scan_htc (actual rows=1.00 loops=1)
+         Order: skip_scan_htc."time" DESC
          ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
                ->  Index Scan Backward using compress_hyper_4_37_chunk_dev__ts_meta_v2_first_time__ts_me_idx on compress_hyper_4_37_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (never executed)
+               ->  Index Scan Backward using compress_hyper_4_36_chunk_dev__ts_meta_v2_first_time__ts_me_idx on compress_hyper_4_36_chunk (never executed)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (never executed)
+               ->  Index Scan Backward using compress_hyper_4_35_chunk_dev__ts_meta_v2_first_time__ts_me_idx on compress_hyper_4_35_chunk (never executed)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (never executed)
+               ->  Index Scan Backward using compress_hyper_4_34_chunk_dev__ts_meta_v2_first_time__ts_me_idx on compress_hyper_4_34_chunk (never executed)
                      Index Cond: (dev = 1)
 
 -- CTE
@@ -7353,19 +7357,19 @@ SET enable_seqscan = false;
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
 --- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
-   ->  Merge Append (actual rows=1.00 loops=1)
-         Sort Key: skip_scan_htcl."time" DESC
-         ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_v2_last_time__ts_met_idx on compress_hyper_6_10_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_11_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_14_chunk_dev__ts_meta_v2_last_time__ts_met_idx on compress_hyper_6_14_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_12_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_15_chunk_dev__ts_meta_v2_last_time__ts_met_idx on compress_hyper_6_15_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
+   ->  Custom Scan (ChunkAppend) on skip_scan_htcl (actual rows=1.00 loops=1)
+         Order: skip_scan_htcl."time" DESC
          ->  Custom Scan (ColumnarScan) on _hyper_5_13_chunk (actual rows=1.00 loops=1)
                ->  Index Scan using compress_hyper_6_16_chunk_dev__ts_meta_v2_last_time__ts_met_idx on compress_hyper_6_16_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_12_chunk (never executed)
+               ->  Index Scan using compress_hyper_6_15_chunk_dev__ts_meta_v2_last_time__ts_met_idx on compress_hyper_6_15_chunk (never executed)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_11_chunk (never executed)
+               ->  Index Scan using compress_hyper_6_14_chunk_dev__ts_meta_v2_last_time__ts_met_idx on compress_hyper_6_14_chunk (never executed)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (never executed)
+               ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_v2_last_time__ts_met_idx on compress_hyper_6_10_chunk (never executed)
                      Index Cond: (dev = 1)
 
 -- CTE
@@ -7568,8 +7572,8 @@ INSERT INTO i3629 SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i
 EXPLAIN (SUMMARY OFF, BUFFERS OFF, COSTS OFF) SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
 --- QUERY PLAN ---
  Limit
-   ->  Merge Append
-         Sort Key: i3629."time" DESC
+   ->  Custom Scan (ChunkAppend) on i3629
+         Order: i3629."time" DESC
          ->  Index Scan using _hyper_7_42_chunk_i3629_time_idx on _hyper_7_42_chunk
                Filter: (a = 2)
          ->  Index Scan using _hyper_7_43_chunk_i3629_time_idx on _hyper_7_43_chunk

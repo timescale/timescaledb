@@ -1063,7 +1063,6 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 			 */
 			{
 				MergeAppendPath *merge = castNode(MergeAppendPath, path);
-				PathKey *pk;
 				ListCell *lc;
 
 				if (!ordered || path->pathkeys == NIL || list_length(merge->subpaths) == 0)
@@ -1105,8 +1104,6 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					return false;
 				}
 
-				pk = linitial_node(PathKey, path->pathkeys);
-
 				/*
 				 * Check PathKey is compatible with Ordered Append ordering
 				 * we created when expanding hypertable.
@@ -1115,41 +1112,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 * Ordered Append transformation because the RelOptInfo may
 				 * be used for multiple Paths.
 				 */
-				Expr *em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, rel);
+				Var *order_var = ts_ordered_append_var_from_pathkey(rel, path->pathkeys);
 
-				/*
-				 * If this is a join the ordering information might not be
-				 * for the current rel and have no EquivalenceMember.
-				 */
-
-				if (!em_expr)
-				{
-					return false;
-				}
-
-				if (IsA(em_expr, Var) && castNode(Var, em_expr)->varattno == order_attno)
-				{
-					return true;
-				}
-
-				if (IsA(em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
-				{
-					FuncExpr *func = castNode(FuncExpr, em_expr);
-					FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);
-					Expr *transformed;
-
-					if (info && info->sort_transform)
-					{
-						transformed = info->sort_transform(func);
-						if (IsA(transformed, Var) &&
-							castNode(Var, transformed)->varattno == order_attno)
-						{
-							return true;
-						}
-					}
-				}
-
-				return false;
+				return order_var != NULL && order_var->varattno == order_attno;
 				break;
 			}
 		default:

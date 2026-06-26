@@ -194,6 +194,29 @@ LIMIT 1;
          ->  Index Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (never executed)
                Index Cond: (device_id = 1)
 
+-- window function ordering by time combined with the opposite final ORDER BY direction
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: metrics."time" DESC
+         Sort Method: top-N heapsort 
+         ->  WindowAgg (actual rows=13674.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics (actual rows=13674.00 loops=1)
+                     Order: metrics."time"
+                     ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (actual rows=3598.00 loops=1)
+                           Index Cond: (device_id = 1)
+                     ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk (actual rows=5038.00 loops=1)
+                           Index Cond: (device_id = 1)
+                     ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=5038.00 loops=1)
+                           Index Cond: (device_id = 1)
+
 -- test RECORD in targetlist
 :PREFIX
 SELECT (time,
@@ -272,8 +295,7 @@ LIMIT 1;
                      Index Cond: (device_id = ANY ('{1,2}'::integer[]))
 
 RESET enable_seqscan;
--- test equality constraint on ORDER BY prefix
--- currently not optimized
+-- equality constraint on the ORDER BY prefix leaves time as the effective order
 SET enable_seqscan TO false;
 SET enable_indexonlyscan TO false;
 :PREFIX
@@ -286,13 +308,13 @@ ORDER BY device_id,
 LIMIT 10;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
-   ->  Merge Append (actual rows=10.00 loops=1)
-         Sort Key: metrics."time"
+   ->  Custom Scan (ChunkAppend) on metrics (actual rows=10.00 loops=1)
+         Order: metrics."time"
          ->  Index Scan Backward using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (actual rows=10.00 loops=1)
                Index Cond: (device_id = 1)
-         ->  Index Scan Backward using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+         ->  Index Scan Backward using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk (never executed)
                Index Cond: (device_id = 1)
-         ->  Index Scan Backward using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+         ->  Index Scan Backward using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (never executed)
                Index Cond: (device_id = 1)
 
 RESET enable_seqscan;
@@ -872,6 +894,29 @@ LIMIT 1;
          ->  Index Scan Backward using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk (never executed)
                Index Cond: (device_id = 1)
 
+-- window function ordering by time combined with the opposite final ORDER BY direction
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: metrics_space."time" DESC
+         Sort Method: top-N heapsort 
+         ->  WindowAgg (actual rows=13674.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=13674.00 loops=1)
+                     Order: metrics_space."time"
+                     ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk (actual rows=3598.00 loops=1)
+                           Index Cond: (device_id = 1)
+                     ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk (actual rows=5038.00 loops=1)
+                           Index Cond: (device_id = 1)
+                     ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk (actual rows=5038.00 loops=1)
+                           Index Cond: (device_id = 1)
+
 -- test RECORD in targetlist
 :PREFIX
 SELECT (time,
@@ -969,8 +1014,7 @@ LIMIT 1;
                Index Cond: (device_id = ANY ('{1,2}'::integer[]))
 
 RESET enable_seqscan;
--- test equality constraint on ORDER BY prefix
--- currently not optimized
+-- equality constraint on the ORDER BY prefix leaves time as the effective order
 SET enable_seqscan TO false;
 SET enable_indexonlyscan TO false;
 :PREFIX
@@ -983,13 +1027,13 @@ ORDER BY device_id,
 LIMIT 10;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
-   ->  Merge Append (actual rows=10.00 loops=1)
-         Sort Key: metrics_space."time"
+   ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=10.00 loops=1)
+         Order: metrics_space."time"
          ->  Index Scan using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk (actual rows=10.00 loops=1)
                Index Cond: (device_id = 1)
-         ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk (never executed)
                Index Cond: (device_id = 1)
-         ->  Index Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk (never executed)
                Index Cond: (device_id = 1)
 
 RESET enable_seqscan;
@@ -1900,6 +1944,36 @@ LIMIT 1;
                ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (never executed)
                      Index Cond: (device_id = 1)
 
+-- window function ordering by time combined with the opposite final ORDER BY direction
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: metrics_compressed."time" DESC
+         Sort Method: top-N heapsort 
+         ->  WindowAgg (actual rows=13674.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=13674.00 loops=1)
+                     Order: metrics_compressed."time"
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=3598.00 loops=1)
+                           ->  Sort (actual rows=4.00 loops=1)
+                                 Sort Key: compress_hyper_4_16_chunk._ts_meta_v2_last_time, compress_hyper_4_16_chunk._ts_meta_v2_first_time
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=4.00 loops=1)
+                                       Filter: (device_id = 1)
+                                       Rows Removed by Filter: 16
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=5038.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (actual rows=6.00 loops=1)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=5038.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=6.00 loops=1)
+                                 Index Cond: (device_id = 1)
+
 -- test RECORD in targetlist
 :PREFIX
 SELECT (time,
@@ -2001,8 +2075,7 @@ LIMIT 1;
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
 
 RESET enable_seqscan;
--- test equality constraint on ORDER BY prefix
--- currently not optimized
+-- equality constraint on the ORDER BY prefix leaves time as the effective order
 SET enable_seqscan TO false;
 SET enable_indexonlyscan TO false;
 :PREFIX
@@ -2015,16 +2088,16 @@ ORDER BY device_id,
 LIMIT 10;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
-   ->  Merge Append (actual rows=10.00 loops=1)
-         Sort Key: metrics_compressed."time"
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=10.00 loops=1)
+         Order: metrics_compressed."time"
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=10.00 loops=1)
                ->  Index Scan Backward using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (never executed)
                      Index Cond: (device_id = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+               ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (never executed)
                      Index Cond: (device_id = 1)
 
 RESET enable_seqscan;
@@ -2975,6 +3048,32 @@ LIMIT 1;
                ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (never executed)
                      Index Cond: (device_id = 1)
 
+-- window function ordering by time combined with the opposite final ORDER BY direction
+:PREFIX
+SELECT time,
+  row_number() OVER (ORDER BY time)
+FROM :TEST_TABLE
+WHERE device_id = 1
+ORDER BY time DESC
+LIMIT 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: metrics_space_compressed."time" DESC
+         Sort Method: top-N heapsort 
+         ->  WindowAgg (actual rows=13674.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=13674.00 loops=1)
+                     Order: metrics_space_compressed."time"
+                     ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (actual rows=4.00 loops=1)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=5038.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (actual rows=6.00 loops=1)
+                                 Index Cond: (device_id = 1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=5038.00 loops=1)
+                           ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
+                                 Index Cond: (device_id = 1)
+
 -- test RECORD in targetlist
 :PREFIX
 SELECT (time,
@@ -3138,8 +3237,7 @@ LIMIT 1;
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
 
 RESET enable_seqscan;
--- test equality constraint on ORDER BY prefix
--- currently not optimized
+-- equality constraint on the ORDER BY prefix leaves time as the effective order
 SET enable_seqscan TO false;
 SET enable_indexonlyscan TO false;
 :PREFIX
@@ -3152,16 +3250,16 @@ ORDER BY device_id,
 LIMIT 10;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
-   ->  Merge Append (actual rows=10.00 loops=1)
-         Sort Key: metrics_space_compressed."time"
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=10.00 loops=1)
+         Order: metrics_space_compressed."time"
          ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=10.00 loops=1)
                ->  Index Scan Backward using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (actual rows=1.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (never executed)
+               ->  Index Scan Backward using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (never executed)
                      Index Cond: (device_id = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (never executed)
+               ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (never executed)
                      Index Cond: (device_id = 1)
 
 RESET enable_seqscan;

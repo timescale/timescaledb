@@ -1796,8 +1796,11 @@ WHERE device_id = 1
 ORDER BY device_id,
     time;
 --- QUERY PLAN ---
- Merge Append (actual rows=1728.00 loops=1)
-   Sort Key: metrics."time"
+ Custom Scan (ChunkAppend) on public.metrics (actual rows=1728.00 loops=1)
+   Output: metrics."time", metrics.device_id
+   Order: metrics."time"
+   Startup Exclusion: false
+   Runtime Exclusion: false
    ->  Sort (actual rows=720.00 loops=1)
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
          Sort Key: _hyper_1_1_chunk."time"
@@ -1831,8 +1834,11 @@ WHERE device_id = 1
 ORDER BY device_id,
     time;
 --- QUERY PLAN ---
- Merge Append (actual rows=1728.00 loops=1)
-   Sort Key: metrics."time"
+ Custom Scan (ChunkAppend) on public.metrics (actual rows=1728.00 loops=1)
+   Output: metrics."time", metrics.device_id, metrics.device_id_peer, metrics.v0, metrics.v1, metrics.v2, metrics.v3
+   Order: metrics."time"
+   Startup Exclusion: false
+   Runtime Exclusion: false
    ->  Sort (actual rows=720.00 loops=1)
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.device_id_peer, _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
          Sort Key: _hyper_1_1_chunk."time"
@@ -1866,8 +1872,11 @@ WHERE device_id = 1
 ORDER BY device_id,
     time;
 --- QUERY PLAN ---
- Merge Append (actual rows=1728.00 loops=1)
-   Sort Key: test_table."time"
+ Custom Scan (ChunkAppend) on public.metrics test_table (actual rows=1728.00 loops=1)
+   Output: test_table.*, test_table.device_id, test_table."time"
+   Order: test_table."time"
+   Startup Exclusion: false
+   Runtime Exclusion: false
    ->  Sort (actual rows=720.00 loops=1)
          Output: ((test_table_1.*)::metrics), test_table_1.device_id, test_table_1."time"
          Sort Key: test_table_1."time"
@@ -5690,8 +5699,11 @@ WHERE device_id = 1
 ORDER BY device_id,
     time;
 --- QUERY PLAN ---
- Merge Append (actual rows=1728.00 loops=1)
-   Sort Key: metrics_space."time"
+ Custom Scan (ChunkAppend) on public.metrics_space (actual rows=1728.00 loops=1)
+   Output: metrics_space."time", metrics_space.device_id
+   Order: metrics_space."time"
+   Startup Exclusion: false
+   Runtime Exclusion: false
    ->  Sort (actual rows=720.00 loops=1)
          Output: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
          Sort Key: _hyper_2_4_chunk."time"
@@ -5724,8 +5736,11 @@ WHERE device_id = 1
 ORDER BY device_id,
     time;
 --- QUERY PLAN ---
- Merge Append (actual rows=1728.00 loops=1)
-   Sort Key: metrics_space."time"
+ Custom Scan (ChunkAppend) on public.metrics_space (actual rows=1728.00 loops=1)
+   Output: metrics_space."time", metrics_space.device_id, metrics_space.device_id_peer, metrics_space.v0, metrics_space.v1, metrics_space.v2, metrics_space.v3
+   Order: metrics_space."time"
+   Startup Exclusion: false
+   Runtime Exclusion: false
    ->  Sort (actual rows=720.00 loops=1)
          Output: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id, _hyper_2_4_chunk.device_id_peer, _hyper_2_4_chunk.v0, _hyper_2_4_chunk.v1, _hyper_2_4_chunk.v2, _hyper_2_4_chunk.v3
          Sort Key: _hyper_2_4_chunk."time"
@@ -5758,8 +5773,11 @@ WHERE device_id = 1
 ORDER BY device_id,
     time;
 --- QUERY PLAN ---
- Merge Append (actual rows=1728.00 loops=1)
-   Sort Key: test_table."time"
+ Custom Scan (ChunkAppend) on public.metrics_space test_table (actual rows=1728.00 loops=1)
+   Output: test_table.*, test_table.device_id, test_table."time"
+   Order: test_table."time"
+   Startup Exclusion: false
+   Runtime Exclusion: false
    ->  Sort (actual rows=720.00 loops=1)
          Output: ((test_table_1.*)::metrics_space), test_table_1.device_id, test_table_1."time"
          Sort Key: test_table_1."time"

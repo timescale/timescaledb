@@ -58,6 +58,7 @@ extern Node *ts_chunk_append_state_create(CustomScan *cscan);
 
 extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 											  int *order_attno, bool *reverse);
+extern Var *ts_ordered_append_var_from_pathkey(RelOptInfo *rel, List *pathkeys);
 
 extern TSDLLEXPORT bool ts_is_chunk_append_path(Path *path);
 extern TSDLLEXPORT bool ts_is_chunk_append_plan(Plan *plan);
