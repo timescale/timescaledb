@@ -679,11 +679,15 @@ SELECT * FROM cagg_4_hours_offset;
 SELECT * FROM cagg_4_hours_origin;
 
 -- Update materialized data
+-- Use UTC so the lower refresh boundary (minimum timestamp) prints the same
+-- regardless of the timezone database version on the host
+SET timezone TO 'UTC';
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
+SET timezone TO 'PST8PDT';
 
 -- Query the CAggs and check that all buckets are materialized
 SELECT * FROM cagg_4_hours;
@@ -721,11 +725,15 @@ INSERT INTO temperature values('2020-01-02 01:05:00+01', 2222);
 INSERT INTO temperature values('2020-01-02 01:35:00+01', 5555);
 INSERT INTO temperature values('2020-01-02 05:05:00+01', 8888);
 
+-- Use UTC so the lower refresh boundary (minimum timestamp) prints the same
+-- regardless of the timezone database version on the host
+SET timezone TO 'UTC';
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
+SET timezone TO 'PST8PDT';
 
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours;
