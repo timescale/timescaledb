@@ -26,11 +26,12 @@ jobs:
   update_test:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
-    name: Update test PG${{ matrix.pg }}
+    name: Update test PG${{ matrix.pg }} ${{ matrix.mode }}
     runs-on: 'ubuntu-latest'
     strategy:
       matrix:
         pg: [16, 17, 18]
+        mode: [direct, singlestep]
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -57,19 +58,13 @@ jobs:
         sudo apt-get install -y --no-install-recommends -o Dpkg::Options::="--force-overwrite" ${ts_packages}
         git fetch --tags
 
-    - name: Update tests PG${{ matrix.pg }}
+    - name: Update tests PG${{ matrix.pg }} ${{ matrix.mode }}
       run: |
         PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
-        ./scripts/test_updates.sh
-
-    - name: Singlestep update tests PG${{ matrix.pg }}
-      if: always()
-      run: |
-        PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
-        UPDATE_MODE=singlestep ./scripts/test_updates.sh
+        UPDATE_MODE=${{ matrix.mode }} ./scripts/test_updates.sh
 
     - name: Downgrade tests PG${{ matrix.pg }}
-      if: always()
+      if: always() && matrix.mode == 'direct'
       run: |
         PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
         ./scripts/test_downgrade.sh
@@ -118,14 +113,14 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Coredumps update-test PG${{ matrix.pg }}
+        name: Coredumps update-test PG${{ matrix.pg }} ${{ matrix.mode }}
         path: coredumps
 
     - name: Upload Artifacts
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Update test PG${{ matrix.pg }}
+        name: Update test PG${{ matrix.pg }} ${{ matrix.mode }}
         path: update_test
 
   report_status:
