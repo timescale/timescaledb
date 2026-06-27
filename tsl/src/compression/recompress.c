@@ -1325,8 +1325,8 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 						NameStr(uncompressed_chunk->fd.table_name))));
 	}
 
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-	Ensure(compressed_chunk != NULL,
+	Oid compressed_relid = ts_relation_get_compressed_relid(uncompressed_chunk->table_id);
+	Ensure(OidIsValid(compressed_relid),
 		   "compressed chunk not found for chunk \"%s\"",
 		   get_rel_name(uncompressed_chunk->table_id));
 
@@ -1341,8 +1341,7 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 	 * For uncompressed chunk, we just need to read so AccessShareLock is fine.
 	 */
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
-	Relation compressed_chunk_rel =
-		table_open(compressed_chunk->table_id, ShareUpdateExclusiveLock);
+	Relation compressed_chunk_rel = table_open(compressed_relid, ShareUpdateExclusiveLock);
 
 	int count;
 	LOCKTAG locktag;
