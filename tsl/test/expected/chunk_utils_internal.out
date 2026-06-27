@@ -1856,6 +1856,38 @@ ORDER BY schemaname, tablename;
  _timescaledb_internal | _hyper_24_42_chunk
  public                | ht_pub_test
 
+-- Backfill path: recreating the publication as FOR TABLES IN SCHEMA must
+-- backfill the existing normal chunks but skip the OSM chunk.
+SET timescaledb.enable_chunk_auto_publication = true;
+DROP PUBLICATION test_pub_osm;
+CREATE SCHEMA pub_osm_schema;
+ALTER TABLE public.ht_pub_test SET SCHEMA pub_osm_schema;
+-- Show that the hypertable has both normal and OSM chunks before backfill
+SELECT relid::text AS table_name, osm_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id IN (SELECT id FROM _timescaledb_catalog.hypertable
+                        WHERE table_name = 'ht_pub_test')
+ORDER BY relid::text COLLATE "C";
+                table_name                | osm_chunk 
+------------------------------------------+-----------
+ _timescaledb_internal._hyper_24_40_chunk | f
+ _timescaledb_internal._hyper_24_42_chunk | f
+ osm_chunk_pub_test                       | t
+
+CREATE PUBLICATION test_pub_osm FOR TABLES IN SCHEMA pub_osm_schema;
+-- Only normal chunks should appear; OSM chunk is skipped.
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+      schemaname       |     tablename      
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_24_40_chunk
+ _timescaledb_internal | _hyper_24_42_chunk
+ pub_osm_schema        | ht_pub_test
+
+ALTER TABLE pub_osm_schema.ht_pub_test SET SCHEMA public;
+DROP SCHEMA pub_osm_schema;
 -- Cleanup
 DROP PUBLICATION test_pub_osm CASCADE;
 \c :TEST_DBNAME :ROLE_4

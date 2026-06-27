@@ -271,6 +271,89 @@ SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHE
 DROP PUBLICATION test_pub_all_tables CASCADE;
 DROP TABLE test_hypertable CASCADE;
 
+-- Test 6b: FOR TABLES IN SCHEMA publication with pre-existing chunks
+CREATE SCHEMA ht_schema;
+CREATE TABLE ht_schema.test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('ht_schema.test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Non-hypertable table in the same schema; backfill must skip it.
+CREATE TABLE ht_schema.regular_table (id int);
+
+-- Insert two chunks BEFORE the publication exists
+INSERT INTO ht_schema.test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+INSERT INTO ht_schema.test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+
+CREATE PUBLICATION test_pub_schema FOR TABLES IN SCHEMA ht_schema;
+
+-- Pre-existing chunks should be backfilled
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+
+-- Insert another chunk AFTER the publication; the per-chunk hook covers it
+INSERT INTO ht_schema.test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+
+-- ALTER PUBLICATION ... ADD TABLES IN SCHEMA also backfills.
+CREATE SCHEMA ht_schema2;
+CREATE TABLE ht_schema2.test_hypertable2 (time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('ht_schema2.test_hypertable2', 'time', chunk_time_interval => interval '1 day');
+INSERT INTO ht_schema2.test_hypertable2 VALUES ('2024-02-01 00:00:00+00', 1, 1.0);
+INSERT INTO ht_schema2.test_hypertable2 VALUES ('2024-02-02 00:00:00+00', 2, 2.0);
+
+ALTER PUBLICATION test_pub_schema ADD TABLES IN SCHEMA ht_schema2;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+
+-- ALTER PUBLICATION ... SET TABLES IN SCHEMA replaces the whole object list, so
+-- PostgreSQL drops every chunk row we added, even for a schema that stays in the
+-- set. Here ht_schema is retained (ht_schema2 dropped); its chunks must be
+-- rebuilt, not lost.
+ALTER PUBLICATION test_pub_schema SET TABLES IN SCHEMA ht_schema;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+
+-- SET to a superset (retained ht_schema + newly added ht_schema2); both schemas'
+-- chunks must be present afterwards.
+ALTER PUBLICATION test_pub_schema SET TABLES IN SCHEMA ht_schema, ht_schema2;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+
+-- SET that only swaps the schema set; chunks of the newly-set schema must be
+-- backfilled too.
+ALTER PUBLICATION test_pub_schema SET TABLES IN SCHEMA ht_schema2;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+
+-- ALTER PUBLICATION ... DROP TABLES IN SCHEMA must remove previously
+-- backfilled chunks too, not just the schema mapping.
+ALTER PUBLICATION test_pub_schema ADD TABLES IN SCHEMA ht_schema;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+
+ALTER PUBLICATION test_pub_schema DROP TABLES IN SCHEMA ht_schema;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+
+DROP PUBLICATION test_pub_schema CASCADE;
+DROP TABLE ht_schema.test_hypertable CASCADE;
+DROP TABLE ht_schema.regular_table CASCADE;
+DROP TABLE ht_schema2.test_hypertable2 CASCADE;
+DROP SCHEMA ht_schema;
+DROP SCHEMA ht_schema2;
+
+-- Test 6c: FOR ALL TABLES with pre-existing chunks (PG handles via puballtables)
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Two pre-existing chunks
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0);
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0);
+
+CREATE PUBLICATION test_pub_all FOR ALL TABLES;
+
+-- Pre-existing chunks visible
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_all' AND (tablename = 'test_hypertable' OR tablename LIKE '_hyper%') ORDER BY schemaname, tablename;
+
+-- New chunk after the publication
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0);
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_all' AND (tablename = 'test_hypertable' OR tablename LIKE '_hyper%') ORDER BY schemaname, tablename;
+
+DROP PUBLICATION test_pub_all CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
 -- Test 7: Edge case - Hypertable not in any publication
 CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
 SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');

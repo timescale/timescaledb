@@ -16,6 +16,7 @@
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_publication.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
 #include <commands/copy.h>
@@ -6373,7 +6374,61 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 
 	if (result == DDL_CONTINUE)
 	{
+		const char *pubname = NULL;
+		bool is_set_objects = false;
+		if (IsA(args.parsetree, CreatePublicationStmt))
+		{
+			pubname = castNode(CreatePublicationStmt, args.parsetree)->pubname;
+		}
+		else if (IsA(args.parsetree, AlterPublicationStmt))
+		{
+			AlterPublicationStmt *stmt = castNode(AlterPublicationStmt, args.parsetree);
+			pubname = stmt->pubname;
+			is_set_objects = (stmt->action == AP_SetObjects);
+		}
+
+		/*
+		 * Snapshot the publication's schema set before the command runs so we can
+		 * diff it against the post-command set and reconcile chunk membership. The
+		 * ALTER/CREATE PUBLICATION path takes an AccessExclusiveLock on the
+		 * publication, so the schema set is stable across prev_ProcessUtility() and
+		 * a concurrent writer cannot race the before/after snapshots.
+		 */
+		Publication *old_pub = pubname ? GetPublicationByName(pubname, true) : NULL;
+		List *old_schemas = old_pub ? GetPublicationSchemas(old_pub->oid) : NIL;
+
 		prev_ProcessUtility(&args);
+
+		if (pubname)
+		{
+			Publication *pub = GetPublicationByName(pubname, true);
+			if (pub)
+			{
+				List *new_schemas = GetPublicationSchemas(pub->oid);
+
+				if (is_set_objects)
+				{
+					/*
+					 * SET replaces the whole table list too, so PostgreSQL's own
+					 * reconciliation drops every chunk row we previously added,
+					 * even for schemas that remain in the publication. Rebuild
+					 * them all rather than just the newly added schemas.
+					 */
+					ts_chunk_publication_sync_schema_chunks(pub->oid, new_schemas, true);
+				}
+				else
+				{
+					ts_chunk_publication_sync_schema_chunks(pub->oid,
+															list_difference_oid(new_schemas,
+																				old_schemas),
+															true);
+					ts_chunk_publication_sync_schema_chunks(pub->oid,
+															list_difference_oid(old_schemas,
+																				new_schemas),
+															false);
+				}
+			}
+		}
 	}
 }
 
