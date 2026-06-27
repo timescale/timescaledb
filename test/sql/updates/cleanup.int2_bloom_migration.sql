@@ -2,5 +2,5 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir cleanup.v11.sql
-\ir cleanup.int2_bloom_migration.sql
+DROP TABLE IF EXISTS int2_bloom;
+DROP TABLE IF EXISTS int2_bloom_long;

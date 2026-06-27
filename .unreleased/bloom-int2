@@ -1,0 +1,1 @@
+Fixes: Automatically drop incompatible smallint bloom filters when upgrading instead of stopping the upgrade
