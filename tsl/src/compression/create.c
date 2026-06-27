@@ -917,7 +917,7 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 		if (namelen >= NAMEDATALEN)
 		{
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_NAME_TOO_LONG),
 					 errmsg("invalid name \"%s\" for compressed chunk",
 							NameStr(compress_chunk->fd.table_name)),
 					 errdetail("The associated table prefix is too long.")));
