@@ -34,6 +34,7 @@ jobs:
         brew install postgresql@17
         echo "/opt/homebrew/opt/postgresql@17/bin" >> $GITHUB_PATH
         brew tap timescale/tap
+        brew trust timescale/tap
         brew info timescaledb
 
     - name: Install timescaledb
