@@ -16,6 +16,7 @@
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_publication.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
 #include <commands/cluster.h>
@@ -6410,6 +6411,28 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	if (result == DDL_CONTINUE)
 	{
 		prev_ProcessUtility(&args);
+
+		const char *pubname = NULL;
+		if (IsA(args.parsetree, CreatePublicationStmt))
+		{
+			pubname = castNode(CreatePublicationStmt, args.parsetree)->pubname;
+		}
+		else if (IsA(args.parsetree, AlterPublicationStmt))
+		{
+			AlterPublicationStmt *stmt = castNode(AlterPublicationStmt, args.parsetree);
+			if (stmt->action == AP_AddObjects || stmt->action == AP_SetObjects)
+			{
+				pubname = stmt->pubname;
+			}
+		}
+		if (pubname)
+		{
+			Publication *pub = GetPublicationByName(pubname, true);
+			if (pub)
+			{
+				ts_chunk_publication_backfill(pub->oid);
+			}
+		}
 	}
 }
 
