@@ -81,9 +81,9 @@ jobs:
       IGNORES: >-
         bgw_launcher
         chunk_adaptive
+        compress_bloom
         compress_bloom_sparse_compat
         compress_bloom_sparse_debug
-        compress_compbloom_hash_pushdown
         compress_composite_bloom_debug
         compress_observ-*
         compress_qualpushdown_saop
