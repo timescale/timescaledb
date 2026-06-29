@@ -732,6 +732,32 @@ ts_transform_time_bucket_comparison(Expr *node)
 }
 
 /*
+ * Fully unwrap a (possibly nested) time_bucket() comparison by applying the
+ * single-level transform repeatedly until the bound reaches the raw column.
+ *
+ * ts_transform_time_bucket_comparison() only strips the outermost time_bucket().
+ * In hierarchical continuous aggregates the time_bucket() input column can be
+ * itself another time_bucket() call.
+ *
+ * Used both during hypertable expansion and from the chunk-append executor's
+ * runtime constification.
+ */
+Expr *
+ts_transform_nested_time_bucket_comparison(Expr *qual)
+{
+	Expr *nested = ts_transform_time_bucket_comparison(qual);
+	Expr *transformed = NULL;
+
+	while (nested != NULL)
+	{
+		transformed = nested;
+		nested = ts_transform_time_bucket_comparison(transformed);
+	}
+
+	return transformed;
+}
+
+/*
  * Since baserestrictinfo is not yet set by the planner, we have to derive
  * it ourselves. It's safe for us to miss some restrict info clauses (this
  * will just result in more chunks being included) so this does not need
@@ -784,7 +810,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 				 * check for time_bucket comparisons
 				 * time_bucket(Const, time_colum) > Const
 				 */
-				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 				if (transformed != NULL)
 				{
 					/*
@@ -835,7 +861,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 		 * check for time_bucket comparisons
 		 * time_bucket(Const, time_colum) > Const
 		 */
-		Expr *transformed = ts_transform_time_bucket_comparison(qual);
+		Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 		if (transformed != NULL)
 		{
 			/*
@@ -1054,7 +1080,7 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
 				 * check for time_bucket comparisons
 				 * time_bucket(Const, time_colum) > Const
 				 */
-				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 				if (transformed != NULL)
 				{
 					/*

@@ -15,6 +15,7 @@
 
 SET timezone TO PST8PDT;
 SET max_parallel_workers_per_gather TO 0;
+SET client_min_messages TO WARNING;
 
 CREATE TABLE conditions (ts timestamptz NOT NULL, value double precision NOT NULL);
 SELECT create_hypertable('conditions', by_range('ts', INTERVAL '7 days'));
@@ -80,3 +81,4 @@ FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'cagg_l4' \gset
 :PREFIX SELECT * FROM :pv_l4 WHERE ts >= TIMESTAMPTZ '2026-01-13' AND ts < TIMESTAMPTZ '2026-02-10';
 
 DROP TABLE conditions CASCADE;
+RESET client_min_messages;
