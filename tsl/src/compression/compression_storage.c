@@ -293,6 +293,13 @@ modify_compressed_toast_table_storage(CompressionSettings *settings, List *colde
 void
 create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 {
+	/*
+	 * The index covers the segmentby columns followed by each orderby column's
+	 * sparse metadata, in their configured order. Each orderby column adds its
+	 * two metadata columns as `first` then `last`, inheriting that column's
+	 * ASC/DESC and NULLS FIRST/LAST options.
+	 */
+
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
 		.accessMethod = DEFAULT_INDEX_TYPE,
@@ -331,14 +338,25 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 	initStringInfo(&orderby_buf);
 	for (int i = 1; i <= ts_array_length(settings->fd.orderby); i++)
 	{
-		char *lower_name;
-		char *upper_name;
-		orderby_sparse_metadata_names(settings, i, &lower_name, &upper_name);
+		char *first_name;
+		char *last_name;
+		/* Keeping the ability to create indexes based on minmax if
+		 * explicitly specified through sparse index settings. Index will be
+		 * created as (min, max) instead of (first, last).
+		 */
+		if (orderby_sparse_kind(settings, i) == ORDERBY_SPARSE_MINMAX)
+		{
+			orderby_sparse_metadata_names(settings, i, &first_name, &last_name);
+		}
+		else
+		{
+			orderby_firstlast_metadata_names(settings, i, &first_name, &last_name);
+		}
 
 		resetStringInfo(&orderby_buf);
-		/* Lower-boundary metadata column. */
-		IndexElem *orderby_lower_elem = makeNode(IndexElem);
-		orderby_lower_elem->name = lower_name;
+		/* First metadata column. */
+		IndexElem *orderby_first_elem = makeNode(IndexElem);
+		orderby_first_elem->name = first_name;
 		if (ts_array_get_element_bool(settings->fd.orderby_desc, i))
 		{
 			appendStringInfoString(&orderby_buf, " DESC");
@@ -349,11 +367,11 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 			appendStringInfoString(&orderby_buf, " ASC");
 			ordering = SORTBY_ASC;
 		}
-		orderby_lower_elem->ordering = ordering;
+		orderby_first_elem->ordering = ordering;
 
 		if (ts_array_get_element_bool(settings->fd.orderby_nullsfirst, i))
 		{
-			if (orderby_lower_elem->ordering != SORTBY_DESC)
+			if (orderby_first_elem->ordering != SORTBY_DESC)
 			{
 				appendStringInfoString(&orderby_buf, " NULLS FIRST");
 				nulls_ordering = SORTBY_NULLS_FIRST;
@@ -365,7 +383,7 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		}
 		else
 		{
-			if (orderby_lower_elem->ordering != SORTBY_DESC)
+			if (orderby_first_elem->ordering != SORTBY_DESC)
 			{
 				nulls_ordering = SORTBY_NULLS_DEFAULT;
 			}
@@ -375,21 +393,21 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 				nulls_ordering = SORTBY_NULLS_LAST;
 			}
 		}
-		orderby_lower_elem->nulls_ordering = nulls_ordering;
-		appendStringInfoString(&buf, orderby_lower_elem->name);
+		orderby_first_elem->nulls_ordering = nulls_ordering;
+		appendStringInfoString(&buf, orderby_first_elem->name);
 		appendStringInfoString(&buf, orderby_buf.data);
 		appendStringInfoString(&buf, ", ");
-		indexcols = lappend(indexcols, orderby_lower_elem);
+		indexcols = lappend(indexcols, orderby_first_elem);
 
-		/* Upper-boundary metadata column. */
-		IndexElem *orderby_upper_elem = makeNode(IndexElem);
-		orderby_upper_elem->name = upper_name;
-		orderby_upper_elem->ordering = orderby_lower_elem->ordering;
-		orderby_upper_elem->nulls_ordering = orderby_lower_elem->nulls_ordering;
-		appendStringInfoString(&buf, orderby_upper_elem->name);
+		/* Second metadata column. */
+		IndexElem *orderby_last_elem = makeNode(IndexElem);
+		orderby_last_elem->name = last_name;
+		orderby_last_elem->ordering = orderby_first_elem->ordering;
+		orderby_last_elem->nulls_ordering = orderby_first_elem->nulls_ordering;
+		appendStringInfoString(&buf, orderby_last_elem->name);
 		appendStringInfoString(&buf, orderby_buf.data);
 		appendStringInfoString(&buf, ", ");
-		indexcols = lappend(indexcols, orderby_upper_elem);
+		indexcols = lappend(indexcols, orderby_last_elem);
 	}
 
 	stmt.indexParams = indexcols;

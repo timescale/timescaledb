@@ -1319,7 +1319,7 @@ ORDER BY device_id;
          ->  Partial GroupAggregate
                Group Key: _hyper_31_110_chunk.device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_111_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_111_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_110_chunk.device_id
                ->  Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
@@ -1397,11 +1397,11 @@ ORDER BY device_id;
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_111_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_111_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_112_chunk.device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_112_chunk
-                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_113_chunk
+                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_113_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_112_chunk.device_id
                ->  Index Only Scan using _hyper_31_112_chunk_compression_insert_device_id_time_idx on _hyper_31_112_chunk
@@ -1479,15 +1479,15 @@ ORDER BY device_id;
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_111_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_111_chunk
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_112_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_113_chunk
+                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_113_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_114_chunk.device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_114_chunk
-                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_115_chunk
+                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_115_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_114_chunk.device_id
                ->  Index Only Scan using _hyper_31_114_chunk_compression_insert_device_id_time_idx on _hyper_31_114_chunk
@@ -1565,19 +1565,19 @@ ORDER BY device_id;
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_111_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_111_chunk
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_112_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_113_chunk
+                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_113_chunk
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_114_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_115_chunk
+                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_115_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_116_chunk.device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_116_chunk
-                     ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_117_chunk
+                     ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_117_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_116_chunk.device_id
                ->  Index Only Scan using _hyper_31_116_chunk_compression_insert_device_id_time_idx on _hyper_31_116_chunk
@@ -1655,23 +1655,23 @@ ORDER BY device_id;
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_111_chunk
+                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_111_chunk
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_112_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_113_chunk
+                     ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_113_chunk
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_114_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_115_chunk
+                     ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_115_chunk
          ->  Partial GroupAggregate
                Group Key: device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_116_chunk compression_insert
-                     ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_117_chunk
+                     ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_117_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_118_chunk.device_id
                ->  Custom Scan (ColumnarIndexScan) on _hyper_31_118_chunk
-                     ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_v2_last_time_idx on compress_hyper_32_119_chunk
+                     ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_v2_first_tim_idx on compress_hyper_32_119_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_118_chunk.device_id
                ->  Index Only Scan using _hyper_31_118_chunk_compression_insert_device_id_time_idx on _hyper_31_118_chunk
@@ -2076,12 +2076,12 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
          Sort Key: space_part."time"
          ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_last_time, compress_hyper_36_135_chunk._ts_meta_v2_first_time
+                     Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_first_time, compress_hyper_36_135_chunk._ts_meta_v2_last_time
                      ->  Seq Scan on compress_hyper_36_135_chunk
          ->  Index Scan Backward using _hyper_35_133_chunk_space_part_time_idx on _hyper_35_133_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_last_time, compress_hyper_36_136_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_first_time, compress_hyper_36_136_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_136_chunk
 
 -- now add more chunks that do adhere to the new space partitioning
@@ -2101,12 +2101,12 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
          Sort Key: space_part."time"
          ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_last_time, compress_hyper_36_135_chunk._ts_meta_v2_first_time
+                     Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_first_time, compress_hyper_36_135_chunk._ts_meta_v2_last_time
                      ->  Seq Scan on compress_hyper_36_135_chunk
          ->  Index Scan Backward using _hyper_35_133_chunk_space_part_time_idx on _hyper_35_133_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_last_time, compress_hyper_36_136_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_first_time, compress_hyper_36_136_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: space_part."time"
@@ -2131,21 +2131,21 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
    Order: space_part."time"
    ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_last_time, compress_hyper_36_135_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_first_time, compress_hyper_36_135_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_135_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_last_time, compress_hyper_36_136_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_first_time, compress_hyper_36_136_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: space_part."time"
          ->  Custom Scan (ColumnarScan) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_139_chunk._ts_meta_v2_last_time, compress_hyper_36_139_chunk._ts_meta_v2_first_time
+                     Sort Key: compress_hyper_36_139_chunk._ts_meta_v2_first_time, compress_hyper_36_139_chunk._ts_meta_v2_last_time
                      ->  Seq Scan on compress_hyper_36_139_chunk
          ->  Custom Scan (ColumnarScan) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_v2_last_time, compress_hyper_36_140_chunk._ts_meta_v2_first_time
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_v2_first_time, compress_hyper_36_140_chunk._ts_meta_v2_last_time
                      ->  Seq Scan on compress_hyper_36_140_chunk
 
 -- make second one of them partial
@@ -2159,21 +2159,21 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
    Order: space_part."time"
    ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_last_time, compress_hyper_36_135_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_first_time, compress_hyper_36_135_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_135_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_last_time, compress_hyper_36_136_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_first_time, compress_hyper_36_136_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: space_part."time"
          ->  Custom Scan (ColumnarScan) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_139_chunk._ts_meta_v2_last_time, compress_hyper_36_139_chunk._ts_meta_v2_first_time
+                     Sort Key: compress_hyper_36_139_chunk._ts_meta_v2_first_time, compress_hyper_36_139_chunk._ts_meta_v2_last_time
                      ->  Seq Scan on compress_hyper_36_139_chunk
          ->  Custom Scan (ColumnarScan) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_v2_last_time, compress_hyper_36_140_chunk._ts_meta_v2_first_time
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_v2_first_time, compress_hyper_36_140_chunk._ts_meta_v2_last_time
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Index Scan Backward using _hyper_35_138_chunk_space_part_time_idx on _hyper_35_138_chunk
 
@@ -2187,22 +2187,22 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
    Order: space_part."time"
    ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_last_time, compress_hyper_36_135_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_135_chunk._ts_meta_v2_first_time, compress_hyper_36_135_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_135_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_last_time, compress_hyper_36_136_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_136_chunk._ts_meta_v2_first_time, compress_hyper_36_136_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: space_part."time"
          ->  Custom Scan (ColumnarScan) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_139_chunk._ts_meta_v2_last_time, compress_hyper_36_139_chunk._ts_meta_v2_first_time
+                     Sort Key: compress_hyper_36_139_chunk._ts_meta_v2_first_time, compress_hyper_36_139_chunk._ts_meta_v2_last_time
                      ->  Seq Scan on compress_hyper_36_139_chunk
          ->  Index Scan Backward using _hyper_35_137_chunk_space_part_time_idx on _hyper_35_137_chunk
          ->  Custom Scan (ColumnarScan) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_v2_last_time, compress_hyper_36_140_chunk._ts_meta_v2_first_time
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_v2_first_time, compress_hyper_36_140_chunk._ts_meta_v2_last_time
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Index Scan Backward using _hyper_35_138_chunk_space_part_time_idx on _hyper_35_138_chunk
 

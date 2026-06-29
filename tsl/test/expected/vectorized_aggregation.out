@@ -2538,7 +2538,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_41_chunk
                            Output: _hyper_1_41_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_51_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_51_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_51_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_51_chunk
                                  Output: compress_hyper_2_51_chunk._ts_meta_count, compress_hyper_2_51_chunk.segment_by_value, compress_hyper_2_51_chunk._ts_meta_min_1, compress_hyper_2_51_chunk._ts_meta_max_1, compress_hyper_2_51_chunk._ts_meta_v2_first_time, compress_hyper_2_51_chunk._ts_meta_v2_last_time, compress_hyper_2_51_chunk."time", compress_hyper_2_51_chunk.int_value, compress_hyper_2_51_chunk.float_value
                                  Index Cond: (compress_hyper_2_51_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2546,7 +2546,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_42_chunk
                            Output: _hyper_1_42_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_52_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_52_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_52_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_52_chunk
                                  Output: compress_hyper_2_52_chunk._ts_meta_count, compress_hyper_2_52_chunk.segment_by_value, compress_hyper_2_52_chunk._ts_meta_min_1, compress_hyper_2_52_chunk._ts_meta_max_1, compress_hyper_2_52_chunk._ts_meta_v2_first_time, compress_hyper_2_52_chunk._ts_meta_v2_last_time, compress_hyper_2_52_chunk."time", compress_hyper_2_52_chunk.int_value, compress_hyper_2_52_chunk.float_value
                                  Index Cond: (compress_hyper_2_52_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2554,7 +2554,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_43_chunk
                            Output: _hyper_1_43_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_53_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_53_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_53_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_53_chunk
                                  Output: compress_hyper_2_53_chunk._ts_meta_count, compress_hyper_2_53_chunk.segment_by_value, compress_hyper_2_53_chunk._ts_meta_min_1, compress_hyper_2_53_chunk._ts_meta_max_1, compress_hyper_2_53_chunk._ts_meta_v2_first_time, compress_hyper_2_53_chunk._ts_meta_v2_last_time, compress_hyper_2_53_chunk."time", compress_hyper_2_53_chunk.int_value, compress_hyper_2_53_chunk.float_value
                                  Index Cond: (compress_hyper_2_53_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2562,7 +2562,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_44_chunk
                            Output: _hyper_1_44_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_54_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_54_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_54_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_54_chunk
                                  Output: compress_hyper_2_54_chunk._ts_meta_count, compress_hyper_2_54_chunk.segment_by_value, compress_hyper_2_54_chunk._ts_meta_min_1, compress_hyper_2_54_chunk._ts_meta_max_1, compress_hyper_2_54_chunk._ts_meta_v2_first_time, compress_hyper_2_54_chunk._ts_meta_v2_last_time, compress_hyper_2_54_chunk."time", compress_hyper_2_54_chunk.int_value, compress_hyper_2_54_chunk.float_value
                                  Index Cond: (compress_hyper_2_54_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2570,7 +2570,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_45_chunk
                            Output: _hyper_1_45_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_55_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_55_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_55_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_55_chunk
                                  Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk.segment_by_value, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk._ts_meta_v2_first_time, compress_hyper_2_55_chunk._ts_meta_v2_last_time, compress_hyper_2_55_chunk."time", compress_hyper_2_55_chunk.int_value, compress_hyper_2_55_chunk.float_value
                                  Index Cond: (compress_hyper_2_55_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2578,7 +2578,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_46_chunk
                            Output: _hyper_1_46_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_56_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_56_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_56_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_56_chunk
                                  Output: compress_hyper_2_56_chunk._ts_meta_count, compress_hyper_2_56_chunk.segment_by_value, compress_hyper_2_56_chunk._ts_meta_min_1, compress_hyper_2_56_chunk._ts_meta_max_1, compress_hyper_2_56_chunk._ts_meta_v2_first_time, compress_hyper_2_56_chunk._ts_meta_v2_last_time, compress_hyper_2_56_chunk."time", compress_hyper_2_56_chunk.int_value, compress_hyper_2_56_chunk.float_value
                                  Index Cond: (compress_hyper_2_56_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2586,7 +2586,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_47_chunk
                            Output: _hyper_1_47_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_57_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_57_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_57_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_57_chunk
                                  Output: compress_hyper_2_57_chunk._ts_meta_count, compress_hyper_2_57_chunk.segment_by_value, compress_hyper_2_57_chunk._ts_meta_min_1, compress_hyper_2_57_chunk._ts_meta_max_1, compress_hyper_2_57_chunk._ts_meta_v2_first_time, compress_hyper_2_57_chunk._ts_meta_v2_last_time, compress_hyper_2_57_chunk."time", compress_hyper_2_57_chunk.int_value, compress_hyper_2_57_chunk.float_value
                                  Index Cond: (compress_hyper_2_57_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2594,7 +2594,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_48_chunk
                            Output: _hyper_1_48_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_58_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_58_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_58_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_58_chunk
                                  Output: compress_hyper_2_58_chunk._ts_meta_count, compress_hyper_2_58_chunk.segment_by_value, compress_hyper_2_58_chunk._ts_meta_min_1, compress_hyper_2_58_chunk._ts_meta_max_1, compress_hyper_2_58_chunk._ts_meta_v2_first_time, compress_hyper_2_58_chunk._ts_meta_v2_last_time, compress_hyper_2_58_chunk."time", compress_hyper_2_58_chunk.int_value, compress_hyper_2_58_chunk.float_value
                                  Index Cond: (compress_hyper_2_58_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2602,7 +2602,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_49_chunk
                            Output: _hyper_1_49_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_59_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_59_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_59_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_59_chunk
                                  Output: compress_hyper_2_59_chunk._ts_meta_count, compress_hyper_2_59_chunk.segment_by_value, compress_hyper_2_59_chunk._ts_meta_min_1, compress_hyper_2_59_chunk._ts_meta_max_1, compress_hyper_2_59_chunk._ts_meta_v2_first_time, compress_hyper_2_59_chunk._ts_meta_v2_last_time, compress_hyper_2_59_chunk."time", compress_hyper_2_59_chunk.int_value, compress_hyper_2_59_chunk.float_value
                                  Index Cond: (compress_hyper_2_59_chunk.segment_by_value > 5)
                ->  Custom Scan (VectorAgg)
@@ -2610,7 +2610,7 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_50_chunk
                            Output: _hyper_1_50_chunk.int_value
-                           ->  Parallel Index Scan using compress_hyper_2_60_chunk_segment_by_value__ts_meta_v2_last_idx on _timescaledb_internal.compress_hyper_2_60_chunk
+                           ->  Parallel Index Scan using compress_hyper_2_60_chunk_segment_by_value__ts_meta_v2_firs_idx on _timescaledb_internal.compress_hyper_2_60_chunk
                                  Output: compress_hyper_2_60_chunk._ts_meta_count, compress_hyper_2_60_chunk.segment_by_value, compress_hyper_2_60_chunk._ts_meta_min_1, compress_hyper_2_60_chunk._ts_meta_max_1, compress_hyper_2_60_chunk._ts_meta_v2_first_time, compress_hyper_2_60_chunk._ts_meta_v2_last_time, compress_hyper_2_60_chunk."time", compress_hyper_2_60_chunk.int_value, compress_hyper_2_60_chunk.float_value
                                  Index Cond: (compress_hyper_2_60_chunk.segment_by_value > 5)
 
