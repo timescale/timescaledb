@@ -28,6 +28,12 @@ typedef struct RecompressContext
 	bool key_byval[INDEX_MAX_KEYS];
 	int16 key_typlen[INDEX_MAX_KEYS];
 
+	/* Index attribute numbers of the first-row and last-row orderby metadata
+	 * columns per orderby column. Resolved from the chunk's actual index so
+	 * that both legacy (last, first) and current (first, last) layouts work. */
+	AttrNumber orderby_first_index_attno[INDEX_MAX_KEYS];
+	AttrNumber orderby_last_index_attno[INDEX_MAX_KEYS];
+
 	/* Cached sort support per orderby column, used to compare batch boundary
 	 * values during compaction. */
 	SortSupportData *orderby_ssup;

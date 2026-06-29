@@ -217,6 +217,33 @@ orderby_sparse_metadata_names(const CompressionSettings *settings, int orderby_p
 }
 
 void
+orderby_firstlast_metadata_names(const CompressionSettings *settings, int orderby_pos,
+								 char **first_name, char **last_name)
+{
+	Assert(first_name != NULL && last_name != NULL);
+	Assert(orderby_sparse_kind(settings, orderby_pos) == ORDERBY_SPARSE_FIRSTLAST);
+
+	const char *col_name = ts_array_get_element_text(settings->fd.orderby, orderby_pos);
+	const char *col_names[1] = { col_name };
+
+	*first_name = compressed_column_metadata_name_v2("first", col_names, 1);
+	*last_name = compressed_column_metadata_name_v2("last", col_names, 1);
+}
+
+void
+orderby_firstlast_metadata_attnos(const CompressionSettings *settings, Oid compressed_relid,
+								  int orderby_pos, AttrNumber *first_attno, AttrNumber *last_attno)
+{
+	Assert(first_attno != NULL && last_attno != NULL);
+
+	char *first_name;
+	char *last_name;
+	orderby_firstlast_metadata_names(settings, orderby_pos, &first_name, &last_name);
+	*first_attno = get_attnum(compressed_relid, first_name);
+	*last_attno = get_attnum(compressed_relid, last_name);
+}
+
+void
 orderby_sparse_metadata_attnos(const CompressionSettings *settings, Oid compressed_relid,
 							   int orderby_pos, AttrNumber *lower_attno, AttrNumber *upper_attno)
 {

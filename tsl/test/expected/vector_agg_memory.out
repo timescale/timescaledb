@@ -44,12 +44,12 @@ explain (buffers off, costs off) select distinct on (s0, s1) ts_debug_allocated_
                Sort Key: mvagg.s0, mvagg.s1, mvagg.t DESC
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
-                     ->  Index Scan using compress_hyper_2_3_chunk_s0_s1__ts_meta_v2_last_t__ts_meta__idx on compress_hyper_2_3_chunk
-                           Index Cond: ((_ts_meta_v2_last_t < 1000000) AND (_ts_meta_v2_first_t >= '-1'::integer))
+                     ->  Index Scan using compress_hyper_2_3_chunk_s0_s1__ts_meta_v2_first_t__ts_meta_idx on compress_hyper_2_3_chunk
+                           Index Cond: ((_ts_meta_v2_first_t >= '-1'::integer) AND (_ts_meta_v2_last_t < 1000000))
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
-                     ->  Index Scan using compress_hyper_2_4_chunk_s0_s1__ts_meta_v2_last_t__ts_meta__idx on compress_hyper_2_4_chunk
-                           Index Cond: ((_ts_meta_v2_last_t < 1000000) AND (_ts_meta_v2_first_t >= '-1'::integer))
+                     ->  Index Scan using compress_hyper_2_4_chunk_s0_s1__ts_meta_v2_first_t__ts_meta_idx on compress_hyper_2_4_chunk
+                           Index Cond: ((_ts_meta_v2_first_t >= '-1'::integer) AND (_ts_meta_v2_last_t < 1000000))
 
 truncate log;
 \set ECHO none
