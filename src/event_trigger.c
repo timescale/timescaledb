@@ -13,6 +13,7 @@
 #include <executor/executor.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
+#include <utils/tuplestore.h>
 
 #include "compat/compat.h"
 #include "event_trigger.h"

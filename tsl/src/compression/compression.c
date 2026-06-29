@@ -16,6 +16,7 @@
 #include <common/base64.h>
 #include <funcapi.h>
 #include <libpq/pqformat.h>
+#include <storage/latch.h>
 #include <storage/predicate.h>
 #include <utils/datum.h>
 #include <utils/elog.h>
@@ -24,7 +25,9 @@
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/tuplesort.h>
 #include <utils/typcache.h>
+#include <utils/wait_event.h>
 
 #include "compat/compat.h"
 

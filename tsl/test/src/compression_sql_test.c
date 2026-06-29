@@ -6,6 +6,7 @@
 #include <math.h>
 
 #include <postgres.h>
+#include <dirent.h>
 
 #include "guc.h"
 

@@ -263,25 +263,25 @@ SET enable_seqscan TO false;
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
-   ->  Index Scan using compress_hyper_6_7_chunk_dev_vc_dev_c__ts_meta_v2_last_time_idx on compress_hyper_6_7_chunk
+   ->  Index Scan using compress_hyper_6_7_chunk_dev_vc_dev_c__ts_meta_v2_first_tim_idx on compress_hyper_6_7_chunk
          Index Cond: ((dev_vc)::text = 'varchar'::text)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
-   ->  Index Scan using compress_hyper_6_7_chunk_dev_vc_dev_c__ts_meta_v2_last_time_idx on compress_hyper_6_7_chunk
+   ->  Index Scan using compress_hyper_6_7_chunk_dev_vc_dev_c__ts_meta_v2_first_tim_idx on compress_hyper_6_7_chunk
          Index Cond: (dev_c = 'char'::bpchar)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
-   ->  Index Scan using compress_hyper_6_7_chunk_dev_vc_dev_c__ts_meta_v2_last_time_idx on compress_hyper_6_7_chunk
+   ->  Index Scan using compress_hyper_6_7_chunk_dev_vc_dev_c__ts_meta_v2_first_tim_idx on compress_hyper_6_7_chunk
          Index Cond: (((dev_vc)::text = 'varchar'::text) AND (dev_c = 'char'::bpchar))
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
-   ->  Index Scan using compress_hyper_6_7_chunk_dev_vc_dev_c__ts_meta_v2_last_time_idx on compress_hyper_6_7_chunk
+   ->  Index Scan using compress_hyper_6_7_chunk_dev_vc_dev_c__ts_meta_v2_first_tim_idx on compress_hyper_6_7_chunk
          Index Cond: (dev_c = 'char'::bpchar)
          Filter: ((dev_vc)::bpchar = 'varchar   '::character(10))
 

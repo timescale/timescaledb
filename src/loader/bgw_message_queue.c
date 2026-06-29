@@ -14,6 +14,7 @@
 #include <storage/shm_mq.h>
 #include <storage/shmem.h>
 #include <storage/spin.h>
+#include <utils/wait_event.h>
 
 #include "../compat/compat.h"
 

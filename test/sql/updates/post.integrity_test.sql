@@ -5,8 +5,17 @@
 -- We do not dump the size of the tables here since that might differ
 -- between an updated node and a restored node. For examples, stats
 -- tables can have different sizes, and this is not relevant for an
--- update test.
-\dt _timescaledb_internal.*
+-- update test. This mirrors \dt _timescaledb_internal.* but normalizes the
+-- chunk relation names, which are renumbered and renamed across the upgrade.
+SELECT n.nspname AS "Schema",
+       pg_temp.normalize_chunk(c.relname) AS "Name",
+       'table' AS "Type",
+       pg_catalog.pg_get_userbyid(c.relowner) AS "Owner"
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = '_timescaledb_internal'
+  AND c.relkind = 'r'
+ORDER BY 1, 2, 4;
 
 CREATE OR REPLACE FUNCTION timescaledb_integrity_test()
     RETURNS VOID LANGUAGE PLPGSQL STABLE AS
@@ -24,6 +33,24 @@ BEGIN
                           WHERE ds.chunk_id = ch.id AND ds.dimension_id = d.id)
         LOOP
           RAISE EXCEPTION 'Missing dimension slice for chunk % on dimension %.', gap.chunk_id, gap.dimension_id;
+        END LOOP;
+
+        -- Every dimensional CHECK named constraint_<n> on a chunk must point at
+        -- a slice that the chunk actually owns.
+        FOR gap IN
+        SELECT ch.id AS chunk_id,
+               substring(pc.conname FROM 'constraint_([0-9]+)')::int AS slice_id
+        FROM _timescaledb_catalog.chunk ch
+        JOIN pg_constraint pc
+            ON pc.conrelid = pg_catalog.format('%I.%I', ch.schema_name, ch.table_name)::regclass
+           AND pc.contype = 'c'
+           AND pc.conname ~ '^constraint_[0-9]+$'
+        WHERE NOT ch.osm_chunk
+          AND NOT EXISTS (SELECT 1 FROM _timescaledb_catalog.dimension_slice ds
+                          WHERE ds.chunk_id = ch.id
+                            AND ds.id = substring(pc.conname FROM 'constraint_([0-9]+)')::int)
+        LOOP
+          RAISE EXCEPTION 'Chunk % has stale dimensional CHECK constraint_%.', gap.chunk_id, gap.slice_id;
         END LOOP;
     ELSE
         FOR gap IN

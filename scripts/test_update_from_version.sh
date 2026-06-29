@@ -4,6 +4,10 @@
 # - baseline: fresh installation of $TO_VERSION
 # - updated: install $FROM_VERSION, update to $TO_VERSION
 # - restored: restore from updated dump
+#
+# UPDATE_MODE controls how the "updated" database is updated:
+# - direct (default): jump straight from $FROM_VERSION to $TO_VERSION
+# - singlestep: update through every intermediate version one at a time
 
 set -xeu
 
@@ -11,8 +15,9 @@ FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
 
 TEST_VERSION=${TEST_VERSION:-v10}
+UPDATE_MODE=${UPDATE_MODE:-direct}
 
-OUTPUT_DIR=${OUTPUT_DIR:-update_test/${FROM_VERSION}_to_${TO_VERSION}}
+OUTPUT_DIR=${OUTPUT_DIR:-update_test/${FROM_VERSION}_to_${TO_VERSION}_${UPDATE_MODE}}
 PGDATA="${OUTPUT_DIR}/data"
 # Get an unused port to allow	for parallel execution
 PGHOST=localhost
@@ -23,16 +28,61 @@ export PGHOST PGPORT PGDATABASE PGDATA
 
 run_sql() {
   local db=${2:-$PGDATABASE}
-  psql -X -q --echo-queries -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -c "${1}"
+  psql -X -q --echo-queries -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -v UPDATE_MODE="${UPDATE_MODE}" -c "${1}"
 }
 
 run_sql_file() {
   local db=${2:-$PGDATABASE}
-  psql -X -q --echo-queries -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -f "${1}"
+  psql -X -q --echo-queries -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -v UPDATE_MODE="${UPDATE_MODE}" -f "${1}"
 }
 
 check_version() {
   psql -X -c "DO \$\$BEGIN PERFORM from pg_available_extension_versions WHERE name='timescaledb' AND version='$1'; IF NOT FOUND THEN RAISE 'Version $1 not available'; END IF; END\$\$;" > /dev/null
+}
+
+# Single-step transitions that are known to be broken when applied on their own
+# (e.g. an old release script that predates a later fix).
+SINGLESTEP_SKIP=(
+  # The 2.14.0 update script fails on tables with dropped columns; this was
+  # fixed in 2.15.0, so skip the broken edges and step straight to 2.15.0.
+  "2.13.1--2.14.0"
+  "2.13.1--2.14.1"
+  "2.13.1--2.14.2"
+)
+
+# Updates starting before 2.15 carry a fixture that the 2.28.0 and 2.28.1 update
+# scripts can't migrate (int->bigint view change); the 2.28.2 update script handles
+# it, so step from 2.27.2 straight to 2.28.2 when updating from <2.15.
+if [ "$(echo "${FROM_VERSION}" | awk -F. '{print $2}')" -lt 15 ]; then
+  SINGLESTEP_SKIP+=("2.27.2--2.28.0" "2.27.2--2.28.1")
+fi
+
+# Update the current database one version at a time from FROM_VERSION to
+# TO_VERSION, exercising every intermediate update script. We can't step through
+# the versions in numeric order because back-patch releases (e.g. 2.21.4 was
+# released after 2.22.0) have no update script to the next numeric version.
+# Instead we repeatedly move to the lowest version reachable from the current
+# one through a single update script, ignoring transitions listed in
+# SINGLESTEP_SKIP.
+singlestep_update() {
+  local current="${FROM_VERSION}" next skip_clause=""
+  if [ ${#SINGLESTEP_SKIP[@]} -gt 0 ]; then
+    local quoted
+    quoted=$(printf "'%s'," "${SINGLESTEP_SKIP[@]}")
+    skip_clause="AND source || '--' || target NOT IN (${quoted%,})"
+  fi
+  while [ "${current}" != "${TO_VERSION}" ]; do
+    next=$(psql -X -At -d "${PGDATABASE}" -c "
+      SELECT target FROM pg_extension_update_paths('timescaledb')
+      WHERE source = '${current}' AND path = source || '--' || target
+        ${skip_clause}
+        AND string_to_array(regexp_replace(target, '[^0-9.].*\$', ''), '.')::int[]
+            > string_to_array(regexp_replace('${current}', '[^0-9.].*\$', ''), '.')::int[]
+      ORDER BY string_to_array(regexp_replace(target, '[^0-9.].*\$', ''), '.')::int[]
+      LIMIT 1")
+    run_sql "ALTER EXTENSION timescaledb UPDATE TO \"${next}\";"
+    current="${next}"
+  done
 }
 
 trap cleanup EXIT
@@ -61,7 +111,7 @@ pg_ctl -l "${OUTPUT_DIR}/postgres.log" start -o "-c unix_socket_directories=${UN
 
 pg_isready -t 30 > /dev/null
 
-echo -e "\nUpdate test version ${TEST_VERSION} for ${FROM_VERSION} -> ${TO_VERSION}\n"
+echo -e "\nUpdate test version ${TEST_VERSION} (${UPDATE_MODE}) for ${FROM_VERSION} -> ${TO_VERSION}\n"
 
 # caller should ensure that the versions are available
 check_version "${FROM_VERSION}"
@@ -88,7 +138,11 @@ echo "Creating updated database"
   run_sql_file test/sql/updates/pre.testing.sql
   run_sql_file test/sql/updates/setup.${TEST_VERSION}.sql
   run_sql "CHECKPOINT;" >> "${OUTPUT_DIR}/updated.log"
-  run_sql "ALTER EXTENSION timescaledb UPDATE TO \"${TO_VERSION}\";"
+  if [ "${UPDATE_MODE}" = singlestep ]; then
+    singlestep_update
+  else
+    run_sql "ALTER EXTENSION timescaledb UPDATE TO \"${TO_VERSION}\";"
+  fi
   run_sql_file test/sql/updates/setup.check.sql
 } > "${OUTPUT_DIR}/updated.log" 2>&1
 
