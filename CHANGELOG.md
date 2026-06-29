@@ -6,22 +6,11 @@
 
 This release contains performance improvements and bug fixes since the 2.28.1 release. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.28.2**
-* 
-
-**Backward-Incompatible Changes**
-
-**Features**
-
 **Bugfixes**
-* 
-
-**New Settings**
-
-**GUCs**
+* [#10126](https://github.com/timescale/timescaledb/pull/10126) Fix `bgw_job_stat_history` migration for 2.28.1
 
 **Thanks**
-* 
+* @juantxorena for reporting an issue with update script for 2.28.1
 
 ## 2.28.1 (2026-06-23)
 
