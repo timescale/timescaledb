@@ -667,6 +667,7 @@ calc_width(uint64 val)
 		memcpy(to_unpack, packed, packed_size);                                                    \
                                                                                                    \
 		/* allocate a separate result buffer */                                                    \
+		/* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                           \
 		IN_T *unpacked = palloc_aligned(input_size, alignment, 0);                                 \
 		fl_unpack(to_unpack, unpacked, n, W, T);                                                   \
                                                                                                    \
