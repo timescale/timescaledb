@@ -1,0 +1,193 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Regression test for #10071.
+--
+-- A real-time continuous aggregate (timescaledb.materialized_only = false) that
+-- is three or more levels deep in a hierarchy (a cagg on a cagg on a cagg) must
+-- prune its real-time branch when refreshed for a window entirely below the
+-- watermark, exactly as a two-level cagg does. A refresh reads the cagg's
+-- internal partial view, so EXPLAINing a below-watermark SELECT on that partial
+-- view reproduces the refresh scan. Before the fix the real-time branch was
+-- pruned only up to two levels; at three or more it re-scanned the whole
+-- un-materialized tail of the base hypertable and discarded every row.
+SET timezone TO PST8PDT;
+SET max_parallel_workers_per_gather TO 0;
+CREATE TABLE conditions (ts timestamptz NOT NULL, value double precision NOT NULL);
+SELECT create_hypertable('conditions', by_range('ts', INTERVAL '7 days'));
+ create_hypertable 
+-------------------
+ (1,t)
+
+INSERT INTO conditions
+SELECT ts, 1.0
+FROM generate_series(TIMESTAMPTZ '2026-01-01', TIMESTAMPTZ '2026-04-29', INTERVAL '1 hour') AS ts;
+-- Level 1: 6-hour buckets on the raw hypertable
+CREATE MATERIALIZED VIEW cagg_l1
+  WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+SELECT time_bucket('6 hours', ts) AS ts, count(*) AS cnt, sum(value) AS sum_value
+FROM conditions GROUP BY 1 WITH NO DATA;
+-- Level 2: 1-day buckets on cagg_l1 (raw -> 6h -> 1day)
+CREATE MATERIALIZED VIEW cagg_l2
+  WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+SELECT time_bucket('1 day', ts) AS ts, sum(cnt) AS cnt, sum(sum_value) AS sum_value
+FROM cagg_l1 GROUP BY 1 WITH NO DATA;
+-- Level 3: 7-day buckets on cagg_l2 (raw -> 6h -> 1day -> 7day)
+CREATE MATERIALIZED VIEW cagg_l3
+  WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+SELECT time_bucket('7 days', ts) AS ts, sum(cnt) AS cnt, sum(sum_value) AS sum_value
+FROM cagg_l2 GROUP BY 1 WITH NO DATA;
+-- Level 4: 28-day buckets on cagg_l3 (raw -> 6h -> 1day -> 7day -> 28day)
+CREATE MATERIALIZED VIEW cagg_l4
+  WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+SELECT time_bucket('28 days', ts) AS ts, sum(cnt) AS cnt, sum(sum_value) AS sum_value
+FROM cagg_l3 GROUP BY 1 WITH NO DATA;
+-- Materialize everything up to 2026-04-01, leaving an un-materialized tail.
+CALL refresh_continuous_aggregate('cagg_l1', NULL, TIMESTAMPTZ '2026-04-01');
+CALL refresh_continuous_aggregate('cagg_l2', NULL, TIMESTAMPTZ '2026-04-01');
+CALL refresh_continuous_aggregate('cagg_l3', NULL, TIMESTAMPTZ '2026-04-01');
+CALL refresh_continuous_aggregate('cagg_l4', NULL, TIMESTAMPTZ '2026-04-01');
+-- A refresh reads the cagg's internal partial view, so EXPLAINing a
+-- below-watermark SELECT on that partial view reproduces the refresh scan. Look
+-- up each partial view name.
+SELECT format('%I.%I', partial_view_schema, partial_view_name) AS pv_l2
+FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'cagg_l2' \gset
+SELECT format('%I.%I', partial_view_schema, partial_view_name) AS pv_l3
+FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'cagg_l3' \gset
+SELECT format('%I.%I', partial_view_schema, partial_view_name) AS pv_l4
+FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'cagg_l4' \gset
+\set PREFIX 'EXPLAIN (COSTS OFF, TIMING OFF, SUMMARY OFF)'
+-- For a window entirely below the watermark the real-time branch must be pruned
+-- at every depth: the plan should fold it to "One-Time Filter: false" and touch
+-- only the materialized hypertable, never the base-hypertable (_hyper_1_*)
+-- chunks.
+-- 2 levels (control: pruned before and after the fix)
+:PREFIX SELECT * FROM :pv_l2 WHERE ts >= TIMESTAMPTZ '2026-01-13' AND ts < TIMESTAMPTZ '2026-02-10';
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: (time_bucket('@ 1 day'::interval, _hyper_2_19_chunk.ts))
+   ->  Sort
+         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_2_19_chunk.ts))
+         ->  Result
+               ->  Append
+                     ->  Index Scan using _hyper_2_19_chunk__materialized_hypertable_2_ts_idx on _hyper_2_19_chunk
+                           Index Cond: ((ts < 'Tue Mar 31 23:00:00 2026 PDT'::timestamp with time zone) AND (ts >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (ts < 'Wed Feb 11 00:00:00 2026 PST'::timestamp with time zone))
+                           Filter: ((time_bucket('@ 1 day'::interval, ts) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, ts) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                     ->  HashAggregate
+                           Group Key: time_bucket('@ 6 hours'::interval, ts)
+                           ->  Result
+                                 One-Time Filter: false
+
+-- 3 levels (the bug: real-time branch must be pruned)
+:PREFIX SELECT * FROM :pv_l3 WHERE ts >= TIMESTAMPTZ '2026-01-13' AND ts < TIMESTAMPTZ '2026-02-10';
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: (time_bucket('@ 7 days'::interval, _hyper_3_21_chunk.ts))
+   ->  Sort
+         Sort Key: (time_bucket('@ 7 days'::interval, _hyper_3_21_chunk.ts))
+         ->  Result
+               ->  Append
+                     ->  Index Scan using _hyper_3_21_chunk__materialized_hypertable_3_ts_idx on _hyper_3_21_chunk
+                           Index Cond: ((ts < 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (ts >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (ts < 'Tue Feb 17 00:00:00 2026 PST'::timestamp with time zone))
+                           Filter: ((time_bucket('@ 7 days'::interval, ts) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, ts) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                     ->  GroupAggregate
+                           Group Key: (time_bucket('@ 1 day'::interval, (time_bucket('@ 6 hours'::interval, conditions.ts))))
+                           ->  Sort
+                                 Sort Key: (time_bucket('@ 1 day'::interval, (time_bucket('@ 6 hours'::interval, conditions.ts))))
+                                 ->  Result
+                                       ->  Finalize GroupAggregate
+                                             Group Key: (time_bucket('@ 6 hours'::interval, conditions.ts))
+                                             ->  Merge Append
+                                                   Sort Key: (time_bucket('@ 6 hours'::interval, conditions.ts))
+                                                   ->  Partial GroupAggregate
+                                                         Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_13_chunk.ts)
+                                                         ->  Index Scan Backward using _hyper_1_13_chunk_conditions_ts_idx on _hyper_1_13_chunk
+                                                               Index Cond: ((ts >= 'Tue Mar 31 23:00:00 2026 PDT'::timestamp with time zone) AND (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone))
+                                                               Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) < 'Tue Feb 17 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                   ->  Partial GroupAggregate
+                                                         Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_14_chunk.ts)
+                                                         ->  Index Scan Backward using _hyper_1_14_chunk_conditions_ts_idx on _hyper_1_14_chunk
+                                                               Index Cond: (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone)
+                                                               Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) < 'Tue Feb 17 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                   ->  Partial GroupAggregate
+                                                         Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_15_chunk.ts)
+                                                         ->  Index Scan Backward using _hyper_1_15_chunk_conditions_ts_idx on _hyper_1_15_chunk
+                                                               Index Cond: (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone)
+                                                               Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) < 'Tue Feb 17 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                   ->  Partial GroupAggregate
+                                                         Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_16_chunk.ts)
+                                                         ->  Index Scan Backward using _hyper_1_16_chunk_conditions_ts_idx on _hyper_1_16_chunk
+                                                               Index Cond: (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone)
+                                                               Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) < 'Tue Feb 17 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                   ->  Partial GroupAggregate
+                                                         Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_17_chunk.ts)
+                                                         ->  Index Scan Backward using _hyper_1_17_chunk_conditions_ts_idx on _hyper_1_17_chunk
+                                                               Index Cond: (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone)
+                                                               Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) < 'Tue Feb 17 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+
+-- 4 levels
+:PREFIX SELECT * FROM :pv_l4 WHERE ts >= TIMESTAMPTZ '2026-01-13' AND ts < TIMESTAMPTZ '2026-02-10';
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: (time_bucket('@ 28 days'::interval, _materialized_hypertable_4.ts))
+   ->  Sort
+         Sort Key: (time_bucket('@ 28 days'::interval, _materialized_hypertable_4.ts))
+         ->  Result
+               ->  Append
+                     ->  Append
+                           ->  Index Scan using _hyper_4_22_chunk__materialized_hypertable_4_ts_idx on _hyper_4_22_chunk
+                                 Index Cond: ((ts < 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (ts >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (ts < 'Tue Mar 10 01:00:00 2026 PDT'::timestamp with time zone))
+                                 Filter: ((time_bucket('@ 28 days'::interval, ts) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, ts) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                           ->  Index Scan using _hyper_4_23_chunk__materialized_hypertable_4_ts_idx on _hyper_4_23_chunk
+                                 Index Cond: ((ts < 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (ts >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (ts < 'Tue Mar 10 01:00:00 2026 PDT'::timestamp with time zone))
+                                 Filter: ((time_bucket('@ 28 days'::interval, ts) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, ts) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                     ->  GroupAggregate
+                           Group Key: (time_bucket('@ 7 days'::interval, (time_bucket('@ 1 day'::interval, _hyper_2_18_chunk.ts))))
+                           ->  Sort
+                                 Sort Key: (time_bucket('@ 7 days'::interval, (time_bucket('@ 1 day'::interval, _hyper_2_18_chunk.ts))))
+                                 ->  Result
+                                       ->  GroupAggregate
+                                             Group Key: (time_bucket('@ 1 day'::interval, _hyper_2_18_chunk.ts))
+                                             ->  Sort
+                                                   Sort Key: (time_bucket('@ 1 day'::interval, _hyper_2_18_chunk.ts))
+                                                   ->  Result
+                                                         ->  Append
+                                                               ->  Index Scan using _hyper_2_18_chunk__materialized_hypertable_2_ts_idx on _hyper_2_18_chunk
+                                                                     Index Cond: ((ts < 'Tue Mar 31 23:00:00 2026 PDT'::timestamp with time zone) AND (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (ts >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone))
+                                                                     Filter: ((time_bucket('@ 1 day'::interval, ts) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, ts)) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, ts)) < 'Tue Mar 10 01:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, ts))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                               ->  Finalize GroupAggregate
+                                                                     Group Key: (time_bucket('@ 6 hours'::interval, conditions.ts))
+                                                                     ->  Merge Append
+                                                                           Sort Key: (time_bucket('@ 6 hours'::interval, conditions.ts))
+                                                                           ->  Partial GroupAggregate
+                                                                                 Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_13_chunk.ts)
+                                                                                 ->  Index Scan Backward using _hyper_1_13_chunk_conditions_ts_idx on _hyper_1_13_chunk
+                                                                                       Index Cond: ((ts >= 'Tue Mar 31 23:00:00 2026 PDT'::timestamp with time zone) AND (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone))
+                                                                                       Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 6 hours'::interval, ts) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Mar 10 01:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                                           ->  Partial GroupAggregate
+                                                                                 Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_14_chunk.ts)
+                                                                                 ->  Index Scan Backward using _hyper_1_14_chunk_conditions_ts_idx on _hyper_1_14_chunk
+                                                                                       Index Cond: (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone)
+                                                                                       Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 6 hours'::interval, ts) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Mar 10 01:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                                           ->  Partial GroupAggregate
+                                                                                 Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_15_chunk.ts)
+                                                                                 ->  Index Scan Backward using _hyper_1_15_chunk_conditions_ts_idx on _hyper_1_15_chunk
+                                                                                       Index Cond: (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone)
+                                                                                       Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 6 hours'::interval, ts) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Mar 10 01:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                                           ->  Partial GroupAggregate
+                                                                                 Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_16_chunk.ts)
+                                                                                 ->  Index Scan Backward using _hyper_1_16_chunk_conditions_ts_idx on _hyper_1_16_chunk
+                                                                                       Index Cond: (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone)
+                                                                                       Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 6 hours'::interval, ts) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Mar 10 01:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+                                                                           ->  Partial GroupAggregate
+                                                                                 Group Key: time_bucket('@ 6 hours'::interval, _hyper_1_17_chunk.ts)
+                                                                                 ->  Index Scan Backward using _hyper_1_17_chunk_conditions_ts_idx on _hyper_1_17_chunk
+                                                                                       Index Cond: (ts >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone)
+                                                                                       Filter: ((time_bucket('@ 6 hours'::interval, ts) >= 'Tue Mar 31 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 6 hours'::interval, ts) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)) >= 'Sun Mar 29 17:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts))) < 'Tue Mar 10 01:00:00 2026 PDT'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) >= 'Tue Jan 13 00:00:00 2026 PST'::timestamp with time zone) AND (time_bucket('@ 28 days'::interval, time_bucket('@ 7 days'::interval, time_bucket('@ 1 day'::interval, time_bucket('@ 6 hours'::interval, ts)))) < 'Tue Feb 10 00:00:00 2026 PST'::timestamp with time zone))
+
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to 12 other objects
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_24_chunk
