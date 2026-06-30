@@ -334,6 +334,14 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetAccessMethod:
 			case AT_SetLogged:
 			case AT_SetUnLogged:
+			case AT_EnableTrig:
+			case AT_EnableAlwaysTrig:
+			case AT_EnableReplicaTrig:
+			case AT_DisableTrig:
+			case AT_EnableTrigAll:
+			case AT_DisableTrigAll:
+			case AT_EnableTrigUser:
+			case AT_DisableTrigUser:
 				continue;
 				/*
 				 * BLOCKED:
@@ -4642,6 +4650,27 @@ process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	AlterTableInternal(chunk_relid, list_make1(cmd), false);
 }
 
+/*
+ * Recurse ENABLE/DISABLE TRIGGER to chunks.
+ *
+ * Only row triggers are cloned to chunks, so a command naming a specific
+ * trigger must be skipped on chunks that do not have it (e.g. statement-level
+ * triggers, which live only on the hypertable root). The ALL/USER variants
+ * carry no name and apply to whatever triggers a chunk has.
+ */
+static void
+process_altertable_chunk_trigger(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	AlterTableCmd *cmd = arg;
+
+	if (cmd->name != NULL && !OidIsValid(get_trigger_oid(chunk_relid, cmd->name, true)))
+	{
+		return;
+	}
+
+	AlterTableInternal(chunk_relid, list_make1(cmd), false);
+}
+
 static void
 process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void *arg)
 {
@@ -5347,7 +5376,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DisableTrigAll:
 		case AT_EnableTrigUser:
 		case AT_DisableTrigUser:
-			foreach_chunk(ht, process_altertable_chunk, cmd);
+			foreach_chunk(ht, process_altertable_chunk_trigger, cmd);
 			break;
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);
