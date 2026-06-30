@@ -110,3 +110,109 @@ FROM sort_oj_plain a LEFT JOIN sort_oj_ht b ON a.v = b.v;
 DROP TABLE sort_oj_ht;
 DROP TABLE sort_oj_plain;
 
+-- Test issue #10130: sort_transform applied incorrectly to negative consts
+-- We should not apply sort_transform to expressions like (1-x), x*-1, x/-1 as it changes sort direction
+
+-- int8 OpExpr
+-------------
+CREATE TABLE t10130(time bigint NOT NULL, val int);
+SELECT create_hypertable('t10130', 'time', chunk_time_interval => 1000::bigint);
+INSERT INTO t10130 SELECT i, i * 10 FROM generate_series(1, 2000) i;
+
+-- Make sure indexscan is not selected even when the cost pushes for it
+SET enable_seqscan=0;
+
+-- Baseline: correct descending order
+SET timescaledb.enable_optimizations = off;
+SELECT time, val FROM t10130 ORDER BY time * (-1)::bigint LIMIT 3;
+
+-- Should return correct result, should not apply sort transform
+SET timescaledb.enable_optimizations = on;
+SELECT time, val FROM t10130 ORDER BY time * (-1)::bigint LIMIT 3;
+SELECT time, val FROM t10130 ORDER BY (-1)::bigint * time LIMIT 3;
+
+-- Same for const - var
+SELECT time, val FROM t10130 ORDER BY 5000::bigint - time LIMIT 3;
+
+-- Same for var / negative const
+SELECT time, val FROM t10130 ORDER BY time / (-1)::bigint LIMIT 3;
+
+-- Non-commutative operation nested in commutative operation: should not apply sort transform
+SELECT time, val FROM t10130 ORDER BY (time * (-1)::bigint) + 2::bigint LIMIT 3;
+
+drop table t10130 cascade;
+
+-- int4 OpExpr
+------------
+CREATE TABLE t10130(time int NOT NULL, val int);
+SELECT create_hypertable('t10130', 'time', chunk_time_interval => 1000::int);
+INSERT INTO t10130 SELECT i, i * 10 FROM generate_series(1, 2000) i;
+
+-- Baseline: correct descending order
+SET timescaledb.enable_optimizations = off;
+SELECT time, val FROM t10130 ORDER BY time * (-1)::int LIMIT 3;
+
+-- Should return correct result, should not apply sort transform
+SET timescaledb.enable_optimizations = on;
+SELECT time, val FROM t10130 ORDER BY time * (-1)::int LIMIT 3;
+SELECT time, val FROM t10130 ORDER BY (-1)::int * time LIMIT 3;
+
+-- Same for const - var
+SELECT time, val FROM t10130 ORDER BY 5000::int - time LIMIT 3;
+
+-- Same for var / negative const
+SELECT time, val FROM t10130 ORDER BY time / (-1)::int LIMIT 3;
+
+-- Non-commutative operation nested in commutative operation: should not apply sort transform
+SELECT time, val FROM t10130 ORDER BY (time * (-1)::int) + 2::int LIMIT 3;
+
+drop table t10130 cascade;
+
+-- int2 OpExpr
+------------
+CREATE TABLE t10130(time smallint NOT NULL, val int);
+SELECT create_hypertable('t10130', 'time', chunk_time_interval => 1000::smallint);
+INSERT INTO t10130 SELECT i, i * 10 FROM generate_series(1, 2000) i;
+
+-- Baseline: correct descending order
+SET timescaledb.enable_optimizations = off;
+SELECT time, val FROM t10130 ORDER BY time * (-1)::smallint LIMIT 3;
+
+-- Should return correct result, should not apply sort transform
+SET timescaledb.enable_optimizations = on;
+SELECT time, val FROM t10130 ORDER BY time * (-1)::smallint LIMIT 3;
+SELECT time, val FROM t10130 ORDER BY (-1)::smallint * time LIMIT 3;
+
+-- Same for const - var
+SELECT time, val FROM t10130 ORDER BY 5000::smallint - time LIMIT 3;
+
+-- Same for var / negative const
+SELECT time, val FROM t10130 ORDER BY time / (-1)::smallint LIMIT 3;
+
+-- Non-commutative operation nested in commutative operation: should not apply sort transform
+SELECT time, val FROM t10130 ORDER BY (time * (-1)::smallint) + 2::smallint LIMIT 3;
+
+-- Custom "*" operator which does not preserve sort order: should not apply sort transform to custom ops
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA test_ops;
+CREATE FUNCTION test_ops.custom_mult(a smallint, b smallint) RETURNS smallint AS $$
+BEGIN
+    RETURN a * coalesce(b, -1);
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OPERATOR test_ops.* (
+    LEFTARG = smallint,
+    RIGHTARG = smallint,
+    FUNCTION = test_ops.custom_mult,
+    COMMUTATOR = OPERATOR(test_ops.*)
+);
+
+-- Should use seqscan as we sort by custom operator
+:PREFIX SELECT time, val FROM t10130 ORDER BY time OPERATOR(test_ops.*) NULL::smallint LIMIT 3;
+:PREFIX SELECT time, val FROM t10130 ORDER BY time OPERATOR(test_ops.*) 1::smallint LIMIT 3;
+
+drop schema test_ops cascade;
+drop table t10130 cascade;
+
+RESET enable_seqscan;
