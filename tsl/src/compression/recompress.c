@@ -200,6 +200,16 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							"enable it by first setting "
 							"timescaledb.enable_segmentwise_recompression to on")));
 		}
+
+		if (!ts_guc_enable_optimizations)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("segmentwise recompression functionality disabled, "
+							"enable it by first setting "
+							"timescaledb.enable_optimizations to on")));
+		}
+
 		CompressionSettings *settings = ts_compression_settings_get(uncompressed_relid);
 		if (!settings->fd.orderby)
 		{

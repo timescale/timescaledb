@@ -627,12 +627,28 @@ SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress')
 ERROR:  segmentwise recompression functionality disabled, enable it by first setting timescaledb.enable_segmentwise_recompression to on
 \set ON_ERROR_STOP 1
 -- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
+BEGIN;
 SELECT compress_chunk(:'chunk_to_compress');
 NOTICE:  segmentwise in-memory recompression functionality disabled, set timescaledb.enable_segmentwise_recompression to on
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_22_24_chunk
 
+ROLLBACK;
+RESET timescaledb.enable_segmentwise_recompression;
+-- Same when the optimizations GUC is off.
+SET timescaledb.enable_optimizations TO OFF;
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+ERROR:  segmentwise recompression functionality disabled, enable it by first setting timescaledb.enable_optimizations to on
+\set ON_ERROR_STOP 1
+SELECT compress_chunk(:'chunk_to_compress');
+NOTICE:  segmentwise in-memory recompression functionality disabled, set timescaledb.enable_optimizations to on
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_22_24_chunk
+
+RESET timescaledb.enable_optimizations;
 RESET timescaledb.enable_segmentwise_recompression;
 --- Test behaviour of enable_exclusive_locking_recompression GUC
 CREATE TABLE exclusive_test(time timestamptz not null, a int, b int, c int);
@@ -687,8 +703,8 @@ ORDER BY 1;
                              relname                             
 -----------------------------------------------------------------
  _hyper_22_24_chunk
- compress_hyper_23_26_chunk
- compress_hyper_23_26_chunk_a_b__ts_meta_v2_first_time__ts_m_idx
+ compress_hyper_23_27_chunk
+ compress_hyper_23_27_chunk_a_b__ts_meta_v2_first_time__ts_m_idx
 
 ROLLBACK;
 RESET timescaledb.enable_exclusive_locking_recompression;
@@ -743,7 +759,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
        recompress_chunk_segmentwise       
 ------------------------------------------
- _timescaledb_internal._hyper_25_27_chunk
+ _timescaledb_internal._hyper_25_28_chunk
 
 -- PARTIAL should be cleared (no more uncompressed rows).
 -- UNORDERED must be preserved (segment a=2 still has unordered compressed data).
@@ -758,10 +774,10 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SET timescaledb.debug_require_batch_sorted_merge = 'force';
 EXPLAIN (COSTS OFF) SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_25_27_chunk
+ Custom Scan (ColumnarScan) on _hyper_25_28_chunk
    ->  Sort
-         Sort Key: compress_hyper_26_28_chunk._ts_meta_v2_first_time
-         ->  Index Scan using compress_hyper_26_28_chunk_a__ts_meta_v2_first_time__ts_met_idx on compress_hyper_26_28_chunk
+         Sort Key: compress_hyper_26_29_chunk._ts_meta_v2_first_time
+         ->  Index Scan using compress_hyper_26_29_chunk_a__ts_meta_v2_first_time__ts_met_idx on compress_hyper_26_29_chunk
                Index Cond: (a = 2)
 
 RESET timescaledb.debug_require_batch_sorted_merge;
@@ -799,7 +815,7 @@ CROSS JOIN generate_series(1, 10) t;
 SELECT compress_chunk(c) FROM show_chunks('segwise_no_overlap') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_27_29_chunk
+ _timescaledb_internal._hyper_27_30_chunk
 
 -- Add rows for series_id = 50 (inside the existing batch's series_id range)
 -- with ts outside the existing batch's ts range. Pre-fix, the matcher would
@@ -811,7 +827,7 @@ FROM generate_series(1, 500) t;
 SELECT compress_chunk(c) FROM show_chunks('segwise_no_overlap') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_27_29_chunk
+ _timescaledb_internal._hyper_27_30_chunk
 
 -- Locate the compressed chunk for the metadata check.
 SELECT cs.compress_relid AS comp_table_segwise
@@ -888,7 +904,7 @@ SELECT compress_chunk(c)
 FROM show_chunks('segwise_uaf_scankeys') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_29_31_chunk
+ _timescaledb_internal._hyper_29_32_chunk
 
 INSERT INTO segwise_uaf_scankeys
 SELECT '2024-01-01'::timestamptz + ((i + 1000) || 's')::interval + '1us'::interval,
@@ -903,7 +919,7 @@ SELECT compress_chunk(c)
 FROM show_chunks('segwise_uaf_scankeys') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_29_31_chunk
+ _timescaledb_internal._hyper_29_32_chunk
 
 INSERT INTO segwise_uaf_scankeys
 SELECT '2024-01-01'::timestamptz + ((i + 3000) || 's')::interval + '2us'::interval,
@@ -918,7 +934,7 @@ SELECT compress_chunk(c)
 FROM show_chunks('segwise_uaf_scankeys') c; -- should not segfault
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_29_31_chunk
+ _timescaledb_internal._hyper_29_32_chunk
 
 RESET maintenance_work_mem;
 DROP TABLE segwise_uaf_scankeys;
