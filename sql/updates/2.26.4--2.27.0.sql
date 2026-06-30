@@ -81,67 +81,60 @@ ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT IF EXISTS hypertable
 ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT IF EXISTS chunk_compressed_chunk_id_fkey;
 
 
--- Block upgrade if bloom filter sparse indexes exist on smallint (int2)
--- columns. These bloom filters used PostgreSQL's hashint2extended while
--- the new code uses bloom1_hash_2. Existing bloom data must be dropped
--- before upgrading; recompress afterwards to rebuild with the new hash.
+-- Bloom filters on smallint columns are incompatible with this version because
+-- the int2 hash changed, so the bloom data must be dropped. Drop it only when
+-- every such bloom was created automatically (source is not 'config'); if any
+-- was configured explicitly, block the upgrade with manual instructions instead.
 DO $$
 DECLARE
   drop_commands text;
+  has_explicit boolean;
 BEGIN
-  WITH bloom_entries AS (
-    SELECT relid AS chunk_oid,
-           compress_relid,
-           columns,
-           (SELECT string_agg(col, '_' ORDER BY ordinality)
-            FROM jsonb_array_elements_text(columns)
-                 WITH ORDINALITY AS t(col, ordinality)) AS col_suffix
-    FROM _timescaledb_catalog.compression_settings,
-         jsonb_array_elements(index) AS elem,
-         LATERAL (SELECT
-           CASE jsonb_typeof(elem->'column')
-             WHEN 'array' THEN elem->'column'
-             ELSE jsonb_build_array(elem->'column')
-           END AS columns
-         ) AS normalized
+  -- Find the bloom metadata columns of int2 blooms on compressed chunks. The
+  -- column is named after the bloom's columns joined by '_'; the prefix depends
+  -- on the build that wrote it (bloom1 for old builds, bloomh/bloomg for current
+  -- ones), and names longer than 39 chars are truncated with a 4 char md5 hash.
+  WITH int2_blooms AS (
+    SELECT cs.compress_relid,
+           COALESCE(elem->>'source', 'default') AS source,
+           (SELECT string_agg(col, '_' ORDER BY ord)
+            FROM jsonb_array_elements_text(cols) WITH ORDINALITY AS t(col, ord)) AS suffix
+    FROM _timescaledb_catalog.compression_settings cs,
+         jsonb_array_elements(cs.index) AS elem,
+         LATERAL (SELECT CASE jsonb_typeof(elem->'column')
+                           WHEN 'array' THEN elem->'column'
+                           ELSE jsonb_build_array(elem->'column')
+                         END) AS n(cols)
     WHERE elem->>'type' = 'bloom'
-      AND compress_relid IS NOT NULL
+      AND cs.compress_relid IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(cols) AS colname
+        JOIN pg_attribute a ON a.attrelid = cs.relid AND a.attname = colname
+         AND a.atttypid = 'int2'::regtype AND a.attnum > 0
+      )
   ),
-  bloom_column_names AS (
-    SELECT chunk_oid, compress_relid, col_suffix, colname
-    FROM bloom_entries,
-         jsonb_array_elements_text(columns) AS bloom_column(colname)
-  ),
-  int2_bloom_suffixes AS (
-    SELECT DISTINCT compress_relid, col_suffix
-    FROM bloom_column_names
-    JOIN pg_attribute ON attrelid = chunk_oid
-     AND attname = colname
-     AND atttypid = 'int2'::regtype
-     AND attnum > 0
-  ),
-  bloom_cols_to_drop AS (
-    SELECT compress_relid,
-           attname AS bloom_attname
-    FROM int2_bloom_suffixes
-    JOIN pg_attribute ON attrelid = compress_relid
-     AND attname IN (
-       '_ts_meta_v2_bloom1_' || col_suffix,
-       '_ts_meta_v2_bloomh_' || col_suffix,
-       '_ts_meta_v2_bloomg_' || col_suffix
-     )
-     AND attnum > 0
+  drop_cmds AS (
+    SELECT format('ALTER TABLE %s DROP COLUMN %I;', b.compress_relid::regclass, a.attname) AS cmd,
+           b.source
+    FROM int2_blooms b
+    CROSS JOIN LATERAL (
+      SELECT CASE WHEN length(b.suffix) > 39
+                  THEN substr(md5(b.suffix), 1, 4) || '_' || substr(b.suffix, 1, 39)
+                  ELSE b.suffix END AS body
+    ) m
+    JOIN pg_attribute a ON a.attrelid = b.compress_relid AND a.attnum > 0
+     AND a.attname IN ('_ts_meta_v2_bloom1_' || m.body,
+                       '_ts_meta_v2_bloomh_' || m.body,
+                       '_ts_meta_v2_bloomg_' || m.body)
   )
-  SELECT string_agg(DISTINCT
-           format('ALTER TABLE %s DROP COLUMN %I;',
-                  compress_relid::regclass, bloom_attname),
-           E'\n' ORDER BY
-           format('ALTER TABLE %s DROP COLUMN %I;',
-                  compress_relid::regclass, bloom_attname))
-  INTO drop_commands
-  FROM bloom_cols_to_drop;
+  SELECT string_agg(DISTINCT cmd, E'\n' ORDER BY cmd), bool_or(source = 'config')
+  INTO drop_commands, has_explicit
+  FROM drop_cmds;
 
-  IF drop_commands IS NOT NULL THEN
+  IF drop_commands IS NULL THEN
+    -- Nothing to migrate.
+  ELSIF has_explicit THEN
+    -- Not all can be dropped automatically, so drop none and block the upgrade.
     RAISE EXCEPTION
       'existing bloom filter sparse indexes on smallint columns are incompatible '
       'with this version of TimescaleDB'
@@ -151,9 +144,39 @@ BEGIN
                  || drop_commands || E'\n'
                  || 'SET timescaledb.restoring = off;',
         HINT = 'To rebuild the bloom filter indexes after upgrading, decompress and compress the affected chunks.';
+  ELSE
+    EXECUTE drop_commands;
   END IF;
 END
 $$;
+
+-- Drop the same blooms from the compression settings so they no longer
+-- reference the removed columns, keeping explicitly configured entries.
+WITH rebuilt AS (
+  SELECT cs.relid,
+         jsonb_agg(elem ORDER BY ord) FILTER (WHERE keep) AS new_index,
+         bool_or(NOT keep) AS changed
+  FROM _timescaledb_catalog.compression_settings cs,
+       jsonb_array_elements(cs.index) WITH ORDINALITY AS arr(elem, ord),
+       LATERAL (SELECT NOT (
+         elem->>'type' = 'bloom'
+         AND COALESCE(elem->>'source', 'default') <> 'config'
+         AND EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(CASE jsonb_typeof(elem->'column')
+                                            WHEN 'array' THEN elem->'column'
+                                            ELSE jsonb_build_array(elem->'column')
+                                          END) AS colname
+           JOIN pg_attribute a ON a.attrelid = cs.relid AND a.attname = colname
+            AND a.atttypid = 'int2'::regtype AND a.attnum > 0
+         ))) AS k(keep)
+  GROUP BY cs.relid
+)
+UPDATE _timescaledb_catalog.compression_settings cs
+SET index = rebuilt.new_index
+FROM rebuilt
+WHERE cs.relid = rebuilt.relid
+  AND rebuilt.changed;
 
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.job_history_bsearch;

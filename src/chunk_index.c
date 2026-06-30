@@ -36,9 +36,9 @@
 #include "scanner.h"
 #include "ts_catalog/catalog.h"
 
-static Oid ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_indexrel,
-												 Relation chunkrel, IndexInfo *indexinfo,
-												 bool isconstraint, Oid index_tablespace);
+static Oid chunk_index_create_from_indexinfo(int32 hypertable_id, Relation template_indexrel,
+											 Relation chunkrel, IndexInfo *indexinfo,
+											 bool isconstraint, Oid index_tablespace);
 
 static List *
 create_index_colnames(Relation indexrel)
@@ -194,16 +194,22 @@ Oid
 ts_chunk_index_get_tablespace(int32 hypertable_id, Relation template_indexrel, Relation chunkrel)
 {
 	/*
-	 * Determine the index's tablespace. Use the main index's tablespace, or,
-	 * if not set, select one at an offset from the chunk's tablespace.
+	 * Determine the index's tablespace. Use the template index's tablespace,
+	 * or, if not set, select one at an offset from the chunk's tablespace. When
+	 * no hypertable is available (e.g. when duplicating indexes for an internal
+	 * compressed relation) fall back to the chunk relation's own tablespace.
 	 */
 	if (OidIsValid(template_indexrel->rd_rel->reltablespace))
 	{
 		return template_indexrel->rd_rel->reltablespace;
 	}
-	else
+	else if (hypertable_id != INVALID_HYPERTABLE_ID)
 	{
 		return chunk_index_select_tablespace(hypertable_id, chunkrel);
+	}
+	else
+	{
+		return chunkrel->rd_rel->reltablespace;
 	}
 }
 
@@ -243,18 +249,18 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 	hypertable_id = ts_hypertable_relid_to_id(htrel->rd_id);
 	Assert(hypertable_id != INVALID_HYPERTABLE_ID);
 
-	return ts_chunk_index_create_post_adjustment(hypertable_id,
-												 template_indexrel,
-												 chunkrel,
-												 indexinfo,
-												 isconstraint,
-												 index_tablespace);
+	return chunk_index_create_from_indexinfo(hypertable_id,
+											 template_indexrel,
+											 chunkrel,
+											 indexinfo,
+											 isconstraint,
+											 index_tablespace);
 }
 
 static Oid
-ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_indexrel,
-									  Relation chunkrel, IndexInfo *indexinfo, bool isconstraint,
-									  Oid index_tablespace)
+chunk_index_create_from_indexinfo(int32 hypertable_id, Relation template_indexrel,
+								  Relation chunkrel, IndexInfo *indexinfo, bool isconstraint,
+								  Oid index_tablespace)
 {
 	Oid chunk_indexrelid = InvalidOid;
 	const char *indexname;
@@ -335,23 +341,6 @@ ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_ind
 	return chunk_indexrelid;
 }
 
-static Oid
-chunk_index_find_matching(Relation chunk_rel, Oid ht_indexoid)
-{
-	List *indexlist = RelationGetIndexList(chunk_rel);
-	ListCell *lc;
-	foreach (lc, indexlist)
-	{
-		Oid indexoid = lfirst_oid(lc);
-		if (ts_indexing_compare(indexoid, ht_indexoid))
-		{
-			return indexoid;
-		}
-	}
-	list_free(indexlist);
-	return InvalidOid;
-}
-
 /*
  * Create a new chunk index as a child of a parent hypertable index.
  *
@@ -363,8 +352,6 @@ static void
 chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypertable_idxrel,
 				   int32 chunk_id, Relation chunkrel, Oid constraint_oid, Oid index_tblspc)
 {
-	Oid chunk_indexrelid;
-
 	if (OidIsValid(constraint_oid))
 	{
 		/*
@@ -374,14 +361,15 @@ chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypert
 		return;
 	}
 
-	chunk_indexrelid = chunk_index_find_matching(chunkrel, RelationGetRelid(hypertable_idxrel));
+	Oid chunk_indexrelid =
+		ts_chunk_index_get_by_hypertable_indexrelid(chunkrel, RelationGetRelid(hypertable_idxrel));
 	if (!OidIsValid(chunk_indexrelid))
 	{
-		chunk_indexrelid = chunk_relation_index_create(hypertable_rel,
-													   hypertable_idxrel,
-													   chunkrel,
-													   false,
-													   index_tblspc);
+		chunk_relation_index_create(hypertable_rel,
+									hypertable_idxrel,
+									chunkrel,
+									false,
+									index_tblspc);
 	}
 }
 
@@ -390,12 +378,12 @@ ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id, Relation hyp
 											   int32 chunk_id, Relation chunkrel,
 											   IndexInfo *indexinfo)
 {
-	ts_chunk_index_create_post_adjustment(hypertable_id,
-										  hypertable_idxrel,
-										  chunkrel,
-										  indexinfo,
-										  false,
-										  false);
+	chunk_index_create_from_indexinfo(hypertable_id,
+									  hypertable_idxrel,
+									  chunkrel,
+									  indexinfo,
+									  false,
+									  false);
 }
 
 /*
@@ -580,20 +568,19 @@ ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 }
 
 static Oid
-chunk_index_duplicate_index(Relation hypertable_rel, Chunk *src_chunk, Oid chunk_index_oid,
-							Relation dest_chunk_rel, Oid index_tablespace)
+chunk_index_duplicate_index(Oid chunk_index_oid, Relation dest_chunk_rel, Oid index_tablespace)
 {
 	Relation chunk_index_rel = index_open(chunk_index_oid, AccessShareLock);
 	Oid constraint_oid;
 	Oid new_chunk_indexrelid;
 
 	constraint_oid = get_index_constraint(chunk_index_oid);
-
-	new_chunk_indexrelid = chunk_relation_index_create(hypertable_rel,
-													   chunk_index_rel,
-													   dest_chunk_rel,
-													   OidIsValid(constraint_oid),
-													   index_tablespace);
+	new_chunk_indexrelid = chunk_index_create_from_indexinfo(INVALID_HYPERTABLE_ID,
+															 chunk_index_rel,
+															 dest_chunk_rel,
+															 BuildIndexInfo(chunk_index_rel),
+															 OidIsValid(constraint_oid),
+															 index_tablespace);
 
 	index_close(chunk_index_rel, NoLock);
 	return new_chunk_indexrelid;
@@ -608,35 +595,24 @@ TSDLLEXPORT List *
 ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_index_oids,
 						 Oid index_tablespace)
 {
-	Relation hypertable_rel = NULL;
 	Relation src_chunk_rel;
 	Relation dest_chunk_rel;
 	List *index_oids;
 	ListCell *index_elem;
 	List *new_index_oids = NIL;
-	Chunk *src_chunk;
 
 	src_chunk_rel = table_open(src_chunkrelid, AccessShareLock);
 	dest_chunk_rel = table_open(dest_chunkrelid, ShareLock);
-
-	src_chunk = ts_chunk_get_by_relid(src_chunkrelid, true);
-
-	hypertable_rel = table_open(src_chunk->hypertable_relid, AccessShareLock);
 
 	index_oids = RelationGetIndexList(src_chunk_rel);
 	foreach (index_elem, index_oids)
 	{
 		Oid chunk_index_oid = lfirst_oid(index_elem);
-		Oid new_chunk_indexrelid = chunk_index_duplicate_index(hypertable_rel,
-															   src_chunk,
-															   chunk_index_oid,
-															   dest_chunk_rel,
-															   index_tablespace);
+		Oid new_chunk_indexrelid =
+			chunk_index_duplicate_index(chunk_index_oid, dest_chunk_rel, index_tablespace);
 
 		new_index_oids = lappend_oid(new_index_oids, new_chunk_indexrelid);
 	}
-
-	table_close(hypertable_rel, AccessShareLock);
 
 	table_close(dest_chunk_rel, NoLock);
 	table_close(src_chunk_rel, NoLock);

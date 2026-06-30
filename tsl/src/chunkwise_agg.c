@@ -534,7 +534,7 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 /*
  Is the provided path a agg path that uses a sorted or plain agg strategy?
 */
-static bool pg_nodiscard
+pg_nodiscard static bool
 is_path_sorted_or_plain_agg_path(Path *path)
 {
 	AggPath *agg_path = castNode(AggPath, path);

@@ -3,3 +3,4 @@
 -- LICENSE-APACHE for a copy of the license.
 
 \ir cleanup.v11.sql
+\ir cleanup.int2_bloom_migration.sql

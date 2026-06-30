@@ -69,7 +69,7 @@ typedef struct Bloom1MetadataBuilder
 	Bloom1HasherInternal hasher;
 } Bloom1MetadataBuilder;
 
-static void bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_columns);
+static Bloom1HasherInternal bloom1_hasher_init(const Oid *type_oids, int num_columns);
 
 /*
  * Low-bias invertible hash function from this article:
@@ -544,6 +544,13 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 								num_columns)));
 			}
 
+			if (num_columns < 2)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("composite bloom filter must have at least two columns")));
+			}
+
 			for (int i = 0; i < num_columns; i++)
 			{
 				type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
@@ -556,7 +563,7 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 			num_columns = 1;
 		}
 
-		bloom1_hasher_init(&context->bloom_hasher, type_oids, num_columns);
+		context->bloom_hasher = bloom1_hasher_init(type_oids, num_columns);
 
 		get_typlenbyvalalign(context->element_type,
 							 &context->element_typlen,
@@ -582,12 +589,6 @@ static inline bool
 bloom1_contains_hash_internal(const char *words_buf, uint32 num_bits, uint64 hash)
 {
 	Assert(words_buf != NULL);
-
-	/* Must be a power of two. */
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
-
-	/* Must be >= 64 bits. */
-	CheckCompressedData(num_bits >= 64);
 
 	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
@@ -767,11 +768,11 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
-	/* Must be a power of two. */
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
-
 	/* Must be >= 64 bits. */
 	CheckCompressedData(num_bits >= 64);
+
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 
 	const uint32 num_word_bits = sizeof(*words_buf) * 8;
 	Assert(num_bits % num_word_bits == 0);
@@ -809,7 +810,7 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 }
 
 /*
- * Checks whether any hashes of the given array can be present in the given
+ * Checks whether any hashes in the given array can be present in the given
  * bloom filter. This is used for predicate pushdown where the values are
  * pre-hashed at planning time.
  *
@@ -864,6 +865,12 @@ bloom1_contains_any_hashes(PG_FUNCTION_ARGS)
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
+	/* Must be >= 64 bits. */
+	CheckCompressedData(num_bits >= 64);
+
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+
 	for (int i = 0; i < num_hashes; i++)
 	{
 		if (hash_nulls[i])
@@ -912,6 +919,13 @@ bloom1_hash(PG_FUNCTION_ARGS)
 							num_columns)));
 		}
 
+		if (num_columns < 2)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("composite bloom filter must have at least two columns")));
+		}
+
 		for (int i = 0; i < num_columns; i++)
 		{
 			type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
@@ -938,8 +952,8 @@ bloom1_hash(PG_FUNCTION_ARGS)
 		num_columns = 1;
 	}
 
-	Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_columns);
-	uint64 hash = hasher->hash_values(hasher, values);
+	Bloom1HasherInternal hasher = bloom1_hasher_init(type_oids, num_columns);
+	uint64 hash = hasher.functions.hash_values(&hasher, values);
 	PG_RETURN_INT64((int64) hash);
 }
 
@@ -981,10 +995,10 @@ batch_metadata_builder_bloom1_varlena_size(void)
 	return bloom1_varlena_alloc_size(desired_bits);
 }
 
-static void
-bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_columns)
+static Bloom1HasherInternal
+bloom1_hasher_init(const Oid *type_oids, int num_columns)
 {
-	*hasher = (Bloom1HasherInternal){
+	Bloom1HasherInternal hasher = (Bloom1HasherInternal){
 		.functions =
 			(Bloom1Hasher){
 				.hash_values = bloom1_hash_values,
@@ -992,11 +1006,12 @@ bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_c
 			},
 	};
 
+	Assert(num_columns != 0);
 	for (int i = 0; i < num_columns; i++)
 	{
-		hasher->hash_functions[i] =
-			bloom1_get_hash_function(type_oids[i], &hasher->hash_function_finfos[i]);
-		if (hasher->hash_functions[i] == NULL)
+		hasher.hash_functions[i] =
+			bloom1_get_hash_function(type_oids[i], &hasher.hash_function_finfos[i]);
+		if (hasher.hash_functions[i] == NULL)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_FUNCTION),
@@ -1004,13 +1019,15 @@ bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_c
 							format_type_be(type_oids[i]))));
 		}
 	}
+
+	return hasher;
 }
 
 Bloom1Hasher *
 bloom1_hasher_create(const Oid *type_oids, int num_columns)
 {
 	Bloom1HasherInternal *hasher = palloc(sizeof(*hasher));
-	bloom1_hasher_init(hasher, type_oids, num_columns);
+	*hasher = bloom1_hasher_init(type_oids, num_columns);
 	return &hasher->functions;
 }
 
@@ -1038,7 +1055,7 @@ batch_metadata_builder_bloom1_create(int num_columns, const Oid *type_oids,
 	memcpy(builder->input_columns, attnums, num_columns * sizeof(AttrNumber));
 
 	/* Initialize the embedded hasher */
-	bloom1_hasher_init(&builder->hasher, type_oids, num_columns);
+	builder->hasher = bloom1_hasher_init(type_oids, num_columns);
 
 	/*
 	 * Initialize the bloom filter.
@@ -1104,8 +1121,9 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 	bool nulls[_out_columns] = { 0 };
 
 	Datum toasted = PG_GETARG_DATUM(0);
-	values[out_toast_header] = Int32GetDatum(((varattrib_1b *) toasted)->va_header);
-	values[out_toasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(toasted));
+	struct varlena *toasted_va = (struct varlena *) DatumGetPointer(toasted);
+	values[out_toast_header] = Int32GetDatum(((varattrib_1b *) toasted_va)->va_header);
+	values[out_toasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(toasted_va));
 
 	struct varlena *detoasted = PG_DETOAST_DATUM(toasted);
 	values[out_detoasted_bytes] = Int32GetDatum(VARSIZE_ANY_EXHDR(detoasted));
@@ -1119,10 +1137,10 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 
 	values[out_estimated_elements] = Int32GetDatum(bloom1_estimate_ndistinct(detoasted));
 
-	if (VARATT_IS_EXTERNAL_ONDISK(toasted))
+	if (VARATT_IS_EXTERNAL_ONDISK(toasted_va))
 	{
 		struct varatt_external toast_pointer;
-		VARATT_EXTERNAL_GET_POINTER(toast_pointer, toasted);
+		VARATT_EXTERNAL_GET_POINTER(toast_pointer, toasted_va);
 
 		if (TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer))
 		{
@@ -1133,9 +1151,9 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 			nulls[out_compressed_bytes] = true;
 		}
 	}
-	else if (VARATT_IS_COMPRESSED(toasted))
+	else if (VARATT_IS_COMPRESSED(toasted_va))
 	{
-		values[out_compressed_bytes] = VARDATA_COMPRESSED_GET_EXTSIZE(toasted);
+		values[out_compressed_bytes] = VARDATA_COMPRESSED_GET_EXTSIZE(toasted_va);
 	}
 	else
 	{
@@ -1196,7 +1214,7 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 	}
 	ReleaseTupleDesc(tupdesc);
 
-	Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_fields);
+	Bloom1HasherInternal hasher = bloom1_hasher_init(type_oids, num_fields);
 
 	NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
 	for (int i = 0; i < num_fields; i++)
@@ -1204,7 +1222,7 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 		values[i].value = GetAttributeByNum(tuple, i + 1, &values[i].isnull);
 	}
 
-	uint64 hash = hasher->hash_values(hasher, values);
+	uint64 hash = hasher.functions.hash_values(&hasher, values);
 	PG_RETURN_INT64((int64) hash);
 }
 
@@ -1227,9 +1245,8 @@ bloom1_contains_hash(Datum bloom_datum, uint64 hash)
 	const uint32 num_bits = 8 * VARSIZE_ANY_EXHDR(bloom);
 
 	/* Validate bloom structure */
-	CheckCompressedData(num_bits != 0);
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 	CheckCompressedData(num_bits >= 64);
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
 
 	return bloom1_contains_hash_internal(words_buf, num_bits, hash);
 }

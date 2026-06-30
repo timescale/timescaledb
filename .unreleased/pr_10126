@@ -1,0 +1,2 @@
+Fixes: #10126 Fix bgw_job_stat_history migration for 2.28.1
+Thanks: @juantxorena for reporting an issue with update script for 2.28.1

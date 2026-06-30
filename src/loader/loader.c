@@ -472,7 +472,11 @@ database_allowconn(const Oid db_oid)
 }
 
 static void
+#if PG19_GE
+post_analyze_hook(ParseState *pstate, Query *query, const JumbleState *jstate)
+#else
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
+#endif
 {
 	if (query->commandType == CMD_UTILITY)
 	{

@@ -83,6 +83,10 @@ SELECT generate_series('2024-03-01'::timestamptz, '2024-03-20'::timestamptz, '1 
 -- Both count the 9 buckets before March 10.
 SELECT count(*) FROM qual_filter_tb WHERE time_bucket('1 day', ts) < '2024-03-10'::date;
 SELECT count(*) FROM qual_filter_tb WHERE time_bucket('1 day', ts) < '2024-03-10'::timestamptz;
+-- A zero width period is rejected
+\set ON_ERROR_STOP 0
+SELECT count(*) FROM qual_filter_tb WHERE time_bucket(INTERVAL '0', ts) < '2024-03-10'::timestamptz;
+\set ON_ERROR_STOP 1
 DROP TABLE qual_filter_tb;
 
 -- A timestamptz constant against a date time_bucket is not transformed.

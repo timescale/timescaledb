@@ -1663,9 +1663,19 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		};
 		Chunk *chunk;
 
-		if (NULL == relation)
+		if (!relation)
 		{
 			continue;
+		}
+
+		Oid relid = RangeVarGetRelid(relation, NoLock, true);
+		if (ts_relation_is_compressed_chunk_relation(relid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("dropping columnstore chunks not supported"),
+					 errhint("Please drop the corresponding chunk on the rowstore hypertable "
+							 "instead.")));
 		}
 
 		chunk = ts_chunk_get_by_name_with_memory_context(relation->schemaname,
@@ -1675,18 +1685,9 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 														 CurrentMemoryContext,
 														 false);
 
-		if (chunk != NULL)
+		if (chunk)
 		{
 			Hypertable *ht;
-
-			if (ts_relation_is_compressed_chunk_relation(chunk->table_id))
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("dropping columnstore chunks not supported"),
-						 errhint("Please drop the corresponding chunk on the rowstore hypertable "
-								 "instead.")));
-			}
 
 			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
 			 *  it would be blocked if there are dependent objects */
@@ -2064,16 +2065,32 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 												  was_schema_op,
 												  &compressed_hypertable->fd.schema_name,
 												  &compressed_hypertable->fd.table_name);
-						List *chunks =
-							ts_chunk_get_by_hypertable_id(hypertable->fd.compressed_hypertable_id);
+						List *chunks = ts_chunk_get_by_hypertable_id(hypertable->fd.id);
 						ListCell *cell;
 						foreach (cell, chunks)
 						{
 							Chunk *chunk = lfirst(cell);
+							Oid compressed_relid =
+								ts_relation_get_compressed_relid(chunk->table_id);
+							if (!OidIsValid(compressed_relid))
+							{
+								continue;
+							}
+							/*
+							 * makeRangeVar() keeps the name pointers without
+							 * copying, so the NameData must outlive this loop
+							 * iteration. Allocate it instead of using stack
+							 * storage which is reused on every iteration.
+							 */
+							NameData *compressed_schema_name = palloc(sizeof(NameData));
+							NameData *compressed_table_name = palloc(sizeof(NameData));
+							namestrcpy(compressed_schema_name,
+									   get_namespace_name(get_rel_namespace(compressed_relid)));
+							namestrcpy(compressed_table_name, get_rel_name(compressed_relid));
 							process_grant_add_by_name(stmt,
 													  was_schema_op,
-													  &chunk->fd.schema_name,
-													  &chunk->fd.table_name);
+													  compressed_schema_name,
+													  compressed_table_name);
 						}
 					}
 				}
