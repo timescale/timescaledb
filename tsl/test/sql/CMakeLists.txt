@@ -11,6 +11,7 @@ set(TEST_FILES
     cagg_ddl.sql
     cagg_direct_compress.sql
     cagg_errors.sql
+    cagg_granular_refresh_api.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
     cagg_planning.sql

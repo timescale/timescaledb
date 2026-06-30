@@ -12,3 +12,4 @@
 
 extern void continuous_agg_update_options(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+extern void continuous_agg_set_granular_refresh_enabled(ContinuousAgg *agg, bool enabled);

@@ -54,6 +54,11 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
         .arg_names = {"compress_chunk_interval", "compress_chunk_time_interval", NULL},
          .type_id = INTERVALOID,
     },
+    [CreateMaterializedViewFlagEnableGranularRefresh] = {
+        .arg_names = {"enable_granular_refresh", "granular_refresh_enabled", NULL},
+        .type_id = BOOLOID,
+        .default_val = (Datum)false,
+    },
 };
 
 WithClauseResult *
@@ -76,6 +81,9 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 		{
 			case AlterTableFlagChunkTimeInterval:
 			case AlterTableFlagIndex:
+			case AlterTableFlagGranularRefreshColumn:
+			case AlterTableFlagGranularRefreshStartOffset:
+			case AlterTableFlagGranularRefreshEndOffset:
 				continue;
 				break;
 			case AlterTableFlagColumnstore:
