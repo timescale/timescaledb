@@ -126,6 +126,14 @@
  * behavior of the new version we simply adopt the new version's name.
  */
 
+/*
+ * GetRelationPublications was renamed to GetRelationIncludedPublications in PG19.
+ * https://github.com/postgres/postgres/commit/fd366065e0
+ */
+#if PG19_LT
+#define GetRelationIncludedPublications(relid) GetRelationPublications(relid)
+#endif
+
 #if PG19_LT
 #define ExecInsertIndexTuplesCompat(rri,                                                           \
 									slot,                                                          \
