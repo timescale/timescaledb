@@ -1465,7 +1465,7 @@ ORDER BY 1;
  _hyper_41_79_chunk | Fri Dec 24 16:00:00 1999 PST | Mon May 22 17:00:00 2000 PDT | t
  _hyper_41_83_chunk | Sun Mar 18 16:00:00 2001 PST | Wed Aug 15 17:00:00 2001 PDT | f
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id = :'MAT_HTID' ORDER BY 1, 2,3;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------

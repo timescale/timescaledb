@@ -127,8 +127,8 @@ insert into continuous_agg_test values( 14, -2, 100);
 --add entry [14 15] to mat inv log for cagg_2. (invalidations are expanded to bucket
 --boundaries and we have bucket size of 2.
 SET ROLE :ROLE_SUPERUSER;
-select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
-select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
+select materialization_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+select hypertable_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
 select * from cagg_1 order by 1;
@@ -136,7 +136,7 @@ CALL refresh_continuous_aggregate('cagg_2', NULL, 14);
 select * from cagg_2 order by 1;
 SET ROLE :ROLE_SUPERUSER;
 select * from _timescaledb_catalog.continuous_aggs_invalidation_threshold order by 1;
-select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+select materialization_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 --this insert will be processed only by cagg_1 and cagg_2 will process the previous
 --one
@@ -150,11 +150,11 @@ select * from cagg_2 order by 1;
 --TEST5 2 inserts with the same value can be copied over to materialization invalidation log
 insert into continuous_agg_test values( 18, -2, 100);
 insert into continuous_agg_test values( 18, -2, 100);
-select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
+select hypertable_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
 select * from cagg_1 where timed = 18 ;
 --copied over for cagg_2 to process later?
-select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+select materialization_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
 DROP MATERIALIZED VIEW cagg_1;
 DROP MATERIALIZED VIEW cagg_2;
 
