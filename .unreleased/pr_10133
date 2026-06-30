@@ -1,2 +1,0 @@
-Fixes: #10133 Fix chunk_constraint migration
-Thanks: @rusha1333 for reporting an issue when upgrading to 2.28.1

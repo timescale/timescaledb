@@ -7,11 +7,14 @@
 This release contains performance improvements and bug fixes since the 2.28.1 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
-* [#10164](https://github.com/timescale/timescaledb/pull/10164) Automatically drop incompatible smallint bloom filters when upgrading instead of stopping the upgrade
 * [#10126](https://github.com/timescale/timescaledb/pull/10126) Fix `bgw_job_stat_history` migration for 2.28.1
+* [#10133](https://github.com/timescale/timescaledb/pull/10133) Fix `chunk_constraint` migration
+* [#10137](https://github.com/timescale/timescaledb/pull/10137) Fix column ordering on `first`/`last`-based sparse indexes
+* [#10164](https://github.com/timescale/timescaledb/pull/10164) Automatically drop incompatible smallint bloom filters when upgrading instead of stopping the upgrade
 
 **Thanks**
 * @juantxorena for reporting an issue with update script for 2.28.1
+* @rusha1333 for reporting an issue when upgrading to 2.28.1
 
 ## 2.28.1 (2026-06-23)
 
