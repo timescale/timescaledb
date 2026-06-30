@@ -1,0 +1,62 @@
+Parsed test spec with 4 sessions
+
+starting permutation: wp_pc_enable v_register_pid v_insert k_cancel wp_pc_release r_anchor_insert r_refresh r_check_conditions r_check_tracking r_refresh2 r_check_cagg r_check_tracking2
+step wp_pc_enable: SELECT debug_waitpoint_enable('tenant_tracker_after_precommit_drain');
+debug_waitpoint_enable
+----------------------
+                      
+
+step v_register_pid: INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+step v_insert: INSERT INTO conditions VALUES ('2026-07-01 00:00+00', 'sensor_victim', 1); <waiting ...>
+step k_cancel: CALL cancelpids(); <waiting ...>
+step v_insert: <... completed>
+ERROR:  canceling statement due to user request
+step wp_pc_release: SELECT debug_waitpoint_release('tenant_tracker_after_precommit_drain');
+debug_waitpoint_release
+-----------------------
+                       
+
+step k_cancel: <... completed>
+step r_anchor_insert: INSERT INTO conditions VALUES ('2026-07-15 00:00+00', 'sensor_anchor', 0);
+step r_refresh: CALL refresh_continuous_aggregate('cond_daily', '2026-07-15 00:00+00', NULL);
+step r_check_conditions: 
+    SELECT count(*) AS victim_rows_in_hypertable
+    FROM conditions
+    WHERE sensor_id = 'sensor_victim';
+
+victim_rows_in_hypertable
+-------------------------
+                        0
+
+step r_check_tracking: 
+    SELECT tenant_id, seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, seqnum;
+
+tenant_id    |seqnum
+-------------+------
+sensor_1     |     1
+sensor_victim|     1
+
+step r_refresh2: CALL refresh_continuous_aggregate('cond_daily', '2026-06-15 00:00+00', NULL) ;
+step r_check_cagg: SELECT * FROM cond_daily ORDER BY 1, 2;
+bucket                      |sensor_id    |avg
+----------------------------+-------------+---
+Sat Jun 20 00:00:00 2026 UTC|sensor_1     |  1
+Wed Jul 15 00:00:00 2026 UTC|sensor_anchor|  0
+
+step r_check_tracking2: 
+    SELECT tenant_id, seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, seqnum;
+
+tenant_id    |seqnum
+-------------+------
+sensor_victim|     1
+
