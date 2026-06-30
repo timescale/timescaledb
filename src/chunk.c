@@ -857,7 +857,7 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 
 		if (len >= NAMEDATALEN)
 		{
-			elog(ERROR, "chunk table name too long");
+			ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk table name too long")));
 		}
 	}
 	else

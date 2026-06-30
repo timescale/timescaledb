@@ -127,8 +127,7 @@ build_compressed_relation_name(const Chunk *chunk)
 	int ret = snprintf(NameStr(name), NAMEDATALEN, "%s_compressed", NameStr(chunk->fd.table_name));
 	if (ret < 0 || ret >= NAMEDATALEN)
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_NAME_TOO_LONG), errmsg("bad compressed chunk internal name")));
+		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk name too long")));
 	}
 	return name;
 }
@@ -149,8 +148,7 @@ rename_compressed_chunk_for_replacement(Oid compressed_relid)
 	int ret = snprintf(tmp_name, NAMEDATALEN, "compress_old_%u", compressed_relid);
 	if (ret < 0 || ret >= NAMEDATALEN)
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_NAME_TOO_LONG), errmsg("bad compressed chunk internal name")));
+		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk name too long")));
 	}
 
 	LockRelationOid(compressed_relid, AccessExclusiveLock);
@@ -918,28 +916,12 @@ Oid
 create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 					  bool skip_segmentby_default, CompressionSettings *settings)
 {
-	char table_name[NAMEDATALEN];
-	int namelen;
 	Oid tablespace_oid;
 	bool settings_provided = (settings != NULL);
 
 	if (OidIsValid(table_id))
 	{
 		LockRelationOid(table_id, AccessShareLock);
-	}
-	else
-	{
-		/* Fail if we overflow the name limit */
-		namelen =
-			snprintf(table_name, NAMEDATALEN, "%s_compressed", NameStr(src_chunk->fd.table_name));
-
-		if (namelen >= NAMEDATALEN)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_NAME_TOO_LONG),
-					 errmsg("invalid name \"%s\" for compressed chunk", table_name),
-					 errdetail("The associated table prefix is too long.")));
-		}
 	}
 
 	/* Create the actual table relation for the chunk
