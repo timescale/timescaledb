@@ -384,7 +384,7 @@ INSERT INTO my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
 ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
 INSERT INTO my_table (date, quantity) VALUES ('2018-08-10T23:00:00+00:00', 20);
 -- Make sure the schema name is changed in both catalog tables
-SELECT * from _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable;
 SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk from _timescaledb_catalog.chunk;
 
 DROP TABLE my_table;

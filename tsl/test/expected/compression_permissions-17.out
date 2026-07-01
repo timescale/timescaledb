@@ -8,13 +8,8 @@ WITH
 SELECT (SELECT format('%I.%I', ht.schema_name, ht.table_name) FROM names
 	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable,
        (SELECT relacl FROM names
-	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable_acl,
-       (SELECT format('%I.%I', ct.schema_name, ct.table_name) FROM names
-	WHERE ct.schema_name = nspname AND ct.table_name = relname) AS compressed,
-       (SELECT relacl FROM names
-	WHERE ct.schema_name = nspname AND ct.table_name = relname) AS compressed_acl
-  FROM _timescaledb_catalog.hypertable ht
-  LEFT JOIN _timescaledb_catalog.hypertable ct ON ht.compressed_hypertable_id = ct.id;
+	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable_acl
+  FROM _timescaledb_catalog.hypertable ht;
 -- Lists every compressed chunk relation with the ACL of the relation and
 -- of its parent hypertable. Compressed chunks are not separate catalog
 -- chunks, so the compressed relation is found through compression_settings.
@@ -190,11 +185,9 @@ SELECT compress_chunk(show_chunks('conditions'));
 -- the hypertable ACL, but for now we list all to make debugging easy.
 \x on
 SELECT * FROM hypertable_details WHERE hypertable = 'public.conditions';
--[ RECORD 1 ]--+-----------------------------------------------
+-[ RECORD 1 ]--+------------------
 hypertable     | public.conditions
 hypertable_acl | 
-compressed     | _timescaledb_internal._compressed_hypertable_4
-compressed_acl | 
 
 SELECT hypertable, hypertable_acl, chunk, chunk_acl
   FROM chunk_details WHERE hypertable = 'public.conditions'
@@ -230,8 +223,6 @@ SELECT * FROM hypertable_details WHERE hypertable = 'public.conditions';
 -[ RECORD 1 ]--+----------------------------------------------------------------
 hypertable     | public.conditions
 hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
-compressed     | _timescaledb_internal._compressed_hypertable_4
-compressed_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
 
 SELECT hypertable, hypertable_acl, chunk, chunk_acl
   FROM chunk_details WHERE hypertable = 'public.conditions'

@@ -40,7 +40,7 @@ WHERE c.relkind IN ('r','p','')
 ORDER BY 1,2;
 
 \echo 'List of hypertables'
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 
 \echo 'List of chunk indexes'
 SELECT ch.id AS chunk_id, ci.indexrelid::regclass::text AS index_name, h.id AS hypertable_id

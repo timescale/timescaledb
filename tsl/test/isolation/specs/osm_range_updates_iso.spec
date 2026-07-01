@@ -72,7 +72,7 @@ step "DTc" { COMMIT; }
 session "LHT"
 step "LHTb" { BEGIN; }
 step "LockHypertableTuple" {
-  SELECT table_name, compression_state, compressed_hypertable_id, status
+  SELECT table_name, compression_state, status
   FROM _timescaledb_catalog.hypertable WHERE table_name = 'osm_test' FOR UPDATE;
 }
 step "UnlockHypertableTuple" { ROLLBACK; }
