@@ -1311,36 +1311,28 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 		ts_columnar_estimate_compressed_batch_size(compression_info->compressed_rte->relid);
 
 	/*
-	 * Estimate the size of decompressed chunk based on the compressed chunk.
-	 *
-	 * The tuple estimates derived from pg_class will be empty, so we have to
-	 * compute that based on the compressed relation as well. Wrong estimates
-	 * there lead to wrong join order choice and wrong low cost for Sort over
-	 * Append, and also different MergeAppend costs on Postgres before 17 due to
-	 * a bug there.
+	 * Add the decompressed row estimate to the chunk rel. The chunk_rel->rows
+	 * already has the PG estimate for uncompressed chunk table, which is nonzero
+	 * for partial chunks.
 	 */
-	const double new_row_estimate = compressed_rel->rows * compression_info->compressed_batch_size;
-	const double new_tuples_estimate =
+	const double compressed_row_estimate =
+		compressed_rel->rows * compression_info->compressed_batch_size;
+	const double compressed_tuples_estimate =
 		compressed_rel->tuples * compression_info->compressed_batch_size;
 	if (!compression_info->single_chunk)
 	{
-		/*
-		 * Adjust the hypertable estimate by the diff of new and old chunk
-		 * estimate.
-		 */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		const double delta = new_row_estimate - chunk_rel->rows;
-		hypertable_rel->rows += delta;
+		hypertable_rel->rows += compressed_row_estimate;
 		/*
 		 * For appendrel, set tuples to the same value as rows,
 		 * like set_append_rel_size() does.
 		 */
-		hypertable_rel->tuples += delta;
+		hypertable_rel->tuples += compressed_row_estimate;
 	}
-	chunk_rel->rows = new_row_estimate;
-	chunk_rel->tuples = new_tuples_estimate;
+	chunk_rel->rows += compressed_row_estimate;
+	chunk_rel->tuples += compressed_tuples_estimate;
 
 	/*
 	 * Create the paths for the compressed chunk table.
