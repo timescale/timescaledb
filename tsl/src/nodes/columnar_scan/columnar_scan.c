@@ -2960,6 +2960,12 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		{
 			return false;
 		}
+		/* Pathkey collation different from underlying column collation may lead to different sort
+		 * order */
+		if (var->varcollid != pk->pk_eclass->ec_collation)
+		{
+			return false;
+		}
 
 		char *column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
 		int orderby_index = ts_array_position(compression_info->settings->fd.orderby, column_name);
