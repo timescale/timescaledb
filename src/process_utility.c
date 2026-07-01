@@ -5,7 +5,10 @@
  */
 
 #include <postgres.h>
+#include <access/heapam.h>
 #include <access/htup_details.h>
+#include <access/table.h>
+#include <access/transam.h>
 #include <access/xact.h>
 #include <catalog/heap.h>
 #include <catalog/index.h>
@@ -40,6 +43,8 @@
 #include <parser/parse_relation.h>
 #include <parser/parse_type.h>
 #include <parser/parse_utilcmd.h>
+#include <replication/slot.h>
+#include <storage/bufmgr.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <tcop/utility.h>
@@ -111,6 +116,7 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 static bool expect_chunk_modification = false;
 static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
+static void error_if_logical_slot_blocks_extension_drop(void);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
 static void ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc,
@@ -620,6 +626,22 @@ process_drop_procedure_start(DropStmt *stmt)
 					ts_catalog_restore_user(&sec_ctx);
 				}
 			}
+		}
+	}
+}
+
+static void
+process_drop_extension_start(DropStmt *stmt)
+{
+	ListCell *lc;
+
+	foreach (lc, stmt->objects)
+	{
+		char *extname = strVal(lfirst(lc));
+
+		if (strcmp(extname, EXTENSION_NAME) == 0)
+		{
+			error_if_logical_slot_blocks_extension_drop();
 		}
 	}
 }
@@ -2282,6 +2304,82 @@ process_drop_role(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+/*
+ * Block DROP EXTENSION timescaledb when a local logical replication slot
+ * still has WAL to decode that references _timescaledb_catalog.hypertable or
+ * _timescaledb_catalog.chunk.
+ *
+ * Those tables are marked as user_catalog_tables so logical decoding plugins
+ * can read them under a historic snapshot. Dropping them while a slot still
+ * has pending changes against those relfilenodes later fails inside
+ * RelationInitPhysicalAddr: that code path forces a non-historic pg_class
+ * lookup to refresh the current relfilenode (it handles concurrent catalog
+ * rewrites that way), and once the extension is gone there is no current
+ * pg_class row anymore, producing "could not find pg_class entry for ...".
+ * The slot is unrecoverable at that point, so refuse the drop and let the
+ * operator drain or remove the slot first.
+ *
+ * A slot's catalog_xmin is the oldest transaction whose (user) catalog changes
+ * it may still decode. If the newest XID that modified either table is at or
+ * after a slot's catalog_xmin, that slot still has pending changes against
+ * them.
+ *
+ * Caveat: a pending TRUNCATE leaves no tuple carrying the truncating XID, so
+ * it is not detected here. Nothing in TimescaleDB truncates these internal
+ * catalog tables, so we accept that gap.
+ */
+static void
+error_if_logical_slot_blocks_extension_drop(void)
+{
+	Oid catalog_ns;
+	NameData slot_name;
+	TransactionId catalog_xmin;
+    char *catalog[] = {HYPERTABLE_TABLE_NAME, CHUNK_TABLE_NAME};
+
+	if (max_replication_slots == 0 || ReplicationSlotCtl == NULL)
+		return;
+
+	catalog_ns = get_namespace_oid(CATALOG_SCHEMA_NAME, true);
+	if (!OidIsValid(catalog_ns))
+		return;
+
+    for (int i = 0; i < 2; i++)
+    {
+		TransactionId max_xid;
+		Oid catalog_oid = get_relname_relid(catalog[i], catalog_ns);
+
+		if (!OidIsValid(catalog_oid))
+		{
+			continue;
+		}
+
+		max_xid = ts_relation_max_modifying_xid(catalog_oid);
+		if (!ts_relation_xid_blocks_logical_slot(max_xid, &slot_name, &catalog_xmin))
+		{
+			continue;
+		}
+
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_IN_USE),
+				 errmsg("cannot drop extension \"%s\" while logical replication slot "
+						"\"%s\" still has pending changes against TimescaleDB catalog "
+						"table \"%s\"",
+						EXTENSION_NAME,
+						NameStr(slot_name),
+						catalog[i]),
+				 errdetail("Slot \"%s\" has catalog_xmin %u but TimescaleDB catalog "
+						   "table \"%s\" was modified by transaction %u. Decoding "
+                           "the pending WAL after the extension is dropped would "
+                           "not be possible",
+						   NameStr(slot_name),
+						   catalog_xmin,
+						   catalog[i],
+						   max_xid),
+				 errhint("Advance the slot past those changes or drop it before dropping "
+						 "the extension.")));
+    }
+}
+
 static DDLResult
 process_drop_start(ProcessUtilityArgs *args)
 {
@@ -2313,6 +2411,11 @@ process_drop_start(ProcessUtilityArgs *args)
 		case OBJECT_SCHEMA:
 			process_drop_schema_start(stmt);
 			break;
+		case OBJECT_EXTENSION:
+		{
+			process_drop_extension_start(stmt);
+			break;
+		}
 		default:
 			break;
 	}

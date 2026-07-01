@@ -9,6 +9,7 @@
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/reloptions.h>
+#include <access/transam.h>
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
@@ -23,11 +24,13 @@
 #include <commands/tablecmds.h>
 #include <fmgr.h>
 #include <funcapi.h>
+#include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <parser/scansup.h>
+#include <replication/slot.h>
 #include <storage/lockdefs.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
@@ -2218,4 +2221,172 @@ ts_get_attnotnull(Oid relid, AttrNumber attno)
 	ReleaseSysCache(tp);
 	return result;
 #endif
+}
+
+/*
+ * Find the newest XID that inserted, updated, or deleted a tuple in a
+ * relation, scanning both live and dead-but-still-present tuples.
+ *
+ * We take AccessExclusiveLock and hold it until the end of the transaction.
+ * Its job is to fence concurrent writers: no new modification to these tables
+ * can commit between this check and the actual DROP, closing the TOCTOU
+ * window. (We take it directly rather than a weaker ShareLock so the
+ * subsequent drop need not upgrade the lock, which would risk deadlock.)
+ *
+ * The lock is NOT needed to protect against VACUUM. Because hypertable/chunk
+ * are user_catalog_tables, VACUUM's removal horizon is clamped to the oldest
+ * slot catalog_xmin (see procarray.c), so it can only remove tuples strictly
+ * older than every slot's catalog_xmin -- exactly the tuples that could never
+ * make us block. Any modification a slot has not yet decoded is therefore
+ * still present for this scan regardless of concurrent VACUUM. Per-page buffer
+ * locking during the scan itself is handled internally by heap_getnext.
+ *
+ * We scan with SnapshotAny so deleted tuples are seen too (a pending DELETE
+ * only shows up in xmax). Frozen xmins map to FrozenTransactionId and are
+ * ignored, as are lock-only xmax values, which produce no logical change.
+ */
+TransactionId
+ts_relation_max_modifying_xid(Oid relid)
+{
+	Relation rel;
+	TableScanDesc scan;
+	HeapTuple tuple;
+	TransactionId maxxid = InvalidTransactionId;
+
+	rel = table_open(relid, AccessExclusiveLock);
+	scan = heap_beginscan(rel,
+						  SnapshotAny,
+						  0,
+						  NULL,
+						  NULL,
+						  SO_TYPE_SEQSCAN | SO_ALLOW_STRAT | SO_ALLOW_SYNC | SO_ALLOW_PAGEMODE);
+	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	{
+		HeapTupleHeader htup = tuple->t_data;
+		uint16 infomask = htup->t_infomask;
+		TransactionId xmin = HeapTupleHeaderGetXmin(htup);
+
+		if (TransactionIdIsNormal(xmin) &&
+			(!TransactionIdIsValid(maxxid) || TransactionIdFollows(xmin, maxxid)))
+			maxxid = xmin;
+
+		/*
+		 * A lock-only xmax (or a lock-only multixact) is not a data change and
+		 * its raw value may even be a MultiXactId, so skip it; a real
+		 * update/delete xid is resolved by HeapTupleHeaderGetUpdateXid.
+		 */
+		if (!(infomask & HEAP_XMAX_INVALID) && !(infomask & HEAP_XMAX_LOCK_ONLY))
+		{
+			TransactionId xmax = HeapTupleHeaderGetUpdateXid(htup);
+
+			if (TransactionIdIsNormal(xmax) &&
+				(!TransactionIdIsValid(maxxid) || TransactionIdFollows(xmax, maxxid)))
+				maxxid = xmax;
+		}
+	}
+	heap_endscan(scan);
+	/* keep AccessExclusiveLock until end of transaction */
+	table_close(rel, NoLock);
+
+	return maxxid;
+}
+
+/*
+ * Check whether any in-use logical replication slot may still need to decode a
+ * change identified by max_xid -- that is, whether its catalog_xmin is at or
+ * before max_xid. Returns true for the first such slot and, when the output
+ * pointers are non-NULL, reports that slot's name and catalog_xmin. Returns
+ * false if no logical slot is affected (including when no slots are
+ * configured).
+ */
+bool
+ts_relation_xid_blocks_logical_slot(TransactionId max_xid, NameData *blocking_slot,
+									TransactionId *blocking_catalog_xmin)
+{
+	if (!TransactionIdIsValid(max_xid))
+		return false;
+
+	if (max_replication_slots == 0 || ReplicationSlotCtl == NULL)
+		return false;
+
+	LWLockAcquire(ReplicationSlotControlLock, LW_SHARED);
+	for (int i = 0; i < max_replication_slots; i++)
+	{
+		ReplicationSlot *slot = &ReplicationSlotCtl->replication_slots[i];
+		NameData slot_name;
+		bool is_logical;
+		TransactionId catalog_xmin;
+
+		if (!slot->in_use)
+			continue;
+
+		SpinLockAcquire(&slot->mutex);
+		slot_name = slot->data.name;
+		is_logical = OidIsValid(slot->data.database);
+		catalog_xmin = slot->data.catalog_xmin;
+		SpinLockRelease(&slot->mutex);
+
+		if (!is_logical)
+			continue;
+		/* A slot not retaining catalog rows cannot need these tables. */
+		if (!TransactionIdIsValid(catalog_xmin))
+			continue;
+		/* Slot has already decoded past every modification to the table(s). */
+		if (TransactionIdPrecedes(max_xid, catalog_xmin))
+			continue;
+
+		if (blocking_slot != NULL)
+			*blocking_slot = slot_name;
+		if (blocking_catalog_xmin != NULL)
+			*blocking_catalog_xmin = catalog_xmin;
+		LWLockRelease(ReplicationSlotControlLock);
+		return true;
+	}
+	LWLockRelease(ReplicationSlotControlLock);
+
+	return false;
+}
+
+/*
+ * SQL-callable guard: raise an error if a logical replication slot still has
+ * pending changes against the given relation. Intended to be called before
+ * recreating a TimescaleDB catalog table during an extension upgrade -- once
+ * the old relation is dropped, a slot that still needs to decode changes to it
+ * becomes unrecoverable (see error_if_logical_slot_blocks_extension_drop for
+ * the underlying mechanism).
+ */
+TS_FUNCTION_INFO_V1(ts_ensure_catalog_replication);
+Datum
+ts_ensure_catalog_replication(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_GETARG_OID(0);
+	TransactionId max_xid;
+	NameData slot_name;
+	TransactionId catalog_xmin;
+
+	if (max_replication_slots == 0 || ReplicationSlotCtl == NULL)
+		PG_RETURN_VOID();
+
+	max_xid = ts_relation_max_modifying_xid(relid);
+
+	if (!ts_relation_xid_blocks_logical_slot(max_xid, &slot_name, &catalog_xmin))
+		PG_RETURN_VOID();
+
+	ereport(ERROR,
+			(errcode(ERRCODE_OBJECT_IN_USE),
+			 errmsg("cannot modify relation \"%s\" while logical replication slot "
+					"\"%s\" still has pending changes against it",
+					get_rel_name(relid),
+					NameStr(slot_name)),
+			 errdetail("Slot \"%s\" has catalog_xmin %u but the relation was modified by "
+					   "transaction %u. Decoding the pending WAL after the relation is "
+					   "recreated would fail with \"could not find pg_class entry\".",
+					   NameStr(slot_name),
+					   catalog_xmin,
+					   max_xid),
+			 errhint("Advance the slot past those changes (e.g. by consuming with "
+					 "pg_logical_slot_get_changes()), or drop it with "
+					 "pg_drop_replication_slot(), first.")));
+
+	PG_RETURN_VOID();
 }
