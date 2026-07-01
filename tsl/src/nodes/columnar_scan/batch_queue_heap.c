@@ -150,7 +150,7 @@ compare_heap_pos_signed(Datum a, Datum b, void *arg)
  * the binaryheap_add_unordered() function, the capacity of the heap is automatically
  * increased if needed.
  */
-static pg_nodiscard binaryheap *
+pg_nodiscard static binaryheap *
 binaryheap_add_unordered_autoresize(binaryheap *heap, Datum d)
 {
 	/* Resize heap if needed */

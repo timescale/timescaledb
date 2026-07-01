@@ -2564,15 +2564,15 @@ EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
    Order: test_partials."time"
    ->  Custom Scan (ColumnarScan) on _hyper_35_68_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_71_chunk._ts_meta_v2_last_time, compress_hyper_36_71_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_71_chunk._ts_meta_v2_first_time, compress_hyper_36_71_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_71_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_69_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_72_chunk._ts_meta_v2_last_time, compress_hyper_36_72_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_72_chunk._ts_meta_v2_first_time, compress_hyper_36_72_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_72_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_70_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_73_chunk._ts_meta_v2_last_time, compress_hyper_36_73_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_73_chunk._ts_meta_v2_first_time, compress_hyper_36_73_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_73_chunk
 
 -- verify correct results
@@ -2671,15 +2671,15 @@ EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
    Order: test_partials."time"
    ->  Custom Scan (ColumnarScan) on _hyper_35_68_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_71_chunk._ts_meta_v2_last_time, compress_hyper_36_71_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_71_chunk._ts_meta_v2_first_time, compress_hyper_36_71_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_71_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_69_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_72_chunk._ts_meta_v2_last_time, compress_hyper_36_72_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_72_chunk._ts_meta_v2_first_time, compress_hyper_36_72_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_72_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_35_70_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_73_chunk._ts_meta_v2_last_time, compress_hyper_36_73_chunk._ts_meta_v2_first_time
+               Sort Key: compress_hyper_36_73_chunk._ts_meta_v2_first_time, compress_hyper_36_73_chunk._ts_meta_v2_last_time
                ->  Seq Scan on compress_hyper_36_73_chunk
 
 DROP TABLE test_partials;
@@ -3360,7 +3360,7 @@ EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cag
                ->  Seq Scan on _hyper_47_89_chunk cagg_inval_2 (actual rows=0.00 loops=1)
 
 -- should have invalidation entry from the direct batch delete
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
             47 |      1577865600000000 |        1577865600000000

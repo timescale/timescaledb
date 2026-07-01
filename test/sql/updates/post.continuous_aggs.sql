@@ -51,9 +51,10 @@ ON (cl.oid IN (format('%I.%I', h.schema_name, h.table_name)::regclass,
                format('%I.%I', partial_view_schema, partial_view_name)::regclass))
 ORDER BY reloid, relacl;
 
--- Output ACLs for chunks on materialized hypertables
+-- Output ACLs for chunks on materialized hypertables. Chunk relation names are
+-- renumbered across the upgrade, so normalize them.
 SELECT inhparent::regclass::text AS parent,
-       cl.oid::regclass::text AS chunk,
+       pg_temp.normalize_chunk(cl.oid::regclass::text) AS chunk,
        unnest(relacl)::text AS acl
 FROM _timescaledb_catalog.continuous_agg ca
 JOIN _timescaledb_catalog.hypertable h

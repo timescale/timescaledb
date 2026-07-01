@@ -407,16 +407,16 @@ SELECT ts_setup_osm_hook();
 
 BEGIN;
 DROP MATERIALIZED VIEW hyper1_cagg CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_9_chunk
 NOTICE:  hypertable_drop_hook
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_9_chunk
 DROP TABLE test1.hyper1;
 NOTICE:  hypertable_drop_hook
 ROLLBACK;
 BEGIN;
 DROP TABLE test1.hyper1 CASCADE;
 NOTICE:  drop cascades to 3 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_9_chunk
 NOTICE:  hypertable_drop_hook
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_9_chunk
 NOTICE:  hypertable_drop_hook
 ROLLBACK;
 SELECT ts_undo_osm_hook();

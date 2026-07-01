@@ -9,9 +9,12 @@
 -- burned ids for slices of chunks dropped before the upgrade. Those dropped
 -- slices leave no trace to reconstruct, so the next id legitimately differs
 -- from a clean install even though the slice rows match.
+-- chunk_id_seq is excluded too: a fresh install no longer burns chunk ids for
+-- compressed relations, so the next id is lower than in a pre-upgrade catalog.
 SELECT seqrelid::regclass,
   CASE WHEN seqrelid::regclass::text IN ('_timescaledb_catalog.chunk_constraint_name',
-                                         '_timescaledb_catalog.dimension_slice_id_seq')
+                                         '_timescaledb_catalog.dimension_slice_id_seq',
+                                         '_timescaledb_catalog.chunk_id_seq')
        THEN NULL ELSE nextval(seqrelid) END AS nextval,
   seqstart,
   seqincrement,
