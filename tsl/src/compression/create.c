@@ -912,8 +912,8 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
  *
  */
 Oid
-create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
-					  bool skip_segmentby_default, CompressionSettings *settings)
+create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_default,
+					  CompressionSettings *settings)
 {
 	Oid tablespace_oid;
 	bool settings_provided = (settings != NULL);
