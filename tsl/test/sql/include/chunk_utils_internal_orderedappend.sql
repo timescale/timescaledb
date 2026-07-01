@@ -131,20 +131,6 @@ ALTER TABLE test_chunkapp ADD CHECK (a > 0);
 SELECT * FROM test.show_constraints('test_chunkapp_fdw_child');
 \set ON_ERROR_STOP 1
 
--- test error is triggered when time dimension not found
-CREATE TABLE test2(time timestamptz not null, a int);
-SELECT create_hypertable('test2', 'time');
-INSERT INTO test2 VALUES ('2020-01-01'::timestamptz, 1);
-ALTER TABLE test2 SET (timescaledb.compress);
-SELECT compress_chunk(show_chunks('test2'));
--- find internal compression table, call API function on it
-SELECT format('%I.%I', cht.schema_name, cht.table_name) AS "COMPRESSION_TBLNM"
-FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
-WHERE ht.table_name = 'test2' and cht.id = ht.compressed_hypertable_id \gset
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.hypertable_osm_range_update(:'COMPRESSION_TBLNM'::regclass, '2020-01-01'::timestamptz);
-\set ON_ERROR_STOP 1
-
 -- test wrong/incompatible data types with hypertable time dimension
 -- update range of int2 with int4
 \set ON_ERROR_STOP 0

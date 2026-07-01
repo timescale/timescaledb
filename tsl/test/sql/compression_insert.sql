@@ -621,22 +621,6 @@ COPY conditions FROM STDIN DELIMITER ',';
 CALL refresh_continuous_aggregate('cagg_conditions', NULL, '2011-01-01 12:00:00-08' );
 SELECT * FROM cagg_conditions ORDER BY 1;
 
--- TEST direct insert into internal compressed hypertable should be blocked
-CREATE TABLE direct_insert(time timestamptz not null);
-SELECT table_name FROM create_hypertable('direct_insert','time');
-ALTER TABLE direct_insert SET(timescaledb.compress);
-
-SELECT
-  format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
-FROM
-  _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
-      AND uncompress.table_name = 'direct_insert') \gset
-
-\set ON_ERROR_STOP 0
-INSERT INTO :TABLENAME SELECT;
-\set ON_ERROR_STOP 1
-
 -- Test that inserting into a compressed table works even when the
 -- column has been dropped.
 CREATE TABLE test4 (

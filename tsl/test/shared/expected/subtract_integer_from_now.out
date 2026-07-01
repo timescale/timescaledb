@@ -11,17 +11,6 @@ ERROR:  table "pg_class" is not a hypertable
 SELECT _timescaledb_functions.subtract_integer_from_now('metrics', 1);
 ERROR:  hypertable has no integer partitioning dimension
 \set ON_ERROR_STOP 1
-SELECT
-  format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
-FROM
-  _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
-      AND uncompress.table_name = 'metrics_compressed') \gset
--- test on hypertable without dimensions
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.subtract_integer_from_now(:'TABLENAME', 1);
-ERROR:  hypertable has no open partitioning dimension
-\set ON_ERROR_STOP 1
 -- test on hypertable without now function
 CREATE TABLE subtract_int_no_func(time int NOT NULL);
 SELECT table_name FROM create_hypertable('subtract_int_no_func','time',chunk_time_interval:=10);
@@ -96,11 +85,6 @@ SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int8', lag) AS
    4
    0
 
--- test set_integer_now_func on internal table
-\set ON_ERROR_STOP 0
-SELECT set_integer_now_func(:'TABLENAME', 'sub_int2_now');
-ERROR:  custom time function not supported on internal columnstore table
-\set ON_ERROR_STOP 1
 -- cleanup
 DROP TABLE subtract_int_no_func;
 DROP TABLE subtract_int2;

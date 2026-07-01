@@ -375,9 +375,8 @@ SELECT count(*) AS chunks_compressed FROM (
 
 ALTER MATERIALIZED VIEW cagg_compressed
     ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp)) STORED;
--- look up the mat HT (schema, name) and the compressed HT id once.
-SELECT h.id as mat_ht_id,
-       h.compressed_hypertable_id AS compressed_ht_id
+-- look up the mat HT (schema, name)
+SELECT h.id as mat_ht_id
 FROM _timescaledb_catalog.continuous_agg ca
 JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
 WHERE ca.user_view_name = 'cagg_compressed' \gset
