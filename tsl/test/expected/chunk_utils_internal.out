@@ -1525,33 +1525,11 @@ SELECT * FROM test.show_constraints('test_chunkapp_fdw_child');
  test_chunkapp_a_check | c    | {a}     | -     | (a > 0) | f          | f        | t
 
 \set ON_ERROR_STOP 1
--- test error is triggered when time dimension not found
-CREATE TABLE test2(time timestamptz not null, a int);
-SELECT create_hypertable('test2', 'time');
-  create_hypertable  
----------------------
- (21,public,test2,t)
-
-INSERT INTO test2 VALUES ('2020-01-01'::timestamptz, 1);
-ALTER TABLE test2 SET (timescaledb.compress);
-SELECT compress_chunk(show_chunks('test2'));
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_21_32_chunk
-
--- find internal compression table, call API function on it
-SELECT format('%I.%I', cht.schema_name, cht.table_name) AS "COMPRESSION_TBLNM"
-FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
-WHERE ht.table_name = 'test2' and cht.id = ht.compressed_hypertable_id \gset
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.hypertable_osm_range_update(:'COMPRESSION_TBLNM'::regclass, '2020-01-01'::timestamptz);
-psql:include/chunk_utils_internal_orderedappend.sql:145: ERROR:  could not find time dimension for hypertable _timescaledb_internal._compressed_hypertable_22
-\set ON_ERROR_STOP 1
 -- test wrong/incompatible data types with hypertable time dimension
 -- update range of int2 with int4
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_int2', range_start => 65540::int4, range_end => 100000::int4);
-psql:include/chunk_utils_internal_orderedappend.sql:151: ERROR:  invalid time argument type "integer"
+psql:include/chunk_utils_internal_orderedappend.sql:137: ERROR:  invalid time argument type "integer"
 -- update range of int8 with int4
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_int8', 120, 150);
  hypertable_osm_range_update 
@@ -1566,7 +1544,7 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', '2020-01-0
 
 -- udpate range of timestamp with bigint
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', 9223372036854771806, 9223372036854775406);
-psql:include/chunk_utils_internal_orderedappend.sql:157: ERROR:  invalid time argument type "bigint"
+psql:include/chunk_utils_internal_orderedappend.sql:143: ERROR:  invalid time argument type "bigint"
 \set ON_ERROR_STOP 1
 -- test dimension slice tuple visibility
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -1588,9 +1566,9 @@ ROLLBACK;
 -- should show 0 10 as range
 \set ON_ERROR_STOP 0
 INSERT INTO osm_slice_update VALUES (1);
-psql:include/chunk_utils_internal_orderedappend.sql:178: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
+psql:include/chunk_utils_internal_orderedappend.sql:164: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
 INSERT INTO osm_slice_update VALUES (1);
-psql:include/chunk_utils_internal_orderedappend.sql:179: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
+psql:include/chunk_utils_internal_orderedappend.sql:165: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
 \set ON_ERROR_STOP 1
 --TEST hypertable with foreign key into it
 \c :TEST_DBNAME :ROLE_4
@@ -1643,7 +1621,7 @@ CREATE TABLE ht_try(timec timestamptz NOT NULL, acq_id bigint, value bigint);
 SELECT create_hypertable('ht_try', 'timec', chunk_time_interval => interval '1 day');
   create_hypertable   
 ----------------------
- (25,public,ht_try,t)
+ (23,public,ht_try,t)
 
 -- creating event triggers requires superuser permissions
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -1677,7 +1655,7 @@ SET timescaledb.enable_event_triggers = on;
 INSERT INTO ht_try VALUES ('2025-05-02 00:00', 1, 10);
 NOTICE:  ddl_start_trigger_func() is invoked
 NOTICE:  ddl_end_trigger_func() is invoked
-NOTICE:  tag: CREATE TABLE, object: _timescaledb_internal._hyper_25_37_chunk
+NOTICE:  tag: CREATE TABLE, object: _timescaledb_internal._hyper_23_36_chunk
 RESET timescaledb.enable_event_triggers;
 DROP EVENT TRIGGER ddl_start_trigger;
 DROP EVENT TRIGGER ddl_end_trigger;
@@ -1727,24 +1705,24 @@ SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
 -- DML on hypertable after freezing should be blocked
 \set ON_ERROR_STOP 0
 INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
-ERROR:  cannot INSERT into frozen chunk "_hyper_27_40_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_25_39_chunk"
 UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
-ERROR:  cannot update/delete rows from chunk "_hyper_27_40_chunk" as it is frozen
+ERROR:  cannot update/delete rows from chunk "_hyper_25_39_chunk" as it is frozen
 DELETE FROM dml_blocks WHERE device = 'dev2';
-ERROR:  cannot update/delete rows from chunk "_hyper_27_40_chunk" as it is frozen
+ERROR:  cannot update/delete rows from chunk "_hyper_25_39_chunk" as it is frozen
 COPY dml_blocks FROM STDIN;
-ERROR:  cannot INSERT into frozen chunk "_hyper_27_40_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_25_39_chunk"
 \set ON_ERROR_STOP 1
 -- DML on chunk after freezing should be blocked
 \set ON_ERROR_STOP 0
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
-ERROR:  cannot INSERT into frozen chunk "_hyper_27_40_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_25_39_chunk"
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
-ERROR:  cannot update/delete rows from chunk "_hyper_27_40_chunk" as it is frozen
+ERROR:  cannot update/delete rows from chunk "_hyper_25_39_chunk" as it is frozen
 DELETE FROM :CHUNK WHERE device = 'dev2';
-ERROR:  cannot update/delete rows from chunk "_hyper_27_40_chunk" as it is frozen
+ERROR:  cannot update/delete rows from chunk "_hyper_25_39_chunk" as it is frozen
 COPY :CHUNK FROM STDIN;
-ERROR:  cannot INSERT into frozen chunk "_hyper_27_40_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_25_39_chunk"
 \set ON_ERROR_STOP 1
 -- repeat tests with compressed chunk
 SELECT _timescaledb_functions.unfreeze_chunk(:'CHUNK');
@@ -1755,7 +1733,7 @@ SELECT _timescaledb_functions.unfreeze_chunk(:'CHUNK');
 SELECT compress_chunk(:'CHUNK');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_27_40_chunk
+ _timescaledb_internal._hyper_25_39_chunk
 
 SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
  freeze_chunk 
@@ -1766,24 +1744,24 @@ SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.comp
 -- DML on hypertable after freezing should be blocked
 \set ON_ERROR_STOP 0
 INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
-ERROR:  cannot INSERT into frozen chunk "_hyper_27_40_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_25_39_chunk"
 UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
-ERROR:  cannot update/delete rows from chunk "_hyper_27_40_chunk" as it is frozen
+ERROR:  cannot update/delete rows from chunk "_hyper_25_39_chunk" as it is frozen
 DELETE FROM dml_blocks WHERE device = 'dev2';
-ERROR:  cannot update/delete rows from chunk "_hyper_27_40_chunk" as it is frozen
+ERROR:  cannot update/delete rows from chunk "_hyper_25_39_chunk" as it is frozen
 COPY dml_blocks FROM STDIN;
-ERROR:  cannot INSERT into frozen chunk "_hyper_27_40_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_25_39_chunk"
 \set ON_ERROR_STOP 1
 -- DML on chunk after freezing should be blocked
 \set ON_ERROR_STOP 0
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
-ERROR:  cannot INSERT into frozen chunk "_hyper_27_40_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_25_39_chunk"
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
-ERROR:  cannot update/delete rows from chunk "_hyper_27_40_chunk" as it is frozen
+ERROR:  cannot update/delete rows from chunk "_hyper_25_39_chunk" as it is frozen
 DELETE FROM :CHUNK WHERE device = 'dev2';
-ERROR:  cannot update/delete rows from chunk "_hyper_27_40_chunk" as it is frozen
+ERROR:  cannot update/delete rows from chunk "_hyper_25_39_chunk" as it is frozen
 COPY :CHUNK FROM STDIN;
-ERROR:  cannot INSERT into frozen chunk "_hyper_27_40_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_25_39_chunk"
 \set ON_ERROR_STOP 1
 -- DML on chunk after freezing should be blocked
 \set ON_ERROR_STOP 0
@@ -1803,7 +1781,7 @@ CREATE TABLE ht_pub_test(timec timestamptz NOT NULL, device_id int, value float)
 SELECT create_hypertable('ht_pub_test', 'timec', chunk_time_interval => interval '1 day');
      create_hypertable     
 ---------------------------
- (29,public,ht_pub_test,t)
+ (27,public,ht_pub_test,t)
 
 -- Insert data to create first normal chunk
 INSERT INTO ht_pub_test VALUES ('2023-01-01 01:00', 1, 10.5);
@@ -1818,7 +1796,7 @@ WHERE pubname = 'test_pub_osm'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename      
 -----------------------+--------------------
- _timescaledb_internal | _hyper_29_41_chunk
+ _timescaledb_internal | _hyper_27_40_chunk
  public                | ht_pub_test
 
 -- Create a new foreign table for OSM testing
@@ -1845,7 +1823,7 @@ WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
 ORDER BY table_name;
       schema_name      |     table_name     | status | osm_chunk 
 -----------------------+--------------------+--------+-----------
- _timescaledb_internal | _hyper_29_41_chunk |      0 | f
+ _timescaledb_internal | _hyper_27_40_chunk |      0 | f
  public                | osm_chunk_pub_test |      0 | t
 
 -- Verify: still only 1 normal chunk in publication (OSM chunk NOT added)
@@ -1856,7 +1834,7 @@ WHERE pubname = 'test_pub_osm'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename      
 -----------------------+--------------------
- _timescaledb_internal | _hyper_29_41_chunk
+ _timescaledb_internal | _hyper_27_40_chunk
  public                | ht_pub_test
 
 -- Insert data to create second normal chunk
@@ -1871,8 +1849,8 @@ WHERE pubname = 'test_pub_osm'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename      
 -----------------------+--------------------
- _timescaledb_internal | _hyper_29_41_chunk
- _timescaledb_internal | _hyper_29_43_chunk
+ _timescaledb_internal | _hyper_27_40_chunk
+ _timescaledb_internal | _hyper_27_42_chunk
  public                | ht_pub_test
 
 -- Cleanup
@@ -1902,6 +1880,6 @@ SELECT _timescaledb_functions.freeze_chunk(chunk) FROM show_chunks('metrics') ch
  t
 
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
-ERROR:  chunk "_timescaledb_internal._hyper_30_44_chunk" is frozen, skipping compression
+ERROR:  chunk "_timescaledb_internal._hyper_28_43_chunk" is frozen, skipping compression
 ROLLBACK;
 \set ON_ERROR_STOP 1

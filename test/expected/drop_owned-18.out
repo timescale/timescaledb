@@ -20,11 +20,11 @@ SELECT create_hypertable('hypertable_schema.superuser', 'time', 'location', 2);
  (2,hypertable_schema,superuser,t)
 
 INSERT INTO hypertable_schema.superuser VALUES ('2001-01-01 01:01:01', 23.3, 1);
-SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
- id |    schema_name    |    table_name     | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------------+-------------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
-  1 | hypertable_schema | default_perm_user | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-  2 | hypertable_schema | superuser         | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable ORDER BY id;
+ id |    schema_name    |    table_name     | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | compression_state | status 
+----+-------------------+-------------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------
+  1 | hypertable_schema | default_perm_user | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |      0
+  2 | hypertable_schema | superuser         | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |      0
 
 SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |    table_name    | status | osm_chunk 
@@ -33,10 +33,10 @@ SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _times
   2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |      0 | f
 
 DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
-SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
- id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
-  2 | hypertable_schema | superuser  | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable ORDER BY id;
+ id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | compression_state | status 
+----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------
+  2 | hypertable_schema | superuser  | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |      0
 
 SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |    table_name    | status | osm_chunk 
@@ -45,9 +45,9 @@ SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _times
 
 DROP TABLE  hypertable_schema.superuser;
 --everything should be cleaned up
-SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable GROUP BY id;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | compression_state | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+--------
 
 SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id | schema_name | table_name | status | osm_chunk 

@@ -56,11 +56,11 @@ SET timescaledb.enable_columnarscan to ON;
 update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
 SET timescaledb.enable_columnarscan to OFF;
-SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable ORDER BY id;
- id |      schema_name      |        table_name        | compressed | compressed_hypertable_id 
-----+-----------------------+--------------------------+------------+--------------------------
-  1 | public                | foo                      |          1 |                        2
-  2 | _timescaledb_internal | _compressed_hypertable_2 |          2 |                         
+SELECT id, schema_name, table_name, compression_state as compressed FROM _timescaledb_catalog.hypertable ORDER BY id;
+ id |      schema_name      |        table_name        | compressed 
+----+-----------------------+--------------------------+------------
+  1 | public                | foo                      |          1
+  2 | _timescaledb_internal | _compressed_hypertable_2 |          2
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                 index                                                                                                                  
@@ -264,10 +264,10 @@ insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
-SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
- id | schema_name | table_name | compressed | compressed_hypertable_id 
-----+-------------+------------+------------+--------------------------
-  5 | public      | conditions |          1 |                        6
+SELECT id, schema_name, table_name, compression_state as compressed FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
+ id | schema_name | table_name | compressed 
+----+-------------+------------+------------
+  5 | public      | conditions |          1
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'conditions'::regclass;
    relid    | compress_relid | segmentby  | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
@@ -833,10 +833,10 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
 -------
      1
 
-select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
- id | schema_name |  table_name   | compressed | compressed_hypertable_id 
-----+-------------+---------------+------------+--------------------------
- 11 | public      | datatype_test |          1 |                       12
+select id, schema_name, table_name, compression_state as compressed from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
+ id | schema_name |  table_name   | compressed 
+----+-------------+---------------+------------
+ 11 | public      | datatype_test |          1
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_test'::regclass;
      relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
@@ -1359,12 +1359,7 @@ order by relname;
  _hyper_29_42_chunk |         0 |        0 |             0
  _hyper_29_43_chunk |         0 |        0 |             0
 
-SELECT '_timescaledb_internal.' || compht.table_name as "STAT_COMP_TABLE",
-             compht.table_name  as "STAT_COMP_TABLE_NAME"
-FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable compht
-WHERE ht.table_name = 'stattest2' AND ht.compressed_hypertable_id = compht.id \gset
---analyze the compressed table, will update stats for the raw table.
-ANALYZE :STAT_COMP_TABLE;
+ANALYZE stattest2;
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
  WHERE relname in ( SELECT ch.table_name FROM
@@ -1374,7 +1369,7 @@ ORDER BY relname;
       relname       | reltuples | relpages | relallvisible 
 --------------------+-----------+----------+---------------
  _hyper_29_42_chunk |         0 |        0 |             0
- _hyper_29_43_chunk |         0 |        0 |             0
+ _hyper_29_43_chunk |       200 |        2 |             0
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
  WHERE oid in ( SELECT cs.compress_relid FROM
@@ -1386,7 +1381,7 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class
 ORDER BY relname;
             relname            | reltuples | relpages | relallvisible 
 -------------------------------+-----------+----------+---------------
- _hyper_29_42_chunk_compressed |        -1 |        0 |             0
+ _hyper_29_42_chunk_compressed |         1 |        1 |             0
 
 --analyze on stattest2 should not overwrite
 ANALYZE stattest2;
