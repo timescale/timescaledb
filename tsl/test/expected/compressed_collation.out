@@ -117,3 +117,33 @@ select min(name), max(name) from collation_agg_c;
 
 reset enable_sort;
 reset timescaledb.debug_require_vector_agg;
+-- Test #9998: should not match query sort key with a different collation to compressed index sort key
+create table t9998 (
+    ts   timestamptz not null,
+    name text collate :"COLLATION"
+);
+select table_name from create_hypertable('t9998', 'ts');
+ table_name 
+------------
+ t9998
+
+insert into t9998 values
+    ('2024-01-01', 'B'),
+    ('2024-01-01', 'a');
+alter table t9998 set (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'name'
+);
+select count(compress_chunk(ch)) from show_chunks('t9998') ch;
+ count 
+-------
+     1
+
+-- C collation sorts capital before lowercase: expected order is 'B', 'a'.
+select name from t9998 order by name collate "C";
+ name 
+------
+ B
+ a
+
+drop table t9998 cascade;
