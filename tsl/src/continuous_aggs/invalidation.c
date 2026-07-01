@@ -33,6 +33,8 @@
 #include "cache.h"
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
+#include "dimension.h"
+#include "dimension_slice.h"
 #include "guc.h"
 #include "invalidation.h"
 #include "refresh.h"
@@ -1286,6 +1288,30 @@ invalidation_cagg_has_pending_mat_ranges(ContinuousAgg *cagg)
 	return found;
 }
 
+/*
+ * Return the range_start of the earliest dimension slice (chunk) for the
+ * given raw hypertable, or INVAL_NEG_INFINITY when no chunks exist.
+ *
+ * This is used to ignore invalidation entries that lie entirely before any
+ * chunk — such entries cannot affect materialized data and should be
+ * preserved for future use rather than treated as pending work.
+ */
+int64
+invalidation_get_earliest_chunk_start(int32 raw_hypertable_id)
+{
+	Hypertable *raw_ht = cagg_get_hypertable_or_fail(raw_hypertable_id);
+	const Dimension *time_dim = hyperspace_get_open_dimension(raw_ht->space, 0);
+	Assert(time_dim != NULL);
+
+	DimensionSlice *slice = ts_dimension_slice_earliest_non_osm_slice(time_dim->fd.id);
+	if (slice != NULL)
+	{
+		return slice->fd.range_start;
+	}
+
+	return INVAL_NEG_INFINITY;
+}
+
 bool
 invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 {
@@ -1299,6 +1325,26 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 											   PG_INT64_MAX);
 
 	int64 watermark = ts_cagg_watermark_get(cagg_hyper_id);
+
+	/*
+	 * Expand the earliest chunk boundary to the end of its containing
+	 * bucket. Invalidation entries are also bucket-expanded, so both
+	 * sides of the comparison use consistent bucket-aligned values.
+	 * Any entry whose expanded greatest_modified_value falls within this
+	 * bucket or earlier lies entirely before the first data and can be
+	 * ignored.
+	 */
+	int64 earliest_start = invalidation_get_earliest_chunk_start(cagg->data.raw_hypertable_id);
+	if (earliest_start != INVAL_NEG_INFINITY)
+	{
+		Invalidation boundary = { .lowest_modified_value = earliest_start,
+								  .greatest_modified_value = earliest_start };
+		invalidation_expand_to_bucket_boundaries(&boundary,
+												 cagg->partition_type,
+												 cagg->bucket_function);
+		earliest_start = boundary.lowest_modified_value;
+	}
+
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti;
@@ -1310,9 +1356,11 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 													  ti,
 													  cagg->partition_type,
 													  cagg->bucket_function);
+
 		/* Entries which cannot be invalidations */
 		if (logentry.greatest_modified_value == INVAL_NEG_INFINITY ||
-			logentry.lowest_modified_value >= watermark)
+			logentry.lowest_modified_value >= watermark ||
+			logentry.greatest_modified_value <= earliest_start)
 		{
 			continue;
 		}

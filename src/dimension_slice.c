@@ -1181,6 +1181,55 @@ ts_dimension_slice_nth_earliest_slice(int32 dimension_id, int n)
 	return ret;
 }
 
+static ScanTupleResult
+dimension_slice_earliest_non_osm_found(TupleInfo *ti, void *data)
+{
+	DimensionSlice **slice = (DimensionSlice **) data;
+	MemoryContext old = MemoryContextSwitchTo(ti->mctx);
+	*slice = dimension_slice_from_slot(ti->slot);
+	MemoryContextSwitchTo(old);
+	Chunk *chunk = ts_chunk_get_by_id((*slice)->fd.chunk_id, true);
+
+	if (IS_OSM_CHUNK(chunk))
+	{
+		// Explicitly set slice to NULL to handle the scenario where all chunks are tiered
+		*slice = NULL;
+		return SCAN_CONTINUE;
+	}
+
+	return SCAN_DONE;
+}
+
+/*
+ * Return the earliest dimension slice not belonging to an OSM chunk.
+ */
+DimensionSlice *
+ts_dimension_slice_earliest_non_osm_slice(int32 dimension_id)
+{
+	ScanKeyData scankey[1];
+	DimensionSlice *ret = NULL;
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_id));
+
+	dimension_slice_scan_limit_direction_internal(
+		DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+		scankey,
+		1,
+		dimension_slice_earliest_non_osm_found,
+		(void *) &ret,
+		0,
+		ForwardScanDirection,
+		AccessShareLock,
+		NULL,
+		CurrentMemoryContext);
+
+	return ret;
+}
+
 typedef struct ReorderBoundaryState
 {
 	int target;
