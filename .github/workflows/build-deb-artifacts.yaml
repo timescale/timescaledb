@@ -2,7 +2,11 @@ name: "Build .deb artifacts (dev)"
 
 "on":
   push:
-    branches: [main]
+    branches:
+      - main
+      - "benchmark_*"
+    tags:
+      - "*"
 
 # Avoid stacking dispatches when commits land in quick succession.
 # Note: this cancels pending dispatches, not the builds themselves on the
