@@ -86,7 +86,7 @@ if [ -n "${VERSIONS}" ]; then
   for version in ${VERSIONS}; do
     ts_minor_version=$(echo "${version}" | awk -F. '{print $2}')
 
-    if [ "${ts_minor_version}" -ge 25 ]; then
+    if [ "${ts_minor_version}" -ge 26 ]; then
         TEST_VERSION=v12
     elif [ "${ts_minor_version}" -ge 22 ]; then
         TEST_VERSION=v11

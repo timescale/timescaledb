@@ -4,6 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#include <math.h>
+
 #include <postgres.h>
 
 #include <port/pg_bitutils.h>

@@ -24,6 +24,7 @@
 #include "hypertable_cache.h"
 #include "stats.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
 
@@ -109,6 +110,16 @@ classify_table(const Form_pg_class class, Cache *htcache, const Hypertable **ht,
 	if (NULL != *chunk)
 	{
 		return classify_chunk(htcache, ht, *chunk);
+	}
+
+	/*
+	 * The relation holding the compressed data of a chunk is not a chunk
+	 * catalog entry on its own, so classify it directly here. Its stats are
+	 * tracked separately via the compressed chunk size metadata.
+	 */
+	if (ts_relation_is_compressed_chunk_relation(class->oid))
+	{
+		return RELTYPE_COMPRESSION_CHUNK;
 	}
 
 	return RELTYPE_TABLE;
@@ -548,8 +559,14 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 			case RELTYPE_PARTITIONED_TABLE:
 				process_relation(&stats->partitioned_tables.storage.base, class);
 				break;
-			case RELTYPE_CHUNK:
 			case RELTYPE_COMPRESSION_CHUNK:
+				/*
+				 * Ignore the compressed data relation. Its stats are tracked
+				 * separately via the compressed chunk size metadata, which is
+				 * accounted for when processing the owning chunk.
+				 */
+				break;
+			case RELTYPE_CHUNK:
 			case RELTYPE_MATERIALIZED_CHUNK:
 				Assert(NULL != chunk);
 				process_chunk(&statsctx, reltype, class, chunk);

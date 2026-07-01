@@ -31,17 +31,8 @@ set(TEST_FILES
     compress_auto_sparse_index.sql
     compress_batch_size.sql
     compress_bitmap_scan.sql
+    compress_bloom.sql
     compress_bloom_dml.sql
-    compress_bloom_hash.sql
-    compress_bloom_int2.sql
-    compress_compbloom_basics.sql
-    compress_compbloom_config.sql
-    compress_compbloom_hash_pushdown.sql
-    compress_compbloom_index_add.sql
-    compress_compbloom_index_drop.sql
-    compress_compbloom_manual_config.sql
-    compress_compbloom_naming.sql
-    compress_compbloom_upsert.sql
     compress_default.sql
     compress_dml_aux.sql
     compress_dml_bitmap_rescan.sql
@@ -228,6 +219,9 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
 
   list(APPEND TEST_FILES privilege_maintain.sql
        merge_append_partially_compressed.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES vector_agg_expr_debug.sql)
+  endif(CMAKE_BUILD_TYPE MATCHES Debug)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))

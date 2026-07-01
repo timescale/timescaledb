@@ -2,6 +2,16 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- Chunk relation names are not deterministic between a fresh install and a post-upgrade catalog.
+CREATE OR REPLACE FUNCTION pg_temp.normalize_chunk(t text) RETURNS text
+  LANGUAGE sql IMMUTABLE AS $$
+  SELECT regexp_replace(
+           regexp_replace(t,
+             'compress_hyper_[0-9]+_[0-9]+_chunk|_hyper_[0-9]+_[0-9]+_chunk_compressed',
+             'compressed_chunk', 'g'),
+           '(_hyper_[0-9]+)_[0-9]+_chunk', '\1_X_chunk', 'g')
+$$;
+
 SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_compression_algorithms
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
@@ -161,10 +171,10 @@ ORDER BY conrelid::regclass::text, contype, conname, confrelid::regclass::text;
 
 -- child tables
 SELECT parent.relname AS table_name,
-    i.inhrelid::regclass AS child_table
+    pg_temp.normalize_chunk(i.inhrelid::regclass::text) AS child_table
 FROM pg_catalog.pg_inherits i
 JOIN pg_catalog.pg_class parent ON parent.oid = i.inhparent AND parent.relnamespace = 'public'::regnamespace
-ORDER BY parent.relname, i.inhrelid::regclass::text;
+ORDER BY parent.relname, pg_temp.normalize_chunk(i.inhrelid::regclass::text);
 
 -- Keep the output backward compatible
 \if :PG_UPGRADE_TEST
@@ -199,24 +209,25 @@ ORDER BY parent.relname, i.inhrelid::regclass::text;
 -- The list of tables configured to be dumped.
 SELECT unnest(extconfig)::regclass::text, unnest(extcondition) FROM pg_extension WHERE extname = 'timescaledb' ORDER BY 1;
 
--- Show chunks that include owner in the output
-SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, cl.relowner::regrole
+-- Show chunks that include owner in the output. The chunk id is not
+-- deterministic post-upgrade, so drop it and normalize the chunk relation name.
+SELECT c.hypertable_id, c.schema_name, pg_temp.normalize_chunk(c.table_name) AS table_name, cl.relowner::regrole
 FROM  _timescaledb_catalog.chunk c
 INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
-ORDER BY c.id, c.hypertable_id;
+ORDER BY c.hypertable_id, pg_temp.normalize_chunk(c.table_name);
 
--- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and differ
--- between a fresh install and a post-upgrade catalog, so dump path-stable
--- columns only.
+-- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and chunk ids
+-- are renumbered, so both differ between a fresh install and a post-upgrade
+-- catalog. Dump and order by the dimensional range only.
 \if :has_chunk_owned_slices
-SELECT ds.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
+SELECT ds.dimension_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.dimension_slice ds
-ORDER BY ds.chunk_id, ds.dimension_id;
+ORDER BY ds.dimension_id, ds.range_start, ds.range_end;
 \else
-SELECT cc.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
+SELECT ds.dimension_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk_constraint cc
 JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
-ORDER BY cc.chunk_id, ds.dimension_id;
+ORDER BY ds.dimension_id, ds.range_start, ds.range_end;
 \endif
 
 -- Show attributes of all regclass objects belonging to our extension
@@ -240,7 +251,7 @@ ORDER BY attrelid::regclass::text COLLATE "C", a.attnum;
 -- form (2.28.0) compare equal. The dimensional CHECKs are named
 -- "constraint_<slice_id>" and slice ids are not deterministic between a
 -- fresh install and a post-upgrade catalog, so collapse the suffix too.
-SELECT conrelid::regclass::text,
+SELECT pg_temp.normalize_chunk(conrelid::regclass::text) AS conrelid,
        regexp_replace(
            regexp_replace(conname, '^([0-9]+_){1,2}', ''),
            '^constraint_[0-9]+$', 'constraint_dim') AS conname,
@@ -256,4 +267,8 @@ ORDER BY 1, 2, 3;
 -- orderby sparse index type changed across releases and existing chunks are
 -- not rewritten on upgrade), so it differs between a fresh install and a
 -- post-upgrade catalog. Skip it and compare the remaining columns.
-SELECT relid, compress_relid, segmentby, orderby, orderby_desc, orderby_nullsfirst FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
+SELECT pg_temp.normalize_chunk(relid::regclass::text) AS relid,
+       pg_temp.normalize_chunk(compress_relid::regclass::text) AS compress_relid,
+       segmentby, orderby, orderby_desc, orderby_nullsfirst
+FROM _timescaledb_catalog.compression_settings
+ORDER BY pg_temp.normalize_chunk(relid::regclass::text), segmentby, orderby;

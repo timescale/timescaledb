@@ -772,7 +772,7 @@ DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 14 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_24_chunk
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_29_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_28_chunk
 NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
     time TIMESTAMPTZ NOT NULL,
@@ -1047,7 +1047,7 @@ SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
  Tue Jan 02 16:00:00 2018 PST |          | 200
 
 DROP MATERIALIZED VIEW conditions_nullable_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_41_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_40_chunk
 DROP TABLE conditions CASCADE;
 -- test cagg refresh with updated values
 CREATE TABLE metrics(time timestamptz NOT NULL, device text, value float8) WITH (tsdb.hypertable,tsdb.partition_column='time');

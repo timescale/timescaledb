@@ -50,6 +50,7 @@
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "time_utils.h"
+#include "ts_catalog/compression_settings.h"
 #include "utils.h"
 #include "uuid.h"
 
@@ -1442,17 +1443,9 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 		bool isnull, is_osm_chunk;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		Datum id = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
-		Datum comp_id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_id, &isnull));
-		int32 chunk_id, compressed_chunk_id;
+		Datum status = slot_getattr(ti->slot, Anum_chunk_status, &isnull);
 		Oid chunk_relid, compressed_chunk_relid;
 		RelationSize chunk_relsize, compressed_chunk_relsize;
-
-		if (isnull)
-		{
-			continue;
-		}
-
-		chunk_id = DatumGetInt32(id);
 
 		/* avoid if it's an OSM chunk */
 		is_osm_chunk = slot_getattr(ti->slot, Anum_chunk_osm_chunk, &isnull);
@@ -1462,20 +1455,18 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 			continue;
 		}
 
-		chunk_relid = ts_chunk_get_relid(chunk_id, false);
+		chunk_relid = ts_chunk_get_relid(DatumGetInt32(id), false);
 		chunk_relsize = ts_relation_approximate_size_impl(chunk_relid);
 		/* add this chunk's size to the total size */
 		ADD_RELATIONSIZE(total_relsize, chunk_relsize);
 
 		/* check if the chunk has a compressed counterpart and add if yes */
-		comp_id = slot_getattr(ti->slot, Anum_chunk_compressed_chunk_id, &isnull);
-		if (isnull)
+		if (!ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED))
 		{
 			continue;
 		}
 
-		compressed_chunk_id = DatumGetInt32(comp_id);
-		compressed_chunk_relid = ts_chunk_get_relid(compressed_chunk_id, false);
+		compressed_chunk_relid = ts_relation_get_compressed_relid(chunk_relid);
 		compressed_chunk_relsize = ts_relation_approximate_size_impl(compressed_chunk_relid);
 		/* add this compressed chunk's size to the total size */
 		ADD_RELATIONSIZE(total_relsize, compressed_chunk_relsize);

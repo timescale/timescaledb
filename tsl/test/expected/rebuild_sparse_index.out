@@ -262,12 +262,12 @@ ALTER TABLE rsi_integrity SET (
 SELECT compress_chunk(:'ichunk1');
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 SELECT compress_chunk(:'ichunk2');
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_5_chunk
+ _timescaledb_internal._hyper_3_4_chunk
 
 SELECT comp_ns.nspname AS ic_schema1, comp_cl.relname AS ic_table1
 FROM _timescaledb_catalog.compression_settings cs
@@ -327,12 +327,12 @@ SELECT format('\! diff -u --label "minmax original" --label "minmax rebuilt" %s 
 SELECT decompress_chunk(:'ichunk1');
             decompress_chunk            
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 SELECT decompress_chunk(:'ichunk2');
             decompress_chunk            
 ----------------------------------------
- _timescaledb_internal._hyper_3_5_chunk
+ _timescaledb_internal._hyper_3_4_chunk
 
 -- Test 9: firstlast integrity (compress, save, drop+rebuild, save, diff)
 ALTER TABLE rsi_integrity SET (
@@ -345,12 +345,12 @@ NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(:'ichunk1');
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 SELECT compress_chunk(:'ichunk2');
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_5_chunk
+ _timescaledb_internal._hyper_3_4_chunk
 
 -- re-fetch compressed chunk names after recompress
 SELECT comp_ns.nspname AS ic_schema1, comp_cl.relname AS ic_table1
@@ -411,12 +411,12 @@ SELECT format('\! diff -u --label "firstlast original" --label "firstlast rebuil
 SELECT decompress_chunk(:'ichunk1');
             decompress_chunk            
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 SELECT decompress_chunk(:'ichunk2');
             decompress_chunk            
 ----------------------------------------
- _timescaledb_internal._hyper_3_5_chunk
+ _timescaledb_internal._hyper_3_4_chunk
 
 -- Test 10: single-column bloom integrity (drop, rebuild, check contains)
 ALTER TABLE rsi_integrity SET (
@@ -429,7 +429,7 @@ NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(:'ichunk1');
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 SELECT comp_ns.nspname AS ic_schema1, comp_cl.relname AS ic_table1
 FROM _timescaledb_catalog.compression_settings cs
@@ -521,7 +521,7 @@ FROM :ic_schema1.:ic_table1 WHERE device = 'd2' LIMIT 1;
 SELECT decompress_chunk(:'ichunk1');
             decompress_chunk            
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 -- Test 11: composite bloom integrity (drop, rebuild, verify via explain)
 ALTER TABLE rsi_integrity SET (
@@ -534,7 +534,7 @@ NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(:'ichunk1');
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 SELECT comp_ns.nspname AS ic_schema1, comp_cl.relname AS ic_table1
 FROM _timescaledb_catalog.compression_settings cs
@@ -589,15 +589,15 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 SELECT * FROM rsi_integrity WHERE device = 'd1' AND humidity = 42 AND label = 'label_0';
 --- QUERY PLAN ---
  Append (actual rows=0.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_4_chunk (actual rows=0.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_3_chunk (actual rows=0.00 loops=1)
          Vectorized Filter: ((humidity = 42) AND (label = 'label_0'::text))
-         ->  Index Scan using compress_hyper_4_12_chunk_device__ts_meta_v2_first_time__ts_idx on compress_hyper_4_12_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_3_3_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_3_3_chunk_compressed (actual rows=0.00 loops=1)
                Index Cond: (device = 'd1'::text)
                Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_577c_humidity_label, TEST-HASHES::bigint[])
-   ->  Seq Scan on _hyper_3_5_chunk (actual rows=0.00 loops=1)
+   ->  Seq Scan on _hyper_3_4_chunk (actual rows=0.00 loops=1)
          Filter: ((device = 'd1'::text) AND (humidity = 42) AND (label = 'label_0'::text))
          Rows Removed by Filter: 8640
-   ->  Seq Scan on _hyper_3_6_chunk (actual rows=0.00 loops=1)
+   ->  Seq Scan on _hyper_3_5_chunk (actual rows=0.00 loops=1)
          Filter: ((device = 'd1'::text) AND (humidity = 42) AND (label = 'label_0'::text))
          Rows Removed by Filter: 600
 

@@ -55,7 +55,7 @@ explain (buffers off, costs off)
 select * from compressed_collation_ht order by name;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-   ->  Index Scan using compress_hyper_2_2_chunk_name_idx on compress_hyper_2_2_chunk
+   ->  Index Scan using _hyper_1_1_chunk_compressed_name_idx on _hyper_1_1_chunk_compressed
 
 select * from compressed_collation_ht order by name;
            time           | name | value 

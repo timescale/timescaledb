@@ -80,7 +80,7 @@ create_dummy_query()
 
 void
 compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
-									  int32 compress_chunk_id, const RelationSize *compress_size,
+									  const RelationSize *compress_size,
 									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression,
 									  int64 rowcnt_frozen)
 {
@@ -99,8 +99,6 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *sr
 
 	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_chunk_id)] =
 		Int32GetDatum(src_chunk_id);
-	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_chunk_id)] =
-		Int32GetDatum(compress_chunk_id);
 	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_heap_size)] =
 		Int64GetDatum(src_size->heap_size);
 	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_toast_size)] =
@@ -128,7 +126,7 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *sr
 
 static int
 compression_chunk_size_catalog_update_merged(int32 chunk_id, const RelationSize *size,
-											 int32 merge_chunk_id, const RelationSize *merge_size,
+											 const RelationSize *merge_size,
 											 int64 merge_rowcnt_pre_compression,
 											 int64 merge_rowcnt_post_compression)
 {
@@ -417,7 +415,11 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 {
 	Oid result_chunk_id = chunk_relid;
 	CompressChunkCxt cxt = { 0 };
-	Chunk *compress_ht_chunk, *mergable_chunk;
+	Chunk *mergable_chunk;
+	/* Only set when we create a fresh compressed chunk; the merge path works
+	 * purely off the compressed relation Oid since the compressed chunk has no
+	 * entry in the chunk catalog. */
+	Oid compress_chunk_relid;
 	Cache *hcache;
 	RelationSize before_size, after_size;
 	CompressionStats cstat;
@@ -481,25 +483,25 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		 */
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
-		compress_ht_chunk =
+		compress_chunk_relid =
 			create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid, false, NULL);
 		new_compressed_chunk = true;
 		ereport(DEBUG1,
 				(errmsg("new columnstore chunk \"%s.%s\" created",
-						NameStr(compress_ht_chunk->fd.schema_name),
-						NameStr(compress_ht_chunk->fd.table_name))));
+						get_namespace_name(get_rel_namespace(compress_chunk_relid)),
+						get_rel_name(compress_chunk_relid))));
 
 		EventTriggerAlterTableEnd();
 	}
 	else
 	{
 		/* use an existing compressed chunk to compress into */
-		compress_ht_chunk = ts_chunk_get_by_id(mergable_chunk->fd.compressed_chunk_id, true);
+		compress_chunk_relid = ts_relation_get_compressed_relid(mergable_chunk->table_id);
 		result_chunk_id = mergable_chunk->table_id;
 		ereport(DEBUG1,
 				(errmsg("merge into existing columnstore chunk \"%s.%s\"",
-						NameStr(compress_ht_chunk->fd.schema_name),
-						NameStr(compress_ht_chunk->fd.table_name))));
+						get_namespace_name(get_rel_namespace(compress_chunk_relid)),
+						get_rel_name(compress_chunk_relid))));
 	}
 
 	/* Since the compressed relation is created in the same transaction as the tuples that will be
@@ -529,8 +531,8 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
 
-	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
-	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
+	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_chunk_relid, insert_options);
+	after_size = ts_relation_size_impl(compress_chunk_relid);
 
 	if (cxt.srcht->range_space)
 	{
@@ -541,7 +543,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	{
 		compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 											  &before_size,
-											  compress_ht_chunk->fd.id,
 											  &after_size,
 											  cstat.rowcnt_pre_compression,
 											  cstat.rowcnt_post_compression,
@@ -572,7 +573,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	{
 		compression_chunk_size_catalog_update_merged(mergable_chunk->fd.id,
 													 &before_size,
-													 compress_ht_chunk->fd.id,
 													 &after_size,
 													 cstat.rowcnt_pre_compression,
 													 cstat.rowcnt_post_compression);
@@ -694,7 +694,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
-	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
+	ts_chunk_clear_compressed(uncompressed_chunk);
 	ts_compression_settings_delete(uncompressed_chunk->table_id);
 
 	/*
@@ -778,6 +778,15 @@ recompress_chunk_impl(Chunk *chunk, bool recompress)
 			return false;
 		}
 
+		if (!ts_guc_enable_optimizations)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("segmentwise in-memory recompression functionality disabled, "
+							"set timescaledb.enable_optimizations to on")));
+			return false;
+		}
+
 		/* #9444: do not recompress when order by columns are nullable, do segmentwise
 		 * decompress/compress instead. It is due to compression min/max metadata not handling
 		 * NULLs. This restriction is lifted with first/last metadata index.
@@ -802,6 +811,15 @@ recompress_chunk_impl(Chunk *chunk, bool recompress)
 					(errcode(ERRCODE_WARNING),
 					 errmsg("in-memory recompression functionality disabled, "
 							"set timescaledb.enable_in_memory_recompression to on")));
+			return false;
+		}
+
+		if (!ts_guc_enable_optimizations)
+		{
+			ereport(DEBUG1,
+					(errcode(ERRCODE_WARNING),
+					 errmsg("in-memory recompression functionality disabled, "
+							"set timescaledb.enable_optimizations to on")));
 			return false;
 		}
 
@@ -830,7 +848,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	int64 numrows_pre_compression = PG_GETARG_INT64(8);
 	int64 numrows_post_compression = PG_GETARG_INT64(9);
 	Chunk *chunk;
-	Chunk *compress_ht_chunk;
 	Cache *hcache;
 	CompressChunkCxt cxt;
 	bool chunk_was_compressed;
@@ -862,14 +879,12 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	EventTriggerAlterTableStart(create_dummy_query());
 	chunk_was_compressed = ts_chunk_is_compressed(cxt.srcht_chunk);
 	/* Create compressed chunk using existing table */
-	compress_ht_chunk =
-		create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table, false, NULL);
+	create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table, false, NULL);
 	EventTriggerAlterTableEnd();
 
 	/* Insert empty stats to compression_chunk_size */
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 										  &uncompressed_size,
-										  compress_ht_chunk->fd.id,
 										  &compressed_size,
 										  numrows_pre_compression,
 										  numrows_post_compression,
@@ -1021,6 +1036,11 @@ can_use_in_memory_rebuild(Chunk *chunk)
 	if (!ts_guc_enable_in_memory_recompression)
 	{
 		elog(DEBUG1, "timescaledb.enable_in_memory_recompression is disabled");
+		return false;
+	}
+	if (!ts_guc_enable_optimizations)
+	{
+		elog(DEBUG1, "timescaledb.enable_optimizations is disabled");
 		return false;
 	}
 

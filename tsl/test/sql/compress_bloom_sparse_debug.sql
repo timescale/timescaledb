@@ -109,14 +109,25 @@ select ts_bloom1_debug_hash('2025-05-05'::timestamp);
 select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
 
 
--- The "contains" functions should error out when called with wrong arguments.
 \set ON_ERROR_STOP 0
 
+-- The "contains" functions should error out when called with wrong arguments.
 select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, 1::bit) ;
 
 select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
 
 select _timescaledb_functions.bloom1_contains(_timescaledb_functions.bloom1in('\x'::cstring), 1);
+
+select _timescaledb_functions.bloom1_contains_any(_timescaledb_functions.bloom1in('\x'::cstring), 1);
+
+select _timescaledb_functions.bloom1_contains('\x'::_timescaledb_internal.bloom1, ROW(1));
+
+select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, ROW());
+
+-- The hash function is callable by user, so must return proper error
+select _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
+
+select _timescaledb_functions.bloom1_hash(ROW());
 
 \set ON_ERROR_STOP 1
 
@@ -171,7 +182,5 @@ SELECT _timescaledb_functions.bloom1_contains('\xd098c885f08468eb8916751d947f248
 SELECT _timescaledb_functions.bloom1_contains(NULL, pg_catalog.record_in(null::cstring, 23::oid, 12::int4));
 
 
--- The hash function is callable by user, so must return proper error
-SELECT _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
 
 
