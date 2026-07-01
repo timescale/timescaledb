@@ -1,0 +1,1 @@
+Fixes: #10082 Wrong result when evaluating a function returning NULL in the columnar query execution pipeline

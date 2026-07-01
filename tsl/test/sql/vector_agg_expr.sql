@@ -11,7 +11,15 @@ set timescaledb.enable_columnarindexscan = off;
 \pset null $
 
 create function always_null(x int4) returns int4 as $$ select null::int4 $$
-language sql strict immutable parallel safe;
+language sql strict immutable parallel safe
+set search_path = pg_catalog /* prevent inlining */
+;
+
+create function null_on_odd(x int4) returns int4 as
+$$ select case when x % 2 = 1 then null else x end $$
+language sql strict immutable parallel safe
+set search_path = pg_catalog /* prevent inlining */
+;
 
 create or replace function throw_on_twelve(n integer)
 returns integer language plpgsql strict immutable parallel safe as $$
@@ -286,6 +294,19 @@ where x > 0
 \set ON_ERROR_STOP 0
 select count(*), case when i = 12 then 12 else throw_on_twelve(i) end from aggexpr group by 2 order by 1, 2 limit 10;
 \set ON_ERROR_STOP 1
+
+
+-- Null handling in expressions
+select count(null_on_odd(i)) from aggexpr;
+
+select count(null_on_odd(i)), i from aggexpr group by i order by i;
+
+select count(null_on_odd(i)), x from aggexpr group by x order by 1 desc, 2 limit 10;
+
+select count(substring(x, '12')), x from aggexpr group by x order by 1 desc, 2 limit 10;
+
+select count(substring(x, '12')), i from aggexpr group by i order by 1 desc, 2 limit 10;
+
 
 reset timescaledb.debug_require_vector_agg;
 
