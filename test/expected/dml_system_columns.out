@@ -429,7 +429,7 @@ VACUUM FREEZE ANALYZE ht_zero_chunks;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.ht_zero_chunks (actual rows=0.00 loops=1)
          ->  Result (actual rows=0.00 loops=1)
-               Output: 1, ctid, ctid
+               Output: 1, ctid
                One-Time Filter: false
 
 :PREFIX DELETE FROM ht_zero_chunks WHERE time = '2020-01-15';
@@ -437,7 +437,7 @@ VACUUM FREEZE ANALYZE ht_zero_chunks;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.ht_zero_chunks (actual rows=0.00 loops=1)
          ->  Result (actual rows=0.00 loops=1)
-               Output: ctid, ctid
+               Output: ctid
                One-Time Filter: false
 
 :PREFIX UPDATE ht_zero_chunks SET v = 1 RETURNING ctid, xmin, tableoid::regclass, *;
@@ -447,7 +447,7 @@ VACUUM FREEZE ANALYZE ht_zero_chunks;
    ->  Update on public.ht_zero_chunks (actual rows=0.00 loops=1)
          Output: ctid, xmin, (tableoid)::regclass, "time", v
          ->  Result (actual rows=0.00 loops=1)
-               Output: 1, ctid, ctid
+               Output: 1, ctid
                One-Time Filter: false
 
 :PREFIX DELETE FROM ht_zero_chunks RETURNING ctid, xmin, tableoid::regclass, *;
@@ -457,7 +457,7 @@ VACUUM FREEZE ANALYZE ht_zero_chunks;
    ->  Delete on public.ht_zero_chunks (actual rows=0.00 loops=1)
          Output: ctid, xmin, (tableoid)::regclass, "time", v
          ->  Result (actual rows=0.00 loops=1)
-               Output: ctid, ctid
+               Output: ctid
                One-Time Filter: false
 
 DROP TABLE ht_zero_chunks;
@@ -476,7 +476,7 @@ VACUUM FREEZE ANALYZE ht_dummy;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.ht_dummy (actual rows=0.00 loops=1)
          ->  Result (actual rows=0.00 loops=1)
-               Output: 99, ctid
+               Output: 99, NULL::oid, NULL::tid
                One-Time Filter: false
 
 :PREFIX DELETE FROM ht_dummy WHERE false;
@@ -484,7 +484,7 @@ VACUUM FREEZE ANALYZE ht_dummy;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.ht_dummy (actual rows=0.00 loops=1)
          ->  Result (actual rows=0.00 loops=1)
-               Output: ctid
+               Output: NULL::oid, NULL::tid
                One-Time Filter: false
 
 :PREFIX UPDATE ht_dummy SET v = 99 WHERE time IS NULL;
@@ -501,11 +501,11 @@ RETURNING ctid, xmin, tableoid::regclass, *
 ;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Output: ctid, xmin, ((tableoid)::regclass), "time", v
+   Output: ht_dummy.ctid, ht_dummy.xmin, ((ht_dummy.tableoid)::regclass), ht_dummy."time", ht_dummy.v
    ->  Update on public.ht_dummy (actual rows=0.00 loops=1)
-         Output: ctid, xmin, (tableoid)::regclass, "time", v
+         Output: ht_dummy.ctid, ht_dummy.xmin, (ht_dummy.tableoid)::regclass, ht_dummy."time", ht_dummy.v
          ->  Result (actual rows=0.00 loops=1)
-               Output: 99, ctid
+               Output: 99, NULL::oid, NULL::tid
                One-Time Filter: false
 
 DROP TABLE ht_dummy;

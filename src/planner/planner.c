@@ -1601,11 +1601,10 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * expansion.
 			 *
 			 * `inhparent` goes to false in two cases: a hypertable without
-			 * chunks or a SELECT FROM ONLY hypertable. We still want to run our
-			 * hypertable expansion code for hypertables w/o chunks.
+			 * chunks or a SELECT FROM ONLY hypertable.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL &&
+				inhparent && rte->ctename == NULL &&
 				!IS_DUMMY_REL(rel))
 			{
 				if (rel->relid != (Index) query->resultRelation)
