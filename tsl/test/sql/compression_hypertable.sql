@@ -102,10 +102,11 @@ reset timescaledb.enable_bulk_decompression;
 TRUNCATE test1;
 /* should be no data in table */
 SELECT * FROM test1;
-/* nor compressed table */
-SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
-/* the compressed table should not have chunks */
-SELECT count(*) FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1');
+/* there should be no compressed relation */
+SELECT count(*)
+FROM _timescaledb_catalog.chunk ch
+JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id AND ht.table_name = 'test1'
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass;
 
 --add test for altered hypertable
 CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
