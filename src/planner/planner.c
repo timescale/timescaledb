@@ -1215,7 +1215,7 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 			 * Run our hypertable expansion. We can save some time by not doing
 			 * it, if the relation has already been proven empty.
 			 */
-			if (true /* FIXME */ || !IS_DUMMY_REL(in_rel))
+			if (!IS_DUMMY_REL(in_rel))
 			{
 				ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
 			}
@@ -1459,8 +1459,8 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	TsRelType reltype;
 	Hypertable *ht;
 
-//	mybt();
-//	fprintf(stderr, "dummy rel %d: %d\n", rel->relid, IS_DUMMY_REL(rel));
+	//	mybt();
+	//	fprintf(stderr, "dummy rel %d: %d\n", rel->relid, IS_DUMMY_REL(rel));
 
 	/*
 	 * Quick exit if this is a relation we're not interested in.
@@ -1470,7 +1470,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 * not the relation itself.
 	 */
 	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid)
-//		|| IS_DUMMY_REL(rel)
+		//		|| IS_DUMMY_REL(rel)
 	)
 	{
 		if (prev_set_rel_pathlist_hook != NULL)
@@ -1482,6 +1482,22 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	reltype = ts_classify_relation(root, rel, &ht);
 
+	/* Check for unexpanded hypertable */
+	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
+	{
+		expand_hypertables(root, rel, rti, rte);
+	}
+
+	if (ts_guc_enable_optimizations)
+	{
+		ts_planner_constraint_cleanup(root, rel);
+	}
+
+	/* Call other extensions. Do it after table expansion. */
+	if (prev_set_rel_pathlist_hook != NULL)
+	{
+		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+	}
 
 	switch (reltype)
 	{
@@ -1514,24 +1530,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			break;
 
 		case TS_REL_HYPERTABLE:
-			/* Check for unexpanded hypertable */
 			if (!rte->inh)
 			{
-				if (ts_rte_is_marked_for_expansion(rte))
-				{
-					expand_hypertables(root, rel, rti, rte);
-					apply_optimizations(root, reltype, rel, rte, ht);
-				}
-				else
-				{
-					/*
-					 * This happens with SELECT FROM ONLY hypertable or with an
-					 * empty hypertable. Mark it as dummy, otherwise we'll get a
-					 * scan on hypertable relation itself. It's always empty, so
-					 * this scan is useless and looks misleading.
-					 */
-					mark_dummy_rel(rel);
-				}
+				/*
+				 * This happens with SELECT FROM ONLY hypertable or with an
+				 * empty hypertable. Mark it as dummy, otherwise we'll get a
+				 * scan on hypertable relation itself. It's always empty, so
+				 * this scan is useless and looks misleading.
+				 */
+				mark_dummy_rel(rel);
+			}
+			else
+			{
+				apply_optimizations(root, reltype, rel, rte, ht);
 			}
 			break;
 
@@ -1539,18 +1550,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
 	}
-
-	if (ts_guc_enable_optimizations)
-	{
-		ts_planner_constraint_cleanup(root, rel);
-	}
-
-	/* Call other extensions. Do it after table expansion. */
-	if (prev_set_rel_pathlist_hook != NULL)
-	{
-		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
-	}
-
 }
 
 /* This hook is meant to editorialize about the information the planner gets
@@ -1606,8 +1605,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * hypertable expansion code for hypertables w/o chunks.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL
-				&& !IS_DUMMY_REL(rel))
+				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL &&
+				!IS_DUMMY_REL(rel))
 			{
 				if (rel->relid != (Index) query->resultRelation)
 				{
@@ -1618,8 +1617,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 					rte_mark_for_expansion(rte);
 				}
 			}
-//			mybt();
-//			fprintf(stderr, "dummy rel %d: %d\n", rel->relid, IS_DUMMY_REL(rel));
+			//			mybt();
+			//			fprintf(stderr, "dummy rel %d: %d\n", rel->relid, IS_DUMMY_REL(rel));
 			ts_create_private_reloptinfo(rel);
 
 			if (ts_guc_enable_optimizations)
