@@ -419,6 +419,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 
 			compressed_columns_to_postgres_data(arg_values, nargs, row);
 
+			fcinfo->isnull = false;
+
 			const Datum datum = FunctionCallInvoke(fcinfo);
 
 			/*
