@@ -30,7 +30,6 @@ SELECT * FROM test.relation WHERE schema = 'test_schema';
  creation_time       | timestamp with time zone |           | not null | 
 Indexes:
     "chunk_pkey" PRIMARY KEY, btree (id)
-    "chunk_compressed_chunk_id_idx" btree (compressed_chunk_id)
     "chunk_hypertable_id_creation_time_idx" btree (hypertable_id, creation_time)
     "chunk_hypertable_id_idx" btree (hypertable_id)
     "chunk_osm_chunk_idx" btree (osm_chunk, hypertable_id)
@@ -41,7 +40,6 @@ Referenced by:
     TABLE "_timescaledb_internal.bgw_policy_chunk_stats" CONSTRAINT "bgw_policy_chunk_stats_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
     TABLE "_timescaledb_catalog.chunk_column_stats" CONSTRAINT "chunk_column_stats_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
     TABLE "_timescaledb_catalog.compression_chunk_size" CONSTRAINT "compression_chunk_size_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
-    TABLE "_timescaledb_catalog.compression_chunk_size" CONSTRAINT "compression_chunk_size_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
     TABLE "_timescaledb_catalog.dimension_slice" CONSTRAINT "dimension_slice_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
 
 create table test_schema.test_table_no_not_null(time BIGINT, device_id text);

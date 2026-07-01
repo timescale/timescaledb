@@ -5,6 +5,7 @@
  */
 #include "rewrite_with_caggs.h"
 
+#include <access/attmap.h>
 #include <optimizer/tlist.h>
 #include <parser/parse_relation.h>
 #include <rewrite/rewriteDefine.h>

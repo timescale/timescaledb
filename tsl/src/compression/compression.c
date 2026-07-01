@@ -16,6 +16,7 @@
 #include <common/base64.h>
 #include <funcapi.h>
 #include <libpq/pqformat.h>
+#include <storage/latch.h>
 #include <storage/predicate.h>
 #include <utils/datum.h>
 #include <utils/elog.h>
@@ -24,7 +25,9 @@
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/tuplesort.h>
 #include <utils/typcache.h>
+#include <utils/wait_event.h>
 
 #include "compat/compat.h"
 
@@ -1198,11 +1201,12 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	Relation in_rel = table_open(src_chunk->table_id, NoLock);
 
 	/* Create before drop. We must update settings first to point to the new chunk. */
-	Chunk *new_compressed_chunk =
+	rename_compressed_chunk_for_replacement(old_compressed_relid);
+	Oid new_compressed_relid =
 		create_compress_chunk(compress_ht, src_chunk, InvalidOid, false, settings);
 
 	/* Initialize the new bulk writer and compressor against the new compressed relation */
-	Relation out_rel = table_open(new_compressed_chunk->table_id, RowExclusiveLock);
+	Relation out_rel = table_open(new_compressed_relid, RowExclusiveLock);
 
 	BulkWriter new_bulk_writer = bulk_writer_build(out_rel, /* insert_options = */ 0);
 

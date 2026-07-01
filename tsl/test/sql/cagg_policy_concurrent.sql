@@ -616,7 +616,7 @@ SELECT * from mat_m1 EXCEPT SELECT * from mat_m2;
 DROP MATERIALIZED VIEW mat_m1;
 DROP MATERIALIZED VIEW mat_m2;
 
-/* Concurrent policies aren't allowed on hierarchical continuous aggs */
+/* Multiple refresh policies on hierarchical continuous aggs */
 CREATE MATERIALIZED VIEW mat_m1
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -653,9 +653,15 @@ WITH NO DATA;
 SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval) AS "JOB_ID" \gset
 -- alter_job should not be blocked
 SELECT alter_job(:JOB_ID, next_start => '2000-01-01'::timestamptz);
+-- Multiple non-overlapping policies on the same hierarchical cagg are allowed
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', '29 days'::interval, NULL, '12 h'::interval) AS "JOB_ID_HIER2" \gset
+SELECT config->>'start_offset' AS start_offset, config->>'end_offset' AS end_offset
+FROM _timescaledb_config.bgw_job
+WHERE id IN (:JOB_ID, :JOB_ID_HIER2)
+ORDER BY id;
 \set ON_ERROR_STOP 0
--- Multiple policies on hierarchical cagg should not be allowed
-SELECT add_continuous_aggregate_policy('mat_m1_rollup', '29 days'::interval, NULL, '12 h'::interval);
+-- Overlapping policies on a hierarchical cagg are still rejected
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', '40 days'::interval, NULL, '12 h'::interval);
 \set ON_ERROR_STOP 1
 -- Adding the exact same policy with if_not_exists should succeed (not error)
 SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval, if_not_exists => true);
@@ -678,12 +684,15 @@ SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 
 SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval,  NULL, '12 h'::interval, buckets_per_batch => 0) AS agg_m1_job_2 \gset
 
 SELECT remove_continuous_aggregate_policy('mat_m1_rollup');
-SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, NULL, '12 h'::interval) AS m1_rollup_job \gset
+/* Create two policies on the hierarchical cagg mat_m1_rollup as well */
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval, buckets_per_batch => 0) AS m1_rollup_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', '30 days'::interval, NULL, '12 h'::interval, buckets_per_batch => 0) AS m1_rollup_job_2 \gset
 
 /* Refresh both continuous aggs */
 CALL run_job(:agg_m1_job_1);
 CALL run_job(:agg_m1_job_2);
-CALL run_job(:m1_rollup_job);
+CALL run_job(:m1_rollup_job_1);
+CALL run_job(:m1_rollup_job_2);
 
 /* Insert new data to generate invalidations */
 INSERT INTO overlap_test_timestamptz
@@ -714,8 +723,9 @@ FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log hil
 JOIN _timescaledb_catalog.hypertable ht ON ht.id = hil.hypertable_id
 GROUP BY ht.schema_name, ht.table_name;
 
-/* Run L2 policy */
-CALL run_job(:m1_rollup_job);
+/* Run both L2 policies */
+CALL run_job(:m1_rollup_job_1);
+CALL run_job(:m1_rollup_job_2);
 
 /* L2 must be consistent with L1 after both policies run */
 SELECT r.bucket,
@@ -730,7 +740,7 @@ JOIN (
 ) l ON l.month = r.bucket
 ORDER BY 1;
 
-/* Restore timezone */
+/* Restore timezone and mock time */
 SET timezone TO PST8PDT;
 
 DROP MATERIALIZED VIEW mat_m1_rollup;

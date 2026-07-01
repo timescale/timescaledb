@@ -321,17 +321,17 @@ set enable_bitmapscan to off;
 explain (costs off, summary off, buffers off)
 select * from fl_push_asc where ts = 2500;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_20_19_chunk
+ Custom Scan (ColumnarScan) on _hyper_20_11_chunk
    Vectorized Filter: (ts = 2500)
-   ->  Index Scan using compress_hyper_21_25_chunk__ts_meta_v2_first_ts__ts_meta_v2_idx on compress_hyper_21_25_chunk
+   ->  Index Scan using _hyper_20_11_chunk_compressed__ts_meta_v2_first_ts__ts_meta_idx on _hyper_20_11_chunk_compressed
          Index Cond: ((_ts_meta_v2_first_ts <= 2500) AND (_ts_meta_v2_last_ts >= 2500))
 
 explain (costs off, summary off, buffers off)
 select * from fl_push_asc where ts >= 2500 and ts <= 2600;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_20_19_chunk
+ Custom Scan (ColumnarScan) on _hyper_20_11_chunk
    Vectorized Filter: ((ts >= 2500) AND (ts <= 2600))
-   ->  Index Scan using compress_hyper_21_25_chunk__ts_meta_v2_first_ts__ts_meta_v2_idx on compress_hyper_21_25_chunk
+   ->  Index Scan using _hyper_20_11_chunk_compressed__ts_meta_v2_first_ts__ts_meta_idx on _hyper_20_11_chunk_compressed
          Index Cond: ((_ts_meta_v2_first_ts <= 2600) AND (_ts_meta_v2_last_ts >= 2500))
 
 reset enable_seqscan;
@@ -358,10 +358,10 @@ set enable_bitmapscan to off;
 explain (costs off, summary off, buffers off)
 select * from fl_push_desc where ts = 2500;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_22_31_chunk
+ Custom Scan (ColumnarScan) on _hyper_22_17_chunk
    Vectorized Filter: (ts = 2500)
-   ->  Index Scan using compress_hyper_23_37_chunk__ts_meta_v2_last_ts__ts_meta_v2__idx on compress_hyper_23_37_chunk
-         Index Cond: ((_ts_meta_v2_last_ts <= 2500) AND (_ts_meta_v2_first_ts >= 2500))
+   ->  Index Scan using _hyper_22_17_chunk_compressed__ts_meta_v2_first_ts__ts_meta_idx on _hyper_22_17_chunk_compressed
+         Index Cond: ((_ts_meta_v2_first_ts >= 2500) AND (_ts_meta_v2_last_ts <= 2500))
 
 reset enable_seqscan;
 reset enable_bitmapscan;
@@ -387,9 +387,9 @@ analyze fl_push_null;
 explain (costs off, summary off, buffers off)
 select * from fl_push_null where val = 2500;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_24_41_chunk
+ Custom Scan (ColumnarScan) on _hyper_24_21_chunk
    Vectorized Filter: (val = 2500)
-   ->  Seq Scan on compress_hyper_25_42_chunk
+   ->  Seq Scan on _hyper_24_21_chunk_compressed
          Filter: ((_ts_meta_min_1 <= 2500) AND (_ts_meta_max_1 >= 2500))
 
 drop table fl_push_null;
@@ -415,9 +415,9 @@ set enable_bitmapscan to off;
 explain (costs off, summary off, buffers off)
 select * from fl_push_compound where a = 2500;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_26_45_chunk
+ Custom Scan (ColumnarScan) on _hyper_26_24_chunk
    Vectorized Filter: (a = 2500)
-   ->  Index Scan using compress_hyper_27_51_chunk__ts_meta_v2_first_a__ts_meta_v2__idx on compress_hyper_27_51_chunk
+   ->  Index Scan using _hyper_26_24_chunk_compressed__ts_meta_v2_first_a__ts_meta__idx on _hyper_26_24_chunk_compressed
          Index Cond: ((_ts_meta_v2_first_a <= 2500) AND (_ts_meta_v2_last_a >= 2500))
 
 reset enable_seqscan;
@@ -428,29 +428,29 @@ explain (costs off, summary off, buffers off)
 select * from fl_push_compound where b = 50;
 --- QUERY PLAN ---
  Append
-   ->  Custom Scan (ColumnarScan) on _hyper_26_43_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_26_22_chunk
          Vectorized Filter: (b = 50)
-         ->  Seq Scan on compress_hyper_27_49_chunk
+         ->  Seq Scan on _hyper_26_22_chunk_compressed
                Filter: ((_ts_meta_min_2 <= 50) AND (_ts_meta_max_2 >= 50))
-   ->  Custom Scan (ColumnarScan) on _hyper_26_44_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_26_23_chunk
          Vectorized Filter: (b = 50)
-         ->  Seq Scan on compress_hyper_27_50_chunk
+         ->  Seq Scan on _hyper_26_23_chunk_compressed
                Filter: ((_ts_meta_min_2 <= 50) AND (_ts_meta_max_2 >= 50))
-   ->  Custom Scan (ColumnarScan) on _hyper_26_45_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_26_24_chunk
          Vectorized Filter: (b = 50)
-         ->  Seq Scan on compress_hyper_27_51_chunk
+         ->  Seq Scan on _hyper_26_24_chunk_compressed
                Filter: ((_ts_meta_min_2 <= 50) AND (_ts_meta_max_2 >= 50))
-   ->  Custom Scan (ColumnarScan) on _hyper_26_46_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_26_25_chunk
          Vectorized Filter: (b = 50)
-         ->  Seq Scan on compress_hyper_27_52_chunk
+         ->  Seq Scan on _hyper_26_25_chunk_compressed
                Filter: ((_ts_meta_min_2 <= 50) AND (_ts_meta_max_2 >= 50))
-   ->  Custom Scan (ColumnarScan) on _hyper_26_47_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_26_26_chunk
          Vectorized Filter: (b = 50)
-         ->  Seq Scan on compress_hyper_27_53_chunk
+         ->  Seq Scan on _hyper_26_26_chunk_compressed
                Filter: ((_ts_meta_min_2 <= 50) AND (_ts_meta_max_2 >= 50))
-   ->  Custom Scan (ColumnarScan) on _hyper_26_48_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_26_27_chunk
          Vectorized Filter: (b = 50)
-         ->  Seq Scan on compress_hyper_27_54_chunk
+         ->  Seq Scan on _hyper_26_27_chunk_compressed
                Filter: ((_ts_meta_min_2 <= 50) AND (_ts_meta_max_2 >= 50))
 
 drop table fl_push_compound;
@@ -491,6 +491,98 @@ order by _ts_meta_min_1;
                  1600 |                1600 |           1600 |           1600
 
 drop table fl_push_recompress;
+-- Legacy and current firstlast index orderings coexist across chunks.
+-- New chunks index a DESC orderby column as (first, last); chunks compressed
+-- before that change index it as (last, first). A query touching both must
+-- scan each chunk's index in its own order, without an added sort.
+create table fl_legacy_order(ts int not null, value int);
+select create_hypertable('fl_legacy_order', 'ts', chunk_time_interval => 1000);
+       create_hypertable       
+-------------------------------
+ (30,public,fl_legacy_order,t)
+
+insert into fl_legacy_order select x, x from generate_series(1, 2000) x;
+alter table fl_legacy_order set (timescaledb.compress, timescaledb.compress_orderby = 'ts desc');
+select count(compress_chunk(x)) from show_chunks('fl_legacy_order') x;
+ count 
+-------
+     3
+
+-- Show plan before legacy ordering inclusion.
+set enable_seqscan to off;
+explain (costs off, summary off, buffers off)
+select * from fl_legacy_order order by ts desc;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on fl_legacy_order
+   Order: fl_legacy_order.ts DESC
+   ->  Custom Scan (ColumnarScan) on _hyper_30_32_chunk
+         ->  Index Scan using _hyper_30_32_chunk_compressed__ts_meta_v2_first_ts__ts_meta_idx on _hyper_30_32_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_30_31_chunk
+         ->  Index Scan using _hyper_30_31_chunk_compressed__ts_meta_v2_first_ts__ts_meta_idx on _hyper_30_31_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_30_30_chunk
+         ->  Index Scan using _hyper_30_30_chunk_compressed__ts_meta_v2_first_ts__ts_meta_idx on _hyper_30_30_chunk_compressed
+
+-- Also the actual data ordering, under the plan shown above.
+select ts from fl_legacy_order order by ts desc limit 3;
+  ts  
+------
+ 2000
+ 1999
+ 1998
+
+select ts from fl_legacy_order order by ts desc offset 999 limit 3;
+  ts  
+------
+ 1001
+ 1000
+  999
+
+reset enable_seqscan;
+-- Rebuild the first chunk's metadata index in the legacy (last, first) order.
+select cs.compress_relid::regclass::text as cchunk
+from _timescaledb_catalog.compression_settings cs
+inner join _timescaledb_catalog.chunk uc on cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_legacy_order')
+order by uc.id
+limit 1
+\gset
+select indexrelid::regclass::text as cidx from pg_index where indrelid = :'cchunk'::regclass
+\gset
+drop index :cidx;
+create index on :cchunk (_ts_meta_v2_last_ts desc, _ts_meta_v2_first_ts desc);
+set enable_seqscan to off;
+-- Legacy chunk scans its (last, first) index, current chunks their (first, last)
+-- index, none with a Sort underneath.
+explain (costs off, summary off, buffers off)
+select * from fl_legacy_order order by ts desc;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on fl_legacy_order
+   Order: fl_legacy_order.ts DESC
+   ->  Custom Scan (ColumnarScan) on _hyper_30_32_chunk
+         ->  Index Scan using _hyper_30_32_chunk_compressed__ts_meta_v2_first_ts__ts_meta_idx on _hyper_30_32_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_30_31_chunk
+         ->  Index Scan using _hyper_30_31_chunk_compressed__ts_meta_v2_first_ts__ts_meta_idx on _hyper_30_31_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_30_30_chunk
+         ->  Index Scan using _hyper_30_30_chunk_compressed__ts_meta_v2_last_ts__ts_meta__idx on _hyper_30_30_chunk_compressed
+
+-- Ordering is correct across the legacy and current chunk boundary,
+-- under the plan shown above.
+select ts from fl_legacy_order order by ts desc limit 3;
+  ts  
+------
+ 2000
+ 1999
+ 1998
+
+select ts from fl_legacy_order order by ts desc offset 999 limit 3;
+  ts  
+------
+ 1001
+ 1000
+  999
+
+reset enable_seqscan;
+drop table fl_legacy_order;
 drop view settings;
 -- Issue #9970: test RENAME COLUMN
 CREATE TABLE sensor_readings (
@@ -501,7 +593,7 @@ SELECT create_hypertable('sensor_readings', 'recorded_at',
                          chunk_time_interval => 10000);
        create_hypertable       
 -------------------------------
- (30,public,sensor_readings,t)
+ (32,public,sensor_readings,t)
 
 ALTER TABLE sensor_readings SET (
     timescaledb.compress,
@@ -512,7 +604,7 @@ SELECT i, i FROM generate_series(1, 100) i;
 SELECT compress_chunk(c) FROM show_chunks('sensor_readings') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_30_60_chunk
+ _timescaledb_internal._hyper_32_33_chunk
 
 ALTER TABLE sensor_readings RENAME COLUMN recorded_at TO measured_at;
 INSERT INTO sensor_readings
@@ -521,7 +613,7 @@ SELECT i, i FROM generate_series(101, 200) i;
 SELECT compress_chunk(c) FROM show_chunks('sensor_readings') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_30_60_chunk
+ _timescaledb_internal._hyper_32_33_chunk
 
 select cs.compress_relid::text as compressed_chunk
 from _timescaledb_catalog.compression_settings cs

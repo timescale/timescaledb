@@ -24,8 +24,10 @@ bool tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_op
 void tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def);
 void tsl_process_compress_table_drop_column(Hypertable *ht, char *name);
 void tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt);
-Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
-							 bool skip_segmentby_default, CompressionSettings *settings);
+Oid create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
+						  bool skip_segmentby_default, CompressionSettings *settings);
+NameData build_compressed_relation_name(const Chunk *chunk);
+void rename_compressed_chunk_for_replacement(Oid compressed_relid);
 
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);
@@ -61,6 +63,11 @@ typedef enum OrderbySparseKind
 OrderbySparseKind orderby_sparse_kind(const CompressionSettings *settings, int orderby_pos);
 void orderby_sparse_metadata_names(const CompressionSettings *settings, int orderby_pos,
 								   char **lower_name, char **upper_name);
+void orderby_firstlast_metadata_names(const CompressionSettings *settings, int orderby_pos,
+									  char **first_name, char **last_name);
+void orderby_firstlast_metadata_attnos(const CompressionSettings *settings, Oid compressed_relid,
+									   int orderby_pos, AttrNumber *first_attno,
+									   AttrNumber *last_attno);
 void orderby_sparse_metadata_attnos(const CompressionSettings *settings, Oid compressed_relid,
 									int orderby_pos, AttrNumber *lower_attno,
 									AttrNumber *upper_attno);

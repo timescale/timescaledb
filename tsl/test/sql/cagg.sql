@@ -1139,7 +1139,7 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = :'MAT_TABLE_NAME'
 ORDER BY 1;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id = :'MAT_HTID' ORDER BY 1, 2,3;
 
 SELECT * from search_query_count_3

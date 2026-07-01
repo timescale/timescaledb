@@ -77,12 +77,10 @@ typedef struct CompactChunkScanState
 	 * one. Holds copies so it survives advancing the index scan. */
 	Datum *prev_last;
 	bool *prev_last_isnull;
-
-	bool *isdesc; /* orderby column DESC settings */
 } CompactChunkScanState;
 
 static CompactChunkScanState *
-compact_chunk_scan_state_init(RecompressContext *recompress_ctx, CompressionSettings *settings)
+compact_chunk_scan_state_init(RecompressContext *recompress_ctx)
 {
 	CompactChunkScanState *state = palloc(sizeof(CompactChunkScanState));
 	ItemPointerSetInvalid(&state->previous_tid);
@@ -95,11 +93,9 @@ compact_chunk_scan_state_init(RecompressContext *recompress_ctx, CompressionSett
 	state->curr_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
 	state->prev_last = palloc0(sizeof(Datum) * recompress_ctx->num_orderby);
 	state->prev_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
-	state->isdesc = palloc(sizeof(bool) * recompress_ctx->num_orderby);
 	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
 		state->prev_last_isnull[i] = true;
-		state->isdesc[i] = ts_array_get_element_bool(settings->fd.orderby_desc, i + 1);
 	}
 	return state;
 }
@@ -204,6 +200,16 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							"enable it by first setting "
 							"timescaledb.enable_segmentwise_recompression to on")));
 		}
+
+		if (!ts_guc_enable_optimizations)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("segmentwise recompression functionality disabled, "
+							"enable it by first setting "
+							"timescaledb.enable_optimizations to on")));
+		}
+
 		CompressionSettings *settings = ts_compression_settings_get(uncompressed_relid);
 		if (!settings->fd.orderby)
 		{
@@ -348,6 +354,40 @@ compress_chunk_populate_recompress_ctx(CompressionSettings *settings,
 		ssup->ssup_collation = recompress_ctx->sort_collations[key];
 		ssup->ssup_nulls_first = recompress_ctx->nulls_first[key];
 		PrepareSortSupportFromOrderingOp(recompress_ctx->sort_operators[key], ssup);
+	}
+
+	/* Resolve the index attnos of the first-row and last-row orderby metadata.
+	 * Only the compaction path reads these, and it requires every orderby
+	 * column to be firstlast; the shared segmentwise recompress path may pass a
+	 * minmax column here, which we skip. Matching by column identity works
+	 * whether the chunk indexes the pair as (first, last) or the legacy
+	 * (last, first). */
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
+	{
+		position = i + 1;
+		if (orderby_sparse_kind(settings, position) != ORDERBY_SPARSE_FIRSTLAST)
+		{
+			continue;
+		}
+
+		int base = recompress_ctx->num_segmentby + i * 2;
+		AttrNumber first_attno;
+		AttrNumber last_attno;
+		orderby_firstlast_metadata_attnos(settings,
+										  compressed_chunk_rel->rd_id,
+										  position,
+										  &first_attno,
+										  &last_attno);
+		if (index_rel->rd_index->indkey.values[base] == first_attno)
+		{
+			recompress_ctx->orderby_first_index_attno[i] = AttrOffsetGetAttrNumber(base);
+			recompress_ctx->orderby_last_index_attno[i] = AttrOffsetGetAttrNumber(base) + 1;
+		}
+		else
+		{
+			recompress_ctx->orderby_last_index_attno[i] = AttrOffsetGetAttrNumber(base);
+			recompress_ctx->orderby_first_index_attno[i] = AttrOffsetGetAttrNumber(base) + 1;
+		}
 	}
 
 	return recompress_ctx;
@@ -908,12 +948,11 @@ compact_chunk_begin_index_scan(Relation compressed_chunk_rel, Relation index_rel
  * Read the current batch's segmentby key values and the first-row / last-row
  * orderby tuples from the index tuple into the scan state.
  *
- * Index key order is [segby1, ...segbyN, orderby_lower_1, orderby_upper_1, ...].
- * The index stores a (lower, upper) metadata pair per orderby column. With
- * firstlast metadata the lower/upper columns are the values of that column in
- * the batch's boundary rows: ascending stores (first, last), descending stores
- * (last, first). So curr_first/curr_last are exactly the orderby values in the
- * batch's first and last rows.
+ * Index key order is [segby1, ...segbyN, orderby metadata pair 1, ...]. Each
+ * firstlast orderby column contributes its first-row and last-row values as a
+ * metadata pair; the index attno of each was resolved up front in the context,
+ * so curr_first/curr_last are exactly the orderby values in the batch's first
+ * and last rows.
  */
 static void
 read_batch_firstlast(IndexScanDesc index_scan, RecompressContext *recompress_ctx,
@@ -929,17 +968,12 @@ read_batch_firstlast(IndexScanDesc index_scan, RecompressContext *recompress_ctx
 
 	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
-		AttrNumber lower = AttrOffsetGetAttrNumber(recompress_ctx->num_segmentby + i * 2);
-		AttrNumber upper = lower + 1;
-		AttrNumber first_attno = state->isdesc[i] ? upper : lower;
-		AttrNumber last_attno = state->isdesc[i] ? lower : upper;
-
 		state->curr_first[i] = index_getattr(index_scan->xs_itup,
-											 first_attno,
+											 recompress_ctx->orderby_first_index_attno[i],
 											 index_scan->xs_itupdesc,
 											 &state->curr_first_isnull[i]);
 		state->curr_last[i] = index_getattr(index_scan->xs_itup,
-											last_attno,
+											recompress_ctx->orderby_last_index_attno[i],
 											index_scan->xs_itupdesc,
 											&state->curr_last_isnull[i]);
 	}
@@ -1301,8 +1335,8 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 						NameStr(uncompressed_chunk->fd.table_name))));
 	}
 
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-	Ensure(compressed_chunk != NULL,
+	Oid compressed_relid = ts_relation_get_compressed_relid(uncompressed_chunk->table_id);
+	Ensure(OidIsValid(compressed_relid),
 		   "compressed chunk not found for chunk \"%s\"",
 		   get_rel_name(uncompressed_chunk->table_id));
 
@@ -1317,8 +1351,7 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 	 * For uncompressed chunk, we just need to read so AccessShareLock is fine.
 	 */
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
-	Relation compressed_chunk_rel =
-		table_open(compressed_chunk->table_id, ShareUpdateExclusiveLock);
+	Relation compressed_chunk_rel = table_open(compressed_relid, ShareUpdateExclusiveLock);
 
 	int count;
 	LOCKTAG locktag;
@@ -1394,11 +1427,19 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 											   index_rel,
 											   true);
 
+	/* Every orderby column is firstlast here (checked above), so all first/last
+	 * metadata attnos must have been resolved from the index. */
+	for (int i = 0; i < recompress_ctx->num_orderby; i++)
+	{
+		Assert(AttributeNumberIsValid(recompress_ctx->orderby_first_index_attno[i]));
+		Assert(AttributeNumberIsValid(recompress_ctx->orderby_last_index_attno[i]));
+	}
+
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
 	IndexScanDesc index_scan =
 		compact_chunk_begin_index_scan(compressed_chunk_rel, index_rel, snapshot);
 
-	CompactChunkScanState *state = compact_chunk_scan_state_init(recompress_ctx, settings);
+	CompactChunkScanState *state = compact_chunk_scan_state_init(recompress_ctx);
 
 	bool found_overlaps = compact_chunk_find_overlapping_batches(compressed_chunk_rel,
 																 index_scan,
@@ -1734,9 +1775,11 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
 	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-	Chunk *new_compressed_chunk =
+	/* Free the deterministic compressed chunk name before creating the new one. */
+	rename_compressed_chunk_for_replacement(compressed_relid);
+	Oid new_compressed_relid =
 		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false, new_settings);
-	Relation new_compressed_chunk_rel = table_open(new_compressed_chunk->table_id, lockmode);
+	Relation new_compressed_chunk_rel = table_open(new_compressed_relid, lockmode);
 
 	perform_recompression(recompress_ctx,
 						  compressed_chunk_rel,
