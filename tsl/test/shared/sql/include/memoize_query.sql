@@ -7,5 +7,9 @@ SHOW enable_memoize;
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
-LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
+LEFT JOIN LATERAL (
+    SELECT time FROM :TEST_TABLE m2
+    WHERE m1.time + '0 seconds'::interval = m2.time
+    LIMIT 1
+) m2 ON true
 ORDER BY m1.time;

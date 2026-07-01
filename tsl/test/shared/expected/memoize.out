@@ -25,7 +25,11 @@ SHOW enable_memoize;
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
-LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
+LEFT JOIN LATERAL (
+    SELECT time FROM :TEST_TABLE m2
+    WHERE m1.time + '0 seconds'::interval = m2.time
+    LIMIT 1
+) m2 ON true
 ORDER BY m1.time;
 --- QUERY PLAN ---
  Nested Loop Left Join (actual rows=68370.00 loops=1)
@@ -40,13 +44,14 @@ ORDER BY m1.time;
          Hits: 54696  Misses: 13674  Evictions: 0  Overflows: 0 
          ->  Limit (actual rows=1.00 loops=13674)
                ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1.00 loops=13674)
+                     Chunks excluded during startup: 0
                      Chunks excluded during runtime: 2
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1.00 loops=3598)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2 (actual rows=1.00 loops=5038)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (actual rows=1.00 loops=5038)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
 
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
@@ -61,7 +66,11 @@ SHOW enable_memoize;
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
-LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
+LEFT JOIN LATERAL (
+    SELECT time FROM :TEST_TABLE m2
+    WHERE m1.time + '0 seconds'::interval = m2.time
+    LIMIT 1
+) m2 ON true
 ORDER BY m1.time;
 --- QUERY PLAN ---
  Nested Loop Left Join (actual rows=68370.00 loops=1)
@@ -88,25 +97,26 @@ ORDER BY m1.time;
          Hits: 54696  Misses: 13674  Evictions: 0  Overflows: 0 
          ->  Limit (actual rows=1.00 loops=13674)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=1.00 loops=13674)
+                     Chunks excluded during startup: 0
                      Chunks excluded during runtime: 6
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_1 (actual rows=1.00 loops=3598)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_2 (never executed)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_3 (never executed)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_4 (actual rows=1.00 loops=5038)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_5 (never executed)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_6 (never executed)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_7 (actual rows=1.00 loops=5038)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_8 (never executed)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
 
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
@@ -121,7 +131,11 @@ SHOW enable_memoize;
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
-LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
+LEFT JOIN LATERAL (
+    SELECT time FROM :TEST_TABLE m2
+    WHERE m1.time + '0 seconds'::interval = m2.time
+    LIMIT 1
+) m2 ON true
 ORDER BY m1.time;
 --- QUERY PLAN ---
  Nested Loop Left Join (actual rows=68370.00 loops=1)
@@ -151,26 +165,27 @@ ORDER BY m1.time;
          Hits: 54696  Misses: 13674  Evictions: 0  Overflows: 0 
          ->  Limit (actual rows=1.00 loops=13674)
                ->  Custom Scan (ChunkAppend) on metrics_compressed m2 (actual rows=1.00 loops=13674)
+                     Chunks excluded during startup: 0
                      Chunks excluded during runtime: 2
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_1 (actual rows=1.00 loops=3598)
-                           Filter: (m1."time" = "time")
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
                            Rows Removed by Filter: 466
                            ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=3598)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                                 Filter: ((_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)))
                                  Rows Removed by Filter: 2
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk m2_1 (never executed)
-                           Index Cond: ("time" = m1."time")
+                           Index Cond: ("time" = (m1."time" + '@ 0'::interval))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_2 (actual rows=1.00 loops=5038)
-                           Filter: (m1."time" = "time")
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
                            Rows Removed by Filter: 496
                            ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=5038)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                                 Filter: ((_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)))
                                  Rows Removed by Filter: 2
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_3 (actual rows=1.00 loops=5038)
-                           Filter: (m1."time" = "time")
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
                            Rows Removed by Filter: 496
                            ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=5038)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                                 Filter: ((_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)))
                                  Rows Removed by Filter: 2
 
 \set TEST_TABLE 'metrics_space_compressed'
@@ -186,7 +201,11 @@ SHOW enable_memoize;
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
-LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
+LEFT JOIN LATERAL (
+    SELECT time FROM :TEST_TABLE m2
+    WHERE m1.time + '0 seconds'::interval = m2.time
+    LIMIT 1
+) m2 ON true
 ORDER BY m1.time;
 --- QUERY PLAN ---
  Nested Loop Left Join (actual rows=68370.00 loops=1)
@@ -249,49 +268,47 @@ ORDER BY m1.time;
          Hits: 54696  Misses: 13674  Evictions: 0  Overflows: 0 
          ->  Limit (actual rows=1.00 loops=13674)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed m2 (actual rows=1.00 loops=13674)
+                     Chunks excluded during startup: 0
                      Chunks excluded during runtime: 6
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_1 (actual rows=1.00 loops=3598)
-                           Filter: (m1."time" = "time")
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
                            Rows Removed by Filter: 466
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=3598)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
-                                 Rows Removed by Filter: 1
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=3598)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_2 (never executed)
-                           Filter: (m1."time" = "time")
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_3 (never executed)
-                           Filter: (m1."time" = "time")
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_4 (actual rows=1.00 loops=5038)
-                           Filter: (m1."time" = "time")
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
                            Rows Removed by Filter: 496
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=5038)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
-                                 Rows Removed by Filter: 2
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=5038)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_5 (never executed)
-                           Filter: (m1."time" = "time")
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_6 (never executed)
-                           Filter: (m1."time" = "time")
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_7 (actual rows=1.00 loops=5038)
-                           Filter: (m1."time" = "time")
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
                            Rows Removed by Filter: 496
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=5038)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
-                                 Rows Removed by Filter: 2
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (actual rows=1.00 loops=5038)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_8 (never executed)
-                           Filter: (m1."time" = "time")
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2_9 (never executed)
-                           Filter: (m1."time" = "time")
-                           ->  Seq Scan on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
-                                 Filter: ((_ts_meta_v2_last_time <= m1."time") AND (_ts_meta_v2_first_time >= m1."time"))
+                           Filter: ((m1."time" + '@ 0'::interval) = "time")
+                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed _hyper_X_X_chunk_compressed_1 (never executed)
+                                 Index Cond: ((_ts_meta_v2_first_time >= (m1."time" + '@ 0'::interval)) AND (_ts_meta_v2_last_time <= (m1."time" + '@ 0'::interval)))
 
 -- get results for all the queries
 -- run queries with and without memoize
