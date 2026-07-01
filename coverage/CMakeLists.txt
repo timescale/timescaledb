@@ -121,7 +121,6 @@ else()
 
   # Make sure coverage_test runs after tests (installcheck) finish
   add_custom_target(coverage_test DEPENDS ${OUTPUT_FILE}.test)
-  add_dependencies(installcheck-post-hook coverage_test)
 
   # Generate the final coverage file by combining the pre and post test
   # tracefiles
