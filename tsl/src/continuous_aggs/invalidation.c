@@ -1342,7 +1342,7 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 		invalidation_expand_to_bucket_boundaries(&boundary,
 												 cagg->partition_type,
 												 cagg->bucket_function);
-		earliest_start = boundary.greatest_modified_value;
+		earliest_start = boundary.lowest_modified_value;
 	}
 
 	ts_scanner_foreach(&iterator)

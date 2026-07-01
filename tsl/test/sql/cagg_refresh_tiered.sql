@@ -206,8 +206,7 @@ SELECT "start", "end" FROM cagg_invals WHERE cagg_id = :cond2_10_id;
 
 ----------------------------------------------------------------------
 -- Test 5: When the OSM chunk's range is updated to precede the
--- earliest real chunk, the wrong dimension slice is picked up
--- and the refresh is not capped correctly.
+-- earliest real chunk the refresh should be capped correctly.
 ----------------------------------------------------------------------
 
 -- Update the OSM chunk range so it sorts before all real chunks

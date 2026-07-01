@@ -1192,6 +1192,8 @@ dimension_slice_earliest_non_osm_found(TupleInfo *ti, void *data)
 
 	if (IS_OSM_CHUNK(chunk))
 	{
+		// Explicitly set slice to NULL to handle the scenario where all chunks are tiered
+		*slice = NULL;
 		return SCAN_CONTINUE;
 	}
 
