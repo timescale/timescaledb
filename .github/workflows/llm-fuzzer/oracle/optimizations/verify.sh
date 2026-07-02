@@ -4,18 +4,29 @@
 # set to ON and OFF, and compares the output. The admissible bug must lead to
 # a change in script output with optimizations disabled.
 #
-# The script output must be sufficiently ordered to prevent false positives
-# (i.e. ORDER BY, no ties).
+# An admissible repro script:
 #
-# The script must be runnable on same database multiple times in sequence.
+# Must be runnable on same database multiple times in sequence.
 #
-# The script output must be independent from arbitrary environmental influence
-# like the OID values or chunk identifiers.
+# Must run exactly the same statements no matter if it runs with optimizations
+# enabled or disabled.
 #
-# The script must run exactly the same statements no matter if it runs with
-# optimizations enabled or disabled.
+# Must not use the psql meta-commands.
 #
-# The script must not use the psql meta-commands.
+# Must not require superuser privileges.
+#
+# The output of an admissible repro script:
+#
+# Must be sufficiently ordered to prevent false positives (i.e. ORDER BY, no
+# ties).
+#
+# Must not depend on floating point precision or numeric stability.
+#
+# Must be independent from arbitrary environmental influence like the OID values
+# or chunk identifiers.
+#
+# Must not change when the script runs on the same database multiple times in
+# sequence.
 set -eu
 
 PGOPTIONS='-c client_min_messages=error'
