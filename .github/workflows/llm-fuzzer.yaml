@@ -274,12 +274,10 @@ jobs:
 
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
 
-        export PGDATA=verify_db
+        export PGDATA=repro_pgdata
 
         PGPORT=$(( 6600 + $RANDOM % 100 ))
         export PGPORT
-
-        export PGDATABASE=postgres
 
         initdb
 
@@ -296,12 +294,20 @@ jobs:
 
         pg_ctl start
 
+        export PGDATABASE=postgres
+        psql -c "create user repro_user"
+        psql -c "create database repro_database owner repro_user"
+
+        export PGDATABASE=repro_database
+        export PGUSER=repro_user
         psql -c "create extension timescaledb;"
 
-        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh
+        printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
+        cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
+
+        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh restricted-repro.sql
 
         psql -c "select 1;"
-
 
         pg_ctl stop
 
