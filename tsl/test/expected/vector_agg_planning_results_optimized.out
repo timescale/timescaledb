@@ -1,0 +1,154 @@
+ timescaledb.enable_vectorized_aggregation 
+-------------------------------------------
+ on
+(1 row)
+
+              mx              | mn  | device 
+------------------------------+-----+--------
+ Sat Feb 01 02:46:10 2025 PST | 200 | dev 7
+ Sat Feb 01 02:45:10 2025 PST | 200 | dev 1
+ Sat Feb 01 02:45:30 2025 PST | 200 | dev 3
+ Sat Feb 01 02:45:40 2025 PST | 200 | dev 4
+ Sat Feb 01 02:46:00 2025 PST | 200 | dev 6
+ Sat Feb 01 02:46:30 2025 PST | 200 | dev 9
+ Sat Feb 01 02:45:20 2025 PST | 200 | dev 2
+ Sat Feb 01 02:46:20 2025 PST | 200 | dev 8
+ Sat Feb 01 02:46:40 2025 PST | 200 | dev 0
+ Sat Feb 01 02:45:50 2025 PST | 200 | dev 5
+(10 rows)
+
+ count 
+-------
+  2000
+(1 row)
+
+--
+(1 row)
+
+  sum  
+-------
+ 99000
+(1 row)
+
+ sum 
+-----
+(0 rows)
+
+ device |  sum  
+--------+-------
+ dev 0  |  9000
+ dev 1  |  9200
+ dev 2  |  9400
+ dev 3  |  9600
+ dev 4  |  9800
+ dev 5  | 10000
+ dev 6  | 10200
+ dev 7  | 10400
+ dev 8  | 10600
+ dev 9  | 10800
+(10 rows)
+
+ device | count 
+--------+-------
+ dev 0  |   200
+ dev 1  |   200
+ dev 2  |   200
+ dev 3  |   200
+ dev 4  |   200
+ dev 5  |   200
+ dev 6  |   200
+ dev 7  |   200
+ dev 8  |   200
+ dev 9  |   200
+(10 rows)
+
+ device |  sum  
+--------+-------
+ dev 0  |  9000
+ dev 1  |  9200
+ dev 2  |  9400
+ dev 3  |  9600
+ dev 4  |  9800
+ dev 5  | 10000
+ dev 6  | 10200
+ dev 7  | 10400
+ dev 8  | 10600
+ dev 9  | 10800
+(10 rows)
+
+ device | count 
+--------+-------
+ dev 0  |   200
+ dev 1  |   200
+ dev 2  |   200
+ dev 3  |   200
+ dev 4  |   200
+ dev 5  |   200
+ dev 6  |   200
+ dev 7  |   200
+ dev 8  |   200
+ dev 9  |   200
+(10 rows)
+
+ device |  sum  | count 
+--------+-------+-------
+ dev 0  |  9000 |   200
+ dev 1  |  9200 |   200
+ dev 2  |  9400 |   200
+ dev 3  |  9600 |   200
+ dev 4  |  9800 |   200
+ dev 5  | 10000 |   200
+ dev 6  | 10200 |   200
+ dev 7  | 10400 |   200
+ dev 8  | 10600 |   200
+ dev 9  | 10800 |   200
+(10 rows)
+
+ device |  sum  
+--------+-------
+ dev 5  | 10000
+(1 row)
+
+ device |  sum  
+--------+-------
+ dev 0  |  9000
+ dev 1  |  9200
+ dev 2  |  9400
+ dev 3  |  9600
+ dev 4  |  9800
+ dev 5  | 10000
+ dev 6  | 10200
+ dev 7  | 10400
+ dev 8  | 10600
+ dev 9  | 10800
+(10 rows)
+
+ device | min 
+--------+-----
+ dev 0  |   0
+(1 row)
+
+ device | max 
+--------+-----
+(0 rows)
+
+ device | avg 
+--------+-----
+ dev 5  |  50
+ dev 6  |  51
+ dev 7  |  52
+ dev 8  |  53
+ dev 9  |  54
+(5 rows)
+
+ device |  sum  
+--------+-------
+ dev 6  | 10200
+ dev 7  | 10400
+ dev 8  | 10600
+ dev 9  | 10800
+(4 rows)
+
+--
+(0 rows)
+

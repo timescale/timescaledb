@@ -200,14 +200,14 @@ CREATE TABLE target2(filler_1 int, filler_2 int, filler_3 int, time timestamptz 
 SELECT create_hypertable('target2', 'time');
   create_hypertable   
 ----------------------
- (4,public,target2,t)
+ (3,public,target2,t)
 
 ALTER TABLE target2 SET (timescaledb.compress, timescaledb.compress_segmentby='device_id', timescaledb.compress_orderby='time');
 INSERT INTO target2 SELECT 1,2,3, t, d, 0 FROM generate_series('2000-01-01'::timestamptz, '2000-01-02', '1h') t cross join generate_series(1,3) d;
 SELECT compress_chunk(ch) FROM show_chunks('target2') ch;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_4_7_chunk
+ _timescaledb_internal._hyper_3_7_chunk
 
 CREATE TABLE source2(time timestamptz NOT NULL, device_id int);
 INSERT INTO source2 SELECT t, d FROM generate_series('2000-01-01'::timestamptz, '2000-01-01 12:00:00', '1h') t cross join generate_series(1,2) d;
@@ -244,7 +244,7 @@ CREATE TABLE merge_target (
 SELECT create_hypertable('merge_target', 'time', chunk_time_interval => interval '1 day');
      create_hypertable     
 ---------------------------
- (6,public,merge_target,t)
+ (4,public,merge_target,t)
 
 ALTER TABLE merge_target SET (
     timescaledb.compress,
@@ -580,7 +580,7 @@ SELECT count(compress_chunk(ch, true)) FROM show_chunks('merge_target') ch;
 SELECT decompress_chunk(ch) FROM show_chunks('merge_target') ch LIMIT 1;
             decompress_chunk            
 ----------------------------------------
- _timescaledb_internal._hyper_6_8_chunk
+ _timescaledb_internal._hyper_4_8_chunk
 
 MERGE INTO merge_target t
   USING merge_source s

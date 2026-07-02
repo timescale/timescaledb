@@ -1,0 +1,644 @@
+ enable_multikey_skipscan 
+--------------------------
+ off
+(1 row)
+
+ time | status | region | dev | dev_name |  val  
+------+--------+--------+-----+----------+-------
+  999 |      1 | reg_1  |   1 | device_1 |   999
+ 2999 |      1 | reg_1  |   2 | device_2 |  5998
+ 3999 |      1 | reg_1  |   3 | device_3 | 11997
+  999 |      1 | reg_1  |   4 | device_4 |  3996
+ 2999 |      1 | reg_1  |   5 | device_5 | 14995
+ 3999 |      1 | reg_2  |   1 | device_1 |  3999
+  999 |      1 | reg_2  |   2 | device_2 |  1998
+ 2999 |      1 | reg_2  |   3 | device_3 |  8997
+ 3999 |      1 | reg_2  |   4 | device_4 | 15996
+  999 |      1 | reg_2  |   5 | device_5 |  4995
+ 2999 |      1 | reg_3  |   1 | device_1 |  2999
+ 3999 |      1 | reg_3  |   2 | device_2 |  7998
+  999 |      1 | reg_3  |   3 | device_3 |  2997
+ 2999 |      1 | reg_3  |   4 | device_4 | 11996
+ 3999 |      1 | reg_3  |   5 | device_5 | 19995
+  999 |      1 | reg_4  |   1 | device_1 |   999
+ 2999 |      1 | reg_4  |   2 | device_2 |  5998
+ 3999 |      1 | reg_4  |   3 | device_3 | 11997
+  999 |      1 | reg_4  |   4 | device_4 |  3996
+ 2999 |      1 | reg_4  |   5 | device_5 | 14995
+(20 rows)
+
+ time | status | region | dev | dev_name |  val  
+------+--------+--------+-----+----------+-------
+  999 |      1 | reg_4  |   5 | device_5 |  4995
+ 2999 |      1 | reg_4  |   4 | device_4 | 11996
+ 3999 |      1 | reg_4  |   3 | device_3 | 11997
+  999 |      1 | reg_4  |   2 | device_2 |  1998
+ 2999 |      1 | reg_4  |   1 | device_1 |  2999
+ 3999 |      1 | reg_3  |   5 | device_5 | 19995
+  999 |      1 | reg_3  |   4 | device_4 |  3996
+ 2999 |      1 | reg_3  |   3 | device_3 |  8997
+ 3999 |      1 | reg_3  |   2 | device_2 |  7998
+  999 |      1 | reg_3  |   1 | device_1 |   999
+ 2999 |      1 | reg_2  |   5 | device_5 | 14995
+ 3999 |      1 | reg_2  |   4 | device_4 | 15996
+  999 |      1 | reg_2  |   3 | device_3 |  2997
+ 2999 |      1 | reg_2  |   2 | device_2 |  5998
+ 3999 |      1 | reg_2  |   1 | device_1 |  3999
+  999 |      1 | reg_1  |   5 | device_5 |  4995
+ 2999 |      1 | reg_1  |   4 | device_4 | 11996
+ 3999 |      1 | reg_1  |   3 | device_3 | 11997
+  999 |      1 | reg_1  |   2 | device_2 |  1998
+ 2999 |      1 | reg_1  |   1 | device_1 |  2999
+(20 rows)
+
+ time | status | region | dev | dev_name |  val  
+------+--------+--------+-----+----------+-------
+  999 |      1 | reg_4  |   1 | device_1 |   999
+ 2999 |      1 | reg_4  |   2 | device_2 |  5998
+ 3999 |      1 | reg_4  |   3 | device_3 | 11997
+  999 |      1 | reg_4  |   4 | device_4 |  3996
+ 2999 |      1 | reg_4  |   5 | device_5 | 14995
+ 3999 |      1 | reg_3  |   1 | device_1 |  3999
+  999 |      1 | reg_3  |   2 | device_2 |  1998
+ 2999 |      1 | reg_3  |   3 | device_3 |  8997
+ 3999 |      1 | reg_3  |   4 | device_4 | 15996
+  999 |      1 | reg_3  |   5 | device_5 |  4995
+ 2999 |      1 | reg_2  |   1 | device_1 |  2999
+ 3999 |      1 | reg_2  |   2 | device_2 |  7998
+  999 |      1 | reg_2  |   3 | device_3 |  2997
+ 2999 |      1 | reg_2  |   4 | device_4 | 11996
+ 3999 |      1 | reg_2  |   5 | device_5 | 19995
+  999 |      1 | reg_1  |   1 | device_1 |   999
+ 2999 |      1 | reg_1  |   2 | device_2 |  5998
+ 3999 |      1 | reg_1  |   3 | device_3 | 11997
+  999 |      1 | reg_1  |   4 | device_4 |  3996
+ 2999 |      1 | reg_1  |   5 | device_5 | 14995
+(20 rows)
+
+ time | status | region | dev | dev_name |  val  
+------+--------+--------+-----+----------+-------
+  999 |      1 | reg_1  |   5 | device_5 |  4995
+ 2999 |      1 | reg_1  |   4 | device_4 | 11996
+ 3999 |      1 | reg_1  |   3 | device_3 | 11997
+  999 |      1 | reg_1  |   2 | device_2 |  1998
+ 2999 |      1 | reg_1  |   1 | device_1 |  2999
+ 3999 |      1 | reg_2  |   5 | device_5 | 19995
+  999 |      1 | reg_2  |   4 | device_4 |  3996
+ 2999 |      1 | reg_2  |   3 | device_3 |  8997
+ 3999 |      1 | reg_2  |   2 | device_2 |  7998
+  999 |      1 | reg_2  |   1 | device_1 |   999
+ 2999 |      1 | reg_3  |   5 | device_5 | 14995
+ 3999 |      1 | reg_3  |   4 | device_4 | 15996
+  999 |      1 | reg_3  |   3 | device_3 |  2997
+ 2999 |      1 | reg_3  |   2 | device_2 |  5998
+ 3999 |      1 | reg_3  |   1 | device_1 |  3999
+  999 |      1 | reg_4  |   5 | device_5 |  4995
+ 2999 |      1 | reg_4  |   4 | device_4 | 11996
+ 3999 |      1 | reg_4  |   3 | device_3 | 11997
+  999 |      1 | reg_4  |   2 | device_2 |  1998
+ 2999 |      1 | reg_4  |   1 | device_1 |  2999
+(20 rows)
+
+ status | dev 
+--------+-----
+      1 |   1
+      1 |   2
+      1 |   3
+      1 |   4
+      1 |   5
+(5 rows)
+
+ dev | dev_name 
+-----+----------
+   1 | device_1
+   2 | device_2
+   3 | device_3
+   4 | device_4
+   5 | device_5
+(5 rows)
+
+ dev | status | dev_name 
+-----+--------+----------
+   1 |      1 | device_1
+   2 |      1 | device_2
+   3 |      1 | device_3
+   4 |      1 | device_4
+   5 |      1 | device_5
+(5 rows)
+
+ region | dev | ?column? | ?column? 
+--------+-----+----------+----------
+ reg_1  |   1 | q1_3     | 
+ reg_1  |   2 | q1_3     | 
+ reg_1  |   3 | q1_3     | 
+ reg_1  |   4 | q1_3     | 
+ reg_1  |   5 | q1_3     | 
+ reg_2  |   1 | q1_3     | 
+ reg_2  |   2 | q1_3     | 
+ reg_2  |   3 | q1_3     | 
+ reg_2  |   4 | q1_3     | 
+ reg_2  |   5 | q1_3     | 
+ reg_3  |   1 | q1_3     | 
+ reg_3  |   2 | q1_3     | 
+ reg_3  |   3 | q1_3     | 
+ reg_3  |   4 | q1_3     | 
+ reg_3  |   5 | q1_3     | 
+ reg_4  |   1 | q1_3     | 
+ reg_4  |   2 | q1_3     | 
+ reg_4  |   3 | q1_3     | 
+ reg_4  |   4 | q1_3     | 
+ reg_4  |   5 | q1_3     | 
+(20 rows)
+
+ region | dev | dev_name |                tableoid                 | ?column? 
+--------+-----+----------+-----------------------------------------+----------
+ reg_1  |   1 | device_1 | _timescaledb_internal._hyper_5_17_chunk | q2_11
+ reg_1  |   2 | device_2 | _timescaledb_internal._hyper_5_19_chunk | q2_11
+ reg_1  |   3 | device_3 | _timescaledb_internal._hyper_5_20_chunk | q2_11
+ reg_1  |   4 | device_4 | _timescaledb_internal._hyper_5_17_chunk | q2_11
+ reg_1  |   5 | device_5 | _timescaledb_internal._hyper_5_19_chunk | q2_11
+ reg_2  |   1 | device_1 | _timescaledb_internal._hyper_5_20_chunk | q2_11
+ reg_2  |   2 | device_2 | _timescaledb_internal._hyper_5_17_chunk | q2_11
+ reg_2  |   3 | device_3 | _timescaledb_internal._hyper_5_19_chunk | q2_11
+ reg_2  |   4 | device_4 | _timescaledb_internal._hyper_5_20_chunk | q2_11
+ reg_2  |   5 | device_5 | _timescaledb_internal._hyper_5_17_chunk | q2_11
+ reg_3  |   1 | device_1 | _timescaledb_internal._hyper_5_19_chunk | q2_11
+ reg_3  |   2 | device_2 | _timescaledb_internal._hyper_5_20_chunk | q2_11
+ reg_3  |   3 | device_3 | _timescaledb_internal._hyper_5_17_chunk | q2_11
+ reg_3  |   4 | device_4 | _timescaledb_internal._hyper_5_19_chunk | q2_11
+ reg_3  |   5 | device_5 | _timescaledb_internal._hyper_5_20_chunk | q2_11
+ reg_4  |   1 | device_1 | _timescaledb_internal._hyper_5_17_chunk | q2_11
+ reg_4  |   2 | device_2 | _timescaledb_internal._hyper_5_19_chunk | q2_11
+ reg_4  |   3 | device_3 | _timescaledb_internal._hyper_5_20_chunk | q2_11
+ reg_4  |   4 | device_4 | _timescaledb_internal._hyper_5_17_chunk | q2_11
+ reg_4  |   5 | device_5 | _timescaledb_internal._hyper_5_19_chunk | q2_11
+(20 rows)
+
+ region | dev | dev_name | int_func_immutable | ?column? 
+--------+-----+----------+--------------------+----------
+ reg_1  |   1 | device_1 |                  1 | q2_12
+ reg_1  |   2 | device_2 |                  1 | q2_12
+ reg_1  |   3 | device_3 |                  1 | q2_12
+ reg_1  |   4 | device_4 |                  1 | q2_12
+ reg_1  |   5 | device_5 |                  1 | q2_12
+ reg_2  |   1 | device_1 |                  1 | q2_12
+ reg_2  |   2 | device_2 |                  1 | q2_12
+ reg_2  |   3 | device_3 |                  1 | q2_12
+ reg_2  |   4 | device_4 |                  1 | q2_12
+ reg_2  |   5 | device_5 |                  1 | q2_12
+ reg_3  |   1 | device_1 |                  1 | q2_12
+ reg_3  |   2 | device_2 |                  1 | q2_12
+ reg_3  |   3 | device_3 |                  1 | q2_12
+ reg_3  |   4 | device_4 |                  1 | q2_12
+ reg_3  |   5 | device_5 |                  1 | q2_12
+ reg_4  |   1 | device_1 |                  1 | q2_12
+ reg_4  |   2 | device_2 |                  1 | q2_12
+ reg_4  |   3 | device_3 |                  1 | q2_12
+ reg_4  |   4 | device_4 |                  1 | q2_12
+ reg_4  |   5 | device_5 |                  1 | q2_12
+(20 rows)
+
+ region | dev | dev_name | int_func_stable | ?column? 
+--------+-----+----------+-----------------+----------
+ reg_1  |   1 | device_1 |               2 | q2_13
+ reg_1  |   2 | device_2 |               2 | q2_13
+ reg_1  |   3 | device_3 |               2 | q2_13
+ reg_1  |   4 | device_4 |               2 | q2_13
+ reg_1  |   5 | device_5 |               2 | q2_13
+ reg_2  |   1 | device_1 |               2 | q2_13
+ reg_2  |   2 | device_2 |               2 | q2_13
+ reg_2  |   3 | device_3 |               2 | q2_13
+ reg_2  |   4 | device_4 |               2 | q2_13
+ reg_2  |   5 | device_5 |               2 | q2_13
+ reg_3  |   1 | device_1 |               2 | q2_13
+ reg_3  |   2 | device_2 |               2 | q2_13
+ reg_3  |   3 | device_3 |               2 | q2_13
+ reg_3  |   4 | device_4 |               2 | q2_13
+ reg_3  |   5 | device_5 |               2 | q2_13
+ reg_4  |   1 | device_1 |               2 | q2_13
+ reg_4  |   2 | device_2 |               2 | q2_13
+ reg_4  |   3 | device_3 |               2 | q2_13
+ reg_4  |   4 | device_4 |               2 | q2_13
+ reg_4  |   5 | device_5 |               2 | q2_13
+(20 rows)
+
+ region | dev | dev_name | int_func_volatile | ?column? 
+--------+-----+----------+-------------------+----------
+ reg_1  |   1 | device_1 |                 3 | q2_14
+ reg_1  |   2 | device_2 |                 3 | q2_14
+ reg_1  |   3 | device_3 |                 3 | q2_14
+ reg_1  |   4 | device_4 |                 3 | q2_14
+ reg_1  |   5 | device_5 |                 3 | q2_14
+ reg_2  |   1 | device_1 |                 3 | q2_14
+ reg_2  |   2 | device_2 |                 3 | q2_14
+ reg_2  |   3 | device_3 |                 3 | q2_14
+ reg_2  |   4 | device_4 |                 3 | q2_14
+ reg_2  |   5 | device_5 |                 3 | q2_14
+ reg_3  |   1 | device_1 |                 3 | q2_14
+ reg_3  |   2 | device_2 |                 3 | q2_14
+ reg_3  |   3 | device_3 |                 3 | q2_14
+ reg_3  |   4 | device_4 |                 3 | q2_14
+ reg_3  |   5 | device_5 |                 3 | q2_14
+ reg_4  |   1 | device_1 |                 3 | q2_14
+ reg_4  |   2 | device_2 |                 3 | q2_14
+ reg_4  |   3 | device_3 |                 3 | q2_14
+ reg_4  |   4 | device_4 |                 3 | q2_14
+ reg_4  |   5 | device_5 |                 3 | q2_14
+(20 rows)
+
+ordered append on mskip_scan_htc
+ region | dev 
+--------+-----
+ reg_1  |   1
+ reg_1  |   2
+ reg_1  |   3
+ reg_1  |   4
+ reg_1  |   5
+ reg_2  |   1
+ reg_2  |   2
+ reg_2  |   3
+ reg_2  |   4
+ reg_2  |   5
+ reg_3  |   1
+ reg_3  |   2
+ reg_3  |   3
+ reg_3  |   4
+ reg_3  |   5
+ reg_4  |   1
+ reg_4  |   2
+ reg_4  |   3
+ reg_4  |   4
+ reg_4  |   5
+(20 rows)
+
+SUBSELECTS on mskip_scan_htc
+ time | region | dev |  val  | ?column? 
+------+--------+-----+-------+----------
+  999 | reg_1  |   1 |   999 | q4_1
+ 2999 | reg_1  |   2 |  5998 | q4_1
+ 3999 | reg_1  |   3 | 11997 | q4_1
+  999 | reg_1  |   4 |  3996 | q4_1
+ 2999 | reg_1  |   5 | 14995 | q4_1
+ 3999 | reg_2  |   1 |  3999 | q4_1
+  999 | reg_2  |   2 |  1998 | q4_1
+ 2999 | reg_2  |   3 |  8997 | q4_1
+ 3999 | reg_2  |   4 | 15996 | q4_1
+  999 | reg_2  |   5 |  4995 | q4_1
+ 2999 | reg_3  |   1 |  2999 | q4_1
+ 3999 | reg_3  |   2 |  7998 | q4_1
+  999 | reg_3  |   3 |  2997 | q4_1
+ 2999 | reg_3  |   4 | 11996 | q4_1
+ 3999 | reg_3  |   5 | 19995 | q4_1
+  999 | reg_4  |   1 |   999 | q4_1
+ 2999 | reg_4  |   2 |  5998 | q4_1
+ 3999 | reg_4  |   3 | 11997 | q4_1
+  999 | reg_4  |   4 |  3996 | q4_1
+ 2999 | reg_4  |   5 | 14995 | q4_1
+(20 rows)
+
+ ?column? | region | dev | ?column? | ?column? 
+----------+--------+-----+----------+----------
+          | reg_1  |   1 |          | q4_3
+          | reg_1  |   2 |          | q4_3
+          | reg_1  |   3 |          | q4_3
+          | reg_1  |   4 |          | q4_3
+          | reg_1  |   5 |          | q4_3
+          | reg_2  |   1 |          | q4_3
+          | reg_2  |   2 |          | q4_3
+          | reg_2  |   3 |          | q4_3
+          | reg_2  |   4 |          | q4_3
+          | reg_2  |   5 |          | q4_3
+          | reg_3  |   1 |          | q4_3
+          | reg_3  |   2 |          | q4_3
+          | reg_3  |   3 |          | q4_3
+          | reg_3  |   4 |          | q4_3
+          | reg_3  |   5 |          | q4_3
+          | reg_4  |   1 |          | q4_3
+          | reg_4  |   2 |          | q4_3
+          | reg_4  |   3 |          | q4_3
+          | reg_4  |   4 |          | q4_3
+          | reg_4  |   5 |          | q4_3
+(20 rows)
+
+ORDER BY
+ time | dev |  val  | ?column? 
+------+-----+-------+----------
+  999 |   1 |   999 | q4_1
+ 2999 |   2 |  5998 | q4_1
+ 3999 |   3 | 11997 | q4_1
+  999 |   4 |  3996 | q4_1
+ 2999 |   5 | 14995 | q4_1
+ 3999 |   1 |  3999 | q4_1
+  999 |   2 |  1998 | q4_1
+ 2999 |   3 |  8997 | q4_1
+ 3999 |   4 | 15996 | q4_1
+  999 |   5 |  4995 | q4_1
+ 2999 |   1 |  2999 | q4_1
+ 3999 |   2 |  7998 | q4_1
+  999 |   3 |  2997 | q4_1
+ 2999 |   4 | 11996 | q4_1
+ 3999 |   5 | 19995 | q4_1
+  999 |   1 |   999 | q4_1
+ 2999 |   2 |  5998 | q4_1
+ 3999 |   3 | 11997 | q4_1
+  999 |   4 |  3996 | q4_1
+ 2999 |   5 | 14995 | q4_1
+(20 rows)
+
+ time | status | region | dev | dev_name |  val  
+------+--------+--------+-----+----------+-------
+  999 |      1 | reg_1  |   3 | device_3 |  2997
+ 2999 |      1 | reg_1  |   4 | device_4 | 11996
+ 3999 |      1 | reg_1  |   5 | device_5 | 19995
+(3 rows)
+
+ time | status | region | dev | dev_name | val 
+------+--------+--------+-----+----------+-----
+(0 rows)
+
+ time | status | region | dev | dev_name | val 
+------+--------+--------+-----+----------+-----
+(0 rows)
+
+ time | status | region | dev | dev_name |  val  
+------+--------+--------+-----+----------+-------
+  999 |      1 | reg_1  |   1 | device_1 |   999
+ 2999 |      1 | reg_1  |   2 | device_2 |  5998
+ 3999 |      1 | reg_1  |   3 | device_3 | 11997
+  999 |      1 | reg_1  |   4 | device_4 |  3996
+ 2999 |      1 | reg_1  |   5 | device_5 | 14995
+ 3999 |      1 | reg_2  |   1 | device_1 |  3999
+  999 |      1 | reg_2  |   2 | device_2 |  1998
+ 2999 |      1 | reg_2  |   3 | device_3 |  8997
+ 3999 |      1 | reg_2  |   4 | device_4 | 15996
+  999 |      1 | reg_2  |   5 | device_5 |  4995
+ 2999 |      1 | reg_3  |   1 | device_1 |  2999
+ 3999 |      1 | reg_3  |   2 | device_2 |  7998
+  999 |      1 | reg_3  |   3 | device_3 |  2997
+ 2999 |      1 | reg_3  |   4 | device_4 | 11996
+ 3999 |      1 | reg_3  |   5 | device_5 | 19995
+  999 |      1 | reg_4  |   1 | device_1 |   999
+ 2999 |      1 | reg_4  |   2 | device_2 |  5998
+ 3999 |      1 | reg_4  |   3 | device_3 | 11997
+  999 |      1 | reg_4  |   4 | device_4 |  3996
+ 2999 |      1 | reg_4  |   5 | device_5 | 14995
+(20 rows)
+
+ dev 
+-----
+(0 rows)
+
+ region | dev 
+--------+-----
+ reg_1  |   1
+ reg_1  |   2
+ reg_1  |   3
+ reg_1  |   4
+ reg_1  |   5
+ reg_2  |   1
+ reg_2  |   2
+ reg_2  |   3
+ reg_2  |   4
+ reg_2  |   5
+ reg_3  |   1
+ reg_3  |   2
+ reg_3  |   3
+ reg_3  |   4
+ reg_3  |   5
+ reg_4  |   1
+ reg_4  |   2
+ reg_4  |   3
+ reg_4  |   4
+ reg_4  |   5
+(20 rows)
+
+ region | dev 
+--------+-----
+ reg_1  |   1
+ reg_1  |   2
+ reg_1  |   3
+ reg_1  |   4
+ reg_1  |   5
+ reg_2  |   1
+ reg_2  |   2
+ reg_2  |   3
+ reg_2  |   4
+ reg_2  |   5
+ reg_3  |   1
+ reg_3  |   2
+ reg_3  |   3
+ reg_3  |   4
+ reg_3  |   5
+ reg_4  |   1
+ reg_4  |   2
+ reg_4  |   3
+ reg_4  |   4
+ reg_4  |   5
+(20 rows)
+
+ region | dev | dev_name 
+--------+-----+----------
+ reg_1  |   1 | device_1
+ reg_1  |   2 | device_2
+ reg_1  |   3 | device_3
+ reg_1  |   4 | device_4
+ reg_1  |   5 | device_5
+ reg_2  |   1 | device_1
+ reg_2  |   2 | device_2
+ reg_2  |   3 | device_3
+ reg_2  |   4 | device_4
+ reg_2  |   5 | device_5
+ reg_3  |   1 | device_1
+ reg_3  |   2 | device_2
+ reg_3  |   3 | device_3
+ reg_3  |   4 | device_4
+ reg_3  |   5 | device_5
+ reg_4  |   1 | device_1
+ reg_4  |   2 | device_2
+ reg_4  |   3 | device_3
+ reg_4  |   4 | device_4
+ reg_4  |   5 | device_5
+(20 rows)
+
+ region | dev | dev_name 
+--------+-----+----------
+ reg_1  |   1 | device_1
+ reg_1  |   2 | device_2
+ reg_1  |   3 | device_3
+ reg_1  |   4 | device_4
+ reg_1  |   5 | device_5
+ reg_2  |   1 | device_1
+ reg_2  |   2 | device_2
+ reg_2  |   3 | device_3
+ reg_2  |   4 | device_4
+ reg_2  |   5 | device_5
+ reg_3  |   1 | device_1
+ reg_3  |   2 | device_2
+ reg_3  |   3 | device_3
+ reg_3  |   4 | device_4
+ reg_3  |   5 | device_5
+ reg_4  |   1 | device_1
+ reg_4  |   2 | device_2
+ reg_4  |   3 | device_3
+ reg_4  |   4 | device_4
+ reg_4  |   5 | device_5
+(20 rows)
+
+ region | dev | dev_name 
+--------+-----+----------
+ reg_1  |   1 | device_1
+ reg_1  |   2 | device_2
+ reg_1  |   3 | device_3
+ reg_1  |   4 | device_4
+ reg_1  |   5 | device_5
+ reg_2  |   1 | device_1
+ reg_2  |   2 | device_2
+ reg_2  |   3 | device_3
+ reg_2  |   4 | device_4
+ reg_2  |   5 | device_5
+ reg_3  |   1 | device_1
+ reg_3  |   2 | device_2
+ reg_3  |   3 | device_3
+ reg_3  |   4 | device_4
+ reg_3  |   5 | device_5
+ reg_4  |   1 | device_1
+ reg_4  |   2 | device_2
+ reg_4  |   3 | device_3
+ reg_4  |   4 | device_4
+ reg_4  |   5 | device_5
+(20 rows)
+
+ time | status | region | dev |  val  | ?column? 
+------+--------+--------+-----+-------+----------
+  999 |      1 | reg_1  |   1 |   999 | q7_1
+ 2999 |      1 | reg_1  |   2 |  5998 | q7_1
+ 3999 |      1 | reg_1  |   3 | 11997 | q7_1
+  999 |      1 | reg_1  |   4 |  3996 | q7_1
+ 2999 |      1 | reg_1  |   5 | 14995 | q7_1
+ 3999 |      1 | reg_2  |   1 |  3999 | q7_1
+  999 |      1 | reg_2  |   2 |  1998 | q7_1
+ 2999 |      1 | reg_2  |   3 |  8997 | q7_1
+ 3999 |      1 | reg_2  |   4 | 15996 | q7_1
+  999 |      1 | reg_2  |   5 |  4995 | q7_1
+ 2999 |      1 | reg_3  |   1 |  2999 | q7_1
+ 3999 |      1 | reg_3  |   2 |  7998 | q7_1
+  999 |      1 | reg_3  |   3 |  2997 | q7_1
+ 2999 |      1 | reg_3  |   4 | 11996 | q7_1
+ 3999 |      1 | reg_3  |   5 | 19995 | q7_1
+  999 |      1 | reg_4  |   1 |   999 | q7_1
+ 2999 |      1 | reg_4  |   2 |  5998 | q7_1
+ 3999 |      1 | reg_4  |   3 | 11997 | q7_1
+  999 |      1 | reg_4  |   4 |  3996 | q7_1
+ 2999 |      1 | reg_4  |   5 | 14995 | q7_1
+(20 rows)
+
+ time | status | region | dev |  val  | ?column? 
+------+--------+--------+-----+-------+----------
+  999 |      1 | reg_1  |   2 |  1998 | q7_2
+ 2999 |      1 | reg_1  |   3 |  8997 | q7_2
+ 3999 |      1 | reg_1  |   4 | 15996 | q7_2
+  999 |      1 | reg_1  |   5 |  4995 | q7_2
+ 2999 |      1 | reg_2  |   2 |  5998 | q7_2
+ 3999 |      1 | reg_2  |   3 | 11997 | q7_2
+  999 |      1 | reg_2  |   4 |  3996 | q7_2
+ 2999 |      1 | reg_2  |   5 | 14995 | q7_2
+ 3999 |      1 | reg_3  |   2 |  7998 | q7_2
+  999 |      1 | reg_3  |   3 |  2997 | q7_2
+ 2999 |      1 | reg_3  |   4 | 11996 | q7_2
+ 3999 |      1 | reg_3  |   5 | 19995 | q7_2
+  999 |      1 | reg_4  |   2 |  1998 | q7_2
+ 2999 |      1 | reg_4  |   3 |  8997 | q7_2
+ 3999 |      1 | reg_4  |   4 | 15996 | q7_2
+  999 |      1 | reg_4  |   5 |  4995 | q7_2
+  999 |      1 | reg_1  |   1 |   999 | q7_2
+ 2999 |      1 | reg_1  |   3 |  8997 | q7_2
+ 3999 |      1 | reg_1  |   4 | 15996 | q7_2
+  999 |      1 | reg_1  |   5 |  4995 | q7_2
+ 2999 |      1 | reg_2  |   1 |  2999 | q7_2
+ 3999 |      1 | reg_2  |   3 | 11997 | q7_2
+  999 |      1 | reg_2  |   4 |  3996 | q7_2
+ 2999 |      1 | reg_2  |   5 | 14995 | q7_2
+ 3999 |      1 | reg_3  |   1 |  3999 | q7_2
+  999 |      1 | reg_3  |   3 |  2997 | q7_2
+ 2999 |      1 | reg_3  |   4 | 11996 | q7_2
+ 3999 |      1 | reg_3  |   5 | 19995 | q7_2
+  999 |      1 | reg_4  |   1 |   999 | q7_2
+ 2999 |      1 | reg_4  |   3 |  8997 | q7_2
+ 3999 |      1 | reg_4  |   4 | 15996 | q7_2
+  999 |      1 | reg_4  |   5 |  4995 | q7_2
+(32 rows)
+
+ time | status | region | dev |  val  | ?column? 
+------+--------+--------+-----+-------+----------
+  999 |      1 | reg_1  |   1 |   999 | q8_1
+ 2999 |      1 | reg_1  |   2 |  5998 | q8_1
+ 3999 |      1 | reg_1  |   3 | 11997 | q8_1
+  999 |      1 | reg_1  |   4 |  3996 | q8_1
+ 2999 |      1 | reg_1  |   5 | 14995 | q8_1
+ 3999 |      1 | reg_2  |   1 |  3999 | q8_1
+  999 |      1 | reg_2  |   2 |  1998 | q8_1
+ 2999 |      1 | reg_2  |   3 |  8997 | q8_1
+ 3999 |      1 | reg_2  |   4 | 15996 | q8_1
+  999 |      1 | reg_2  |   5 |  4995 | q8_1
+ 2999 |      1 | reg_3  |   1 |  2999 | q8_1
+ 3999 |      1 | reg_3  |   2 |  7998 | q8_1
+  999 |      1 | reg_3  |   3 |  2997 | q8_1
+ 2999 |      1 | reg_3  |   4 | 11996 | q8_1
+ 3999 |      1 | reg_3  |   5 | 19995 | q8_1
+  999 |      1 | reg_4  |   1 |   999 | q8_1
+ 2999 |      1 | reg_4  |   2 |  5998 | q8_1
+ 3999 |      1 | reg_4  |   3 | 11997 | q8_1
+  999 |      1 | reg_4  |   4 |  3996 | q8_1
+ 2999 |      1 | reg_4  |   5 | 14995 | q8_1
+  999 |      1 | reg_1  |   2 |  1998 | q8_1
+ 2999 |      1 | reg_1  |   3 |  8997 | q8_1
+ 3999 |      1 | reg_1  |   4 | 15996 | q8_1
+  999 |      1 | reg_1  |   5 |  4995 | q8_1
+ 2999 |      1 | reg_2  |   2 |  5998 | q8_1
+ 3999 |      1 | reg_2  |   3 | 11997 | q8_1
+  999 |      1 | reg_2  |   4 |  3996 | q8_1
+ 2999 |      1 | reg_2  |   5 | 14995 | q8_1
+ 3999 |      1 | reg_3  |   2 |  7998 | q8_1
+  999 |      1 | reg_3  |   3 |  2997 | q8_1
+ 2999 |      1 | reg_3  |   4 | 11996 | q8_1
+ 3999 |      1 | reg_3  |   5 | 19995 | q8_1
+  999 |      1 | reg_4  |   2 |  1998 | q8_1
+ 2999 |      1 | reg_4  |   3 |  8997 | q8_1
+ 3999 |      1 | reg_4  |   4 | 15996 | q8_1
+  999 |      1 | reg_4  |   5 |  4995 | q8_1
+(36 rows)
+
+ set_config 
+------------
+ on
+(1 row)
+
+ status | region | dev 
+--------+--------+-----
+      1 | reg_1  |   1
+      1 | reg_1  |   2
+      1 | reg_1  |   3
+      1 | reg_1  |   4
+      1 | reg_1  |   5
+      1 | reg_2  |   1
+      1 | reg_2  |   2
+      1 | reg_2  |   3
+      1 | reg_2  |   4
+      1 | reg_2  |   5
+      1 | reg_3  |   1
+      1 | reg_3  |   2
+      1 | reg_3  |   3
+      1 | reg_3  |   4
+      1 | reg_3  |   5
+      1 | reg_4  |   1
+      1 | reg_4  |   2
+      1 | reg_4  |   3
+      1 | reg_4  |   4
+      1 | reg_4  |   5
+(20 rows)
+
+ set_config 
+------------
+ off
+(1 row)
+

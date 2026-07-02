@@ -87,12 +87,12 @@ WHERE hypertable.table_name like 'test1' \gset
 
 ALTER TABLE test1 SET TABLESPACE tablespace1;
 
---all chunks + both the compressed and uncompressed hypertable moved to new tablespace
-SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
+--all chunks + the hypertable moved to new tablespace
+SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 1)
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
 ALTER TABLE test1 SET TABLESPACE tablespace2;
-SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
+SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 1)
 FROM pg_tables WHERE tablespace = 'tablespace2';
 
 SELECT

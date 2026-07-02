@@ -93,7 +93,7 @@ CREATE TABLE mixed_compressed (ts int, u uuid);
 SELECT create_hypertable('mixed_compressed', 'ts', chunk_time_interval => 500);
        create_hypertable       
 -------------------------------
- (3,public,mixed_compressed,t)
+ (2,public,mixed_compressed,t)
 
 ALTER TABLE mixed_compressed SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 -- the new UUID compression is OFF at this point, so we use the original method
@@ -104,7 +104,7 @@ INSERT INTO mixed_compressed SELECT i+100 as i, NULL as u FROM uuids;
 SELECT compress_chunk(show_chunks('mixed_compressed'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_8_chunk
+ _timescaledb_internal._hyper_2_8_chunk
 
 -- enable uuid compression and compress the data again
 -- and add the base uuids to the data again
@@ -113,11 +113,11 @@ INSERT INTO mixed_compressed SELECT i+1000 as i, u FROM uuids;
 INSERT INTO mixed_compressed SELECT i+1100 as i, NULL as u FROM uuids;
 -- compress the data
 SELECT compress_chunk(show_chunks('mixed_compressed'));
-NOTICE:  chunk "_hyper_3_8_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_2_8_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_8_chunk
- _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_2_8_chunk
+ _timescaledb_internal._hyper_2_9_chunk
 
 -- now turn it off again and add the whole data twice
 SET timescaledb.enable_uuid_compression = off;
@@ -126,13 +126,13 @@ INSERT INTO mixed_compressed SELECT i+2200, u FROM uuids;
 INSERT INTO mixed_compressed SELECT i+2300 as i, NULL as u FROM uuids;
 -- compress the data again
 SELECT compress_chunk(show_chunks('mixed_compressed'));
-NOTICE:  chunk "_hyper_3_8_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_3_9_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_2_8_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_2_9_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_3_8_chunk
- _timescaledb_internal._hyper_3_9_chunk
- _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_2_8_chunk
+ _timescaledb_internal._hyper_2_9_chunk
+ _timescaledb_internal._hyper_2_10_chunk
 
 -- turn it on again and do the same
 SET timescaledb.enable_uuid_compression = off;
@@ -141,15 +141,15 @@ INSERT INTO mixed_compressed SELECT i+3200, u FROM uuids;
 INSERT INTO mixed_compressed SELECT i+3300 as i, NULL as u FROM uuids;
 -- compress the data again
 SELECT compress_chunk(show_chunks('mixed_compressed'));
-NOTICE:  chunk "_hyper_3_8_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_3_9_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_3_10_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_2_8_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_2_9_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_2_10_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_3_8_chunk
- _timescaledb_internal._hyper_3_9_chunk
- _timescaledb_internal._hyper_3_10_chunk
- _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_2_8_chunk
+ _timescaledb_internal._hyper_2_9_chunk
+ _timescaledb_internal._hyper_2_10_chunk
+ _timescaledb_internal._hyper_2_11_chunk
 
 -- check the compression algorithm for the compressed chunks
 CREATE TABLE compressed_chunks AS
@@ -203,10 +203,10 @@ ORDER BY
 	1,2,3;
                   compressed_chunk                  |     result     | compressed_size | num_rows | compressed_toast_size | numrows_pre_compression | numrows_post_compression 
 ----------------------------------------------------+----------------+-----------------+----------+-----------------------+-------------------------+--------------------------
- _timescaledb_internal._hyper_3_8_chunk_compressed  | (DICTIONARY,t) |            1272 |        1 |                  8192 |                     200 |                        1
- _timescaledb_internal._hyper_3_9_chunk_compressed  | (UUID,t)       |             976 |        1 |                  8192 |                     200 |                        1
- _timescaledb_internal._hyper_3_10_chunk_compressed | (DICTIONARY,t) |            1352 |        1 |                  8192 |                     300 |                        1
- _timescaledb_internal._hyper_3_11_chunk_compressed | (DICTIONARY,t) |            1352 |        1 |                  8192 |                     300 |                        1
+ _timescaledb_internal._hyper_2_8_chunk_compressed  | (DICTIONARY,t) |            1272 |        1 |                  8192 |                     200 |                        1
+ _timescaledb_internal._hyper_2_9_chunk_compressed  | (UUID,t)       |             976 |        1 |                  8192 |                     200 |                        1
+ _timescaledb_internal._hyper_2_10_chunk_compressed | (DICTIONARY,t) |            1352 |        1 |                  8192 |                     300 |                        1
+ _timescaledb_internal._hyper_2_11_chunk_compressed | (DICTIONARY,t) |            1352 |        1 |                  8192 |                     300 |                        1
 
 -- -------------------------------
 -- Test the new UUID v7 functions
@@ -350,7 +350,7 @@ CREATE TABLE uuid_part (id uuid, value int);
 SELECT create_hypertable('uuid_part', by_range('id', interval '1 month'));
  create_hypertable 
 -------------------
- (5,t)
+ (3,t)
 
 -- Insert the static UUIDs
 INSERT INTO uuid_part SELECT u, i FROM uuids
@@ -363,22 +363,22 @@ INSERT INTO uuid_part (value, id) VALUES
 SELECT * FROM show_chunks('uuid_part');
                show_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_5_12_chunk
- _timescaledb_internal._hyper_5_13_chunk
- _timescaledb_internal._hyper_5_14_chunk
- _timescaledb_internal._hyper_5_15_chunk
- _timescaledb_internal._hyper_5_16_chunk
+ _timescaledb_internal._hyper_3_12_chunk
+ _timescaledb_internal._hyper_3_13_chunk
+ _timescaledb_internal._hyper_3_14_chunk
+ _timescaledb_internal._hyper_3_15_chunk
+ _timescaledb_internal._hyper_3_16_chunk
 
 ALTER TABLE uuid_part SET (timescaledb.compress, timescaledb.compress_orderby = 'id');
 -- Show how data is spread across chunks
 SELECT tableoid::regclass, count(*) FROM uuid_part GROUP BY tableoid ORDER BY tableoid;
                 tableoid                 | count 
 -----------------------------------------+-------
- _timescaledb_internal._hyper_5_12_chunk |   101
- _timescaledb_internal._hyper_5_13_chunk |     1
- _timescaledb_internal._hyper_5_14_chunk |     1
- _timescaledb_internal._hyper_5_15_chunk |     1
- _timescaledb_internal._hyper_5_16_chunk |     3
+ _timescaledb_internal._hyper_3_12_chunk |   101
+ _timescaledb_internal._hyper_3_13_chunk |     1
+ _timescaledb_internal._hyper_3_14_chunk |     1
+ _timescaledb_internal._hyper_3_15_chunk |     1
+ _timescaledb_internal._hyper_3_16_chunk |     3
 
 SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
@@ -394,18 +394,18 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
 --- QUERY PLAN ---
  Aggregate
    Output: count(*)
-   ->  Index Only Scan using _hyper_5_16_chunk_uuid_part_id_idx on _timescaledb_internal._hyper_5_16_chunk
-         Index Cond: ((_hyper_5_16_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_5_16_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
+   ->  Index Only Scan using _hyper_3_16_chunk_uuid_part_id_idx on _timescaledb_internal._hyper_3_16_chunk
+         Index Cond: ((_hyper_3_16_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
 
 -- Compress
 SELECT compress_chunk(ch) FROM show_chunks('uuid_part') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_12_chunk
- _timescaledb_internal._hyper_5_13_chunk
- _timescaledb_internal._hyper_5_14_chunk
- _timescaledb_internal._hyper_5_15_chunk
- _timescaledb_internal._hyper_5_16_chunk
+ _timescaledb_internal._hyper_3_12_chunk
+ _timescaledb_internal._hyper_3_13_chunk
+ _timescaledb_internal._hyper_3_14_chunk
+ _timescaledb_internal._hyper_3_15_chunk
+ _timescaledb_internal._hyper_3_16_chunk
 
 -- Check that chunk exclusion and filtering works as expected on
 -- compressed UUID data.
@@ -428,11 +428,11 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
    ->  Custom Scan (VectorAgg)
          Output: (PARTIAL count(*))
          Grouping Policy: all compressed batches
-         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_16_chunk
-               Filter: ((_hyper_5_16_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_5_16_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
-               ->  Index Scan using _hyper_5_16_chunk_compressed__ts_meta_v2_first_id__ts_meta__idx on _timescaledb_internal._hyper_5_16_chunk_compressed
-                     Output: _hyper_5_16_chunk_compressed._ts_meta_count, _hyper_5_16_chunk_compressed._ts_meta_min_1, _hyper_5_16_chunk_compressed._ts_meta_max_1, _hyper_5_16_chunk_compressed._ts_meta_v2_first_id, _hyper_5_16_chunk_compressed._ts_meta_v2_last_id, _hyper_5_16_chunk_compressed.id, _hyper_5_16_chunk_compressed.value
-                     Index Cond: ((_hyper_5_16_chunk_compressed._ts_meta_v2_first_id < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (_hyper_5_16_chunk_compressed._ts_meta_v2_last_id >= '0198a23a-8180-7000-8000-000000000000'::uuid))
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_16_chunk
+               Filter: ((_hyper_3_16_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
+               ->  Index Scan using _hyper_3_16_chunk_compressed__ts_meta_v2_first_id__ts_meta__idx on _timescaledb_internal._hyper_3_16_chunk_compressed
+                     Output: _hyper_3_16_chunk_compressed._ts_meta_count, _hyper_3_16_chunk_compressed._ts_meta_min_1, _hyper_3_16_chunk_compressed._ts_meta_max_1, _hyper_3_16_chunk_compressed._ts_meta_v2_first_id, _hyper_3_16_chunk_compressed._ts_meta_v2_last_id, _hyper_3_16_chunk_compressed.id, _hyper_3_16_chunk_compressed.value
+                     Index Cond: ((_hyper_3_16_chunk_compressed._ts_meta_v2_first_id < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (_hyper_3_16_chunk_compressed._ts_meta_v2_last_id >= '0198a23a-8180-7000-8000-000000000000'::uuid))
 
 -- Calling compressed_data_to_array / compressed_data_column_size on a
 -- uuid-compressed value with a non-uuid element type must raise a clean

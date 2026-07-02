@@ -64,8 +64,8 @@ SELECT oid::regclass,relpersistence from pg_class where relpersistence = 'u' AND
 ----------------------------------------------------+----------------
  t2                                                 | u
  t2_time_idx                                        | u
- _timescaledb_internal._hyper_3_2_chunk             | u
- _timescaledb_internal._hyper_3_2_chunk_t2_time_idx | u
+ _timescaledb_internal._hyper_2_2_chunk             | u
+ _timescaledb_internal._hyper_2_2_chunk_t2_time_idx | u
 
 ALTER TABLE t2 SET LOGGED;
 -- everything should be logged now

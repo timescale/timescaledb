@@ -614,7 +614,7 @@ CREATE TABLE int_ht(timec bigint NOT NULL, val float);
 SELECT create_hypertable('int_ht', 'timec', chunk_time_interval => 1000000);
   create_hypertable   
 ----------------------
- (19,public,int_ht,t)
+ (16,public,int_ht,t)
 
 CREATE OR REPLACE FUNCTION int_ht_now() RETURNS bigint LANGUAGE SQL STABLE AS $$ SELECT 0::bigint $$;
 SELECT set_integer_now_func('int_ht', 'int_ht_now');
