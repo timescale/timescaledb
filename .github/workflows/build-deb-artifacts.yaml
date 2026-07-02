@@ -1,4 +1,4 @@
-name: "Build .deb artifacts (dev)"
+name: "Build .deb artifacts (dev) and schedule tsbench run"
 
 "on":
   push:
@@ -62,10 +62,7 @@ jobs:
             -f skip-dev-guards=true \
             -f matrix-mode=slim \
             -f upload-artifacts=true \
-            -f run-benchmark=true \
-            -f s3-bucket=timescaledb-build-artifacts \
-            -f s3-prefix="builds/${GITHUB_SHA}" \
-            -f aws-role-arn="${{ secrets.TIMESCALEDB_CI_S3_WRITER }}"
+            -f run-benchmark=true
 
       - name: Summary
         if: always()
