@@ -6,6 +6,6 @@
 # and so on. The admissible bug must manifest as this class of error.
 #
 # The repro must not require superuser privileges.
-set -xeu
+set -eu
 
 psql -v ON_ERROR_STOP=0 -f "$1"
