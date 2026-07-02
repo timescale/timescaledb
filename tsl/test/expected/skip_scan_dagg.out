@@ -56,7 +56,7 @@ ALTER TABLE skip_scan_htc SET (autovacuum_enabled = off);
 SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, create_default_indexes => false);
      create_hypertable      
 ----------------------------
- (3,public,skip_scan_htc,t)
+ (2,public,skip_scan_htc,t)
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -90,7 +90,7 @@ ALTER TABLE skip_scan_htcl SET (autovacuum_enabled = off);
 SELECT create_hypertable('skip_scan_htcl', 'time', chunk_time_interval => 250, create_default_indexes => false);
       create_hypertable      
 -----------------------------
- (5,public,skip_scan_htcl,t)
+ (3,public,skip_scan_htcl,t)
 
 ALTER TABLE skip_scan_htcl SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -98,7 +98,7 @@ INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::t
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
+ _timescaledb_internal._hyper_3_9_chunk
 
 ALTER TABLE skip_scan_htcl DROP COLUMN f1;
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
@@ -112,9 +112,9 @@ INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FRO
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch order by 1 desc limit 3;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_12_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_10_chunk
+ _timescaledb_internal._hyper_3_12_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_10_chunk
 
 ANALYZE skip_scan_htcl;
 -- adjust statistics so we get skipscan plans

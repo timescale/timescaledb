@@ -314,7 +314,7 @@ CREATE TABLE null_test(
 SELECT create_hypertable('null_test', 'ts');
    create_hypertable    
 ------------------------
- (3,public,null_test,t)
+ (2,public,null_test,t)
 
 ALTER TABLE null_test SET (
     timescaledb.compress,
@@ -331,7 +331,7 @@ INSERT INTO null_test VALUES (5, NULL, 'test', 1);
 SELECT compress_chunk(c) FROM show_chunks('null_test') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_2_chunk
+ _timescaledb_internal._hyper_2_2_chunk
 
 -- Test NULL queries
 SELECT COUNT(*) FROM null_test WHERE a IS NULL AND b IS NULL;
@@ -449,7 +449,7 @@ CREATE TABLE test_triple(ts int, a int, b text, c float8, seg int);
 SELECT create_hypertable('test_triple', 'ts');
     create_hypertable     
 --------------------------
- (5,public,test_triple,t)
+ (3,public,test_triple,t)
 
 ALTER TABLE test_triple SET (
     timescaledb.compress,
@@ -467,7 +467,7 @@ FROM generate_series(1, 1000) ts;
 SELECT compress_chunk(c) FROM show_chunks('test_triple') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_3_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 -- Test various triple combinations
 SELECT COUNT(*) FROM test_triple WHERE a = 1 AND b = 'x' AND c = 2.0;

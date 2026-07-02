@@ -32,10 +32,10 @@ SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(1);
 ---------------+-------------+------------+---------
              1 | public      | metrics    | f
 
-SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(8);
+SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(6);
  hypertable_id |      schema_name      |         table_name         | is_cagg 
 ---------------+-----------------------+----------------------------+---------
-             8 | _timescaledb_internal | _materialized_hypertable_X | f
+             6 | _timescaledb_internal | _materialized_hypertable_X | f
 
 SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(0);
  hypertable_id | schema_name | table_name | is_cagg 
@@ -52,7 +52,7 @@ SELECT * FROM _timescaledb_functions.get_primary_dimension(1);
 -------------+--------------------------+------------------
  time        | timestamp with time zone | <NULL>
 
-SELECT * FROM _timescaledb_functions.get_primary_dimension(8);
+SELECT * FROM _timescaledb_functions.get_primary_dimension(6);
  column_name |       column_type        | integer_now_func 
 -------------+--------------------------+------------------
  hour        | timestamp with time zone | <NULL>
@@ -100,7 +100,7 @@ SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(3);
 SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(26);
  chunk_id | hypertable_id |    ht_schema_name     |       ht_table_name        |     chunk_schema      |    chunk_name     | is_osm_chunk | is_frozen 
 ----------+---------------+-----------------------+----------------------------+-----------------------+-------------------+--------------+-----------
-       26 |             8 | _timescaledb_internal | _materialized_hypertable_X | _timescaledb_internal | _hyper_X_X_chunk | f            | f
+       26 |             6 | _timescaledb_internal | _materialized_hypertable_X | _timescaledb_internal | _hyper_X_X_chunk | f            | f
 
 SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(0);
  chunk_id | hypertable_id | ht_schema_name | ht_table_name | chunk_schema | chunk_name | is_osm_chunk | is_frozen 
@@ -172,7 +172,7 @@ SELECT * FROM _timescaledb_functions.get_integer_now_func(1);
 ------------+--------------
  <NULL>     | <NULL>
 
-SELECT * FROM _timescaledb_functions.get_integer_now_func(8);
+SELECT * FROM _timescaledb_functions.get_integer_now_func(6);
  hypertable | integer_func 
 ------------+--------------
  <NULL>     | <NULL>

@@ -129,7 +129,7 @@ add_columns_to_mat_hypertable(Oid mat_ht_oid, AlterTableStmt *stmt)
 
 	Hypertable *mat_ht = ts_hypertable_get_by_id(ts_hypertable_relid_to_id(mat_ht_oid));
 	Assert(mat_ht != NULL);
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(mat_ht))
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
 	{
 		ListCell *def_cell;
 		foreach (def_cell, stripped_defs)

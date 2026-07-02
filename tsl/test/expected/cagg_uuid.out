@@ -425,7 +425,7 @@ CREATE TABLE uuid_realtime(id uuid primary key, device int, temp float);
 SELECT create_hypertable('uuid_realtime', 'id', chunk_time_interval => interval '1 day');
      create_hypertable      
 ----------------------------
- (9,public,uuid_realtime,t)
+ (7,public,uuid_realtime,t)
 
 INSERT INTO uuid_realtime VALUES
        ('0194214e-cd00-7000-a9a7-63f1416dab45', 1, 10.0),

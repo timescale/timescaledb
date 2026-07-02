@@ -68,12 +68,6 @@ ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = ''
 -- check stats
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
- WHERE attrelid = '_timescaledb_internal._compressed_hypertable_2'::REGCLASS
-   AND attnum > 0
- ORDER BY attname;
-
-SELECT DISTINCT attname, attstattarget
-  FROM pg_attribute
   WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1'))
     AND attnum > 0
   ORDER BY attname;
@@ -179,12 +173,6 @@ group by location ORDER BY location;
 \ir include/compression_test_hypertable_segment_meta.sql
 
 -- check stats with segmentby
-SELECT DISTINCT attname, attstattarget
-  FROM pg_attribute
- WHERE attrelid = '_timescaledb_internal._compressed_hypertable_6'::REGCLASS
-   AND attnum > 0
- ORDER BY attname;
-
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
   WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test4'))

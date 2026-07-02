@@ -87,12 +87,12 @@ WHERE hypertable.table_name like 'test1' \gset
 
 ALTER TABLE test1 SET TABLESPACE tablespace1;
 
---all chunks + both the compressed and uncompressed hypertable moved to new tablespace
-SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
+--all chunks + the hypertable moved to new tablespace
+SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 1)
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
 ALTER TABLE test1 SET TABLESPACE tablespace2;
-SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
+SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 1)
 FROM pg_tables WHERE tablespace = 'tablespace2';
 
 SELECT
@@ -621,8 +621,6 @@ ALTER MATERIALIZED VIEW test1_cont_view2 SET (
 ALTER MATERIALIZED VIEW test1_cont_view2 SET (
   timescaledb.compress = false
 );
-
-DROP TABLE metric CASCADE;
 
 -- inserting into compressed chunks with different physical layouts
 CREATE TABLE compression_insert(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);

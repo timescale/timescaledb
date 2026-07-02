@@ -3127,15 +3127,15 @@ SELECT sum(segment_by_value1), sum(segment_by_value2) FROM testtable2;
 SELECT compress_chunk(ch) FROM show_chunks('testtable2') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_3_51_chunk
- _timescaledb_internal._hyper_3_52_chunk
- _timescaledb_internal._hyper_3_53_chunk
- _timescaledb_internal._hyper_3_54_chunk
- _timescaledb_internal._hyper_3_55_chunk
- _timescaledb_internal._hyper_3_56_chunk
- _timescaledb_internal._hyper_3_57_chunk
- _timescaledb_internal._hyper_3_58_chunk
- _timescaledb_internal._hyper_3_59_chunk
+ _timescaledb_internal._hyper_2_51_chunk
+ _timescaledb_internal._hyper_2_52_chunk
+ _timescaledb_internal._hyper_2_53_chunk
+ _timescaledb_internal._hyper_2_54_chunk
+ _timescaledb_internal._hyper_2_55_chunk
+ _timescaledb_internal._hyper_2_56_chunk
+ _timescaledb_internal._hyper_2_57_chunk
+ _timescaledb_internal._hyper_2_58_chunk
+ _timescaledb_internal._hyper_2_59_chunk
 
 ANALYZE testtable2;
 :EXPLAIN
@@ -3145,68 +3145,68 @@ SELECT sum(segment_by_value1) FROM testtable2;
    Output: sum(testtable2.segment_by_value1)
    ->  Append
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_51_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_51_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_51_chunk
-                     Output: _hyper_3_51_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_51_chunk_compressed
-                           Output: _hyper_3_51_chunk_compressed._ts_meta_count, _hyper_3_51_chunk_compressed.segment_by_value1, _hyper_3_51_chunk_compressed.segment_by_value2, _hyper_3_51_chunk_compressed._ts_meta_min_1, _hyper_3_51_chunk_compressed._ts_meta_max_1, _hyper_3_51_chunk_compressed._ts_meta_v2_first_time, _hyper_3_51_chunk_compressed._ts_meta_v2_last_time, _hyper_3_51_chunk_compressed."time", _hyper_3_51_chunk_compressed.int_value, _hyper_3_51_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_51_chunk
+                     Output: _hyper_2_51_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_51_chunk_compressed
+                           Output: _hyper_2_51_chunk_compressed._ts_meta_count, _hyper_2_51_chunk_compressed.segment_by_value1, _hyper_2_51_chunk_compressed.segment_by_value2, _hyper_2_51_chunk_compressed._ts_meta_min_1, _hyper_2_51_chunk_compressed._ts_meta_max_1, _hyper_2_51_chunk_compressed._ts_meta_v2_first_time, _hyper_2_51_chunk_compressed._ts_meta_v2_last_time, _hyper_2_51_chunk_compressed."time", _hyper_2_51_chunk_compressed.int_value, _hyper_2_51_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_52_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_52_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_52_chunk
-                     Output: _hyper_3_52_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_52_chunk_compressed
-                           Output: _hyper_3_52_chunk_compressed._ts_meta_count, _hyper_3_52_chunk_compressed.segment_by_value1, _hyper_3_52_chunk_compressed.segment_by_value2, _hyper_3_52_chunk_compressed._ts_meta_min_1, _hyper_3_52_chunk_compressed._ts_meta_max_1, _hyper_3_52_chunk_compressed._ts_meta_v2_first_time, _hyper_3_52_chunk_compressed._ts_meta_v2_last_time, _hyper_3_52_chunk_compressed."time", _hyper_3_52_chunk_compressed.int_value, _hyper_3_52_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_52_chunk
+                     Output: _hyper_2_52_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_52_chunk_compressed
+                           Output: _hyper_2_52_chunk_compressed._ts_meta_count, _hyper_2_52_chunk_compressed.segment_by_value1, _hyper_2_52_chunk_compressed.segment_by_value2, _hyper_2_52_chunk_compressed._ts_meta_min_1, _hyper_2_52_chunk_compressed._ts_meta_max_1, _hyper_2_52_chunk_compressed._ts_meta_v2_first_time, _hyper_2_52_chunk_compressed._ts_meta_v2_last_time, _hyper_2_52_chunk_compressed."time", _hyper_2_52_chunk_compressed.int_value, _hyper_2_52_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_53_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_53_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_53_chunk
-                     Output: _hyper_3_53_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_53_chunk_compressed
-                           Output: _hyper_3_53_chunk_compressed._ts_meta_count, _hyper_3_53_chunk_compressed.segment_by_value1, _hyper_3_53_chunk_compressed.segment_by_value2, _hyper_3_53_chunk_compressed._ts_meta_min_1, _hyper_3_53_chunk_compressed._ts_meta_max_1, _hyper_3_53_chunk_compressed._ts_meta_v2_first_time, _hyper_3_53_chunk_compressed._ts_meta_v2_last_time, _hyper_3_53_chunk_compressed."time", _hyper_3_53_chunk_compressed.int_value, _hyper_3_53_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_53_chunk
+                     Output: _hyper_2_53_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_53_chunk_compressed
+                           Output: _hyper_2_53_chunk_compressed._ts_meta_count, _hyper_2_53_chunk_compressed.segment_by_value1, _hyper_2_53_chunk_compressed.segment_by_value2, _hyper_2_53_chunk_compressed._ts_meta_min_1, _hyper_2_53_chunk_compressed._ts_meta_max_1, _hyper_2_53_chunk_compressed._ts_meta_v2_first_time, _hyper_2_53_chunk_compressed._ts_meta_v2_last_time, _hyper_2_53_chunk_compressed."time", _hyper_2_53_chunk_compressed.int_value, _hyper_2_53_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_54_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_54_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_54_chunk
-                     Output: _hyper_3_54_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_54_chunk_compressed
-                           Output: _hyper_3_54_chunk_compressed._ts_meta_count, _hyper_3_54_chunk_compressed.segment_by_value1, _hyper_3_54_chunk_compressed.segment_by_value2, _hyper_3_54_chunk_compressed._ts_meta_min_1, _hyper_3_54_chunk_compressed._ts_meta_max_1, _hyper_3_54_chunk_compressed._ts_meta_v2_first_time, _hyper_3_54_chunk_compressed._ts_meta_v2_last_time, _hyper_3_54_chunk_compressed."time", _hyper_3_54_chunk_compressed.int_value, _hyper_3_54_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_54_chunk
+                     Output: _hyper_2_54_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_54_chunk_compressed
+                           Output: _hyper_2_54_chunk_compressed._ts_meta_count, _hyper_2_54_chunk_compressed.segment_by_value1, _hyper_2_54_chunk_compressed.segment_by_value2, _hyper_2_54_chunk_compressed._ts_meta_min_1, _hyper_2_54_chunk_compressed._ts_meta_max_1, _hyper_2_54_chunk_compressed._ts_meta_v2_first_time, _hyper_2_54_chunk_compressed._ts_meta_v2_last_time, _hyper_2_54_chunk_compressed."time", _hyper_2_54_chunk_compressed.int_value, _hyper_2_54_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_55_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_55_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_55_chunk
-                     Output: _hyper_3_55_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_55_chunk_compressed
-                           Output: _hyper_3_55_chunk_compressed._ts_meta_count, _hyper_3_55_chunk_compressed.segment_by_value1, _hyper_3_55_chunk_compressed.segment_by_value2, _hyper_3_55_chunk_compressed._ts_meta_min_1, _hyper_3_55_chunk_compressed._ts_meta_max_1, _hyper_3_55_chunk_compressed._ts_meta_v2_first_time, _hyper_3_55_chunk_compressed._ts_meta_v2_last_time, _hyper_3_55_chunk_compressed."time", _hyper_3_55_chunk_compressed.int_value, _hyper_3_55_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_55_chunk
+                     Output: _hyper_2_55_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_55_chunk_compressed
+                           Output: _hyper_2_55_chunk_compressed._ts_meta_count, _hyper_2_55_chunk_compressed.segment_by_value1, _hyper_2_55_chunk_compressed.segment_by_value2, _hyper_2_55_chunk_compressed._ts_meta_min_1, _hyper_2_55_chunk_compressed._ts_meta_max_1, _hyper_2_55_chunk_compressed._ts_meta_v2_first_time, _hyper_2_55_chunk_compressed._ts_meta_v2_last_time, _hyper_2_55_chunk_compressed."time", _hyper_2_55_chunk_compressed.int_value, _hyper_2_55_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_56_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_56_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_56_chunk
-                     Output: _hyper_3_56_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_56_chunk_compressed
-                           Output: _hyper_3_56_chunk_compressed._ts_meta_count, _hyper_3_56_chunk_compressed.segment_by_value1, _hyper_3_56_chunk_compressed.segment_by_value2, _hyper_3_56_chunk_compressed._ts_meta_min_1, _hyper_3_56_chunk_compressed._ts_meta_max_1, _hyper_3_56_chunk_compressed._ts_meta_v2_first_time, _hyper_3_56_chunk_compressed._ts_meta_v2_last_time, _hyper_3_56_chunk_compressed."time", _hyper_3_56_chunk_compressed.int_value, _hyper_3_56_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_56_chunk
+                     Output: _hyper_2_56_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_56_chunk_compressed
+                           Output: _hyper_2_56_chunk_compressed._ts_meta_count, _hyper_2_56_chunk_compressed.segment_by_value1, _hyper_2_56_chunk_compressed.segment_by_value2, _hyper_2_56_chunk_compressed._ts_meta_min_1, _hyper_2_56_chunk_compressed._ts_meta_max_1, _hyper_2_56_chunk_compressed._ts_meta_v2_first_time, _hyper_2_56_chunk_compressed._ts_meta_v2_last_time, _hyper_2_56_chunk_compressed."time", _hyper_2_56_chunk_compressed.int_value, _hyper_2_56_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_57_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_57_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_57_chunk
-                     Output: _hyper_3_57_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_57_chunk_compressed
-                           Output: _hyper_3_57_chunk_compressed._ts_meta_count, _hyper_3_57_chunk_compressed.segment_by_value1, _hyper_3_57_chunk_compressed.segment_by_value2, _hyper_3_57_chunk_compressed._ts_meta_min_1, _hyper_3_57_chunk_compressed._ts_meta_max_1, _hyper_3_57_chunk_compressed._ts_meta_v2_first_time, _hyper_3_57_chunk_compressed._ts_meta_v2_last_time, _hyper_3_57_chunk_compressed."time", _hyper_3_57_chunk_compressed.int_value, _hyper_3_57_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_57_chunk
+                     Output: _hyper_2_57_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_57_chunk_compressed
+                           Output: _hyper_2_57_chunk_compressed._ts_meta_count, _hyper_2_57_chunk_compressed.segment_by_value1, _hyper_2_57_chunk_compressed.segment_by_value2, _hyper_2_57_chunk_compressed._ts_meta_min_1, _hyper_2_57_chunk_compressed._ts_meta_max_1, _hyper_2_57_chunk_compressed._ts_meta_v2_first_time, _hyper_2_57_chunk_compressed._ts_meta_v2_last_time, _hyper_2_57_chunk_compressed."time", _hyper_2_57_chunk_compressed.int_value, _hyper_2_57_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_58_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_58_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_58_chunk
-                     Output: _hyper_3_58_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_58_chunk_compressed
-                           Output: _hyper_3_58_chunk_compressed._ts_meta_count, _hyper_3_58_chunk_compressed.segment_by_value1, _hyper_3_58_chunk_compressed.segment_by_value2, _hyper_3_58_chunk_compressed._ts_meta_min_1, _hyper_3_58_chunk_compressed._ts_meta_max_1, _hyper_3_58_chunk_compressed._ts_meta_v2_first_time, _hyper_3_58_chunk_compressed._ts_meta_v2_last_time, _hyper_3_58_chunk_compressed."time", _hyper_3_58_chunk_compressed.int_value, _hyper_3_58_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_58_chunk
+                     Output: _hyper_2_58_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_58_chunk_compressed
+                           Output: _hyper_2_58_chunk_compressed._ts_meta_count, _hyper_2_58_chunk_compressed.segment_by_value1, _hyper_2_58_chunk_compressed.segment_by_value2, _hyper_2_58_chunk_compressed._ts_meta_min_1, _hyper_2_58_chunk_compressed._ts_meta_max_1, _hyper_2_58_chunk_compressed._ts_meta_v2_first_time, _hyper_2_58_chunk_compressed._ts_meta_v2_last_time, _hyper_2_58_chunk_compressed."time", _hyper_2_58_chunk_compressed.int_value, _hyper_2_58_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_59_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_59_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_59_chunk
-                     Output: _hyper_3_59_chunk.segment_by_value1
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_59_chunk_compressed
-                           Output: _hyper_3_59_chunk_compressed._ts_meta_count, _hyper_3_59_chunk_compressed.segment_by_value1, _hyper_3_59_chunk_compressed.segment_by_value2, _hyper_3_59_chunk_compressed._ts_meta_min_1, _hyper_3_59_chunk_compressed._ts_meta_max_1, _hyper_3_59_chunk_compressed._ts_meta_v2_first_time, _hyper_3_59_chunk_compressed._ts_meta_v2_last_time, _hyper_3_59_chunk_compressed."time", _hyper_3_59_chunk_compressed.int_value, _hyper_3_59_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_59_chunk
+                     Output: _hyper_2_59_chunk.segment_by_value1
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_59_chunk_compressed
+                           Output: _hyper_2_59_chunk_compressed._ts_meta_count, _hyper_2_59_chunk_compressed.segment_by_value1, _hyper_2_59_chunk_compressed.segment_by_value2, _hyper_2_59_chunk_compressed._ts_meta_min_1, _hyper_2_59_chunk_compressed._ts_meta_max_1, _hyper_2_59_chunk_compressed._ts_meta_v2_first_time, _hyper_2_59_chunk_compressed._ts_meta_v2_last_time, _hyper_2_59_chunk_compressed."time", _hyper_2_59_chunk_compressed.int_value, _hyper_2_59_chunk_compressed.float_value
 
 SELECT sum(segment_by_value1) FROM testtable2;
   sum   
@@ -3220,68 +3220,68 @@ SELECT sum(segment_by_value2) FROM testtable2;
    Output: sum(testtable2.segment_by_value2)
    ->  Append
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_51_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_51_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_51_chunk
-                     Output: _hyper_3_51_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_51_chunk_compressed
-                           Output: _hyper_3_51_chunk_compressed._ts_meta_count, _hyper_3_51_chunk_compressed.segment_by_value1, _hyper_3_51_chunk_compressed.segment_by_value2, _hyper_3_51_chunk_compressed._ts_meta_min_1, _hyper_3_51_chunk_compressed._ts_meta_max_1, _hyper_3_51_chunk_compressed._ts_meta_v2_first_time, _hyper_3_51_chunk_compressed._ts_meta_v2_last_time, _hyper_3_51_chunk_compressed."time", _hyper_3_51_chunk_compressed.int_value, _hyper_3_51_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_51_chunk
+                     Output: _hyper_2_51_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_51_chunk_compressed
+                           Output: _hyper_2_51_chunk_compressed._ts_meta_count, _hyper_2_51_chunk_compressed.segment_by_value1, _hyper_2_51_chunk_compressed.segment_by_value2, _hyper_2_51_chunk_compressed._ts_meta_min_1, _hyper_2_51_chunk_compressed._ts_meta_max_1, _hyper_2_51_chunk_compressed._ts_meta_v2_first_time, _hyper_2_51_chunk_compressed._ts_meta_v2_last_time, _hyper_2_51_chunk_compressed."time", _hyper_2_51_chunk_compressed.int_value, _hyper_2_51_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_52_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_52_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_52_chunk
-                     Output: _hyper_3_52_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_52_chunk_compressed
-                           Output: _hyper_3_52_chunk_compressed._ts_meta_count, _hyper_3_52_chunk_compressed.segment_by_value1, _hyper_3_52_chunk_compressed.segment_by_value2, _hyper_3_52_chunk_compressed._ts_meta_min_1, _hyper_3_52_chunk_compressed._ts_meta_max_1, _hyper_3_52_chunk_compressed._ts_meta_v2_first_time, _hyper_3_52_chunk_compressed._ts_meta_v2_last_time, _hyper_3_52_chunk_compressed."time", _hyper_3_52_chunk_compressed.int_value, _hyper_3_52_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_52_chunk
+                     Output: _hyper_2_52_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_52_chunk_compressed
+                           Output: _hyper_2_52_chunk_compressed._ts_meta_count, _hyper_2_52_chunk_compressed.segment_by_value1, _hyper_2_52_chunk_compressed.segment_by_value2, _hyper_2_52_chunk_compressed._ts_meta_min_1, _hyper_2_52_chunk_compressed._ts_meta_max_1, _hyper_2_52_chunk_compressed._ts_meta_v2_first_time, _hyper_2_52_chunk_compressed._ts_meta_v2_last_time, _hyper_2_52_chunk_compressed."time", _hyper_2_52_chunk_compressed.int_value, _hyper_2_52_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_53_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_53_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_53_chunk
-                     Output: _hyper_3_53_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_53_chunk_compressed
-                           Output: _hyper_3_53_chunk_compressed._ts_meta_count, _hyper_3_53_chunk_compressed.segment_by_value1, _hyper_3_53_chunk_compressed.segment_by_value2, _hyper_3_53_chunk_compressed._ts_meta_min_1, _hyper_3_53_chunk_compressed._ts_meta_max_1, _hyper_3_53_chunk_compressed._ts_meta_v2_first_time, _hyper_3_53_chunk_compressed._ts_meta_v2_last_time, _hyper_3_53_chunk_compressed."time", _hyper_3_53_chunk_compressed.int_value, _hyper_3_53_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_53_chunk
+                     Output: _hyper_2_53_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_53_chunk_compressed
+                           Output: _hyper_2_53_chunk_compressed._ts_meta_count, _hyper_2_53_chunk_compressed.segment_by_value1, _hyper_2_53_chunk_compressed.segment_by_value2, _hyper_2_53_chunk_compressed._ts_meta_min_1, _hyper_2_53_chunk_compressed._ts_meta_max_1, _hyper_2_53_chunk_compressed._ts_meta_v2_first_time, _hyper_2_53_chunk_compressed._ts_meta_v2_last_time, _hyper_2_53_chunk_compressed."time", _hyper_2_53_chunk_compressed.int_value, _hyper_2_53_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_54_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_54_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_54_chunk
-                     Output: _hyper_3_54_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_54_chunk_compressed
-                           Output: _hyper_3_54_chunk_compressed._ts_meta_count, _hyper_3_54_chunk_compressed.segment_by_value1, _hyper_3_54_chunk_compressed.segment_by_value2, _hyper_3_54_chunk_compressed._ts_meta_min_1, _hyper_3_54_chunk_compressed._ts_meta_max_1, _hyper_3_54_chunk_compressed._ts_meta_v2_first_time, _hyper_3_54_chunk_compressed._ts_meta_v2_last_time, _hyper_3_54_chunk_compressed."time", _hyper_3_54_chunk_compressed.int_value, _hyper_3_54_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_54_chunk
+                     Output: _hyper_2_54_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_54_chunk_compressed
+                           Output: _hyper_2_54_chunk_compressed._ts_meta_count, _hyper_2_54_chunk_compressed.segment_by_value1, _hyper_2_54_chunk_compressed.segment_by_value2, _hyper_2_54_chunk_compressed._ts_meta_min_1, _hyper_2_54_chunk_compressed._ts_meta_max_1, _hyper_2_54_chunk_compressed._ts_meta_v2_first_time, _hyper_2_54_chunk_compressed._ts_meta_v2_last_time, _hyper_2_54_chunk_compressed."time", _hyper_2_54_chunk_compressed.int_value, _hyper_2_54_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_55_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_55_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_55_chunk
-                     Output: _hyper_3_55_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_55_chunk_compressed
-                           Output: _hyper_3_55_chunk_compressed._ts_meta_count, _hyper_3_55_chunk_compressed.segment_by_value1, _hyper_3_55_chunk_compressed.segment_by_value2, _hyper_3_55_chunk_compressed._ts_meta_min_1, _hyper_3_55_chunk_compressed._ts_meta_max_1, _hyper_3_55_chunk_compressed._ts_meta_v2_first_time, _hyper_3_55_chunk_compressed._ts_meta_v2_last_time, _hyper_3_55_chunk_compressed."time", _hyper_3_55_chunk_compressed.int_value, _hyper_3_55_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_55_chunk
+                     Output: _hyper_2_55_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_55_chunk_compressed
+                           Output: _hyper_2_55_chunk_compressed._ts_meta_count, _hyper_2_55_chunk_compressed.segment_by_value1, _hyper_2_55_chunk_compressed.segment_by_value2, _hyper_2_55_chunk_compressed._ts_meta_min_1, _hyper_2_55_chunk_compressed._ts_meta_max_1, _hyper_2_55_chunk_compressed._ts_meta_v2_first_time, _hyper_2_55_chunk_compressed._ts_meta_v2_last_time, _hyper_2_55_chunk_compressed."time", _hyper_2_55_chunk_compressed.int_value, _hyper_2_55_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_56_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_56_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_56_chunk
-                     Output: _hyper_3_56_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_56_chunk_compressed
-                           Output: _hyper_3_56_chunk_compressed._ts_meta_count, _hyper_3_56_chunk_compressed.segment_by_value1, _hyper_3_56_chunk_compressed.segment_by_value2, _hyper_3_56_chunk_compressed._ts_meta_min_1, _hyper_3_56_chunk_compressed._ts_meta_max_1, _hyper_3_56_chunk_compressed._ts_meta_v2_first_time, _hyper_3_56_chunk_compressed._ts_meta_v2_last_time, _hyper_3_56_chunk_compressed."time", _hyper_3_56_chunk_compressed.int_value, _hyper_3_56_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_56_chunk
+                     Output: _hyper_2_56_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_56_chunk_compressed
+                           Output: _hyper_2_56_chunk_compressed._ts_meta_count, _hyper_2_56_chunk_compressed.segment_by_value1, _hyper_2_56_chunk_compressed.segment_by_value2, _hyper_2_56_chunk_compressed._ts_meta_min_1, _hyper_2_56_chunk_compressed._ts_meta_max_1, _hyper_2_56_chunk_compressed._ts_meta_v2_first_time, _hyper_2_56_chunk_compressed._ts_meta_v2_last_time, _hyper_2_56_chunk_compressed."time", _hyper_2_56_chunk_compressed.int_value, _hyper_2_56_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_57_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_57_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_57_chunk
-                     Output: _hyper_3_57_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_57_chunk_compressed
-                           Output: _hyper_3_57_chunk_compressed._ts_meta_count, _hyper_3_57_chunk_compressed.segment_by_value1, _hyper_3_57_chunk_compressed.segment_by_value2, _hyper_3_57_chunk_compressed._ts_meta_min_1, _hyper_3_57_chunk_compressed._ts_meta_max_1, _hyper_3_57_chunk_compressed._ts_meta_v2_first_time, _hyper_3_57_chunk_compressed._ts_meta_v2_last_time, _hyper_3_57_chunk_compressed."time", _hyper_3_57_chunk_compressed.int_value, _hyper_3_57_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_57_chunk
+                     Output: _hyper_2_57_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_57_chunk_compressed
+                           Output: _hyper_2_57_chunk_compressed._ts_meta_count, _hyper_2_57_chunk_compressed.segment_by_value1, _hyper_2_57_chunk_compressed.segment_by_value2, _hyper_2_57_chunk_compressed._ts_meta_min_1, _hyper_2_57_chunk_compressed._ts_meta_max_1, _hyper_2_57_chunk_compressed._ts_meta_v2_first_time, _hyper_2_57_chunk_compressed._ts_meta_v2_last_time, _hyper_2_57_chunk_compressed."time", _hyper_2_57_chunk_compressed.int_value, _hyper_2_57_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_58_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_58_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_58_chunk
-                     Output: _hyper_3_58_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_58_chunk_compressed
-                           Output: _hyper_3_58_chunk_compressed._ts_meta_count, _hyper_3_58_chunk_compressed.segment_by_value1, _hyper_3_58_chunk_compressed.segment_by_value2, _hyper_3_58_chunk_compressed._ts_meta_min_1, _hyper_3_58_chunk_compressed._ts_meta_max_1, _hyper_3_58_chunk_compressed._ts_meta_v2_first_time, _hyper_3_58_chunk_compressed._ts_meta_v2_last_time, _hyper_3_58_chunk_compressed."time", _hyper_3_58_chunk_compressed.int_value, _hyper_3_58_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_58_chunk
+                     Output: _hyper_2_58_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_58_chunk_compressed
+                           Output: _hyper_2_58_chunk_compressed._ts_meta_count, _hyper_2_58_chunk_compressed.segment_by_value1, _hyper_2_58_chunk_compressed.segment_by_value2, _hyper_2_58_chunk_compressed._ts_meta_min_1, _hyper_2_58_chunk_compressed._ts_meta_max_1, _hyper_2_58_chunk_compressed._ts_meta_v2_first_time, _hyper_2_58_chunk_compressed._ts_meta_v2_last_time, _hyper_2_58_chunk_compressed."time", _hyper_2_58_chunk_compressed.int_value, _hyper_2_58_chunk_compressed.float_value
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_59_chunk.segment_by_value2))
+               Output: (PARTIAL sum(_hyper_2_59_chunk.segment_by_value2))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_59_chunk
-                     Output: _hyper_3_59_chunk.segment_by_value2
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_59_chunk_compressed
-                           Output: _hyper_3_59_chunk_compressed._ts_meta_count, _hyper_3_59_chunk_compressed.segment_by_value1, _hyper_3_59_chunk_compressed.segment_by_value2, _hyper_3_59_chunk_compressed._ts_meta_min_1, _hyper_3_59_chunk_compressed._ts_meta_max_1, _hyper_3_59_chunk_compressed._ts_meta_v2_first_time, _hyper_3_59_chunk_compressed._ts_meta_v2_last_time, _hyper_3_59_chunk_compressed."time", _hyper_3_59_chunk_compressed.int_value, _hyper_3_59_chunk_compressed.float_value
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_59_chunk
+                     Output: _hyper_2_59_chunk.segment_by_value2
+                     ->  Seq Scan on _timescaledb_internal._hyper_2_59_chunk_compressed
+                           Output: _hyper_2_59_chunk_compressed._ts_meta_count, _hyper_2_59_chunk_compressed.segment_by_value1, _hyper_2_59_chunk_compressed.segment_by_value2, _hyper_2_59_chunk_compressed._ts_meta_min_1, _hyper_2_59_chunk_compressed._ts_meta_max_1, _hyper_2_59_chunk_compressed._ts_meta_v2_first_time, _hyper_2_59_chunk_compressed._ts_meta_v2_last_time, _hyper_2_59_chunk_compressed."time", _hyper_2_59_chunk_compressed.int_value, _hyper_2_59_chunk_compressed.float_value
 
 SELECT sum(segment_by_value2) FROM testtable2;
    sum   
@@ -3296,77 +3296,77 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0;
    Output: sum(testtable2.segment_by_value1)
    ->  Append
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_51_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_51_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_51_chunk
-                     Output: _hyper_3_51_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_51_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_51_chunk_compressed
-                           Output: _hyper_3_51_chunk_compressed._ts_meta_count, _hyper_3_51_chunk_compressed.segment_by_value1, _hyper_3_51_chunk_compressed.segment_by_value2, _hyper_3_51_chunk_compressed._ts_meta_min_1, _hyper_3_51_chunk_compressed._ts_meta_max_1, _hyper_3_51_chunk_compressed._ts_meta_v2_first_time, _hyper_3_51_chunk_compressed._ts_meta_v2_last_time, _hyper_3_51_chunk_compressed."time", _hyper_3_51_chunk_compressed.int_value, _hyper_3_51_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_51_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_51_chunk
+                     Output: _hyper_2_51_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_51_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_51_chunk_compressed
+                           Output: _hyper_2_51_chunk_compressed._ts_meta_count, _hyper_2_51_chunk_compressed.segment_by_value1, _hyper_2_51_chunk_compressed.segment_by_value2, _hyper_2_51_chunk_compressed._ts_meta_min_1, _hyper_2_51_chunk_compressed._ts_meta_max_1, _hyper_2_51_chunk_compressed._ts_meta_v2_first_time, _hyper_2_51_chunk_compressed._ts_meta_v2_last_time, _hyper_2_51_chunk_compressed."time", _hyper_2_51_chunk_compressed.int_value, _hyper_2_51_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_51_chunk_compressed.segment_by_value1 > 0)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_52_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_52_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_52_chunk
-                     Output: _hyper_3_52_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_52_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_52_chunk_compressed
-                           Output: _hyper_3_52_chunk_compressed._ts_meta_count, _hyper_3_52_chunk_compressed.segment_by_value1, _hyper_3_52_chunk_compressed.segment_by_value2, _hyper_3_52_chunk_compressed._ts_meta_min_1, _hyper_3_52_chunk_compressed._ts_meta_max_1, _hyper_3_52_chunk_compressed._ts_meta_v2_first_time, _hyper_3_52_chunk_compressed._ts_meta_v2_last_time, _hyper_3_52_chunk_compressed."time", _hyper_3_52_chunk_compressed.int_value, _hyper_3_52_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_52_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_52_chunk
+                     Output: _hyper_2_52_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_52_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_52_chunk_compressed
+                           Output: _hyper_2_52_chunk_compressed._ts_meta_count, _hyper_2_52_chunk_compressed.segment_by_value1, _hyper_2_52_chunk_compressed.segment_by_value2, _hyper_2_52_chunk_compressed._ts_meta_min_1, _hyper_2_52_chunk_compressed._ts_meta_max_1, _hyper_2_52_chunk_compressed._ts_meta_v2_first_time, _hyper_2_52_chunk_compressed._ts_meta_v2_last_time, _hyper_2_52_chunk_compressed."time", _hyper_2_52_chunk_compressed.int_value, _hyper_2_52_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_52_chunk_compressed.segment_by_value1 > 0)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_53_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_53_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_53_chunk
-                     Output: _hyper_3_53_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_53_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_53_chunk_compressed
-                           Output: _hyper_3_53_chunk_compressed._ts_meta_count, _hyper_3_53_chunk_compressed.segment_by_value1, _hyper_3_53_chunk_compressed.segment_by_value2, _hyper_3_53_chunk_compressed._ts_meta_min_1, _hyper_3_53_chunk_compressed._ts_meta_max_1, _hyper_3_53_chunk_compressed._ts_meta_v2_first_time, _hyper_3_53_chunk_compressed._ts_meta_v2_last_time, _hyper_3_53_chunk_compressed."time", _hyper_3_53_chunk_compressed.int_value, _hyper_3_53_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_53_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_53_chunk
+                     Output: _hyper_2_53_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_53_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_53_chunk_compressed
+                           Output: _hyper_2_53_chunk_compressed._ts_meta_count, _hyper_2_53_chunk_compressed.segment_by_value1, _hyper_2_53_chunk_compressed.segment_by_value2, _hyper_2_53_chunk_compressed._ts_meta_min_1, _hyper_2_53_chunk_compressed._ts_meta_max_1, _hyper_2_53_chunk_compressed._ts_meta_v2_first_time, _hyper_2_53_chunk_compressed._ts_meta_v2_last_time, _hyper_2_53_chunk_compressed."time", _hyper_2_53_chunk_compressed.int_value, _hyper_2_53_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_53_chunk_compressed.segment_by_value1 > 0)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_54_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_54_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_54_chunk
-                     Output: _hyper_3_54_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_54_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_54_chunk_compressed
-                           Output: _hyper_3_54_chunk_compressed._ts_meta_count, _hyper_3_54_chunk_compressed.segment_by_value1, _hyper_3_54_chunk_compressed.segment_by_value2, _hyper_3_54_chunk_compressed._ts_meta_min_1, _hyper_3_54_chunk_compressed._ts_meta_max_1, _hyper_3_54_chunk_compressed._ts_meta_v2_first_time, _hyper_3_54_chunk_compressed._ts_meta_v2_last_time, _hyper_3_54_chunk_compressed."time", _hyper_3_54_chunk_compressed.int_value, _hyper_3_54_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_54_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_54_chunk
+                     Output: _hyper_2_54_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_54_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_54_chunk_compressed
+                           Output: _hyper_2_54_chunk_compressed._ts_meta_count, _hyper_2_54_chunk_compressed.segment_by_value1, _hyper_2_54_chunk_compressed.segment_by_value2, _hyper_2_54_chunk_compressed._ts_meta_min_1, _hyper_2_54_chunk_compressed._ts_meta_max_1, _hyper_2_54_chunk_compressed._ts_meta_v2_first_time, _hyper_2_54_chunk_compressed._ts_meta_v2_last_time, _hyper_2_54_chunk_compressed."time", _hyper_2_54_chunk_compressed.int_value, _hyper_2_54_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_54_chunk_compressed.segment_by_value1 > 0)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_55_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_55_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_55_chunk
-                     Output: _hyper_3_55_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_55_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_55_chunk_compressed
-                           Output: _hyper_3_55_chunk_compressed._ts_meta_count, _hyper_3_55_chunk_compressed.segment_by_value1, _hyper_3_55_chunk_compressed.segment_by_value2, _hyper_3_55_chunk_compressed._ts_meta_min_1, _hyper_3_55_chunk_compressed._ts_meta_max_1, _hyper_3_55_chunk_compressed._ts_meta_v2_first_time, _hyper_3_55_chunk_compressed._ts_meta_v2_last_time, _hyper_3_55_chunk_compressed."time", _hyper_3_55_chunk_compressed.int_value, _hyper_3_55_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_55_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_55_chunk
+                     Output: _hyper_2_55_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_55_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_55_chunk_compressed
+                           Output: _hyper_2_55_chunk_compressed._ts_meta_count, _hyper_2_55_chunk_compressed.segment_by_value1, _hyper_2_55_chunk_compressed.segment_by_value2, _hyper_2_55_chunk_compressed._ts_meta_min_1, _hyper_2_55_chunk_compressed._ts_meta_max_1, _hyper_2_55_chunk_compressed._ts_meta_v2_first_time, _hyper_2_55_chunk_compressed._ts_meta_v2_last_time, _hyper_2_55_chunk_compressed."time", _hyper_2_55_chunk_compressed.int_value, _hyper_2_55_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_55_chunk_compressed.segment_by_value1 > 0)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_56_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_56_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_56_chunk
-                     Output: _hyper_3_56_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_56_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_56_chunk_compressed
-                           Output: _hyper_3_56_chunk_compressed._ts_meta_count, _hyper_3_56_chunk_compressed.segment_by_value1, _hyper_3_56_chunk_compressed.segment_by_value2, _hyper_3_56_chunk_compressed._ts_meta_min_1, _hyper_3_56_chunk_compressed._ts_meta_max_1, _hyper_3_56_chunk_compressed._ts_meta_v2_first_time, _hyper_3_56_chunk_compressed._ts_meta_v2_last_time, _hyper_3_56_chunk_compressed."time", _hyper_3_56_chunk_compressed.int_value, _hyper_3_56_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_56_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_56_chunk
+                     Output: _hyper_2_56_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_56_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_56_chunk_compressed
+                           Output: _hyper_2_56_chunk_compressed._ts_meta_count, _hyper_2_56_chunk_compressed.segment_by_value1, _hyper_2_56_chunk_compressed.segment_by_value2, _hyper_2_56_chunk_compressed._ts_meta_min_1, _hyper_2_56_chunk_compressed._ts_meta_max_1, _hyper_2_56_chunk_compressed._ts_meta_v2_first_time, _hyper_2_56_chunk_compressed._ts_meta_v2_last_time, _hyper_2_56_chunk_compressed."time", _hyper_2_56_chunk_compressed.int_value, _hyper_2_56_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_56_chunk_compressed.segment_by_value1 > 0)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_57_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_57_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_57_chunk
-                     Output: _hyper_3_57_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_57_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_57_chunk_compressed
-                           Output: _hyper_3_57_chunk_compressed._ts_meta_count, _hyper_3_57_chunk_compressed.segment_by_value1, _hyper_3_57_chunk_compressed.segment_by_value2, _hyper_3_57_chunk_compressed._ts_meta_min_1, _hyper_3_57_chunk_compressed._ts_meta_max_1, _hyper_3_57_chunk_compressed._ts_meta_v2_first_time, _hyper_3_57_chunk_compressed._ts_meta_v2_last_time, _hyper_3_57_chunk_compressed."time", _hyper_3_57_chunk_compressed.int_value, _hyper_3_57_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_57_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_57_chunk
+                     Output: _hyper_2_57_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_57_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_57_chunk_compressed
+                           Output: _hyper_2_57_chunk_compressed._ts_meta_count, _hyper_2_57_chunk_compressed.segment_by_value1, _hyper_2_57_chunk_compressed.segment_by_value2, _hyper_2_57_chunk_compressed._ts_meta_min_1, _hyper_2_57_chunk_compressed._ts_meta_max_1, _hyper_2_57_chunk_compressed._ts_meta_v2_first_time, _hyper_2_57_chunk_compressed._ts_meta_v2_last_time, _hyper_2_57_chunk_compressed."time", _hyper_2_57_chunk_compressed.int_value, _hyper_2_57_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_57_chunk_compressed.segment_by_value1 > 0)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_58_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_58_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_58_chunk
-                     Output: _hyper_3_58_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_58_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_58_chunk_compressed
-                           Output: _hyper_3_58_chunk_compressed._ts_meta_count, _hyper_3_58_chunk_compressed.segment_by_value1, _hyper_3_58_chunk_compressed.segment_by_value2, _hyper_3_58_chunk_compressed._ts_meta_min_1, _hyper_3_58_chunk_compressed._ts_meta_max_1, _hyper_3_58_chunk_compressed._ts_meta_v2_first_time, _hyper_3_58_chunk_compressed._ts_meta_v2_last_time, _hyper_3_58_chunk_compressed."time", _hyper_3_58_chunk_compressed.int_value, _hyper_3_58_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_58_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_58_chunk
+                     Output: _hyper_2_58_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_58_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_58_chunk_compressed
+                           Output: _hyper_2_58_chunk_compressed._ts_meta_count, _hyper_2_58_chunk_compressed.segment_by_value1, _hyper_2_58_chunk_compressed.segment_by_value2, _hyper_2_58_chunk_compressed._ts_meta_min_1, _hyper_2_58_chunk_compressed._ts_meta_max_1, _hyper_2_58_chunk_compressed._ts_meta_v2_first_time, _hyper_2_58_chunk_compressed._ts_meta_v2_last_time, _hyper_2_58_chunk_compressed."time", _hyper_2_58_chunk_compressed.int_value, _hyper_2_58_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_58_chunk_compressed.segment_by_value1 > 0)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_59_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_59_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_59_chunk
-                     Output: _hyper_3_59_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_59_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_59_chunk_compressed
-                           Output: _hyper_3_59_chunk_compressed._ts_meta_count, _hyper_3_59_chunk_compressed.segment_by_value1, _hyper_3_59_chunk_compressed.segment_by_value2, _hyper_3_59_chunk_compressed._ts_meta_min_1, _hyper_3_59_chunk_compressed._ts_meta_max_1, _hyper_3_59_chunk_compressed._ts_meta_v2_first_time, _hyper_3_59_chunk_compressed._ts_meta_v2_last_time, _hyper_3_59_chunk_compressed."time", _hyper_3_59_chunk_compressed.int_value, _hyper_3_59_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_59_chunk_compressed.segment_by_value1 > 0)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_59_chunk
+                     Output: _hyper_2_59_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_59_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_59_chunk_compressed
+                           Output: _hyper_2_59_chunk_compressed._ts_meta_count, _hyper_2_59_chunk_compressed.segment_by_value1, _hyper_2_59_chunk_compressed.segment_by_value2, _hyper_2_59_chunk_compressed._ts_meta_min_1, _hyper_2_59_chunk_compressed._ts_meta_max_1, _hyper_2_59_chunk_compressed._ts_meta_v2_first_time, _hyper_2_59_chunk_compressed._ts_meta_v2_last_time, _hyper_2_59_chunk_compressed."time", _hyper_2_59_chunk_compressed.int_value, _hyper_2_59_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_59_chunk_compressed.segment_by_value1 > 0)
 
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND segment_by_value2 > 0;
@@ -3375,77 +3375,77 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND se
    Output: sum(testtable2.segment_by_value1)
    ->  Append
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_51_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_51_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_51_chunk
-                     Output: _hyper_3_51_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_51_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_51_chunk_compressed
-                           Output: _hyper_3_51_chunk_compressed._ts_meta_count, _hyper_3_51_chunk_compressed.segment_by_value1, _hyper_3_51_chunk_compressed.segment_by_value2, _hyper_3_51_chunk_compressed._ts_meta_min_1, _hyper_3_51_chunk_compressed._ts_meta_max_1, _hyper_3_51_chunk_compressed._ts_meta_v2_first_time, _hyper_3_51_chunk_compressed._ts_meta_v2_last_time, _hyper_3_51_chunk_compressed."time", _hyper_3_51_chunk_compressed.int_value, _hyper_3_51_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_51_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_51_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_51_chunk
+                     Output: _hyper_2_51_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_51_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_51_chunk_compressed
+                           Output: _hyper_2_51_chunk_compressed._ts_meta_count, _hyper_2_51_chunk_compressed.segment_by_value1, _hyper_2_51_chunk_compressed.segment_by_value2, _hyper_2_51_chunk_compressed._ts_meta_min_1, _hyper_2_51_chunk_compressed._ts_meta_max_1, _hyper_2_51_chunk_compressed._ts_meta_v2_first_time, _hyper_2_51_chunk_compressed._ts_meta_v2_last_time, _hyper_2_51_chunk_compressed."time", _hyper_2_51_chunk_compressed.int_value, _hyper_2_51_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_51_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_51_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_52_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_52_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_52_chunk
-                     Output: _hyper_3_52_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_52_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_52_chunk_compressed
-                           Output: _hyper_3_52_chunk_compressed._ts_meta_count, _hyper_3_52_chunk_compressed.segment_by_value1, _hyper_3_52_chunk_compressed.segment_by_value2, _hyper_3_52_chunk_compressed._ts_meta_min_1, _hyper_3_52_chunk_compressed._ts_meta_max_1, _hyper_3_52_chunk_compressed._ts_meta_v2_first_time, _hyper_3_52_chunk_compressed._ts_meta_v2_last_time, _hyper_3_52_chunk_compressed."time", _hyper_3_52_chunk_compressed.int_value, _hyper_3_52_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_52_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_52_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_52_chunk
+                     Output: _hyper_2_52_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_52_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_52_chunk_compressed
+                           Output: _hyper_2_52_chunk_compressed._ts_meta_count, _hyper_2_52_chunk_compressed.segment_by_value1, _hyper_2_52_chunk_compressed.segment_by_value2, _hyper_2_52_chunk_compressed._ts_meta_min_1, _hyper_2_52_chunk_compressed._ts_meta_max_1, _hyper_2_52_chunk_compressed._ts_meta_v2_first_time, _hyper_2_52_chunk_compressed._ts_meta_v2_last_time, _hyper_2_52_chunk_compressed."time", _hyper_2_52_chunk_compressed.int_value, _hyper_2_52_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_52_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_52_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_53_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_53_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_53_chunk
-                     Output: _hyper_3_53_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_53_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_53_chunk_compressed
-                           Output: _hyper_3_53_chunk_compressed._ts_meta_count, _hyper_3_53_chunk_compressed.segment_by_value1, _hyper_3_53_chunk_compressed.segment_by_value2, _hyper_3_53_chunk_compressed._ts_meta_min_1, _hyper_3_53_chunk_compressed._ts_meta_max_1, _hyper_3_53_chunk_compressed._ts_meta_v2_first_time, _hyper_3_53_chunk_compressed._ts_meta_v2_last_time, _hyper_3_53_chunk_compressed."time", _hyper_3_53_chunk_compressed.int_value, _hyper_3_53_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_53_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_53_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_53_chunk
+                     Output: _hyper_2_53_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_53_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_53_chunk_compressed
+                           Output: _hyper_2_53_chunk_compressed._ts_meta_count, _hyper_2_53_chunk_compressed.segment_by_value1, _hyper_2_53_chunk_compressed.segment_by_value2, _hyper_2_53_chunk_compressed._ts_meta_min_1, _hyper_2_53_chunk_compressed._ts_meta_max_1, _hyper_2_53_chunk_compressed._ts_meta_v2_first_time, _hyper_2_53_chunk_compressed._ts_meta_v2_last_time, _hyper_2_53_chunk_compressed."time", _hyper_2_53_chunk_compressed.int_value, _hyper_2_53_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_53_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_53_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_54_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_54_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_54_chunk
-                     Output: _hyper_3_54_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_54_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_54_chunk_compressed
-                           Output: _hyper_3_54_chunk_compressed._ts_meta_count, _hyper_3_54_chunk_compressed.segment_by_value1, _hyper_3_54_chunk_compressed.segment_by_value2, _hyper_3_54_chunk_compressed._ts_meta_min_1, _hyper_3_54_chunk_compressed._ts_meta_max_1, _hyper_3_54_chunk_compressed._ts_meta_v2_first_time, _hyper_3_54_chunk_compressed._ts_meta_v2_last_time, _hyper_3_54_chunk_compressed."time", _hyper_3_54_chunk_compressed.int_value, _hyper_3_54_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_54_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_54_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_54_chunk
+                     Output: _hyper_2_54_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_54_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_54_chunk_compressed
+                           Output: _hyper_2_54_chunk_compressed._ts_meta_count, _hyper_2_54_chunk_compressed.segment_by_value1, _hyper_2_54_chunk_compressed.segment_by_value2, _hyper_2_54_chunk_compressed._ts_meta_min_1, _hyper_2_54_chunk_compressed._ts_meta_max_1, _hyper_2_54_chunk_compressed._ts_meta_v2_first_time, _hyper_2_54_chunk_compressed._ts_meta_v2_last_time, _hyper_2_54_chunk_compressed."time", _hyper_2_54_chunk_compressed.int_value, _hyper_2_54_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_54_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_54_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_55_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_55_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_55_chunk
-                     Output: _hyper_3_55_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_55_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_55_chunk_compressed
-                           Output: _hyper_3_55_chunk_compressed._ts_meta_count, _hyper_3_55_chunk_compressed.segment_by_value1, _hyper_3_55_chunk_compressed.segment_by_value2, _hyper_3_55_chunk_compressed._ts_meta_min_1, _hyper_3_55_chunk_compressed._ts_meta_max_1, _hyper_3_55_chunk_compressed._ts_meta_v2_first_time, _hyper_3_55_chunk_compressed._ts_meta_v2_last_time, _hyper_3_55_chunk_compressed."time", _hyper_3_55_chunk_compressed.int_value, _hyper_3_55_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_55_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_55_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_55_chunk
+                     Output: _hyper_2_55_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_55_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_55_chunk_compressed
+                           Output: _hyper_2_55_chunk_compressed._ts_meta_count, _hyper_2_55_chunk_compressed.segment_by_value1, _hyper_2_55_chunk_compressed.segment_by_value2, _hyper_2_55_chunk_compressed._ts_meta_min_1, _hyper_2_55_chunk_compressed._ts_meta_max_1, _hyper_2_55_chunk_compressed._ts_meta_v2_first_time, _hyper_2_55_chunk_compressed._ts_meta_v2_last_time, _hyper_2_55_chunk_compressed."time", _hyper_2_55_chunk_compressed.int_value, _hyper_2_55_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_55_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_55_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_56_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_56_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_56_chunk
-                     Output: _hyper_3_56_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_56_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_56_chunk_compressed
-                           Output: _hyper_3_56_chunk_compressed._ts_meta_count, _hyper_3_56_chunk_compressed.segment_by_value1, _hyper_3_56_chunk_compressed.segment_by_value2, _hyper_3_56_chunk_compressed._ts_meta_min_1, _hyper_3_56_chunk_compressed._ts_meta_max_1, _hyper_3_56_chunk_compressed._ts_meta_v2_first_time, _hyper_3_56_chunk_compressed._ts_meta_v2_last_time, _hyper_3_56_chunk_compressed."time", _hyper_3_56_chunk_compressed.int_value, _hyper_3_56_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_56_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_56_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_56_chunk
+                     Output: _hyper_2_56_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_56_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_56_chunk_compressed
+                           Output: _hyper_2_56_chunk_compressed._ts_meta_count, _hyper_2_56_chunk_compressed.segment_by_value1, _hyper_2_56_chunk_compressed.segment_by_value2, _hyper_2_56_chunk_compressed._ts_meta_min_1, _hyper_2_56_chunk_compressed._ts_meta_max_1, _hyper_2_56_chunk_compressed._ts_meta_v2_first_time, _hyper_2_56_chunk_compressed._ts_meta_v2_last_time, _hyper_2_56_chunk_compressed."time", _hyper_2_56_chunk_compressed.int_value, _hyper_2_56_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_56_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_56_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_57_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_57_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_57_chunk
-                     Output: _hyper_3_57_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_57_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_57_chunk_compressed
-                           Output: _hyper_3_57_chunk_compressed._ts_meta_count, _hyper_3_57_chunk_compressed.segment_by_value1, _hyper_3_57_chunk_compressed.segment_by_value2, _hyper_3_57_chunk_compressed._ts_meta_min_1, _hyper_3_57_chunk_compressed._ts_meta_max_1, _hyper_3_57_chunk_compressed._ts_meta_v2_first_time, _hyper_3_57_chunk_compressed._ts_meta_v2_last_time, _hyper_3_57_chunk_compressed."time", _hyper_3_57_chunk_compressed.int_value, _hyper_3_57_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_57_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_57_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_57_chunk
+                     Output: _hyper_2_57_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_57_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_57_chunk_compressed
+                           Output: _hyper_2_57_chunk_compressed._ts_meta_count, _hyper_2_57_chunk_compressed.segment_by_value1, _hyper_2_57_chunk_compressed.segment_by_value2, _hyper_2_57_chunk_compressed._ts_meta_min_1, _hyper_2_57_chunk_compressed._ts_meta_max_1, _hyper_2_57_chunk_compressed._ts_meta_v2_first_time, _hyper_2_57_chunk_compressed._ts_meta_v2_last_time, _hyper_2_57_chunk_compressed."time", _hyper_2_57_chunk_compressed.int_value, _hyper_2_57_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_57_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_57_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_58_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_58_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_58_chunk
-                     Output: _hyper_3_58_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_58_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_58_chunk_compressed
-                           Output: _hyper_3_58_chunk_compressed._ts_meta_count, _hyper_3_58_chunk_compressed.segment_by_value1, _hyper_3_58_chunk_compressed.segment_by_value2, _hyper_3_58_chunk_compressed._ts_meta_min_1, _hyper_3_58_chunk_compressed._ts_meta_max_1, _hyper_3_58_chunk_compressed._ts_meta_v2_first_time, _hyper_3_58_chunk_compressed._ts_meta_v2_last_time, _hyper_3_58_chunk_compressed."time", _hyper_3_58_chunk_compressed.int_value, _hyper_3_58_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_58_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_58_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_58_chunk
+                     Output: _hyper_2_58_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_58_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_58_chunk_compressed
+                           Output: _hyper_2_58_chunk_compressed._ts_meta_count, _hyper_2_58_chunk_compressed.segment_by_value1, _hyper_2_58_chunk_compressed.segment_by_value2, _hyper_2_58_chunk_compressed._ts_meta_min_1, _hyper_2_58_chunk_compressed._ts_meta_max_1, _hyper_2_58_chunk_compressed._ts_meta_v2_first_time, _hyper_2_58_chunk_compressed._ts_meta_v2_last_time, _hyper_2_58_chunk_compressed."time", _hyper_2_58_chunk_compressed.int_value, _hyper_2_58_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_58_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_58_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_59_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_59_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_59_chunk
-                     Output: _hyper_3_59_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_59_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_59_chunk_compressed
-                           Output: _hyper_3_59_chunk_compressed._ts_meta_count, _hyper_3_59_chunk_compressed.segment_by_value1, _hyper_3_59_chunk_compressed.segment_by_value2, _hyper_3_59_chunk_compressed._ts_meta_min_1, _hyper_3_59_chunk_compressed._ts_meta_max_1, _hyper_3_59_chunk_compressed._ts_meta_v2_first_time, _hyper_3_59_chunk_compressed._ts_meta_v2_last_time, _hyper_3_59_chunk_compressed."time", _hyper_3_59_chunk_compressed.int_value, _hyper_3_59_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_59_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_59_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_59_chunk
+                     Output: _hyper_2_59_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_59_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_59_chunk_compressed
+                           Output: _hyper_2_59_chunk_compressed._ts_meta_count, _hyper_2_59_chunk_compressed.segment_by_value1, _hyper_2_59_chunk_compressed.segment_by_value2, _hyper_2_59_chunk_compressed._ts_meta_min_1, _hyper_2_59_chunk_compressed._ts_meta_max_1, _hyper_2_59_chunk_compressed._ts_meta_v2_first_time, _hyper_2_59_chunk_compressed._ts_meta_v2_last_time, _hyper_2_59_chunk_compressed."time", _hyper_2_59_chunk_compressed.int_value, _hyper_2_59_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_59_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_59_chunk_compressed.segment_by_value2 > 0))
 
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND segment_by_value2 > 0 AND 2>1;
@@ -3454,77 +3454,77 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND se
    Output: sum(testtable2.segment_by_value1)
    ->  Append
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_51_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_51_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_51_chunk
-                     Output: _hyper_3_51_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_51_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_51_chunk_compressed
-                           Output: _hyper_3_51_chunk_compressed._ts_meta_count, _hyper_3_51_chunk_compressed.segment_by_value1, _hyper_3_51_chunk_compressed.segment_by_value2, _hyper_3_51_chunk_compressed._ts_meta_min_1, _hyper_3_51_chunk_compressed._ts_meta_max_1, _hyper_3_51_chunk_compressed._ts_meta_v2_first_time, _hyper_3_51_chunk_compressed._ts_meta_v2_last_time, _hyper_3_51_chunk_compressed."time", _hyper_3_51_chunk_compressed.int_value, _hyper_3_51_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_51_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_51_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_51_chunk
+                     Output: _hyper_2_51_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_51_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_51_chunk_compressed
+                           Output: _hyper_2_51_chunk_compressed._ts_meta_count, _hyper_2_51_chunk_compressed.segment_by_value1, _hyper_2_51_chunk_compressed.segment_by_value2, _hyper_2_51_chunk_compressed._ts_meta_min_1, _hyper_2_51_chunk_compressed._ts_meta_max_1, _hyper_2_51_chunk_compressed._ts_meta_v2_first_time, _hyper_2_51_chunk_compressed._ts_meta_v2_last_time, _hyper_2_51_chunk_compressed."time", _hyper_2_51_chunk_compressed.int_value, _hyper_2_51_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_51_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_51_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_52_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_52_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_52_chunk
-                     Output: _hyper_3_52_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_52_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_52_chunk_compressed
-                           Output: _hyper_3_52_chunk_compressed._ts_meta_count, _hyper_3_52_chunk_compressed.segment_by_value1, _hyper_3_52_chunk_compressed.segment_by_value2, _hyper_3_52_chunk_compressed._ts_meta_min_1, _hyper_3_52_chunk_compressed._ts_meta_max_1, _hyper_3_52_chunk_compressed._ts_meta_v2_first_time, _hyper_3_52_chunk_compressed._ts_meta_v2_last_time, _hyper_3_52_chunk_compressed."time", _hyper_3_52_chunk_compressed.int_value, _hyper_3_52_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_52_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_52_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_52_chunk
+                     Output: _hyper_2_52_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_52_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_52_chunk_compressed
+                           Output: _hyper_2_52_chunk_compressed._ts_meta_count, _hyper_2_52_chunk_compressed.segment_by_value1, _hyper_2_52_chunk_compressed.segment_by_value2, _hyper_2_52_chunk_compressed._ts_meta_min_1, _hyper_2_52_chunk_compressed._ts_meta_max_1, _hyper_2_52_chunk_compressed._ts_meta_v2_first_time, _hyper_2_52_chunk_compressed._ts_meta_v2_last_time, _hyper_2_52_chunk_compressed."time", _hyper_2_52_chunk_compressed.int_value, _hyper_2_52_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_52_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_52_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_53_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_53_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_53_chunk
-                     Output: _hyper_3_53_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_53_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_53_chunk_compressed
-                           Output: _hyper_3_53_chunk_compressed._ts_meta_count, _hyper_3_53_chunk_compressed.segment_by_value1, _hyper_3_53_chunk_compressed.segment_by_value2, _hyper_3_53_chunk_compressed._ts_meta_min_1, _hyper_3_53_chunk_compressed._ts_meta_max_1, _hyper_3_53_chunk_compressed._ts_meta_v2_first_time, _hyper_3_53_chunk_compressed._ts_meta_v2_last_time, _hyper_3_53_chunk_compressed."time", _hyper_3_53_chunk_compressed.int_value, _hyper_3_53_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_53_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_53_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_53_chunk
+                     Output: _hyper_2_53_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_53_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_53_chunk_compressed
+                           Output: _hyper_2_53_chunk_compressed._ts_meta_count, _hyper_2_53_chunk_compressed.segment_by_value1, _hyper_2_53_chunk_compressed.segment_by_value2, _hyper_2_53_chunk_compressed._ts_meta_min_1, _hyper_2_53_chunk_compressed._ts_meta_max_1, _hyper_2_53_chunk_compressed._ts_meta_v2_first_time, _hyper_2_53_chunk_compressed._ts_meta_v2_last_time, _hyper_2_53_chunk_compressed."time", _hyper_2_53_chunk_compressed.int_value, _hyper_2_53_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_53_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_53_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_54_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_54_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_54_chunk
-                     Output: _hyper_3_54_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_54_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_54_chunk_compressed
-                           Output: _hyper_3_54_chunk_compressed._ts_meta_count, _hyper_3_54_chunk_compressed.segment_by_value1, _hyper_3_54_chunk_compressed.segment_by_value2, _hyper_3_54_chunk_compressed._ts_meta_min_1, _hyper_3_54_chunk_compressed._ts_meta_max_1, _hyper_3_54_chunk_compressed._ts_meta_v2_first_time, _hyper_3_54_chunk_compressed._ts_meta_v2_last_time, _hyper_3_54_chunk_compressed."time", _hyper_3_54_chunk_compressed.int_value, _hyper_3_54_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_54_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_54_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_54_chunk
+                     Output: _hyper_2_54_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_54_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_54_chunk_compressed
+                           Output: _hyper_2_54_chunk_compressed._ts_meta_count, _hyper_2_54_chunk_compressed.segment_by_value1, _hyper_2_54_chunk_compressed.segment_by_value2, _hyper_2_54_chunk_compressed._ts_meta_min_1, _hyper_2_54_chunk_compressed._ts_meta_max_1, _hyper_2_54_chunk_compressed._ts_meta_v2_first_time, _hyper_2_54_chunk_compressed._ts_meta_v2_last_time, _hyper_2_54_chunk_compressed."time", _hyper_2_54_chunk_compressed.int_value, _hyper_2_54_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_54_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_54_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_55_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_55_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_55_chunk
-                     Output: _hyper_3_55_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_55_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_55_chunk_compressed
-                           Output: _hyper_3_55_chunk_compressed._ts_meta_count, _hyper_3_55_chunk_compressed.segment_by_value1, _hyper_3_55_chunk_compressed.segment_by_value2, _hyper_3_55_chunk_compressed._ts_meta_min_1, _hyper_3_55_chunk_compressed._ts_meta_max_1, _hyper_3_55_chunk_compressed._ts_meta_v2_first_time, _hyper_3_55_chunk_compressed._ts_meta_v2_last_time, _hyper_3_55_chunk_compressed."time", _hyper_3_55_chunk_compressed.int_value, _hyper_3_55_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_55_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_55_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_55_chunk
+                     Output: _hyper_2_55_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_55_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_55_chunk_compressed
+                           Output: _hyper_2_55_chunk_compressed._ts_meta_count, _hyper_2_55_chunk_compressed.segment_by_value1, _hyper_2_55_chunk_compressed.segment_by_value2, _hyper_2_55_chunk_compressed._ts_meta_min_1, _hyper_2_55_chunk_compressed._ts_meta_max_1, _hyper_2_55_chunk_compressed._ts_meta_v2_first_time, _hyper_2_55_chunk_compressed._ts_meta_v2_last_time, _hyper_2_55_chunk_compressed."time", _hyper_2_55_chunk_compressed.int_value, _hyper_2_55_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_55_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_55_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_56_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_56_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_56_chunk
-                     Output: _hyper_3_56_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_56_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_56_chunk_compressed
-                           Output: _hyper_3_56_chunk_compressed._ts_meta_count, _hyper_3_56_chunk_compressed.segment_by_value1, _hyper_3_56_chunk_compressed.segment_by_value2, _hyper_3_56_chunk_compressed._ts_meta_min_1, _hyper_3_56_chunk_compressed._ts_meta_max_1, _hyper_3_56_chunk_compressed._ts_meta_v2_first_time, _hyper_3_56_chunk_compressed._ts_meta_v2_last_time, _hyper_3_56_chunk_compressed."time", _hyper_3_56_chunk_compressed.int_value, _hyper_3_56_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_56_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_56_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_56_chunk
+                     Output: _hyper_2_56_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_56_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_56_chunk_compressed
+                           Output: _hyper_2_56_chunk_compressed._ts_meta_count, _hyper_2_56_chunk_compressed.segment_by_value1, _hyper_2_56_chunk_compressed.segment_by_value2, _hyper_2_56_chunk_compressed._ts_meta_min_1, _hyper_2_56_chunk_compressed._ts_meta_max_1, _hyper_2_56_chunk_compressed._ts_meta_v2_first_time, _hyper_2_56_chunk_compressed._ts_meta_v2_last_time, _hyper_2_56_chunk_compressed."time", _hyper_2_56_chunk_compressed.int_value, _hyper_2_56_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_56_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_56_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_57_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_57_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_57_chunk
-                     Output: _hyper_3_57_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_57_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_57_chunk_compressed
-                           Output: _hyper_3_57_chunk_compressed._ts_meta_count, _hyper_3_57_chunk_compressed.segment_by_value1, _hyper_3_57_chunk_compressed.segment_by_value2, _hyper_3_57_chunk_compressed._ts_meta_min_1, _hyper_3_57_chunk_compressed._ts_meta_max_1, _hyper_3_57_chunk_compressed._ts_meta_v2_first_time, _hyper_3_57_chunk_compressed._ts_meta_v2_last_time, _hyper_3_57_chunk_compressed."time", _hyper_3_57_chunk_compressed.int_value, _hyper_3_57_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_57_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_57_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_57_chunk
+                     Output: _hyper_2_57_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_57_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_57_chunk_compressed
+                           Output: _hyper_2_57_chunk_compressed._ts_meta_count, _hyper_2_57_chunk_compressed.segment_by_value1, _hyper_2_57_chunk_compressed.segment_by_value2, _hyper_2_57_chunk_compressed._ts_meta_min_1, _hyper_2_57_chunk_compressed._ts_meta_max_1, _hyper_2_57_chunk_compressed._ts_meta_v2_first_time, _hyper_2_57_chunk_compressed._ts_meta_v2_last_time, _hyper_2_57_chunk_compressed."time", _hyper_2_57_chunk_compressed.int_value, _hyper_2_57_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_57_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_57_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_58_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_58_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_58_chunk
-                     Output: _hyper_3_58_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_58_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_58_chunk_compressed
-                           Output: _hyper_3_58_chunk_compressed._ts_meta_count, _hyper_3_58_chunk_compressed.segment_by_value1, _hyper_3_58_chunk_compressed.segment_by_value2, _hyper_3_58_chunk_compressed._ts_meta_min_1, _hyper_3_58_chunk_compressed._ts_meta_max_1, _hyper_3_58_chunk_compressed._ts_meta_v2_first_time, _hyper_3_58_chunk_compressed._ts_meta_v2_last_time, _hyper_3_58_chunk_compressed."time", _hyper_3_58_chunk_compressed.int_value, _hyper_3_58_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_58_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_58_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_58_chunk
+                     Output: _hyper_2_58_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_58_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_58_chunk_compressed
+                           Output: _hyper_2_58_chunk_compressed._ts_meta_count, _hyper_2_58_chunk_compressed.segment_by_value1, _hyper_2_58_chunk_compressed.segment_by_value2, _hyper_2_58_chunk_compressed._ts_meta_min_1, _hyper_2_58_chunk_compressed._ts_meta_max_1, _hyper_2_58_chunk_compressed._ts_meta_v2_first_time, _hyper_2_58_chunk_compressed._ts_meta_v2_last_time, _hyper_2_58_chunk_compressed."time", _hyper_2_58_chunk_compressed.int_value, _hyper_2_58_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_58_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_58_chunk_compressed.segment_by_value2 > 0))
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_59_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_59_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_59_chunk
-                     Output: _hyper_3_59_chunk.segment_by_value1
-                     ->  Index Scan using _hyper_3_59_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_59_chunk_compressed
-                           Output: _hyper_3_59_chunk_compressed._ts_meta_count, _hyper_3_59_chunk_compressed.segment_by_value1, _hyper_3_59_chunk_compressed.segment_by_value2, _hyper_3_59_chunk_compressed._ts_meta_min_1, _hyper_3_59_chunk_compressed._ts_meta_max_1, _hyper_3_59_chunk_compressed._ts_meta_v2_first_time, _hyper_3_59_chunk_compressed._ts_meta_v2_last_time, _hyper_3_59_chunk_compressed."time", _hyper_3_59_chunk_compressed.int_value, _hyper_3_59_chunk_compressed.float_value
-                           Index Cond: ((_hyper_3_59_chunk_compressed.segment_by_value1 > 0) AND (_hyper_3_59_chunk_compressed.segment_by_value2 > 0))
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_59_chunk
+                     Output: _hyper_2_59_chunk.segment_by_value1
+                     ->  Index Scan using _hyper_2_59_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_59_chunk_compressed
+                           Output: _hyper_2_59_chunk_compressed._ts_meta_count, _hyper_2_59_chunk_compressed.segment_by_value1, _hyper_2_59_chunk_compressed.segment_by_value2, _hyper_2_59_chunk_compressed._ts_meta_min_1, _hyper_2_59_chunk_compressed._ts_meta_max_1, _hyper_2_59_chunk_compressed._ts_meta_v2_first_time, _hyper_2_59_chunk_compressed._ts_meta_v2_last_time, _hyper_2_59_chunk_compressed."time", _hyper_2_59_chunk_compressed.int_value, _hyper_2_59_chunk_compressed.float_value
+                           Index Cond: ((_hyper_2_59_chunk_compressed.segment_by_value1 > 0) AND (_hyper_2_59_chunk_compressed.segment_by_value2 > 0))
 
 -- Vectorization not possible filter on segment_by and compressed value
 -- Disable parallel worker to get deterministic query plans on i386
@@ -3536,86 +3536,86 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND
    Output: sum(testtable2.segment_by_value1)
    ->  Append
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_51_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_51_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_51_chunk
-                     Output: _hyper_3_51_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_51_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_51_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_51_chunk_compressed
-                           Output: _hyper_3_51_chunk_compressed._ts_meta_count, _hyper_3_51_chunk_compressed.segment_by_value1, _hyper_3_51_chunk_compressed.segment_by_value2, _hyper_3_51_chunk_compressed._ts_meta_min_1, _hyper_3_51_chunk_compressed._ts_meta_max_1, _hyper_3_51_chunk_compressed._ts_meta_v2_first_time, _hyper_3_51_chunk_compressed._ts_meta_v2_last_time, _hyper_3_51_chunk_compressed."time", _hyper_3_51_chunk_compressed.int_value, _hyper_3_51_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_51_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_51_chunk
+                     Output: _hyper_2_51_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_51_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_51_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_51_chunk_compressed
+                           Output: _hyper_2_51_chunk_compressed._ts_meta_count, _hyper_2_51_chunk_compressed.segment_by_value1, _hyper_2_51_chunk_compressed.segment_by_value2, _hyper_2_51_chunk_compressed._ts_meta_min_1, _hyper_2_51_chunk_compressed._ts_meta_max_1, _hyper_2_51_chunk_compressed._ts_meta_v2_first_time, _hyper_2_51_chunk_compressed._ts_meta_v2_last_time, _hyper_2_51_chunk_compressed."time", _hyper_2_51_chunk_compressed.int_value, _hyper_2_51_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_51_chunk_compressed.segment_by_value1 > 1000)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_52_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_52_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_52_chunk
-                     Output: _hyper_3_52_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_52_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_52_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_52_chunk_compressed
-                           Output: _hyper_3_52_chunk_compressed._ts_meta_count, _hyper_3_52_chunk_compressed.segment_by_value1, _hyper_3_52_chunk_compressed.segment_by_value2, _hyper_3_52_chunk_compressed._ts_meta_min_1, _hyper_3_52_chunk_compressed._ts_meta_max_1, _hyper_3_52_chunk_compressed._ts_meta_v2_first_time, _hyper_3_52_chunk_compressed._ts_meta_v2_last_time, _hyper_3_52_chunk_compressed."time", _hyper_3_52_chunk_compressed.int_value, _hyper_3_52_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_52_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_52_chunk
+                     Output: _hyper_2_52_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_52_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_52_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_52_chunk_compressed
+                           Output: _hyper_2_52_chunk_compressed._ts_meta_count, _hyper_2_52_chunk_compressed.segment_by_value1, _hyper_2_52_chunk_compressed.segment_by_value2, _hyper_2_52_chunk_compressed._ts_meta_min_1, _hyper_2_52_chunk_compressed._ts_meta_max_1, _hyper_2_52_chunk_compressed._ts_meta_v2_first_time, _hyper_2_52_chunk_compressed._ts_meta_v2_last_time, _hyper_2_52_chunk_compressed."time", _hyper_2_52_chunk_compressed.int_value, _hyper_2_52_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_52_chunk_compressed.segment_by_value1 > 1000)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_53_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_53_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_53_chunk
-                     Output: _hyper_3_53_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_53_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_53_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_53_chunk_compressed
-                           Output: _hyper_3_53_chunk_compressed._ts_meta_count, _hyper_3_53_chunk_compressed.segment_by_value1, _hyper_3_53_chunk_compressed.segment_by_value2, _hyper_3_53_chunk_compressed._ts_meta_min_1, _hyper_3_53_chunk_compressed._ts_meta_max_1, _hyper_3_53_chunk_compressed._ts_meta_v2_first_time, _hyper_3_53_chunk_compressed._ts_meta_v2_last_time, _hyper_3_53_chunk_compressed."time", _hyper_3_53_chunk_compressed.int_value, _hyper_3_53_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_53_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_53_chunk
+                     Output: _hyper_2_53_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_53_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_53_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_53_chunk_compressed
+                           Output: _hyper_2_53_chunk_compressed._ts_meta_count, _hyper_2_53_chunk_compressed.segment_by_value1, _hyper_2_53_chunk_compressed.segment_by_value2, _hyper_2_53_chunk_compressed._ts_meta_min_1, _hyper_2_53_chunk_compressed._ts_meta_max_1, _hyper_2_53_chunk_compressed._ts_meta_v2_first_time, _hyper_2_53_chunk_compressed._ts_meta_v2_last_time, _hyper_2_53_chunk_compressed."time", _hyper_2_53_chunk_compressed.int_value, _hyper_2_53_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_53_chunk_compressed.segment_by_value1 > 1000)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_54_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_54_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_54_chunk
-                     Output: _hyper_3_54_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_54_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_54_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_54_chunk_compressed
-                           Output: _hyper_3_54_chunk_compressed._ts_meta_count, _hyper_3_54_chunk_compressed.segment_by_value1, _hyper_3_54_chunk_compressed.segment_by_value2, _hyper_3_54_chunk_compressed._ts_meta_min_1, _hyper_3_54_chunk_compressed._ts_meta_max_1, _hyper_3_54_chunk_compressed._ts_meta_v2_first_time, _hyper_3_54_chunk_compressed._ts_meta_v2_last_time, _hyper_3_54_chunk_compressed."time", _hyper_3_54_chunk_compressed.int_value, _hyper_3_54_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_54_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_54_chunk
+                     Output: _hyper_2_54_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_54_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_54_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_54_chunk_compressed
+                           Output: _hyper_2_54_chunk_compressed._ts_meta_count, _hyper_2_54_chunk_compressed.segment_by_value1, _hyper_2_54_chunk_compressed.segment_by_value2, _hyper_2_54_chunk_compressed._ts_meta_min_1, _hyper_2_54_chunk_compressed._ts_meta_max_1, _hyper_2_54_chunk_compressed._ts_meta_v2_first_time, _hyper_2_54_chunk_compressed._ts_meta_v2_last_time, _hyper_2_54_chunk_compressed."time", _hyper_2_54_chunk_compressed.int_value, _hyper_2_54_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_54_chunk_compressed.segment_by_value1 > 1000)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_55_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_55_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_55_chunk
-                     Output: _hyper_3_55_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_55_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_55_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_55_chunk_compressed
-                           Output: _hyper_3_55_chunk_compressed._ts_meta_count, _hyper_3_55_chunk_compressed.segment_by_value1, _hyper_3_55_chunk_compressed.segment_by_value2, _hyper_3_55_chunk_compressed._ts_meta_min_1, _hyper_3_55_chunk_compressed._ts_meta_max_1, _hyper_3_55_chunk_compressed._ts_meta_v2_first_time, _hyper_3_55_chunk_compressed._ts_meta_v2_last_time, _hyper_3_55_chunk_compressed."time", _hyper_3_55_chunk_compressed.int_value, _hyper_3_55_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_55_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_55_chunk
+                     Output: _hyper_2_55_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_55_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_55_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_55_chunk_compressed
+                           Output: _hyper_2_55_chunk_compressed._ts_meta_count, _hyper_2_55_chunk_compressed.segment_by_value1, _hyper_2_55_chunk_compressed.segment_by_value2, _hyper_2_55_chunk_compressed._ts_meta_min_1, _hyper_2_55_chunk_compressed._ts_meta_max_1, _hyper_2_55_chunk_compressed._ts_meta_v2_first_time, _hyper_2_55_chunk_compressed._ts_meta_v2_last_time, _hyper_2_55_chunk_compressed."time", _hyper_2_55_chunk_compressed.int_value, _hyper_2_55_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_55_chunk_compressed.segment_by_value1 > 1000)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_56_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_56_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_56_chunk
-                     Output: _hyper_3_56_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_56_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_56_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_56_chunk_compressed
-                           Output: _hyper_3_56_chunk_compressed._ts_meta_count, _hyper_3_56_chunk_compressed.segment_by_value1, _hyper_3_56_chunk_compressed.segment_by_value2, _hyper_3_56_chunk_compressed._ts_meta_min_1, _hyper_3_56_chunk_compressed._ts_meta_max_1, _hyper_3_56_chunk_compressed._ts_meta_v2_first_time, _hyper_3_56_chunk_compressed._ts_meta_v2_last_time, _hyper_3_56_chunk_compressed."time", _hyper_3_56_chunk_compressed.int_value, _hyper_3_56_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_56_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_56_chunk
+                     Output: _hyper_2_56_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_56_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_56_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_56_chunk_compressed
+                           Output: _hyper_2_56_chunk_compressed._ts_meta_count, _hyper_2_56_chunk_compressed.segment_by_value1, _hyper_2_56_chunk_compressed.segment_by_value2, _hyper_2_56_chunk_compressed._ts_meta_min_1, _hyper_2_56_chunk_compressed._ts_meta_max_1, _hyper_2_56_chunk_compressed._ts_meta_v2_first_time, _hyper_2_56_chunk_compressed._ts_meta_v2_last_time, _hyper_2_56_chunk_compressed."time", _hyper_2_56_chunk_compressed.int_value, _hyper_2_56_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_56_chunk_compressed.segment_by_value1 > 1000)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_57_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_57_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_57_chunk
-                     Output: _hyper_3_57_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_57_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_57_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_57_chunk_compressed
-                           Output: _hyper_3_57_chunk_compressed._ts_meta_count, _hyper_3_57_chunk_compressed.segment_by_value1, _hyper_3_57_chunk_compressed.segment_by_value2, _hyper_3_57_chunk_compressed._ts_meta_min_1, _hyper_3_57_chunk_compressed._ts_meta_max_1, _hyper_3_57_chunk_compressed._ts_meta_v2_first_time, _hyper_3_57_chunk_compressed._ts_meta_v2_last_time, _hyper_3_57_chunk_compressed."time", _hyper_3_57_chunk_compressed.int_value, _hyper_3_57_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_57_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_57_chunk
+                     Output: _hyper_2_57_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_57_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_57_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_57_chunk_compressed
+                           Output: _hyper_2_57_chunk_compressed._ts_meta_count, _hyper_2_57_chunk_compressed.segment_by_value1, _hyper_2_57_chunk_compressed.segment_by_value2, _hyper_2_57_chunk_compressed._ts_meta_min_1, _hyper_2_57_chunk_compressed._ts_meta_max_1, _hyper_2_57_chunk_compressed._ts_meta_v2_first_time, _hyper_2_57_chunk_compressed._ts_meta_v2_last_time, _hyper_2_57_chunk_compressed."time", _hyper_2_57_chunk_compressed.int_value, _hyper_2_57_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_57_chunk_compressed.segment_by_value1 > 1000)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_58_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_58_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_58_chunk
-                     Output: _hyper_3_58_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_58_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_58_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_58_chunk_compressed
-                           Output: _hyper_3_58_chunk_compressed._ts_meta_count, _hyper_3_58_chunk_compressed.segment_by_value1, _hyper_3_58_chunk_compressed.segment_by_value2, _hyper_3_58_chunk_compressed._ts_meta_min_1, _hyper_3_58_chunk_compressed._ts_meta_max_1, _hyper_3_58_chunk_compressed._ts_meta_v2_first_time, _hyper_3_58_chunk_compressed._ts_meta_v2_last_time, _hyper_3_58_chunk_compressed."time", _hyper_3_58_chunk_compressed.int_value, _hyper_3_58_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_58_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_58_chunk
+                     Output: _hyper_2_58_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_58_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_58_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_58_chunk_compressed
+                           Output: _hyper_2_58_chunk_compressed._ts_meta_count, _hyper_2_58_chunk_compressed.segment_by_value1, _hyper_2_58_chunk_compressed.segment_by_value2, _hyper_2_58_chunk_compressed._ts_meta_min_1, _hyper_2_58_chunk_compressed._ts_meta_max_1, _hyper_2_58_chunk_compressed._ts_meta_v2_first_time, _hyper_2_58_chunk_compressed._ts_meta_v2_last_time, _hyper_2_58_chunk_compressed."time", _hyper_2_58_chunk_compressed.int_value, _hyper_2_58_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_58_chunk_compressed.segment_by_value1 > 1000)
          ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_59_chunk.segment_by_value1))
+               Output: (PARTIAL sum(_hyper_2_59_chunk.segment_by_value1))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_59_chunk
-                     Output: _hyper_3_59_chunk.segment_by_value1
-                     Vectorized Filter: (_hyper_3_59_chunk.int_value > 1000)
-                     ->  Index Scan using _hyper_3_59_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_3_59_chunk_compressed
-                           Output: _hyper_3_59_chunk_compressed._ts_meta_count, _hyper_3_59_chunk_compressed.segment_by_value1, _hyper_3_59_chunk_compressed.segment_by_value2, _hyper_3_59_chunk_compressed._ts_meta_min_1, _hyper_3_59_chunk_compressed._ts_meta_max_1, _hyper_3_59_chunk_compressed._ts_meta_v2_first_time, _hyper_3_59_chunk_compressed._ts_meta_v2_last_time, _hyper_3_59_chunk_compressed."time", _hyper_3_59_chunk_compressed.int_value, _hyper_3_59_chunk_compressed.float_value
-                           Index Cond: (_hyper_3_59_chunk_compressed.segment_by_value1 > 1000)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_59_chunk
+                     Output: _hyper_2_59_chunk.segment_by_value1
+                     Vectorized Filter: (_hyper_2_59_chunk.int_value > 1000)
+                     ->  Index Scan using _hyper_2_59_chunk_compressed_segment_by_value1_segment_by_v_idx on _timescaledb_internal._hyper_2_59_chunk_compressed
+                           Output: _hyper_2_59_chunk_compressed._ts_meta_count, _hyper_2_59_chunk_compressed.segment_by_value1, _hyper_2_59_chunk_compressed.segment_by_value2, _hyper_2_59_chunk_compressed._ts_meta_min_1, _hyper_2_59_chunk_compressed._ts_meta_max_1, _hyper_2_59_chunk_compressed._ts_meta_v2_first_time, _hyper_2_59_chunk_compressed._ts_meta_v2_last_time, _hyper_2_59_chunk_compressed."time", _hyper_2_59_chunk_compressed.int_value, _hyper_2_59_chunk_compressed.float_value
+                           Index Cond: (_hyper_2_59_chunk_compressed.segment_by_value1 > 1000)
 
 RESET max_parallel_workers_per_gather;
 -- Can't group by a system column
@@ -3639,7 +3639,7 @@ CREATE TABLE testtable3 (time timestamptz, location_id int, device_id int, senso
 SELECT create_hypertable('testtable3', 'time');
     create_hypertable    
 -------------------------
- (5,public,testtable3,t)
+ (3,public,testtable3,t)
 
 ALTER TABLE testtable3 SET (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='location_id');
 INSERT INTO testtable3 SELECT t, ceil(random() * 20)::int, ceil(random() * 30)::int, ceil(random() * 20)::int FROM generate_series('2024-01-01'::timestamptz, '2024-01-10'::timestamptz, '1h') AS t;
@@ -3663,9 +3663,9 @@ GROUP BY TT.location_id, TT.device_id
    ->  Custom Scan (ChunkAppend) on testtable3 tt
          Chunks excluded during startup: 1
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_5_61_chunk tt_1
+               ->  Custom Scan (ColumnarScan) on _hyper_3_61_chunk tt_1
                      Vectorized Filter: ("time" >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
-                     ->  Seq Scan on _hyper_5_61_chunk_compressed
+                     ->  Seq Scan on _hyper_3_61_chunk_compressed
                            Filter: (_ts_meta_v2_last_time >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
 
 SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id \g :TEST_OUTPUT_DIR/vectorized_aggregation_query_result.out
@@ -3685,9 +3685,9 @@ WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour'
          ->  Result
                ->  Custom Scan (ChunkAppend) on testtable3 tt
                      Chunks excluded during startup: 1
-                     ->  Custom Scan (ColumnarScan) on _hyper_5_61_chunk tt_1
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_61_chunk tt_1
                            Vectorized Filter: ("time" >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
-                           ->  Seq Scan on _hyper_5_61_chunk_compressed
+                           ->  Seq Scan on _hyper_3_61_chunk_compressed
                                  Filter: (_ts_meta_v2_last_time >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
 
 EXPLAIN (buffers off, costs off)

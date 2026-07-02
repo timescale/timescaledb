@@ -416,12 +416,12 @@ WHERE h.id = ch.hypertable_id AND h.table_name = 'metrics2';
 :PREFIX select time, avg(value) from metrics2 where time > '2025-01-01 01:00:00' group by time order by time DESC;
 --- QUERY PLAN ---
  Sort
-   Sort Key: _hyper_3_2_chunk."time" DESC
+   Sort Key: _hyper_2_2_chunk."time" DESC
    ->  HashAggregate
-         Group Key: _hyper_3_2_chunk."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_3_2_chunk
+         Group Key: _hyper_2_2_chunk."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_2_2_chunk
                Vectorized Filter: ("time" > 'Wed Jan 01 01:00:00 2025 UTC'::timestamp with time zone)
-               ->  Index Scan using _hyper_3_2_chunk_compressed__ts_meta_v2_first_time__ts_meta_idx on _hyper_3_2_chunk_compressed
+               ->  Index Scan using _hyper_2_2_chunk_compressed__ts_meta_v2_first_time__ts_meta_idx on _hyper_2_2_chunk_compressed
                      Index Cond: (_ts_meta_v2_first_time > 'Wed Jan 01 01:00:00 2025 UTC'::timestamp with time zone)
 
 select time, avg(value) from metrics2  where time > '2025-01-01 01:00:00' group by time order by time DESC;
