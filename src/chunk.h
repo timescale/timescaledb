@@ -227,6 +227,7 @@ extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_chunk_status_text(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_chunk_get_by_hypertable_id(int32 hypertable_id);
+extern TSDLLEXPORT void ts_chunk_publication_backfill(Oid pubid);
 
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 

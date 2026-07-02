@@ -442,12 +442,116 @@ SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHE
 -- Cleanup
 DROP PUBLICATION test_pub_all_tables CASCADE;
 DROP TABLE test_hypertable CASCADE;
--- Test 7: Edge case - Hypertable not in any publication
-CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+-- Test 6b: FOR TABLES IN SCHEMA publication with pre-existing chunks
+CREATE SCHEMA ht_schema;
+CREATE TABLE ht_schema.test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('ht_schema.test_hypertable', 'time', chunk_time_interval => interval '1 day');
+        create_hypertable        
+---------------------------------
+ (7,ht_schema,test_hypertable,t)
+
+-- Non-hypertable table in the same schema; backfill must skip it.
+CREATE TABLE ht_schema.regular_table (id int);
+-- Insert two chunks BEFORE the publication exists
+INSERT INTO ht_schema.test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+INSERT INTO ht_schema.test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+CREATE PUBLICATION test_pub_schema FOR TABLES IN SCHEMA ht_schema;
+-- Pre-existing chunks should be backfilled
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+      schemaname       |     tablename     |           attnames           | rowfilter 
+-----------------------+-------------------+------------------------------+-----------
+ _timescaledb_internal | _hyper_7_49_chunk | {time,device_id,value,extra} | 
+ _timescaledb_internal | _hyper_7_50_chunk | {time,device_id,value,extra} | 
+ ht_schema             | regular_table     | {id}                         | 
+ ht_schema             | test_hypertable   | {time,device_id,value,extra} | 
+
+-- Insert another chunk AFTER the publication; the per-chunk hook covers it
+INSERT INTO ht_schema.test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+      schemaname       |     tablename     |           attnames           | rowfilter 
+-----------------------+-------------------+------------------------------+-----------
+ _timescaledb_internal | _hyper_7_49_chunk | {time,device_id,value,extra} | 
+ _timescaledb_internal | _hyper_7_50_chunk | {time,device_id,value,extra} | 
+ _timescaledb_internal | _hyper_7_51_chunk | {time,device_id,value,extra} | 
+ ht_schema             | regular_table     | {id}                         | 
+ ht_schema             | test_hypertable   | {time,device_id,value,extra} | 
+
+-- ALTER PUBLICATION ... ADD TABLES IN SCHEMA also backfills.
+CREATE SCHEMA ht_schema2;
+CREATE TABLE ht_schema2.test_hypertable2 (time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('ht_schema2.test_hypertable2', 'time', chunk_time_interval => interval '1 day');
+         create_hypertable         
+-----------------------------------
+ (8,ht_schema2,test_hypertable2,t)
+
+INSERT INTO ht_schema2.test_hypertable2 VALUES ('2024-02-01 00:00:00+00', 1, 1.0);
+INSERT INTO ht_schema2.test_hypertable2 VALUES ('2024-02-02 00:00:00+00', 2, 2.0);
+ALTER PUBLICATION test_pub_schema ADD TABLES IN SCHEMA ht_schema2;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+      schemaname       |     tablename     |           attnames           | rowfilter 
+-----------------------+-------------------+------------------------------+-----------
+ _timescaledb_internal | _hyper_7_49_chunk | {time,device_id,value,extra} | 
+ _timescaledb_internal | _hyper_7_50_chunk | {time,device_id,value,extra} | 
+ _timescaledb_internal | _hyper_7_51_chunk | {time,device_id,value,extra} | 
+ _timescaledb_internal | _hyper_8_52_chunk | {time,device_id,value}       | 
+ _timescaledb_internal | _hyper_8_53_chunk | {time,device_id,value}       | 
+ ht_schema             | regular_table     | {id}                         | 
+ ht_schema             | test_hypertable   | {time,device_id,value,extra} | 
+ ht_schema2            | test_hypertable2  | {time,device_id,value}       | 
+
+-- ALTER PUBLICATION ... SET TABLES IN SCHEMA replaces the schema set; chunks of
+-- the newly-set schema must be backfilled too.
+ALTER PUBLICATION test_pub_schema SET TABLES IN SCHEMA ht_schema2;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_schema' ORDER BY schemaname, tablename;
+      schemaname       |     tablename     |        attnames        | rowfilter 
+-----------------------+-------------------+------------------------+-----------
+ _timescaledb_internal | _hyper_8_52_chunk | {time,device_id,value} | 
+ _timescaledb_internal | _hyper_8_53_chunk | {time,device_id,value} | 
+ ht_schema2            | test_hypertable2  | {time,device_id,value} | 
+
+DROP PUBLICATION test_pub_schema CASCADE;
+DROP TABLE ht_schema.test_hypertable CASCADE;
+DROP TABLE ht_schema.regular_table CASCADE;
+DROP TABLE ht_schema2.test_hypertable2 CASCADE;
+DROP SCHEMA ht_schema;
+DROP SCHEMA ht_schema2;
+-- Test 6c: FOR ALL TABLES with pre-existing chunks (PG handles via puballtables)
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float);
 SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
       create_hypertable       
 ------------------------------
- (7,public,test_hypertable,t)
+ (9,public,test_hypertable,t)
+
+-- Two pre-existing chunks
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0);
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0);
+CREATE PUBLICATION test_pub_all FOR ALL TABLES;
+-- Pre-existing chunks visible
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_all' AND (tablename = 'test_hypertable' OR tablename LIKE '_hyper%') ORDER BY schemaname, tablename;
+      schemaname       |     tablename     |        attnames        | rowfilter 
+-----------------------+-------------------+------------------------+-----------
+ _timescaledb_internal | _hyper_9_54_chunk | {time,device_id,value} | 
+ _timescaledb_internal | _hyper_9_55_chunk | {time,device_id,value} | 
+ public                | test_hypertable   | {time,device_id,value} | 
+
+-- New chunk after the publication
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0);
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_all' AND (tablename = 'test_hypertable' OR tablename LIKE '_hyper%') ORDER BY schemaname, tablename;
+      schemaname       |     tablename     |        attnames        | rowfilter 
+-----------------------+-------------------+------------------------+-----------
+ _timescaledb_internal | _hyper_9_54_chunk | {time,device_id,value} | 
+ _timescaledb_internal | _hyper_9_55_chunk | {time,device_id,value} | 
+ _timescaledb_internal | _hyper_9_56_chunk | {time,device_id,value} | 
+ public                | test_hypertable   | {time,device_id,value} | 
+
+DROP PUBLICATION test_pub_all CASCADE;
+DROP TABLE test_hypertable CASCADE;
+-- Test 7: Edge case - Hypertable not in any publication
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+       create_hypertable       
+-------------------------------
+ (10,public,test_hypertable,t)
 
 -- Insert to create 8 chunks without any publication
 INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
@@ -470,9 +574,9 @@ DROP TABLE test_hypertable CASCADE;
 -- Test 8: Edge case - Publication dropped before chunk creation
 CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
 SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
-      create_hypertable       
-------------------------------
- (8,public,test_hypertable,t)
+       create_hypertable       
+-------------------------------
+ (11,public,test_hypertable,t)
 
 -- Insert to create first chunk
 INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
@@ -480,10 +584,10 @@ INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
 CREATE PUBLICATION test_pub FOR TABLE test_hypertable;
 -- Verify (1 chunk in publication)
 SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub' ORDER BY schemaname, tablename;
-      schemaname       |     tablename     |           attnames           | rowfilter 
------------------------+-------------------+------------------------------+-----------
- _timescaledb_internal | _hyper_8_57_chunk | {time,device_id,value,extra} | 
- public                | test_hypertable   | {time,device_id,value,extra} | 
+      schemaname       |     tablename      |           attnames           | rowfilter 
+-----------------------+--------------------+------------------------------+-----------
+ _timescaledb_internal | _hyper_11_65_chunk | {time,device_id,value,extra} | 
+ public                | test_hypertable    | {time,device_id,value,extra} | 
 
 -- Drop the publication
 DROP PUBLICATION test_pub;
@@ -503,9 +607,9 @@ DROP TABLE test_hypertable CASCADE;
 -- Test 9: GUC control of chunk publication
 CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
 SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
-      create_hypertable       
-------------------------------
- (9,public,test_hypertable,t)
+       create_hypertable       
+-------------------------------
+ (12,public,test_hypertable,t)
 
 -- Insert to create first chunk
 INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
@@ -513,9 +617,9 @@ INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
 CREATE PUBLICATION test_pub_guc FOR TABLE test_hypertable;
 -- Verify initial state (1 chunk)
 SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pub_guc' ORDER BY schemaname, tablename;
-      schemaname       |     tablename     
------------------------+-------------------
- _timescaledb_internal | _hyper_9_60_chunk
+      schemaname       |     tablename      
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_12_68_chunk
  public                | test_hypertable
 
 -- Test Part 1: GUC enabled - chunks should be added to publication automatically
@@ -523,10 +627,10 @@ SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pu
 INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
 -- Verify (2 chunks in publication)
 SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pub_guc' ORDER BY schemaname, tablename;
-      schemaname       |     tablename     
------------------------+-------------------
- _timescaledb_internal | _hyper_9_60_chunk
- _timescaledb_internal | _hyper_9_61_chunk
+      schemaname       |     tablename      
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_12_68_chunk
+ _timescaledb_internal | _hyper_12_69_chunk
  public                | test_hypertable
 
 -- Test Part 2: Disable the GUC and create another chunk
@@ -535,19 +639,19 @@ SET timescaledb.enable_chunk_auto_publication = false;
 INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
 -- Verify (still 2 chunks in publication, chunk 3 should not be there)
 SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pub_guc' ORDER BY schemaname, tablename;
-      schemaname       |     tablename     
------------------------+-------------------
- _timescaledb_internal | _hyper_9_60_chunk
- _timescaledb_internal | _hyper_9_61_chunk
+      schemaname       |     tablename      
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_12_68_chunk
+ _timescaledb_internal | _hyper_12_69_chunk
  public                | test_hypertable
 
 -- Verify that chunk 3 exists but is not in the publication
 SELECT chunk_schema, chunk_name FROM timescaledb_information.chunks WHERE hypertable_name = 'test_hypertable';
-     chunk_schema      |    chunk_name     
------------------------+-------------------
- _timescaledb_internal | _hyper_9_60_chunk
- _timescaledb_internal | _hyper_9_61_chunk
- _timescaledb_internal | _hyper_9_62_chunk
+     chunk_schema      |     chunk_name     
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_12_68_chunk
+ _timescaledb_internal | _hyper_12_69_chunk
+ _timescaledb_internal | _hyper_12_70_chunk
 
 -- Test Part 3: Re-enable the GUC and create another chunk
 SET timescaledb.enable_chunk_auto_publication = true;
@@ -555,20 +659,20 @@ SET timescaledb.enable_chunk_auto_publication = true;
 INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
 -- Verify (3 chunks in publication: chunk 1, 2, and 4; chunk 3 still missing)
 SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pub_guc' ORDER BY schemaname, tablename;
-      schemaname       |     tablename     
------------------------+-------------------
- _timescaledb_internal | _hyper_9_60_chunk
- _timescaledb_internal | _hyper_9_61_chunk
- _timescaledb_internal | _hyper_9_63_chunk
+      schemaname       |     tablename      
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_12_68_chunk
+ _timescaledb_internal | _hyper_12_69_chunk
+ _timescaledb_internal | _hyper_12_71_chunk
  public                | test_hypertable
 
 SELECT chunk_schema, chunk_name FROM timescaledb_information.chunks WHERE hypertable_name = 'test_hypertable';
-     chunk_schema      |    chunk_name     
------------------------+-------------------
- _timescaledb_internal | _hyper_9_60_chunk
- _timescaledb_internal | _hyper_9_61_chunk
- _timescaledb_internal | _hyper_9_62_chunk
- _timescaledb_internal | _hyper_9_63_chunk
+     chunk_schema      |     chunk_name     
+-----------------------+--------------------
+ _timescaledb_internal | _hyper_12_68_chunk
+ _timescaledb_internal | _hyper_12_69_chunk
+ _timescaledb_internal | _hyper_12_70_chunk
+ _timescaledb_internal | _hyper_12_71_chunk
 
 -- Cleanup
 DROP PUBLICATION test_pub_guc CASCADE;

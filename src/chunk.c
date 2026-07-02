@@ -1059,15 +1059,53 @@ chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 static void
 chunk_add_to_publications(const Chunk *chunk)
 {
-	List *puboids;
+	Oid ht_nspid = get_rel_namespace(chunk->hypertable_relid);
+	List *puboids = list_concat_unique_oid(GetRelationPublications(chunk->hypertable_relid),
+										   GetSchemaPublications(ht_nspid));
 	ListCell *lc;
-
-	puboids = GetRelationPublications(chunk->hypertable_relid);
 	foreach (lc, puboids)
 	{
-		Oid puboid = lfirst_oid(lc);
-		chunk_add_to_publication(puboid, chunk);
+		chunk_add_to_publication(lfirst_oid(lc), chunk);
 	}
+}
+
+/* Schema publications miss chunks (chunks live in _timescaledb_internal, not
+ * the hypertable's schema). FOR TABLE / FOR ALL TABLES are handled by PG. */
+void
+ts_chunk_publication_backfill(Oid pubid)
+{
+	if (!ts_guc_enable_chunk_auto_publication)
+	{
+		return;
+	}
+
+	Cache *hcache = ts_hypertable_cache_pin();
+	ListCell *sc;
+	foreach (sc, GetPublicationSchemas(pubid))
+	{
+		ListCell *rc;
+		foreach (rc, GetSchemaPublicationRelations(lfirst_oid(sc), PUBLICATION_PART_ROOT))
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, lfirst_oid(rc), CACHE_FLAG_MISSING_OK);
+			if (ht == NULL)
+			{
+				continue;
+			}
+			ListCell *cc;
+			foreach (cc, ts_chunk_get_by_hypertable_id(ht->fd.id))
+			{
+				Chunk *chunk = lfirst(cc);
+				/* OSM chunks are foreign tables; publication_add_relation would fail. */
+				if (IS_OSM_CHUNK(chunk))
+				{
+					continue;
+				}
+				chunk_add_to_publication(pubid, chunk);
+			}
+		}
+	}
+	ts_cache_release(&hcache);
 }
 
 static Chunk *
