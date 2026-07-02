@@ -162,15 +162,7 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 
 	values[AttrNumberGetAttrOffset(Anum_hypertable_compression_state)] =
 		Int16GetDatum(fd->compression_state);
-	if (fd->compressed_hypertable_id == INVALID_HYPERTABLE_ID)
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
-	}
-	else
-	{
-		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
-			Int32GetDatum(fd->compressed_hypertable_id);
-	}
+	nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
 	values[AttrNumberGetAttrOffset(Anum_hypertable_status)] = Int32GetDatum(fd->status);
 
 	return heap_form_tuple(desc, values, nulls);
@@ -226,15 +218,7 @@ ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 	fd->compression_state =
 		DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_compression_state)]);
 
-	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)])
-	{
-		fd->compressed_hypertable_id = INVALID_HYPERTABLE_ID;
-	}
-	else
-	{
-		fd->compressed_hypertable_id = DatumGetInt32(
-			values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)]);
-	}
+	fd->compressed_hypertable_id = INVALID_HYPERTABLE_ID;
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_status)]);
 
 	if (should_free)
@@ -671,12 +655,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
 	bool isnull;
-	bool compressed_hypertable_id_isnull;
 	int hypertable_id = DatumGetInt32(slot_getattr(ti->slot, Anum_hypertable_id, &isnull));
-	int compressed_hypertable_id =
-		DatumGetInt32(slot_getattr(ti->slot,
-								   Anum_hypertable_compressed_hypertable_id,
-								   &compressed_hypertable_id_isnull));
 
 	ts_tablespace_delete(hypertable_id, NULL, InvalidOid);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
@@ -692,16 +671,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
-
-	if (!compressed_hypertable_id_isnull)
-	{
-		Hypertable *compressed_hypertable = ts_hypertable_get_by_id(compressed_hypertable_id);
-		/* The hypertable may have already been deleted by a cascade */
-		if (compressed_hypertable != NULL)
-		{
-			ts_hypertable_drop(compressed_hypertable, DROP_RESTRICT);
-		}
-	}
 
 	hypertable_drop_hook_type osm_htdrop_hook = ts_get_osm_hypertable_drop_hook();
 	/* Invoke the OSM callback if set */
@@ -2218,7 +2187,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
  * set compression state as enabled
  */
 bool
-ts_hypertable_set_compressed(Hypertable *ht, int32 compressed_hypertable_id)
+ts_hypertable_set_compressed(Hypertable *ht)
 {
 	FormData_hypertable form;
 	ItemPointerData tid;
@@ -2228,7 +2197,6 @@ ts_hypertable_set_compressed(Hypertable *ht, int32 compressed_hypertable_id)
 
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
 	form.compression_state = HypertableCompressionEnabled;
-	form.compressed_hypertable_id = compressed_hypertable_id;
 	hypertable_update_catalog_tuple(&tid, &form);
 	return true;
 }
@@ -2247,7 +2215,6 @@ ts_hypertable_unset_compressed(Hypertable *ht)
 
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
 	form.compression_state = HypertableCompressionOff;
-	form.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
 	hypertable_update_catalog_tuple(&tid, &form);
 	return true;
 }
@@ -2431,17 +2398,6 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	}
 
 	return max_value;
-}
-
-bool
-ts_hypertable_has_compression_table(const Hypertable *ht)
-{
-	if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
-	{
-		Assert(ht->fd.compression_state == HypertableCompressionEnabled);
-		return true;
-	}
-	return false;
 }
 
 /*
