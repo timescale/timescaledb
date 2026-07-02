@@ -271,7 +271,7 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
 SELECT compress_chunk(show_chunks('metrics_status'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_4_20_chunk
+ _timescaledb_internal._hyper_3_20_chunk
 
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
  chunk_status_text 
@@ -349,10 +349,10 @@ SET timescaledb.enable_direct_compress_copy = true;
 \set ON_ERROR_STOP 0
 -- CHECK violation should be reported
 COPY metrics_check FROM STDIN WITH (FORMAT CSV);
-ERROR:  new row for relation "_hyper_6_22_chunk" violates check constraint "metrics_check_value_check"
+ERROR:  new row for relation "_hyper_4_22_chunk" violates check constraint "metrics_check_value_check"
 -- NOT NULL violation should be reported
 COPY metrics_check FROM STDIN WITH (FORMAT CSV);
-ERROR:  null value in column "value" of relation "_hyper_6_23_chunk" violates not-null constraint
+ERROR:  null value in column "value" of relation "_hyper_4_23_chunk" violates not-null constraint
 \set ON_ERROR_STOP 1
 -- valid rows copy without error
 COPY metrics_check FROM STDIN WITH (FORMAT CSV);

@@ -648,7 +648,7 @@ SELECT * FROM create_hypertable('sample_table1', 'time',
 WARNING:  column type "character varying" used for "name" does not follow best practices
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
-             3 | public      | sample_table1 | t
+             2 | public      | sample_table1 | t
 
 SELECT * FROM enable_chunk_skipping('sample_table1', 'sensor_id');
  column_stats_id | enabled 
@@ -658,7 +658,7 @@ SELECT * FROM enable_chunk_skipping('sample_table1', 'sensor_id');
 SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
-  9 |             3 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  9 |             2 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
 
 \set start_date '2023-03-17 17:51:11.322998+05:30'
 -- insert into new chunks
@@ -666,8 +666,8 @@ INSERT INTO sample_table1 VALUES (:'start_date'::timestamptz, 12, 21, 33.123, 'n
 SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
-  9 |             3 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
- 10 |             3 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  9 |             2 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+ 10 |             2 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
 
 -- Check that ALTER TYPE for a column on which stats are enabled only works
 -- in a few sub types
@@ -681,7 +681,7 @@ ERROR:  data type "text" unsupported for statistics calculation
 SELECT * FROM disable_chunk_skipping('sample_table1', 'sensor_id');
  hypertable_id | column_name | disabled 
 ---------------+-------------+----------
-             3 | sensor_id   | t
+             2 | sensor_id   | t
 
 ALTER TABLE sample_table1 ALTER COLUMN sensor_id TYPE TEXT;
 -- Check that column mapping between hypertable and chunk doesn't break when
@@ -696,7 +696,7 @@ CREATE INDEX ON sample_table (temperature);
 SELECT create_hypertable('sample_table', 'time', chunk_time_interval=>'7 days'::interval);
      create_hypertable     
 ---------------------------
- (4,public,sample_table,t)
+ (3,public,sample_table,t)
 
 ALTER TABLE sample_table DROP COLUMN sensor_id;
 INSERT INTO sample_table VALUES
@@ -713,13 +713,13 @@ SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
 SELECT compress_chunk(:'CH_NAME');
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_4_5_chunk
+ _timescaledb_internal._hyper_3_5_chunk
 
 SELECT * FROM _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
- 11 |             4 |          | temperature | -9223372036854775808 | 9223372036854775807 | t
- 12 |             4 |        5 | temperature |                  366 |                 502 | t
+ 11 |             3 |          | temperature | -9223372036854775808 | 9223372036854775807 | t
+ 12 |             3 |        5 | temperature |                  366 |                 502 | t
 
 -- Check min/max ranges for partial chunks with segmentby columns get recalculated correctly by seementwise recompression
 CREATE TABLE chunk_skipping(time timestamptz,device text, updated_at timestamptz)
@@ -733,7 +733,7 @@ INSERT INTO chunk_skipping SELECT '2025-01-01', 'd1', '2025-01-01';
 SELECT compress_chunk(show_chunks('chunk_skipping'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_6_6_chunk
+ _timescaledb_internal._hyper_4_6_chunk
 
 SELECT * from chunk_skipping where updated_at < '2026-01-01';
              time             | device |          updated_at          
@@ -744,7 +744,7 @@ INSERT INTO chunk_skipping SELECT '2025-01-01', 'd2', '2026-01-01';
 SELECT compress_chunk(show_chunks('chunk_skipping'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_6_6_chunk
+ _timescaledb_internal._hyper_4_6_chunk
 
 SELECT * from chunk_skipping where updated_at < '2026-01-01';
              time             | device |          updated_at          
@@ -776,9 +776,9 @@ SELECT * FROM attno WHERE id = 1 AND start > '2025-02-02T11:53:28Z'::date ORDER 
 -- Test for wrong allocation size of chunk stats storage
 CREATE TABLE sensor_readings(measured_at timestamptz NOT NULL, temperature int, humidity int);
 SELECT create_hypertable('sensor_readings', 'measured_at');
-       create_hypertable       
--------------------------------
- (10,public,sensor_readings,t)
+      create_hypertable       
+------------------------------
+ (6,public,sensor_readings,t)
 
 SELECT enable_chunk_skipping('sensor_readings', 'temperature');
  enable_chunk_skipping 
@@ -796,7 +796,7 @@ SELECT * FROM create_hypertable('chunk_skip_bigint_max', 'ts',
                          chunk_time_interval => interval '1 day');
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
-            11 | public      | chunk_skip_bigint_max | t
+             7 | public      | chunk_skip_bigint_max | t
 
 SELECT * FROM enable_chunk_skipping('chunk_skip_bigint_max', 'ranged');
  column_stats_id | enabled 
@@ -807,10 +807,10 @@ ALTER TABLE chunk_skip_bigint_max SET (timescaledb.compress);
 INSERT INTO chunk_skip_bigint_max VALUES ('2025-01-01', 9223372036854775806); -- PG_INT64_MAX - 1
 INSERT INTO chunk_skip_bigint_max VALUES ('2025-01-02', 9223372036854775807); -- PG_INT64_MAX
 SELECT compress_chunk(c) FROM show_chunks('chunk_skip_bigint_max') c;
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_11_8_chunk
- _timescaledb_internal._hyper_11_9_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_7_8_chunk
+ _timescaledb_internal._hyper_7_9_chunk
 
 SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged = 9223372036854775807;
  count 

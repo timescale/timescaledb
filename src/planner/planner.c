@@ -461,24 +461,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 					/* This lookup will warm the cache with all hypertables in the query */
 					ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
 
-					if (ht)
-					{
-						/*
-						 * Hypertable expansion marking is done in the
-						 * get_relation_info_hook, which also handles
-						 * hypertables appearing after function	or view inlining.
-						 */
-
-						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-						{
-							int compr_htid = ht->fd.compressed_hypertable_id;
-
-							/* Also warm the cache with the compressed
-							 * companion hypertable */
-							ts_hypertable_cache_get_entry_by_id(hcache, compr_htid);
-						}
-					}
-					else
+					if (!ht)
 					{
 						/* To properly keep track of SELECT FROM ONLY <chunk> we
 						 * have to mark the rte here because postgres will set
@@ -1610,7 +1593,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * relation here has observable side effects (schema USAGE checks
 			 * fire before the parent's table-level ACL check).
 			 */
-			if (ts_license_is_apache() && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+			if (ts_license_is_apache() && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 			{
 				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
 
@@ -1640,7 +1623,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * in cases when these functions don't run, we have to do it here.
 			 */
 			const bool use_columnar_scan =
-				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht);
+				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
 			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE) &&
 											 !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht);
 			const bool is_child_chunk_in_update =
@@ -1826,7 +1809,7 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					 * - Compressed chunks need decompression for correct
 					 *   join evaluation of matched vs not-matched rows
 					 */
-					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht));
+					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 					if (!need_modify)
 					{
 						List *firstMergeActionList = linitial(mt->mergeActionLists);

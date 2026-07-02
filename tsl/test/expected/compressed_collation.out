@@ -71,7 +71,7 @@ create table collation_agg(time int, name text collate :"COLLATION");
 select create_hypertable('collation_agg', 'time', chunk_time_interval => 10);
      create_hypertable      
 ----------------------------
- (3,public,collation_agg,t)
+ (2,public,collation_agg,t)
 
 alter table collation_agg set (timescaledb.compress, timescaledb.compress_orderby = 'time');
 insert into collation_agg select x, case x % 3 when 0 then 'á' when 1 then 'b' else 'ç' end
@@ -99,7 +99,7 @@ create table collation_agg_c(time int, name text collate "C");
 select create_hypertable('collation_agg_c', 'time', chunk_time_interval => 10);
       create_hypertable       
 ------------------------------
- (5,public,collation_agg_c,t)
+ (3,public,collation_agg_c,t)
 
 alter table collation_agg_c set (timescaledb.compress, timescaledb.compress_orderby = 'time');
 insert into collation_agg_c select x, case x % 3 when 0 then 'á' when 1 then 'b' else 'ç' end
