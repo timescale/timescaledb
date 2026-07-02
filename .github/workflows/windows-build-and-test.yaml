@@ -124,6 +124,7 @@ jobs:
             # to ensure no conflicts with the new installation.
             Remove-Item "C:\Program Files\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item "C:\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item "HKLM:\SOFTWARE\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
         } else {
             Write-Host "No registered PostgreSQL installation found. Skipping uninstall step."
         }
