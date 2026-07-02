@@ -93,6 +93,7 @@ extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, 
 											 bool include_osm);
 extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
 extern Expr *ts_transform_time_bucket_comparison(Expr *);
+extern Expr *ts_transform_nested_time_bucket_comparison(Expr *);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);
