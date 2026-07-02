@@ -24,8 +24,8 @@ When done, generate a self-contained ~/llm-fuzzer-repro.sql that reproduces the
 error when the subsequent workflow step replays it against a fresh server. If no
 bug in the target class is reproducible, do not create the reproducer file.
 
-Do not describe a purported root cause or fix direction, and focus instead on
-reproducibility and how the bug manifests.
+In your final summary, describe how the bug manifests and how to reproduce it.
+Do not include root cause analysis or fix suggestions in the summary.
 
 Some details about the GitHub Actions event that triggered this workflow:
 what=${EVENT_WHAT}
