@@ -410,7 +410,7 @@ SELECT
 FROM
     _timescaledb_catalog.hypertable AS srcht
     JOIN _timescaledb_catalog.chunk AS srcch ON srcht.id = srcch.hypertable_id
-        AND srcht.compressed_hypertable_id IS NOT NULL
+        AND srcht.compression_state = 1
     LEFT JOIN _timescaledb_catalog.compression_chunk_size map ON srcch.id = map.chunk_id;
 
 GRANT SELECT ON _timescaledb_internal.compressed_chunk_stats TO PUBLIC;

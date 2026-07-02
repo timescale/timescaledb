@@ -338,7 +338,7 @@ jobs:
     name: Regression Linux i386 summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

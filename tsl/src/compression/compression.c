@@ -1140,8 +1140,6 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	CompressionSettings *settings =
 		ts_compression_settings_get_by_compress_relid(old_compressed_relid);
 	Chunk *src_chunk = ts_chunk_get_by_relid(settings->fd.relid, true);
-	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
-	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 
 	if (settings->fd.segmentby)
 	{
@@ -1202,8 +1200,7 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 
 	/* Create before drop. We must update settings first to point to the new chunk. */
 	rename_compressed_chunk_for_replacement(old_compressed_relid);
-	Oid new_compressed_relid =
-		create_compress_chunk(compress_ht, src_chunk, InvalidOid, false, settings);
+	Oid new_compressed_relid = create_compress_chunk(src_chunk, InvalidOid, false, settings);
 
 	/* Initialize the new bulk writer and compressor against the new compressed relation */
 	Relation out_rel = table_open(new_compressed_relid, RowExclusiveLock);
