@@ -66,6 +66,32 @@
 #error "Unsupported PostgreSQL version"
 #endif
 
+/*
+ * PG19 reworked jsonb construction: pushJsonbValue() now takes a JsonbInState *
+ * and returns void, leaving the completed value in state->result (populated only
+ * when the outermost container is closed). Older versions took a JsonbParseState **
+ * and returned the completed value directly.
+ *
+ * https://github.com/postgres/postgres/commit/0986e95161
+ */
+#if PG19_LT
+typedef struct JsonbInState
+{
+	JsonbParseState *parseState;
+	JsonbValue *result;
+} JsonbInState;
+#endif
+
+static inline void
+pushJsonbValueCompat(JsonbInState *state, JsonbIteratorToken seq, JsonbValue *jbval)
+{
+#if PG19_GE
+	pushJsonbValue(state, seq, jbval);
+#else
+	state->result = pushJsonbValue(&state->parseState, seq, jbval);
+#endif
+}
+
 #if ((PG_VERSION_NUM >= 150009 && PG_VERSION_NUM < 160000) ||                                      \
 	 (PG_VERSION_NUM >= 160005 && PG_VERSION_NUM < 170000) || (PG_VERSION_NUM >= 170001))
 /*

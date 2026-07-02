@@ -27,28 +27,28 @@ typedef struct BgwJobStatHistoryContext
 static Jsonb *
 build_job_info(BgwJob *job)
 {
-	JsonbParseState *parse_state = NULL;
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	JsonbInState parse_state = { 0 };
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 
 	/* all fields that is possible to change with `alter_job` API */
-	ts_jsonb_add_interval(parse_state, "schedule_interval", &job->fd.schedule_interval);
-	ts_jsonb_add_interval(parse_state, "max_runtime", &job->fd.max_runtime);
-	ts_jsonb_add_int32(parse_state, "max_retries", job->fd.max_retries);
-	ts_jsonb_add_interval(parse_state, "retry_period", &job->fd.retry_period);
-	ts_jsonb_add_str(parse_state, "proc_schema", NameStr(job->fd.proc_schema));
-	ts_jsonb_add_str(parse_state, "proc_name", NameStr(job->fd.proc_name));
-	ts_jsonb_add_str(parse_state, "owner", GetUserNameFromId(job->fd.owner, false));
-	ts_jsonb_add_bool(parse_state, "scheduled", job->fd.scheduled);
-	ts_jsonb_add_bool(parse_state, "fixed_schedule", job->fd.fixed_schedule);
+	ts_jsonb_add_interval(&parse_state, "schedule_interval", &job->fd.schedule_interval);
+	ts_jsonb_add_interval(&parse_state, "max_runtime", &job->fd.max_runtime);
+	ts_jsonb_add_int32(&parse_state, "max_retries", job->fd.max_retries);
+	ts_jsonb_add_interval(&parse_state, "retry_period", &job->fd.retry_period);
+	ts_jsonb_add_str(&parse_state, "proc_schema", NameStr(job->fd.proc_schema));
+	ts_jsonb_add_str(&parse_state, "proc_name", NameStr(job->fd.proc_name));
+	ts_jsonb_add_str(&parse_state, "owner", GetUserNameFromId(job->fd.owner, false));
+	ts_jsonb_add_bool(&parse_state, "scheduled", job->fd.scheduled);
+	ts_jsonb_add_bool(&parse_state, "fixed_schedule", job->fd.fixed_schedule);
 
 	if (job->fd.initial_start)
 	{
-		ts_jsonb_add_interval(parse_state, "initial_start", &job->fd.retry_period);
+		ts_jsonb_add_interval(&parse_state, "initial_start", &job->fd.retry_period);
 	}
 
 	if (job->fd.hypertable_id != INVALID_HYPERTABLE_ID)
 	{
-		ts_jsonb_add_int32(parse_state, "hypertable_id", job->fd.hypertable_id);
+		ts_jsonb_add_int32(&parse_state, "hypertable_id", job->fd.hypertable_id);
 	}
 
 	if (job->fd.config != NULL)
@@ -56,48 +56,50 @@ build_job_info(BgwJob *job)
 		/* config information jsonb*/
 		JsonbValue value = { 0 };
 		JsonbToJsonbValue(job->fd.config, &value);
-		ts_jsonb_add_value(parse_state, "config", &value);
+		ts_jsonb_add_value(&parse_state, "config", &value);
 	}
 
 	if (strlen(NameStr(job->fd.check_schema)) > 0)
 	{
-		ts_jsonb_add_str(parse_state, "check_schema", NameStr(job->fd.check_schema));
+		ts_jsonb_add_str(&parse_state, "check_schema", NameStr(job->fd.check_schema));
 	}
 
 	if (strlen(NameStr(job->fd.check_name)) > 0)
 	{
-		ts_jsonb_add_str(parse_state, "check_name", NameStr(job->fd.check_name));
+		ts_jsonb_add_str(&parse_state, "check_name", NameStr(job->fd.check_name));
 	}
 
 	if (job->fd.timezone != NULL)
 	{
-		ts_jsonb_add_str(parse_state, "timezone", text_to_cstring(job->fd.timezone));
+		ts_jsonb_add_str(&parse_state, "timezone", text_to_cstring(job->fd.timezone));
 	}
 
-	return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL));
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	return JsonbValueToJsonb(parse_state.result);
 }
 
 static Jsonb *
 ts_bgw_job_stat_history_build_data_info(BgwJobStatHistoryContext *context)
 {
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 	JsonbValue value = { 0 };
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 
 	Assert(context != NULL && context->job != NULL);
 
 	/* job information jsonb */
 	JsonbToJsonbValue(build_job_info(context->job), &value);
-	ts_jsonb_add_value(parse_state, "job", &value);
+	ts_jsonb_add_value(&parse_state, "job", &value);
 
 	if (context->edata != NULL)
 	{
 		/* error information jsonb */
 		JsonbToJsonbValue(context->edata, &value);
-		ts_jsonb_add_value(parse_state, "error_data", &value);
+		ts_jsonb_add_value(&parse_state, "error_data", &value);
 	}
 
-	return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL));
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	return JsonbValueToJsonb(parse_state.result);
 }
 
 static void

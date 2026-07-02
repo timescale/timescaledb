@@ -98,8 +98,7 @@ static void compression_settings_set_manually_for_alter(Hypertable *ht,
 														CompressionSettings *settings,
 														WithClauseResult *with_clause_options);
 static void create_default_composite_bloom(IndexInfo *index_info, Hypertable *ht,
-										   CompressionSettings *settings,
-										   JsonbParseState *parse_state,
+										   CompressionSettings *settings, JsonbInState *parse_state,
 										   TsBmsList *sparse_index_columns, bool *has_object);
 
 static char *
@@ -1838,7 +1837,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 
 static void
 create_default_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSettings *settings,
-							   JsonbParseState *parse_state, TsBmsList *sparse_index_columns,
+							   JsonbInState *parse_state, TsBmsList *sparse_index_columns,
 							   bool *has_object)
 {
 	int num_cols = index_info->ii_NumIndexKeyAttrs;
@@ -1954,7 +1953,7 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 {
 	bool has_object = false;
 	TsBmsList sparse_index_columns = ts_bmslist_create();
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
 	/*
 	 * Sparse indexes are only created automatically if they are not set in compression settings
@@ -1973,7 +1972,7 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 	ListCell *lc;
 	List *index_oids = RelationGetIndexList(rel);
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_ARRAY, NULL);
 	foreach (lc, index_oids)
 	{
 		Oid index_oid = lfirst_oid(lc);
@@ -2005,7 +2004,7 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 			create_default_composite_bloom(index_info,
 										   ht,
 										   settings,
-										   parse_state,
+										   &parse_state,
 										   &sparse_index_columns,
 										   &has_object);
 		}
@@ -2062,14 +2061,15 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 			config->source = _SparseIndexSourceEnumDefault;
 
 			/* convert to json object */
-			ts_convert_sparse_index_config_to_jsonb(parse_state, config);
+			ts_convert_sparse_index_config_to_jsonb(&parse_state, config);
 			sparse_index_columns = ts_bmslist_add_member(sparse_index_columns, &attno, 1);
 			has_object = true;
 		}
 	}
 	table_close(rel, AccessShareLock);
 	ts_bmslist_free(sparse_index_columns);
-	return has_object ? JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL)) : NULL;
+	pushJsonbValueCompat(&parse_state, WJB_END_ARRAY, NULL);
+	return has_object ? JsonbValueToJsonb(parse_state.result) : NULL;
 }
 
 void
