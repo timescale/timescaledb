@@ -130,6 +130,26 @@ transform_time_op_const_interval(OpExpr *op)
 	return (Expr *) op;
 }
 
+static inline bool
+is_negative_num_const(Const *c)
+{
+	Assert(c->consttype == INT2OID || c->consttype == INT4OID || c->consttype == INT8OID);
+	double res = 0.0;
+	switch (c->consttype)
+	{
+		case INT2OID:
+			res = (double) DatumGetInt16(c->constvalue);
+			break;
+		case INT4OID:
+			res = (double) DatumGetInt32(c->constvalue);
+			break;
+		case INT8OID:
+			res = (double) DatumGetInt64(c->constvalue);
+			break;
+	}
+	return (res < 0.0);
+}
+
 static inline Expr *
 transform_int_op_const(OpExpr *op)
 {
@@ -144,8 +164,10 @@ transform_int_op_const(OpExpr *op)
 	if (list_length(op->args) == 2 &&
 		(IsA(lsecond(op->args), Const) || IsA(linitial(op->args), Const)))
 	{
-		Oid left = exprType((Node *) linitial(op->args));
-		Oid right = exprType((Node *) lsecond(op->args));
+		Node *left_arg = (Node *) linitial(op->args);
+		Node *right_arg = (Node *) lsecond(op->args);
+		Oid left = exprType(left_arg);
+		Oid right = exprType(right_arg);
 
 		if ((left == INT8OID && right == INT8OID) || (left == INT4OID && right == INT4OID) ||
 			(left == INT2OID && right == INT2OID))
@@ -156,13 +178,17 @@ transform_int_op_const(OpExpr *op)
 			{
 				switch (name[0])
 				{
-					case '-':
 					case '+':
 					case '*':
 						/* commutative cases */
-						if (IsA(linitial(op->args), Const))
+						if (IsA(left_arg, Const))
 						{
-							Expr *nonconst = ts_sort_transform_expr((Expr *) lsecond(op->args));
+							/* (-1 * v) changes sort direction */
+							if (name[0] == '*' && is_negative_num_const(castNode(Const, left_arg)))
+							{
+								break;
+							}
+							Expr *nonconst = ts_sort_transform_expr((Expr *) right_arg);
 
 							if (IsA(nonconst, Var))
 							{
@@ -171,7 +197,12 @@ transform_int_op_const(OpExpr *op)
 						}
 						else
 						{
-							Expr *nonconst = ts_sort_transform_expr((Expr *) linitial(op->args));
+							/* (v * -1) changes sort direction */
+							if (name[0] == '*' && is_negative_num_const(castNode(Const, right_arg)))
+							{
+								break;
+							}
+							Expr *nonconst = ts_sort_transform_expr((Expr *) left_arg);
 
 							if (IsA(nonconst, Var))
 							{
@@ -179,11 +210,17 @@ transform_int_op_const(OpExpr *op)
 							}
 						}
 						break;
+					case '-':
 					case '/':
 						/* only if second arg is const */
-						if (IsA(lsecond(op->args), Const))
+						if (IsA(right_arg, Const))
 						{
-							Expr *nonconst = ts_sort_transform_expr((Expr *) linitial(op->args));
+							/* (v / -1) changes sort direction */
+							if (name[0] == '/' && is_negative_num_const(castNode(Const, right_arg)))
+							{
+								break;
+							}
+							Expr *nonconst = ts_sort_transform_expr((Expr *) left_arg);
 
 							if (IsA(nonconst, Var))
 							{
