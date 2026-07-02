@@ -347,14 +347,14 @@ create table splitme_int (time int not null, device int, temp float);
 select create_hypertable('splitme_int', 'time', chunk_time_interval => 10::int);
     create_hypertable     
 --------------------------
- (3,public,splitme_int,t)
+ (2,public,splitme_int,t)
 
 insert into splitme_int values (1, 1, 1.0), (8, 8, 8.0);
 select ch as int_chunk from show_chunks('splitme_int') ch order by ch limit 1 \gset
 select * from chunk_slices where hypertable_name = 'splitme_int';
  hypertable_name |    chunk_name    |         range_start          |             range_end              
 -----------------+------------------+------------------------------+------------------------------------
- splitme_int     | _hyper_3_4_chunk | Wed Dec 31 16:00:00 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+ splitme_int     | _hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
 
 \set ON_ERROR_STOP 0
 call split_chunk(:'int_chunk', split_at => 0);
@@ -366,8 +366,8 @@ call split_chunk(:'int_chunk', split_at => '5');
 select * from chunk_slices where hypertable_name = 'splitme_int';
  hypertable_name |    chunk_name    |             range_start             |              range_end              
 -----------------+------------------+-------------------------------------+-------------------------------------
- splitme_int     | _hyper_3_4_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000005 1969 PST
- splitme_int     | _hyper_3_5_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+ splitme_int     | _hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000005 1969 PST
+ splitme_int     | _hyper_2_5_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
 
 select * from :int_chunk order by time;
  time | device | temp 
@@ -385,9 +385,9 @@ call split_chunk(:'int_chunk', split_at => 3);
 select * from chunk_slices where hypertable_name = 'splitme_int';
  hypertable_name |    chunk_name    |             range_start             |              range_end              
 -----------------+------------------+-------------------------------------+-------------------------------------
- splitme_int     | _hyper_3_4_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000003 1969 PST
- splitme_int     | _hyper_3_6_chunk | Wed Dec 31 16:00:00.000003 1969 PST | Wed Dec 31 16:00:00.000005 1969 PST
- splitme_int     | _hyper_3_5_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+ splitme_int     | _hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000003 1969 PST
+ splitme_int     | _hyper_2_6_chunk | Wed Dec 31 16:00:00.000003 1969 PST | Wed Dec 31 16:00:00.000005 1969 PST
+ splitme_int     | _hyper_2_5_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
 
 select * from :int_chunk order by time;
  time | device | temp 
@@ -396,7 +396,7 @@ select * from :int_chunk order by time;
 
 select ch as int_chunk from show_chunks('splitme_int') ch order by ch limit 1 offset 2 \gset
 \echo :int_chunk
-_timescaledb_internal._hyper_3_6_chunk
+_timescaledb_internal._hyper_2_6_chunk
 select * from :int_chunk order by time;
  time | device | temp 
 ------+--------+------
@@ -470,7 +470,7 @@ create table splitme_md (time timestamptz not null, device int, location int, te
 select create_hypertable('splitme_md', 'time', 'device', 2, chunk_time_interval => interval '1 week');
     create_hypertable    
 -------------------------
- (4,public,splitme_md,t)
+ (3,public,splitme_md,t)
 
 insert into splitme_md values
        ('2024-01-03 22:00', 1, 1, 1.0),
@@ -479,8 +479,8 @@ select ch as chunk_md from show_chunks('splitme_md') ch limit 1 \gset
 select * from chunk_slices where hypertable_name = 'splitme_md';
  hypertable_name |    chunk_name    |         range_start          |              range_end              
 -----------------+------------------+------------------------------+-------------------------------------
- splitme_md      | _hyper_4_9_chunk | -infinity                    | Wed Dec 31 16:17:53.741823 1969 PST
- splitme_md      | _hyper_4_9_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+ splitme_md      | _hyper_3_9_chunk | -infinity                    | Wed Dec 31 16:17:53.741823 1969 PST
+ splitme_md      | _hyper_3_9_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
 
 \set ON_ERROR_STOP 0
 -- Currently can't split multi-dimensional chunks due to bug/limitation in subspace store.
@@ -1084,7 +1084,7 @@ create table time_part_func (time float8, temp float);
 select create_hypertable('time_part_func', 'time', time_partitioning_func => :'time_funcid', create_default_indexes => false, chunk_time_interval => interval '1 month');
       create_hypertable      
 -----------------------------
- (5,public,time_part_func,t)
+ (4,public,time_part_func,t)
 
 alter table time_part_func set (tsdb.orderby = 'time');
 insert into time_part_func values (1734714800, 10.0), (1736220400, 11.0), (1736420400, 12.0);
@@ -1108,8 +1108,8 @@ call convert_to_columnstore(:'chunk2');
 select * from show_chunks('time_part_func');
                show_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_5_19_chunk
- _timescaledb_internal._hyper_5_20_chunk
+ _timescaledb_internal._hyper_4_19_chunk
+ _timescaledb_internal._hyper_4_20_chunk
 
 select to_timestamp(1736320400::float8);
          to_timestamp         
@@ -1142,7 +1142,7 @@ CREATE TABLE pub_split_test(time timestamptz not null, device int, temp float);
 SELECT create_hypertable('pub_split_test', 'time', chunk_time_interval => interval '1 month');
       create_hypertable      
 -----------------------------
- (7,public,pub_split_test,t)
+ (5,public,pub_split_test,t)
 
 -- Create publication
 CREATE PUBLICATION test_split_pub FOR TABLE pub_split_test;
@@ -1157,7 +1157,7 @@ WHERE pubname = 'test_split_pub'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename     
 -----------------------+-------------------
- _timescaledb_internal | _hyper_7_22_chunk
+ _timescaledb_internal | _hyper_5_22_chunk
  public                | pub_split_test
 
 SELECT show_chunks('pub_split_test') chunk_to_split \gset
@@ -1169,8 +1169,8 @@ WHERE pubname = 'test_split_pub'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename     
 -----------------------+-------------------
- _timescaledb_internal | _hyper_7_22_chunk
- _timescaledb_internal | _hyper_7_23_chunk
+ _timescaledb_internal | _hyper_5_22_chunk
+ _timescaledb_internal | _hyper_5_23_chunk
  public                | pub_split_test
 
 -- Cleanup

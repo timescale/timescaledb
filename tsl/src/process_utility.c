@@ -30,16 +30,14 @@ tsl_process_altertable_cmd(Hypertable *ht, const AlterTableCmd *cmd)
 	switch (cmd->subtype)
 	{
 		case AT_AddColumn:
-			if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ||
-				TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+			if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 			{
 				ColumnDef *orig_coldef = castNode(ColumnDef, cmd->def);
 				tsl_process_compress_table_add_column(ht, orig_coldef);
 			}
 			break;
 		case AT_DropColumn:
-			if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ||
-				TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+			if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 			{
 				tsl_process_compress_table_drop_column(ht, cmd->name);
 			}
@@ -69,8 +67,7 @@ tsl_process_rename_cmd(Oid relid, Cache *hcache, const RenameStmt *stmt)
 			}
 		}
 
-		if (ht &&
-			(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht)))
+		if (ht && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		{
 			tsl_process_compress_table_rename_column(ht, stmt);
 		}

@@ -30,8 +30,6 @@ enum
 	HypertableInternalCompressionTable = 2,
 };
 
-#define TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ts_hypertable_has_compression_table(ht)
-
 #define TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht)                                                  \
 	((ht)->fd.compression_state == HypertableCompressionEnabled)
 
@@ -131,15 +129,13 @@ extern TSDLLEXPORT bool ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockm
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
 extern bool ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno);
 extern bool ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name);
-extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
-													 int32 compressed_hypertable_id);
+extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
 															int64 compress_interval);
 extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
-extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_has_continuous_aggregates(int32 hypertable_id);
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
 

@@ -123,7 +123,7 @@ SELECT ht.schema_name AS hypertable_schema,
   cagg.user_view_name AS view_name,
   viewinfo.viewowner AS view_owner,
   cagg.materialized_only,
-  CASE WHEN mat_ht.compressed_hypertable_id IS NOT NULL
+  CASE WHEN mat_ht.compression_state = 1
        THEN TRUE
        ELSE FALSE
   END AS compression_enabled,
@@ -148,7 +148,7 @@ FROM _timescaledb_catalog.continuous_agg cagg,
     AND C.relname = cagg.direct_view_name
     AND N.nspname = cagg.direct_view_schema) directview,
   LATERAL (
-    SELECT schema_name, table_name, compressed_hypertable_id
+    SELECT schema_name, table_name, compression_state
     FROM _timescaledb_catalog.hypertable
     WHERE cagg.mat_hypertable_id = id) mat_ht
 WHERE cagg.raw_hypertable_id = ht.id;
@@ -269,7 +269,6 @@ SELECT
   NULL::bool AS orderby_nullsfirst
 FROM _timescaledb_catalog.hypertable ht
 INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.segmentby IS NOT NULL
-WHERE compressed_hypertable_id IS NOT NULL
 UNION ALL
 SELECT
 	schema_name AS hypertable_schema,
@@ -281,7 +280,6 @@ SELECT
   unnest(cs.orderby_nullsfirst) AS orderby_nullsfirst
 FROM _timescaledb_catalog.hypertable ht
 INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.orderby IS NOT NULL
-WHERE compressed_hypertable_id IS NOT NULL
 ORDER BY hypertable_name,
   segmentby_column_index,
   orderby_column_index;

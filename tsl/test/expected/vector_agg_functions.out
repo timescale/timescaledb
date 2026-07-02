@@ -123,7 +123,7 @@ create table edges(t int, s int, ss int, f1 int);
 select create_hypertable('edges', 't', chunk_time_interval => 100000);
  create_hypertable  
 --------------------
- (3,public,edges,t)
+ (2,public,edges,t)
 
 alter table edges set (timescaledb.compress, timescaledb.compress_segmentby='s');
 insert into edges select
