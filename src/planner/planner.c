@@ -1181,104 +1181,36 @@ rte_should_expand(const RangeTblEntry *rte)
 }
 
 static void
-expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+expand_hypertable(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
-	bool set_pathlist_for_current_rel = false;
-	double total_pages;
-	bool reenabled_inheritance = false;
+	Assert(rte_should_expand(rte));
+	Assert(rti == rel->relid);
 
-	for (int i = 1; i < root->simple_rel_array_size; i++)
+	Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_NOCREATE);
+	Assert(ht != NULL);
+	ts_plan_expand_hypertable_chunks(ht, root, rel, rte->ctename != TS_FK_EXPAND);
+
+	rte->inh = true;
+
+	/*
+	 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
+	 * be a hypertable here if it was pulled up from a subquery
+	 * as happens with UNION ALL for example.
+	 */
+	if (rel->reloptkind == RELOPT_BASEREL || rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
-		RangeTblEntry *in_rte = root->simple_rte_array[i];
-
-#if PG18_GE
-		/* RTE could be removed due to self-join
-		 * elimination optimization.
-		 *
-		 * https://github.com/postgres/postgres/commit/5f6f95
-		 */
-		if (!in_rte)
-		{
-			continue;
-		}
-#endif
-
-		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
-		{
-			RelOptInfo *in_rel = root->simple_rel_array[i];
-			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
-
-			Assert(ht != NULL && in_rel != NULL);
-			ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
-
-			in_rte->inh = true;
-			reenabled_inheritance = true;
-			/* Redo set_rel_consider_parallel, as results of the call may no longer be valid
-			 * here (due to adding more tables to the set of tables under consideration here).
-			 * This is especially true if dealing with foreign data wrappers. */
-
-			/*
-			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
-			 * be a hypertable here if it was pulled up from a subquery
-			 * as happens with UNION ALL for example.
-			 */
-			if (in_rel->reloptkind == RELOPT_BASEREL ||
-				in_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
-			{
-				Assert(in_rte->relkind == RELKIND_RELATION);
-				ts_set_rel_size(root, in_rel, i, in_rte);
-			}
-
-			/* if we're activating inheritance during a hypertable's pathlist
-			 * creation then we're past the point at which postgres will add
-			 * paths for the children, and we have to do it ourselves. We delay
-			 * the actual setting of the pathlists until after this loop,
-			 * because set_append_rel_pathlist will eventually call this hook again.
-			 */
-			if (in_rte == rte)
-			{
-				Assert(rti == (Index) i);
-				set_pathlist_for_current_rel = true;
-			}
-		}
+		Assert(rte->relkind == RELKIND_RELATION);
+		ts_set_rel_size(root, rel, rti, rte);
 	}
 
-	if (!reenabled_inheritance)
-	{
-		return;
-	}
-
-	total_pages = 0;
-	for (int i = 1; i < root->simple_rel_array_size; i++)
-	{
-		RelOptInfo *brel = root->simple_rel_array[i];
-
-		if (brel == NULL)
-		{
-			continue;
-		}
-
-		Assert(brel->relid == (Index) i); /* sanity check on array */
-
-		if (IS_DUMMY_REL(brel))
-		{
-			continue;
-		}
-
-		if (IS_SIMPLE_REL(brel))
-		{
-			total_pages += (double) brel->pages;
-		}
-	}
-	root->total_table_pages = total_pages;
-
-	if (set_pathlist_for_current_rel)
-	{
-		rel->pathlist = NIL;
-		rel->partial_pathlist = NIL;
-
-		ts_set_append_rel_pathlist(root, rel, rti, rte);
-	}
+	/*
+	 * We are past the point at which postgres will add paths for the children,
+	 * so we have to do it ourselves. set_append_rel_pathlist will eventually
+	 * call this hook again for each child chunk.
+	 */
+	rel->pathlist = NIL;
+	rel->partial_pathlist = NIL;
+	ts_set_append_rel_pathlist(root, rel, rti, rte);
 }
 
 static void
@@ -1461,23 +1393,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	reltype = ts_classify_relation(root, rel, &ht);
 
-	/* Check for unexpanded hypertable */
-	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
-	{
-		expand_hypertables(root, rel, rti, rte);
-	}
-
-	if (ts_guc_enable_optimizations)
-	{
-		ts_planner_constraint_cleanup(root, rel);
-	}
-
-	/* Call other extensions. Do it after table expansion. */
-	if (prev_set_rel_pathlist_hook != NULL)
-	{
-		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
-	}
-
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
@@ -1507,23 +1422,38 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		case TS_REL_HYPERTABLE:
 			if (!rte->inh)
 			{
-				/*
-				 * This happens with SELECT FROM ONLY hypertable or with an
-				 * empty hypertable. Mark it as dummy, otherwise we'll get a
-				 * scan on hypertable relation itself. It's always empty, so
-				 * this scan is useless and looks misleading.
-				 */
-				mark_dummy_rel(rel);
-			}
-			else
-			{
-				apply_optimizations(root, reltype, rel, rte, ht);
+				if (ts_rte_is_marked_for_expansion(rte))
+				{
+					expand_hypertable(root, rel, rti, rte);
+					apply_optimizations(root, reltype, rel, rte, ht);
+				}
+				else
+				{
+					/*
+					 * This happens with SELECT FROM ONLY hypertable or with an
+					 * empty hypertable. Mark it as dummy, otherwise we'll get a
+					 * scan on hypertable relation itself. It's always empty, so
+					 * this scan is useless and looks misleading.
+					 */
+					mark_dummy_rel(rel);
+				}
 			}
 			break;
 
 		default:
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
+	}
+
+	if (ts_guc_enable_optimizations)
+	{
+		ts_planner_constraint_cleanup(root, rel);
+	}
+
+	/* Call other extensions. Do it after table expansion. */
+	if (prev_set_rel_pathlist_hook != NULL)
+	{
+		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
 	}
 }
 
