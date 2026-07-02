@@ -116,12 +116,12 @@ step DTc: COMMIT;
 starting permutation: LHTb LockHypertableTuple Cb UR1b Cenable UR1u UnlockHypertableTuple Ccommit UR1c
 step LHTb: BEGIN;
 step LockHypertableTuple: 
-  SELECT table_name, compression_state, compressed_hypertable_id, status
+  SELECT table_name, compression_state, status
   FROM _timescaledb_catalog.hypertable WHERE table_name = 'osm_test' FOR UPDATE;
 
-table_name|compression_state|compressed_hypertable_id|status
-----------+-----------------+------------------------+------
-osm_test  |                0|                        |     3
+table_name|compression_state|status
+----------+-----------------+------
+osm_test  |                0|     3
 
 step Cb: BEGIN;
 step UR1b: BEGIN;
@@ -168,12 +168,12 @@ step LHTb: BEGIN;
 step Utest2b: BEGIN;
 step UR1b: BEGIN;
 step LockHypertableTuple: 
-  SELECT table_name, compression_state, compressed_hypertable_id, status
+  SELECT table_name, compression_state, status
   FROM _timescaledb_catalog.hypertable WHERE table_name = 'osm_test' FOR UPDATE;
 
-table_name|compression_state|compressed_hypertable_id|status
-----------+-----------------+------------------------+------
-osm_test  |                0|                        |     3
+table_name|compression_state|status
+----------+-----------------+------
+osm_test  |                0|     3
 
 step UR1u: SELECT _timescaledb_functions.hypertable_osm_range_update('osm_test', 0, 10); <waiting ...>
 step Utest2u: SELECT _timescaledb_functions.hypertable_osm_range_update('osm_test2', 0, 20);

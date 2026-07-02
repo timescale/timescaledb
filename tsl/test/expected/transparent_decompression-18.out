@@ -154,14 +154,6 @@ where n in (1, 2, 3, 7, 8)
  _timescaledb_internal._hyper_2_10_chunk
  _timescaledb_internal._hyper_2_11_chunk
 
-SELECT ht.schema_name || '.' || ht.table_name AS "METRICS_COMPRESSED"
-FROM _timescaledb_catalog.hypertable ht
-    INNER JOIN _timescaledb_catalog.hypertable ht2 ON ht.id = ht2.compressed_hypertable_id
-        AND ht2.table_name = 'metrics' \gset
-SELECT ht.schema_name || '.' || ht.table_name AS "METRICS_SPACE_COMPRESSED"
-FROM _timescaledb_catalog.hypertable ht
-    INNER JOIN _timescaledb_catalog.hypertable ht2 ON ht.id = ht2.compressed_hypertable_id
-        AND ht2.table_name = 'metrics_space' \gset
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- Index created using query saved in variable used because there was
 -- no standard way to create an index on a compressed table.
