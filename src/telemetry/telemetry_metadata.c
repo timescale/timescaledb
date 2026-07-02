@@ -21,7 +21,7 @@
  * add all entries from _timescaledb_catalog.metadata
  */
 void
-ts_telemetry_metadata_add_values(JsonbParseState *state)
+ts_telemetry_metadata_add_values(JsonbInState *state)
 {
 	Datum key, value;
 	bool key_isnull, value_isnull, include_entry;

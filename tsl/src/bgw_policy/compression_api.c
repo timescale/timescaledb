@@ -292,10 +292,10 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	namestrcpy(&check_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(&parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
 	validate_compress_after_type(dim, partitioning_type, compress_after_type);
 
 	switch (compress_after_type)
@@ -303,29 +303,29 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		case INTERVALOID:
 			if (created_before)
 			{
-				ts_jsonb_add_interval(parse_state,
+				ts_jsonb_add_interval(&parse_state,
 									  POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE,
 									  created_before);
 			}
 			else
 			{
-				ts_jsonb_add_interval(parse_state,
+				ts_jsonb_add_interval(&parse_state,
 									  POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 									  DatumGetIntervalP(compress_after_datum));
 			}
 			break;
 		case INT2OID:
-			ts_jsonb_add_int64(parse_state,
+			ts_jsonb_add_int64(&parse_state,
 							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt16(compress_after_datum));
 			break;
 		case INT4OID:
-			ts_jsonb_add_int64(parse_state,
+			ts_jsonb_add_int64(&parse_state,
 							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt32(compress_after_datum));
 			break;
 		case INT8OID:
-			ts_jsonb_add_int64(parse_state,
+			ts_jsonb_add_int64(&parse_state,
 							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt64(compress_after_datum));
 			break;
@@ -337,7 +337,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 							format_type_be(compress_after_type))));
 	}
 
-	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	JsonbValue *result = parse_state.result;
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,

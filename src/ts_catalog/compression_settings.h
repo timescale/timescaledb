@@ -9,6 +9,7 @@
 #include <catalog/pg_type.h>
 
 #include "bmslist_utils.h"
+#include "jsonb_utils.h"
 #include "ts_catalog/catalog.h"
 
 typedef struct CompressionSettings
@@ -166,7 +167,7 @@ TSDLLEXPORT bool ts_sparse_index_is_orderby_source(SparseIndexSettingsObject *ob
 TSDLLEXPORT int ts_compression_settings_update(CompressionSettings *settings);
 TSDLLEXPORT void ts_compression_settings_rename_column_cascade(Oid parent_relid, const char *old,
 															   const char *new);
-TSDLLEXPORT void ts_convert_sparse_index_config_to_jsonb(JsonbParseState *parse_state,
+TSDLLEXPORT void ts_convert_sparse_index_config_to_jsonb(JsonbInState *parse_state,
 														 SparseIndexConfigBase *config);
 
 TSDLLEXPORT
