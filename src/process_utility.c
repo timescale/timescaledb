@@ -2976,6 +2976,7 @@ typedef struct ChunkConstraintInfo
 static void
 validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 {
+	/* LOOK HERE */
 	if ((stmt->primary || stmt->unique) && ts_chunk_is_compressed(chunk))
 	{
 		StringInfoData command;

@@ -21,35 +21,28 @@ set -eu
 PGOPTIONS='-c client_min_messages=error'
 export PGOPTIONS
 
+psql -q <<<'alter :"DBNAME" set client_min_messages to error'
+psql -q <<<'alter :"DBNAME" set timescaledb.enable_optimizations to off'
 
-printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
-cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
-
-psql -q -c "create database repro_off"
-psql -q -c "alter database repro_off set client_min_messages to error"
-export PGDATABASE=repro_off
-psql -q -c "create extension timescaledb"
-psql -q -c "alter database repro_off set timescaledb.enable_optimizations to off"
-
-if ! psql -q -f restricted-repro.sql > result_noopt.txt
+if ! psql -q -f "@1" > result_noopt.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_seqscan to off;" -f restricted-repro.sql > result_noopt_noseq.txt
+if ! psql -q -c "set enable_seqscan to off;" -f "@1" > result_noopt_noseq.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_indexscan to off;" -f restricted-repro.sql > result_noopt_noindex.txt
+if ! psql -q -c "set enable_indexscan to off;" -f "@1" > result_noopt_noindex.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_hashagg to off;" -f restricted-repro.sql > result_noopt_nohashagg.txt
+if ! psql -q -c "set enable_hashagg to off;" -f "@1" > result_noopt_nohashagg.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
@@ -61,13 +54,13 @@ if ! psql -q -c "
         set parallel_tuple_cost = 0;
         set min_parallel_table_scan_size = 0;
         set min_parallel_index_scan_size = 0;
-    " -f restricted-repro.sql > result_noopt_para.txt
+    " -f "@1" > result_noopt_para.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set work_mem = '4GB'" -f restricted-repro.sql > result_noopt_mem.txt
+if ! psql -q -c "set work_mem = '4GB'" -f "@1" > result_noopt_mem.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
@@ -83,13 +76,9 @@ then
     exit 0
 fi
 
-psql -q -c "create database repro_on"
-psql -q -c "alter database repro_on set client_min_messages to error"
-export PGDATABASE=repro_on
-psql -q -c "create extension timescaledb"
-psql -q -c "alter database repro_on set timescaledb.enable_optimizations to on"
+psql -q <<<'alter :"DBNAME" set timescaledb.enable_optimizations to on'
 
-if ! psql -q -f restricted-repro.sql > result_opt.txt
+if ! psql -q -f "@1" > result_opt.txt
 then
     echo "Repro errors out, not admissible"
     exit 0

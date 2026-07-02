@@ -105,7 +105,6 @@ constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 	{
 		RestrictInfo *rinfo = lfirst(lc);
 
-		/* LOOK HERE */
 		rinfo->clause = (Expr *) estimate_expression_value(root, (Node *) rinfo->clause);
 	}
 
