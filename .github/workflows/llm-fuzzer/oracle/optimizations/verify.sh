@@ -21,28 +21,28 @@ set -eu
 PGOPTIONS='-c client_min_messages=error'
 export PGOPTIONS
 
-psql -q <<<'alter :"DBNAME" set client_min_messages to error'
-psql -q <<<'alter :"DBNAME" set timescaledb.enable_optimizations to off'
+psql -q <<<'alter database :"DBNAME" set client_min_messages to error'
+psql -q <<<'alter database :"DBNAME" set timescaledb.enable_optimizations to off'
 
-if ! psql -q -f "@1" > result_noopt.txt
+if ! psql -q -f "$1" > result_noopt.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_seqscan to off;" -f "@1" > result_noopt_noseq.txt
+if ! psql -q -c "set enable_seqscan to off;" -f "$1" > result_noopt_noseq.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_indexscan to off;" -f "@1" > result_noopt_noindex.txt
+if ! psql -q -c "set enable_indexscan to off;" -f "$1" > result_noopt_noindex.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set enable_hashagg to off;" -f "@1" > result_noopt_nohashagg.txt
+if ! psql -q -c "set enable_hashagg to off;" -f "$1" > result_noopt_nohashagg.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
@@ -54,13 +54,13 @@ if ! psql -q -c "
         set parallel_tuple_cost = 0;
         set min_parallel_table_scan_size = 0;
         set min_parallel_index_scan_size = 0;
-    " -f "@1" > result_noopt_para.txt
+    " -f "$1" > result_noopt_para.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -c "set work_mem = '4GB'" -f "@1" > result_noopt_mem.txt
+if ! psql -q -c "set work_mem = '4GB'" -f "$1" > result_noopt_mem.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
@@ -76,9 +76,9 @@ then
     exit 0
 fi
 
-psql -q <<<'alter :"DBNAME" set timescaledb.enable_optimizations to on'
+psql -q <<<'alter database :"DBNAME" set timescaledb.enable_optimizations to on'
 
-if ! psql -q -f "@1" > result_opt.txt
+if ! psql -q -f "$1" > result_opt.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
