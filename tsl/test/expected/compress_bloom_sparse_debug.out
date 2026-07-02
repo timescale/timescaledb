@@ -170,6 +170,11 @@ select _timescaledb_functions.bloom1_contains('\x'::_timescaledb_internal.bloom1
 ERROR:  composite bloom filter must have at least two columns
 select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, ROW());
 ERROR:  composite bloom filter must have at least two columns
+select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, NULL::record[]);
+ bloom1_contains_any 
+---------------------
+ f
+
 -- The hash function is callable by user, so must return proper error
 select _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
 ERROR:  composite bloom filter supports at most 8 columns, got 9
