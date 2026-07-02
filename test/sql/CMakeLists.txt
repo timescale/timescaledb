@@ -131,11 +131,11 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   list(APPEND TEST_FILES tableam_alter_defaults.sql
-       merge_not_matched_by_source.sql)
+       merge_not_matched_by_source.sql dml_system_columns.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
-  list(APPEND TEST_FILES insert_returning_old_new.sql dml_system_columns.sql)
+  list(APPEND TEST_FILES insert_returning_old_new.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture

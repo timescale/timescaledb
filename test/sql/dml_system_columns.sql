@@ -6,6 +6,8 @@
 -- Some test cases for DML with system-column references on a hypertable target.
 \set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
+SET enable_material TO OFF;
+
 CREATE TABLE ht_update_join(time timestamptz NOT NULL, val int);
 SELECT create_hypertable('ht_update_join', 'time', chunk_time_interval => interval '1 month');
 INSERT INTO ht_update_join VALUES ('2020-01-15', 1), ('2020-02-15', 2);
@@ -178,3 +180,5 @@ RETURNING ctid, xmin, tableoid::regclass, *
 
 DROP TABLE ht_dummy;
 
+
+RESET enable_material;
