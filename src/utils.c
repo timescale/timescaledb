@@ -1742,7 +1742,8 @@ ts_copy_relation_acl(const Oid source_relid, const Oid target_relid, const Oid o
 		 * which takes an AccessExclusiveLock and should be enough to handle any
 		 * inplace update issues.
 		 */
-		AssertSufficientPgClassUpdateLockHeld(target_relid);
+		Assert(CheckRelationOidLockedByMe(target_relid, ShareUpdateExclusiveLock, false) ||
+			   CheckRelationOidLockedByMe(target_relid, ShareRowExclusiveLock, true));
 
 		/* Find the tuple for the target in `pg_class` */
 		target_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(target_relid));
@@ -1940,9 +1941,7 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 	{
 		elog(ERROR, "cache lookup failed for relation %u", relid);
 	}
-#ifdef SYSCACHE_TUPLE_LOCK_NEEDED
 	ItemPointerData otid = tuple->t_self;
-#endif
 
 	/* Get the old reloptions */
 	Datum datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
@@ -1971,7 +1970,7 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 	/* Not sure if we need this one, but keeping it as a precaution */
 	InvokeObjectPostAlterHook(RelationRelationId, RelationGetRelid(rel), 0);
 
-	UnlockSysCacheTuple(pgclass, &otid);
+	UnlockTuple(pgclass, &otid, InplaceUpdateTupleLock);
 	heap_freetuple(newtuple);
 	heap_freetuple(tuple);
 	table_close(pgclass, RowExclusiveLock);
