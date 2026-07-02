@@ -938,7 +938,11 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	}
 	if (strnlen(NameStr(fd.associated_table_prefix), NAMEDATALEN) > MAXIMUM_PREFIX_LENGTH)
 	{
-		elog(ERROR, "associated_table_prefix too long");
+		ereport(ERROR,
+				(errcode(ERRCODE_NAME_TOO_LONG),
+				 errmsg("associated_table_prefix too long"),
+				 errhint("The associated_table_prefix must be less than %zu characters.",
+						 MAXIMUM_PREFIX_LENGTH)));
 	}
 
 	fd.num_dimensions = num_dimensions;
@@ -1845,7 +1849,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/*
 	 * Check that the table is not part of any publication
 	 */
-	if (GetRelationPublications(table_relid) != NIL || GetAllTablesPublications() != NIL)
+	if (GetRelationIncludedPublications(table_relid) != NIL || GetAllTablesPublications() != NIL)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),

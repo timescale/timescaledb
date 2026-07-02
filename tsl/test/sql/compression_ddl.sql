@@ -458,6 +458,77 @@ SELECT count(decompress_chunk(ch)) FROM show_chunks('test1') ch;
 
 DROP TABLE test1;
 
+-- enabling/disabling triggers works on hypertables with columnstore enabled
+CREATE TABLE trigger_columnstore ("Time" timestamptz, device_id int, value numeric) WITH (tsdb.hypertable, tsdb.chunk_interval = '1 day');
+
+CREATE OR REPLACE FUNCTION trigger_columnstore_fn() RETURNS TRIGGER LANGUAGE PLPGSQL
+AS $BODY$
+BEGIN
+  RAISE NOTICE 'trigger=% when=% level=% op=% table=%',
+    TG_NAME, TG_WHEN, TG_LEVEL, TG_OP, TG_TABLE_NAME;
+  RETURN NULL;
+END
+$BODY$;
+
+-- a statement-level trigger lives only on the hypertable root, a row-level one is cloned to chunks
+CREATE TRIGGER trigger_columnstore_stmt
+AFTER INSERT ON trigger_columnstore FOR EACH STATEMENT EXECUTE FUNCTION trigger_columnstore_fn();
+CREATE TRIGGER trigger_columnstore_row
+AFTER INSERT ON trigger_columnstore FOR EACH ROW EXECUTE FUNCTION trigger_columnstore_fn();
+INSERT INTO trigger_columnstore SELECT generate_series('2018-03-02 1:00'::timestamptz, '2018-03-03 1:00', '12 hour'), 1, 1;
+
+-- no compressed chunks yet
+ALTER TABLE trigger_columnstore DISABLE TRIGGER trigger_columnstore_stmt;
+-- statement trigger doesnt fire
+INSERT INTO trigger_columnstore SELECT '2018-03-02 1:00'::timestamptz, 1, 1;
+ALTER TABLE trigger_columnstore ENABLE TRIGGER trigger_columnstore_stmt;
+-- trigger does fire
+INSERT INTO trigger_columnstore SELECT '2018-03-02 1:00'::timestamptz, 1, 1;
+
+-- with a compressed chunk, the named statement trigger is disabled on the root only
+SELECT count(compress_chunk(ch)) FROM show_chunks('trigger_columnstore') ch;
+
+-- trigger does fire after compression
+INSERT INTO trigger_columnstore SELECT '2018-03-02 1:00'::timestamptz, 1, 1;
+
+ALTER TABLE trigger_columnstore DISABLE TRIGGER trigger_columnstore_stmt;
+
+-- statement trigger does not fire but row trigger does fire
+INSERT INTO trigger_columnstore SELECT '2018-03-02 1:00'::timestamptz, 1, 1;
+
+ALTER TABLE trigger_columnstore DISABLE TRIGGER trigger_columnstore_row;
+-- no trigger fires
+INSERT INTO trigger_columnstore SELECT '2018-03-02 1:00'::timestamptz, 1, 1;
+
+ALTER TABLE trigger_columnstore ENABLE TRIGGER trigger_columnstore_stmt;
+ALTER TABLE trigger_columnstore ENABLE TRIGGER trigger_columnstore_row;
+
+-- both trigger fire
+INSERT INTO trigger_columnstore SELECT '2018-03-02 1:00'::timestamptz, 1, 1;
+
+ALTER TABLE trigger_columnstore DISABLE TRIGGER ALL;
+
+-- no trigger fires
+INSERT INTO trigger_columnstore SELECT '2018-03-02 1:00'::timestamptz, 1, 1;
+
+ALTER TABLE trigger_columnstore ENABLE TRIGGER ALL;
+ALTER TABLE trigger_columnstore DISABLE TRIGGER trigger_columnstore_stmt;
+
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'trigger_columnstore_stmt'
+  AND tgrelid = 'trigger_columnstore'::regclass;
+-- the row trigger is propagated to chunks
+ALTER TABLE trigger_columnstore DISABLE TRIGGER trigger_columnstore_row;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('trigger_columnstore') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'trigger_columnstore_row';
+-- DISABLE TRIGGER USER applies to all triggers present on each relation
+ALTER TABLE trigger_columnstore ENABLE TRIGGER USER;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('trigger_columnstore') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'trigger_columnstore_row';
+
+DROP TABLE trigger_columnstore;
+
 -- test disabling compression on hypertables with caggs and dropped chunks
 -- github issue 2844
 CREATE TABLE i2844 (created_at timestamptz NOT NULL,c1 float);
