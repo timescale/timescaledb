@@ -1,0 +1,63 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- Verify that automatically adding a chunk to a publication emits the
+-- ddl_command_start/end events for the implicit ALTER PUBLICATION ... ADD TABLE,
+-- and that no event is emitted when the publication is not actually updated.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION log_pub_ddl() RETURNS event_trigger AS $$
+DECLARE
+    r record;
+BEGIN
+    FOR r IN SELECT * FROM pg_event_trigger_ddl_commands() LOOP
+        RAISE NOTICE 'ddl_command_end: tag=% identity=%', r.command_tag, r.object_identity;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION drop_pub2() RETURNS event_trigger AS $$
+BEGIN
+    DROP PUBLICATION IF EXISTS pub2;
+END;
+$$ LANGUAGE plpgsql;
+CREATE EVENT TRIGGER pub_ddl_trigger ON ddl_command_end
+    WHEN TAG IN ('ALTER PUBLICATION') EXECUTE FUNCTION log_pub_ddl();
+SET client_min_messages = WARNING;
+SET timescaledb.enable_chunk_auto_publication = true;
+SET timescaledb.enable_event_triggers = true;
+CREATE TABLE pub_test (time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('pub_test', 'time', chunk_time_interval => interval '1 day');
+   create_hypertable   
+-----------------------
+ (1,public,pub_test,t)
+
+CREATE PUBLICATION test_pub FOR TABLE pub_test;
+SET client_min_messages = NOTICE;
+-- Each new chunk fires an ALTER PUBLICATION ddl_command_end event.
+INSERT INTO pub_test VALUES ('2024-01-01 00:00:00+00', 1, 1.0);
+NOTICE:  ddl_command_end: tag=ALTER PUBLICATION identity=_timescaledb_internal._hyper_1_1_chunk in publication test_pub
+INSERT INTO pub_test VALUES ('2024-01-02 00:00:00+00', 2, 2.0);
+NOTICE:  ddl_command_end: tag=ALTER PUBLICATION identity=_timescaledb_internal._hyper_1_2_chunk in publication test_pub
+-- Inserting into an existing chunk does NOT update the publication, so no event.
+INSERT INTO pub_test VALUES ('2024-01-01 12:00:00+00', 2, 2.1);
+-- Error Handling --
+-- Two publications that both include the hypertable.
+CREATE PUBLICATION pub1 FOR TABLE pub_test;
+CREATE PUBLICATION pub2 FOR TABLE pub_test;
+-- Event trigger handler which will drop pub2, invalidating internal iteration of publications to update.
+CREATE EVENT TRIGGER sub_drop_pub2 ON ddl_command_end
+    WHEN TAG IN ('ALTER PUBLICATION') EXECUTE FUNCTION drop_pub2();
+-- Pub1 will be updated, emitting a notice. Pub2 will be deleted, so no DDL for pub2 being updated.
+INSERT INTO pub_test VALUES ('2024-01-03 00:00:00+00', 3, 3.0);
+NOTICE:  ddl_command_end: tag=ALTER PUBLICATION identity=_timescaledb_internal._hyper_1_3_chunk in publication test_pub
+NOTICE:  ddl_command_end: tag=ALTER PUBLICATION identity=_timescaledb_internal._hyper_1_3_chunk in publication pub1
+NOTICE:  publication "pub2" does not exist, skipping
+-- With event triggers disabled, creating a chunk emits no event.
+SET timescaledb.enable_event_triggers = false;
+INSERT INTO pub_test VALUES ('2024-01-04 00:00:00+00', 4, 4.0);
+DROP EVENT TRIGGER pub_ddl_trigger;
+DROP EVENT TRIGGER sub_drop_pub2;
+DROP PUBLICATION test_pub;
+DROP PUBLICATION pub1; -- pub2 already dropped.
+DROP TABLE pub_test;
+DROP FUNCTION log_pub_ddl();
+DROP FUNCTION drop_pub2();
