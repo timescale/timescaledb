@@ -84,7 +84,11 @@ set_tablesample_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *
 	if ((root->query_level > 1 || bms_membership(root->all_baserels) != BMS_SINGLETON) &&
 		!(GetTsmRoutine(rte->tablesample->tsmhandler)->repeatable_across_scans))
 	{
+#if PG19_GE
+		path = (Path *) create_material_path(rel, path, enable_material);
+#else
 		path = (Path *) create_material_path(rel, path);
+#endif
 	}
 
 	add_path(rel, path);
@@ -325,8 +329,19 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 
 	/* Set up the dummy path */
 	add_path(rel,
-			 (Path *)
-				 create_append_path(NULL, rel, NIL, NIL, NIL, rel->lateral_relids, 0, false, -1));
+			 (Path *) create_append_path(/* root = */ NULL,
+										 rel,
+#if PG19_GE
+										 (AppendPathInput) { 0 },
+#else
+										 /* subpaths = */ NIL,
+										 /* partial_subpaths = */ NIL,
+#endif
+										 /* pathkeys = */ NIL,
+										 rel->lateral_relids,
+										 /* parallel_workers = */ 0,
+										 /* parallel_aware = */ false,
+										 /* rows = */ -1));
 
 	/*
 	 * We set the cheapest-path fields immediately, just in case they were
