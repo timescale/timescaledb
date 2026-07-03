@@ -613,6 +613,19 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
 	Oid compressed_relid = ts_relation_get_compressed_relid(uncompressed_chunk->table_id);
 
+	/*
+	 * The chunk is marked as compressed but its compressed relation is
+	 * missing. This can happen with a corrupted chunk status.
+	 */
+	if (!OidIsValid(compressed_relid))
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s\" is missing its compressed relation",
+						get_rel_name(uncompressed_chunk->table_id))));
+	}
+
 	ereport(DEBUG1,
 			(errmsg("acquiring locks for converting to rowstore \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),

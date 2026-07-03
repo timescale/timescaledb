@@ -121,10 +121,12 @@ jobs:
           pip install --upgrade pip
           pip install black prospector pylint dodgy \
             mccabe pycodestyle pyflakes \
-            psutil pygithub pglast testgres more_itertools
+            psutil pygithub testgres more_itertools
           # pinning snowballstemmer to version 2.2.0 due to:
           # https://github.com/prospector-dev/prospector/issues/763
           pip install --force-reinstall --no-deps snowballstemmer==2.2.0
+          # pinning pglast due to build issues
+          pip install --force-reinstall --no-deps pglast==7.16
           pip list
           pip list --user
 
