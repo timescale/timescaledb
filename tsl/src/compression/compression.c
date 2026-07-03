@@ -230,7 +230,7 @@ static void
 RelationDeleteAllRows(Relation rel, Snapshot snap)
 {
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
-	TableScanDesc scan = table_beginscan(rel, snap, 0, NULL);
+	TableScanDesc scan = table_beginscan_compat(rel, snap, 0, NULL, 0);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -686,7 +686,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 	TableScanDesc scan;
 	TupleTableSlot *slot;
 	tuplesortstate = compression_create_tuplesort_state(settings, in_rel, false);
-	scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, NULL);
+	scan = table_beginscan_compat(in_rel, GetActiveSnapshot(), 0, NULL, 0);
 	slot = table_slot_create(in_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -2149,7 +2149,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 													  RelationGetRelid(in_rel),
 													  RelationGetRelid(out_rel));
 	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
-	TableScanDesc scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, (ScanKey) NULL);
+	TableScanDesc scan = table_beginscan_compat(in_rel, GetActiveSnapshot(), 0, (ScanKey) NULL, 0);
 	int64 report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))

@@ -1816,7 +1816,7 @@ ts_map_attno(Oid src_rel, Oid dst_rel, AttrNumber attno)
 bool
 ts_relation_has_tuples(Relation rel)
 {
-	TableScanDesc scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
+	TableScanDesc scandesc = table_beginscan_compat(rel, GetActiveSnapshot(), 0, NULL, 0);
 	TupleTableSlot *slot =
 		MakeSingleTupleTableSlot(RelationGetDescr(rel), table_slot_callbacks(rel));
 	bool hastuples = table_scan_getnextslot(scandesc, ForwardScanDirection, slot);

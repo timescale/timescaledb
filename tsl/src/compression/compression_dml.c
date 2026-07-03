@@ -1029,7 +1029,7 @@ decompress_batch_beginscan(Relation in_rel, Relation index_rel, Snapshot snapsho
 	}
 	else
 	{
-		scan->scan = table_beginscan(in_rel, snapshot, num_scankeys, scankeys);
+		scan->scan = table_beginscan_compat(in_rel, snapshot, num_scankeys, scankeys, 0);
 		scan->index_scan = NULL;
 	}
 

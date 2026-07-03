@@ -1916,7 +1916,7 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 {
 	bool matching_exist = false;
 
-	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, 0);
+	TableScanDesc scan = table_beginscan_compat(uncompressed_chunk_rel, snapshot, 0, 0, 0);
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -2129,7 +2129,8 @@ static void
 try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel)
 {
 	PushActiveSnapshot(GetLatestSnapshot());
-	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, GetActiveSnapshot(), 0, 0);
+	TableScanDesc scan =
+		table_beginscan_compat(uncompressed_chunk_rel, GetActiveSnapshot(), 0, 0, 0);
 	ScanDirection scan_dir = BackwardScanDirection;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
@@ -2498,7 +2499,7 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 							  List *builders, bool *repl)
 {
 	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
-	TableScanDesc scan = table_beginscan(compressed_rel, GetActiveSnapshot(), 0, NULL);
+	TableScanDesc scan = table_beginscan_compat(compressed_rel, GetActiveSnapshot(), 0, NULL, 0);
 	TupleTableSlot *scan_slot = table_slot_create(compressed_rel, NULL);
 	TupleTableSlot *update_slot = MakeSingleTupleTableSlot(compressed_desc, &TTSOpsHeapTuple);
 

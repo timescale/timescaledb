@@ -96,6 +96,21 @@
 #define PointerIsValid(pointer) ((const void *) (pointer) != NULL)
 #endif
 
+/*
+ * PG19 added a "flags" argument to table_beginscan(). Provide a wrapper taking
+ * the new signature that drops the flags on earlier versions.
+ */
+#include <access/tableam.h>
+static inline TableScanDesc
+table_beginscan_compat(Relation rel, Snapshot snapshot, int nkeys, ScanKey key, uint32 flags)
+{
+#if PG19_GE
+	return table_beginscan(rel, snapshot, nkeys, key, flags);
+#else
+	return table_beginscan(rel, snapshot, nkeys, key);
+#endif
+}
+
 #if PG19_GE
 /*
  * PG19 generalized CLUSTER into REPACK and renamed the CLUSTER progress

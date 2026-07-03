@@ -48,7 +48,7 @@ static ScanDesc
 table_scanner_beginscan(ScannerCtx *ctx)
 {
 	ctx->internal.scan.table_scan =
-		table_beginscan(ctx->tablerel, ctx->snapshot, ctx->nkeys, ctx->scankey);
+		table_beginscan_compat(ctx->tablerel, ctx->snapshot, ctx->nkeys, ctx->scankey, 0);
 
 	return ctx->internal.scan;
 }
