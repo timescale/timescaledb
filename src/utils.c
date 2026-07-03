@@ -1616,14 +1616,18 @@ ts_get_node_name(Node *node)
 		NODE_CASE(MergeAppendPath);
 		NODE_CASE(GroupResultPath);
 		NODE_CASE(MaterialPath);
+#if PG19_GE
 		NODE_CASE(UniquePath);
+#else
+		/* PG19 renamed UpperUniquePath to UniquePath; name it correctly per version */
+		NODE_CASE(UpperUniquePath);
+#endif
 		NODE_CASE(GatherPath);
 		NODE_CASE(GatherMergePath);
 		NODE_CASE(ProjectionPath);
 		NODE_CASE(ProjectSetPath);
 		NODE_CASE(SortPath);
 		NODE_CASE(GroupPath);
-		NODE_CASE(UpperUniquePath);
 		NODE_CASE(AggPath);
 		NODE_CASE(GroupingSetsPath);
 		NODE_CASE(MinMaxAggPath);
