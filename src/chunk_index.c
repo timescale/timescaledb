@@ -14,7 +14,6 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_depend.h>
 #include <catalog/pg_index.h>
-#include <commands/cluster.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
@@ -27,6 +26,7 @@
 #include <utils/rel.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable.h"

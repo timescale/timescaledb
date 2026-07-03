@@ -31,7 +31,6 @@
 #include <catalog/pg_authid.h>
 #include <catalog/pg_tablespace_d.h>
 #include <catalog/toasting.h>
-#include <commands/cluster.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/vacuum.h>
@@ -60,6 +59,7 @@
 
 #include <access/toast_internals.h>
 
+#include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable_cache.h"
@@ -867,6 +867,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 									OldIndex,
 									use_sort,
 									cutoffs.OldestXmin,
+#if PG19_GE
+									NULL, /* snapshot (only used by REPACK CONCURRENTLY) */
+#endif
 									&cutoffs.FreezeLimit,
 									&cutoffs.MultiXactCutoff,
 									&num_tuples,
