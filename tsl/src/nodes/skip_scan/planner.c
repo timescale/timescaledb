@@ -329,6 +329,7 @@ get_distint_clause_expr(PlannerInfo *root, SortGroupClause *distinct_clause)
 static List *
 get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 {
+	/* LOOK HERE */
 	ListCell *lc;
 	Expr *tlexpr = NULL;
 	List *result = NULL;
