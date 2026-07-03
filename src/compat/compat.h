@@ -80,6 +80,15 @@
 #endif
 
 /*
+ * PG19 renamed OnConflictSetState to OnConflictActionState.
+ * https://github.com/postgres/postgres/commit/8832709
+ */
+#if PG19_LT
+#define OnConflictActionState OnConflictSetState
+#define T_OnConflictActionState T_OnConflictSetState
+#endif
+
+/*
  * PG19 reworked jsonb construction: pushJsonbValue() now takes a JsonbInState *
  * and returns void, leaving the completed value in state->result (populated only
  * when the outermost container is closed). Older versions took a JsonbParseState **
