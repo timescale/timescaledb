@@ -110,7 +110,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.policy_compaction_check(jsonb)
  _timescaledb_functions.policy_compression(integer,jsonb)
  _timescaledb_functions.policy_compression_check(jsonb)
- _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean,boolean)
+ _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean,boolean,boolean)
  _timescaledb_functions.policy_job_stat_history_retention(integer,jsonb)
  _timescaledb_functions.policy_job_stat_history_retention_check(jsonb)
  _timescaledb_functions.policy_recompression(integer,jsonb)

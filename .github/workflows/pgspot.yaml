@@ -33,6 +33,8 @@ jobs:
         --proc-without-search-path '_timescaledb_internal.policy_compression(job_id integer,config jsonb)'
         --proc-without-search-path '_timescaledb_functions.policy_compression(job_id integer,config jsonb)'
         --proc-without-search-path '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,reindex_enabled boolean,use_creation_time boolean)'
+        --proc-without-search-path 
+        '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,reindex_enabled boolean,use_creation_time boolean,recompress_unordered boolean)'
         --proc-without-search-path '_timescaledb_functions.policy_compaction(job_id integer,config jsonb)'
 
     steps:

@@ -136,7 +136,8 @@ _timescaledb_functions.policy_compression_execute(
   verbose_log         BOOLEAN,
   recompress_enabled  BOOLEAN,
   reindex_enabled     BOOLEAN,
-  use_creation_time   BOOLEAN
+  use_creation_time   BOOLEAN,
+  recompress_unordered BOOLEAN
 )
 AS $$
 DECLARE
@@ -151,6 +152,7 @@ DECLARE
   status_fully_compressed int := 1;
   -- chunk status bits:
   bit_uncompressed int := 0;
+  bit_unordered int := 2;
   bit_frozen int := 4;
   bit_compressed_partial int := 8;
   creation_lag INTERVAL := NULL;
@@ -195,6 +197,13 @@ BEGIN
     -- Checking for chunks which are not fully compressed and not frozen
     AND ch.status != status_fully_compressed
     AND ch.status & bit_frozen = 0
+    -- When recompress_unordered is off, skip unordered chunks unless they
+    -- are also partial, since partial chunks always need recompression.
+    AND (
+      recompress_unordered
+      OR ch.status & bit_unordered = 0
+      OR ch.status & bit_compressed_partial = bit_compressed_partial
+    )
   LOOP
     BEGIN
       IF chunk_rec.status = bit_uncompressed OR recompress_enabled IS TRUE THEN
@@ -283,6 +292,7 @@ DECLARE
   numchunks           INTEGER := 1;
   recompress_enabled  BOOL;
   reindex_enabled     BOOL;
+  recompress_unordered BOOL;
   use_creation_time   BOOL := FALSE;
 BEGIN
 
@@ -303,6 +313,7 @@ BEGIN
   maxchunks           := COALESCE(jsonb_object_field_text(config, 'maxchunks_to_compress')::INTEGER, 0);
   recompress_enabled  := COALESCE(jsonb_object_field_text(config, 'recompress')::BOOLEAN, TRUE);
   reindex_enabled     := COALESCE(jsonb_object_field_text(config, 'reindex')::BOOLEAN, TRUE);
+  recompress_unordered := COALESCE(jsonb_object_field_text(config, 'recompress_unordered')::BOOLEAN, TRUE);
 
   -- find primary dimension type --
   SELECT dim.column_type INTO dimtype
@@ -328,13 +339,13 @@ BEGIN
   -- execute the properly type casts for the lag value
   CASE dimtype
     WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype, 'DATE'::regtype, 'INTERVAL' ::regtype, 'UUID'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, recompress_unordered);
     WHEN 'BIGINT'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::BIGINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::BIGINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, recompress_unordered);
     WHEN 'INTEGER'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTEGER, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTEGER, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, recompress_unordered);
     WHEN 'SMALLINT'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::SMALLINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::SMALLINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, recompress_unordered);
   END CASE;
   COMMIT;
 END;
