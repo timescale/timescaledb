@@ -588,7 +588,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
 
 	TupleTableSlot *uncompressed_slot =
-		MakeTupleTableSlot(uncompressed_rel_tupdesc, &TTSOpsMinimalTuple);
+		MakeTupleTableSlotCompat(uncompressed_rel_tupdesc, &TTSOpsMinimalTuple, 0);
 	TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
 
 	Datum *values = palloc(sizeof(Datum) * recompress_ctx->n_keys);

@@ -1075,7 +1075,8 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 				compressor_apply_segmentby_and_rebuild(compressor, bulk_writer);
 			}
 
-			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
+			TupleTableSlot *slot =
+				MakeTupleTableSlotCompat(compressor->in_desc, &TTSOpsMinimalTuple, 0);
 			while (tuplesort_gettupleslot(compressor->sort_state,
 										  true /*=forward*/,
 										  false /*=copy*/,
@@ -1222,7 +1223,8 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	new_compressor.invalidation = old_compressor->invalidation;
 
 	/* Transfer from old sort state into the new one with segmentby settings */
-	TupleTableSlot *slot = MakeTupleTableSlot(old_compressor->in_desc, &TTSOpsMinimalTuple);
+	TupleTableSlot *slot =
+		MakeTupleTableSlotCompat(old_compressor->in_desc, &TTSOpsMinimalTuple, 0);
 	while (tuplesort_gettupleslot(old_compressor->sort_state,
 								  true /*=forward*/,
 								  false /*=copy*/,
@@ -1357,7 +1359,8 @@ void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
 								  Relation in_rel, BulkWriter *writer)
 {
-	TupleTableSlot *slot = MakeTupleTableSlot(row_compressor->in_desc, &TTSOpsMinimalTuple);
+	TupleTableSlot *slot =
+		MakeTupleTableSlotCompat(row_compressor->in_desc, &TTSOpsMinimalTuple, 0);
 	int64 nrows_processed = 0;
 	int64 report_reltuples;
 
@@ -3505,7 +3508,7 @@ analyze_and_get_segmentby(CompressionSettings *settings, RowCompressor *compress
 	 * Step 2: Load data and process necessary information for future analysis.
 	 * Current Criteria: Reject candidates with too many distinct values or too few rows per value
 	 */
-	TupleTableSlot *slot = MakeTupleTableSlot(in_desc, &TTSOpsMinimalTuple);
+	TupleTableSlot *slot = MakeTupleTableSlotCompat(in_desc, &TTSOpsMinimalTuple, 0);
 	int candidates_rejected = 0;
 	while (tuplesort_gettupleslot(compressor->sort_state,
 								  true /*=forward*/,
