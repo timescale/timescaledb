@@ -44,8 +44,13 @@ ts_stats_chunk_init_segment(void *ptr)
 
 	seg->magic = TS_STATS_SHMEM_MAGIC;
 	seg->dboid = MyDatabaseId;
+#if PG19_GE
+	/* PG19 merged tranche registration into LWLockNewTrancheId(name). */
+	LWLockInitialize(&seg->lock, LWLockNewTrancheId("ts_stats_chunk"));
+#else
 	LWLockInitialize(&seg->lock, LWLockNewTrancheId());
 	LWLockRegisterTranche(seg->lock.tranche, "ts_stats_chunk");
+#endif
 	seg->base_timestamp = GetCurrentTimestamp();
 	seg->num_slots = num_slots;
 
