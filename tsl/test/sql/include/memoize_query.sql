@@ -9,7 +9,10 @@ SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (
     SELECT time FROM :TEST_TABLE m2
-    WHERE m1.time + '0 seconds'::interval = m2.time
+    WHERE m1.device_id = m2.device_id
+    ORDER BY m2.time DESC
     LIMIT 1
 ) m2 ON true
-ORDER BY m1.time;
+ORDER BY m1.time
+LIMIT 10000
+;
