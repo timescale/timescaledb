@@ -271,7 +271,7 @@ chunk_index_create_from_indexinfo(int32 hypertable_id, Relation template_indexre
 	oidvector *indclassoid;
 	List *colnames = create_index_colnames(template_indexrel);
 	Oid tablespace;
-	bits16 flags = 0;
+	uint16 flags = 0;
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(RelationGetRelid(template_indexrel)));
 
