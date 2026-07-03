@@ -89,6 +89,14 @@
 #endif
 
 /*
+ * PG19 removed the PointerIsValid macro that used to live in c.h. Provide it
+ * when the server headers no longer do.
+ */
+#ifndef PointerIsValid
+#define PointerIsValid(pointer) ((const void *) (pointer) != NULL)
+#endif
+
+/*
  * PG19 reworked jsonb construction: pushJsonbValue() now takes a JsonbInState *
  * and returns void, leaving the completed value in state->result (populated only
  * when the outermost container is closed). Older versions took a JsonbParseState **
