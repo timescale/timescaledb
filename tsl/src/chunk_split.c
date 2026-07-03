@@ -504,7 +504,7 @@ copy_tuples_for_split(SplitContext *scontext)
 	 * can transfer tuples that are deleted or updated but still visible to
 	 * concurrent transactions.
 	 */
-	scan = table_beginscan(srcrel, SnapshotAny, 0, NULL);
+	scan = table_beginscan_compat(srcrel, SnapshotAny, 0, NULL, 0);
 
 	/*
 	 * Switch to per-tuple memory context and reset it for each tuple
