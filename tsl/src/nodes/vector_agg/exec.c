@@ -1017,7 +1017,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
-
 	/*
 	 * Allocate the storage for definitions of aggregate function and grouping
 	 * columns.
