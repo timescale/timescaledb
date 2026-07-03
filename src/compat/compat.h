@@ -204,6 +204,24 @@ pushJsonbValueCompat(JsonbInState *state, JsonbIteratorToken seq, JsonbValue *jb
 						  specConflict,                                                            \
 						  arbiterIndexes,                                                          \
 						  onlySummarizing)
+#else
+/* PG19 replaced the bool arguments with a flags bitmask and reordered them. */
+#define ExecInsertIndexTuplesCompat(rri,                                                           \
+									slot,                                                          \
+									estate,                                                        \
+									update,                                                        \
+									noDupErr,                                                      \
+									specConflict,                                                  \
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
+	ExecInsertIndexTuples(rri,                                                                     \
+						  estate,                                                                  \
+						  (((update) ? EIIT_IS_UPDATE : 0) |                                       \
+						   ((noDupErr) ? EIIT_NO_DUPE_ERROR : 0) |                                 \
+						   ((onlySummarizing) ? EIIT_ONLY_SUMMARIZING : 0)),                       \
+						  slot,                                                                    \
+						  arbiterIndexes,                                                          \
+						  specConflict)
 #endif
 
 /* fmgr
@@ -571,7 +589,7 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, nkeys, norderbys)
-#else
+#elif PG19_LT
 #define index_beginscan_compat(heapRelation,                                                       \
 							   indexRelation,                                                      \
 							   snapshot,                                                           \
@@ -579,6 +597,15 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys)
+#else
+/* PG19 adds a trailing flags argument to index_beginscan. */
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys, 0)
 #endif
 
 /* Copied from PG17. We can remove it once we deprecate older versions. */
