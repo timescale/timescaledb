@@ -177,6 +177,15 @@ ts_jsonb_add_interval(JsonbInState *state, const char *key, Interval *interval)
 }
 
 void
+ts_jsonb_add_timestamptz(JsonbInState *state, const char *key, const TimestampTz value)
+{
+	JsonbValue json_value;
+
+	ts_jsonb_set_value_by_type(&json_value, TIMESTAMPTZOID, TimestampTzGetDatum(value));
+	ts_jsonb_add_value(state, key, &json_value);
+}
+
+void
 ts_jsonb_add_value(JsonbInState *state, const char *key, JsonbValue *value)
 {
 	JsonbValue json_key;
