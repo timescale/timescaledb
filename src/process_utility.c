@@ -18,7 +18,6 @@
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
-#include <commands/cluster.h>
 #include <commands/copy.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
@@ -3976,21 +3975,38 @@ chunk_index_mappings_cmp(const void *p1, const void *p2)
 static DDLResult
 process_cluster_start(ProcessUtilityArgs *args)
 {
+#if PG19_GE
+	RepackStmt *stmt = (RepackStmt *) args->parsetree;
+	Cache *hcache;
+	Hypertable *ht;
+	DDLResult result = DDL_CONTINUE;
+	RangeVar *cluster_rv = stmt->relation ? stmt->relation->relation : NULL;
+
+	Assert(IsA(stmt, RepackStmt));
+
+	/* We only intercept CLUSTER; let REPACK and VACUUM FULL fall through */
+	if (stmt->command != REPACK_COMMAND_CLUSTER)
+	{
+		return DDL_CONTINUE;
+	}
+#else
 	ClusterStmt *stmt = (ClusterStmt *) args->parsetree;
 	Cache *hcache;
 	Hypertable *ht;
 	DDLResult result = DDL_CONTINUE;
+	RangeVar *cluster_rv = stmt->relation;
 
 	Assert(IsA(stmt, ClusterStmt));
+#endif
 
 	/* If this is a re-cluster on all tables, there is nothing we need to do */
-	if (NULL == stmt->relation)
+	if (NULL == cluster_rv)
 	{
 		return DDL_CONTINUE;
 	}
 
 	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
+	ht = ts_hypertable_cache_get_entry_rv(hcache, cluster_rv);
 
 	if (NULL != ht)
 	{
@@ -4124,11 +4140,18 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * Since we keep OIDs between transactions, there is a potential
 			 * issue if an OID gets reassigned between two subtransactions
 			 */
-#if PG18_LT
-			cluster_rel(cim->chunkoid, cim->indexoid, get_cluster_options(stmt));
-#else
+#if PG19_GE
 			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
-			cluster_rel(rel, cim->indexoid, get_cluster_options(stmt));
+			cluster_rel(REPACK_COMMAND_CLUSTER,
+						rel,
+						cim->indexoid,
+						get_cluster_options(stmt->params),
+						is_top_level);
+#elif PG18_GE
+			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
+			cluster_rel(rel, cim->indexoid, get_cluster_options(stmt->params));
+#else
+			cluster_rel(cim->chunkoid, cim->indexoid, get_cluster_options(stmt->params));
 #endif
 			PopActiveSnapshot();
 			CommitTransactionCommand();
@@ -6064,9 +6087,15 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_ReindexStmt:
 			handler = process_reindex;
 			break;
+#if PG19_GE
+		case T_RepackStmt:
+			handler = process_cluster_start;
+			break;
+#else
 		case T_ClusterStmt:
 			handler = process_cluster_start;
 			break;
+#endif
 		case T_ViewStmt:
 			handler = process_viewstmt;
 			break;

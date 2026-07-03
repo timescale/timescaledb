@@ -96,6 +96,17 @@
 #define PointerIsValid(pointer) ((const void *) (pointer) != NULL)
 #endif
 
+#if PG19_GE
+/*
+ * PG19 generalized CLUSTER into REPACK and renamed the CLUSTER progress
+ * constants accordingly.
+ */
+#define PROGRESS_CLUSTER_PHASE PROGRESS_REPACK_PHASE
+#define PROGRESS_CLUSTER_PHASE_SWAP_REL_FILES PROGRESS_REPACK_PHASE_SWAP_REL_FILES
+#define PROGRESS_CLUSTER_PHASE_REBUILD_INDEX PROGRESS_REPACK_PHASE_REBUILD_INDEX
+#define PROGRESS_CLUSTER_PHASE_FINAL_CLEANUP PROGRESS_REPACK_PHASE_FINAL_CLEANUP
+#endif
+
 /*
  * PG19 reworked jsonb construction: pushJsonbValue() now takes a JsonbInState *
  * and returns void, leaving the completed value in state->result (populated only
@@ -211,14 +222,14 @@ pushJsonbValueCompat(JsonbInState *state, JsonbIteratorToken seq, JsonbValue *jb
 #define ts_tuptableslot_set_table_oid(slot, table_oid) (slot)->tts_tableOid = table_oid
 
 static inline ClusterParams *
-get_cluster_options(const ClusterStmt *stmt)
+get_cluster_options(List *stmt_params)
 {
 	ListCell *lc;
 	ClusterParams *params = palloc0(sizeof(ClusterParams));
 	bool verbose = false;
 
 	/* Parse option list */
-	foreach (lc, stmt->params)
+	foreach (lc, stmt_params)
 	{
 		DefElem *opt = (DefElem *) lfirst(lc);
 		if (strcmp(opt->defname, "verbose") == 0)

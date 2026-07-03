@@ -732,6 +732,9 @@ split_relation(Relation rel, SplitPoint *sp, unsigned int split_factor,
 							 false /* swap toast by content */,
 							 true, /* check constraints */
 							 true, /* internal? */
+#if PG19_GE
+							 true, /* reindex */
+#endif
 							 scontext.cutoffs.FreezeLimit,
 							 scontext.cutoffs.MultiXactCutoff,
 							 relpersistence);
