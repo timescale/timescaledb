@@ -111,6 +111,17 @@ table_beginscan_compat(Relation rel, Snapshot snapshot, int nkeys, ScanKey key, 
 #endif
 }
 
+/*
+ * PG19 added a "flags" argument to MakeTupleTableSlot(). Provide a wrapper with
+ * the new signature that drops the flags on earlier versions.
+ */
+#if PG19_GE
+#define MakeTupleTableSlotCompat(tupleDesc, tts_ops, flags)                                        \
+	MakeTupleTableSlot(tupleDesc, tts_ops, flags)
+#else
+#define MakeTupleTableSlotCompat(tupleDesc, tts_ops, flags) MakeTupleTableSlot(tupleDesc, tts_ops)
+#endif
+
 #if PG19_GE
 /*
  * PG19 generalized CLUSTER into REPACK and renamed the CLUSTER progress
