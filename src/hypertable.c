@@ -1301,7 +1301,11 @@ hypertable_create_schema(const char *schema_name)
 		.if_not_exists = true,
 	};
 
+#if PG19_GE
+	CreateSchemaCommand(NULL, &stmt, -1, -1);
+#else
 	CreateSchemaCommand(&stmt, "(generated CREATE SCHEMA command)", -1, -1);
+#endif
 }
 
 /*
