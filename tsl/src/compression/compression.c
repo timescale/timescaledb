@@ -1285,6 +1285,8 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 
 	MemoryContextSwitchTo(old_context);
 
+	ts_compression_settings_free(settings);
+
 	return compressor;
 }
 
@@ -1295,10 +1297,8 @@ void
 row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *settings,
 					const TupleDesc noncompressed_tupdesc, const TupleDesc compressed_tupdesc)
 {
-	Name count_metadata_name = DatumGetName(
-		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
 	AttrNumber count_metadata_column_num =
-		get_attnum(settings->fd.compress_relid, NameStr(*count_metadata_name));
+		get_attnum(settings->fd.compress_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
 	if (count_metadata_column_num == InvalidAttrNumber)
 	{
@@ -1983,12 +1983,15 @@ bulk_writer_build(Relation out_rel, int insert_options)
 {
 	BulkWriter writer = {
 		.out_rel = out_rel,
-		.indexstate = CatalogOpenIndexes(out_rel),
 		.mycid = GetCurrentCommandId(true),
-		.bistate = GetBulkInsertState(),
 		.estate = CreateExecutorState(),
 		.insert_options = insert_options,
 	};
+
+	MemoryContext oldcxt = MemoryContextSwitchTo(writer.estate->es_query_cxt);
+	writer.indexstate = CatalogOpenIndexes(out_rel);
+	writer.bistate = GetBulkInsertState();
+	MemoryContextSwitchTo(oldcxt);
 
 	return writer;
 }

@@ -43,7 +43,7 @@ build_job_info(BgwJob *job)
 
 	if (job->fd.initial_start)
 	{
-		ts_jsonb_add_interval(&parse_state, "initial_start", &job->fd.retry_period);
+		ts_jsonb_add_timestamptz(&parse_state, "initial_start", job->fd.initial_start);
 	}
 
 	if (job->fd.hypertable_id != INVALID_HYPERTABLE_ID)
