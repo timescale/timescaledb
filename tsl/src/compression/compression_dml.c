@@ -1176,7 +1176,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		 */
 		for (; attrno >= 0; attrno = bms_next_member(null_columns, attrno))
 		{
-			is_null_condition = is_nulls && list_nth_int(is_nulls, pos);
+			// We cannot filter out NULLs if the unique constraint has NULLS NOT DISTINCT
+			is_null_condition = (is_nulls && list_nth_int(is_nulls, pos)) || (constraints && constraints->nullsnotdistinct);
 			seg_col_is_null = slot_attisnull(slot, attrno);
 			if ((seg_col_is_null && !is_null_condition) || (!seg_col_is_null && is_null_condition))
 			{

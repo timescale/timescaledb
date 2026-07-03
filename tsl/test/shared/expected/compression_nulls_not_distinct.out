@@ -37,5 +37,30 @@ ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_nulls_n
 INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', 'd2', 'l1', 1);
 INFO:  Using index scan with scan keys: index 1, heap 4, memory 2. 
 INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 0.
+-- test that this is correctly handled when using table scan
+-- see https://github.com/timescale/timescaledb/issues/10057
+SELECT count(compress_chunk(c)) FROM show_chunks('nulls_not_distinct') c;
+INFO:  Using index "compress_hyper_X_X_chunk_device__ts_meta_v2_last_time__ts_idx" for recompression
+ count 
+-------
+     1
+
+set timescaledb.enable_dml_decompression_tuple_filtering to off;
+-- should not insert a duplicate, conflict with existing (NULL, 'l1') row
+\set ON_ERROR_STOP 0
+INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', NULL, 'l1', 1);
+INFO:  Using table scan with scan keys: index 0, heap 4, memory 0. 
+INFO:  Number of compressed rows fetched from table scan: 2. Number of compressed rows filtered: 1.
+ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_nulls_not_distinct_time_device_label_idx"
+INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', 'd2', NULL, 1);
+INFO:  Using table scan with scan keys: index 0, heap 3, memory 0. 
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_nulls_not_distinct_time_device_label_idx"
+\set ON_ERROR_STOP 1
+-- should insert without error, no conflict
+INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.15', 'd2', 'l1', 1);
+INFO:  Using table scan with scan keys: index 0, heap 5, memory 0. 
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE nulls_not_distinct;
