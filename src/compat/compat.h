@@ -306,6 +306,31 @@ get_reindex_options(ReindexStmt *stmt)
 				check_not_in_use,                                                                  \
 				skip_build,                                                                        \
 				quiet)
+#else
+/* PG19 adds a leading ParseState argument to DefineIndex. */
+#define DefineIndexCompat(relationId,                                                              \
+						  stmt,                                                                    \
+						  indexRelationId,                                                         \
+						  parentIndexId,                                                           \
+						  parentConstraintId,                                                      \
+						  total_parts,                                                             \
+						  is_alter_table,                                                          \
+						  check_rights,                                                            \
+						  check_not_in_use,                                                        \
+						  skip_build,                                                              \
+						  quiet)                                                                   \
+	DefineIndex(NULL,                                                                              \
+				relationId,                                                                        \
+				stmt,                                                                              \
+				indexRelationId,                                                                   \
+				parentIndexId,                                                                     \
+				parentConstraintId,                                                                \
+				total_parts,                                                                       \
+				is_alter_table,                                                                    \
+				check_rights,                                                                      \
+				check_not_in_use,                                                                  \
+				skip_build,                                                                        \
+				quiet)
 #endif
 
 #if PG17_LT
