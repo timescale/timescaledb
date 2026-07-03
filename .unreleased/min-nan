@@ -1,0 +1,1 @@
+Fixes: #10052 Result of min/max aggregate functions in columnar aggregation pipeline possibly inconsistent with plain Postgres result
