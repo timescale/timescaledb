@@ -263,12 +263,13 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	namestrcpy(&check_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable_id);
-	ts_jsonb_add_str(parse_state, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
-	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(&parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable_id);
+	ts_jsonb_add_str(&parse_state, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	JsonbValue *result = parse_state.result;
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	/* for the reorder policy, we choose a drifting schedule

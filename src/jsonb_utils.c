@@ -17,10 +17,10 @@
 #include "jsonb_utils.h"
 #include "utils.h"
 
-static void ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value);
+static void ts_jsonb_add_pair(JsonbInState *state, JsonbValue *key, JsonbValue *value);
 
 void
-ts_jsonb_add_null(JsonbParseState *state, const char *key)
+ts_jsonb_add_null(JsonbInState *state, const char *key)
 {
 	JsonbValue json_value;
 
@@ -29,7 +29,7 @@ ts_jsonb_add_null(JsonbParseState *state, const char *key)
 }
 
 void
-ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean)
+ts_jsonb_add_bool(JsonbInState *state, const char *key, bool boolean)
 {
 	JsonbValue json_value;
 
@@ -40,7 +40,7 @@ ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean)
 }
 
 void
-ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
+ts_jsonb_add_str(JsonbInState *state, const char *key, const char *value)
 {
 	JsonbValue json_value;
 
@@ -59,7 +59,7 @@ ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 }
 
 static void
-ts_jsonb_add_str_element(JsonbParseState *state, const char *elem)
+ts_jsonb_add_str_element(JsonbInState *state, const char *elem)
 {
 	JsonbValue json_value;
 
@@ -74,11 +74,11 @@ ts_jsonb_add_str_element(JsonbParseState *state, const char *elem)
 	json_value.val.string.val = (char *) elem;
 	json_value.val.string.len = strlen(elem);
 
-	pushJsonbValue(&state, WJB_ELEM, &json_value);
+	pushJsonbValueCompat(state, WJB_ELEM, &json_value);
 }
 
 void
-ts_jsonb_add_str_array(JsonbParseState *state, const char *key, const char **values, int num_values)
+ts_jsonb_add_str_array(JsonbInState *state, const char *key, const char **values, int num_values)
 {
 	JsonbValue json_key;
 	Assert(key != NULL);
@@ -93,9 +93,9 @@ ts_jsonb_add_str_array(JsonbParseState *state, const char *key, const char **val
 	json_key.type = jbvString;
 	json_key.val.string.val = (char *) key;
 	json_key.val.string.len = strlen(key);
-	pushJsonbValue(&state, WJB_KEY, &json_key);
+	pushJsonbValueCompat(state, WJB_KEY, &json_key);
 
-	pushJsonbValue(&state, WJB_BEGIN_ARRAY, NULL);
+	pushJsonbValueCompat(state, WJB_BEGIN_ARRAY, NULL);
 	for (int i = 0; i < num_values; i++)
 	{
 		if (values[i] == NULL || values[i][0] == '\0')
@@ -104,7 +104,7 @@ ts_jsonb_add_str_array(JsonbParseState *state, const char *key, const char **val
 		}
 		ts_jsonb_add_str_element(state, values[i]);
 	}
-	pushJsonbValue(&state, WJB_END_ARRAY, NULL);
+	pushJsonbValueCompat(state, WJB_END_ARRAY, NULL);
 }
 
 static PGFunction
@@ -150,7 +150,7 @@ ts_jsonb_set_value_by_type(JsonbValue *value, Oid typeid, Datum datum)
 }
 
 void
-ts_jsonb_add_int32(JsonbParseState *state, const char *key, const int32 int_value)
+ts_jsonb_add_int32(JsonbInState *state, const char *key, const int32 int_value)
 {
 	JsonbValue json_value;
 
@@ -159,7 +159,7 @@ ts_jsonb_add_int32(JsonbParseState *state, const char *key, const int32 int_valu
 }
 
 void
-ts_jsonb_add_int64(JsonbParseState *state, const char *key, const int64 int_value)
+ts_jsonb_add_int64(JsonbInState *state, const char *key, const int64 int_value)
 {
 	JsonbValue json_value;
 
@@ -168,7 +168,7 @@ ts_jsonb_add_int64(JsonbParseState *state, const char *key, const int64 int_valu
 }
 
 void
-ts_jsonb_add_interval(JsonbParseState *state, const char *key, Interval *interval)
+ts_jsonb_add_interval(JsonbInState *state, const char *key, Interval *interval)
 {
 	JsonbValue json_value;
 
@@ -177,7 +177,7 @@ ts_jsonb_add_interval(JsonbParseState *state, const char *key, Interval *interva
 }
 
 void
-ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value)
+ts_jsonb_add_value(JsonbInState *state, const char *key, JsonbValue *value)
 {
 	JsonbValue json_key;
 
@@ -195,7 +195,7 @@ ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value)
 }
 
 static void
-ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value)
+ts_jsonb_add_pair(JsonbInState *state, JsonbValue *key, JsonbValue *value)
 {
 	Assert(state != NULL);
 	Assert(key != NULL);
@@ -204,8 +204,8 @@ ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value)
 		return;
 	}
 
-	pushJsonbValue(&state, WJB_KEY, key);
-	pushJsonbValue(&state, WJB_VALUE, value);
+	pushJsonbValueCompat(state, WJB_KEY, key);
+	pushJsonbValueCompat(state, WJB_VALUE, value);
 }
 
 char *

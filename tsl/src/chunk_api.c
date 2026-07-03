@@ -38,6 +38,7 @@
 #include "errors.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
+#include "jsonb_utils.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "utils.h"
@@ -52,13 +53,13 @@
  *  "device": [-9223372036854775808, 1073741823]}
  */
 static JsonbValue *
-hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbParseState **ps)
+hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbInState *state)
 {
 	int i;
 
 	Assert(hs->num_dimensions == hc->num_slices);
 
-	pushJsonbValue(ps, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_BEGIN_OBJECT, NULL);
 
 	for (i = 0; i < hc->num_slices; i++)
 	{
@@ -75,19 +76,20 @@ hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbParseState **ps)
 		k.val.string.len = strlen(dim_name);
 		k.val.string.val = dim_name;
 
-		pushJsonbValue(ps, WJB_KEY, &k);
-		pushJsonbValue(ps, WJB_BEGIN_ARRAY, NULL);
+		pushJsonbValueCompat(state, WJB_KEY, &k);
+		pushJsonbValueCompat(state, WJB_BEGIN_ARRAY, NULL);
 
 		v.type = jbvNumeric;
 		v.val.numeric = DatumGetNumeric(range_start);
-		pushJsonbValue(ps, WJB_ELEM, &v);
+		pushJsonbValueCompat(state, WJB_ELEM, &v);
 		v.val.numeric = DatumGetNumeric(range_end);
-		pushJsonbValue(ps, WJB_ELEM, &v);
+		pushJsonbValueCompat(state, WJB_ELEM, &v);
 
-		pushJsonbValue(ps, WJB_END_ARRAY, NULL);
+		pushJsonbValueCompat(state, WJB_END_ARRAY, NULL);
 	}
 
-	return pushJsonbValue(ps, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_END_OBJECT, NULL);
+	return state->result;
 }
 
 /*
@@ -253,8 +255,8 @@ chunk_form_tuple(Chunk *chunk, Hypertable *ht, TupleDesc tupdesc, bool created)
 {
 	Datum values[Natts_create_chunk];
 	bool nulls[Natts_create_chunk] = { false };
-	JsonbParseState *ps = NULL;
-	JsonbValue *jv = hypercube_to_jsonb_value(chunk->cube, ht->space, &ps);
+	JsonbInState state = { 0 };
+	JsonbValue *jv = hypercube_to_jsonb_value(chunk->cube, ht->space, &state);
 
 	if (NULL == jv)
 	{
