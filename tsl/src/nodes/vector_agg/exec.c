@@ -1017,11 +1017,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		}
 	}
 
-	/*
-	 * Some aggregates share transition state, but we shouldn't be able to get
-	 * more entries than the input targetlist.
-	 */
-	Assert(max_aggtransno + grouping_column_counter <= tlist_length);
 
 	/*
 	 * Allocate the storage for definitions of aggregate function and grouping
@@ -1034,6 +1029,12 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	vector_agg_state->num_grouping_columns = grouping_column_counter;
 	vector_agg_state->grouping_columns = palloc0(sizeof(*vector_agg_state->grouping_columns) *
 												 vector_agg_state->num_grouping_columns);
+
+	/*
+	 * Some aggregates share transition state, but we shouldn't be able to get
+	 * more entries than the input targetlist.
+	 */
+	Assert(vector_agg_state->num_agg_defs + vector_agg_state->num_grouping_columns <= tlist_length);
 
 	/*
 	 * Loop through the aggregated targetlist again and fill the definitions.

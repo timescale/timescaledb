@@ -289,6 +289,11 @@ gp_batch_do_emit(GroupingPolicy *gp, List *aggregated_tlist, TupleTableSlot *agg
 		return false;
 	}
 
+	/*
+	 * Multiple aggregates can share a single transition state, as given by the
+	 * Aggref.aggtransno. The partial aggregation node still has to output them
+	 * separately, so here we have to walk the aggregated targetlist.
+	 */
 	const int tlist_length = list_length(aggregated_tlist);
 	for (int i = 0; i < tlist_length; i++)
 	{

@@ -6,8 +6,7 @@
 
 /*
  * Vectorized implementation of a Postgres float{4,8}_accum() transition
- * function for a single type. They use the same Youngs-Cramer state, but for
- * AVG we can skip calculating the Sxx variable.
+ * function for a single type.
  */
 
 #ifdef GENERATE_DISPATCH_TABLE

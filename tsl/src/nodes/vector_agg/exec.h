@@ -41,6 +41,10 @@ typedef struct VectorAggState
 {
 	CustomScanState custom;
 
+	/*
+	 * Postgres makes some Aggrefs share the transition state. This array tracks
+	 * the unique transition states indexed by Aggref.aggtransno.
+	 */
 	int num_agg_defs;
 	VectorAggDef *agg_defs;
 
