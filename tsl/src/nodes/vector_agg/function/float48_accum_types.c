@@ -23,4 +23,3 @@
 #include "float48_accum_single.c"
 
 #undef AGG_NAME
-#undef NEED_SXX

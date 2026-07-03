@@ -999,16 +999,16 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	const int tlist_length = list_length(aggregated_tlist);
 
 	/*
-	 * First, count how many grouping columns and aggregate functions we have.
+	 * First, count how many grouping columns and aggregate transition states we have.
 	 */
-	int agg_functions_counter = 0;
+	int max_aggtransno = -1;
 	int grouping_column_counter = 0;
 	for (int i = 0; i < tlist_length; i++)
 	{
 		TargetEntry *tlentry = list_nth_node(TargetEntry, aggregated_tlist, i);
 		if (IsA(tlentry->expr, Aggref))
 		{
-			agg_functions_counter++;
+			max_aggtransno = Max(max_aggtransno, castNode(Aggref, tlentry->expr)->aggtransno);
 		}
 		else
 		{
@@ -1016,13 +1016,18 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			grouping_column_counter++;
 		}
 	}
-	Assert(agg_functions_counter + grouping_column_counter == tlist_length);
+
+	/*
+	 * Some aggregates share transition state, but we shouldn't be able to get
+	 * more entries than the input targetlist.
+	 */
+	Assert(max_aggtransno + grouping_column_counter <= tlist_length);
 
 	/*
 	 * Allocate the storage for definitions of aggregate function and grouping
 	 * columns.
 	 */
-	vector_agg_state->num_agg_defs = agg_functions_counter;
+	vector_agg_state->num_agg_defs = max_aggtransno + 1;
 	vector_agg_state->agg_defs =
 		palloc0(sizeof(*vector_agg_state->agg_defs) * vector_agg_state->num_agg_defs);
 
@@ -1033,7 +1038,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	/*
 	 * Loop through the aggregated targetlist again and fill the definitions.
 	 */
-	agg_functions_counter = 0;
 	grouping_column_counter = 0;
 	for (int i = 0; i < tlist_length; i++)
 	{
@@ -1041,13 +1045,24 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		if (IsA(tlentry->expr, Aggref))
 		{
 			/* This is an aggregate function. */
-			VectorAggDef *def = &vector_agg_state->agg_defs[agg_functions_counter++];
-			def->output_offset = i;
-
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
+
+			VectorAggDef *def = &vector_agg_state->agg_defs[aggref->aggtransno];
 
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid, aggref->inputcollid);
 			Assert(func != NULL);
+
+			if (def->func.agg_init != NULL)
+			{
+				/*
+				 * Already initialized for another aggregate sharing the same
+				 * transition state.
+				 */
+				Assert(def->func.agg_init == func->agg_init);
+				Assert(def->func.agg_vector == func->agg_vector);
+				continue;
+			}
+
 			def->func = *func;
 
 			if (list_length(aggref->args) > 0)
@@ -1474,9 +1489,11 @@ vector_agg_exec(CustomScanState *node)
 	/*
 	 * If we have more partial aggregation results, continue returning them.
 	 */
+	List *aggregated_tlist =
+		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
 	GroupingPolicy *grouping = vector_agg_state->grouping;
 	MemoryContext old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
-	bool have_partial = grouping->gp_do_emit(grouping, aggregated_slot);
+	bool have_partial = grouping->gp_do_emit(grouping, aggregated_tlist, aggregated_slot);
 	MemoryContextSwitchTo(old_context);
 	if (have_partial)
 	{
@@ -1568,7 +1585,7 @@ vector_agg_exec(CustomScanState *node)
 	 * If we have partial aggregation results, start returning them.
 	 */
 	old_context = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
-	have_partial = grouping->gp_do_emit(grouping, aggregated_slot);
+	have_partial = grouping->gp_do_emit(grouping, aggregated_tlist, aggregated_slot);
 	MemoryContextSwitchTo(old_context);
 	if (have_partial)
 	{

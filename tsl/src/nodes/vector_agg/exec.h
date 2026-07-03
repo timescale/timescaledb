@@ -18,7 +18,6 @@ typedef struct VectorAggDef
 {
 	VectorAggFunctions func;
 	Expr *argument;
-	int output_offset;
 	List *filter_clauses;
 
 	/*

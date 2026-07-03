@@ -185,6 +185,15 @@ select count(*), count(cint2), min(cfloat4), cint2 from aggfns group by cint2
 order by count(*) desc, cint2 limit 10
 ;
 
+-- Test aggregate transition state sharing.
+select count(cfloat8), round(avg(cfloat8)), round(sum(cfloat8)),
+    round(stddev(cfloat8)) from aggfns
+group by cint2 order by cint2 limit 10
+;
+
+select round(stddev(cint4)), count(cint4), sum(cint4), round(avg(cint4)) from aggfns;
+
+
 -- Test edge cases for various batch sizes and the filter matching around batch
 -- end.
 select count(*) from edges;
