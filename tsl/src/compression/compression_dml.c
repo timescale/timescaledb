@@ -1333,14 +1333,14 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		}
 
 		TM_FailureData tmfd;
-		result = table_tuple_delete(in_rel,
-									&compressed_tuple->t_self,
-									GetCurrentCommandId(true),
-									snapshot,
-									InvalidSnapshot,
-									true,
-									&tmfd,
-									false);
+		result = table_tuple_delete_compat(in_rel,
+										   &compressed_tuple->t_self,
+										   GetCurrentCommandId(true),
+										   0, /* options (not changing partition) */
+										   snapshot,
+										   InvalidSnapshot,
+										   true,
+										   &tmfd);
 
 		/* skip reporting error if isolation level is < Repeatable Read
 		 * since somebody decompressed the data concurrently, we need to take

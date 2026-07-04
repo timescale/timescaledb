@@ -2104,16 +2104,16 @@ delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot)
 	TM_Result result;
 	TM_FailureData tmfd;
 
-	result =
-		table_tuple_delete(rel,
-						   tid,
-						   GetCurrentCommandId(true),
-						   snapshot,
-						   InvalidSnapshot,
-						   true /* for now, just wait for commit/abort, that might let us proceed */
-						   ,
-						   &tmfd,
-						   true /* changingPart */);
+	result = table_tuple_delete_compat(rel,
+									   tid,
+									   GetCurrentCommandId(true),
+									   TABLE_DELETE_CHANGING_PARTITION, /* options */
+									   snapshot,
+									   InvalidSnapshot,
+									   true /* for now, just wait for commit/abort, that might let
+											   us proceed */
+									   ,
+									   &tmfd);
 
 	return result == TM_Ok;
 }
