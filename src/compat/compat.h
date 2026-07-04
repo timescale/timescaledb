@@ -112,6 +112,66 @@ table_beginscan_compat(Relation rel, Snapshot snapshot, int nkeys, ScanKey key, 
 }
 
 /*
+ * PG19 replaced the "changingPart" boolean of table_tuple_delete() with an
+ * "options" bitmask and added an "options" argument to table_tuple_update().
+ * Provide wrappers with the new signature; on earlier versions the changingPart
+ * flag is derived from the bitmask and the update options are dropped.
+ */
+#if PG19_LT
+#define TABLE_DELETE_CHANGING_PARTITION (1 << 0)
+#endif
+
+static inline TM_Result
+table_tuple_delete_compat(Relation rel, ItemPointer tid, CommandId cid, uint32 options,
+						  Snapshot snapshot, Snapshot crosscheck, bool wait, TM_FailureData *tmfd)
+{
+#if PG19_GE
+	return table_tuple_delete(rel, tid, cid, options, snapshot, crosscheck, wait, tmfd);
+#else
+	return table_tuple_delete(rel,
+							  tid,
+							  cid,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  (options & TABLE_DELETE_CHANGING_PARTITION) != 0);
+#endif
+}
+
+static inline TM_Result
+table_tuple_update_compat(Relation rel, ItemPointer otid, TupleTableSlot *slot, CommandId cid,
+						  uint32 options, Snapshot snapshot, Snapshot crosscheck, bool wait,
+						  TM_FailureData *tmfd, LockTupleMode *lockmode,
+						  TU_UpdateIndexes *update_indexes)
+{
+#if PG19_GE
+	return table_tuple_update(rel,
+							  otid,
+							  slot,
+							  cid,
+							  options,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  lockmode,
+							  update_indexes);
+#else
+	return table_tuple_update(rel,
+							  otid,
+							  slot,
+							  cid,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  lockmode,
+							  update_indexes);
+#endif
+}
+
+/*
  * PG19 added a "flags" argument to MakeTupleTableSlot(). Provide a wrapper with
  * the new signature that drops the flags on earlier versions.
  */
