@@ -33,6 +33,7 @@ from ci_settings import (
     PG17_LATEST,
     PG18_EARLIEST,
     PG18_LATEST,
+    PG19_LATEST,
     PG_LATEST,
 )
 
@@ -188,6 +189,18 @@ m["include"].append(
 m["include"].append(build_debug_config({"pg": PG17_LATEST}))
 
 m["include"].append(build_debug_config({"pg": PG18_LATEST, "coverage": True}))
+
+# test building against PG19
+m["include"].append(
+    build_debug_config(
+        {
+            "pg": PG19_LATEST,
+            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DEXPERIMENTAL=ON",
+            "installcheck": False,
+            "pginstallcheck": False,
+        }
+    )
+)
 
 # Also test on ARM. The custom arm64 runner is only available in the
 # timescale/timescaledb repository.
