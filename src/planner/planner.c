@@ -103,9 +103,19 @@ typedef struct BaserelInfoEntry
 void _planner_init(void);
 void _planner_fini(void);
 
+/*
+ * PG19 replaced get_relation_info_hook with build_simple_rel_hook. Adopt the
+ * new name on older versions so the hook variable and its install/restore code
+ * are version independent; only the callback signature differs.
+ */
+#if PG19_LT
+typedef get_relation_info_hook_type build_simple_rel_hook_type;
+#define build_simple_rel_hook get_relation_info_hook
+#endif
+
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
-static get_relation_info_hook_type prev_get_relation_info_hook;
+static build_simple_rel_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
 static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sortcl,
 										List *outer_tlist);
@@ -616,7 +626,12 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 
 static PlannedStmt *
 timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
-					ParamListInfo bound_params)
+					ParamListInfo bound_params
+#if PG19_GE
+					,
+					ExplainState *es
+#endif
+)
 {
 	PlannedStmt *stmt;
 	ListCell *lc;
@@ -700,12 +715,28 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 		if (prev_planner_hook != NULL)
 		{
 			/* Call any earlier hooks */
-			stmt = (prev_planner_hook) (context.rootquery, query_string, cursor_opts, bound_params);
+			stmt = (prev_planner_hook) (context.rootquery,
+										query_string,
+										cursor_opts,
+										bound_params
+#if PG19_GE
+										,
+										es
+#endif
+			);
 		}
 		else
 		{
 			/* Call the standard planner */
-			stmt = standard_planner(context.rootquery, query_string, cursor_opts, bound_params);
+			stmt = standard_planner(context.rootquery,
+									query_string,
+									cursor_opts,
+									bound_params
+#if PG19_GE
+									,
+									es
+#endif
+			);
 		}
 
 		if (ts_extension_is_loaded_and_not_upgrading())
@@ -1520,14 +1551,8 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
  * chunk relations that we need during planning. We also expand hypertables
  * here. */
 static void
-timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, bool inhparent,
-								   RelOptInfo *rel)
+timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent)
 {
-	if (prev_get_relation_info_hook != NULL)
-	{
-		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
-	}
-
 	if (!valid_hook_call())
 	{
 		return;
@@ -1661,6 +1686,36 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			break;
 	}
 }
+
+/*
+ * The hook fires once per base relation. PG19 renamed it and passes the range
+ * table entry, whereas earlier versions passed the relation OID and inhparent
+ * flag; adapt the arguments to our shared implementation here.
+ */
+#if PG19_GE
+static void
+timescaledb_get_relation_info_hook(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
+{
+	if (prev_get_relation_info_hook != NULL)
+	{
+		prev_get_relation_info_hook(root, rel, rte);
+	}
+
+	timescaledb_get_relation_info(root, rel, rte->inh);
+}
+#else
+static void
+timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, bool inhparent,
+								   RelOptInfo *rel)
+{
+	if (prev_get_relation_info_hook != NULL)
+	{
+		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
+	}
+
+	timescaledb_get_relation_info(root, rel, inhparent);
+}
+#endif
 
 static bool
 join_involves_hypertable(const PlannerInfo *root, const RelOptInfo *rel)
@@ -2059,8 +2114,8 @@ _planner_init(void)
 	prev_set_rel_pathlist_hook = set_rel_pathlist_hook;
 	set_rel_pathlist_hook = timescaledb_set_rel_pathlist;
 
-	prev_get_relation_info_hook = get_relation_info_hook;
-	get_relation_info_hook = timescaledb_get_relation_info_hook;
+	prev_get_relation_info_hook = build_simple_rel_hook;
+	build_simple_rel_hook = timescaledb_get_relation_info_hook;
 
 	prev_create_upper_paths_hook = create_upper_paths_hook;
 	create_upper_paths_hook = timescaledb_create_upper_paths_hook;
@@ -2071,6 +2126,6 @@ _planner_fini(void)
 {
 	planner_hook = prev_planner_hook;
 	set_rel_pathlist_hook = prev_set_rel_pathlist_hook;
-	get_relation_info_hook = prev_get_relation_info_hook;
+	build_simple_rel_hook = prev_get_relation_info_hook;
 	create_upper_paths_hook = prev_create_upper_paths_hook;
 }
