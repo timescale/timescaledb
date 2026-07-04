@@ -727,6 +727,9 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 	List *qualified_funcname =
 		list_make2(makeString(pstrdup(schema_name)), makeString(pstrdup(funcname)));
 	FuncCandidateList func_candidates;
+#if PG19_GE
+	int fgc_flags = 0; /* PG19 writes the result bitmask here; must not be NULL */
+#endif
 
 	func_candidates = FuncnameGetCandidates(qualified_funcname,
 											nargs,
@@ -734,7 +737,12 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 											false,
 											false, /* include_out_arguments */
 											false,
-											false);
+											false /* missing_ok */
+#if PG19_GE
+											,
+											&fgc_flags
+#endif
+	);
 	while (func_candidates != NULL)
 	{
 		if (func_candidates->nargs == nargs &&
