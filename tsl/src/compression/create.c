@@ -1379,6 +1379,17 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 	/* reload info after lock */
 	ht = ts_hypertable_get_by_id(ht->fd.id);
 
+	/*
+	 * If the reload returns nothing the hypertable was dropped while we were
+	 * waiting for the lock above.
+	 */
+	if (!ht)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("hypertable was dropped by a concurrent transaction")));
+	}
+
 	if (compress_disable)
 	{
 		return disable_compression(ht, with_clause_options);
