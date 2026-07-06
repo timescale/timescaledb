@@ -534,7 +534,7 @@ column_name_list_as_string(BloomFilterConfig *config)
 /* parses the individual sparse index config entities. being called once for each sparse index
  * config entity in the list. */
 static void
-parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_details,
+parse_sparse_index_config(JsonbInState *parse_state, FuncCall *sparse_index_details,
 						  Hypertable *hypertable, TsBmsList *sparse_index_columns)
 {
 	TypeCacheEntry *type_cache;
@@ -720,18 +720,19 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 	ListCell *lc;
 	SelectStmt *select;
 	RawStmt *raw;
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
 	/* sparse index can have empty input. Return [{"source":"config"}] jsonb */
 	if (strlen(inpstr) == 0)
 	{
-		pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
-		pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-		ts_jsonb_add_str(parse_state,
+		pushJsonbValueCompat(&parse_state, WJB_BEGIN_ARRAY, NULL);
+		pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+		ts_jsonb_add_str(&parse_state,
 						 ts_sparse_index_common_keys[SparseIndexKeySource],
 						 ts_sparse_index_source_names[_SparseIndexSourceEnumConfig]); /* source */
-		JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL));
-		return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL));
+		pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+		pushJsonbValueCompat(&parse_state, WJB_END_ARRAY, NULL);
+		return JsonbValueToJsonb(parse_state.result);
 	}
 
 	initStringInfo(&buf);
@@ -790,7 +791,7 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 	 * {"type": "minmax","source":"config", "column": "ts"},
 	 * {"type": "bloom", "source":"config", "column": ["age", "gender"]}]
 	 */
-	pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_ARRAY, NULL);
 
 	TsBmsList sparse_index_columns = ts_bmslist_create();
 	foreach (lc, select->targetList)
@@ -804,11 +805,12 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 
 		FuncCall *fc = (FuncCall *) target->val;
 
-		parse_sparse_index_config(parse_state, fc, hypertable, &sparse_index_columns);
+		parse_sparse_index_config(&parse_state, fc, hypertable, &sparse_index_columns);
 	}
 
 	ts_bmslist_free(sparse_index_columns);
-	return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL));
+	pushJsonbValueCompat(&parse_state, WJB_END_ARRAY, NULL);
+	return JsonbValueToJsonb(parse_state.result);
 }
 
 /* returns List of CompressedParsedCol

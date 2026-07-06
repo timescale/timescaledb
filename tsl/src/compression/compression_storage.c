@@ -50,6 +50,7 @@
 		}                                                                                          \
 	} while (0);
 
+static void create_compressed_chunk_indexes(Oid relid, CompressionSettings *settings);
 static void set_toast_tuple_target_on_chunk(Oid compressed_table_id);
 static void set_statistics_on_compressed_chunk(Oid compressed_table_id);
 
@@ -99,7 +100,7 @@ compression_hypertable_create(Hypertable *ht, Oid owner, Oid tablespace_oid)
 }
 
 Oid
-compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid tablespace_oid,
+compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid,
 						 CompressionSettings *settings)
 {
 	ObjectAddress tbladdress;
@@ -111,7 +112,7 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
 #endif
 
-	Oid owner = ts_rel_get_owner(chunk->hypertable_relid);
+	Oid owner = ts_rel_get_owner(src_chunk->hypertable_relid);
 
 	CreateStmt *create;
 	RangeVar *compress_rel;
@@ -131,8 +132,9 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 
 	/* create the compression table */
 	/* NewRelationCreateToastTable calls CommandCounterIncrement */
+	NameData relname = build_compressed_relation_name(src_chunk);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	compress_rel = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+	compress_rel = makeRangeVar(NameStr(src_chunk->fd.schema_name), NameStr(relname), -1);
 
 	create->relation = compress_rel;
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the uncompressed chunk */
@@ -140,21 +142,21 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 
 	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
 	CommandCounterIncrement();
-	chunk->table_id = tbladdress.objectId;
-	ts_copy_relation_acl(chunk->hypertable_relid, chunk->table_id, owner);
+	Oid table_id = tbladdress.objectId;
+	ts_copy_relation_acl(src_chunk->hypertable_relid, table_id, owner);
 	toast_options =
 		transformRelOptions((Datum) 0, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
-	NewRelationCreateToastTable(chunk->table_id, toast_options);
+	NewRelationCreateToastTable(table_id, toast_options);
 
-	modify_compressed_toast_table_storage(settings, column_defs, chunk->table_id);
-	set_statistics_on_compressed_chunk(chunk->table_id);
-	set_toast_tuple_target_on_chunk(chunk->table_id);
+	modify_compressed_toast_table_storage(settings, column_defs, table_id);
+	set_statistics_on_compressed_chunk(table_id);
+	set_toast_tuple_target_on_chunk(table_id);
 	ts_catalog_restore_user(&sec_ctx);
 
-	create_compressed_chunk_indexes(chunk, settings);
+	create_compressed_chunk_indexes(table_id, settings);
 
-	return chunk->table_id;
+	return table_id;
 }
 
 static void
@@ -291,14 +293,22 @@ modify_compressed_toast_table_storage(CompressionSettings *settings, List *colde
 }
 
 void
-create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
+create_compressed_chunk_indexes(Oid relid, CompressionSettings *settings)
 {
+	/*
+	 * The index covers the segmentby columns followed by each orderby column's
+	 * sparse metadata, in their configured order. Each orderby column adds its
+	 * two metadata columns as `first` then `last`, inheriting that column's
+	 * ASC/DESC and NULLS FIRST/LAST options.
+	 */
+	RangeVar *rv =
+		makeRangeVar(get_namespace_name(get_rel_namespace(relid)), get_rel_name(relid), -1);
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
 		.accessMethod = DEFAULT_INDEX_TYPE,
 		.idxname = NULL,
-		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
-		.tableSpace = get_tablespace_name(get_rel_tablespace(chunk->table_id)),
+		.relation = rv,
+		.tableSpace = get_tablespace_name(get_rel_tablespace(relid)),
 	};
 
 	NameData index_name;
@@ -331,14 +341,25 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 	initStringInfo(&orderby_buf);
 	for (int i = 1; i <= ts_array_length(settings->fd.orderby); i++)
 	{
-		char *lower_name;
-		char *upper_name;
-		orderby_sparse_metadata_names(settings, i, &lower_name, &upper_name);
+		char *first_name;
+		char *last_name;
+		/* Keeping the ability to create indexes based on minmax if
+		 * explicitly specified through sparse index settings. Index will be
+		 * created as (min, max) instead of (first, last).
+		 */
+		if (orderby_sparse_kind(settings, i) == ORDERBY_SPARSE_MINMAX)
+		{
+			orderby_sparse_metadata_names(settings, i, &first_name, &last_name);
+		}
+		else
+		{
+			orderby_firstlast_metadata_names(settings, i, &first_name, &last_name);
+		}
 
 		resetStringInfo(&orderby_buf);
-		/* Lower-boundary metadata column. */
-		IndexElem *orderby_lower_elem = makeNode(IndexElem);
-		orderby_lower_elem->name = lower_name;
+		/* First metadata column. */
+		IndexElem *orderby_first_elem = makeNode(IndexElem);
+		orderby_first_elem->name = first_name;
 		if (ts_array_get_element_bool(settings->fd.orderby_desc, i))
 		{
 			appendStringInfoString(&orderby_buf, " DESC");
@@ -349,11 +370,11 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 			appendStringInfoString(&orderby_buf, " ASC");
 			ordering = SORTBY_ASC;
 		}
-		orderby_lower_elem->ordering = ordering;
+		orderby_first_elem->ordering = ordering;
 
 		if (ts_array_get_element_bool(settings->fd.orderby_nullsfirst, i))
 		{
-			if (orderby_lower_elem->ordering != SORTBY_DESC)
+			if (orderby_first_elem->ordering != SORTBY_DESC)
 			{
 				appendStringInfoString(&orderby_buf, " NULLS FIRST");
 				nulls_ordering = SORTBY_NULLS_FIRST;
@@ -365,7 +386,7 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		}
 		else
 		{
-			if (orderby_lower_elem->ordering != SORTBY_DESC)
+			if (orderby_first_elem->ordering != SORTBY_DESC)
 			{
 				nulls_ordering = SORTBY_NULLS_DEFAULT;
 			}
@@ -375,25 +396,25 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 				nulls_ordering = SORTBY_NULLS_LAST;
 			}
 		}
-		orderby_lower_elem->nulls_ordering = nulls_ordering;
-		appendStringInfoString(&buf, orderby_lower_elem->name);
+		orderby_first_elem->nulls_ordering = nulls_ordering;
+		appendStringInfoString(&buf, orderby_first_elem->name);
 		appendStringInfoString(&buf, orderby_buf.data);
 		appendStringInfoString(&buf, ", ");
-		indexcols = lappend(indexcols, orderby_lower_elem);
+		indexcols = lappend(indexcols, orderby_first_elem);
 
-		/* Upper-boundary metadata column. */
-		IndexElem *orderby_upper_elem = makeNode(IndexElem);
-		orderby_upper_elem->name = upper_name;
-		orderby_upper_elem->ordering = orderby_lower_elem->ordering;
-		orderby_upper_elem->nulls_ordering = orderby_lower_elem->nulls_ordering;
-		appendStringInfoString(&buf, orderby_upper_elem->name);
+		/* Second metadata column. */
+		IndexElem *orderby_last_elem = makeNode(IndexElem);
+		orderby_last_elem->name = last_name;
+		orderby_last_elem->ordering = orderby_first_elem->ordering;
+		orderby_last_elem->nulls_ordering = orderby_first_elem->nulls_ordering;
+		appendStringInfoString(&buf, orderby_last_elem->name);
 		appendStringInfoString(&buf, orderby_buf.data);
 		appendStringInfoString(&buf, ", ");
-		indexcols = lappend(indexcols, orderby_upper_elem);
+		indexcols = lappend(indexcols, orderby_last_elem);
 	}
 
 	stmt.indexParams = indexcols;
-	index_addr = DefineIndexCompat(chunk->table_id,
+	index_addr = DefineIndexCompat(relid,
 								   &stmt,
 								   InvalidOid, /* IndexRelationId */
 								   InvalidOid, /* parentIndexId */
@@ -415,8 +436,8 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 	elog(DEBUG1,
 		 "adding index %s ON %s.%s USING BTREE(%s)",
 		 NameStr(index_name),
-		 NameStr(chunk->fd.schema_name),
-		 NameStr(chunk->fd.table_name),
+		 rv->schemaname,
+		 rv->relname,
 		 buf.data);
 
 	ReleaseSysCache(index_tuple);

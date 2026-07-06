@@ -19,6 +19,7 @@
 #include <optimizer/restrictinfo.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
+#include <storage/lwlock.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/ruleutils.h>

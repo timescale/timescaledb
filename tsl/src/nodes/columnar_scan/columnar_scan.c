@@ -317,15 +317,60 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 				column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 				int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
 				Assert(orderby_index != 0);
-				AttrNumber lower_attno;
-				AttrNumber upper_attno;
+				AttrNumber leading_attno;
+				AttrNumber trailing_attno;
 				orderby_sparse_metadata_attnos(info->settings,
 											   info->compressed_rte->relid,
 											   orderby_index,
-											   &lower_attno,
-											   &upper_attno);
+											   &leading_attno,
+											   &trailing_attno);
 				bool orderby_desc =
 					ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+
+				/*
+				 * Compressed chunk indexes based on firstlast sparse indexes can have two
+				 * orderings. New chunks index them as (first, last); chunks compressed before that
+				 * change index a DESC column as (last, first). Only DESC columns can differ, so for
+				 * those we check the chunk's index and follow whichever order it has.
+				 */
+				if (orderby_desc &&
+					orderby_sparse_kind(info->settings, orderby_index) == ORDERBY_SPARSE_FIRSTLAST)
+				{
+					orderby_firstlast_metadata_attnos(info->settings,
+													  info->compressed_rte->relid,
+													  orderby_index,
+													  &leading_attno,
+													  &trailing_attno);
+
+					ListCell *index_lc;
+					foreach (index_lc, info->compressed_rel->indexlist)
+					{
+						IndexOptInfo *index = lfirst(index_lc);
+						int leading_pos = -1;
+						int trailing_pos = -1;
+						for (int k = 0; k < index->nkeycolumns; k++)
+						{
+							if (index->indexkeys[k] == leading_attno)
+							{
+								leading_pos = k;
+							}
+							else if (index->indexkeys[k] == trailing_attno)
+							{
+								trailing_pos = k;
+							}
+						}
+						if (leading_pos >= 0 && trailing_pos >= 0)
+						{
+							if (trailing_pos < leading_pos)
+							{
+								AttrNumber tmp = leading_attno;
+								leading_attno = trailing_attno;
+								trailing_attno = tmp;
+							}
+							break;
+						}
+					}
+				}
 				bool orderby_nullsfirst =
 					ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
 
@@ -344,33 +389,39 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 				}
 
 				Var *metadata_var = makeVar(info->compressed_rel->relid,
-											lower_attno,
+											leading_attno,
 											var->vartype,
 											var->vartypmod,
 											var->varcollid,
 											var->varlevelsup);
-				Expr *lower_expr =
+				Expr *leading_expr =
 					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *lower_ec =
-					append_ec_for_metadata_col(root, info, lower_expr, pk, opcintype);
-				PathKey *lower_pk =
-					make_canonical_pathkey(root, lower_ec, pk->pk_opfamily, strategy, nulls_first);
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, lower_pk);
+				EquivalenceClass *leading_ec =
+					append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
+				PathKey *leading_pk = make_canonical_pathkey(root,
+															 leading_ec,
+															 pk->pk_opfamily,
+															 strategy,
+															 nulls_first);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, leading_pk);
 
 				metadata_var = makeVar(info->compressed_rel->relid,
-									   upper_attno,
+									   trailing_attno,
 									   var->vartype,
 									   var->vartypmod,
 									   var->varcollid,
 									   var->varlevelsup);
-				Expr *upper_expr =
+				Expr *trailing_expr =
 					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *upper_ec =
-					append_ec_for_metadata_col(root, info, upper_expr, pk, opcintype);
-				PathKey *upper_pk =
-					make_canonical_pathkey(root, upper_ec, pk->pk_opfamily, strategy, nulls_first);
+				EquivalenceClass *trailing_ec =
+					append_ec_for_metadata_col(root, info, trailing_expr, pk, opcintype);
+				PathKey *trailing_pk = make_canonical_pathkey(root,
+															  trailing_ec,
+															  pk->pk_opfamily,
+															  strategy,
+															  nulls_first);
 
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, upper_pk);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, trailing_pk);
 			}
 		}
 	}
@@ -1668,16 +1719,23 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			sequential_paths = lappend(sequential_paths, unordered_uncompressed_path);
 		}
 
-		Path *plain_append = (Path *) create_append_path(root,
-														 chunk_rel,
-														 sequential_paths,
-														 parallel_paths,
-														 /* pathkeys = */ NIL,
-														 req_outer,
-														 workers,
-														 workers > 0,
-														 chunk_path_no_sort->rows +
-															 unordered_uncompressed_path->rows);
+		Path *plain_append =
+			(Path *) create_append_path(/* root = */ root,
+										/* rel = */ chunk_rel,
+#if PG19_GE
+										/* input = */
+										(AppendPathInput){ .subpaths = sequential_paths,
+														   .partial_subpaths = parallel_paths },
+#else
+										/* subpaths = */ sequential_paths,
+										/* partial_subpaths = */ parallel_paths,
+#endif
+										/* pathkeys = */ NIL,
+										/* required_outer = */ req_outer,
+										/* parallel_workers = */ workers,
+										/* parallel_aware = */ workers > 0,
+										/* rows = */ chunk_path_no_sort->rows +
+											unordered_uncompressed_path->rows);
 
 		combined_paths = lappend(combined_paths, plain_append);
 	}
@@ -1756,6 +1814,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 											  chunk_rel,
 											  list_make2(decompression_path,
 														 uncompressed_path_for_merge),
+#if PG19_GE
+											  /* child_append_relid_sets = */ NIL,
+#endif
 											  sort_info->decompressed_sort_pathkeys,
 											  req_outer);
 		combined_paths = lappend(combined_paths, merge_append);
@@ -2867,6 +2928,12 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		Var *var = castNode(Var, node);
 
 		if (var->varattno <= 0)
+		{
+			return false;
+		}
+		/* Pathkey collation different from underlying column collation may lead to different sort
+		 * order */
+		if (var->varcollid != pk->pk_eclass->ec_collation)
 		{
 			return false;
 		}

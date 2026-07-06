@@ -644,9 +644,12 @@ SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, 
 ORDER BY relname;
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM
-                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
-  WHERE ht.table_name = :'STAT_COMP_TABLE_NAME' AND ch.hypertable_id = ht.id )
+ WHERE oid in ( SELECT cs.compress_relid FROM
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht,
+                   _timescaledb_catalog.compression_settings cs
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id
+        AND cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        AND cs.compress_relid IS NOT NULL )
 ORDER BY relname;
 
 --analyze on stattest2 should not overwrite
@@ -658,9 +661,12 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class
 ORDER BY relname;
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM
-                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
-  WHERE ht.table_name = :'STAT_COMP_TABLE_NAME' AND ch.hypertable_id = ht.id )
+ WHERE oid in ( SELECT cs.compress_relid FROM
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht,
+                   _timescaledb_catalog.compression_settings cs
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id
+        AND cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        AND cs.compress_relid IS NOT NULL )
 ORDER BY relname;
 
 -- analyze on compressed hypertable should restore stats

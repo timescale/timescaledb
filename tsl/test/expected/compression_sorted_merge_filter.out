@@ -45,7 +45,7 @@ insert into batches values ('2022-02-02 00:00:01', 1, true), ('2022-02-02 00:00:
 select compress_chunk(x, true) from show_chunks('batches') x;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_2_chunk
 
 analyze batches;
 select ts from batches where filter order by ts;
@@ -64,7 +64,7 @@ insert into batches values ('2022-02-02 00:00:01', 1, true), ('2022-02-02 00:00:
 select compress_chunk(x, true) from show_chunks('batches') x;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_3_chunk
 
 analyze batches;
 select ts from batches where filter order by ts;
@@ -83,7 +83,7 @@ insert into batches values ('2022-02-02 00:00:01', 1, false), ('2022-02-02 00:00
 select compress_chunk(x, true) from show_chunks('batches') x;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_4_chunk
 
 analyze batches;
 select ts from batches where filter order by ts;

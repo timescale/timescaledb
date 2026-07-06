@@ -62,7 +62,7 @@ SELECT compress_relid AS "COMPRESSED_CHUNK_2" FROM _timescaledb_catalog.compress
 
 \set ON_ERROR_STOP 0
 
--- Cannot merge chunks internal compressed chunks, no dimensions on them.
+-- Cannot merge internal compressed relations
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension(:'COMPRESSED_CHUNK_1',:'COMPRESSED_CHUNK_2', 1);
 
 \set ON_ERROR_STOP 1
