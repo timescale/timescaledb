@@ -112,6 +112,34 @@ jobs:
         echo '::add-matcher::.github/problem-matchers/grep.json'
         ! grep '[f]ixme' -niR ./* .github/workflows/*
 
+  clang_tidy:
+    name: Run clang-tidy
+    runs-on: timescaledb-runner-arm64
+    env:
+      LLVM_VER: 17
+    steps:
+    - name: Install Linux Dependencies
+      timeout-minutes: 15
+      run: |
+        gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+        gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+
+        . /etc/os-release
+        echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+        sudo apt-get update
+
+        sudo apt-get install clang-${LLVM_VER} clang-tidy-${LLVM_VER}
+
+    - name: Checkout source
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+    - name: Run clang-tidy
+      run: |
+        cmake -S . -B build-tidy -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
+          -DLINTER=ON -DWARNINGS_AS_ERRORS=ON
+        make -C build-tidy -j8
+
+
   python_checks:
     name: Check Python code in tree
     runs-on: ubuntu-latest
