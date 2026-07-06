@@ -117,6 +117,7 @@ jobs:
     runs-on: timescaledb-runner-arm64
     env:
       LLVM_VER: 17
+      PG_VER: 16
     steps:
     - name: Install Linux Dependencies
       timeout-minutes: 15
@@ -129,6 +130,8 @@ jobs:
         sudo apt-get update
 
         sudo apt-get install clang-${LLVM_VER} clang-tidy-${LLVM_VER}
+
+        sudo apt-get install postgresql-server-dev-${PG_VER}
 
     - name: Checkout source
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
