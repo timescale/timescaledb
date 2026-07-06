@@ -127,12 +127,9 @@ jobs:
 
         . /etc/os-release
         echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+        sudo apt-get update
 
-        sudo apt-get install postgresql-common
-        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-
-        sudo apt-get install postgresql-server-dev-${PG_VER} \
-            clang-${LLVM_VER} lld-${LLVM_VER} clang-tidy-${LLVM_VER}
+        sudo apt-get install clang-${LLVM_VER} lld-${LLVM_VER} clang-tidy-${LLVM_VER}
 
         sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${LLVM_VER} 100
         sudo update-alternatives --set clang-tidy /usr/bin/clang-tidy-${LLVM_VER}
@@ -142,11 +139,63 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+    - name: Read configuration
+      id: config
+      run: python -B .github/gh_config_reader.py
+
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
+    # ages after the original problem.
+    - name: Get date for build caching
+      id: get-date
+      run: echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
+
+    - name: Get key for caching
+      id: cache-key
+      run: echo "key=postgresql-tidy-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}" >> $GITHUB_OUTPUT
+
+    - name: Restore PostgreSQL Cache
+      id: restore-postgresql
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: install
+        key: ${{ steps.cache-key.outputs.key }}
+
+    - name: Build PostgreSQL
+      if: steps.restore-postgresql.outputs.cache-hit != 'true'
+      run: |
+       wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
+         https://ftp.postgresql.org/pub/source/v${{ steps.config.outputs.PG18_LATEST }}/postgresql-${{ steps.config.outputs.PG18_LATEST }}.tar.bz2
+        mkdir -p pg build-pg install
+        tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
+        cd build-pg
+        ../pg/configure --prefix=$(readlink -e "$(pwd)/../install") --with-openssl \
+          --without-readline --without-zlib --without-libxml --enable-cassert \
+          --enable-debug
+        make -j$(getconf _NPROCESSORS_ONLN)
+
+    - name: Install PostgreSQL
+      run: |
+        make -C build-pg install
+
+    - name: Save PostgreSQL Cache
+      if: steps.restore-postgresql.outputs.cache-matched-key == ''
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: install
+        key: ${{ steps.cache-key.outputs.key }}
+
+    - name: Upload config.log
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: config.log for PostgreSQL
+        path: build-pg/config.log
+
     - name: Run clang-tidy
       run: |
-        cmake -S . -B build-tidy -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang-${LLVM_VER} \
-          -DPG_PATH=/usr/lib/postgresql/${PG_VER} -DLINTER=ON -DWARNINGS_AS_ERRORS=ON
-        make -C build-tidy -j8
+        cmake -S . -B build-ts-tidy -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang-${LLVM_VER} \
+          -DPG_PATH=install -DLINTER=ON -DWARNINGS_AS_ERRORS=ON
+        make -C build-ts-tidy -j8
 
 
   python_checks:
