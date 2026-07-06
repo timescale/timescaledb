@@ -1465,11 +1465,11 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 * hypertables are already expanded, but no paths are created yet, to update
 	 * the PlannerInfo.total_table_pages which influences the index path cost.
 	 */
-	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
+	if (rte_should_expand(rte))
 	{
 		expand_all_hypertables(root, rel, rti, rte);
 
-		Assert(!ts_rte_is_marked_for_expansion(rte));
+		Assert(!rte_should_expand(rte));
 	}
 
 	if (ts_guc_enable_optimizations)
