@@ -101,9 +101,9 @@ echo
 
 if diff -u result_noopt.txt result_opt.txt
 then
-    result=$?
-else
     result=0
+else
+    result=$?
 fi
 
 echo
