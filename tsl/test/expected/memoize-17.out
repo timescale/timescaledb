@@ -10,7 +10,7 @@ SELECT format('\! diff -u --label "Unmemoized results" --label "Memoized results
 \gset
 -- create normal hypertable with dropped columns, each chunk will have different attribute numbers
 CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
-SELECT create_hypertable('metrics','time',create_default_indexes:=false);
+SELECT create_hypertable('metrics','time');
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
@@ -18,30 +18,24 @@ SELECT create_hypertable('metrics','time',create_default_indexes:=false);
 INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','10m') time, generate_series(1,27) device_id;
 INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','10m') time, generate_series(1,27) device_id;
 INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','10m') time, generate_series(1,27) device_id;
-CREATE INDEX ON metrics(time DESC);
-CREATE INDEX ON metrics(device_id,time DESC);
 VACUUM FULL ANALYZE metrics;
 -- create identical hypertable with space partitioning
 CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
-SELECT create_hypertable('metrics_space','time','device_id',3,create_default_indexes:=false);
+SELECT create_hypertable('metrics_space','time','device_id',3);
      create_hypertable      
 ----------------------------
  (2,public,metrics_space,t)
 
 INSERT INTO metrics_space SELECT * FROM metrics;
-CREATE INDEX ON metrics_space(time);
-CREATE INDEX ON metrics_space(device_id,time);
 VACUUM FULL ANALYZE metrics_space;
 -- create hypertable with compression
 CREATE TABLE metrics_compressed(time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
-SELECT create_hypertable('metrics_compressed','time',create_default_indexes:=false);
+SELECT create_hypertable('metrics_compressed','time');
         create_hypertable        
 ---------------------------------
  (3,public,metrics_compressed,t)
 
 INSERT INTO metrics_compressed SELECT * FROM metrics;
-CREATE INDEX ON metrics_compressed(time);
-CREATE INDEX ON metrics_compressed(device_id,time);
 -- compress chunks
 ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(show_chunks('metrics_compressed'));
@@ -55,14 +49,12 @@ UPDATE metrics_compressed SET v3 = 42 WHERE device_id=1 AND time > '2000-01-01' 
 VACUUM FULL ANALYZE metrics_compressed;
 -- create hypertable with space partitioning and compression
 CREATE TABLE metrics_space_compressed(time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
-SELECT create_hypertable('metrics_space_compressed','time','device_id',3,create_default_indexes:=false);
+SELECT create_hypertable('metrics_space_compressed','time','device_id',3);
            create_hypertable           
 ---------------------------------------
  (5,public,metrics_space_compressed,t)
 
 INSERT INTO metrics_space_compressed SELECT * FROM metrics;
-CREATE INDEX ON metrics_space_compressed(time);
-CREATE INDEX ON metrics_space_compressed(device_id,time);
 ANALYZE metrics_space_compressed;
 -- compress chunks
 ALTER TABLE metrics_space_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
@@ -123,12 +115,13 @@ LIMIT 10000
                      ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1.00 loops=27)
                            Order: m2."time" DESC
                            Hypertables excluded during runtime: 0
-                           ->  Index Scan using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk m2_1 (actual rows=1.00 loops=27)
-                                 Index Cond: (device_id = m1.device_id)
-                           ->  Index Scan using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk m2_2 (never executed)
-                                 Index Cond: (device_id = m1.device_id)
-                           ->  Index Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk m2_3 (never executed)
-                                 Index Cond: (device_id = m1.device_id)
+                           ->  Index Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk m2_1 (actual rows=1.00 loops=27)
+                                 Filter: (m1.device_id = device_id)
+                                 Rows Removed by Filter: 13
+                           ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk m2_2 (never executed)
+                                 Filter: (m1.device_id = device_id)
+                           ->  Index Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk m2_3 (never executed)
+                                 Filter: (m1.device_id = device_id)
 
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
@@ -159,19 +152,19 @@ LIMIT 10000
                Order: m1."time"
                ->  Merge Append (actual rows=10000.00 loops=1)
                      Sort Key: m1."time"
-                     ->  Index Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk m1_1 (actual rows=3332.00 loops=1)
-                     ->  Index Scan using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk m1_2 (actual rows=3701.00 loops=1)
-                     ->  Index Scan using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk m1_3 (actual rows=2969.00 loops=1)
+                     ->  Index Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk m1_1 (actual rows=3332.00 loops=1)
+                     ->  Index Scan Backward using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk m1_2 (actual rows=3701.00 loops=1)
+                     ->  Index Scan Backward using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk m1_3 (actual rows=2969.00 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: m1."time"
-                     ->  Index Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk m1_4 (never executed)
-                     ->  Index Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk m1_5 (never executed)
-                     ->  Index Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk m1_6 (never executed)
+                     ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk m1_4 (never executed)
+                     ->  Index Scan Backward using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk m1_5 (never executed)
+                     ->  Index Scan Backward using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk m1_6 (never executed)
                ->  Merge Append (never executed)
                      Sort Key: m1."time"
-                     ->  Index Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk m1_7 (never executed)
-                     ->  Index Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk m1_8 (never executed)
-                     ->  Index Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk m1_9 (never executed)
+                     ->  Index Scan Backward using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk m1_7 (never executed)
+                     ->  Index Scan Backward using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk m1_8 (never executed)
+                     ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk m1_9 (never executed)
          ->  Memoize (actual rows=1.00 loops=10000)
                Cache Key: m1.device_id
                Cache Mode: binary
@@ -181,27 +174,27 @@ LIMIT 10000
                            Order: m2."time" DESC
                            ->  Merge Append (actual rows=1.00 loops=27)
                                  Sort Key: m2."time" DESC
-                                 ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_1 (actual rows=0.00 loops=27)
+                                 ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_1 (actual rows=0.00 loops=27)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan Backward using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk m2_2 (actual rows=0.00 loops=27)
+                                 ->  Index Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk m2_2 (actual rows=0.00 loops=27)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan Backward using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk m2_3 (actual rows=0.00 loops=27)
-                                       Index Cond: (device_id = m1.device_id)
-                           ->  Merge Append (never executed)
-                                 Sort Key: m2."time" DESC
-                                 ->  Index Scan Backward using _hyper_2_9_chunk_metrics_space_device_id_time_idx on _hyper_2_9_chunk m2_4 (never executed)
-                                       Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk m2_5 (never executed)
-                                       Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m2_6 (never executed)
+                                 ->  Index Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk m2_3 (actual rows=0.00 loops=27)
                                        Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC
-                                 ->  Index Scan Backward using _hyper_2_6_chunk_metrics_space_device_id_time_idx on _hyper_2_6_chunk m2_7 (never executed)
+                                 ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_time_idx on _hyper_2_9_chunk m2_4 (never executed)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan Backward using _hyper_2_5_chunk_metrics_space_device_id_time_idx on _hyper_2_5_chunk m2_8 (never executed)
+                                 ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk m2_5 (never executed)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan Backward using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk m2_9 (never executed)
+                                 ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m2_6 (never executed)
+                                       Index Cond: (device_id = m1.device_id)
+                           ->  Merge Append (never executed)
+                                 Sort Key: m2."time" DESC
+                                 ->  Index Scan using _hyper_2_6_chunk_metrics_space_device_id_time_idx on _hyper_2_6_chunk m2_7 (never executed)
+                                       Index Cond: (device_id = m1.device_id)
+                                 ->  Index Scan using _hyper_2_5_chunk_metrics_space_device_id_time_idx on _hyper_2_5_chunk m2_8 (never executed)
+                                       Index Cond: (device_id = m1.device_id)
+                                 ->  Index Scan using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk m2_9 (never executed)
                                        Index Cond: (device_id = m1.device_id)
 
 \set TEST_TABLE 'metrics_compressed'
@@ -238,7 +231,7 @@ LIMIT 10000
                                  Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
                                  Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=26.00 loops=1)
-                     ->  Index Scan using _hyper_3_13_chunk_metrics_compressed_time_idx on _hyper_3_13_chunk m1_1 (actual rows=371.00 loops=1)
+                     ->  Index Scan Backward using _hyper_3_13_chunk_metrics_compressed_time_idx on _hyper_3_13_chunk m1_1 (actual rows=371.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk m1_2 (never executed)
                      ->  Sort (never executed)
                            Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
@@ -266,7 +259,7 @@ LIMIT 10000
                                  ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk m2_3 (never executed)
                                        ->  Index Scan using _hyper_3_13_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_13_chunk_compressed _hyper_3_13_chunk_compressed_1 (never executed)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan Backward using _hyper_3_13_chunk_metrics_compressed_time_idx on _hyper_3_13_chunk m2_3 (never executed)
+                                 ->  Index Scan using _hyper_3_13_chunk_metrics_compressed_time_idx on _hyper_3_13_chunk m2_3 (never executed)
                                        Filter: (m1.device_id = device_id)
 
 \set TEST_TABLE 'metrics_space_compressed'
