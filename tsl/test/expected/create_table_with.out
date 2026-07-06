@@ -255,7 +255,7 @@ INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
 SELECT compress_chunk(show_chunks('t13'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_45_6_chunk
+ _timescaledb_internal._hyper_45_5_chunk
 
 ROLLBACK;
 -- test segmentby and orderby

@@ -1764,7 +1764,7 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_buck
 EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cagg_inval;
 
 -- should have invalidation entry from the direct batch delete
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2;
 
 -- direct batch delete with time column as segmentby. Segmentby columns don't
 -- have _ts_meta_min/max, so the invalidation context must read the segmentby

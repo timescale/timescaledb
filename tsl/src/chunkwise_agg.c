@@ -134,14 +134,18 @@ get_subpaths_from_append_path(Path *path, List **subpaths, Path **append, Path *
  * Copy an AppendPath and set new subpaths.
  */
 static AppendPath *
-copy_append_path(AppendPath *path, List *subpaths, PathTarget *pathtarget)
+copy_append_path(PlannerInfo *root, AppendPath *path, List *subpaths, PathTarget *pathtarget)
 {
 	AppendPath *newPath = makeNode(AppendPath);
 	memcpy(newPath, path, sizeof(AppendPath));
 	newPath->subpaths = subpaths;
 	newPath->path.pathtarget = copy_pathtarget(pathtarget);
 
+#if PG19_GE
+	cost_append(newPath, root);
+#else
 	cost_append(newPath);
+#endif
 
 	return newPath;
 }
@@ -153,8 +157,14 @@ static MergeAppendPath *
 copy_merge_append_path(PlannerInfo *root, MergeAppendPath *path, List *subpaths,
 					   PathTarget *pathtarget)
 {
-	MergeAppendPath *newPath =
-		create_merge_append_path(root, path->path.parent, subpaths, path->path.pathkeys, NULL);
+	MergeAppendPath *newPath = create_merge_append_path(root,
+														path->path.parent,
+														subpaths,
+#if PG19_GE
+														path->child_append_relid_sets,
+#endif
+														path->path.pathkeys,
+														NULL);
 
 	newPath->path.param_info = path->path.param_info;
 	newPath->path.pathtarget = copy_pathtarget(pathtarget);
@@ -171,7 +181,7 @@ copy_append_like_path(PlannerInfo *root, Path *path, List *new_subpaths, PathTar
 	if (IsA(path, AppendPath))
 	{
 		AppendPath *append_path = castNode(AppendPath, path);
-		AppendPath *new_append_path = copy_append_path(append_path, new_subpaths, pathtarget);
+		AppendPath *new_append_path = copy_append_path(root, append_path, new_subpaths, pathtarget);
 		return &new_append_path->path;
 	}
 	else if (IsA(path, MergeAppendPath))
@@ -534,7 +544,7 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 /*
  Is the provided path a agg path that uses a sorted or plain agg strategy?
 */
-static bool pg_nodiscard
+pg_nodiscard static bool
 is_path_sorted_or_plain_agg_path(Path *path)
 {
 	AggPath *agg_path = castNode(AggPath, path);

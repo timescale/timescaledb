@@ -112,9 +112,9 @@ INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FRO
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch order by 1 desc limit 3;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_13_chunk
  _timescaledb_internal._hyper_5_12_chunk
  _timescaledb_internal._hyper_5_11_chunk
+ _timescaledb_internal._hyper_5_10_chunk
 
 ANALYZE skip_scan_htcl;
 -- adjust statistics so we get skipscan plans

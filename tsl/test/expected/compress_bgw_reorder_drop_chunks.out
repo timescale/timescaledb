@@ -170,10 +170,10 @@ INSERT INTO test_reorder_chunks_table VALUES (6, 6);
 ALTER TABLE test_reorder_chunks_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
 -- Compress 2 chunks:
 SELECT compress_chunk(show_chunks('test_reorder_chunks_table', newer_than => 2, older_than => 4));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_3_12_chunk
- _timescaledb_internal._hyper_3_13_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_7_chunk
+ _timescaledb_internal._hyper_3_8_chunk
 
 -- make sure we have total of 6 chunks:
 SELECT count(*) as count_chunks_uncompressed
@@ -220,9 +220,9 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
 SELECT indexrelid::regclass, indisclustered
     FROM pg_index
     WHERE indisclustered = true ORDER BY 1;
-                                 indexrelid                                 | indisclustered 
-----------------------------------------------------------------------------+----------------
- _timescaledb_internal._hyper_3_11_chunk_test_reorder_chunks_table_time_idx | t
+                                indexrelid                                 | indisclustered 
+---------------------------------------------------------------------------+----------------
+ _timescaledb_internal._hyper_3_6_chunk_test_reorder_chunks_table_time_idx | t
 
 -- second call to scheduler
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
@@ -241,8 +241,8 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
 SELECT indexrelid::regclass, indisclustered
     FROM pg_index
     WHERE indisclustered = true ORDER BY 1;
-                                 indexrelid                                 | indisclustered 
-----------------------------------------------------------------------------+----------------
- _timescaledb_internal._hyper_3_11_chunk_test_reorder_chunks_table_time_idx | t
- _timescaledb_internal._hyper_3_14_chunk_test_reorder_chunks_table_time_idx | t
+                                indexrelid                                 | indisclustered 
+---------------------------------------------------------------------------+----------------
+ _timescaledb_internal._hyper_3_6_chunk_test_reorder_chunks_table_time_idx | t
+ _timescaledb_internal._hyper_3_9_chunk_test_reorder_chunks_table_time_idx | t
 

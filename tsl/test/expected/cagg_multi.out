@@ -249,7 +249,7 @@ insert into continuous_agg_test values( 14, -2, 100);
 --add entry [14 15] to mat inv log for cagg_2. (invalidations are expanded to bucket
 --boundaries and we have bucket size of 2.
 SET ROLE :ROLE_SUPERUSER;
-select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+select materialization_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
                   5 |  -9223372036854775808 |             -2147483649
@@ -257,7 +257,7 @@ select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_
                   6 |  -9223372036854775808 |             -2147483649
                   6 |                    14 |     9223372036854775807
 
-select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
+select hypertable_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              4 |                    14 |                      14
@@ -286,7 +286,7 @@ select * from _timescaledb_catalog.continuous_aggs_invalidation_threshold order 
 ---------------+-----------
              4 |        18
 
-select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+select materialization_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
                   5 |  -9223372036854775808 |             -2147483649
@@ -321,7 +321,7 @@ select * from cagg_2 order by 1;
 --TEST5 2 inserts with the same value can be copied over to materialization invalidation log
 insert into continuous_agg_test values( 18, -2, 100);
 insert into continuous_agg_test values( 18, -2, 100);
-select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
+select hypertable_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              4 |                    18 |                      18
@@ -334,7 +334,7 @@ select * from cagg_1 where timed = 18 ;
     18 |   3
 
 --copied over for cagg_2 to process later?
-select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+select materialization_id, lowest_modified_value, greatest_modified_value from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
                   5 |  -9223372036854775808 |             -2147483649

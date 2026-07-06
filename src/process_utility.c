@@ -334,6 +334,14 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetAccessMethod:
 			case AT_SetLogged:
 			case AT_SetUnLogged:
+			case AT_EnableTrig:
+			case AT_EnableAlwaysTrig:
+			case AT_EnableReplicaTrig:
+			case AT_DisableTrig:
+			case AT_EnableTrigAll:
+			case AT_DisableTrigAll:
+			case AT_EnableTrigUser:
+			case AT_DisableTrigUser:
 				continue;
 				/*
 				 * BLOCKED:
@@ -1589,27 +1597,7 @@ process_truncate(ProcessUtilityArgs *args)
 	foreach (cell, hypertables)
 	{
 		Hypertable *ht = lfirst(cell);
-
-		Assert(ht != NULL);
-
 		handle_truncate_hypertable(args, stmt, ht);
-
-		/* propagate to the compressed hypertable */
-		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-		{
-			Hypertable *compressed_ht =
-				ts_hypertable_cache_get_entry_by_id(hcache, ht->fd.compressed_hypertable_id);
-			TruncateStmt compressed_stmt = *stmt;
-			compressed_stmt.relations =
-				list_make1(makeRangeVar(NameStr(compressed_ht->fd.schema_name),
-										NameStr(compressed_ht->fd.table_name),
-										-1));
-
-			/* TRUNCATE the compressed hypertable */
-			ExecuteTruncate(&compressed_stmt);
-
-			handle_truncate_hypertable(args, stmt, compressed_ht);
-		}
 	}
 
 	/* For all materialization hypertables, reset the watermark */
@@ -1663,9 +1651,19 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		};
 		Chunk *chunk;
 
-		if (NULL == relation)
+		if (!relation)
 		{
 			continue;
+		}
+
+		Oid relid = RangeVarGetRelid(relation, NoLock, true);
+		if (ts_relation_is_compressed_chunk_relation(relid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("dropping columnstore chunks not supported"),
+					 errhint("Please drop the corresponding chunk on the rowstore hypertable "
+							 "instead.")));
 		}
 
 		chunk = ts_chunk_get_by_name_with_memory_context(relation->schemaname,
@@ -1675,18 +1673,9 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 														 CurrentMemoryContext,
 														 false);
 
-		if (chunk != NULL)
+		if (chunk)
 		{
 			Hypertable *ht;
-
-			if (ts_relation_is_compressed_chunk_relation(chunk->table_id))
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("dropping columnstore chunks not supported"),
-						 errhint("Please drop the corresponding chunk on the rowstore hypertable "
-								 "instead.")));
-			}
 
 			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
 			 *  it would be blocked if there are dependent objects */
@@ -2064,16 +2053,32 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 												  was_schema_op,
 												  &compressed_hypertable->fd.schema_name,
 												  &compressed_hypertable->fd.table_name);
-						List *chunks =
-							ts_chunk_get_by_hypertable_id(hypertable->fd.compressed_hypertable_id);
+						List *chunks = ts_chunk_get_by_hypertable_id(hypertable->fd.id);
 						ListCell *cell;
 						foreach (cell, chunks)
 						{
 							Chunk *chunk = lfirst(cell);
+							Oid compressed_relid =
+								ts_relation_get_compressed_relid(chunk->table_id);
+							if (!OidIsValid(compressed_relid))
+							{
+								continue;
+							}
+							/*
+							 * makeRangeVar() keeps the name pointers without
+							 * copying, so the NameData must outlive this loop
+							 * iteration. Allocate it instead of using stack
+							 * storage which is reused on every iteration.
+							 */
+							NameData *compressed_schema_name = palloc(sizeof(NameData));
+							NameData *compressed_table_name = palloc(sizeof(NameData));
+							namestrcpy(compressed_schema_name,
+									   get_namespace_name(get_rel_namespace(compressed_relid)));
+							namestrcpy(compressed_table_name, get_rel_name(compressed_relid));
 							process_grant_add_by_name(stmt,
 													  was_schema_op,
-													  &chunk->fd.schema_name,
-													  &chunk->fd.table_name);
+													  compressed_schema_name,
+													  compressed_table_name);
 						}
 					}
 				}
@@ -4585,6 +4590,27 @@ process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	AlterTableInternal(chunk_relid, list_make1(cmd), false);
 }
 
+/*
+ * Recurse ENABLE/DISABLE TRIGGER to chunks.
+ *
+ * Only row triggers are cloned to chunks, so a command naming a specific
+ * trigger must be skipped on chunks that do not have it (e.g. statement-level
+ * triggers, which live only on the hypertable root). The ALL/USER variants
+ * carry no name and apply to whatever triggers a chunk has.
+ */
+static void
+process_altertable_chunk_trigger(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	AlterTableCmd *cmd = arg;
+
+	if (cmd->name != NULL && !OidIsValid(get_trigger_oid(chunk_relid, cmd->name, true)))
+	{
+		return;
+	}
+
+	AlterTableInternal(chunk_relid, list_make1(cmd), false);
+}
+
 static void
 process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void *arg)
 {
@@ -5255,7 +5281,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DisableTrigAll:
 		case AT_EnableTrigUser:
 		case AT_DisableTrigUser:
-			foreach_chunk(ht, process_altertable_chunk, cmd, false);
+			foreach_chunk(ht, process_altertable_chunk_trigger, cmd, false);
 			break;
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);

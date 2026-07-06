@@ -32,10 +32,13 @@ BEGIN
     ALTER SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq OWNED BY _timescaledb_internal.bgw_job_stat_history.id;
 
     INSERT INTO _timescaledb_internal.bgw_job_stat_history (id, job_id, pid, execution_start, execution_finish, succeeded, data) SELECT id, job_id, pid, execution_start, execution_finish, succeeded, data FROM _timescaledb_internal._tmp_bgw_job_stat_history;
-    SELECT setval('_timescaledb_internal.bgw_job_stat_history_id_seq', last_value, is_called) FROM _timescaledb_internal._tmp_job_stat_history_id_seq;
+    PERFORM setval('_timescaledb_internal.bgw_job_stat_history_id_seq', last_value, is_called) FROM _timescaledb_internal._tmp_job_stat_history_id_seq;
 
     CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
     REVOKE ALL ON _timescaledb_internal.bgw_job_stat_history FROM PUBLIC;
+
+    DROP TABLE _timescaledb_internal._tmp_bgw_job_stat_history;
+    DROP TABLE _timescaledb_internal._tmp_job_stat_history_id_seq;
     --
     -- END bgw_job_stat_history
     --

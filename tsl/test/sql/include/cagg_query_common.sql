@@ -679,11 +679,15 @@ SELECT * FROM cagg_4_hours_offset;
 SELECT * FROM cagg_4_hours_origin;
 
 -- Update materialized data
+-- Use UTC so the lower refresh boundary (minimum timestamp) prints the same
+-- regardless of the timezone database version on the host
+SET timezone TO 'UTC';
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
+SET timezone TO 'PST8PDT';
 
 -- Query the CAggs and check that all buckets are materialized
 SELECT * FROM cagg_4_hours;
@@ -721,11 +725,15 @@ INSERT INTO temperature values('2020-01-02 01:05:00+01', 2222);
 INSERT INTO temperature values('2020-01-02 01:35:00+01', 5555);
 INSERT INTO temperature values('2020-01-02 05:05:00+01', 8888);
 
+-- Use UTC so the lower refresh boundary (minimum timestamp) prints the same
+-- regardless of the timezone database version on the host
+SET timezone TO 'UTC';
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
+SET timezone TO 'PST8PDT';
 
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours;
@@ -762,7 +770,7 @@ INSERT INTO temperature
 -- cutting during refresh won't merge entries which are not overlapping with its refresh window.
 -- The duplicates will be merged when there is a refresh that overlaps with them.
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
 
 CREATE MATERIALIZED VIEW cagg_1_year
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -770,19 +778,19 @@ CREATE MATERIALIZED VIEW cagg_1_year
     FROM temperature
     GROUP BY 1 ORDER BY 1;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
 
 --try a refresh that overlaps with the invalidation log entries to check that they are merged properly
 --in this case, the duplicates at the +infinity end should be merged.
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
                              WHERE user_view_name = 'cagg_4_hours')
 ORDER BY 1, 2, 3;
 
 CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz, options => '{"buckets_per_batch": 0}'::jsonb);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
                              WHERE user_view_name = 'cagg_4_hours')
 ORDER BY 1, 2, 3;

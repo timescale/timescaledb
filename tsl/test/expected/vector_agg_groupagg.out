@@ -117,7 +117,7 @@ alter table text_table set (timescaledb.compress,
     timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
 NOTICE:  updated compression settings will only apply to future compressions
 select count(compress_chunk(x)) from show_chunks('text_table') x;
-NOTICE:  chunk "_hyper_3_7_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_3_3_chunk" is already converted to columnstore
  count 
 -------
      3

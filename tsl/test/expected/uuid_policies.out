@@ -227,9 +227,9 @@ SELECT device, chunk_name FROM (
 ) sub;
  device |               chunk_name                
 --------+-----------------------------------------
-      3 | _timescaledb_internal._hyper_4_16_chunk
-      2 | _timescaledb_internal._hyper_4_16_chunk
-      1 | _timescaledb_internal._hyper_4_16_chunk
+      3 | _timescaledb_internal._hyper_4_13_chunk
+      2 | _timescaledb_internal._hyper_4_13_chunk
+      1 | _timescaledb_internal._hyper_4_13_chunk
 
 -- Add reorder policy
 SELECT add_reorder_policy('uuid_reorder_test', 'uuid_reorder_test_device_idx') AS reorder_job_id \gset
@@ -251,9 +251,9 @@ SELECT device, chunk_name FROM (
 ) sub;
  device |               chunk_name                
 --------+-----------------------------------------
-      1 | _timescaledb_internal._hyper_4_16_chunk
-      2 | _timescaledb_internal._hyper_4_16_chunk
-      3 | _timescaledb_internal._hyper_4_16_chunk
+      1 | _timescaledb_internal._hyper_4_13_chunk
+      2 | _timescaledb_internal._hyper_4_13_chunk
+      3 | _timescaledb_internal._hyper_4_13_chunk
 
 -- Clean up reorder test
 SELECT remove_reorder_policy('uuid_reorder_test', if_exists => true);

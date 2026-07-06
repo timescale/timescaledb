@@ -268,7 +268,7 @@ policy_refresh_cagg_check(PG_FUNCTION_ARGS)
 }
 
 static void
-json_add_dim_interval_value(JsonbParseState *parse_state, const char *json_label, Oid dim_type,
+json_add_dim_interval_value(JsonbInState *parse_state, const char *json_label, Oid dim_type,
 							Datum value)
 {
 	switch (dim_type)
@@ -691,24 +691,6 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 		}
 	}
 
-	/* We cannot check if the CAgg is hierarchical first and abort early since
-	 * we need to respect the if_not_exists parameter that is passed in.
-	 * So we check for overlap first, and only if there is no exact match, we block multiple
-	 * policies on hierarchical caggs */
-	if (ContinuousAggIsHierarchical(cagg))
-	{
-		/* if this is an existing job, it will also be in the list of jobs */
-		int max_concurrent = existing_job_id ? 1 : 0;
-
-		if (list_length(jobs) > max_concurrent)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("multiple refresh policies are not supported for hierarchical "
-							"continuous aggregates")));
-		}
-	}
-
 	return overlap_result;
 }
 
@@ -727,7 +709,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	CaggPolicyConfig policyconf;
 	int32 job_id;
 	Oid owner_id;
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
 	/* Verify that the owner can create a background worker */
 	owner_id = ts_cagg_permissions_check(cagg_oid, GetUserId());
@@ -767,64 +749,65 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	namestrcpy(&check_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state,
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(&parse_state,
 					   POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID,
 					   cagg->data.mat_hypertable_id);
 
 	if (!policyconf.offset_start.isnull)
 	{
-		json_add_dim_interval_value(parse_state,
+		json_add_dim_interval_value(&parse_state,
 									POL_REFRESH_CONF_KEY_START_OFFSET,
 									policyconf.offset_start.type,
 									policyconf.offset_start.value);
 	}
 	else
 	{
-		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_START_OFFSET);
+		ts_jsonb_add_null(&parse_state, POL_REFRESH_CONF_KEY_START_OFFSET);
 	}
 
 	if (!policyconf.offset_end.isnull)
 	{
-		json_add_dim_interval_value(parse_state,
+		json_add_dim_interval_value(&parse_state,
 									POL_REFRESH_CONF_KEY_END_OFFSET,
 									policyconf.offset_end.type,
 									policyconf.offset_end.value);
 	}
 	else
 	{
-		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_END_OFFSET);
+		ts_jsonb_add_null(&parse_state, POL_REFRESH_CONF_KEY_END_OFFSET);
 	}
 
 	if (!include_tiered_data.isnull)
 	{
-		ts_jsonb_add_bool(parse_state,
+		ts_jsonb_add_bool(&parse_state,
 						  POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA,
 						  include_tiered_data.value);
 	}
 
 	if (!buckets_per_batch.isnull)
 	{
-		ts_jsonb_add_int32(parse_state,
+		ts_jsonb_add_int32(&parse_state,
 						   POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH,
 						   buckets_per_batch.value);
 	}
 
 	if (!max_batches_per_execution.isnull)
 	{
-		ts_jsonb_add_int32(parse_state,
+		ts_jsonb_add_int32(&parse_state,
 						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION,
 						   max_batches_per_execution.value);
 	}
 
 	if (!refresh_newest_first.isnull)
 	{
-		ts_jsonb_add_bool(parse_state,
+		ts_jsonb_add_bool(&parse_state,
 						  POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST,
 						  refresh_newest_first.value);
 	}
 
-	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	JsonbValue *result = parse_state.result;
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	PolicyRefreshOffsetOverlapResult res = policy_refresh_cagg_check_for_overlaps(cagg, config, 0);

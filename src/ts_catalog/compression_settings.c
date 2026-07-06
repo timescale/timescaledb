@@ -416,6 +416,36 @@ ts_compression_settings_get(Oid relid)
 	return settings;
 }
 
+TSDLLEXPORT void
+ts_compression_settings_free(CompressionSettings *settings)
+{
+	if (settings == NULL)
+	{
+		return;
+	}
+	if (settings->fd.segmentby)
+	{
+		pfree(settings->fd.segmentby);
+	}
+	if (settings->fd.orderby)
+	{
+		pfree(settings->fd.orderby);
+	}
+	if (settings->fd.orderby_desc)
+	{
+		pfree(settings->fd.orderby_desc);
+	}
+	if (settings->fd.orderby_nullsfirst)
+	{
+		pfree(settings->fd.orderby_nullsfirst);
+	}
+	if (settings->fd.index)
+	{
+		pfree(settings->fd.index);
+	}
+	pfree(settings);
+}
+
 /*
  * Get the compression settings for a relation given its associated compressed
  * relation.
@@ -886,12 +916,12 @@ compression_settings_tuple_update(TupleInfo *ti, void *data)
 }
 
 void
-ts_convert_sparse_index_config_to_jsonb(JsonbParseState *parse_state, SparseIndexConfigBase *config)
+ts_convert_sparse_index_config_to_jsonb(JsonbInState *parse_state, SparseIndexConfigBase *config)
 {
 	MinmaxIndexColumnConfig *minmax_config = NULL;
 	BloomFilterConfig *bloom_config = NULL;
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_str(parse_state,
 					 ts_sparse_index_common_keys[SparseIndexKeyType],
 					 ts_sparse_index_type_names[config->type]); /* type */
@@ -942,7 +972,7 @@ ts_convert_sparse_index_config_to_jsonb(JsonbParseState *parse_state, SparseInde
 	ts_jsonb_add_str(parse_state,
 					 ts_sparse_index_common_keys[SparseIndexKeySource],
 					 ts_sparse_index_source_names[config->source]); /* source */
-	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(parse_state, WJB_END_OBJECT, NULL);
 }
 
 bool
@@ -1092,7 +1122,7 @@ ts_add_orderby_sparse_index(CompressionSettings *settings)
 {
 	Datum datum;
 	bool isnull;
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 	JsonbIterator *it_json;
 	JsonbValue v;
 	JsonbIteratorToken r;
@@ -1104,7 +1134,7 @@ ts_add_orderby_sparse_index(CompressionSettings *settings)
 		return sparse_index;
 	}
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_ARRAY, NULL);
 
 	/* add existing sparse index */
 	if (settings->fd.index)
@@ -1114,7 +1144,7 @@ ts_add_orderby_sparse_index(CompressionSettings *settings)
 		while ((r = JsonbIteratorNext(&it_json, &v, true)) != WJB_END_ARRAY)
 		{
 			Assert(r == WJB_ELEM);
-			pushJsonbValue(&parse_state, r, &v);
+			pushJsonbValueCompat(&parse_state, r, &v);
 		}
 	}
 
@@ -1144,25 +1174,26 @@ ts_add_orderby_sparse_index(CompressionSettings *settings)
 		minmax_config.base.type = _SparseIndexTypeEnumMinmax;
 		minmax_config.base.source = _SparseIndexSourceEnumOrderby;
 		minmax_config.col = col_name;
-		ts_convert_sparse_index_config_to_jsonb(parse_state,
+		ts_convert_sparse_index_config_to_jsonb(&parse_state,
 												(SparseIndexConfigBase *) &minmax_config);
 
 		FirstLastIndexColumnConfig firstlast_config;
 		firstlast_config.base.type = _SparseIndexTypeEnumFirstLast;
 		firstlast_config.base.source = _SparseIndexSourceEnumOrderby;
 		firstlast_config.col = col_name;
-		ts_convert_sparse_index_config_to_jsonb(parse_state,
+		ts_convert_sparse_index_config_to_jsonb(&parse_state,
 												(SparseIndexConfigBase *) &firstlast_config);
 	}
 
-	return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL));
+	pushJsonbValueCompat(&parse_state, WJB_END_ARRAY, NULL);
+	return JsonbValueToJsonb(parse_state.result);
 }
 
 /* removed orderby sparse index settings from fd.index */
 Jsonb *
 ts_remove_orderby_sparse_index(CompressionSettings *settings)
 {
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 	JsonbContainer *container;
 	JsonbIterator *it_json;
 	JsonbIteratorToken r;
@@ -1180,7 +1211,7 @@ ts_remove_orderby_sparse_index(CompressionSettings *settings)
 		return sparse_index;
 	}
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_ARRAY, NULL);
 
 	it_json = JsonbIteratorInit(&sparse_index->root);
 	JsonbIteratorNext(&it_json, &v, false); /* WJB_BEGIN_ARRAY */
@@ -1200,7 +1231,7 @@ ts_remove_orderby_sparse_index(CompressionSettings *settings)
 		}
 
 		has_object = true;
-		pushJsonbValue(&parse_state, r, &v);
+		pushJsonbValueCompat(&parse_state, r, &v);
 	}
 
 	/* this is a possible edge case, log it just in case */
@@ -1209,7 +1240,8 @@ ts_remove_orderby_sparse_index(CompressionSettings *settings)
 		elog(LOG, "orderby settings existed, but no orderby sparse index was removed");
 	}
 
-	return has_object ? JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL)) : NULL;
+	pushJsonbValueCompat(&parse_state, WJB_END_ARRAY, NULL);
+	return has_object ? JsonbValueToJsonb(parse_state.result) : NULL;
 }
 
 int
@@ -1500,7 +1532,7 @@ ts_convert_to_sparse_index_settings(Jsonb *jsonb)
 Jsonb *
 ts_convert_from_sparse_index_settings(SparseIndexSettings *settings)
 {
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
 	Assert(settings != NULL);
 	if (settings == NULL)
@@ -1513,10 +1545,10 @@ ts_convert_from_sparse_index_settings(SparseIndexSettings *settings)
 		return NULL;
 	}
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_ARRAY, NULL);
 	foreach_ptr(SparseIndexSettingsObject, obj, settings->objects)
 	{
-		pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+		pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 		Assert(list_length(obj->pairs) > 0);
 		foreach_ptr(SparseIndexSettingsPair, pair, obj->pairs)
 		{
@@ -1525,7 +1557,7 @@ ts_convert_from_sparse_index_settings(SparseIndexSettings *settings)
 			JsonbValue key = { .type = jbvString,
 							   .val = {
 								   .string = { .val = pair->key, .len = strlen(pair->key) } } };
-			pushJsonbValue(&parse_state, WJB_KEY, &key);
+			pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
 
 			if (list_length(pair->values) == 1)
 			{
@@ -1536,11 +1568,11 @@ ts_convert_from_sparse_index_settings(SparseIndexSettings *settings)
 				JsonbValue value_jsonb = {
 					.type = jbvString, .val = { .string = { .val = pstrdup(value), .len = len } }
 				};
-				pushJsonbValue(&parse_state, WJB_VALUE, &value_jsonb);
+				pushJsonbValueCompat(&parse_state, WJB_VALUE, &value_jsonb);
 			}
 			else
 			{
-				pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
+				pushJsonbValueCompat(&parse_state, WJB_BEGIN_ARRAY, NULL);
 				foreach_ptr(const char, value, pair->values)
 				{
 					Assert(value != NULL);
@@ -1549,14 +1581,15 @@ ts_convert_from_sparse_index_settings(SparseIndexSettings *settings)
 					JsonbValue value_jsonb = { .type = jbvString,
 											   .val = { .string = { .val = pstrdup(value),
 																	.len = len } } };
-					pushJsonbValue(&parse_state, WJB_ELEM, &value_jsonb);
+					pushJsonbValueCompat(&parse_state, WJB_ELEM, &value_jsonb);
 				}
-				pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL);
+				pushJsonbValueCompat(&parse_state, WJB_END_ARRAY, NULL);
 			}
 		}
-		pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+		pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 	}
-	return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL));
+	pushJsonbValueCompat(&parse_state, WJB_END_ARRAY, NULL);
+	return JsonbValueToJsonb(parse_state.result);
 }
 
 void

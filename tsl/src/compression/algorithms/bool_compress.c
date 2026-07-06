@@ -363,9 +363,10 @@ bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	CheckCompressedData(DatumGetPointer(compressed) != NULL);
 	/* detoasting is caller responsibility */
-	CheckCompressedData(!VARATT_IS_EXTERNAL(compressed));
+	CheckCompressedData(!VARATT_IS_EXTERNAL(DatumGetPointer(compressed)));
 
-	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
+	StringInfoData si = { .data = DatumGetPointer(compressed),
+						  .len = VARSIZE(DatumGetPointer(compressed)) };
 	BoolCompressed *header = consumeCompressedData(&si, sizeof(BoolCompressed));
 
 	Assert(header->has_nulls == 0 || header->has_nulls == 1);

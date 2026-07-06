@@ -486,7 +486,7 @@ SELECT count(*) AS rows_visible FROM cagg_meta;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP MATERIALIZED VIEW cagg_meta;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_19_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_16_chunk
 -- =====================================================================
 -- Hierarchical CAgg: ADD COLUMN on parent, then on a child that
 -- references the parent's newly-added column.
@@ -545,8 +545,8 @@ SELECT day_bucket, daily_avg, min_avg, min_min_temp FROM cagg_child;
  Fri Jan 02 16:00:00 2026 PST |      43.5 |      40 |            4
 
 DROP MATERIALIZED VIEW cagg_child;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_24_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_21_chunk
 DROP MATERIALIZED VIEW cagg_parent;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_23_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_20_chunk
 DROP TABLE hier_src;
 DROP TABLE metrics;

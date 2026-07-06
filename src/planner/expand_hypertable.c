@@ -25,6 +25,7 @@
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_type.h>
+#include <math.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
@@ -568,6 +569,12 @@ time_bucket_width_to_integral(const Const *width, Oid bucket_type, int64 integra
 		default:
 			return false;
 	}
+
+	if (*integral_width == 0)
+	{
+		return false;
+	}
+
 	return true;
 }
 
