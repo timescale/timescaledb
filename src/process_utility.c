@@ -1597,27 +1597,7 @@ process_truncate(ProcessUtilityArgs *args)
 	foreach (cell, hypertables)
 	{
 		Hypertable *ht = lfirst(cell);
-
-		Assert(ht != NULL);
-
 		handle_truncate_hypertable(args, stmt, ht);
-
-		/* propagate to the compressed hypertable */
-		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-		{
-			Hypertable *compressed_ht =
-				ts_hypertable_cache_get_entry_by_id(hcache, ht->fd.compressed_hypertable_id);
-			TruncateStmt compressed_stmt = *stmt;
-			compressed_stmt.relations =
-				list_make1(makeRangeVar(NameStr(compressed_ht->fd.schema_name),
-										NameStr(compressed_ht->fd.table_name),
-										-1));
-
-			/* TRUNCATE the compressed hypertable */
-			ExecuteTruncate(&compressed_stmt);
-
-			handle_truncate_hypertable(args, stmt, compressed_ht);
-		}
 	}
 
 	/* For all materialization hypertables, reset the watermark */

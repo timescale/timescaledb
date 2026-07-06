@@ -289,39 +289,39 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 						 " with timestamp or UUID time dimension.")));
 	}
 
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(&parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
 
 	switch (window_type)
 	{
 		case INTERVALOID:
 			if (created_before)
 			{
-				ts_jsonb_add_interval(parse_state,
+				ts_jsonb_add_interval(&parse_state,
 									  POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE,
 									  created_before);
 			}
 			else
 			{
-				ts_jsonb_add_interval(parse_state,
+				ts_jsonb_add_interval(&parse_state,
 									  POL_RETENTION_CONF_KEY_DROP_AFTER,
 									  DatumGetIntervalP(window_datum));
 			}
 			break;
 		case INT2OID:
-			ts_jsonb_add_int64(parse_state,
+			ts_jsonb_add_int64(&parse_state,
 							   POL_RETENTION_CONF_KEY_DROP_AFTER,
 							   DatumGetInt16(window_datum));
 			break;
 		case INT4OID:
-			ts_jsonb_add_int64(parse_state,
+			ts_jsonb_add_int64(&parse_state,
 							   POL_RETENTION_CONF_KEY_DROP_AFTER,
 							   DatumGetInt32(window_datum));
 			break;
 		case INT8OID:
-			ts_jsonb_add_int64(parse_state,
+			ts_jsonb_add_int64(&parse_state,
 							   POL_RETENTION_CONF_KEY_DROP_AFTER,
 							   DatumGetInt64(window_datum));
 			break;
@@ -333,7 +333,8 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 							format_type_be(window_type))));
 	}
 
-	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	JsonbValue *result = parse_state.result;
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	/* Next, insert a new job into jobs table */

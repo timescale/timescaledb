@@ -1773,12 +1773,10 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 											   index_rel,
 											   false);
 
-	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 	/* Free the deterministic compressed chunk name before creating the new one. */
 	rename_compressed_chunk_for_replacement(compressed_relid);
 	Oid new_compressed_relid =
-		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false, new_settings);
+		create_compress_chunk(uncompressed_chunk, InvalidOid, false, new_settings);
 	Relation new_compressed_chunk_rel = table_open(new_compressed_relid, lockmode);
 
 	perform_recompression(recompress_ctx,
@@ -2570,10 +2568,8 @@ void
 rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
 {
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 
 	LockRelationOid(ht->main_table_relid, AccessShareLock);
-	LockRelationOid(compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(uncompressed_chunk->table_id, ShareUpdateExclusiveLock);
 
 	/* Re-read chunk state after locks — another process may have changed it */

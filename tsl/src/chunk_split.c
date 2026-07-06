@@ -1172,9 +1172,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	if (compress_settings != NULL)
 	{
-		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-		new_compressed_relid =
-			create_compress_chunk(ht_compressed, new_chunk, InvalidOid, false, NULL);
+		new_compressed_relid = create_compress_chunk(new_chunk, InvalidOid, false, NULL);
 	}
 
 	CommandCounterIncrement();

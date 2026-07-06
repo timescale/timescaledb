@@ -686,8 +686,7 @@ policies_alter(PG_FUNCTION_ARGS)
 }
 
 static void
-push_to_json(Oid type, JsonbParseState *parse_state, BgwJob *job, char *json_label,
-			 char *show_config)
+push_to_json(Oid type, JsonbInState *parse_state, BgwJob *job, char *json_label, char *show_config)
 {
 	if (IS_INTEGER_TYPE(type))
 	{
@@ -725,7 +724,7 @@ policies_show(PG_FUNCTION_ARGS)
 	ListCell *lc;
 	FuncCallContext *funcctx;
 	static List *jobs;
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
 	ts_feature_flag_check(FEATURE_POLICY);
 
@@ -739,7 +738,7 @@ policies_show(PG_FUNCTION_ARGS)
 
 	type = IS_TIMESTAMP_TYPE(cagg->partition_type) ? INTERVALOID : cagg->partition_type;
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	if (SRF_IS_FIRSTCALL())
 	{
 		MemoryContext oldcontext;
@@ -772,48 +771,48 @@ policies_show(PG_FUNCTION_ARGS)
 
 		if (!namestrcmp(&(job->fd.proc_name), POLICY_REFRESH_CAGG_PROC_NAME))
 		{
-			ts_jsonb_add_str(parse_state,
+			ts_jsonb_add_str(&parse_state,
 							 SHOW_POLICY_KEY_POLICY_NAME,
 							 POLICY_REFRESH_CAGG_PROC_NAME);
 			push_to_json(type,
-						 parse_state,
+						 &parse_state,
 						 job,
 						 POL_REFRESH_CONF_KEY_START_OFFSET,
 						 SHOW_POLICY_KEY_REFRESH_START_OFFSET);
 			push_to_json(type,
-						 parse_state,
+						 &parse_state,
 						 job,
 						 POL_REFRESH_CONF_KEY_END_OFFSET,
 						 SHOW_POLICY_KEY_REFRESH_END_OFFSET);
-			ts_jsonb_add_interval(parse_state,
+			ts_jsonb_add_interval(&parse_state,
 								  SHOW_POLICY_KEY_REFRESH_INTERVAL,
 								  &(job->fd.schedule_interval));
 		}
 		else if (!namestrcmp(&(job->fd.proc_name), POLICY_COMPRESSION_PROC_NAME))
 		{
-			ts_jsonb_add_str(parse_state,
+			ts_jsonb_add_str(&parse_state,
 							 SHOW_POLICY_KEY_POLICY_NAME,
 							 POLICY_COMPRESSION_PROC_NAME);
 			push_to_json(type,
-						 parse_state,
+						 &parse_state,
 						 job,
 						 POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 						 SHOW_POLICY_KEY_COMPRESS_AFTER);
 			/* POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE not supported with caggs */
-			ts_jsonb_add_interval(parse_state,
+			ts_jsonb_add_interval(&parse_state,
 								  SHOW_POLICY_KEY_COMPRESS_INTERVAL,
 								  &(job->fd.schedule_interval));
 		}
 		else if (!namestrcmp(&(job->fd.proc_name), POLICY_RETENTION_PROC_NAME))
 		{
-			ts_jsonb_add_str(parse_state, SHOW_POLICY_KEY_POLICY_NAME, POLICY_RETENTION_PROC_NAME);
+			ts_jsonb_add_str(&parse_state, SHOW_POLICY_KEY_POLICY_NAME, POLICY_RETENTION_PROC_NAME);
 			push_to_json(type,
-						 parse_state,
+						 &parse_state,
 						 job,
 						 POL_RETENTION_CONF_KEY_DROP_AFTER,
 						 SHOW_POLICY_KEY_DROP_AFTER);
 			/* POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE not supported with caggs */
-			ts_jsonb_add_interval(parse_state,
+			ts_jsonb_add_interval(&parse_state,
 								  SHOW_POLICY_KEY_RETENTION_INTERVAL,
 								  &(job->fd.schedule_interval));
 		}
@@ -824,7 +823,8 @@ policies_show(PG_FUNCTION_ARGS)
 					 errmsg("\"%s\" unsupported proc", NameStr(job->fd.proc_name))));
 		}
 
-		JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+		pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+		JsonbValue *result = parse_state.result;
 
 		funcctx->user_fctx = lnext(jobs, (ListCell *) funcctx->user_fctx);
 		SRF_RETURN_NEXT(funcctx, PointerGetDatum(JsonbValueToJsonb(result)));

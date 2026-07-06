@@ -1051,7 +1051,11 @@ chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 	pri.columns = columns;
 	pri.whereClause = whereClause;
 
+#if PG19_GE
+	publication_add_relation(puboid, &pri, true, NULL);
+#else
 	publication_add_relation(puboid, &pri, true);
+#endif
 
 	table_close(chunk_rel, AccessShareLock);
 }
@@ -1062,7 +1066,7 @@ chunk_add_to_publications(const Chunk *chunk)
 	List *puboids;
 	ListCell *lc;
 
-	puboids = GetRelationPublications(chunk->hypertable_relid);
+	puboids = GetRelationIncludedPublications(chunk->hypertable_relid);
 	foreach (lc, puboids)
 	{
 		Oid puboid = lfirst_oid(lc);

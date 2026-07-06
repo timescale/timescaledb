@@ -160,7 +160,7 @@ job_config_check(BgwJob *job, Jsonb *config)
 
 	/* Both should either be empty or contain a schema and name */
 	Assert((strlen(NameStr(job->fd.check_schema)) == 0) ==
-		   (strlen(NameStr(job->fd.check_schema)) == 0));
+		   (strlen(NameStr(job->fd.check_name)) == 0));
 
 	/* If there is no function, just return */
 	if (strlen(NameStr(job->fd.check_name)) == 0)
