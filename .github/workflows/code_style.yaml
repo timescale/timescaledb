@@ -130,7 +130,11 @@ jobs:
         sudo apt-get update
 
         sudo apt-get install clang-${LLVM_VER} clang-tidy-${LLVM_VER}
+        sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${LLVM_VER} 100
+        sudo update-alternatives --set clang-tidy /usr/bin/clang-tidy-${LLVM_VER}
 
+        sudo apt-get install postgresql-common
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get install postgresql-server-dev-${PG_VER}
 
     - name: Checkout source
@@ -139,6 +143,7 @@ jobs:
     - name: Run clang-tidy
       run: |
         cmake -S . -B build-tidy -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
+          -DPG_PATH=/usr/lib/postgresql/${PG_VER} \
           -DLINTER=ON -DWARNINGS_AS_ERRORS=ON
         make -C build-tidy -j8
 
