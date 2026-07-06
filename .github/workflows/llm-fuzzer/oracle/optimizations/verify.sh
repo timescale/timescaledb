@@ -99,15 +99,18 @@ echo
 echo '```diff'
 echo
 
-if diff -u result_noopt.txt result_opt.txt
-then
-    echo "Same result with optimizations ON/OFF, error not reproduced"
-    exit 0
-fi
+diff -u result_noopt.txt result_opt.txt
+result=$?
 
 echo
 echo '```'
 echo
+
+if [ "${result}" -eq 0 ]
+then
+    echo "Same result with optimizations ON/OFF, error not reproduced"
+    exit 0
+fi
 
 echo "Reproduced"
 exit 1
