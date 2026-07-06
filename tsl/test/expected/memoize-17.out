@@ -180,11 +180,11 @@ LIMIT 10000
                            Order: m2."time" DESC
                            ->  Merge Append (actual rows=1.00 loops=27)
                                  Sort Key: m2."time" DESC
-                                 ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_1 (actual rows=0.30 loops=27)
+                                 ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_1 (actual rows=0.00 loops=27)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Only Scan Backward using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk m2_2 (actual rows=0.37 loops=27)
+                                 ->  Index Only Scan Backward using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk m2_2 (actual rows=0.00 loops=27)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Only Scan Backward using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk m2_3 (actual rows=0.33 loops=27)
+                                 ->  Index Only Scan Backward using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk m2_3 (actual rows=0.00 loops=27)
                                        Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC
@@ -349,14 +349,14 @@ LIMIT 10000
                            Order: m2."time" DESC
                            ->  Merge Append (actual rows=1.00 loops=27)
                                  Sort Key: m2."time" DESC
-                                 ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk m2_1 (actual rows=0.30 loops=27)
-                                       ->  Index Scan using _hyper_5_24_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_5_24_chunk_compressed _hyper_5_24_chunk_compressed_1 (actual rows=0.30 loops=27)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk m2_1 (actual rows=0.00 loops=27)
+                                       ->  Index Scan using _hyper_5_24_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_5_24_chunk_compressed _hyper_5_24_chunk_compressed_1 (actual rows=0.00 loops=27)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk m2_2 (actual rows=0.37 loops=27)
-                                       ->  Index Scan using _hyper_5_23_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_5_23_chunk_compressed _hyper_5_23_chunk_compressed_1 (actual rows=0.37 loops=27)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk m2_2 (actual rows=0.00 loops=27)
+                                       ->  Index Scan using _hyper_5_23_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_5_23_chunk_compressed _hyper_5_23_chunk_compressed_1 (actual rows=0.00 loops=27)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk m2_3 (actual rows=0.33 loops=27)
-                                       ->  Index Scan using _hyper_5_22_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_5_22_chunk_compressed _hyper_5_22_chunk_compressed_1 (actual rows=0.33 loops=27)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk m2_3 (actual rows=0.00 loops=27)
+                                       ->  Index Scan using _hyper_5_22_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_5_22_chunk_compressed _hyper_5_22_chunk_compressed_1 (actual rows=0.00 loops=27)
                                              Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC
