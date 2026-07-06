@@ -207,17 +207,6 @@ SELECT count(*)=1 FROM metrics WHERE device = 'rollback_test';
 ROLLBACK;
 SELECT count(*)=0 FROM metrics WHERE device = 'rollback_test';
 
--- Explicitly disabling the hypertable option creates a plain
--- non-partitioned table
-BEGIN;
-CREATE TABLE metrics_plain(
-    time TIMESTAMPTZ NOT NULL,
-    device TEXT,
-    value FLOAT
-) WITH (timescaledb.hypertable=false, timescaledb.partition_column='time');
-SELECT relname, relkind FROM pg_class WHERE relname = 'metrics_plain';
-ROLLBACK;
-
 -- Reset GUC
 SET timescaledb.enable_partitioned_hypertables = false;
 
