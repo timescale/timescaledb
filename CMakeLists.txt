@@ -391,12 +391,28 @@ get_pg_config(PG_LDFLAGS --ldflags)
 string(REGEX REPLACE "-Wl,-rpath,[^ ]+" "" PG_LDFLAGS "${PG_LDFLAGS}")
 
 separate_arguments(PG_CFLAGS)
-foreach(option ${PG_CFLAGS})
-  if(NOT ${option} MATCHES ^-W)
-    set(filtered "${filtered} ${option}")
+separate_arguments(PG_CFLAGS_SL)
+foreach(option ${PG_CFLAGS} ${PG_CFLAGS_SL})
+  # Remove warning flags, we have our own configuration
+  if(${option} MATCHES ^-W)
+    continue()
   endif()
+
+  # Remove the Postgres CFLAGS that are not supported by the current compiler
+  # which might be different.
+  string(MAKE_C_IDENTIFIER "PG_CFLAG_SUPPORTED${option}" flag_check_name)
+  check_c_compiler_flag("${option}" ${flag_check_name})
+  if(NOT ${flag_check_name})
+    message(
+      STATUS
+        "Disabled PostgreSQL compile flag ${option} not supported by ${CMAKE_C_COMPILER_ID}"
+    )
+    continue()
+  endif()
+
+  set(filtered "${filtered} ${option}")
 endforeach()
-set(PG_CFLAGS "${filtered} ${PG_CFLAGS_SL}")
+set(PG_CFLAGS "${filtered}")
 
 find_path(
   PG_SOURCE_DIR src/include/pg_config.h.in
@@ -542,9 +558,10 @@ if(LINTER)
     CONCAT
       CMAKE_C_CLANG_TIDY
       "${CLANG_TIDY}"
-      ";--checks=clang-diagnostic-*,clang-analyzer-*"
+      ";--checks=clang-analyzer-*"
       ",-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling"
       ",-clang-analyzer-deadcode.DeadStores"
+      ",clang-diagnostic-*"
       ",bugprone-*"
       ",-bugprone-branch-clone"
       ",-bugprone-easily-swappable-parameters"
@@ -552,6 +569,7 @@ if(LINTER)
       ",-bugprone-narrowing-conversions"
       ",-bugprone-reserved-identifier"
       ",-bugprone-suspicious-include"
+      ",misc-header-include-cycle"
       ",readability-*"
       ",-readability-avoid-const-params-in-decls"
       ",-readability-braces-around-statements"
@@ -564,7 +582,6 @@ if(LINTER)
       ",-readability-math-missing-parentheses"
       ",-readability-non-const-parameter"
       ",-readability-redundant-casting"
-      ",misc-header-include-cycle"
       "${CLANG_TIDY_EXTRA_OPTS}")
   if(WARNINGS_AS_ERRORS)
     set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")
