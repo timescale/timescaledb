@@ -190,7 +190,7 @@ jobs:
       run: |
         cmake -S . -B build-ts-tidy -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang-${LLVM_VER} \
           -DPG_PATH=install -DLINTER=ON -DWARNINGS_AS_ERRORS=ON
-        make -C build-ts-tidy -j8
+        make -C build-ts-tidy -j8 -k
 
 
   python_checks:

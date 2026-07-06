@@ -202,7 +202,7 @@ DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
 DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 #endif
 
-DebugRequireOption ts_guc_debug_require_batch_sorted_merge = false;
+DebugRequireOption ts_guc_debug_require_batch_sorted_merge = DRO_Allow;
 
 bool ts_guc_debug_compression_path_info = false;
 bool ts_guc_enable_rowlevel_compression_locking = false;
