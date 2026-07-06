@@ -202,11 +202,11 @@ jobs:
             build/compile_commands.json
 
     - name: Check exported symbols
-      parallel: true
+      background: true
       run: ./build/scripts/export_prefix_check.sh
 
     - name: pginstallcheck
-      parallel: true
+      background: true
       if: matrix.pginstallcheck
       run: make -C build pginstallcheck
 
