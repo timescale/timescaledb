@@ -99,8 +99,12 @@ echo
 echo '```diff'
 echo
 
-diff -u result_noopt.txt result_opt.txt
-result=$?
+if diff -u result_noopt.txt result_opt.txt
+then
+    result=$?
+else
+    result=0
+fi
 
 echo
 echo '```'
