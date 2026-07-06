@@ -19,7 +19,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
  hypertable_id | watermark 
 ---------------+-----------
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
 
@@ -29,7 +29,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
  hypertable_id | watermark 
 ---------------+-----------
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
 
@@ -45,7 +45,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-------------
              1 | -2147483648
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
 
@@ -59,7 +59,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              1 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              1 |                    10 |                      11
@@ -71,7 +71,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              1 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              1 |                    10 |                      11
@@ -83,7 +83,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              1 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              1 |                    10 |                      11
@@ -96,7 +96,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              1 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              1 |                     1 |                       1
@@ -112,7 +112,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              1 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              1 |                    -4 |                      -1
@@ -127,7 +127,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              1 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              1 |                    -4 |                      -1
@@ -144,7 +144,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              1 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              1 |                    -7 |                      -3
@@ -160,7 +160,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              1 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              1 |                    -7 |                      -3
@@ -204,7 +204,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-------------
              3 | -2147483648
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
 
@@ -219,7 +219,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              3 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              3 |                     5 |                       9
@@ -231,7 +231,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              3 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              3 |                     5 |                       9
@@ -253,7 +253,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              3 |        15
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              3 |                     5 |                       6
@@ -293,7 +293,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-------------
              5 | -2147483648
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
 
@@ -308,7 +308,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              5 |         2
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              5 |                     1 |                       1
@@ -322,7 +322,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER 
 ---------------+-----------
              5 |         2
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
+SELECT hypertable_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
              5 |                     1 |                       1

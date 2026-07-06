@@ -43,9 +43,11 @@ SELECT hypertable_name,
        (SELECT relacl FROM pg_class WHERE oid = hypertable_name::regclass) AS hypertable_acl,
        compressed_hypertable_name,
        (SELECT relacl FROM pg_class WHERE oid = compressed_hypertable_name::regclass) AS compressed_hypertable_acl,
-       compressed_chunk_name,
+       -- the compressed relation keeps its pre-upgrade name across a downgrade,
+       -- so normalize it; the acl is still looked up by the real name
+       pg_temp.normalize_chunk(compressed_chunk_name) AS compressed_chunk_name,
        (SELECT relacl FROM pg_class WHERE oid = compressed_chunk_name::regclass) AS compressed_chunk_acl
   FROM table_summary
-  ORDER BY hypertable_name, compressed_hypertable_name, compressed_chunk_name;
+  ORDER BY hypertable_name, compressed_hypertable_name, pg_temp.normalize_chunk(compressed_chunk_name);
 \x off
 

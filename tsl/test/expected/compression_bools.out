@@ -93,12 +93,12 @@ FROM
 	show_chunks('t') c
 WHERE
 	c NOT IN (SELECT chunk_name FROM chunks_done);
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_1_11_chunk
- _timescaledb_internal._hyper_1_12_chunk
- _timescaledb_internal._hyper_1_13_chunk
- _timescaledb_internal._hyper_1_14_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
+ _timescaledb_internal._hyper_1_9_chunk
 
 SELECT
 	chunk_schema, chunk_name, compression_status,
@@ -113,12 +113,12 @@ FROM
 	chunk_compression_stats('t')
 WHERE
 	format('%I.%I', chunk_schema, chunk_name)::regclass NOT IN (SELECT chunk_name FROM chunks_done);
-     chunk_schema      |    chunk_name     | compression_status | after_compression_total_bytes 
------------------------+-------------------+--------------------+-------------------------------
- _timescaledb_internal | _hyper_1_11_chunk | Compressed         |                         40960
- _timescaledb_internal | _hyper_1_12_chunk | Compressed         |                         40960
- _timescaledb_internal | _hyper_1_13_chunk | Compressed         |                         40960
- _timescaledb_internal | _hyper_1_14_chunk | Compressed         |                         40960
+     chunk_schema      |    chunk_name    | compression_status | after_compression_total_bytes 
+-----------------------+------------------+--------------------+-------------------------------
+ _timescaledb_internal | _hyper_1_6_chunk | Compressed         |                         40960
+ _timescaledb_internal | _hyper_1_7_chunk | Compressed         |                         40960
+ _timescaledb_internal | _hyper_1_8_chunk | Compressed         |                         40960
+ _timescaledb_internal | _hyper_1_9_chunk | Compressed         |                         40960
 
 -- check the compression algorithm for the compressed chunks
 CREATE TABLE compressed_chunks AS
@@ -170,19 +170,19 @@ FROM
 		ON (ci.compressed_chunk = ccs.compressed_chunk)
 ORDER BY
 	1,2,3;
-                compressed_chunk                 |  result   | compressed_size | num_rows | compressed_toast_size | numrows_pre_compression | numrows_post_compression 
--------------------------------------------------+-----------+-----------------+----------+-----------------------+-------------------------+--------------------------
- _timescaledb_internal.compress_hyper_2_6_chunk  | (ARRAY,t) |             320 |        5 |                 32768 |                    4999 |                        5
- _timescaledb_internal.compress_hyper_2_7_chunk  | (ARRAY,f) |             172 |        4 |                 32768 |                    5000 |                        5
- _timescaledb_internal.compress_hyper_2_7_chunk  | (ARRAY,t) |              62 |        1 |                 32768 |                    5000 |                        5
- _timescaledb_internal.compress_hyper_2_8_chunk  | (ARRAY,f) |             215 |        5 |                 32768 |                    5000 |                        5
- _timescaledb_internal.compress_hyper_2_9_chunk  | (ARRAY,f) |             215 |        5 |                 32768 |                    5000 |                        5
- _timescaledb_internal.compress_hyper_2_10_chunk | (ARRAY,f) |              38 |        1 |                  8192 |                       1 |                        1
- _timescaledb_internal.compress_hyper_2_15_chunk | (BOOL,f)  |             116 |        4 |                  8192 |                    5000 |                        5
- _timescaledb_internal.compress_hyper_2_15_chunk | (BOOL,t)  |              69 |        1 |                  8192 |                    5000 |                        5
- _timescaledb_internal.compress_hyper_2_16_chunk | (BOOL,f)  |             145 |        5 |                  8192 |                    5000 |                        5
- _timescaledb_internal.compress_hyper_2_17_chunk | (BOOL,f)  |             145 |        5 |                  8192 |                    5000 |                        5
- _timescaledb_internal.compress_hyper_2_18_chunk | (BOOL,f)  |              29 |        1 |                  8192 |                       1 |                        1
+                 compressed_chunk                  |  result   | compressed_size | num_rows | compressed_toast_size | numrows_pre_compression | numrows_post_compression 
+---------------------------------------------------+-----------+-----------------+----------+-----------------------+-------------------------+--------------------------
+ _timescaledb_internal._hyper_1_1_chunk_compressed | (ARRAY,t) |             320 |        5 |                 32768 |                    4999 |                        5
+ _timescaledb_internal._hyper_1_2_chunk_compressed | (ARRAY,f) |             172 |        4 |                 32768 |                    5000 |                        5
+ _timescaledb_internal._hyper_1_2_chunk_compressed | (ARRAY,t) |              62 |        1 |                 32768 |                    5000 |                        5
+ _timescaledb_internal._hyper_1_3_chunk_compressed | (ARRAY,f) |             215 |        5 |                 32768 |                    5000 |                        5
+ _timescaledb_internal._hyper_1_4_chunk_compressed | (ARRAY,f) |             215 |        5 |                 32768 |                    5000 |                        5
+ _timescaledb_internal._hyper_1_5_chunk_compressed | (ARRAY,f) |              38 |        1 |                  8192 |                       1 |                        1
+ _timescaledb_internal._hyper_1_6_chunk_compressed | (BOOL,f)  |             116 |        4 |                  8192 |                    5000 |                        5
+ _timescaledb_internal._hyper_1_6_chunk_compressed | (BOOL,t)  |              69 |        1 |                  8192 |                    5000 |                        5
+ _timescaledb_internal._hyper_1_7_chunk_compressed | (BOOL,f)  |             145 |        5 |                  8192 |                    5000 |                        5
+ _timescaledb_internal._hyper_1_8_chunk_compressed | (BOOL,f)  |             145 |        5 |                  8192 |                    5000 |                        5
+ _timescaledb_internal._hyper_1_9_chunk_compressed | (BOOL,f)  |              29 |        1 |                  8192 |                       1 |                        1
 
 -- Calling compressed_data_to_array / compressed_data_column_size on a
 -- bool-compressed value with a non-bool element type must raise a clean

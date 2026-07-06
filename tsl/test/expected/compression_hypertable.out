@@ -157,8 +157,8 @@ select * from :chunk;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=15.00 loops=1)
    Output: _hyper_1_1_chunk."Time", _hyper_1_1_chunk.i, _hyper_1_1_chunk.b, _hyper_1_1_chunk.t
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_65_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_2_65_chunk._ts_meta_count, compress_hyper_2_65_chunk._ts_meta_min_1, compress_hyper_2_65_chunk._ts_meta_max_1, compress_hyper_2_65_chunk."_ts_meta_v2_first_Time", compress_hyper_2_65_chunk."_ts_meta_v2_last_Time", compress_hyper_2_65_chunk."Time", compress_hyper_2_65_chunk.i, compress_hyper_2_65_chunk.b, compress_hyper_2_65_chunk.t
+   ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+         Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed."_ts_meta_v2_first_Time", _hyper_1_1_chunk_compressed."_ts_meta_v2_last_Time", _hyper_1_1_chunk_compressed."Time", _hyper_1_1_chunk_compressed.i, _hyper_1_1_chunk_compressed.b, _hyper_1_1_chunk_compressed.t
 
 set timescaledb.enable_bulk_decompression to false;
 explain (analyze, verbose, timing off, buffers off, costs off, summary off)
@@ -167,8 +167,8 @@ select * from :chunk;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=15.00 loops=1)
    Output: _hyper_1_1_chunk."Time", _hyper_1_1_chunk.i, _hyper_1_1_chunk.b, _hyper_1_1_chunk.t
    Bulk Decompression: false
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_65_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_2_65_chunk._ts_meta_count, compress_hyper_2_65_chunk._ts_meta_min_1, compress_hyper_2_65_chunk._ts_meta_max_1, compress_hyper_2_65_chunk."_ts_meta_v2_first_Time", compress_hyper_2_65_chunk."_ts_meta_v2_last_Time", compress_hyper_2_65_chunk."Time", compress_hyper_2_65_chunk.i, compress_hyper_2_65_chunk.b, compress_hyper_2_65_chunk.t
+   ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+         Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed."_ts_meta_v2_first_Time", _hyper_1_1_chunk_compressed."_ts_meta_v2_last_Time", _hyper_1_1_chunk_compressed."Time", _hyper_1_1_chunk_compressed.i, _hyper_1_1_chunk_compressed.b, _hyper_1_1_chunk_compressed.t
 
 reset timescaledb.enable_bulk_decompression;
 TRUNCATE test1;
@@ -261,11 +261,11 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = ''
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_82_chunk" is already converted to columnstore
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_83_chunk" is already converted to columnstore
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_84_chunk" is already converted to columnstore
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_85_chunk" is already converted to columnstore
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_86_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_28_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_29_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_30_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_31_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_32_chunk" is already converted to columnstore
  count 
 -------
      5
@@ -610,14 +610,14 @@ insert into test8
     from generate_series(1, 10000) x(x)
 ;
 select compress_chunk(x) from show_chunks('test8') x;
-              compress_chunk               
--------------------------------------------
- _timescaledb_internal._hyper_13_148_chunk
- _timescaledb_internal._hyper_13_149_chunk
- _timescaledb_internal._hyper_13_150_chunk
- _timescaledb_internal._hyper_13_151_chunk
- _timescaledb_internal._hyper_13_152_chunk
- _timescaledb_internal._hyper_13_153_chunk
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_13_50_chunk
+ _timescaledb_internal._hyper_13_51_chunk
+ _timescaledb_internal._hyper_13_52_chunk
+ _timescaledb_internal._hyper_13_53_chunk
+ _timescaledb_internal._hyper_13_54_chunk
+ _timescaledb_internal._hyper_13_55_chunk
 
 select distinct on (id) * from test8
 order by id, ts desc, value

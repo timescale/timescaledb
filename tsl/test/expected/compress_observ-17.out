@@ -593,9 +593,9 @@ n_deletes                             | 1
 
 -- Show the information schema view as well:
 SELECT * FROM observ_main_view;
--[ RECORD 1 ]-------------------------+-----------------------------------------------
+-[ RECORD 1 ]-------------------------+--------------------------------------------------
 chunk                                 | _timescaledb_internal._hyper_1_1_chunk
-compressed_chunk                      | _timescaledb_internal.compress_hyper_2_4_chunk
+compressed_chunk                      | _timescaledb_internal._hyper_1_1_chunk_compressed
 chunk_id                              | 1
 hypertable_id                         | 1
 hypertable                            | t
@@ -637,9 +637,9 @@ n_selects                             | 1
 n_inserts                             | 0
 n_updates                             | 1
 n_deletes                             | 1
--[ RECORD 2 ]-------------------------+-----------------------------------------------
+-[ RECORD 2 ]-------------------------+--------------------------------------------------
 chunk                                 | _timescaledb_internal._hyper_1_2_chunk
-compressed_chunk                      | _timescaledb_internal.compress_hyper_2_5_chunk
+compressed_chunk                      | _timescaledb_internal._hyper_1_2_chunk_compressed
 chunk_id                              | 2
 hypertable_id                         | 1
 hypertable                            | t
@@ -681,9 +681,9 @@ n_selects                             | 1
 n_inserts                             | 0
 n_updates                             | 1
 n_deletes                             | 1
--[ RECORD 3 ]-------------------------+-----------------------------------------------
+-[ RECORD 3 ]-------------------------+--------------------------------------------------
 chunk                                 | _timescaledb_internal._hyper_1_3_chunk
-compressed_chunk                      | _timescaledb_internal.compress_hyper_2_6_chunk
+compressed_chunk                      | _timescaledb_internal._hyper_1_3_chunk_compressed
 chunk_id                              | 3
 hypertable_id                         | 1
 hypertable                            | t
@@ -746,9 +746,9 @@ SELECT
       compressed_block_bytes_min,            compressed_block_bytes_max,
       compressed_block_bytes_avg,            compressed_block_bytes_stddev
 FROM observ_main_view;
--[ RECORD 1 ]-----------------+-----------------------------------------------
+-[ RECORD 1 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_1_chunk
-compressed_chunk              | _timescaledb_internal.compress_hyper_2_4_chunk
+compressed_chunk              | _timescaledb_internal._hyper_1_1_chunk_compressed
 compressed_batch_count        | 2
 compressed_block_count        | 2
 compressed_batch_rows_min     | 600
@@ -763,9 +763,9 @@ compressed_block_bytes_min    | 460
 compressed_block_bytes_max    | 756
 compressed_block_bytes_avg    | 608
 compressed_block_bytes_stddev | 148
--[ RECORD 2 ]-----------------+-----------------------------------------------
+-[ RECORD 2 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_2_chunk
-compressed_chunk              | _timescaledb_internal.compress_hyper_2_5_chunk
+compressed_chunk              | _timescaledb_internal._hyper_1_2_chunk_compressed
 compressed_batch_count        | 3
 compressed_block_count        | 3
 compressed_batch_rows_min     | 400
@@ -780,9 +780,9 @@ compressed_block_bytes_min    | 324
 compressed_block_bytes_max    | 756
 compressed_block_bytes_avg    | 609
 compressed_block_bytes_stddev | 201.787567065521
--[ RECORD 3 ]-----------------+-----------------------------------------------
+-[ RECORD 3 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_3_chunk
-compressed_chunk              | _timescaledb_internal.compress_hyper_2_6_chunk
+compressed_chunk              | _timescaledb_internal._hyper_1_3_chunk_compressed
 compressed_batch_count        | 0
 compressed_block_count        | 1
 compressed_batch_rows_min     | 
@@ -815,9 +815,9 @@ SELECT
       compressed_block_bytes_min,            compressed_block_bytes_max,
       compressed_block_bytes_avg,            compressed_block_bytes_stddev
 FROM observ_main_view;
--[ RECORD 1 ]-----------------+-----------------------------------------------
+-[ RECORD 1 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_1_chunk
-compressed_chunk              | _timescaledb_internal.compress_hyper_2_4_chunk
+compressed_chunk              | _timescaledb_internal._hyper_1_1_chunk_compressed
 compressed_batch_count        | 2
 compressed_block_count        | 8
 compressed_batch_rows_min     | 600
@@ -832,9 +832,9 @@ compressed_block_bytes_min    | 188
 compressed_block_bytes_max    | 756
 compressed_block_bytes_avg    | 430
 compressed_block_bytes_stddev | 168.321121669266
--[ RECORD 2 ]-----------------+-----------------------------------------------
+-[ RECORD 2 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_2_chunk
-compressed_chunk              | _timescaledb_internal.compress_hyper_2_5_chunk
+compressed_chunk              | _timescaledb_internal._hyper_1_2_chunk_compressed
 compressed_batch_count        | 3
 compressed_block_count        | 12
 compressed_batch_rows_min     | 400
@@ -849,9 +849,9 @@ compressed_block_bytes_min    | 132
 compressed_block_bytes_max    | 756
 compressed_block_bytes_avg    | 431
 compressed_block_bytes_stddev | 201.075994478594
--[ RECORD 3 ]-----------------+-----------------------------------------------
+-[ RECORD 3 ]-----------------+--------------------------------------------------
 chunk                         | _timescaledb_internal._hyper_1_3_chunk
-compressed_chunk              | _timescaledb_internal.compress_hyper_2_6_chunk
+compressed_chunk              | _timescaledb_internal._hyper_1_3_chunk_compressed
 compressed_batch_count        | 0
 compressed_block_count        | 4
 compressed_batch_rows_min     | 

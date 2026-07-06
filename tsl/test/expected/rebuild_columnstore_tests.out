@@ -23,17 +23,17 @@ SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float
 FROM generate_series(101,750) i;
 -- should be compressed
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_ordered';
- hypertable_name |                 chunk                  |                compressed_chunk                |    status    
------------------+----------------------------------------+------------------------------------------------+--------------
- rebuild_ordered | _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_2_chunk | {COMPRESSED}
+ hypertable_name |                 chunk                  |                 compressed_chunk                  |    status    
+-----------------+----------------------------------------+---------------------------------------------------+--------------
+ rebuild_ordered | _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_compressed | {COMPRESSED}
 
 SELECT chunk FROM show_chunks('rebuild_ordered') AS chunk LIMIT 1 \gset
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 -- should be compressed
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_ordered';
- hypertable_name |                 chunk                  |                compressed_chunk                |    status    
------------------+----------------------------------------+------------------------------------------------+--------------
- rebuild_ordered | _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_3_chunk | {COMPRESSED}
+ hypertable_name |                 chunk                  |                 compressed_chunk                  |    status    
+-----------------+----------------------------------------+---------------------------------------------------+--------------
+ rebuild_ordered | _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_compressed | {COMPRESSED}
 
 DROP TABLE rebuild_ordered CASCADE;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
@@ -49,17 +49,17 @@ SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float
 FROM generate_series(101,750) i;
 -- should be compressed, unordered
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_unordered';
-  hypertable_name  |                 chunk                  |                compressed_chunk                |         status         
--------------------+----------------------------------------+------------------------------------------------+------------------------
- rebuild_unordered | _timescaledb_internal._hyper_3_4_chunk | _timescaledb_internal.compress_hyper_4_5_chunk | {COMPRESSED,UNORDERED}
+  hypertable_name  |                 chunk                  |                 compressed_chunk                  |         status         
+-------------------+----------------------------------------+---------------------------------------------------+------------------------
+ rebuild_unordered | _timescaledb_internal._hyper_3_2_chunk | _timescaledb_internal._hyper_3_2_chunk_compressed | {COMPRESSED,UNORDERED}
 
 SELECT chunk FROM show_chunks('rebuild_unordered') AS chunk LIMIT 1 \gset
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 -- should be compressed
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_unordered';
-  hypertable_name  |                 chunk                  |                compressed_chunk                |    status    
--------------------+----------------------------------------+------------------------------------------------+--------------
- rebuild_unordered | _timescaledb_internal._hyper_3_4_chunk | _timescaledb_internal.compress_hyper_4_6_chunk | {COMPRESSED}
+  hypertable_name  |                 chunk                  |                 compressed_chunk                  |    status    
+-------------------+----------------------------------------+---------------------------------------------------+--------------
+ rebuild_unordered | _timescaledb_internal._hyper_3_2_chunk | _timescaledb_internal._hyper_3_2_chunk_compressed | {COMPRESSED}
 
 DROP TABLE rebuild_unordered CASCADE;
 -- Test 3: Rebuild partial chunk (should preserve partial state with in-memory)
@@ -79,17 +79,17 @@ FROM generate_series(751,755) i;
 WARNING:  disabling direct compress because of too small batch size
 -- should be compressed, unordered, partial
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_partial';
- hypertable_name |                 chunk                  |                compressed_chunk                |             status             
------------------+----------------------------------------+------------------------------------------------+--------------------------------
- rebuild_partial | _timescaledb_internal._hyper_5_7_chunk | _timescaledb_internal.compress_hyper_6_8_chunk | {COMPRESSED,UNORDERED,PARTIAL}
+ hypertable_name |                 chunk                  |                 compressed_chunk                  |             status             
+-----------------+----------------------------------------+---------------------------------------------------+--------------------------------
+ rebuild_partial | _timescaledb_internal._hyper_5_3_chunk | _timescaledb_internal._hyper_5_3_chunk_compressed | {COMPRESSED,UNORDERED,PARTIAL}
 
 SELECT chunk FROM show_chunks('rebuild_partial') AS chunk LIMIT 1 \gset
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 -- should be compressed, partial
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_partial';
- hypertable_name |                 chunk                  |                compressed_chunk                |        status        
------------------+----------------------------------------+------------------------------------------------+----------------------
- rebuild_partial | _timescaledb_internal._hyper_5_7_chunk | _timescaledb_internal.compress_hyper_6_9_chunk | {COMPRESSED,PARTIAL}
+ hypertable_name |                 chunk                  |                 compressed_chunk                  |        status        
+-----------------+----------------------------------------+---------------------------------------------------+----------------------
+ rebuild_partial | _timescaledb_internal._hyper_5_3_chunk | _timescaledb_internal._hyper_5_3_chunk_compressed | {COMPRESSED,PARTIAL}
 
 -- Verify uncompressed row count
 SELECT chunk FROM show_chunks('rebuild_partial') AS chunk LIMIT 1 \gset
@@ -131,15 +131,15 @@ SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :COMPRESSED_C
             250 | d1     | Wed Jan 01 08:21:00 2025 PST | Wed Jan 01 12:30:00 2025 PST
 
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_segmentby';
-  hypertable_name  |                  chunk                  |                compressed_chunk                 |         status         
--------------------+-----------------------------------------+-------------------------------------------------+------------------------
- rebuild_segmentby | _timescaledb_internal._hyper_7_10_chunk | _timescaledb_internal.compress_hyper_8_11_chunk | {COMPRESSED,UNORDERED}
+  hypertable_name  |                 chunk                  |                 compressed_chunk                  |         status         
+-------------------+----------------------------------------+---------------------------------------------------+------------------------
+ rebuild_segmentby | _timescaledb_internal._hyper_7_4_chunk | _timescaledb_internal._hyper_7_4_chunk_compressed | {COMPRESSED,UNORDERED}
 
 CALL _timescaledb_functions.rebuild_columnstore(:'CHUNK_NAME'::regclass);
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_segmentby';
-  hypertable_name  |                  chunk                  |                compressed_chunk                 |    status    
--------------------+-----------------------------------------+-------------------------------------------------+--------------
- rebuild_segmentby | _timescaledb_internal._hyper_7_10_chunk | _timescaledb_internal.compress_hyper_8_12_chunk | {COMPRESSED}
+  hypertable_name  |                 chunk                  |                 compressed_chunk                  |    status    
+-------------------+----------------------------------------+---------------------------------------------------+--------------
+ rebuild_segmentby | _timescaledb_internal._hyper_7_4_chunk | _timescaledb_internal._hyper_7_4_chunk_compressed | {COMPRESSED}
 
 -- get meta data info after rebuild
 SELECT compressed_chunk AS "COMPRESSED_CHUNK_NAME"
@@ -189,16 +189,16 @@ ALTER TABLE rebuild_settings SET (
 NOTICE:  updated compression settings will only apply to future compressions
 -- settings changed, decompress/compress fallback
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_settings';
- hypertable_name  |                  chunk                  |                 compressed_chunk                 |             status             
-------------------+-----------------------------------------+--------------------------------------------------+--------------------------------
- rebuild_settings | _timescaledb_internal._hyper_9_13_chunk | _timescaledb_internal.compress_hyper_10_14_chunk | {COMPRESSED,UNORDERED,PARTIAL}
+ hypertable_name  |                 chunk                  |                 compressed_chunk                  |             status             
+------------------+----------------------------------------+---------------------------------------------------+--------------------------------
+ rebuild_settings | _timescaledb_internal._hyper_9_5_chunk | _timescaledb_internal._hyper_9_5_chunk_compressed | {COMPRESSED,UNORDERED,PARTIAL}
 
 CALL _timescaledb_functions.rebuild_columnstore(:'CHUNK_NAME'::regclass);
 -- should be compressed, partial status cleared due to full recompression
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_settings';
- hypertable_name  |                  chunk                  |                 compressed_chunk                 |    status    
-------------------+-----------------------------------------+--------------------------------------------------+--------------
- rebuild_settings | _timescaledb_internal._hyper_9_13_chunk | _timescaledb_internal.compress_hyper_10_15_chunk | {COMPRESSED}
+ hypertable_name  |                 chunk                  |                 compressed_chunk                  |    status    
+------------------+----------------------------------------+---------------------------------------------------+--------------
+ rebuild_settings | _timescaledb_internal._hyper_9_5_chunk | _timescaledb_internal._hyper_9_5_chunk_compressed | {COMPRESSED}
 
 -- get meta data info after rebuild
 SELECT compressed_chunk AS "COMPRESSED_CHUNK_NAME"
@@ -232,11 +232,11 @@ WARNING:  disabling direct compress because of too small batch size
 -- uncompressed notice
 SELECT chunk FROM show_chunks('rebuild_error') AS chunk LIMIT 1 \gset
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
-NOTICE:  chunk "_timescaledb_internal._hyper_11_16_chunk" is uncompressed or frozen, skipping
+NOTICE:  chunk "_timescaledb_internal._hyper_11_6_chunk" is uncompressed or frozen, skipping
 SELECT compress_chunk(chunk) FROM show_chunks('rebuild_error') AS chunk;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_16_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_11_6_chunk
 
 SELECT _timescaledb_functions.freeze_chunk(chunk) FROM show_chunks('rebuild_error') AS chunk;
  freeze_chunk 
@@ -245,26 +245,44 @@ SELECT _timescaledb_functions.freeze_chunk(chunk) FROM show_chunks('rebuild_erro
 
 -- frozen notice
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
-NOTICE:  chunk "_timescaledb_internal._hyper_11_16_chunk" is uncompressed or frozen, skipping
+NOTICE:  chunk "_timescaledb_internal._hyper_11_6_chunk" is uncompressed or frozen, skipping
 SELECT _timescaledb_functions.unfreeze_chunk(chunk) FROM show_chunks('rebuild_error') AS chunk;
  unfreeze_chunk 
 ----------------
  t
 
-SET timescaledb.enable_in_memory_recompression = false;
 -- guc disabled, decompress/compress fallback
+SET timescaledb.debug_compression_path_info = on;
+SET timescaledb.enable_in_memory_recompression = false;
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
- hypertable_name |                  chunk                   |                 compressed_chunk                 |    status    
------------------+------------------------------------------+--------------------------------------------------+--------------
- rebuild_error   | _timescaledb_internal._hyper_11_16_chunk | _timescaledb_internal.compress_hyper_12_17_chunk | {COMPRESSED}
+ hypertable_name |                  chunk                  |                  compressed_chunk                  |    status    
+-----------------+-----------------------------------------+----------------------------------------------------+--------------
+ rebuild_error   | _timescaledb_internal._hyper_11_6_chunk | _timescaledb_internal._hyper_11_6_chunk_compressed | {COMPRESSED}
 
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
+INFO:  using tuplesort to scan rows from "_hyper_11_6_chunk" for converting to columnstore
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
- hypertable_name |                  chunk                   |                 compressed_chunk                 |    status    
------------------+------------------------------------------+--------------------------------------------------+--------------
- rebuild_error   | _timescaledb_internal._hyper_11_16_chunk | _timescaledb_internal.compress_hyper_12_18_chunk | {COMPRESSED}
+ hypertable_name |                  chunk                  |                  compressed_chunk                  |    status    
+-----------------+-----------------------------------------+----------------------------------------------------+--------------
+ rebuild_error   | _timescaledb_internal._hyper_11_6_chunk | _timescaledb_internal._hyper_11_6_chunk_compressed | {COMPRESSED}
 
 RESET timescaledb.enable_in_memory_recompression;
+-- optimizations guc should disable too
+SET timescaledb.enable_optimizations = false;
+SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
+ hypertable_name |                  chunk                  |                  compressed_chunk                  |    status    
+-----------------+-----------------------------------------+----------------------------------------------------+--------------
+ rebuild_error   | _timescaledb_internal._hyper_11_6_chunk | _timescaledb_internal._hyper_11_6_chunk_compressed | {COMPRESSED}
+
+CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
+INFO:  using tuplesort to scan rows from "_hyper_11_6_chunk" for converting to columnstore
+SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
+ hypertable_name |                  chunk                  |                  compressed_chunk                  |    status    
+-----------------+-----------------------------------------+----------------------------------------------------+--------------
+ rebuild_error   | _timescaledb_internal._hyper_11_6_chunk | _timescaledb_internal._hyper_11_6_chunk_compressed | {COMPRESSED}
+
+RESET timescaledb.enable_optimizations;
+RESET timescaledb.debug_compression_path_info;
 DROP TABLE rebuild_error CASCADE;
 CREATE TABLE rebuild_no_orderby (col1 INT NOT NULL, device INT);
 SELECT create_hypertable('rebuild_no_orderby', 'col1', chunk_time_interval => 10);
@@ -279,22 +297,22 @@ ALTER TABLE rebuild_no_orderby SET (
 INSERT INTO rebuild_no_orderby VALUES (1, 2);
 WARNING:  disabling direct compress because of too small batch size
 SELECT compress_chunk(chunk) FROM show_chunks('rebuild_no_orderby') chunk;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_13_19_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_13_7_chunk
 
 -- no orderby, decompress/compress fallback
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_no_orderby';
-  hypertable_name   |                  chunk                   |                 compressed_chunk                 |    status    
---------------------+------------------------------------------+--------------------------------------------------+--------------
- rebuild_no_orderby | _timescaledb_internal._hyper_13_19_chunk | _timescaledb_internal.compress_hyper_14_20_chunk | {COMPRESSED}
+  hypertable_name   |                  chunk                  |                  compressed_chunk                  |    status    
+--------------------+-----------------------------------------+----------------------------------------------------+--------------
+ rebuild_no_orderby | _timescaledb_internal._hyper_13_7_chunk | _timescaledb_internal._hyper_13_7_chunk_compressed | {COMPRESSED}
 
 SELECT chunk FROM show_chunks('rebuild_no_orderby') AS chunk LIMIT 1 \gset
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_no_orderby';
-  hypertable_name   |                  chunk                   |                 compressed_chunk                 |    status    
---------------------+------------------------------------------+--------------------------------------------------+--------------
- rebuild_no_orderby | _timescaledb_internal._hyper_13_19_chunk | _timescaledb_internal.compress_hyper_14_21_chunk | {COMPRESSED}
+  hypertable_name   |                  chunk                  |                  compressed_chunk                  |    status    
+--------------------+-----------------------------------------+----------------------------------------------------+--------------
+ rebuild_no_orderby | _timescaledb_internal._hyper_13_7_chunk | _timescaledb_internal._hyper_13_7_chunk_compressed | {COMPRESSED}
 
 DROP TABLE rebuild_no_orderby CASCADE;
 DROP VIEW chunk_status_view;

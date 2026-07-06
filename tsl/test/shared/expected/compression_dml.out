@@ -97,7 +97,7 @@ EXPLAIN (buffers off, costs off) SELECT * FROM :chunk_table;
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-         ->  Seq Scan on compress_hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk_compressed
    ->  Seq Scan on _hyper_X_X_chunk
 
 DROP TABLE mytab CASCADE;
@@ -133,9 +133,9 @@ EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM 
 --- QUERY PLAN ---
  Append (actual rows=90.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=27.00 loops=1)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=9.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=63.00 loops=1)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=9.00 loops=1)
 
 INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', 'test', 'test', '{}'::jsonb)
 ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
@@ -144,10 +144,10 @@ EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM 
 --- QUERY PLAN ---
  Append (actual rows=91.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=27.00 loops=1)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=9.00 loops=1)
    ->  Seq Scan on _hyper_X_X_chunk (actual rows=1.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=63.00 loops=1)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=9.00 loops=1)
 
 INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', '1', '2', '{}'::jsonb)
 ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
@@ -156,10 +156,10 @@ EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM 
 --- QUERY PLAN ---
  Append (actual rows=92.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=27.00 loops=1)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=9.00 loops=1)
    ->  Seq Scan on _hyper_X_X_chunk (actual rows=2.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=63.00 loops=1)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk_compressed (actual rows=9.00 loops=1)
 
 DROP TABLE comp_seg_varchar;
 -- test row locks for compressed tuples are blocked
@@ -934,7 +934,7 @@ EXECUTE prep;
 EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-   ->  Seq Scan on compress_hyper_X_X_chunk
+   ->  Seq Scan on _hyper_X_X_chunk_compressed
 
 -- Test Update
 BEGIN;
@@ -952,7 +952,7 @@ EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-         ->  Seq Scan on compress_hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk_compressed
    ->  Seq Scan on _hyper_X_X_chunk
 
 ROLLBACK;
@@ -960,7 +960,7 @@ ROLLBACK;
 EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-   ->  Seq Scan on compress_hyper_X_X_chunk
+   ->  Seq Scan on _hyper_X_X_chunk_compressed
 
 -- Test Insert
 BEGIN;
@@ -979,7 +979,7 @@ EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
 --- QUERY PLAN ---
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-         ->  Seq Scan on compress_hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk_compressed
    ->  Seq Scan on _hyper_X_X_chunk
 
 ROLLBACK;

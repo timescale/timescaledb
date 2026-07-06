@@ -27,7 +27,7 @@ SELECT * FROM _timescaledb_functions.get_chunk_info(NULL);
 SELECT * FROM _timescaledb_functions.get_chunk_info('pg_catalog.pg_class'::regclass);
 
 SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(3);
-SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(38);
+SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(26);
 SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(0);
 SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(-1);
 SELECT * FROM _timescaledb_functions.get_chunk_info_by_id(NULL);
@@ -39,7 +39,7 @@ SELECT * FROM _timescaledb_functions.get_chunk_primary_range('pg_catalog.pg_clas
 SELECT * FROM _timescaledb_functions.get_chunk_primary_range(NULL::regclass);
 
 SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(3);
-SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(38);
+SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(26);
 SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(0::int);
 SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(-1::int);
 SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(NULL::int);

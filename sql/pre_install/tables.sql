@@ -137,7 +137,6 @@ CREATE TABLE _timescaledb_catalog.chunk (
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 
 CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
-CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
 --we could use a partial index (where osm_chunk is true). However, the catalog code
 --does not work with partial/functional indexes. So we instead have a full index here.
 --Another option would be to use the status field to identify a OSM chunk. However bit
@@ -488,8 +487,7 @@ CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   numrows_frozen_immediately bigint,
   -- table constraints
   CONSTRAINT compression_chunk_size_pkey PRIMARY KEY (chunk_id),
-  CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
-  CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
+  CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
 );
 
 -- Create index on the compressed_chunk_id to speed up maintainance
