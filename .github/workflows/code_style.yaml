@@ -129,7 +129,7 @@ jobs:
         echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
         sudo apt-get update
 
-        sudo apt-get install clang-${LLVM_VER} clang-tidy-${LLVM_VER}
+        sudo apt-get install clang-${LLVM_VER} lld-${LLVM_VER} clang-tidy-${LLVM_VER}
         sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${LLVM_VER} 100
         sudo update-alternatives --set clang-tidy /usr/bin/clang-tidy-${LLVM_VER}
         sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${LLVM_VER} 100
