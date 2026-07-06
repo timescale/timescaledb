@@ -46,7 +46,7 @@ static pg_attribute_always_inline void
 FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 {
 	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
-	if (!state->isvalid || PREDICATE(DATUM_TO_CTYPE(state->value), value) || isnan((double) value))
+	if (!state->isvalid || PREDICATE(DATUM_TO_CTYPE(state->value), value))
 	{
 		/*
 		 * Note that float8 Datum is by-reference on 32-bit systems, and this
