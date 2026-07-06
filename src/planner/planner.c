@@ -1295,7 +1295,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			 * Since the sort optimization adds new paths to the rel it has
 			 * to happen before any optimizations that replace pathlist.
 			 */
-			List *transformed_query_pathkeys = ts_sort_transform_get_pathkeys(root, rel, rte, ht);
+			List *transformed_query_pathkeys = ts_sort_transform_get_pathkeys(root, rel);
 			if (transformed_query_pathkeys != NIL)
 			{
 				List *orig_query_pathkeys = root->query_pathkeys;
