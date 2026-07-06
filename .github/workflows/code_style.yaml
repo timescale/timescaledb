@@ -116,7 +116,7 @@ jobs:
     name: Run clang-tidy
     runs-on: timescaledb-runner-arm64
     env:
-      LLVM_VER: 22
+      LLVM_VER: 14
     steps:
     - name: Install Linux Dependencies
       timeout-minutes: 15
@@ -163,7 +163,7 @@ jobs:
       if: steps.restore-postgresql.outputs.cache-hit != 'true'
       run: |
        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
-         https://ftp.postgresql.org/pub/source/v${{ steps.config.outputs.PG18_LATEST }}/postgresql-${{ steps.config.outputs.PG18_LATEST }}.tar.bz2
+         https://ftp.postgresql.org/pub/source/v${{ steps.config.outputs.PG16_LATEST }}/postgresql-${{ steps.config.outputs.PG16_LATEST }}.tar.bz2
         mkdir -p pg build-pg install
         tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
         cd build-pg
