@@ -4273,13 +4273,13 @@ SET enable_partitionwise_aggregate = off;
 NOTICE:  using column "ts" as partitioning column
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
+ _timescaledb_internal._hyper_2_3_chunk
 
 --- QUERY PLAN ---
  HashAggregate
-   Group Key: (_hyper_3_3_chunk.device_id)::text
-   ->  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
-         ->  Seq Scan on _hyper_3_3_chunk_compressed
+   Group Key: (_hyper_2_3_chunk.device_id)::text
+   ->  Custom Scan (ColumnarScan) on _hyper_2_3_chunk
+         ->  Seq Scan on _hyper_2_3_chunk_compressed
 
  count 
 -------
@@ -4319,31 +4319,31 @@ INSERT INTO metrics_nullable_orderby VALUES
 SELECT compress_chunk(c) FROM show_chunks('metrics_nullable_orderby') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_4_chunk
+ _timescaledb_internal._hyper_3_4_chunk
 
 SET timescaledb.enable_columnarindexscan = on;
 -- first/last(value, priority) should NOT optimize because priority is nullable
 EXPLAIN (costs off) SELECT device, first(value, priority) FROM metrics_nullable_orderby GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  GroupAggregate
-   Group Key: _hyper_5_4_chunk.device
-   ->  Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-         ->  Index Scan using _hyper_5_4_chunk_compressed_device__ts_meta_v2_first_priori_idx on _hyper_5_4_chunk_compressed
+   Group Key: _hyper_3_4_chunk.device
+   ->  Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+         ->  Index Scan using _hyper_3_4_chunk_compressed_device__ts_meta_v2_first_priori_idx on _hyper_3_4_chunk_compressed
 
 EXPLAIN (costs off) SELECT device, last(value, priority) FROM metrics_nullable_orderby GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  GroupAggregate
-   Group Key: _hyper_5_4_chunk.device
-   ->  Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-         ->  Index Scan using _hyper_5_4_chunk_compressed_device__ts_meta_v2_first_priori_idx on _hyper_5_4_chunk_compressed
+   Group Key: _hyper_3_4_chunk.device
+   ->  Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+         ->  Index Scan using _hyper_3_4_chunk_compressed_device__ts_meta_v2_first_priori_idx on _hyper_3_4_chunk_compressed
 
 -- min/max should still optimize
 EXPLAIN (costs off) SELECT device, min(priority) FROM metrics_nullable_orderby GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  GroupAggregate
    Group Key: device
-   ->  Custom Scan (ColumnarIndexScan) on _hyper_5_4_chunk metrics_nullable_orderby
-         ->  Index Scan using _hyper_5_4_chunk_compressed_device__ts_meta_v2_first_priori_idx on _hyper_5_4_chunk_compressed
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_3_4_chunk metrics_nullable_orderby
+         ->  Index Scan using _hyper_3_4_chunk_compressed_device__ts_meta_v2_first_priori_idx on _hyper_3_4_chunk_compressed
 
 -- Test: multiple orderby columns, first/last only optimized for the first orderby column
 CREATE TABLE metrics_multi_orderby(
@@ -4363,7 +4363,7 @@ INSERT INTO metrics_multi_orderby VALUES
 SELECT compress_chunk(c) FROM show_chunks('metrics_multi_orderby') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_5_chunk
+ _timescaledb_internal._hyper_4_5_chunk
 
 SET timescaledb.enable_columnarindexscan = on;
 -- first/last(value, time) should optimize (time is first orderby column)
@@ -4371,30 +4371,30 @@ EXPLAIN (costs off) SELECT device, first(value, time) FROM metrics_multi_orderby
 --- QUERY PLAN ---
  GroupAggregate
    Group Key: device
-   ->  Custom Scan (ColumnarIndexScan) on _hyper_7_5_chunk metrics_multi_orderby
-         ->  Index Scan using _hyper_7_5_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_7_5_chunk_compressed
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_4_5_chunk metrics_multi_orderby
+         ->  Index Scan using _hyper_4_5_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_4_5_chunk_compressed
 
 EXPLAIN (costs off) SELECT device, last(value, time) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  GroupAggregate
    Group Key: device
-   ->  Custom Scan (ColumnarIndexScan) on _hyper_7_5_chunk metrics_multi_orderby
-         ->  Index Scan using _hyper_7_5_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_7_5_chunk_compressed
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_4_5_chunk metrics_multi_orderby
+         ->  Index Scan using _hyper_4_5_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_4_5_chunk_compressed
 
 -- first/last(value, seq) should NOT optimize (seq is second orderby column)
 EXPLAIN (costs off) SELECT device, first(value, seq) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  GroupAggregate
-   Group Key: _hyper_7_5_chunk.device
-   ->  Custom Scan (ColumnarScan) on _hyper_7_5_chunk
-         ->  Index Scan using _hyper_7_5_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_7_5_chunk_compressed
+   Group Key: _hyper_4_5_chunk.device
+   ->  Custom Scan (ColumnarScan) on _hyper_4_5_chunk
+         ->  Index Scan using _hyper_4_5_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_4_5_chunk_compressed
 
 EXPLAIN (costs off) SELECT device, last(value, seq) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  GroupAggregate
-   Group Key: _hyper_7_5_chunk.device
-   ->  Custom Scan (ColumnarScan) on _hyper_7_5_chunk
-         ->  Index Scan using _hyper_7_5_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_7_5_chunk_compressed
+   Group Key: _hyper_4_5_chunk.device
+   ->  Custom Scan (ColumnarScan) on _hyper_4_5_chunk
+         ->  Index Scan using _hyper_4_5_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_4_5_chunk_compressed
 
 -- correctness check
 SET timescaledb.enable_columnarindexscan = off;

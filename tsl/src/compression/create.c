@@ -1177,33 +1177,6 @@ validate_existing_indexes(Hypertable *ht, CompressionSettings *settings)
 	table_close(pg_index, AccessShareLock);
 }
 
-static void
-drop_existing_compression_table(Hypertable *ht)
-{
-	if (ts_chunk_exists_with_compression(ht->fd.id))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot drop columnstore-enabled hypertable with columnstore chunks")));
-	}
-
-	Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-	if (compressed == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("columnstore-enabled hypertable not found"),
-				 errdetail("columnstore was enabled on \"%s\", but its internal"
-						   " columnstore hypertable could not be found.",
-						   NameStr(ht->fd.table_name))));
-	}
-
-	/* need to drop the old compressed hypertable in case the segment by columns changed (and
-	 * thus the column types of compressed hypertable need to change) */
-	ts_hypertable_drop(compressed, DROP_RESTRICT);
-	ts_hypertable_unset_compressed(ht);
-}
-
 static bool
 disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 {
@@ -1220,15 +1193,7 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 				 errmsg("cannot disable columnstore on hypertable with columnstore chunks")));
 	}
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		drop_existing_compression_table(ht);
-	}
-	else
-	{
-		ts_hypertable_unset_compressed(ht);
-	}
-
+	ts_hypertable_unset_compressed(ht);
 	ts_compression_settings_delete(ht->main_table_relid);
 
 	return true;
@@ -1400,7 +1365,6 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
 bool
 tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
 {
-	int32 compress_htid;
 	bool compress_disable = !with_clause_options[AlterTableFlagColumnstore].is_default &&
 							!DatumGetBool(with_clause_options[AlterTableFlagColumnstore].parsed);
 	CompressionSettings *settings;
@@ -1439,7 +1403,7 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 
 	compression_settings_set_manually_for_alter(ht, settings, with_clause_options);
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
 		bool settings_changed = !with_clause_options[AlterTableFlagSegmentBy].is_default ||
 								!with_clause_options[AlterTableFlagOrderBy].is_default ||
@@ -1453,7 +1417,7 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		}
 	}
 
-	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
 		/* take explicit locks on catalog tables and keep them till end of txn */
 		LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
@@ -1463,10 +1427,7 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		validate_existing_constraints(ht, settings);
 		validate_existing_indexes(ht, settings);
 
-		Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
-		Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
-		compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
-		ts_hypertable_set_compressed(ht, compress_htid);
+		ts_hypertable_set_compressed(ht);
 	}
 
 	/*
@@ -2237,7 +2198,7 @@ void
 tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 {
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
-	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
 		return;
 	}
@@ -2274,7 +2235,7 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 void
 tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 {
-	Assert(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+	Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
@@ -2322,7 +2283,7 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 		}
 	}
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
 		for (int i = 0; i < num_compressed; i++)
 		{
@@ -2410,11 +2371,6 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 				(errcode(ERRCODE_RESERVED_NAME),
 				 errmsg("cannot convert tables with reserved column prefix '%s' to columnstore",
 						COMPRESSION_COLUMN_METADATA_PREFIX)));
-	}
-
-	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		return;
 	}
 
 	RenameStmt *compressed_col_stmt = (RenameStmt *) copyObject(stmt);
@@ -2590,8 +2546,6 @@ void
 tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
-	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
-	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
 	CompressionSettings *settings = ts_compression_settings_create(ht->main_table_relid,
 																   InvalidOid,
 																   NULL,
@@ -2601,8 +2555,7 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 																   NULL);
 
 	compression_settings_set_manually_for_create(ht, settings, with_clause_options);
-	int compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
-	ts_hypertable_set_compressed(ht, compress_htid);
+	ts_hypertable_set_compressed(ht);
 
 	/* Add default compression policy when compression is enabled via CREATE TABLE WITH */
 	/* Use the chunk interval as the compression interval */

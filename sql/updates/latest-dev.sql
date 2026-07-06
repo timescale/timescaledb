@@ -22,3 +22,38 @@ WHERE hypertable_id IN (
 -- END chunk.compressed_chunk_id no longer used
 --
 
+--
+-- BEGIN hypertable.compressed_hypertable_id no longer used
+--
+
+-- Compression no longer keeps a separate internal hypertable for the compressed
+-- data. Detach every hypertable from its internal compressed hypertable and
+-- remove the now unused compressed hypertable entries and their empty relations.
+-- The compressed data itself is stored in the per chunk compressed relations and
+-- is not affected by this.
+DO $$
+DECLARE
+  compressed_relations text[];
+  rel text;
+BEGIN
+  SELECT array_agg(format('%I.%I', schema_name, table_name))
+  INTO compressed_relations
+  FROM _timescaledb_catalog.hypertable
+  WHERE compression_state = 2;
+
+  UPDATE _timescaledb_catalog.hypertable SET compressed_hypertable_id = NULL WHERE compressed_hypertable_id IS NOT NULL;
+  DELETE FROM _timescaledb_catalog.hypertable WHERE compression_state = 2;
+
+  IF compressed_relations IS NOT NULL THEN
+    FOREACH rel IN ARRAY compressed_relations
+    LOOP
+      EXECUTE format('DROP TABLE IF EXISTS %s', rel);
+    END LOOP;
+  END IF;
+END
+$$;
+
+--
+-- END hypertable.compressed_hypertable_id no longer used
+--
+
