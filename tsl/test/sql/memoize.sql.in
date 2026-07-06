@@ -15,9 +15,9 @@ SELECT format('\! diff -u --label "Unmemoized results" --label "Memoized results
 CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 SELECT create_hypertable('metrics','time',create_default_indexes:=false);
 
-INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','10m') time, generate_series(1,27) device_id;
+INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','10m') time, generate_series(1,27) device_id;
+INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','10m') time, generate_series(1,27) device_id;
 CREATE INDEX ON metrics(time DESC);
 CREATE INDEX ON metrics(device_id,time DESC);
 VACUUM FULL ANALYZE metrics;
@@ -26,9 +26,8 @@ VACUUM FULL ANALYZE metrics;
 CREATE TABLE metrics_space(time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 SELECT create_hypertable('metrics_space','time','device_id',3,create_default_indexes:=false);
 
-INSERT INTO metrics_space(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-INSERT INTO metrics_space(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-INSERT INTO metrics_space(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+INSERT INTO metrics_space SELECT * FROM metrics;
+
 CREATE INDEX ON metrics_space(time);
 CREATE INDEX ON metrics_space(device_id,time);
 VACUUM FULL ANALYZE metrics_space;
@@ -37,9 +36,8 @@ VACUUM FULL ANALYZE metrics_space;
 CREATE TABLE metrics_compressed(time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 SELECT create_hypertable('metrics_compressed','time',create_default_indexes:=false);
 
-INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+INSERT INTO metrics_compressed SELECT * FROM metrics;
+
 CREATE INDEX ON metrics_compressed(time);
 CREATE INDEX ON metrics_compressed(device_id,time);
 
@@ -54,9 +52,8 @@ VACUUM FULL ANALYZE metrics_compressed;
 CREATE TABLE metrics_space_compressed(time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 SELECT create_hypertable('metrics_space_compressed','time','device_id',3,create_default_indexes:=false);
 
-INSERT INTO metrics_space_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-INSERT INTO metrics_space_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-INSERT INTO metrics_space_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+INSERT INTO metrics_space_compressed SELECT * FROM metrics;
+
 CREATE INDEX ON metrics_space_compressed(time);
 CREATE INDEX ON metrics_space_compressed(device_id,time);
 ANALYZE metrics_space_compressed;
