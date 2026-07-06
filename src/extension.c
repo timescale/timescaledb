@@ -82,12 +82,7 @@ extension_loader_present()
 {
 	void **presentptr = find_rendezvous_variable(RENDEZVOUS_LOADER_PRESENT_NAME);
 
-	if (*presentptr == NULL)
-	{
-		return false;
-	}
-
-	return *((bool *) *presentptr);
+	return (*presentptr != NULL && *((bool *) *presentptr));
 }
 
 void

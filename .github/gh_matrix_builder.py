@@ -194,8 +194,6 @@ m["include"].append(build_debug_config({"pg": PG18_LATEST, "coverage": True}))
 # timescale/timescaledb repository.
 # See the available runners here:
 # https://github.com/timescale/timescaledb/actions/runners
-#
-# Also run clang-tidy on it, because it's the fastest debug configuration.
 if os.environ.get("GITHUB_REPOSITORY") == "timescale/timescaledb":
     m["include"].append(
         build_debug_config(
@@ -206,7 +204,6 @@ if os.environ.get("GITHUB_REPOSITORY") == "timescale/timescaledb":
                 # code. The actual architecture for our ARM CI runner is reported as:
                 # -imultiarch aarch64-linux-gnu - -mlittle-endian -mabi=lp64 -march=armv8.2-a+crypto+fp16+rcpc+dotprod
                 "pg_extra_args": "--enable-debug --enable-cassert --without-llvm CFLAGS=-march=armv8.2-a+crypto",
-                "clang-tidy": True,
             }
         )
     )

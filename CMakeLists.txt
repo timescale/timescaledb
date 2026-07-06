@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.15)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 include(CMakeDependentOption)
-include(CMakePushCheckState)
 include(CheckCCompilerFlag)
 include(CheckSymbolExists)
 include(GenerateScripts)
@@ -392,32 +391,12 @@ get_pg_config(PG_LDFLAGS --ldflags)
 string(REGEX REPLACE "-Wl,-rpath,[^ ]+" "" PG_LDFLAGS "${PG_LDFLAGS}")
 
 separate_arguments(PG_CFLAGS)
-separate_arguments(PG_CFLAGS_SL)
-
-cmake_push_check_state()
-set(CMAKE_REQUIRED_QUIET TRUE)
-foreach(option ${PG_CFLAGS} ${PG_CFLAGS_SL})
-  # Remove warning flags, we have our own configuration
-  if(${option} MATCHES ^-W)
-    continue()
+foreach(option ${PG_CFLAGS})
+  if(NOT ${option} MATCHES ^-W)
+    set(filtered "${filtered} ${option}")
   endif()
-
-  # Remove the Postgres CFLAGS that are not supported by the current compiler
-  # which might be different.
-  string(MAKE_C_IDENTIFIER "PG_CFLAG_SUPPORTED${option}" flag_check_name)
-  check_c_compiler_flag("${option}" ${flag_check_name})
-  if(NOT ${flag_check_name})
-    message(
-      STATUS
-        "Disabled PostgreSQL compile flag ${option} not supported by ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}"
-    )
-    continue()
-  endif()
-
-  set(filtered "${filtered} ${option}")
 endforeach()
-cmake_pop_check_state()
-set(PG_CFLAGS "${filtered}")
+set(PG_CFLAGS "${filtered} ${PG_CFLAGS_SL}")
 
 find_path(
   PG_SOURCE_DIR src/include/pg_config.h.in
