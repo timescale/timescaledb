@@ -190,7 +190,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 */
 		Hypertable *ht;
 		TsRelType reltype = ts_classify_relation(root, child_rel, &ht);
-		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		if (reltype == TS_REL_CHUNK_CHILD)
 		{
 			const Chunk *chunk = ts_planner_chunk_fetch(root, child_rel);
 
