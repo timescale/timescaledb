@@ -5936,10 +5936,21 @@ process_create_stmt(ProcessUtilityArgs *args)
 
 		if (!create_table_info.hypertable)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_COLUMN),
-					 errmsg("timescaledb options requires hypertable option"),
-					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+			if (create_table_info.with_clauses[CreateTableFlagHypertable].is_default)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("timescaledb options requires hypertable option"),
+						 errhint(
+							 "Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+			}
+
+			/*
+			 * Allow specifying with (tsdb.hypertable = false) for ease of testing.
+			 * This creates a plain Postgres table.
+			 */
+			create_table_info.with_clauses = NULL;
+			return DDL_CONTINUE;
 		}
 
 		if (ts_guc_enable_partitioned_hypertables)
