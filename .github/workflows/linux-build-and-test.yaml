@@ -201,6 +201,15 @@ jobs:
             build/CMakeFiles/CMakeOutput.log
             build/compile_commands.json
 
+    - name: Run clang-tidy
+      if: matrix.clang-tidy
+      background: true
+      run: |
+        cmake -S . -B build-tidy -DPG_SOURCE_DIR="${HOME}/${PG_SRC_DIR}" \
+          -DPG_PATH="${HOME}/${PG_INSTALL_DIR}" ${{ matrix.tsdb_build_args }} \
+          -DCMAKE_C_COMPILER=clang -DLINTER=ON -DWARNINGS_AS_ERRORS=ON
+        make -C build-tidy -j8
+
     - name: Check exported symbols
       run: ./build/scripts/export_prefix_check.sh
 
@@ -215,6 +224,9 @@ jobs:
     - name: pginstallcheck
       if: matrix.pginstallcheck
       run: make -C build pginstallcheck
+
+    - name: Wait for checks to finish
+      wait-all:
 
     - name: coverage
       if: matrix.coverage
