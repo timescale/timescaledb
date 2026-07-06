@@ -68,6 +68,7 @@ VACUUM FULL ANALYZE metrics_space_compressed;
 -- get EXPLAIN output for all variations
 \set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
+SET enable_indexonlyscan TO OFF;
 SET work_mem TO '64MB';
 SET enable_memoize TO on;
 
@@ -114,3 +115,6 @@ SET enable_memoize TO off;
 
 -- diff memoized and unmemoized results
 :DIFF_CMD
+
+RESET work_mem;
+RESET enable_indexonlyscan;

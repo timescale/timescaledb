@@ -82,6 +82,7 @@ SELECT compress_chunk(show_chunks('metrics_space_compressed'));
 VACUUM FULL ANALYZE metrics_space_compressed;
 -- get EXPLAIN output for all variations
 \set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+SET enable_indexonlyscan TO OFF;
 SET work_mem TO '64MB';
 SET enable_memoize TO on;
 \set TEST_TABLE 'metrics'
@@ -122,11 +123,11 @@ LIMIT 10000
                      ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1.00 loops=27)
                            Order: m2."time" DESC
                            Hypertables excluded during runtime: 0
-                           ->  Index Only Scan using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk m2_1 (actual rows=1.00 loops=27)
+                           ->  Index Scan using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk m2_1 (actual rows=1.00 loops=27)
                                  Index Cond: (device_id = m1.device_id)
-                           ->  Index Only Scan using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk m2_2 (never executed)
+                           ->  Index Scan using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk m2_2 (never executed)
                                  Index Cond: (device_id = m1.device_id)
-                           ->  Index Only Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk m2_3 (never executed)
+                           ->  Index Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk m2_3 (never executed)
                                  Index Cond: (device_id = m1.device_id)
 
 \set TEST_TABLE 'metrics_space'
@@ -180,27 +181,27 @@ LIMIT 10000
                            Order: m2."time" DESC
                            ->  Merge Append (actual rows=1.00 loops=27)
                                  Sort Key: m2."time" DESC
-                                 ->  Index Only Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_1 (actual rows=0.30 loops=27)
+                                 ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_1 (actual rows=0.30 loops=27)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Only Scan Backward using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk m2_2 (actual rows=0.37 loops=27)
+                                 ->  Index Scan Backward using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk m2_2 (actual rows=0.37 loops=27)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Only Scan Backward using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk m2_3 (actual rows=0.33 loops=27)
-                                       Index Cond: (device_id = m1.device_id)
-                           ->  Merge Append (never executed)
-                                 Sort Key: m2."time" DESC
-                                 ->  Index Only Scan Backward using _hyper_2_9_chunk_metrics_space_device_id_time_idx on _hyper_2_9_chunk m2_4 (never executed)
-                                       Index Cond: (device_id = m1.device_id)
-                                 ->  Index Only Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk m2_5 (never executed)
-                                       Index Cond: (device_id = m1.device_id)
-                                 ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m2_6 (never executed)
+                                 ->  Index Scan Backward using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk m2_3 (actual rows=0.33 loops=27)
                                        Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC
-                                 ->  Index Only Scan Backward using _hyper_2_6_chunk_metrics_space_device_id_time_idx on _hyper_2_6_chunk m2_7 (never executed)
+                                 ->  Index Scan Backward using _hyper_2_9_chunk_metrics_space_device_id_time_idx on _hyper_2_9_chunk m2_4 (never executed)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Only Scan Backward using _hyper_2_5_chunk_metrics_space_device_id_time_idx on _hyper_2_5_chunk m2_8 (never executed)
+                                 ->  Index Scan Backward using _hyper_2_8_chunk_metrics_space_device_id_time_idx on _hyper_2_8_chunk m2_5 (never executed)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk m2_9 (never executed)
+                                 ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m2_6 (never executed)
+                                       Index Cond: (device_id = m1.device_id)
+                           ->  Merge Append (never executed)
+                                 Sort Key: m2."time" DESC
+                                 ->  Index Scan Backward using _hyper_2_6_chunk_metrics_space_device_id_time_idx on _hyper_2_6_chunk m2_7 (never executed)
+                                       Index Cond: (device_id = m1.device_id)
+                                 ->  Index Scan Backward using _hyper_2_5_chunk_metrics_space_device_id_time_idx on _hyper_2_5_chunk m2_8 (never executed)
+                                       Index Cond: (device_id = m1.device_id)
+                                 ->  Index Scan Backward using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk m2_9 (never executed)
                                        Index Cond: (device_id = m1.device_id)
 
 \set TEST_TABLE 'metrics_compressed'
