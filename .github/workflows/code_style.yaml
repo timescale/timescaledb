@@ -117,7 +117,6 @@ jobs:
     runs-on: timescaledb-runner-arm64
     env:
       LLVM_VER: 17
-      PG_VER: 16
     steps:
     - name: Install Linux Dependencies
       timeout-minutes: 15
@@ -171,15 +170,11 @@ jobs:
         ../pg/configure --prefix=$(readlink -e "$(pwd)/../install") --with-openssl \
           --without-readline --without-zlib --without-libxml --enable-cassert \
           --enable-debug
-        make -j$(getconf _NPROCESSORS_ONLN)
-
-    - name: Install PostgreSQL
-      run: |
-        make -C build-pg install
+        make -j$(getconf _NPROCESSORS_ONLN) install
 
     - name: Save PostgreSQL Cache
       if: steps.restore-postgresql.outputs.cache-matched-key == ''
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: install
         key: ${{ steps.cache-key.outputs.key }}
