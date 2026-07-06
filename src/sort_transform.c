@@ -20,6 +20,7 @@
 #include "func_cache.h"
 #include "hypertable.h"
 #include "import/allpaths.h"
+#include "planner/planner.h"
 #include "sort_transform.h"
 
 /* This optimizations allows GROUP BY clauses that transform time in
@@ -439,9 +440,8 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
  *	For example: an ORDER BY date_trunc('minute', time) can be implemented by
  *	an ordering of time.
  */
-List *
-ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte,
-							   Hypertable *ht)
+static List *
+sort_transform_compute_pathkeys(PlannerInfo *root, RelOptInfo *rel)
 {
 	/*
 	 * We attack this problem in three steps:
@@ -550,6 +550,40 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	}
 
 	return transformed_query_pathkeys;
+}
+
+/*
+ * The transformed pathkeys are a function of the query's ORDER BY and the
+ * hypertable, not of the individual chunk (they reference query-global
+ * equivalence classes; the per-chunk expressions live in the eclass's child
+ * members). Computing them re-walks the whole ORDER BY eclass, whose membership
+ * grows with the chunk count, so doing it once per chunk is O(chunks^2). Cache
+ * the result on the parent hypertable rel and reuse it for every chunk.
+ */
+List *
+ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel)
+{
+	RelOptInfo *parent = NULL;
+
+	if (rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+	{
+		AppendRelInfo *appinfo = root->append_rel_array[rel->relid];
+		parent = root->simple_rel_array[appinfo->parent_relid];
+	}
+
+	/* Standalone chunk (no parent to cache on). */
+	if (!parent)
+	{
+		return sort_transform_compute_pathkeys(root, rel);
+	}
+
+	TimescaleDBPrivate *pp = ts_get_private_reloptinfo(parent);
+	if (!pp->transformed_sort_pathkeys_valid)
+	{
+		pp->transformed_sort_pathkeys = sort_transform_compute_pathkeys(root, rel);
+		pp->transformed_sort_pathkeys_valid = true;
+	}
+	return pp->transformed_sort_pathkeys;
 }
 
 /*
