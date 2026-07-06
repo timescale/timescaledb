@@ -105,7 +105,7 @@ set(PG_REGRESS_OPTS_TEMP_INSTANCE
     --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf)
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE_PGTEST
-    --temp-instance=${TEST_CLUSTER}
+    --temp-instance=${TEST_CLUSTER}-pg
     --temp-config=${TEST_OUTPUT_DIR}/pgtest.conf)
 
 set(PG_REGRESS_OPTS_LOCAL_INSTANCE --host=${TEST_PGHOST}
