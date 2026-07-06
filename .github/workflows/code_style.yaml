@@ -167,7 +167,7 @@ jobs:
         mkdir -p pg build-pg install
         tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
         cd build-pg
-        CC=clang-${{LLVM_VER}} ../pg/configure --prefix=$(readlink -e "$(pwd)/../install") --with-openssl \
+        CC=clang-${LLVM_VER} ../pg/configure --prefix=$(readlink -e "$(pwd)/../install") --with-openssl \
           --without-readline --without-zlib --without-libxml --enable-cassert \
           --enable-debug
         make -j$(getconf _NPROCESSORS_ONLN) install
