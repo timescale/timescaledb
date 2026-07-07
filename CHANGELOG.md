@@ -2,6 +2,48 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.29.0 (2026-07-07)
+
+This release contains performance improvements and bug fixes since the 2.28.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.29.0**
+* 
+
+**Backward-Incompatible Changes**
+
+**Features**
+* [#10010](https://github.com/timescale/timescaledb/pull/10010) Skip classifying compressed relations to speed up planning
+* [#10041](https://github.com/timescale/timescaledb/pull/10041) Remove support for PG15
+* [#10048](https://github.com/timescale/timescaledb/pull/10048) Support concurrent refresh policies on hierarchical continuous aggregates
+* [#10081](https://github.com/timescale/timescaledb/pull/10081) Add samplerate argument to _timescaledb_functions.estimate_uncompressed_size
+* [#10118](https://github.com/timescale/timescaledb/pull/10118) Don't track compressed relations as separate chunk
+* [#10119](https://github.com/timescale/timescaledb/pull/10119) Reduce memory usage of INSERT queries using Direct Compress and spanning multiple chunks
+* [#10204](https://github.com/timescale/timescaledb/pull/10204) Don't create separate hypertable catalog entry for hypertables with compression
+* [#9534](https://github.com/timescale/timescaledb/pull/9534) Speed up expression evaluation in the columnar pipeline by caching common subexpressions
+* [#9684](https://github.com/timescale/timescaledb/pull/9684) Add `decompress_batch` SQL function
+* [#9732](https://github.com/timescale/timescaledb/pull/9732) Speed up some queries with small LIMIT by switching to row-by-row query execution pipeline
+* [#9917](https://github.com/timescale/timescaledb/pull/9917) Decompress less data in DML on compressed hypertable by accounting for the prepared statement parameters
+* [#9957](https://github.com/timescale/timescaledb/pull/9957) Add compact_chunk function
+
+**Bugfixes**
+* [#10013](https://github.com/timescale/timescaledb/pull/10013) Make ownership error messages on CAggs consistent
+* [#10052](https://github.com/timescale/timescaledb/pull/10052) Result of min/max aggregate functions in columnar aggregation pipeline possibly inconsistent with plain Postgres result
+* [#10082](https://github.com/timescale/timescaledb/pull/10082) Wrong result when evaluating a function returning NULL in the columnar query execution pipeline
+* [#10143](https://github.com/timescale/timescaledb/pull/10143) Fix division by zero when planning time_bucket with zero width
+* [#10179](https://github.com/timescale/timescaledb/pull/10179) Allow enabling and disabling triggers on hypertables with columnstore enabled
+* [#10182](https://github.com/timescale/timescaledb/pull/10182) Fix columnstore sort pushdown to check for different query sortkey collation
+* [#10199](https://github.com/timescale/timescaledb/pull/10199) Fix initial_start handling in build_job_info
+* [#10212](https://github.com/timescale/timescaledb/pull/10212) Fix race condition when enabling compression on a hypertable
+* [#10213](https://github.com/timescale/timescaledb/pull/10213) Cache sort pathkeys per hypertable
+
+**New Settings**
+
+**GUCs**
+
+**Thanks**
+* @MaximeEthon for reporting an issue with prepared statement parameters in DML decompression
+* @juantxorena for reporting that triggers could not be enabled or disabled on hypertables with columnstore enabled
+
 ## 2.28.2 (2026-06-30)
 
 This release contains bug fixes since the 2.28.1 release. We recommend that you upgrade at the next available opportunity.
