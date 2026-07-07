@@ -116,7 +116,7 @@ jobs:
     name: clang-tidy
     runs-on: timescaledb-runner-arm64
     env:
-      LLVM_VER: 14
+      LLVM_VER: 17
     steps:
     - name: Install Linux Dependencies
       timeout-minutes: 15
