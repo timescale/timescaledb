@@ -871,8 +871,7 @@ hypertable_insert_relation(Relation rel, FormData_hypertable *fd)
 
 static void
 hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
-				  Name associated_schema_name, Name associated_table_prefix, int16 num_dimensions,
-				  bool compressed)
+				  Name associated_schema_name, Name associated_table_prefix, int16 num_dimensions)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -924,15 +923,7 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	namestrcpy(&fd.chunk_sizing_func_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&fd.chunk_sizing_func_name, DEFAULT_CHUNK_SIZING_FUNC_NAME);
 	fd.chunk_target_size = 0;
-
-	if (compressed)
-	{
-		fd.compression_state = HypertableInternalCompressionTable;
-	}
-	else
-	{
-		fd.compression_state = HypertableCompressionOff;
-	}
+	fd.compression_state = 0;
 
 	/* when creating a hypertable, there is never an associated compressed dual */
 	fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
@@ -1918,8 +1909,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  &table_name,
 					  associated_schema_name,
 					  associated_table_prefix,
-					  DIMENSION_INFO_IS_SET(closed_dim_info) ? 2 : 1,
-					  false);
+					  DIMENSION_INFO_IS_SET(closed_dim_info) ? 2 : 1);
 
 	/* Get the a Hypertable object via the cache */
 	time_dim_info->ht =
@@ -2176,40 +2166,6 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-/*Assume permissions are already checked
- * set compression state as enabled
- */
-bool
-ts_hypertable_set_compressed(Hypertable *ht)
-{
-	FormData_hypertable form;
-	ItemPointerData tid;
-	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
-	Ensure(found, "hypertable id %d not found", ht->fd.id);
-
-	form.compression_state = HypertableCompressionEnabled;
-	hypertable_update_catalog_tuple(&tid, &form);
-	return true;
-}
-
-/* set compression_state as disabled and remove any
- * associated compressed hypertable id
- */
-bool
-ts_hypertable_unset_compressed(Hypertable *ht)
-{
-	FormData_hypertable form;
-	ItemPointerData tid;
-	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
-	Ensure(found, "hypertable id %d not found", ht->fd.id);
-
-	form.compression_state = HypertableCompressionOff;
-	hypertable_update_catalog_tuple(&tid, &form);
-	return true;
-}
-
 bool
 ts_hypertable_set_compress_interval(Hypertable *ht, int64 compress_interval)
 {
@@ -2217,64 +2173,6 @@ ts_hypertable_set_compress_interval(Hypertable *ht, int64 compress_interval)
 		ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 
 	return ts_dimension_set_compress_interval(time_dimension, compress_interval) > 0;
-}
-
-/* create a compressed hypertable
- * table_relid - already created table which we are going to
- *               set up as a compressed hypertable
- * hypertable_id - id to be used while creating hypertable with
- *                  compression property set
- * NOTE:
- * compressed hypertable has no dimensions.
- */
-bool
-ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
-{
-	Oid user_oid = GetUserId();
-	Oid tspc_oid = get_rel_tablespace(table_relid);
-	NameData schema_name, table_name, associated_schema_name;
-	LockRelationOid(table_relid, AccessExclusiveLock);
-	/*
-	 * Check that the user has permissions to make this table to a compressed
-	 * hypertable
-	 */
-	ts_hypertable_permissions_check(table_relid, user_oid);
-	if (ts_is_hypertable(table_relid))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
-				 errmsg("table \"%s\" is already a hypertable", get_rel_name(table_relid))));
-	}
-
-	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
-	namestrcpy(&table_name, get_rel_name(table_relid));
-
-	/* Checks pass, now we can create the catalog information */
-	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
-	namestrcpy(&table_name, get_rel_name(table_relid));
-	namestrcpy(&associated_schema_name, INTERNAL_SCHEMA_NAME);
-
-	/* compressed hypertable has no dimensions of its own , shares the original hypertable dims*/
-	hypertable_insert(hypertable_id,
-					  &schema_name,
-					  &table_name,
-					  &associated_schema_name,
-					  NULL,
-					  0 /*num_dimensions*/,
-					  true);
-
-	/* No indexes are created for the compressed hypertable here */
-
-	/* Attach tablespace, if any */
-	if (OidIsValid(tspc_oid))
-	{
-		NameData tspc_name;
-
-		namestrcpy(&tspc_name, get_tablespace_name(tspc_oid));
-		ts_tablespace_attach_internal(&tspc_name, table_relid, false);
-	}
-
-	return true;
 }
 
 /*
@@ -2390,14 +2288,13 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 }
 
 /*
- * hypertable status update is done in two steps, similar to
- * chunk_update_status
- * This is again equivalent to a SELECT FOR UPDATE, followed by UPDATE
- * 1. RowShareLock to SELECT for UPDATE
- * 2. UPDATE status using RowExclusiveLock
+ * Set or clear the given status flags on the hypertable.
+ *
+ * The row is written back only if the status actually changed. Returns true if
+ * the status was modified.
  */
-bool
-ts_hypertable_update_status_osm(Hypertable *ht)
+static bool
+hypertable_update_status(Hypertable *ht, int32 flags, bool set)
 {
 	FormData_hypertable form;
 	ItemPointerData tid;
@@ -2405,12 +2302,44 @@ ts_hypertable_update_status_osm(Hypertable *ht)
 	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
-	if (form.status != ht->fd.status)
+	/* apply the flags after locking the metadata tuple */
+	int32 old_status = form.status;
+	form.status = set ? ts_set_flags_32(form.status, flags) : ts_clear_flags_32(form.status, flags);
+	ht->fd.status = form.status;
+
+	if (old_status == form.status)
 	{
-		form.status = ht->fd.status;
-		hypertable_update_catalog_tuple(&tid, &form);
+		return false;
 	}
+
+	hypertable_update_catalog_tuple(&tid, &form);
 	return true;
+}
+
+bool
+ts_hypertable_add_status(Hypertable *ht, int32 status)
+{
+	return hypertable_update_status(ht, status, true);
+}
+
+bool
+ts_hypertable_clear_status(Hypertable *ht, int32 status)
+{
+	return hypertable_update_status(ht, status, false);
+}
+
+/* Mark the hypertable as having compression enabled. */
+bool
+ts_hypertable_set_compression(Hypertable *ht)
+{
+	return ts_hypertable_add_status(ht, HYPERTABLE_STATUS_COMPRESSION);
+}
+
+/* Clear the compression status flag on the hypertable. */
+bool
+ts_hypertable_unset_compression(Hypertable *ht)
+{
+	return ts_hypertable_clear_status(ht, HYPERTABLE_STATUS_COMPRESSION);
 }
 
 DimensionSlice *
@@ -2607,29 +2536,25 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 				errhint("Range should be set to invalid for tiered chunk"));
 	}
 	range_invalid = ts_osm_chunk_range_is_invalid(range_start_internal, range_end_internal);
-	/* Update the hypertable flags regarding the validity of the OSM range */
+	/* Update the hypertable flags regarding the validity of the OSM range. The
+	 * flag is set or cleared under the catalog tuple lock so concurrent changes
+	 * to other status bits are not lost. */
 	if (range_invalid)
 	{
 		/* range is set to infinity so the OSM chunk is considered last */
 		range_start_internal = PG_INT64_MAX - 1;
 		range_end_internal = PG_INT64_MAX;
-		if (!osm_chunk_empty)
-		{
-			ht->fd.status =
-				ts_set_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-		}
-		else
-		{
-			ht->fd.status =
-				ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-		}
+	}
+
+	if (range_invalid && !osm_chunk_empty)
+	{
+		ts_hypertable_add_status(ht, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 	}
 	else
 	{
-		ht->fd.status = ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+		ts_hypertable_clear_status(ht, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 	}
 
-	ts_hypertable_update_status_osm(ht);
 	ts_cache_release(&hcache);
 
 	slice->fd.range_start = range_start_internal;

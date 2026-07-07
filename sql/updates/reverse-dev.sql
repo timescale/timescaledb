@@ -3,6 +3,23 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size(regcla
 DROP FUNCTION IF EXISTS _timescaledb_functions.compact_chunk(REGCLASS);
 
 --
+-- BEGIN compression status flag on hypertables
+--
+
+UPDATE _timescaledb_catalog.hypertable
+SET compression_state = 1,
+    status = status & ~4 -- clear compression bit
+WHERE status & 4 <> 0;
+
+--
+-- END compression status flag on hypertables
+--
+
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_num_dimensions_check;
+ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2);
+ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL));
+
+--
 -- BEGIN restore internal compressed hypertables
 --
 

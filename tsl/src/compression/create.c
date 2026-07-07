@@ -1193,7 +1193,7 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 				 errmsg("cannot disable columnstore on hypertable with columnstore chunks")));
 	}
 
-	ts_hypertable_unset_compressed(ht);
+	ts_hypertable_unset_compression(ht);
 	ts_compression_settings_delete(ht->main_table_relid);
 
 	return true;
@@ -1437,7 +1437,7 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		validate_existing_constraints(ht, settings);
 		validate_existing_indexes(ht, settings);
 
-		ts_hypertable_set_compressed(ht);
+		ts_hypertable_set_compression(ht);
 	}
 
 	/*
@@ -2558,7 +2558,7 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 																   NULL);
 
 	compression_settings_set_manually_for_create(ht, settings, with_clause_options);
-	ts_hypertable_set_compressed(ht);
+	ts_hypertable_set_compression(ht);
 
 	/* Add default compression policy when compression is enabled via CREATE TABLE WITH */
 	/* Use the chunk interval as the compression interval */

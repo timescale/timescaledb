@@ -10,9 +10,9 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
 WITH
   hypertable_info AS (
     SELECT hypertable_id, schema_name, table_name,
-           num_dimensions, compression_state, column_name,
+           num_dimensions, status, column_name,
            column_type, interval_length,
-           (compression_state = 1) AS compression_enabled,
+           (status & 4 = 4) AS compression_enabled,
            row_number() OVER (PARTITION BY hypertable_id ORDER BY di.id) AS dimension_num
       FROM _timescaledb_catalog.hypertable ht
       JOIN _timescaledb_catalog.dimension di ON ht.id = di.hypertable_id
@@ -40,8 +40,8 @@ LEFT JOIN (
       array_agg(tablespace_name ORDER BY id) AS tablespace_list
     FROM _timescaledb_catalog.tablespace
     GROUP BY hypertable_id) srchtbs ON ht.hypertable_id = srchtbs.hypertable_id
-WHERE ht.compression_state != 2 --> no internal compression tables
-  AND ca.mat_hypertable_id IS NULL
+WHERE
+  ca.mat_hypertable_id IS NULL
   AND ht.interval_length IS NOT NULL
   AND ht.dimension_num = 1;
 
@@ -123,10 +123,7 @@ SELECT ht.schema_name AS hypertable_schema,
   cagg.user_view_name AS view_name,
   viewinfo.viewowner AS view_owner,
   cagg.materialized_only,
-  CASE WHEN mat_ht.compression_state = 1
-       THEN TRUE
-       ELSE FALSE
-  END AS compression_enabled,
+  mat_ht.status & 4 = 4 AS compression_enabled,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
   directview.viewdefinition AS view_definition
@@ -148,7 +145,7 @@ FROM _timescaledb_catalog.continuous_agg cagg,
     AND C.relname = cagg.direct_view_name
     AND N.nspname = cagg.direct_view_schema) directview,
   LATERAL (
-    SELECT schema_name, table_name, compression_state
+    SELECT schema_name, table_name, status
     FROM _timescaledb_catalog.hypertable
     WHERE cagg.mat_hypertable_id = id) mat_ht
 WHERE cagg.raw_hypertable_id = ht.id;
@@ -219,7 +216,7 @@ FROM (
       AND srcch.schema_name = cl.schema_name
     LEFT OUTER JOIN pg_tablespace pgtab ON pgtab.oid = reltablespace
   WHERE srcch.osm_chunk IS FALSE
-    AND ht.compression_state != 2 ) finalq
+  ) finalq
 WHERE chunk_dimension_num = 1;
 
 -- hypertable's dimension information

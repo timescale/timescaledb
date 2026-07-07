@@ -4822,10 +4822,8 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	 * Once the data is moved into the OSM chunk, then our catalog should be
 	 * updated with proper API calls from the OSM extension.
 	 */
-	parent_ht->fd.status =
-		ts_set_flags_32(parent_ht->fd.status,
-						HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update_status_osm(parent_ht);
+	ts_hypertable_add_status(parent_ht,
+							 HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 }
 
 void
@@ -5293,10 +5291,8 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	ts_chunk_drop(osm_chunk, DROP_RESTRICT, LOG);
 
 	/* reset hypertable OSM status */
-	ht->fd.status =
-		ts_clear_flags_32(ht->fd.status,
-						  HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update_status_osm(ht);
+	ts_hypertable_clear_status(ht,
+							   HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 	ts_cache_release(&hcache);
 	PG_RETURN_BOOL(true);
 }

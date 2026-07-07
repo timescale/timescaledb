@@ -56,10 +56,10 @@ SET timescaledb.enable_columnarscan to ON;
 update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
 SET timescaledb.enable_columnarscan to OFF;
-SELECT id, schema_name, table_name, compression_state as compressed FROM _timescaledb_catalog.hypertable ORDER BY id;
+SELECT id, schema_name, table_name, status & 4 = 4 as compressed FROM _timescaledb_catalog.hypertable ORDER BY id;
  id | schema_name | table_name | compressed 
 ----+-------------+------------+------------
-  1 | public      | foo        |          1
+  1 | public      | foo        | t
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                 index                                                                                                                  
@@ -263,10 +263,10 @@ insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
-SELECT id, schema_name, table_name, compression_state as compressed FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
+SELECT id, schema_name, table_name, status & 4 = 4 as compressed FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
  id | schema_name | table_name | compressed 
 ----+-------------+------------+------------
-  4 | public      | conditions |          1
+  4 | public      | conditions | t
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'conditions'::regclass;
    relid    | compress_relid | segmentby  | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
@@ -832,10 +832,10 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
 -------
      1
 
-select id, schema_name, table_name, compression_state as compressed from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
+select id, schema_name, table_name, status & 4 = 4 as compressed from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
  id | schema_name |  table_name   | compressed 
 ----+-------------+---------------+------------
-  7 | public      | datatype_test |          1
+  7 | public      | datatype_test | t
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_test'::regclass;
      relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           

@@ -33,7 +33,7 @@ update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
 SET timescaledb.enable_columnarscan to OFF;
 
-SELECT id, schema_name, table_name, compression_state as compressed FROM _timescaledb_catalog.hypertable ORDER BY id;
+SELECT id, schema_name, table_name, status & 4 = 4 as compressed FROM _timescaledb_catalog.hypertable ORDER BY id;
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;
 SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;
 
@@ -126,7 +126,7 @@ select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
 
-SELECT id, schema_name, table_name, compression_state as compressed FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
+SELECT id, schema_name, table_name, status & 4 = 4 as compressed FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'conditions'::regclass;
 
 select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
@@ -309,7 +309,7 @@ INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
 
-select id, schema_name, table_name, compression_state as compressed from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
+select id, schema_name, table_name, status & 4 = 4 as compressed from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_test'::regclass;
 
 --TEST try to compress a hypertable that has a continuous aggregate

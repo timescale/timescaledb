@@ -889,7 +889,7 @@ SELECT _timescaledb_functions.drop_osm_chunk('ht_try');
 SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
  status 
 --------
-      0
+      4
 
 -- chunk and dimension slice should have been cleaned up
 SELECT FROM _timescaledb_catalog.chunk WHERE id = :osm_chunk_id;

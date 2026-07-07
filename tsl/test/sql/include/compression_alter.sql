@@ -44,12 +44,12 @@ SELECT count(*) from test1 where new_colv  = '101t';
 CREATE INDEX new_index ON test1(new_colv);
 
 -- TEST 2:  ALTER TABLE rename column
-SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, compression_state, status
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, status
  from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
 
 ALTER TABLE test1 RENAME new_coli TO coli;
-SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, compression_state, status
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, status
  from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
 
@@ -191,7 +191,7 @@ SELECT * FROM test_drop ORDER BY 1;
 -- check dropped columns got removed from catalog
 -- only segmentby and orderby are in catalog which we dont support removing
 -- atm, so nothing to see here
-SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, compression_state, status
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, status
  from _timescaledb_catalog.hypertable WHERE table_name = 'test_drop';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_drop'::regclass;
 
