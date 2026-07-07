@@ -1164,27 +1164,24 @@ rte_should_expand(const RangeTblEntry *rte)
 }
 
 static void
-expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+expand_all_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	bool set_pathlist_for_current_rel = false;
 	double total_pages;
-	bool reenabled_inheritance = false;
+	bool expanded_some_hypertables = false;
 
 	for (int i = 1; i < root->simple_rel_array_size; i++)
 	{
 		RangeTblEntry *in_rte = root->simple_rte_array[i];
 
-#if PG18_GE
-		/* RTE could be removed due to self-join
-		 * elimination optimization.
-		 *
-		 * https://github.com/postgres/postgres/commit/5f6f95
-		 */
 		if (!in_rte)
 		{
+			/*
+			 * Starting with PG18, an RTE can be removed due to self-join
+			 * elimination optimization.
+			 */
 			continue;
 		}
-#endif
 
 		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
 		{
@@ -1195,10 +1192,7 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 			ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
 
 			in_rte->inh = true;
-			reenabled_inheritance = true;
-			/* Redo set_rel_consider_parallel, as results of the call may no longer be valid
-			 * here (due to adding more tables to the set of tables under consideration here).
-			 * This is especially true if dealing with foreign data wrappers. */
+			expanded_some_hypertables = true;
 
 			/*
 			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
@@ -1226,7 +1220,7 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 		}
 	}
 
-	if (!reenabled_inheritance)
+	if (!expanded_some_hypertables)
 	{
 		return;
 	}
@@ -1444,10 +1438,21 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	reltype = ts_classify_relation(root, rel, &ht);
 
-	/* Check for unexpanded hypertable */
-	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
+	/*
+	 * Check for unexpanded hypertable.
+	 *
+	 * We're going to expand all hypertables in the query when this hook is
+	 * called for one of them. This control flow is somewhat unexpected, but
+	 * unfortunately this is the best point available for some calculations,
+	 * given the Postgres hook call sequence. Namely, we need a point where all
+	 * hypertables are already expanded, but no paths are created yet, to update
+	 * the PlannerInfo.total_table_pages which influences the index path cost.
+	 */
+	if (rte_should_expand(rte))
 	{
-		expand_hypertables(root, rel, rti, rte);
+		expand_all_hypertables(root, rel, rti, rte);
+
+		Assert(!rte_should_expand(rte));
 	}
 
 	if (ts_guc_enable_optimizations)
