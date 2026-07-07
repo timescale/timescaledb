@@ -113,7 +113,7 @@ jobs:
         ! grep '[f]ixme' -niR ./* .github/workflows/*
 
   clang_tidy:
-    name: Run clang-tidy
+    name: clang-tidy
     runs-on: timescaledb-runner-arm64
     env:
       LLVM_VER: 14
