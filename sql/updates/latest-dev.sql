@@ -57,3 +57,20 @@ $$;
 -- END hypertable.compressed_hypertable_id no longer used
 --
 
+--
+-- BEGIN set compression status flag on hypertables
+--
+
+UPDATE _timescaledb_catalog.hypertable
+SET status = status | 4, -- set compression bit
+    compression_state = 0
+WHERE compression_state = 1;
+
+--
+-- END set compression status flag on hypertables
+--
+
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_dim_compress_check;
+ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_num_dimensions_check CHECK (num_dimensions > 0);
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_compress_check;
+

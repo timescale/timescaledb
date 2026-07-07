@@ -1745,19 +1745,6 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 			Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
-			/* Direct INSERT into internal compressed hypertable is not supported.
-			 * Compressed chunks have no dimensions so we could not do tuple routing.
-			 * Additionally internal compressed hypertable has no columns so you
-			 * couldn't even insert any actual data.
-			 */
-			if (ht && ht->fd.compression_state == HypertableInternalCompressionTable)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("direct insert into internal compressed hypertable is not "
-								"supported")));
-			}
-
 			/* Check for DML on chunk directly */
 			if (!ht)
 			{
