@@ -111,7 +111,7 @@ BEGIN;
 
   SELECT cs.compress_relid::text AS "CHUNK"
     FROM _timescaledb_catalog.compression_settings cs
-    JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+    JOIN _timescaledb_catalog.chunk ch ON cs.relid=ch.relid
     JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test2'
     WHERE cs.compress_relid IS NOT NULL LIMIT 1 \gset
   -- We want to sure we are not fully recompressing them which will make
@@ -142,7 +142,7 @@ BEGIN;
 
   SELECT cs.compress_relid::text AS "CHUNK"
     FROM _timescaledb_catalog.compression_settings cs
-    JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+    JOIN _timescaledb_catalog.chunk ch ON cs.relid=ch.relid
     JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test2'
     WHERE cs.compress_relid IS NOT NULL LIMIT 1 \gset
   -- Not using time as first column in orderby makes the merged chunks unordered
@@ -303,7 +303,7 @@ SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
 
 SELECT cs.compress_relid::text AS "CHUNK"
   FROM _timescaledb_catalog.compression_settings cs
-  JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+  JOIN _timescaledb_catalog.chunk ch ON cs.relid=ch.relid
   JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test5'
   WHERE cs.compress_relid IS NOT NULL \gset
 SELECT format('%I.%I', i.schemaname, i.indexname) AS "INDEXNAME"

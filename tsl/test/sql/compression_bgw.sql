@@ -53,7 +53,7 @@ CALL run_job(:compressjob_id);
 select chunk_name, pg_size_pretty(before_compression_total_bytes) before_total,
 pg_size_pretty( after_compression_total_bytes)  after_total
 from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
 
 -- TEST 4 --
 --cannot set another policy
@@ -301,8 +301,8 @@ SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','false'), next_start =>
 -- do an INSERT so recompress has something to do
 INSERT INTO metrics2 SELECT '2000-01-01' FROM generate_series(1,3000);
 
-SELECT chunk_schema, chunk_name FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2' AND chunk_status = 9 LIMIT 1; \gset
-SELECT format('%I.%I', :'chunk_schema', :'chunk_name') AS "RECOMPRESS_CHUNK_NAME"; \gset
+SELECT chunk_name FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2' AND chunk_status = 9 LIMIT 1; \gset
+SELECT :'chunk_name' AS "RECOMPRESS_CHUNK_NAME"; \gset
 
 -- get size of the chunk that needs recompression
 VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;
@@ -312,7 +312,7 @@ SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS "SIZE_BEFORE_REINDEX"; \gset
 CALL run_job(:JOB_COMPRESS);
 
 -- status should be 1
-SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 
 -- index size should not have decreased
 VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;
@@ -329,7 +329,7 @@ SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','true'), next_start => 
 INSERT INTO metrics2 SELECT '2000-01-01';
 
 ---- status should be 3
-SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 
 -- Capture relfilenode BEFORE the third run_job
 SELECT c.relfilenode AS "INDEX_RELFILENODE_BEFORE"
@@ -350,7 +350,7 @@ ORDER BY c.relfilenode LIMIT 1;
 SELECT count(*) AS live_in_chunk_heap FROM ONLY :RECOMPRESS_CHUNK_NAME;
 
 -- chunk should be fully compressed now (status = 1) so reindex can run
-SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 
 -- index size should decrease due to reindexing (8kB or 16kB)
 VACUUM ANALYZE metrics2;

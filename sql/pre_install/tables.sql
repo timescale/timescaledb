@@ -120,16 +120,14 @@ CREATE SEQUENCE _timescaledb_catalog.chunk_id_seq MINVALUE 1;
 
 CREATE TABLE _timescaledb_catalog.chunk (
   id integer NOT NULL DEFAULT nextval('_timescaledb_catalog.chunk_id_seq'),
+  relid regclass NOT NULL,
   hypertable_id int NOT NULL,
-  schema_name name NOT NULL,
-  table_name name NOT NULL,
-  compressed_chunk_id integer ,
   status integer NOT NULL DEFAULT 0,
   osm_chunk boolean NOT NULL DEFAULT FALSE,
   creation_time timestamptz NOT NULL,
   -- table constraints
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
-  CONSTRAINT chunk_schema_name_table_name_key UNIQUE (schema_name, table_name),
+  CONSTRAINT chunk_relid_key UNIQUE (relid),
   CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
 ) WITH (user_catalog_table = true);
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;

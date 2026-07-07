@@ -378,10 +378,8 @@ enum
 enum Anum_chunk
 {
 	Anum_chunk_id = 1,
+	Anum_chunk_relid,
 	Anum_chunk_hypertable_id,
-	Anum_chunk_schema_name,
-	Anum_chunk_table_name,
-	Anum_chunk_compressed_chunk_id,
 	Anum_chunk_status,
 	Anum_chunk_osm_chunk,
 	Anum_chunk_creation_time,
@@ -393,10 +391,12 @@ enum Anum_chunk
 typedef struct FormData_chunk
 {
 	int32 id;
+	Oid relid;
 	int32 hypertable_id;
+	/* schema_name and table_name are not stored in the catalog; they are
+	 * derived from the chunk relation when the form is filled. */
 	NameData schema_name;
 	NameData table_name;
-	int32 compressed_chunk_id;
 	int32 status;
 	bool osm_chunk;
 	TimestampTz creation_time;
@@ -408,7 +408,7 @@ enum
 {
 	CHUNK_ID_INDEX = 0,
 	CHUNK_HYPERTABLE_ID_INDEX,
-	CHUNK_SCHEMA_NAME_INDEX,
+	CHUNK_RELID_INDEX,
 	CHUNK_OSM_CHUNK_INDEX,
 	CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX,
 	_MAX_CHUNK_INDEX,
@@ -424,10 +424,9 @@ enum Anum_chunk_hypertable_id_idx
 	Anum_chunk_hypertable_id_idx_hypertable_id = 1,
 };
 
-enum Anum_chunk_schema_name_idx
+enum Anum_chunk_relid_idx
 {
-	Anum_chunk_schema_name_idx_schema_name = 1,
-	Anum_chunk_schema_name_idx_table_name,
+	Anum_chunk_relid_idx_relid = 1,
 };
 
 enum Anum_chunk_osm_chunk_idx

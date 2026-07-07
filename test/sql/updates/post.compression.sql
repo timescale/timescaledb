@@ -23,6 +23,7 @@ SELECT count(compress_chunk(ch, true)) FROM show_chunks('compress') ch;
 SELECT * FROM compress ORDER BY time DESC, small_cardinality, large_cardinality, some_double, some_int, some_custom, some_bool;
 
 \x on
+\if :has_chunk_relid
 WITH chunks AS (
   SELECT
     to_regclass(format('%I.%I', ht.schema_name, ht.table_name)) AS hypertable,
@@ -30,7 +31,7 @@ WITH chunks AS (
     cs.compress_relid AS compressed_relation
 	  FROM _timescaledb_catalog.hypertable ht
     JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
-    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', ch.schema_name, ch.table_name))
+    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid
 )
 SELECT hypertable,
        (SELECT relacl FROM pg_class WHERE oid = hypertable) AS hypertable_acl,
@@ -40,5 +41,24 @@ SELECT hypertable,
        (SELECT relacl FROM pg_class WHERE oid = compressed_relation) AS compressed_chunk_acl
   FROM chunks
   ORDER BY hypertable::text COLLATE "C", pg_temp.normalize_chunk(uncompressed_relation::text) COLLATE "C";
+\else
+WITH chunks AS (
+  SELECT
+    to_regclass(format('%I.%I', ht.schema_name, ht.table_name)) AS hypertable,
+    cs.relid AS uncompressed_relation,
+    cs.compress_relid AS compressed_relation
+	  FROM _timescaledb_catalog.hypertable ht
+    JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
+    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+)
+SELECT hypertable,
+       (SELECT relacl FROM pg_class WHERE oid = hypertable) AS hypertable_acl,
+       pg_temp.normalize_chunk(uncompressed_relation::text) AS chunk_name,
+       (SELECT relacl FROM pg_class WHERE oid = uncompressed_relation) AS uncompressed_chunk_acl,
+       pg_temp.normalize_chunk(compressed_relation::text) AS compressed_chunk_name,
+       (SELECT relacl FROM pg_class WHERE oid = compressed_relation) AS compressed_chunk_acl
+  FROM chunks
+  ORDER BY hypertable::text COLLATE "C", pg_temp.normalize_chunk(uncompressed_relation::text) COLLATE "C";
+\endif
 \x off
 

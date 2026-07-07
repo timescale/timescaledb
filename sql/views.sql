@@ -171,8 +171,8 @@ SELECT hypertable_schema,
 FROM (
   SELECT ht.schema_name AS hypertable_schema,
     ht.table_name AS hypertable_name,
-    srcch.schema_name AS schema_name,
-    srcch.table_name AS chunk_name,
+    cl.schema_name AS schema_name,
+    cl.relname AS chunk_name,
     dim.column_name AS primary_dimension,
     dim.column_type AS primary_dimension_type,
     row_number() OVER (PARTITION BY dimsl.chunk_id ORDER BY dim.id) AS chunk_dimension_num,
@@ -207,13 +207,13 @@ FROM (
     INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dimsl.chunk_id = srcch.id
     INNER JOIN _timescaledb_catalog.dimension dim ON dim.id = dimsl.dimension_id
     INNER JOIN (
-      SELECT relname,
+      SELECT pg_class.oid AS reloid,
+        relname,
         reltablespace,
         nspname AS schema_name
       FROM pg_class,
         pg_namespace
-      WHERE pg_class.relnamespace = pg_namespace.oid) cl ON srcch.table_name = cl.relname
-      AND srcch.schema_name = cl.schema_name
+      WHERE pg_class.relnamespace = pg_namespace.oid) cl ON cl.reloid = srcch.relid
     LEFT OUTER JOIN pg_tablespace pgtab ON pgtab.oid = reltablespace
   WHERE srcch.osm_chunk IS FALSE
   ) finalq
@@ -397,13 +397,13 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings A
 CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 	SELECT
 		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
-		format('%I.%I',ch.schema_name,ch.table_name)::regclass AS chunk,
+		ch.relid AS chunk,
 		array_to_string(segmentby,',') AS segmentby,
 		un.orderby,
     s.index AS index
 	FROM _timescaledb_catalog.hypertable ht
     INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
-    INNER JOIN _timescaledb_catalog.compression_settings s ON (format('%I.%I',ch.schema_name,ch.table_name)::regclass = s.relid)
+    INNER JOIN _timescaledb_catalog.compression_settings s ON (ch.relid = s.relid)
 	LEFT JOIN LATERAL (
 		SELECT
 			string_agg(
@@ -487,7 +487,7 @@ SELECT
     o.last_update
 FROM _timescaledb_functions.chunk_statistics() o
 LEFT JOIN _timescaledb_catalog.chunk c
-       ON format('%I.%I', c.schema_name, c.table_name)::regclass = o.uncompressed_relid
+       ON c.relid = o.uncompressed_relid
 LEFT JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

@@ -22,7 +22,7 @@ SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
 -- Capture the compressed chunk relation name
 SELECT cs.compress_relid::text AS compressed_chunk
 FROM _timescaledb_catalog.chunk c
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = c.relid
 JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id
 WHERE h.table_name = 'metrics' \gset
 

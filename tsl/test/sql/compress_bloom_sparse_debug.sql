@@ -37,7 +37,7 @@ as :TSL_MODULE_PATHNAME, 'ts_bloom1_debug_info' language c immutable parallel sa
 
 select cs.compress_relid::regclass chunk, 'c' column from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'test') limit 1
 \gset
@@ -152,7 +152,7 @@ with chunks as (
     cs.compress_relid::text chunk
   from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-      on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+      on cs.relid = ch.relid
   where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'detoaster')
 )

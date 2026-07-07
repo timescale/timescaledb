@@ -4,7 +4,7 @@
 CREATE OR REPLACE FUNCTION reorder_called(chunk_id INT) RETURNS BOOL AS $$
   SELECT indisclustered
   FROM _timescaledb_catalog.chunk ch
-  JOIN pg_index i on indrelid = format('%I.%I',ch.schema_name,ch.table_name)::regclass
+  JOIN pg_index i on indrelid = ch.relid
   WHERE ch.id = chunk_id;
 $$ LANGUAGE SQL;
 CREATE TABLE test_table(time timestamptz, chunk_id int);

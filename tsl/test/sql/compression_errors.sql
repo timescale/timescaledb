@@ -245,7 +245,7 @@ insert into fortable values(10);
 insert into table_constr values(1000, 1, 44, 44, 1);
 insert into table_constr values(1000, 10, 44, 44, 10);
 
-select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
+select ch1.relid::text AS "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 where ch1.hypertable_id = ht.id and ht.table_name like 'table_constr'
 ORDER BY ch1.id limit 1 \gset
@@ -273,7 +273,7 @@ ALTER TABLE table_constr2 SET (timescaledb.compress, timescaledb.compress_segmen
  ALTER TABLE table_constr2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id, d');
 
 --compress a chunk and try to disable compression, it should fail --
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
+SELECT ch1.relid::text AS "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 WHERE ch1.hypertable_id = ht.id and ht.table_name like 'table_constr2' \gset
 SELECT compress_chunk(:'CHUNK_NAME');

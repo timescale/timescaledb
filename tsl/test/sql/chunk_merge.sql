@@ -26,7 +26,7 @@ SELECT table_name FROM Create_hypertable('test2', 'Time', chunk_time_interval=> 
 -- This creates chunks 7 - 9 on second hypertable.
 INSERT INTO test2 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
 
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 \set ON_ERROR_STOP 0
 
@@ -80,8 +80,8 @@ GROUP BY i, bucket;
 
 -- Merging cagg chunks should also work.
 WITH chunks AS
-  (SELECT format('%I.%I', c1.schema_name, c1.table_name)::regclass AS primary_chunk,
-          format('%I.%I', c2.schema_name, c2.table_name)::regclass AS secondary_chunk,
+  (SELECT c1.relid AS primary_chunk,
+          c2.relid AS secondary_chunk,
           d.id AS dimension_id
    FROM _timescaledb_catalog.continuous_agg cagg
    INNER JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = cagg.mat_hypertable_id

@@ -29,13 +29,13 @@ where relid = 't1'::regclass;
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "v1", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]'
 where compress_relid = (select compress_relid from _timescaledb_catalog.compression_settings
-    where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where relid = (select relid from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 't1') limit 1));
 
 -- Use minmax index on (v1, time DESC) instead
 select compress_relid::text comp_chunk from _timescaledb_catalog.compression_settings
-    where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where relid = (select relid from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 't1') limit 1)
 \gset
@@ -92,13 +92,13 @@ where relid = 't2'::regclass;
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "v1", "source": "orderby"}, {"type": "firstlast", "column": "v1", "source": "orderby"}, {"type": "minmax", "column": "v2", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]'
 where compress_relid = (select compress_relid from _timescaledb_catalog.compression_settings
-    where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where relid = (select relid from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 't2') limit 1));
 
 -- Use minmax index on (v1, v2, time DESC) instead
 select compress_relid::text comp_chunk from _timescaledb_catalog.compression_settings
-    where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where relid = (select relid from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 't2') limit 1)
 \gset

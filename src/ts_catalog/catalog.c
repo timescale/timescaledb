@@ -154,7 +154,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[CHUNK_ID_INDEX] = "chunk_pkey",
 			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
-			[CHUNK_SCHEMA_NAME_INDEX] = "chunk_schema_name_table_name_key",
+			[CHUNK_RELID_INDEX] = "chunk_relid_key",
 			[CHUNK_OSM_CHUNK_INDEX] = "chunk_osm_chunk_idx",
 			[CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX] = "chunk_hypertable_id_creation_time_idx",
 		},

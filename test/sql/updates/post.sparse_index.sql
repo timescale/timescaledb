@@ -14,11 +14,10 @@ FROM pg_attribute a
 JOIN pg_type t ON t.oid = a.atttypid
 WHERE a.attrelid = (
     SELECT cs.compress_relid
-    FROM _timescaledb_catalog.chunk ch
+    FROM show_chunks('bloom') ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-    WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'bloom')
-    ORDER BY ch.id
+        ON cs.relid = ch
+    ORDER BY ch::text
     LIMIT 1
   )
   AND a.attnum > 0

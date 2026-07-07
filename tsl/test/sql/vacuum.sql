@@ -187,7 +187,7 @@ LANGUAGE sql AS $$
   SELECT count(*)
   FROM pg_stat_all_tables s
   JOIN _timescaledb_catalog.chunk c
-    ON c.table_name = s.relname AND c.schema_name = s.schemaname
+    ON format('%I.%I', s.schemaname, s.relname)::regclass = c.relid
   WHERE c.hypertable_id = (SELECT mat_hypertable_id
                            FROM _timescaledb_catalog.continuous_agg
                            WHERE user_view_name = view_name)
@@ -221,7 +221,7 @@ FROM pg_stat_all_tables s
 JOIN _timescaledb_catalog.compression_settings cs
   ON cs.compress_relid = s.relid
 JOIN _timescaledb_catalog.chunk parent
-  ON cs.relid = format('%I.%I', parent.schema_name, parent.table_name)::regclass
+  ON cs.relid = parent.relid
 WHERE parent.hypertable_id = (SELECT mat_hypertable_id
                               FROM _timescaledb_catalog.continuous_agg
                               WHERE user_view_name = 'cagg_analyze_view')

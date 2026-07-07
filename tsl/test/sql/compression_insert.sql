@@ -1107,7 +1107,7 @@ CREATE TABLE direct_compressed_insert (time timestamptz) WITH (tsdb.hypertable);
 
 INSERT INTO direct_compressed_insert SELECT generate_series('2024-01-01'::timestamptz, '2024-01-01 1:00:00'::timestamptz, '1 second');
 SELECT count(compress_chunk(c)) FROM show_chunks('direct_compressed_insert') c;
-SELECT cs.compress_relid::text AS "CHUNK" FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk c ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id WHERE h.table_name = 'direct_compressed_insert' AND cs.compress_relid IS NOT NULL ORDER BY c.id DESC LIMIT 1 \gset
+SELECT cs.compress_relid::text AS "CHUNK" FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk c ON cs.relid = c.relid JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id WHERE h.table_name = 'direct_compressed_insert' AND cs.compress_relid IS NOT NULL ORDER BY c.id DESC LIMIT 1 \gset
 
 CREATE TABLE compressed_batches AS SELECT * FROM :CHUNK;
 SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;

@@ -1,0 +1,1 @@
+Implements: #10231 Use regclass for storing relation reference in chunk table

@@ -14,7 +14,7 @@ VACUUM FULL t2;
 SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
 SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
 
-SELECT cs.compress_relid, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk uc ON uc.id=ccs.chunk_id JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=format('%I.%I',uc.schema_name,uc.table_name)::regclass JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(cs.compress_relid)) l ON true;
+SELECT cs.compress_relid, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk uc ON uc.id=ccs.chunk_id JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=uc.relid JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(cs.compress_relid)) l ON true;
 
 -- look up the compressed chunk relation for t1 instead of hardcoding the name
 SELECT cs.compress_relid AS "COMPRESSED_CHUNK" FROM show_chunks('t1') chunk JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=chunk \gset

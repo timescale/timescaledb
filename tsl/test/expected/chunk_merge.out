@@ -31,18 +31,18 @@ SELECT table_name FROM Create_hypertable('test2', 'Time', chunk_time_interval=> 
 
 -- This creates chunks 7 - 9 on second hypertable.
 INSERT INTO test2 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | status | osm_chunk 
-----+---------------+-----------------------+------------------+--------+-----------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |      0 | f
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |      0 | f
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |      0 | f
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |      0 | f
-  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk |      0 | f
-  6 |             1 | _timescaledb_internal | _hyper_1_6_chunk |      0 | f
-  7 |             2 | _timescaledb_internal | _hyper_2_7_chunk |      0 | f
-  8 |             2 | _timescaledb_internal | _hyper_2_8_chunk |      0 | f
-  9 |             2 | _timescaledb_internal | _hyper_2_9_chunk |      0 | f
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
+ id |                 relid                  | hypertable_id | status | osm_chunk 
+----+----------------------------------------+---------------+--------+-----------
+  1 | _timescaledb_internal._hyper_1_1_chunk |             1 |      0 | f
+  2 | _timescaledb_internal._hyper_1_2_chunk |             1 |      0 | f
+  3 | _timescaledb_internal._hyper_1_3_chunk |             1 |      0 | f
+  4 | _timescaledb_internal._hyper_1_4_chunk |             1 |      0 | f
+  5 | _timescaledb_internal._hyper_1_5_chunk |             1 |      0 | f
+  6 | _timescaledb_internal._hyper_1_6_chunk |             1 |      0 | f
+  7 | _timescaledb_internal._hyper_2_7_chunk |             2 |      0 | f
+  8 | _timescaledb_internal._hyper_2_8_chunk |             2 |      0 | f
+  9 | _timescaledb_internal._hyper_2_9_chunk |             2 |      0 | f
 
 \set ON_ERROR_STOP 0
 -- Cannot merge chunks from different hypertables
@@ -101,8 +101,8 @@ GROUP BY i, bucket;
 NOTICE:  refreshing continuous aggregate "test_cagg"
 -- Merging cagg chunks should also work.
 WITH chunks AS
-  (SELECT format('%I.%I', c1.schema_name, c1.table_name)::regclass AS primary_chunk,
-          format('%I.%I', c2.schema_name, c2.table_name)::regclass AS secondary_chunk,
+  (SELECT c1.relid AS primary_chunk,
+          c2.relid AS secondary_chunk,
           d.id AS dimension_id
    FROM _timescaledb_catalog.continuous_agg cagg
    INNER JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = cagg.mat_hypertable_id

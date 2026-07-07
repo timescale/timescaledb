@@ -131,7 +131,7 @@ CREATE TABLE dim_test(time TIMESTAMPTZ, device int);
 SELECT create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');
 
 CREATE VIEW dim_test_slices AS
-SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, ds.id AS dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, ds.id AS dimension_slice_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
@@ -167,7 +167,7 @@ CREATE TABLE dim_test(time TIMESTAMPTZ, device int, data int);
 SELECT create_hypertable('dim_test', 'time', 'device', 2, chunk_time_interval => INTERVAL '1 day');
 
 CREATE VIEW dim_test_slices AS
-SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, ds.id AS dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, ds.id AS dimension_slice_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
@@ -274,7 +274,7 @@ select create_hypertable('test_schema.test_migrate', 'time', migrate_data => tru
 
 --there should be two new chunks
 select id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
-select id, hypertable_id, schema_name, table_name, status, osm_chunk from _timescaledb_catalog.chunk;
+select id, relid, hypertable_id, status, osm_chunk from _timescaledb_catalog.chunk;
 select * from test_schema.test_migrate;
 --main table should now be empty
 select * from only test_schema.test_migrate;

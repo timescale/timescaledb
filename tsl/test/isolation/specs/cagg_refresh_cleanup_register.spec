@@ -135,7 +135,7 @@ step "A1_revoke_mat_perm" {
   DECLARE
       mat_ht text;
   BEGIN
-      SELECT format('%I.%I', h.schema_name, h.table_name)
+      SELECT format('%I.%I', h.schema_name, h.table_name)::regclass
         INTO mat_ht
         FROM _timescaledb_catalog.continuous_agg ca
         JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id

@@ -163,9 +163,9 @@ SELECT
 FROM
 	show_chunks('mixed_compressed') c
 	INNER JOIN _timescaledb_catalog.chunk cat
-		ON (c = format('%I.%I', cat.schema_name, cat.table_name)::regclass)
+		ON (c = cat.relid)
 	INNER JOIN _timescaledb_catalog.compression_settings cs
-		ON (cs.relid = format('%I.%I', cat.schema_name, cat.table_name)::regclass)
+		ON (cs.relid = cat.relid)
 	INNER JOIN _timescaledb_catalog.compression_chunk_size ccs
 		ON (ccs.chunk_id = cat.id);
 CREATE TABLE compression_info (compressed_chunk regclass, result text, compressed_size int, num_rows int);

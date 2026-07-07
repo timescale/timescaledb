@@ -518,13 +518,13 @@ where relid = 't'::regclass;
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "val", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]'
 where compress_relid = (select compress_relid from _timescaledb_catalog.compression_settings
-    where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where relid = (select relid from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 't') limit 1));
 
 -- Use minmax index on (val DESC, time DESC) instead
 select compress_relid::text comp_chunk from _timescaledb_catalog.compression_settings
-    where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+    where relid = (select relid from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 't') limit 1)
 \gset

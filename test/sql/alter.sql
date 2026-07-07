@@ -101,15 +101,15 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_
 
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Rename chunk
 ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Set schema
 ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
 
 -- Test that we cannot rename chunk columns
 \set ON_ERROR_STOP 0
@@ -385,7 +385,7 @@ ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
 INSERT INTO my_table (date, quantity) VALUES ('2018-08-10T23:00:00+00:00', 20);
 -- Make sure the schema name is changed in both catalog tables
 SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk from _timescaledb_catalog.chunk;
+SELECT id, relid, hypertable_id, status, osm_chunk from _timescaledb_catalog.chunk;
 
 DROP TABLE my_table;
 
@@ -403,7 +403,7 @@ ALTER INDEX t_hypertable_id_time_key RENAME TO t_new_constraint;
 SELECT con.conname AS constraint_name
 FROM _timescaledb_catalog.chunk c
 JOIN pg_constraint con
-  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+  ON con.conrelid = c.relid
 WHERE con.conname LIKE '%t_new_constraint%'
 ORDER BY 1;
 
@@ -417,7 +417,7 @@ ALTER TABLE t_hypertable RENAME CONSTRAINT t_hypertable_id_time_key TO t_new_con
 SELECT con.conname AS constraint_name
 FROM _timescaledb_catalog.chunk c
 JOIN pg_constraint con
-  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+  ON con.conrelid = c.relid
 WHERE con.conname LIKE '%t_new_constraint%'
 ORDER BY 1;
 

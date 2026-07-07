@@ -3,8 +3,8 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Shared helper views used across the composite bloom filter tests.
 CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
-CREATE VIEW metacols AS select h.table_name as relname, a.attname, count(*) from _timescaledb_catalog.compression_settings cs join _timescaledb_catalog.chunk ch on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass join _timescaledb_catalog.hypertable h on ch.hypertable_id = h.id join pg_attribute a on a.attrelid = cs.compress_relid where a.attname like '%_ts_meta%' GROUP BY 1,2 ORDER BY h.table_name COLLATE "C", a.attname::text COLLATE "C";
-CREATE VIEW compressedcols AS select h.table_name as relname, a.attname, cs.compress_relid as reloid, a.attnum from _timescaledb_catalog.compression_settings cs join _timescaledb_catalog.chunk ch on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass join _timescaledb_catalog.hypertable h on ch.hypertable_id = h.id join pg_attribute a on a.attrelid = cs.compress_relid and not a.attisdropped order by cs.compress_relid asc, a.attnum asc;
+CREATE VIEW metacols AS select h.table_name as relname, a.attname, count(*) from _timescaledb_catalog.compression_settings cs join _timescaledb_catalog.chunk ch on cs.relid = ch.relid join _timescaledb_catalog.hypertable h on ch.hypertable_id = h.id join pg_attribute a on a.attrelid = cs.compress_relid where a.attname like '%_ts_meta%' GROUP BY 1,2 ORDER BY h.table_name COLLATE "C", a.attname::text COLLATE "C";
+CREATE VIEW compressedcols AS select h.table_name as relname, a.attname, cs.compress_relid as reloid, a.attnum from _timescaledb_catalog.compression_settings cs join _timescaledb_catalog.chunk ch on cs.relid = ch.relid join _timescaledb_catalog.hypertable h on ch.hypertable_id = h.id join pg_attribute a on a.attrelid = cs.compress_relid and not a.attisdropped order by cs.compress_relid asc, a.attnum asc;
 -------------------------------------------------------------------
 -- Basics
 -------------------------------------------------------------------
@@ -868,7 +868,7 @@ SELECT
       a.attname
 FROM
       _timescaledb_catalog.compression_settings cs
-      JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+      JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid
       JOIN _timescaledb_catalog.hypertable h ON ch.hypertable_id = h.id
       JOIN pg_attribute a ON a.attrelid = cs.compress_relid
 WHERE
@@ -1763,7 +1763,7 @@ select count(compress_chunk(x)) from show_chunks('hashes') x;
 vacuum full analyze hashes;
 select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'hashes') limit 1
 \gset

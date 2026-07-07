@@ -272,7 +272,7 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
 INSERT INTO conditions
 SELECT generate_series('2021-08-01 00:00'::timestamp, '2021-08-31 00:00'::timestamp, '1 day'), 'NYC', 'nycity', 40, 40;
 
-SELECT id, table_name, status from _timescaledb_catalog.chunk
+SELECT id, relid::text AS table_name, status from _timescaledb_catalog.chunk
 where hypertable_id = (select id from _timescaledb_catalog.hypertable
                        where table_name = 'conditions')
 order by id;
@@ -282,7 +282,7 @@ select t.schedule_interval FROM alter_job(:job_id_4, next_start=> now() ) t;
 SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_4, 2);
 
-SELECT id, table_name, status from _timescaledb_catalog.chunk
+SELECT id, relid::text AS table_name, status from _timescaledb_catalog.chunk
 where hypertable_id = (select id from _timescaledb_catalog.hypertable
                        where table_name = 'conditions')
 order by id;
@@ -613,7 +613,7 @@ SELECT chunk_name AS new_uncompressed_chunk_name
   WHERE hypertable_name = 'sensor_data' AND NOT is_compressed LIMIT 1 \gset
 
 -- change compression status so that this chunk is skipped when policy is run
-update _timescaledb_catalog.chunk set status=3 where table_name = :'new_uncompressed_chunk_name';
+update _timescaledb_catalog.chunk set status=3 where relid = (SELECT oid FROM pg_class WHERE relname = :'new_uncompressed_chunk_name' LIMIT 1);
 
 -- add new compression policy job
 SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
@@ -632,7 +632,7 @@ CALL run_job(:compressjob_id);
 SET client_min_messages TO NOTICE;
 
 -- check compression status is not changed for the chunk whose status was manually updated
-SELECT status FROM _timescaledb_catalog.chunk where table_name = :'new_uncompressed_chunk_name';
+SELECT status FROM _timescaledb_catalog.chunk where relid = (SELECT oid FROM pg_class WHERE relname = :'new_uncompressed_chunk_name' LIMIT 1);
 
 -- confirm all the other new chunks are now compressed despite
 -- facing an error when trying to compress :'new_uncompressed_chunk_name'
