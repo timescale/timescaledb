@@ -72,14 +72,8 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 		bool isnull;
 
 		/* We found a chunk. First, try to lock it. */
-		Name schema_name = DatumGetName(slot_getattr(ti->slot, Anum_chunk_schema_name, &isnull));
+		Oid chunk_reloid = DatumGetObjectId(slot_getattr(ti->slot, Anum_chunk_relid, &isnull));
 		Assert(!isnull);
-		Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_chunk_table_name, &isnull));
-		Assert(!isnull);
-
-		Oid chunk_reloid = ts_get_relation_relid(NameStr(*schema_name),
-												 NameStr(*table_name),
-												 /* return_invalid = */ false);
 		Assert(OidIsValid(chunk_reloid));
 
 		/* Only one chunk should match */

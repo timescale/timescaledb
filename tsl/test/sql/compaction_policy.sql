@@ -150,7 +150,7 @@ SELECT i.indexrelid::regclass AS doomed_index
 FROM _timescaledb_catalog.chunk ch
 JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+  ON cs.relid = ch.relid
 JOIN pg_index i ON i.indrelid = cs.compress_relid
 WHERE ht.table_name = 'fail' ORDER BY ch.id LIMIT 1 \gset
 DROP INDEX :doomed_index;

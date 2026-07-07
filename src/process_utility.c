@@ -789,7 +789,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 
 	Assert(alterstmt->objectType == OBJECT_TABLE);
 
-	if (NULL == alterstmt->relation)
+	if (!alterstmt->relation)
 	{
 		return;
 	}
@@ -803,7 +803,11 @@ process_altertableschema(ProcessUtilityArgs *args)
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
-	if (ht == NULL)
+	if (ht)
+	{
+		ts_hypertable_set_schema(ht, alterstmt->newschema);
+	}
+	else
 	{
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
 
@@ -811,20 +815,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 		{
 			alterstmt->objectType = OBJECT_MATVIEW;
 			process_alterviewschema(args);
-			ts_cache_release(&hcache);
-			return;
 		}
-
-		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-		if (NULL != chunk)
-		{
-			ts_chunk_set_schema(chunk, alterstmt->newschema);
-		}
-	}
-	else
-	{
-		ts_hypertable_set_schema(ht, alterstmt->newschema);
 	}
 
 	ts_cache_release(&hcache);
@@ -2356,14 +2347,18 @@ process_rename_view(Oid relid, RenameStmt *stmt)
 }
 
 /*
- * Rename a hypertable, chunk or continuous aggregate.
+ * Rename a hypertable or continuous aggregate.
  */
 static void
 process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 
-	if (NULL == ht)
+	if (ht)
+	{
+		ts_hypertable_set_name(ht, stmt->newname);
+	}
+	else
 	{
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
 
@@ -2371,19 +2366,7 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 		{
 			stmt->renameType = OBJECT_MATVIEW;
 			process_rename_view(relid, stmt);
-			return;
 		}
-
-		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-		if (NULL != chunk)
-		{
-			ts_chunk_set_name(chunk, stmt->newname);
-		}
-	}
-	else
-	{
-		ts_hypertable_set_name(ht, stmt->newname);
 	}
 }
 
@@ -2577,7 +2560,6 @@ process_rename_schema(RenameStmt *stmt)
 	}
 
 	ts_bgw_job_rename_schema_name(stmt->subname, stmt->newname);
-	ts_chunks_rename_schema_name(stmt->subname, stmt->newname);
 	ts_dimensions_rename_schema_name(stmt->subname, stmt->newname);
 	ts_hypertables_rename_schema_name(stmt->subname, stmt->newname);
 	ts_continuous_agg_rename_schema_name(stmt->subname, stmt->newname);

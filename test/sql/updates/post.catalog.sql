@@ -33,6 +33,11 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
 SELECT (extversion >= '2.28.0') AS has_chunk_owned_slices
   FROM pg_extension WHERE extname = 'timescaledb' \gset
 
+-- The chunk catalog stores its relation as schema_name/table_name before 2.29.0
+-- and as a single relid afterwards.
+SELECT (extversion >= '2.29.0') AS has_chunk_relid
+  FROM pg_extension WHERE extname = 'timescaledb' \gset
+
 \if :PG_UPGRADE_TEST
 \else
 \d+ _timescaledb_catalog.hypertable
@@ -225,10 +230,18 @@ SELECT unnest(extconfig)::regclass::text, unnest(extcondition) FROM pg_extension
 
 -- Show chunks that include owner in the output. The chunk id is not
 -- deterministic post-upgrade, so drop it and normalize the chunk relation name.
+\if :has_chunk_relid
+SELECT pg_temp.normalize_hypertable_id(c.hypertable_id) AS hypertable, n.nspname AS schema_name, pg_temp.normalize_chunk(cl.relname) AS table_name, cl.relowner::regrole
+FROM  _timescaledb_catalog.chunk c
+INNER JOIN pg_class cl ON (cl.oid = c.relid)
+INNER JOIN pg_namespace n ON (n.oid = cl.relnamespace)
+ORDER BY pg_temp.normalize_hypertable_id(c.hypertable_id), pg_temp.normalize_chunk(cl.relname);
+\else
 SELECT pg_temp.normalize_hypertable_id(c.hypertable_id) AS hypertable, c.schema_name, pg_temp.normalize_chunk(c.table_name) AS table_name, cl.relowner::regrole
 FROM  _timescaledb_catalog.chunk c
-INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
+INNER JOIN pg_class cl ON (cl.oid = format('%I.%I', c.schema_name, c.table_name)::regclass)
 ORDER BY pg_temp.normalize_hypertable_id(c.hypertable_id), pg_temp.normalize_chunk(c.table_name);
+\endif
 
 -- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and chunk ids
 -- are renumbered, so both differ between a fresh install and a post-upgrade
@@ -281,8 +294,8 @@ ORDER BY 1, 2, 3;
 -- orderby sparse index type changed across releases and existing chunks are
 -- not rewritten on upgrade), so it differs between a fresh install and a
 -- post-upgrade catalog. Skip it and compare the remaining columns.
-SELECT pg_temp.normalize_chunk(relid::regclass::text) AS relid,
+SELECT pg_temp.normalize_chunk(relid::text) AS relid,
        pg_temp.normalize_chunk(compress_relid::regclass::text) AS compress_relid,
        segmentby, orderby, orderby_desc, orderby_nullsfirst
 FROM _timescaledb_catalog.compression_settings
-ORDER BY pg_temp.normalize_chunk(relid::regclass::text), segmentby, orderby;
+ORDER BY pg_temp.normalize_chunk(relid::text), segmentby, orderby;

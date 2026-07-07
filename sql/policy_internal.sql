@@ -57,7 +57,7 @@ BEGIN
   inactive_for := jsonb_object_field_text(config, 'inactive_for')::INTERVAL;
 
   FOR chunk_rec IN
-    SELECT ch.schema_name, ch.table_name
+    SELECT ch.relid
     FROM _timescaledb_catalog.chunk ch
     WHERE ch.hypertable_id = htid
       AND NOT ch.osm_chunk
@@ -70,20 +70,19 @@ BEGIN
       -- so we don't keep recompacting chunks still receiving out-of-order data
       AND (inactive_for IS NULL OR NOT EXISTS (
         SELECT 1 FROM _timescaledb_functions.chunk_statistics(
-          uncompressed_relid => format('%I.%I', ch.schema_name, ch.table_name)::regclass) s
+          uncompressed_relid => ch.relid) s
         WHERE s.last_update >= now() - inactive_for))
   LOOP
     BEGIN
-      PERFORM _timescaledb_functions.compact_chunk(
-        format('%I.%I', chunk_rec.schema_name, chunk_rec.table_name)::regclass);
+      PERFORM _timescaledb_functions.compact_chunk(chunk_rec.relid);
       numchunks := numchunks + 1;
     EXCEPTION WHEN OTHERS THEN
       GET STACKED DIAGNOSTICS
           _message = MESSAGE_TEXT,
           _detail = PG_EXCEPTION_DETAIL,
           _sqlstate = RETURNED_SQLSTATE;
-      RAISE WARNING 'compaction policy failed to compact chunk "%.%"',
-          chunk_rec.schema_name, chunk_rec.table_name
+      RAISE WARNING 'compaction policy failed to compact chunk "%"',
+          chunk_rec.relid
           USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
                 ERRCODE = _sqlstate;
       chunks_failure := chunks_failure + 1;
@@ -96,7 +95,7 @@ BEGIN
     -- search_path to caller, so we do SET LOCAL again after COMMIT
     SET LOCAL search_path TO pg_catalog, pg_temp;
     IF verbose_log THEN
-      RAISE LOG 'job % completed compacting chunk %.%', job_id, chunk_rec.schema_name, chunk_rec.table_name;
+      RAISE LOG 'job % completed compacting chunk %', job_id, chunk_rec.relid;
     END IF;
     -- max_chunks bounds the chunks processed per run, including ones that failed
     IF max_chunks > 0 AND processed >= max_chunks THEN
@@ -187,12 +186,12 @@ BEGIN
 
   FOR chunk_rec IN
     SELECT
-      show.oid, ch.schema_name, ch.table_name, ch.status
+      show.oid, pgns.nspname AS schema_name, pgc.relname AS table_name, ch.status
     FROM
       @extschema@.show_chunks(htoid, older_than => lag, created_before => creation_lag) AS show(oid)
       INNER JOIN pg_class pgc ON pgc.oid = show.oid
       INNER JOIN pg_namespace pgns ON pgc.relnamespace = pgns.oid
-      INNER JOIN _timescaledb_catalog.chunk ch ON ch.table_name = pgc.relname AND ch.schema_name = pgns.nspname AND ch.hypertable_id = htid
+      INNER JOIN _timescaledb_catalog.chunk ch ON ch.relid = show.oid AND ch.hypertable_id = htid
     WHERE NOT ch.osm_chunk
     -- Checking for chunks which are not fully compressed and not frozen
     AND ch.status != status_fully_compressed
@@ -227,7 +226,7 @@ BEGIN
       FOR idx_rec IN
         SELECT idx.schemaname, idx.indexname
         FROM pg_indexes idx
-        JOIN _timescaledb_catalog.chunk ch ON ch.schema_name = idx.schemaname AND ch.table_name = idx.tablename
+        JOIN _timescaledb_catalog.chunk ch ON ch.relid = chunk_rec.oid
         WHERE idx.schemaname = chunk_rec.schema_name
           AND idx.tablename = chunk_rec.table_name
           AND ch.status = status_fully_compressed

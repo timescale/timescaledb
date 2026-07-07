@@ -309,8 +309,7 @@ WHERE ca.user_view_name = 'cagg_compressed' \gset
 SELECT count(*) AS mat_ht_chunks_with_min_temp
 FROM information_schema.columns ic, _timescaledb_catalog.chunk c
 WHERE c.hypertable_id = :mat_ht_id
-  AND ic.table_schema = c.schema_name
-  AND ic.table_name = c.table_name
+  AND c.relid = format('%I.%I', ic.table_schema, ic.table_name)::regclass
   AND ic.column_name = 'min_temp';
 
 -- every mat HT chunk has min_temp
@@ -318,7 +317,7 @@ SELECT count(*) AS compressed_relations_with_min_temp
 FROM information_schema.columns ic,
 _timescaledb_catalog.chunk c,_timescaledb_catalog.compression_settings cs, pg_class
 WHERE c.hypertable_id = :mat_ht_id
-  AND cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
+  AND cs.relid = c.relid
   AND pg_class.oid = cs.compress_relid
   AND ic.table_schema = pg_class.relnamespace::regnamespace::text
   AND ic.table_name = pg_class.relname

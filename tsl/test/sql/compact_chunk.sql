@@ -26,7 +26,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT cs.compress_relid::regclass::text AS "CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics'
 ORDER BY ch.id LIMIT 1 \gset
@@ -161,7 +161,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT cs.compress_relid::regclass::text AS "SEG_CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_seg'
 ORDER BY ch.id LIMIT 1 \gset
@@ -233,7 +233,7 @@ SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_nul
 SELECT cs.compress_relid::regclass::text AS "NULLABLE_CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_nullable'
 ORDER BY ch.id LIMIT 1 \gset
@@ -302,7 +302,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT cs.compress_relid::regclass::text AS "DESC_CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_desc'
 ORDER BY ch.id LIMIT 1 \gset
@@ -388,7 +388,7 @@ FROM generate_series(1,500) i;
 SELECT cs.compress_relid::regclass::text AS "MULTI_CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_multi'
 ORDER BY ch.id LIMIT 1 \gset
@@ -463,7 +463,7 @@ FROM generate_series(1,500) i;
 SELECT cs.compress_relid::regclass::text AS "MULTI_DESC_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_multi_desc'
 ORDER BY ch.id LIMIT 1 \gset
@@ -529,7 +529,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "COMBINED_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_combined'
 ORDER BY ch.id LIMIT 1 \gset
@@ -629,7 +629,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "NULLS_LAST_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_nulls_last'
 ORDER BY ch.id LIMIT 1 \gset
@@ -725,7 +725,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "NULLS_FIRST_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_nulls_first'
 ORDER BY ch.id LIMIT 1 \gset
@@ -831,7 +831,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "MIXED_NULLS_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_mixed_nulls'
 ORDER BY ch.id LIMIT 1 \gset
@@ -901,7 +901,7 @@ FROM generate_series(1,500) i;
 SELECT cs.compress_relid::regclass::text AS "SEC_NULL_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_secondary_null'
 ORDER BY ch.id LIMIT 1 \gset
@@ -966,7 +966,7 @@ FROM generate_series(1,500) i;
 SELECT cs.compress_relid::regclass::text AS "SEC_NF_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_secondary_null_first'
 ORDER BY ch.id LIMIT 1 \gset
@@ -1024,7 +1024,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "NO_FL_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_no_firstlast'
 ORDER BY ch.id LIMIT 1 \gset

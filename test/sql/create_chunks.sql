@@ -38,7 +38,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
 INSERT INTO chunk_test VALUES (4, 24.3, 2, 1);
 INSERT INTO chunk_test VALUES (10, 24.3, 2, 1);
 
-SELECT c.table_name AS chunk_name, d.id AS dimension_id, ds.id AS slice_id, range_start, range_end FROM _timescaledb_catalog.chunk c
+SELECT c.relid::text AS chunk_name, d.id AS dimension_id, ds.id AS slice_id, range_start, range_end FROM _timescaledb_catalog.chunk c
 LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id)
 LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
 LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
@@ -60,7 +60,7 @@ INSERT INTO chunk_test VALUES (8, 24.3, 79669, 1);
 INSERT INTO chunk_test VALUES (10, 24.3, 11233, 1);
 INSERT INTO chunk_test VALUES (16, 24.3, 11233, 1);
 
-SELECT c.table_name AS chunk_name, d.id AS dimension_id, ds.id AS slice_id, range_start, range_end FROM _timescaledb_catalog.chunk c
+SELECT c.relid::text AS chunk_name, d.id AS dimension_id, ds.id AS slice_id, range_start, range_end FROM _timescaledb_catalog.chunk c
 LEFT JOIN _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id)
 LEFT JOIN _timescaledb_catalog.dimension d ON (d.id = ds.dimension_id)
 LEFT JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)

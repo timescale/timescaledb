@@ -62,7 +62,7 @@ step "DTb" { BEGIN; }
 step "DropOsmChunk" {
   SELECT _timescaledb_functions.drop_chunk(chunk_table::regclass)
   FROM (
-    SELECT format('%I.%I', c.schema_name, c.table_name) as chunk_table
+    SELECT c.relid as chunk_table
     FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
     WHERE ht.id = c.hypertable_id AND ht.table_name = 'osm_test'
   ) sq;

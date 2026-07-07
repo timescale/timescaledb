@@ -76,7 +76,7 @@ WHERE hypertable_id =  ( SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'test1' );
 
 SELECT count(*) FROM pg_attribute att
-INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = ch.relid
 INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname = 'bigintcol';
@@ -85,7 +85,7 @@ WHERE
 --the correct column name
 SELECT count(*) FROM pg_attribute att
 INNER JOIN _timescaledb_catalog.compression_settings cs ON att.attrelid = cs.compress_relid
-INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid
 INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname = 'bigintcol';
@@ -101,7 +101,7 @@ WHERE hypertable_name = 'test1' and attname like 'ccc%';
 
 SELECT count(*) FROM pg_attribute att
 INNER JOIN _timescaledb_catalog.compression_settings cs ON att.attrelid = cs.compress_relid
-INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid
 INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname like 'ccc%a';

@@ -556,7 +556,7 @@ SELECT ht.schema_name, ht.table_name, relname AS chunk_name,
   FROM pg_class c,
        _timescaledb_catalog.hypertable ht,
        _timescaledb_catalog.chunk ch
- WHERE ch.table_name = c.relname AND ht.id = ch.hypertable_id;
+ WHERE ch.relid = c.oid AND ht.id = ch.hypertable_id;
 
 CREATE TABLE whatever(time BIGINT NOT NULL, data INTEGER);
 

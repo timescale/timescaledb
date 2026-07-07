@@ -194,9 +194,6 @@ extern TSDLLEXPORT int ts_chunk_delete_by_name(const char *schema, const char *t
 											   DropBehavior behavior);
 extern int ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname,
 												const char *tablename, DropBehavior behavior);
-extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
-extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
-extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 
 extern TSDLLEXPORT bool ts_chunk_set_partial(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);

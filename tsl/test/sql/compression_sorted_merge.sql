@@ -687,7 +687,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('bsm_segby') c;
 
 select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'bsm_segby') limit 1
 \gset
@@ -707,7 +707,7 @@ where relid = 'bsm_segby'::regclass;
 
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]'
-where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+where relid = (select relid from _timescaledb_catalog.chunk
     where hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'bsm_segby') limit 1);
 
@@ -732,7 +732,7 @@ where relid = 'bsm_segby'::regclass;
 
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]'
-where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+where relid = (select relid from _timescaledb_catalog.chunk
     where hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'bsm_segby') limit 1);
 

@@ -26,8 +26,7 @@ begin
     select * into chunk_stats_before
     from _timescaledb_catalog.compression_chunk_size ccs
     join _timescaledb_catalog.chunk c on (c.id = ccs.chunk_id)
-    join pg_class cl on (cl.relname = c.table_name)
-    join pg_namespace ns on (ns.oid = cl.relnamespace and c.schema_name = ns.nspname)
+    join pg_class cl on (cl.oid = c.relid)
     where cl.oid = chunk;
 
     -- Compare chunk children before and after split to get new chunk
@@ -75,7 +74,7 @@ begin
             into uncompressed_heap_size_sum, compressed_heap_size_sum
             from _timescaledb_catalog.compression_chunk_size ccs
             join _timescaledb_catalog.chunk c on (c.id = ccs.chunk_id)
-            join pg_class cl on (cl.relname = c.table_name)
+            join pg_class cl on (cl.oid = c.relid)
             where cl.oid in (chunk, new_chunk);
 
         if chunk_stats_before.uncompressed_heap_size = uncompressed_heap_size_sum and
@@ -96,7 +95,7 @@ $$ language plpgsql;
 create view chunk_slices as
 select
     h.table_name as hypertable_name,
-    c.table_name as chunk_name,
+    c.relid::text as chunk_name,
     _timescaledb_functions.to_timestamp(ds.range_start) as range_start,
     _timescaledb_functions.to_timestamp(ds.range_end) as range_end
 from _timescaledb_catalog.chunk c
@@ -147,9 +146,9 @@ select time, device, temp from _timescaledb_internal._hyper_1_1_chunk order by t
  Tue Jan 09 15:00:00 2024 PST |      1 |    2
 
 select * from chunk_slices where hypertable_name = 'splitme';
- hypertable_name |    chunk_name    |         range_start          |          range_end           
------------------+------------------+------------------------------+------------------------------
- splitme         | _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+ hypertable_name |               chunk_name               |         range_start          |          range_end           
+-----------------+----------------------------------------+------------------------------+------------------------------
+ splitme         | _timescaledb_internal._hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
 
 \set ON_ERROR_STOP 0
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk', split_at => 1);
@@ -177,12 +176,12 @@ ERROR:  access method "testam" is not supported for split
 alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
 -- Split an OSM chunk is not supported
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = true where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 ERROR:  cannot split OSM chunks
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = false where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 -- Split a frozen chunk is not supported
 select _timescaledb_functions.freeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
@@ -225,10 +224,10 @@ order by chunk_name, range_start, range_end;
  _hyper_1_2_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
 
 select * from chunk_slices where hypertable_name = 'splitme';
- hypertable_name |    chunk_name    |         range_start          |          range_end           
------------------+------------------+------------------------------+------------------------------
- splitme         | _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
- splitme         | _hyper_1_2_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+ hypertable_name |               chunk_name               |         range_start          |          range_end           
+-----------------+----------------------------------------+------------------------------+------------------------------
+ splitme         | _timescaledb_internal._hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ splitme         | _timescaledb_internal._hyper_1_2_chunk | Thu Jan 04 00:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
 
 -- Show that the two tuples ended up in different chunks
 select time, device, temp from _timescaledb_internal._hyper_1_1_chunk order by time;
@@ -352,9 +351,9 @@ select create_hypertable('splitme_int', 'time', chunk_time_interval => 10::int);
 insert into splitme_int values (1, 1, 1.0), (8, 8, 8.0);
 select ch as int_chunk from show_chunks('splitme_int') ch order by ch limit 1 \gset
 select * from chunk_slices where hypertable_name = 'splitme_int';
- hypertable_name |    chunk_name    |         range_start          |             range_end              
------------------+------------------+------------------------------+------------------------------------
- splitme_int     | _hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+ hypertable_name |               chunk_name               |         range_start          |             range_end              
+-----------------+----------------------------------------+------------------------------+------------------------------------
+ splitme_int     | _timescaledb_internal._hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
 
 \set ON_ERROR_STOP 0
 call split_chunk(:'int_chunk', split_at => 0);
@@ -364,10 +363,10 @@ ERROR:  cannot split chunk at 10
 \set ON_ERROR_STOP 1
 call split_chunk(:'int_chunk', split_at => '5');
 select * from chunk_slices where hypertable_name = 'splitme_int';
- hypertable_name |    chunk_name    |             range_start             |              range_end              
------------------+------------------+-------------------------------------+-------------------------------------
- splitme_int     | _hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000005 1969 PST
- splitme_int     | _hyper_2_5_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+ hypertable_name |               chunk_name               |             range_start             |              range_end              
+-----------------+----------------------------------------+-------------------------------------+-------------------------------------
+ splitme_int     | _timescaledb_internal._hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000005 1969 PST
+ splitme_int     | _timescaledb_internal._hyper_2_5_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
 
 select * from :int_chunk order by time;
  time | device | temp 
@@ -383,11 +382,11 @@ select * from splitme_int order by time;
 -- Split with one empty chunk
 call split_chunk(:'int_chunk', split_at => 3);
 select * from chunk_slices where hypertable_name = 'splitme_int';
- hypertable_name |    chunk_name    |             range_start             |              range_end              
------------------+------------------+-------------------------------------+-------------------------------------
- splitme_int     | _hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000003 1969 PST
- splitme_int     | _hyper_2_6_chunk | Wed Dec 31 16:00:00.000003 1969 PST | Wed Dec 31 16:00:00.000005 1969 PST
- splitme_int     | _hyper_2_5_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
+ hypertable_name |               chunk_name               |             range_start             |              range_end              
+-----------------+----------------------------------------+-------------------------------------+-------------------------------------
+ splitme_int     | _timescaledb_internal._hyper_2_4_chunk | Wed Dec 31 16:00:00 1969 PST        | Wed Dec 31 16:00:00.000003 1969 PST
+ splitme_int     | _timescaledb_internal._hyper_2_6_chunk | Wed Dec 31 16:00:00.000003 1969 PST | Wed Dec 31 16:00:00.000005 1969 PST
+ splitme_int     | _timescaledb_internal._hyper_2_5_chunk | Wed Dec 31 16:00:00.000005 1969 PST | Wed Dec 31 16:00:00.00001 1969 PST
 
 select * from :int_chunk order by time;
  time | device | temp 
@@ -428,11 +427,11 @@ select setseed(0.2);
  
 
 select * from chunk_slices where hypertable_name = 'splitme';
- hypertable_name |    chunk_name    |         range_start          |          range_end           
------------------+------------------+------------------------------+------------------------------
- splitme         | _hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
- splitme         | _hyper_1_2_chunk | Thu Jan 04 00:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST
- splitme         | _hyper_1_3_chunk | Sun Jan 07 08:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+ hypertable_name |               chunk_name               |         range_start          |          range_end           
+-----------------+----------------------------------------+------------------------------+------------------------------
+ splitme         | _timescaledb_internal._hyper_1_1_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ splitme         | _timescaledb_internal._hyper_1_2_chunk | Thu Jan 04 00:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST
+ splitme         | _timescaledb_internal._hyper_1_3_chunk | Sun Jan 07 08:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
 
 insert into splitme (time, device, location, temp)
 select t, ceil(random()*10), ceil(random()*20), random()*40
@@ -477,10 +476,10 @@ insert into splitme_md values
        ('2024-01-09 14:00', 1, 2, 2.0);
 select ch as chunk_md from show_chunks('splitme_md') ch limit 1 \gset
 select * from chunk_slices where hypertable_name = 'splitme_md';
- hypertable_name |    chunk_name    |         range_start          |              range_end              
------------------+------------------+------------------------------+-------------------------------------
- splitme_md      | _hyper_3_9_chunk | -infinity                    | Wed Dec 31 16:17:53.741823 1969 PST
- splitme_md      | _hyper_3_9_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+ hypertable_name |               chunk_name               |         range_start          |              range_end              
+-----------------+----------------------------------------+------------------------------+-------------------------------------
+ splitme_md      | _timescaledb_internal._hyper_3_9_chunk | -infinity                    | Wed Dec 31 16:17:53.741823 1969 PST
+ splitme_md      | _timescaledb_internal._hyper_3_9_chunk | Wed Jan 03 16:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
 
 \set ON_ERROR_STOP 0
 -- Currently can't split multi-dimensional chunks due to bug/limitation in subspace store.
@@ -560,14 +559,14 @@ select * from chunk_info;
  _hyper_1_8_chunk  | heap |     28800 | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
 
 select * from chunk_slices where hypertable_name = 'splitme';
- hypertable_name |    chunk_name     |         range_start          |          range_end           
------------------+-------------------+------------------------------+------------------------------
- splitme         | _hyper_1_7_chunk  | Wed Dec 27 16:00:00 2023 PST | Wed Jan 03 16:00:00 2024 PST
- splitme         | _hyper_1_1_chunk  | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
- splitme         | _hyper_1_2_chunk  | Thu Jan 04 00:00:00 2024 PST | Thu Jan 04 13:40:30 2024 PST
- splitme         | _hyper_1_12_chunk | Thu Jan 04 13:40:30 2024 PST | Fri Jan 05 16:00:00 2024 PST
- splitme         | _hyper_1_8_chunk  | Fri Jan 05 16:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST
- splitme         | _hyper_1_3_chunk  | Sun Jan 07 08:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
+ hypertable_name |               chunk_name                |         range_start          |          range_end           
+-----------------+-----------------------------------------+------------------------------+------------------------------
+ splitme         | _timescaledb_internal._hyper_1_7_chunk  | Wed Dec 27 16:00:00 2023 PST | Wed Jan 03 16:00:00 2024 PST
+ splitme         | _timescaledb_internal._hyper_1_1_chunk  | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 00:00:00 2024 PST
+ splitme         | _timescaledb_internal._hyper_1_2_chunk  | Thu Jan 04 00:00:00 2024 PST | Thu Jan 04 13:40:30 2024 PST
+ splitme         | _timescaledb_internal._hyper_1_12_chunk | Thu Jan 04 13:40:30 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ splitme         | _timescaledb_internal._hyper_1_8_chunk  | Fri Jan 05 16:00:00 2024 PST | Sun Jan 07 08:00:00 2024 PST
+ splitme         | _timescaledb_internal._hyper_1_3_chunk  | Sun Jan 07 08:00:00 2024 PST | Wed Jan 10 16:00:00 2024 PST
 
 select show_chunks('splitme');
                show_chunks               
@@ -691,11 +690,11 @@ order by time;
  Sun Jan 07 09:03:11 2024 PST |      1 |   21 |       21
  Wed Jan 10 02:04:12 2024 PST |      1 |   17 |       32
 
-select table_name, status
-from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
-    table_name    | status 
-------------------+--------
- _hyper_1_3_chunk |      9
+select relid::text AS table_name, status
+from _timescaledb_catalog.chunk where relid = '_timescaledb_internal._hyper_1_3_chunk'::regclass;
+               table_name               | status 
+----------------------------------------+--------
+ _timescaledb_internal._hyper_1_3_chunk |      9
 
 analyze _timescaledb_internal._hyper_1_3_chunk;
 truncate chunk_summary_before_split;
@@ -734,13 +733,13 @@ select * from chunk_info;
  _hyper_1_7_chunk  | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_8_chunk  | heap |     28800 | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
 
-select table_name, status
+select relid::text AS table_name, status
 from _timescaledb_catalog.chunk
-where table_name in ('_hyper_1_3_chunk', '_hyper_1_13_chunk');
-    table_name     | status 
--------------------+--------
- _hyper_1_13_chunk |      9
- _hyper_1_3_chunk  |      9
+where relid in ('_timescaledb_internal._hyper_1_3_chunk'::regclass, '_timescaledb_internal._hyper_1_13_chunk'::regclass);
+               table_name                | status 
+-----------------------------------------+--------
+ _timescaledb_internal._hyper_1_3_chunk  |      9
+ _timescaledb_internal._hyper_1_13_chunk |      9
 
 -- Check that the non-compressed data rows ended up in separate partitions
 select *

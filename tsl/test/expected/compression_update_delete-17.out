@@ -6,18 +6,16 @@ CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
    h.table_name AS hypertable_name,
-   c.schema_name as chunk_schema,
-   c.table_name as chunk_name,
+   c.relid::text as chunk_name,
    c.status as chunk_status,
-   comp.schema_name as compressed_chunk_schema,
-   comp.table_name as compressed_chunk_name
+   comp.relid::text as compressed_chunk_name
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
    LEFT JOIN _timescaledb_catalog.compression_settings cs
-ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
+ON cs.relid = c.relid
    LEFT JOIN _timescaledb_catalog.chunk comp
-ON cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass
+ON cs.compress_relid = comp.relid
 ;
 CREATE TABLE sample_table (
        time TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -73,10 +71,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            1 | _timescaledb_internal._hyper_1_1_chunk
+            1 | _timescaledb_internal._hyper_1_2_chunk
 
 -- test rows visibility
 BEGIN;
@@ -114,10 +112,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_1_1_chunk
-            9 | _hyper_1_2_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            1 | _timescaledb_internal._hyper_1_1_chunk
+            9 | _timescaledb_internal._hyper_1_2_chunk
 
 -- recompress the partial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
@@ -136,10 +134,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            1 | _timescaledb_internal._hyper_1_1_chunk
+            1 | _timescaledb_internal._hyper_1_2_chunk
 
 -- get count of affected rows
 SELECT count(*) FROM sample_table WHERE name = 'updated row';
@@ -160,10 +158,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_1_1_chunk
-            9 | _hyper_1_2_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            1 | _timescaledb_internal._hyper_1_1_chunk
+            9 | _timescaledb_internal._hyper_1_2_chunk
 
 -- recompress the paritial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
@@ -185,10 +183,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            1 | _timescaledb_internal._hyper_1_1_chunk
+            1 | _timescaledb_internal._hyper_1_2_chunk
 
 -- test for IS NOT NULL checks
 -- should UPDATE all rows
@@ -198,10 +196,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            9 | _hyper_1_1_chunk
-            9 | _hyper_1_2_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            9 | _timescaledb_internal._hyper_1_1_chunk
+            9 | _timescaledb_internal._hyper_1_2_chunk
 
 -- recompress the paritial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
@@ -219,10 +217,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            1 | _timescaledb_internal._hyper_1_1_chunk
+            1 | _timescaledb_internal._hyper_1_2_chunk
 
 -- report 0 rows
 SELECT COUNT(*) FROM sample_table WHERE name = 'updated row based on < OR > comparison';
@@ -242,10 +240,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            9 | _hyper_1_1_chunk
-            1 | _hyper_1_2_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            9 | _timescaledb_internal._hyper_1_1_chunk
+            1 | _timescaledb_internal._hyper_1_2_chunk
 
 -- count should be same
 SELECT COUNT(*) = (:total_affected_rows) FROM sample_table WHERE name = 'updated row based on < OR > comparison';
@@ -280,13 +278,13 @@ SELECT compress_chunk(show_chunks('sample_table'));
 -- get FIRST compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id LIMIT 1 \gset
 -- get SECOND compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_2"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id DESC LIMIT 1 \gset
 -- there should 2 rows matching the conditions coming from 2 chunks
@@ -431,13 +429,13 @@ SELECT compress_chunk(show_chunks('sample_table'));
 -- get FIRST compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id LIMIT 1 \gset
 -- get SECOND compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_2"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id DESC LIMIT 1 \gset
 -- there should 2 rows matching the conditions coming from 2 chunks
@@ -543,11 +541,11 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_4_7_chunk
-            1 | _hyper_4_8_chunk
-            1 | _hyper_4_9_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            1 | _timescaledb_internal._hyper_4_7_chunk
+            1 | _timescaledb_internal._hyper_4_8_chunk
+            1 | _timescaledb_internal._hyper_4_9_chunk
 
 -- report 0 rows
 SELECT * FROM sample_table WHERE time > now_s() + '-1 month' AND colorid = 4;
@@ -567,11 +565,11 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME    
---------------+------------------
-            1 | _hyper_4_7_chunk
-            1 | _hyper_4_8_chunk
-            9 | _hyper_4_9_chunk
+ chunk_status |               CHUNK_NAME               
+--------------+----------------------------------------
+            1 | _timescaledb_internal._hyper_4_7_chunk
+            1 | _timescaledb_internal._hyper_4_8_chunk
+            9 | _timescaledb_internal._hyper_4_9_chunk
 
 DROP TABLE sample_table;
 -- test for NULL values in SEGMENTBY column
@@ -599,13 +597,13 @@ SELECT compress_chunk(show_chunks('sample_table'));
 -- get FIRST compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id LIMIT 1 \gset
 -- get SECOND compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_2"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id DESC LIMIT 1 \gset
 -- get total rowcount from compressed chunks
@@ -667,10 +665,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME     
---------------+-------------------
-            9 | _hyper_5_10_chunk
-            9 | _hyper_5_11_chunk
+ chunk_status |               CHUNK_NAME                
+--------------+-----------------------------------------
+            9 | _timescaledb_internal._hyper_5_10_chunk
+            9 | _timescaledb_internal._hyper_5_11_chunk
 
 DROP TABLE sample_table;
 -- test for IS NOT NULL values in SEGMENTBY column
@@ -698,13 +696,13 @@ SELECT compress_chunk(show_chunks('sample_table'));
 -- get FIRST compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id LIMIT 1 \gset
 -- get SECOND compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_2"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id DESC LIMIT 1 \gset
 SELECT COUNT(*) FROM sample_table WHERE val = 1234;
@@ -725,10 +723,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME     
---------------+-------------------
-            1 | _hyper_6_12_chunk
-            9 | _hyper_6_13_chunk
+ chunk_status |               CHUNK_NAME                
+--------------+-----------------------------------------
+            1 | _timescaledb_internal._hyper_6_12_chunk
+            9 | _timescaledb_internal._hyper_6_13_chunk
 
 DROP TABLE sample_table;
 -- test to for <= AND >= on SEGMENTBY column
@@ -815,13 +813,13 @@ ROLLBACK;
 -- get FIRST compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id LIMIT 1 \gset
 -- get SECOND compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_2"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id DESC LIMIT 1 \gset
 -- get total rowcount from compressed chunks
@@ -883,10 +881,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME     
---------------+-------------------
-            1 | _hyper_7_14_chunk
-            1 | _hyper_7_15_chunk
+ chunk_status |               CHUNK_NAME                
+--------------+-----------------------------------------
+            1 | _timescaledb_internal._hyper_7_14_chunk
+            1 | _timescaledb_internal._hyper_7_15_chunk
 
 -- added tests for code coverage
 UPDATE sample_table SET time = 21 WHERE (device_id) in ( 30, 51, 72, 53);
@@ -925,31 +923,31 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME     
---------------+-------------------
-            1 | _hyper_8_16_chunk
-            1 | _hyper_8_17_chunk
+ chunk_status |               CHUNK_NAME                
+--------------+-----------------------------------------
+            1 | _timescaledb_internal._hyper_8_16_chunk
+            1 | _timescaledb_internal._hyper_8_17_chunk
 
 -- get FIRST uncompressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "UNCOMPRESS_CHUNK_1"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
+SELECT ch1.relid::text AS "UNCOMPRESS_CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1 JOIN pg_class cl1 ON cl1.oid = ch1.relid, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id AND cl1.relname LIKE '_hyper_%'
 ORDER BY ch1.id LIMIT 1 \gset
 -- get SECOND uncompressed chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "UNCOMPRESS_CHUNK_2"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
+SELECT ch1.relid::text AS "UNCOMPRESS_CHUNK_2"
+FROM _timescaledb_catalog.chunk ch1 JOIN pg_class cl1 ON cl1.oid = ch1.relid, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id AND cl1.relname LIKE '_hyper_%'
 ORDER BY ch1.id DESC LIMIT 1 \gset
 -- get FIRST compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id LIMIT 1 \gset
 -- get SECOND compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_2"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id DESC LIMIT 1 \gset
 -- ensure segment by column index position in compressed and uncompressed
@@ -1030,10 +1028,10 @@ SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
- chunk_status |    CHUNK_NAME     
---------------+-------------------
-            1 | _hyper_8_16_chunk
-            1 | _hyper_8_17_chunk
+ chunk_status |               CHUNK_NAME                
+--------------+-----------------------------------------
+            1 | _timescaledb_internal._hyper_8_16_chunk
+            1 | _timescaledb_internal._hyper_8_17_chunk
 
 -- get rowcount from compressed chunks where device_id IS NULL
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id IS NULL;
@@ -1137,7 +1135,7 @@ ROLLBACK;
 -- get FIRST compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id \gset
 -- report 2 rows
@@ -1201,14 +1199,14 @@ SELECT compress_chunk(show_chunks('sample_table'));
  _timescaledb_internal._hyper_10_19_chunk
 
 -- get FIRST chunk
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_1"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE '_hyper_%'
+SELECT ch1.relid::text AS "CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1 JOIN pg_class cl1 ON cl1.oid = ch1.relid, _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id AND cl1.relname LIKE '_hyper_%'
 ORDER BY ch1.id LIMIT 1 \gset
 -- get FIRST compressed chunk
 SELECT cs.compress_relid::text AS "COMPRESS_CHUNK_1"
 FROM _timescaledb_catalog.compression_settings cs
-JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+JOIN _timescaledb_catalog.chunk ch1 ON cs.relid = ch1.relid
 WHERE cs.compress_relid IS NOT NULL
 ORDER BY ch1.id LIMIT 1 \gset
 -- check that you uncompress and delete only for exact SEGMENTBY value
@@ -1824,7 +1822,7 @@ DROP table tab2;
 -- test joins with UPDATE/DELETE on compression chunks
 CREATE TABLE join_test1(time timestamptz NOT NULL,device text, value float);
 CREATE TABLE join_test2(time timestamptz NOT NULL,device text, value float);
-CREATE VIEW chunk_status AS SELECT ht.table_name AS hypertable, ch.table_name AS chunk,ch.status from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id AND ht.table_name IN ('join_test1','join_test2') ORDER BY ht.id, ch.id;
+CREATE VIEW chunk_status AS SELECT ht.table_name AS hypertable, ch.relid::text AS chunk,ch.status from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id AND ht.table_name IN ('join_test1','join_test2') ORDER BY ht.id, ch.id;
 SELECT table_name FROM create_hypertable('join_test1', 'time');
  table_name 
 ------------
@@ -1852,107 +1850,107 @@ SELECT compress_chunk(show_chunks('join_test2'));
  _timescaledb_internal._hyper_14_29_chunk
 
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      1
- join_test1 | _hyper_13_27_chunk |      1
- join_test1 | _hyper_13_28_chunk |      1
- join_test2 | _hyper_14_29_chunk |      1
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      1
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      1
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      1
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      1
 
 BEGIN;
 DELETE FROM join_test1 USING join_test2;
 -- only join_test1 chunks should have status 9
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      9
- join_test1 | _hyper_13_27_chunk |      9
- join_test1 | _hyper_13_28_chunk |      9
- join_test2 | _hyper_14_29_chunk |      1
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      9
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      1
 
 ROLLBACK;
 BEGIN;
 DELETE FROM join_test2 USING join_test1;
 -- only join_test2 chunks should have status 9
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      1
- join_test1 | _hyper_13_27_chunk |      1
- join_test1 | _hyper_13_28_chunk |      1
- join_test2 | _hyper_14_29_chunk |      9
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      1
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      1
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      1
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      9
 
 ROLLBACK;
 BEGIN;
 DELETE FROM join_test1 t1 USING join_test1 t2 WHERE t1.time = '2000-01-01';
 -- only first chunk of join_test1 should have status change
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      9
- join_test1 | _hyper_13_27_chunk |      1
- join_test1 | _hyper_13_28_chunk |      1
- join_test2 | _hyper_14_29_chunk |      1
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      1
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      1
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      1
 
 ROLLBACK;
 BEGIN;
 DELETE FROM join_test1 t1 USING join_test1 t2 WHERE t2.time = '2000-01-01';
 -- all chunks of join_test1 should have status 9
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      9
- join_test1 | _hyper_13_27_chunk |      9
- join_test1 | _hyper_13_28_chunk |      9
- join_test2 | _hyper_14_29_chunk |      1
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      9
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      1
 
 ROLLBACK;
 BEGIN;
 UPDATE join_test1 t1 SET value = t1.value + 1 FROM join_test2 t2;
 -- only join_test1 chunks should have status 9
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      9
- join_test1 | _hyper_13_27_chunk |      9
- join_test1 | _hyper_13_28_chunk |      9
- join_test2 | _hyper_14_29_chunk |      1
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      9
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      1
 
 ROLLBACK;
 BEGIN;
 UPDATE join_test2 t1 SET value = t1.value + 1 FROM join_test1 t2;
 -- only join_test2 chunks should have status 9
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      1
- join_test1 | _hyper_13_27_chunk |      1
- join_test1 | _hyper_13_28_chunk |      1
- join_test2 | _hyper_14_29_chunk |      9
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      1
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      1
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      1
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      9
 
 ROLLBACK;
 BEGIN;
 UPDATE join_test1 t1 SET value = t1.value + 1 FROM join_test1 t2 WHERE t1.time = '2000-01-01';
 -- only first chunk of join_test1 should have status 9
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      9
- join_test1 | _hyper_13_27_chunk |      1
- join_test1 | _hyper_13_28_chunk |      1
- join_test2 | _hyper_14_29_chunk |      1
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      1
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      1
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      1
 
 ROLLBACK;
 BEGIN;
 UPDATE join_test1 t1 SET value = t1.value + 1 FROM join_test1 t2 WHERE t2.time = '2000-01-01';
 -- all chunks of join_test1 should have status 9
 SELECT * FROM chunk_status;
- hypertable |       chunk        | status 
-------------+--------------------+--------
- join_test1 | _hyper_13_26_chunk |      9
- join_test1 | _hyper_13_27_chunk |      9
- join_test1 | _hyper_13_28_chunk |      9
- join_test2 | _hyper_14_29_chunk |      1
+ hypertable |                  chunk                   | status 
+------------+------------------------------------------+--------
+ join_test1 | _timescaledb_internal._hyper_13_26_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_27_chunk |      9
+ join_test1 | _timescaledb_internal._hyper_13_28_chunk |      9
+ join_test2 | _timescaledb_internal._hyper_14_29_chunk |      1
 
 ROLLBACK;
 DROP TABLE join_test1;
@@ -1973,17 +1971,17 @@ SELECT compress_chunk(show_chunks('index_scan_test'));
  _timescaledb_internal._hyper_15_30_chunk
 
 ANALYZE index_scan_test;
-SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_1"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
+SELECT ch1.relid::text AS "CHUNK_1"
+FROM _timescaledb_catalog.chunk ch1 JOIN pg_class cl1 ON cl1.oid = ch1.relid, _timescaledb_catalog.hypertable ht
 WHERE ht.table_name = 'index_scan_test'
 AND ch1.hypertable_id = ht.id
-AND ch1.table_name LIKE '_hyper%'
+AND cl1.relname LIKE '_hyper%'
 ORDER BY ch1.id LIMIT 1 \gset
 SELECT cs.compress_relid::text AS "COMP_CHUNK_1"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs
+FROM _timescaledb_catalog.chunk ch1 JOIN pg_class cl1 ON cl1.oid = ch1.relid, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs
 WHERE ht.table_name = 'index_scan_test'
 AND ch1.hypertable_id = ht.id
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid IS NOT NULL
 ORDER BY ch1.id LIMIT 1 \gset
 INSERT INTO index_scan_test(time,device_id,value) SELECT time, device_id, device_id + 0.5 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','1m') gtime(time), generate_series(1,5,1) gdevice(device_id);
@@ -2220,7 +2218,7 @@ SELECT compress_chunk(show_chunks('tab1'));
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
 
-SELECT cs.compress_relid::text AS "CHUNK" FROM _timescaledb_catalog.chunk ch JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = 1 \gset
+SELECT cs.compress_relid::text AS "CHUNK" FROM _timescaledb_catalog.chunk ch JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid WHERE ch.hypertable_id = 1 \gset
 -- find the default index on the compressed chunk
 SELECT format('%I.%I', n.nspname, i.relname) AS "COMPRESSED_CHUNK_INDEX"
 FROM _timescaledb_catalog.compression_settings cs
@@ -2324,8 +2322,8 @@ SELECT compress_chunk(c) FROM show_chunks('t6367') c;
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
 
-SELECT cs.compress_relid::text AS "CHUNK1" FROM _timescaledb_catalog.chunk ch JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = 1 LIMIT 1 \gset
-SELECT cs.compress_relid::text AS "CHUNK2" FROM _timescaledb_catalog.chunk ch JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = 1 LIMIT 1 OFFSET 1 \gset
+SELECT cs.compress_relid::text AS "CHUNK1" FROM _timescaledb_catalog.chunk ch JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid WHERE ch.hypertable_id = 1 LIMIT 1 \gset
+SELECT cs.compress_relid::text AS "CHUNK2" FROM _timescaledb_catalog.chunk ch JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid WHERE ch.hypertable_id = 1 LIMIT 1 OFFSET 1 \gset
 SELECT format('%I.%I', i.schemaname, i.indexname) AS "CHUNK1_INDEX"
 FROM pg_indexes i
 WHERE format('%I.%I', i.schemaname, i.tablename) = :'CHUNK1'

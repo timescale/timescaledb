@@ -68,14 +68,14 @@ ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = ''
 -- check stats
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
-  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1'))
+  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1'))
     AND attnum > 0
   ORDER BY attname;
 
 
 -- Test that the GUC to disable bulk decompression works.
 vacuum analyze test1;
-SELECT format('%I.%I', ch.schema_name, ch.table_name) AS chunk
+SELECT ch.relid::text AS chunk
   FROM _timescaledb_catalog.chunk ch
   JOIN _timescaledb_catalog.hypertable h ON ch.hypertable_id = h.id
  WHERE h.table_name = 'test1'
@@ -100,7 +100,7 @@ SELECT * FROM test1;
 SELECT count(*)
 FROM _timescaledb_catalog.chunk ch
 JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id AND ht.table_name = 'test1'
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass;
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid;
 
 --add test for altered hypertable
 CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
@@ -175,7 +175,7 @@ group by location ORDER BY location;
 -- check stats with segmentby
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
-  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test4'))
+  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test4'))
     AND attnum > 0
   ORDER BY attname;
 

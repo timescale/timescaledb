@@ -22,7 +22,7 @@ INSERT INTO hypertable_schema.test1 VALUES ('2001-01-01 01:01:01', 23.3, 1);
 INSERT INTO hypertable_schema.test2 VALUES ('2001-01-01 01:01:01', 23.3, 1);
 
 SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable ORDER BY id;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 RESET ROLE;
 --drop the associated schema. We drop the extra schema to show we can
@@ -33,11 +33,11 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 --show that the metadata for the table using the dropped schema is
 --changed. The other table is not affected.
 SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable ORDER BY id;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 --new chunk should be created in the internal associated schema
 INSERT INTO hypertable_schema.test1 VALUES ('2001-01-01 01:01:01', 23.3, 1);
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 RESET ROLE;
 --dropping the internal schema should not work
@@ -50,7 +50,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 --everything should be cleaned up
 SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable GROUP BY id;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM _timescaledb_catalog.dimension_slice;
 SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;

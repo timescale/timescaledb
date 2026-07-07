@@ -13,7 +13,7 @@ set timescaledb.enable_merge_multidim_chunks = true;
 -- Helper views --
 -------------------
 create view partitions as
-select c.table_name, d.column_name, ds.range_start, ds.range_end
+select c.relid::text AS table_name, d.column_name, ds.range_start, ds.range_end
 from _timescaledb_catalog.hypertable h
 join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
 join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
@@ -65,12 +65,12 @@ select * from chunk_info;
 
 -- Show partition layout
 select * from partitions;
-    table_name    | column_name |     range_start      |    range_end     
-------------------+-------------+----------------------+------------------
- _hyper_1_1_chunk | time        |     1704067200000000 | 1704153600000000
- _hyper_1_2_chunk | time        |     1704067200000000 | 1704153600000000
- _hyper_1_1_chunk | device      | -9223372036854775808 |        715827882
- _hyper_1_2_chunk | device      |            715827882 |       1431655764
+               table_name               | column_name |     range_start      |    range_end     
+----------------------------------------+-------------+----------------------+------------------
+ _timescaledb_internal._hyper_1_1_chunk | time        |     1704067200000000 | 1704153600000000
+ _timescaledb_internal._hyper_1_2_chunk | time        |     1704067200000000 | 1704153600000000
+ _timescaledb_internal._hyper_1_1_chunk | device      | -9223372036854775808 |        715827882
+ _timescaledb_internal._hyper_1_2_chunk | device      |            715827882 |       1431655764
 
 -- Now merge chunk 1 and 2:
 begin;
@@ -87,10 +87,10 @@ select reltuples from pg_class where oid='_timescaledb_internal._hyper_1_1_chunk
          2
 
 select * from partitions;
-    table_name    | column_name |     range_start      |    range_end     
-------------------+-------------+----------------------+------------------
- _hyper_1_1_chunk | time        |     1704067200000000 | 1704153600000000
- _hyper_1_1_chunk | device      | -9223372036854775808 |       1431655764
+               table_name               | column_name |     range_start      |    range_end     
+----------------------------------------+-------------+----------------------+------------------
+ _timescaledb_internal._hyper_1_1_chunk | time        |     1704067200000000 | 1704153600000000
+ _timescaledb_internal._hyper_1_1_chunk | device      | -9223372036854775808 |       1431655764
 
 select count(*) as num_orphaned_slices from orphaned_slices;
  num_orphaned_slices 
@@ -152,23 +152,23 @@ set role :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 1
 -- Show new partition
 select * from partitions;
-    table_name    | column_name |     range_start      |      range_end      
-------------------+-------------+----------------------+---------------------
- _hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
- _hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
- _hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
- _hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
- _hyper_1_2_chunk | device      |            715827882 |          1431655764
- _hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
+               table_name               | column_name |     range_start      |      range_end      
+----------------------------------------+-------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_2_chunk | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
 
 begin;
 -- Should be able to merge all three chunks
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk']);
 select * from partitions;
-    table_name    | column_name |     range_start      |      range_end      
-------------------+-------------+----------------------+---------------------
- _hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
- _hyper_1_1_chunk | device      | -9223372036854775808 | 9223372036854775807
+               table_name               | column_name |     range_start      |      range_end      
+----------------------------------------+-------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_1_chunk | device      | -9223372036854775808 | 9223372036854775807
 
 -- Note that no space partition CHECK constraint is added because it
 -- now covers the entire range from -inf to +inf.
@@ -205,18 +205,18 @@ rollback;
 insert into mergeme values ('2024-01-02', 1, 4.0), ('2024-01-04', 1, 5.0);
 -- Show new partitions
 select * from partitions;
-    table_name    | column_name |     range_start      |      range_end      
-------------------+-------------+----------------------+---------------------
- _hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
- _hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
- _hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
- _hyper_1_4_chunk | time        |     1704153600000000 |    1704240000000000
- _hyper_1_5_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
- _hyper_1_2_chunk | device      |            715827882 |          1431655764
- _hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_4_chunk | device      | -9223372036854775808 |           715827882
- _hyper_1_5_chunk | device      | -9223372036854775808 |           715827882
+               table_name               | column_name |     range_start      |      range_end      
+----------------------------------------+-------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_2_chunk | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_3_chunk | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_4_chunk | time        |     1704153600000000 |    1704240000000000
+ _timescaledb_internal._hyper_1_5_chunk | time        |     1704326400000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_2_chunk | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_4_chunk | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_5_chunk | device      | -9223372036854775808 |           715827882
 
 \set ON_ERROR_STOP 0
 -- can't merge 3 and 4
@@ -524,12 +524,12 @@ ERROR:  access method "testam" is not supported for merge
 alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
 -- Merge OSM chunks
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = true where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
 ERROR:  cannot merge OSM chunks
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = false where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 -- Merge frozen chunks
 select _timescaledb_functions.freeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
@@ -565,32 +565,32 @@ select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 
 -- Show partitions before merge
 select * from partitions;
-    table_name     | column_name |     range_start      |      range_end      
--------------------+-------------+----------------------+---------------------
- _hyper_1_1_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_4_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_5_chunk  | time        |     1704326400000000 |    1704412800000000
- _hyper_1_7_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_8_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_9_chunk  | time        |     1704240000000000 |    1704326400000000
- _hyper_1_10_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_11_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_12_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_13_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_4_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_5_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_7_chunk  | device      |            715827882 |          1431655764
- _hyper_1_8_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_9_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_10_chunk | device      |            715827882 |          1431655764
- _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_12_chunk | device      |            715827882 |          1431655764
- _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
+               table_name                | column_name |     range_start      |      range_end      
+-----------------------------------------+-------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk  | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_4_chunk  | time        |     1704153600000000 |    1704240000000000
+ _timescaledb_internal._hyper_1_5_chunk  | time        |     1704326400000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_7_chunk  | time        |     1704153600000000 |    1704240000000000
+ _timescaledb_internal._hyper_1_8_chunk  | time        |     1704153600000000 |    1704240000000000
+ _timescaledb_internal._hyper_1_9_chunk  | time        |     1704240000000000 |    1704326400000000
+ _timescaledb_internal._hyper_1_10_chunk | time        |     1704240000000000 |    1704326400000000
+ _timescaledb_internal._hyper_1_11_chunk | time        |     1704240000000000 |    1704326400000000
+ _timescaledb_internal._hyper_1_12_chunk | time        |     1704326400000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_13_chunk | time        |     1704326400000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_2_chunk  | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_4_chunk  | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_5_chunk  | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_7_chunk  | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_8_chunk  | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_9_chunk  | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_10_chunk | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_12_chunk | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
 
 -- Show which chunks are compressed. Their compression_chunk_size
 -- metadata should be merged.
@@ -666,26 +666,26 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  518406 | 2854401 | 10373952.7510
 
 select * from partitions;
-    table_name     | column_name |     range_start      |      range_end      
--------------------+-------------+----------------------+---------------------
- _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
- _hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_7_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_8_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_10_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_11_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_12_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_13_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_7_chunk  | device      |            715827882 |          1431655764
- _hyper_1_8_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_10_chunk | device      |            715827882 |          1431655764
- _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_12_chunk | device      |            715827882 |          1431655764
- _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
+               table_name                | column_name |     range_start      |      range_end      
+-----------------------------------------+-------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_2_chunk  | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_7_chunk  | time        |     1704153600000000 |    1704240000000000
+ _timescaledb_internal._hyper_1_8_chunk  | time        |     1704153600000000 |    1704240000000000
+ _timescaledb_internal._hyper_1_10_chunk | time        |     1704240000000000 |    1704326400000000
+ _timescaledb_internal._hyper_1_11_chunk | time        |     1704240000000000 |    1704326400000000
+ _timescaledb_internal._hyper_1_12_chunk | time        |     1704326400000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_13_chunk | time        |     1704326400000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_2_chunk  | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_7_chunk  | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_8_chunk  | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_10_chunk | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_12_chunk | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_7_chunk','_timescaledb_internal._hyper_1_10_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
@@ -694,20 +694,20 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  518406 | 2854401 | 10373952.7510
 
 select * from partitions;
-    table_name     | column_name |     range_start      |      range_end      
--------------------+-------------+----------------------+---------------------
- _hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
- _hyper_1_2_chunk  | time        |     1704067200000000 |    1704412800000000
- _hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
- _hyper_1_8_chunk  | time        |     1704153600000000 |    1704240000000000
- _hyper_1_11_chunk | time        |     1704240000000000 |    1704326400000000
- _hyper_1_13_chunk | time        |     1704326400000000 |    1704412800000000
- _hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
- _hyper_1_2_chunk  | device      |            715827882 |          1431655764
- _hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_8_chunk  | device      |           1431655764 | 9223372036854775807
- _hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
- _hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
+               table_name                | column_name |     range_start      |      range_end      
+-----------------------------------------+-------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk  | time        |     1704067200000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_2_chunk  | time        |     1704067200000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_3_chunk  | time        |     1704067200000000 |    1704153600000000
+ _timescaledb_internal._hyper_1_8_chunk  | time        |     1704153600000000 |    1704240000000000
+ _timescaledb_internal._hyper_1_11_chunk | time        |     1704240000000000 |    1704326400000000
+ _timescaledb_internal._hyper_1_13_chunk | time        |     1704326400000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_1_chunk  | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_2_chunk  | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_3_chunk  | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_8_chunk  | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_11_chunk | device      |           1431655764 | 9223372036854775807
+ _timescaledb_internal._hyper_1_13_chunk | device      |           1431655764 | 9223372036854775807
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_8_chunk','_timescaledb_internal._hyper_1_11_chunk', '_timescaledb_internal._hyper_1_13_chunk']);
 -- Final merge, involving the two compressed chunks 1 and 2. The stats
@@ -723,14 +723,14 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  518406 | 2854401 | 10373952.7510
 
 select * from partitions;
-    table_name    | column_name |     range_start      |      range_end      
-------------------+-------------+----------------------+---------------------
- _hyper_1_1_chunk | time        |     1704067200000000 |    1704412800000000
- _hyper_1_2_chunk | time        |     1704067200000000 |    1704412800000000
- _hyper_1_3_chunk | time        |     1704067200000000 |    1704412800000000
- _hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
- _hyper_1_2_chunk | device      |            715827882 |          1431655764
- _hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
+               table_name               | column_name |     range_start      |      range_end      
+----------------------------------------+-------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk | time        |     1704067200000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_2_chunk | time        |     1704067200000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_3_chunk | time        |     1704067200000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_1_chunk | device      | -9223372036854775808 |           715827882
+ _timescaledb_internal._hyper_1_2_chunk | device      |            715827882 |          1431655764
+ _timescaledb_internal._hyper_1_3_chunk | device      |           1431655764 | 9223372036854775807
 
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_2_chunk']);
 select * from compression_size_fraction;
@@ -744,10 +744,10 @@ select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
  518406 | 2854401 | 10373952.7510
 
 select * from partitions;
-    table_name    | column_name |     range_start      |      range_end      
-------------------+-------------+----------------------+---------------------
- _hyper_1_1_chunk | time        |     1704067200000000 |    1704412800000000
- _hyper_1_1_chunk | device      | -9223372036854775808 | 9223372036854775807
+               table_name               | column_name |     range_start      |      range_end      
+----------------------------------------+-------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk | time        |     1704067200000000 |    1704412800000000
+ _timescaledb_internal._hyper_1_1_chunk | device      | -9223372036854775808 | 9223372036854775807
 
 select * from chunk_info;
       chunk       | tam  |                                                                checkconstraint                                                                 
@@ -963,11 +963,11 @@ SELECT create_hypertable('compress_settings_merge', 'time', chunk_time_interval 
 INSERT INTO compress_settings_merge VALUES
     ('2024-01-01 12:00', 1, 'one', 1.5, 100),
     ('2024-01-02 12:00', 2, 'two', 2.5, 200);
-SELECT format('%I.%I', schema_name, table_name) AS first_chunk
+SELECT relid::text AS first_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='compress_settings_merge')
 ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS second_chunk
+SELECT relid::text AS second_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='compress_settings_merge')
 ORDER BY id OFFSET 1 LIMIT 1 \gset
@@ -1039,11 +1039,11 @@ SELECT compress_chunk(ch) FROM show_chunks('concurrent_compressed_merge') ch;
  _timescaledb_internal._hyper_6_20_chunk
  _timescaledb_internal._hyper_6_21_chunk
 
-SELECT format('%I.%I', schema_name, table_name) AS ccm_c1
+SELECT relid::text AS ccm_c1
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
  ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS ccm_c2
+SELECT relid::text AS ccm_c2
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
  ORDER BY id OFFSET 1 LIMIT 1 \gset
@@ -1077,12 +1077,12 @@ INSERT INTO merge_sparse_order
 SELECT t, (i % 10) + 1, random() * 100, (i * 7) % 13
 FROM generate_series('2024-01-02 2:00'::timestamptz, '2024-01-02 23:59', '1 minute') t,
      generate_series(1, 5) i;
-SELECT format('%I.%I', schema_name, table_name) AS mso_c1
+SELECT relid::text AS mso_c1
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'merge_sparse_order')
  ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS mso_c2
+SELECT relid::text AS mso_c2
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'merge_sparse_order')
