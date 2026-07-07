@@ -8,4 +8,9 @@
 # The repro must not require superuser privileges.
 set -eu
 
-psql -v ON_ERROR_STOP=0 -f "$1"
+echo ```
+result=0
+psql -v ON_ERROR_STOP=0 -f "$1" || result=$?
+echo ```
+
+exit result
