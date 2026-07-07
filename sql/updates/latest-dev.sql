@@ -74,3 +74,5 @@ ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_dim_compr
 ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_num_dimensions_check CHECK (num_dimensions > 0);
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_compress_check;
 
+DROP FUNCTION IF EXISTS @extschema@.alter_job(job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ, if_exists BOOL, check_config REGPROC, fixed_schedule BOOL, initial_start TIMESTAMPTZ, timezone TEXT, job_name TEXT);
+
