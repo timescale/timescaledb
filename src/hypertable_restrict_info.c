@@ -206,7 +206,6 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 				}
 				break;
 			case BTEqualStrategyNumber:
-				/* LOOK HERE */
 				dri->lower_bound = value;
 				dri->upper_bound = value;
 				dri->lower_strategy = BTGreaterEqualStrategyNumber;
