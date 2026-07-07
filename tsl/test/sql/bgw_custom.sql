@@ -119,6 +119,20 @@ SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
 SELECT job_id FROM alter_job(1001,scheduled:=false);
 SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
 
+-- config_merge merges its keys into the existing config
+SELECT job_id FROM alter_job(1001, config_merge => '{"key1":"value1"}');
+SELECT config FROM timescaledb_information.jobs WHERE job_id = 1001;
+-- keys in config_merge take precedence over existing keys
+SELECT job_id FROM alter_job(1001, config_merge => '{"test":"overwritten"}');
+SELECT config FROM timescaledb_information.jobs WHERE job_id = 1001;
+-- specifying both config and config_merge in the same call is an error
+\set ON_ERROR_STOP 0
+SELECT job_id FROM alter_job(1001, config => '{"a":"1"}', config_merge => '{"b":"2"}');
+\set ON_ERROR_STOP 1
+SELECT config FROM timescaledb_information.jobs WHERE job_id = 1001;
+-- restore the config used by the following tests
+SELECT job_id FROM alter_job(1001, config => '{"test":"test"}');
+
 -- test updating the job name
 SELECT job_id, application_name FROM alter_job(1001,job_name:='custom_name_2');
 SELECT job_id, application_name FROM alter_job(2147483647,job_name:='short_name_to_fit');
@@ -805,3 +819,10 @@ SELECT * FROM work_mem_log;
 SELECT delete_job(:job_work_mem);
 DROP TABLE work_mem_log;
 DROP PROCEDURE log_work_mem;
+
+-- config_merge on a job without any config sets the configuration
+SELECT add_job('custom_func', '1h', initial_start => :'time_zero'::TIMESTAMPTZ) AS job_no_config \gset
+SELECT config FROM timescaledb_information.jobs WHERE job_id = :job_no_config;
+SELECT job_id FROM alter_job(:job_no_config, config_merge => '{"fresh":"config"}');
+SELECT config FROM timescaledb_information.jobs WHERE job_id = :job_no_config;
+SELECT delete_job(:job_no_config);

@@ -168,3 +168,6 @@ DROP FUNCTION IF EXISTS @extschema@.add_compaction_policy(REGCLASS, BOOL, INTERV
 DROP FUNCTION IF EXISTS @extschema@.remove_compaction_policy(REGCLASS, BOOL);
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compaction(INTEGER, JSONB);
 DROP FUNCTION IF EXISTS _timescaledb_functions.policy_compaction_check(JSONB);
+
+DROP FUNCTION IF EXISTS @extschema@.alter_job(job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ, if_exists BOOL, check_config REGPROC, fixed_schedule BOOL, initial_start TIMESTAMPTZ, timezone TEXT, job_name TEXT, config_merge JSONB);
+
