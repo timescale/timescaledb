@@ -2130,13 +2130,6 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	ts_hypertable_permissions_check(table_relid, GetUserId());
 	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(hypertable))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("custom time function not supported on internal columnstore table")));
-	}
-
 	/* validate that the open dimension uses numeric type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
 
@@ -2195,7 +2188,6 @@ ts_hypertable_set_compressed(Hypertable *ht)
 	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
-	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
 	form.compression_state = HypertableCompressionEnabled;
 	hypertable_update_catalog_tuple(&tid, &form);
 	return true;
@@ -2213,7 +2205,6 @@ ts_hypertable_unset_compressed(Hypertable *ht)
 	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
-	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
 	form.compression_state = HypertableCompressionOff;
 	hypertable_update_catalog_tuple(&tid, &form);
 	return true;
@@ -2222,8 +2213,6 @@ ts_hypertable_unset_compressed(Hypertable *ht)
 bool
 ts_hypertable_set_compress_interval(Hypertable *ht, int64 compress_interval)
 {
-	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
-
 	Dimension *time_dimension =
 		ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 

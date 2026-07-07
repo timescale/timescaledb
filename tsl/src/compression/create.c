@@ -1206,7 +1206,6 @@ add_column_to_compression_table(Oid relid, CompressionSettings *settings, Column
 	AlterTableCmd *addcol_cmd;
 
 	/* create altertable stmt to add column to the compressed hypertable */
-	// Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(compress_ht));
 	addcol_cmd = makeNode(AlterTableCmd);
 	addcol_cmd->subtype = AT_AddColumn;
 	addcol_cmd->def = (Node *) coldef;
@@ -1379,6 +1378,17 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 	/* reload info after lock */
 	ht = ts_hypertable_get_by_id(ht->fd.id);
 
+	/*
+	 * If the reload returns nothing the hypertable was dropped while we were
+	 * waiting for the lock above.
+	 */
+	if (!ht)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("hypertable was dropped by a concurrent transaction")));
+	}
+
 	if (compress_disable)
 	{
 		return disable_compression(ht, with_clause_options);
@@ -1459,13 +1469,6 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 static void
 validate_hypertable_for_compression(Hypertable *ht)
 {
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot compress internal columnstore hypertable")));
-	}
-
 	/*check row security settings for the table */
 	if (ts_has_row_security(ht->main_table_relid))
 	{

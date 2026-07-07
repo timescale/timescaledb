@@ -1,0 +1,1 @@
+Fixes: #10212 Fix race condition when enabling compression on a hypertable

@@ -119,15 +119,6 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 
 	if (ht != NULL)
 	{
-		if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot add retention policy to compressed hypertable \"%s\"",
-							get_rel_name(user_htoid)),
-					 errhint("Please add the policy to the corresponding uncompressed hypertable "
-							 "instead.")));
-		}
 		status = ts_continuous_agg_hypertable_status(ht->fd.id);
 		if ((status == HypertableIsMaterialization || status == HypertableIsMaterializationAndRaw))
 		{

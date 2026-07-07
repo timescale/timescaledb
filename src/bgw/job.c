@@ -1134,7 +1134,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
+#if PG19_LT
 	log_min_messages = ts_guc_bgw_log_level;
+#endif
 
 	elog(DEBUG2, "job %d started execution", params.job_id);
 
