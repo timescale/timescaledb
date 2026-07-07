@@ -21,7 +21,6 @@ void
 vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 					   const ArrowArray *vector, Datum array, uint64 *restrict final_result)
 {
-	/* LOOK HERE */
 	const size_t n_rows = vector->length;
 	const size_t result_words = (n_rows + 63) / 64;
 
