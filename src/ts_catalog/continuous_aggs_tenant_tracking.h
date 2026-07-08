@@ -12,13 +12,6 @@
 
 /*
  * Catalog access for _timescaledb_catalog.continuous_aggs_tenant_tracking.
- *
- * Rows are flushed here from the shared-memory per-tenant invalidation tracker
- * during a continuous aggregate refresh (Transaction 2).  tenant_id holds the
- * canonical text form of the tenant key; min/max_timestamp are internal time
- * values.  The "invalid marker" row (tenant_id/min/max NULL) signals that tenant tracking
- * for that seqnum is incomplete, forcing a fall back to the full invalidation
- * log.
  */
 
 extern TSDLLEXPORT void ts_cagg_tenant_tracking_insert_only(Relation rel, int32 hypertable_id,
@@ -52,14 +45,12 @@ extern TSDLLEXPORT void ts_cagg_tenant_tracking_insert_row(CaggTenantTrackingIns
 
 extern TSDLLEXPORT void ts_cagg_tenant_tracking_insert_end(CaggTenantTrackingInserter *inserter);
 
-extern TSDLLEXPORT void ts_cagg_tenant_tracking_insert_invalid_marker(int32 hypertable_id,
-																	  int32 seqnum);
-
 extern TSDLLEXPORT void ts_cagg_tenant_tracking_delete_by_hypertable_id(int32 hypertable_id);
 
 /*
- * Whether at least one real (non-marker) tenant-tracking row exists for the
- * given hypertable and seqnum. A seqnum with only an invalid-marker row (or no
- * row) returns false, so the refresh falls back to a full refresh.
+ * Whether at least one tenant-tracking row exists for the given hypertable and
+ * seqnum. A seqnum with no row (e.g invalid generation or no tracking entries
+ * for that generation) returns false, so the refresh falls back to a full
+ * refresh.
  */
 extern TSDLLEXPORT bool ts_cagg_tenant_tracking_exists(int32 hypertable_id, int32 seqnum);
