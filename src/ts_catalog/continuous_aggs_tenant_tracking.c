@@ -191,37 +191,6 @@ ts_cagg_tenant_tracking_insert_end(CaggTenantTrackingInserter *inserter)
 	pfree(inserter);
 }
 
-/*
- * Insert the "invalid" marker row <null, null, null, seqnum>, signalling that
- * tenant tracking for this seqnum is incomplete and the refresh must fall back
- * to the full invalidation log.
- */
-TSDLLEXPORT void
-ts_cagg_tenant_tracking_insert_invalid_marker(int32 hypertable_id, int32 seqnum)
-{
-	Catalog *catalog = ts_catalog_get();
-	Relation rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_TENANT_TRACKING),
-							  RowExclusiveLock);
-	TupleDesc desc = RelationGetDescr(rel);
-	Datum values[Natts_continuous_aggs_tenant_tracking] = { 0 };
-	bool nulls[Natts_continuous_aggs_tenant_tracking] = { false };
-	CatalogSecurityContext sec_ctx;
-
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_hypertable_id)] =
-		Int32GetDatum(hypertable_id);
-	nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_tenant_id)] = true;
-	nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_min_timestamp)] = true;
-	nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_max_timestamp)] = true;
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_seqnum)] =
-		Int32GetDatum(seqnum);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
-
-	table_close(rel, NoLock);
-}
-
 TSDLLEXPORT bool
 ts_cagg_tenant_tracking_exists(int32 hypertable_id, int32 seqnum)
 {
@@ -246,16 +215,11 @@ ts_cagg_tenant_tracking_exists(int32 hypertable_id, int32 seqnum)
 
 	ts_scanner_foreach(&iterator)
 	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool isnull;
-
-		/* A real tracking row has a non-NULL tenant_id; invalid markers do not count. */
-		slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_tenant_id, &isnull);
-		if (!isnull)
-		{
-			found = true;
-			break;
-		}
+		/* Any tracking row for this seqnum means refresh recorded tenant info
+		 * during the last flush. An invalid generation writes no rows,
+		 * so its seqnum has none and the refresh falls back to the full log. */
+		found = true;
+		break;
 	}
 	ts_scan_iterator_close(&iterator);
 
