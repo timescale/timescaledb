@@ -141,3 +141,6 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
     ADD CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey
         FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id) ON DELETE CASCADE;
 -- end rebuild _timescaledb_catalog.continuous_agg --
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_get_tenant_tracking_info(REGCLASS);
+DROP FUNCTION IF EXISTS _timescaledb_functions.tenant_tracking_map();
