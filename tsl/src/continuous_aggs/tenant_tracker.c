@@ -94,7 +94,7 @@
  *        flip active_gen. Writers can use this as the new active gen.
  *     2. Busy-wait for existing writers to finish up i.e. old.num_writers == 0 (interruptible).
  *     3. read_barrier.
- *     4. If old gen TENANT_TRACKER_INVALID -> persist <null,null,null,seqnum> marker.  Else
+ *     4. If old gen TENANT_TRACKER_INVALID -> persist nothing for its seqnum.  Else
  *        batch-insert one row per occupied slot, stamped with old's seqnum, reading
  *        keys in place.
  *
@@ -142,8 +142,8 @@
  *   2. Drain reads a generation only after num_writers == 0 on it.
  *   3. Slots are append-only within a generation; cleared only when a buffer is
  *      re-activated as the flush target.
- *   4. seqnum is monotonic; every drain produces either per-tenant rows or exactly
- *      one marker row for that seqnum.
+ *   4. seqnum is monotonic; a drain produces per-tenant rows for a valid
+ *      generation and nothing at all for an invalid one.
  *
  * DURABILITY & FAILURE
  *   The shared-memory flip and seqnum bump are NON-transactional; the catalog
@@ -151,13 +151,15 @@
  *   data is NOT re-merged into the live generation, and the old buffer is wiped by
  *   the next flush -- so if txn 2 rolls back, that seqnum leaves no rows and the
  *   data is gone from shmem.  Correctness then depends on the consumer treating a
- *   missing seqnum the same as an INVALID marker (fall back to the full log); see
- *   the restart-recovery TODO below.
+ *   seqnum with no tracking rows as "fall back to the full log"; see the
+ *   restart-recovery TODO below.
  *
  * TODO (deferred to a later version):
  *   - Recovery on restart: on startup set seqnum = max(seqnum) from the
- *     hypertable invalidation log and write a <null,null,null,seqnum> marker so
- *     refreshes for that seqnum fall back (design doc 5.4.4 #1).
+ *     hypertable invalidation log so a fresh tracker does not reuse a pre-restart
+ *     seqnum that still has catalog rows (design doc 5.4.4 #1).  The natural
+ *     place is init_tracker (get_or_attach's first-touch path), where the epoch
+ *     threshold is now already bootstrapped -- seed seqnum there too.
  *   - Per-cagg instances keyed by hypertable_id (V1 has a single instance).
  *   - num_writers is a per-generation counter touched by every writer; if it
  *     shows up in profiling, shard it per-partition and sum across partitions.
@@ -216,12 +218,13 @@ struct TenantGeneration
 	pg_atomic_uint32 num_writers; /* in-flight writers pinning this gen */
 	pg_atomic_uint32 nentries;	  /* occupied slots (for full detection) */
 	pg_atomic_uint32 status;	  /* TenantTrackStatus for this generation */
-	/*
-	 * Epoch stamped on this generation's writers and drained rows.  Bound to the
-	 * generation (not the tracker) and published with the active_gen flip, so a
-	 * writer reads (generation, epoch) as one consistent pair.
+	pg_atomic_uint32 seqnum;	  /* seqnum for this generation */
+	/* Late-arrival tracking window for this epoch, in the hypertable's internal
+	 * time representation: a row is tracked iff its time is in
+	 * [late_threshold_start, late_threshold_end).
 	 */
-	pg_atomic_uint32 seqnum;
+	pg_atomic_uint64 late_threshold_start;
+	pg_atomic_uint64 late_threshold_end;
 	/* Partition (insert) locks, inline so they live in the tracker's DSA
 	 * allocation; LWLockInitialize'd with the partition tranche id at creation. */
 	LWLock partitions[TENANT_TRACKER_NUM_PARTITIONS];
@@ -439,7 +442,8 @@ retry_generation:
 }
 
 TenantGeneration *
-ts_tenant_tracker_begin_batch(TenantTracking *tracking, int32 *seqnum)
+ts_tenant_tracker_begin_batch(TenantTracking *tracking, int32 *seqnum, int64 *late_threshold_start,
+							  int64 *late_threshold_end)
 {
 	uint32 gen;
 	TenantGeneration *generation;
@@ -458,7 +462,15 @@ retry_generation:
 		goto retry_generation;
 	}
 
+	/*
+	 * Return the epoch late-arrival window + seqnum along with the pin.
+	 * The read barrier pairs with the flush's write barrier before
+	 * the active_gen flip we just observed, so the
+	 */
+	pg_read_barrier();
 	*seqnum = (int32) pg_atomic_read_u32(&generation->seqnum);
+	*late_threshold_start = (int64) pg_atomic_read_u64(&generation->late_threshold_start);
+	*late_threshold_end = (int64) pg_atomic_read_u64(&generation->late_threshold_end);
 
 	return generation;
 }
@@ -520,9 +532,9 @@ retry_generation:
  * fresh one, and persists the drained tenants directly into
  * _timescaledb_catalog.continuous_aggs_tenant_tracking
  *
- * If the generation was INVALID (full / overflowed), no per-tenant rows are
- * written; instead the <null,null,null,seqnum> marker is persisted so the
- * refresh falls back to the full invalidation log.
+ * If the generation was INVALID (full / overflowed), nothing is persisted for
+ * its seqnum.  With no tracking rows for that seqnum, the refresh falls back to
+ * the full invalidation log for every invalidation carrying it.
  *
  * We flush shared mem contents to disk by swapping between the 2 buffers
  * (old_gen and new_gen) and then copying the contents to disk.
@@ -545,7 +557,8 @@ retry_generation:
  *
  */
 void
-ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id)
+ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id, int64 late_threshold_start,
+						int64 late_threshold_end)
 {
 	uint32 old_gen = pg_atomic_read_u32(&tracking->active_gen);
 	uint32 new_gen = 1 - old_gen;
@@ -578,9 +591,11 @@ ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id)
 	pg_atomic_write_u32(&target->status, TENANT_TRACKER_VALID);
 	/* Bind the next epoch to the generation we are about to activate. */
 	pg_atomic_write_u32(&target->seqnum, (uint32) (seqnum + 1));
+	pg_atomic_write_u64(&target->late_threshold_start, (uint64) late_threshold_start);
+	pg_atomic_write_u64(&target->late_threshold_end, (uint64) late_threshold_end);
 
-	/* Publish the reset AND the next epoch before the flip so a writer that pins
-	 * the newly-active generation sees re-inited entries and the matching epoch.
+	/* Publish the reset before the flip so the DML path writers see re-inited entries.
+	 * write barrier before flipping to other buffer.
 	 */
 	pg_write_barrier(); /* for active_gen */
 	pg_atomic_write_u32(&tracking->active_gen, new_gen);
@@ -636,17 +651,11 @@ ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id)
 	was_valid = (pg_atomic_read_u32(&old->status) == TENANT_TRACKER_VALID);
 
 	/* persisted rows are stamped with `old`'s epoch (`seqnum`, read above). */
-
-	/*
-	 * Persist directly from the quiesced old generation: read each entry's key
-	 * bytes in place and hand them to the catalog inserter, which copies them
-	 * into the tuple.  No intermediate snapshot array, no per-row copy here.  The
-	 * old generation stays readable until the next flush resets it.
-	 */
 	if (!was_valid)
 	{
-		/* INVALID: write the marker; refresh falls back to the full log. */
-		ts_cagg_tenant_tracking_insert_invalid_marker(hypertable_id, seqnum);
+		/* If generation is invalid, do not write any entry for this seqnum.
+		 * Refresh path falls back to full refresh when there are no tracker
+		 * entries. */
 		return;
 	}
 
@@ -729,9 +738,21 @@ tenant_tracker_attach(void)
 	return true;
 }
 
-/* Initialize a freshly dsa_allocate0'd tracker (atomics + inline partition locks). */
+/*
+ * Initialize a freshly dsa_allocate0'd tracker (atomics + inline partition
+ * locks).  The creating backend passes the epoch tracking window it computed
+ * (from config + now); both generations are seeded with it so drains before the
+ * first flush gate consistently.
+ *
+ * TODO (recovery on restart, design doc 5.4.4 #1): seqnum is seeded to 0 here,
+ * but after a restart the tracker is re-created fresh while catalog rows for
+ * older seqnums may still exist.  Seed seqnum from max(invalidation-log seqnum)
+ * at this same creation point (where we already bootstrap the threshold) so a
+ * fresh tracker never reuses a pre-restart seqnum that still has tracking rows.
+ */
 static void
-init_tracker(TenantTracking *tracker, int32 hypertable_id)
+init_tracker(TenantTracking *tracker, int32 hypertable_id, int64 late_threshold_start,
+			 int64 late_threshold_end)
 {
 	tracker->hypertable_id = hypertable_id;
 	pg_atomic_init_u32(&tracker->active_gen, 0);
@@ -746,6 +767,8 @@ init_tracker(TenantTracking *tracker, int32 hypertable_id)
 		/* Gen 0 is initially active -> epoch 1 (seqnum 0 means "untracked");
 		 * gen 1's epoch is assigned by the first flush before it activates. */
 		pg_atomic_init_u32(&generation->seqnum, gen == 0 ? 1 : 0);
+		pg_atomic_init_u64(&generation->late_threshold_start, (uint64) late_threshold_start);
+		pg_atomic_init_u64(&generation->late_threshold_end, (uint64) late_threshold_end);
 
 		for (int i = 0; i < TENANT_TRACKER_NUM_PARTITIONS; i++)
 		{
@@ -798,7 +821,8 @@ ts_tenant_tracker_lookup(int32 hypertable_id)
 }
 
 TenantTracking *
-ts_tenant_tracker_get_or_attach(int32 hypertable_id)
+ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
+								int64 late_threshold_end)
 {
 	TenantMapEntry *entry;
 	bool found;
@@ -887,9 +911,34 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id)
 		return NULL;
 	}
 
-	init_tracker((TenantTracking *) dsa_get_address(tracker_area, dp), hypertable_id);
+	init_tracker((TenantTracking *) dsa_get_address(tracker_area, dp),
+				 hypertable_id,
+				 late_threshold_start,
+				 late_threshold_end);
 	entry->tracker = dp;
 	dshash_release_lock(tracker_map, entry);
 
 	return (TenantTracking *) dsa_get_address(tracker_area, dp);
+}
+
+/*
+ * Fill *info with a read-only snapshot of the tracker's current state: seqnum
+ * and active_gen at the tracker level, and nentries/status/window from the
+ * active generation.  A best-effort diagnostic read -- not synchronized against
+ * concurrent writers or a flush, so fields may be momentarily inconsistent with
+ * each other.  Keeps the tracker struct layout private to this file; the
+ * SQL-facing function lives in tenant_tracker_function.c.
+ */
+void
+ts_tenant_tracker_get_info(TenantTracking *tracking, TenantTrackerInfo *info)
+{
+	uint32 gen = pg_atomic_read_u32(&tracking->active_gen);
+	TenantGeneration *generation = &tracking->generations[gen];
+
+	info->seqnum = (int32) pg_atomic_read_u32(&generation->seqnum);
+	info->active_generation = gen;
+	info->nentries = pg_atomic_read_u32(&generation->nentries);
+	info->status = pg_atomic_read_u32(&generation->status);
+	info->late_threshold_start = (int64) pg_atomic_read_u64(&generation->late_threshold_start);
+	info->late_threshold_end = (int64) pg_atomic_read_u64(&generation->late_threshold_end);
 }
