@@ -21,14 +21,25 @@ alter table dc_mem set (timescaledb.compress,
     timescaledb.compress_segmentby = 'device',
     timescaledb.compress_orderby = 'time');
 
+-- A direct `generate_series` call can materialize its results in a tuplestore,
+-- leading to memory usage growth, so use plain tables as source instead.
+create table dc_mem_src_alt(time timestamptz not null, device text, value float8);
+insert into dc_mem_src_alt
+select '2025-01-01'::timestamptz + (i % 2) * (interval '1 day'), 'dev1', random()
+from generate_series(1, 800) i;
+
+create table dc_mem_src_grow(time timestamptz not null, device text, value float8);
+insert into dc_mem_src_grow
+select '2025-01-01'::timestamptz + i * (interval '1 day'), 'dev1', random()
+from generate_series(1, 800) i;
+
 create table dc_mem_log(nchunks int, bytes bigint);
 
 -- Insert into alternating chunks to test chunk changes with direct compress.
 select format('
 with ins as (
     insert into dc_mem
-    select ''2025-01-01''::timestamptz + (i %% 2) * (interval ''1 day''), ''dev1'', random()
-    from generate_series(1, %1$s) i returning 1),
+    select * from dc_mem_src_alt limit %1$s returning 1),
 mem as (select %1$s as n, count(*), ts_debug_allocated_bytes() as b from ins)
 insert into dc_mem_log select n, b from mem;
 ', unnest(array[50, 100, 200, 400, 800]))
@@ -37,7 +48,7 @@ insert into dc_mem_log select n, b from mem;
 
 -- Check if we have memory usage growth with the number of chunks processed.
 select * from dc_mem_log where (
-    select regr_slope(bytes, nchunks) / regr_intercept(bytes, nchunks)::float > 0.01
+    select regr_slope(bytes, nchunks) / regr_intercept(bytes, nchunks)::float > 0.001
     from dc_mem_log)
 ;
 
@@ -47,8 +58,7 @@ truncate dc_mem_log;
 select format('
 with ins as (
     insert into dc_mem
-    select ''2025-01-01''::timestamptz + i * (interval ''1 day''), ''dev1'', random()
-    from generate_series(1, %1$s) i returning 1),
+    select * from dc_mem_src_grow limit %1$s returning 1),
 mem as (select %1$s as n, count(*), ts_debug_allocated_bytes() as b from ins)
 insert into dc_mem_log select n, b from mem;
 ', unnest(array[50, 100, 200, 400, 800]))

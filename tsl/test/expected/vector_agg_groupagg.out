@@ -99,7 +99,7 @@ create table text_table(ts int, a text);
 select create_hypertable('text_table', 'ts', chunk_time_interval => 3);
     create_hypertable    
 -------------------------
- (3,public,text_table,t)
+ (2,public,text_table,t)
 
 alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'a');
 insert into text_table select -1, 'scalar' from generate_series(1, 1000) x;
@@ -117,7 +117,7 @@ alter table text_table set (timescaledb.compress,
     timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
 NOTICE:  updated compression settings will only apply to future compressions
 select count(compress_chunk(x)) from show_chunks('text_table') x;
-NOTICE:  chunk "_hyper_3_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_2_3_chunk" is already converted to columnstore
  count 
 -------
      3

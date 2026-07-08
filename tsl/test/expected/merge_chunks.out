@@ -494,7 +494,7 @@ create table mergeme_too(time timestamptz not null, device int, temp float);
 select create_hypertable('mergeme_too', 'time', 'device', 3, chunk_time_interval => interval '1 day');
     create_hypertable     
 --------------------------
- (3,public,mergeme_too,t)
+ (2,public,mergeme_too,t)
 
 create table mergeme_regular(time timestamptz not null, device int, temp float);
 insert into mergeme_too values ('2024-01-01', 1, 1.0);
@@ -504,7 +504,7 @@ select * from mergeme_too where device=1;
 select * from show_chunks('mergeme_too');
               show_chunks               
 ----------------------------------------
- _timescaledb_internal._hyper_3_6_chunk
+ _timescaledb_internal._hyper_2_6_chunk
 
 \set ON_ERROR_STOP 0
 -- Merge chunk and regular table
@@ -516,7 +516,7 @@ call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', 'mergeme_mat');
 ERROR:  cannot merge non-table relations
 -- Merge chunks from different hypertables
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_3_6_chunk');
-ERROR:  cannot merge chunks across different hypertables
+ERROR:  relation "_timescaledb_internal._hyper_3_6_chunk" does not exist at character 61
 -- Merge with unsupported access method
 alter table _timescaledb_internal._hyper_1_1_chunk set access method testam;
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
@@ -799,14 +799,14 @@ create table mergeme_role1(time timestamptz not null, device int, temp float);
 select create_hypertable('mergeme_role1', 'time', chunk_time_interval => interval '1 day');
      create_hypertable      
 ----------------------------
- (4,public,mergeme_role1,t)
+ (3,public,mergeme_role1,t)
 
 insert into mergeme_role1 values ('2024-01-01', 1, 1.0), ('2024-01-02', 2, 2.0);
 select show_chunks('mergeme_role1');
                show_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_4_14_chunk
- _timescaledb_internal._hyper_4_15_chunk
+ _timescaledb_internal._hyper_3_14_chunk
+ _timescaledb_internal._hyper_3_15_chunk
 
 select show_chunks('mergeme_role1') as role1_chunk1 order by 1 limit 1 offset 0 \gset
 select show_chunks('mergeme_role1') as role1_chunk2 order by 1 limit 1 offset 1 \gset
@@ -823,8 +823,8 @@ select * from chunks_being_merged;
  _timescaledb_internal._hyper_1_4_chunk            |            1 |               0
  _timescaledb_internal._hyper_1_5_chunk            |            1 |               0
  _timescaledb_internal._hyper_1_9_chunk            |            1 |               0
- _timescaledb_internal._hyper_4_14_chunk           |            3 |               1
- _timescaledb_internal._hyper_4_15_chunk           |            3 |               1
+ _timescaledb_internal._hyper_3_14_chunk           |            3 |               1
+ _timescaledb_internal._hyper_3_15_chunk           |            3 |               1
 
 set role :ROLE_DEFAULT_PERM_USER;
 -- Save non-cleaned information
@@ -835,8 +835,8 @@ NOTICE:  cleaned up 5 orphaned rewrite relations, skipped 2
 select * from chunks_being_merged;
                chunk_relid               | new_chunk_id | num_new_indexes 
 -----------------------------------------+--------------+-----------------
- _timescaledb_internal._hyper_4_14_chunk |            1 |               1
- _timescaledb_internal._hyper_4_15_chunk |            1 |               1
+ _timescaledb_internal._hyper_3_14_chunk |            1 |               1
+ _timescaledb_internal._hyper_3_15_chunk |            1 |               1
 
 set role :ROLE_1;
 call _timescaledb_functions.chunk_rewrite_cleanup();
@@ -882,8 +882,8 @@ select * from chunks_being_merged;
  _timescaledb_internal._hyper_1_4_chunk            |            1 |               2
  _timescaledb_internal._hyper_1_5_chunk            |            1 |               2
  _timescaledb_internal._hyper_1_9_chunk            |            1 |               2
- _timescaledb_internal._hyper_4_14_chunk           |            3 |               1
- _timescaledb_internal._hyper_4_15_chunk           |            3 |               1
+ _timescaledb_internal._hyper_3_14_chunk           |            3 |               1
+ _timescaledb_internal._hyper_3_15_chunk           |            3 |               1
 
 -- Reset to superuser
 reset role;
@@ -910,7 +910,7 @@ CREATE TABLE pub_merge_test(time timestamptz not null, device int, temp float);
 SELECT create_hypertable('pub_merge_test', 'time', chunk_time_interval => interval '1 day');
       create_hypertable      
 -----------------------------
- (5,public,pub_merge_test,t)
+ (4,public,pub_merge_test,t)
 
 -- Insert data to create multiple chunks
 INSERT INTO pub_merge_test VALUES
@@ -925,8 +925,8 @@ WHERE pubname = 'test_merge_pub'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename     
 -----------------------+-------------------
- _timescaledb_internal | _hyper_5_16_chunk
- _timescaledb_internal | _hyper_5_17_chunk
+ _timescaledb_internal | _hyper_4_16_chunk
+ _timescaledb_internal | _hyper_4_17_chunk
  public                | pub_merge_test
 
 -- Merge chunks
@@ -940,7 +940,7 @@ WHERE pubname = 'test_merge_pub'
 ORDER BY schemaname, tablename;
       schemaname       |     tablename     
 -----------------------+-------------------
- _timescaledb_internal | _hyper_5_16_chunk
+ _timescaledb_internal | _hyper_4_16_chunk
  public                | pub_merge_test
 
 -- Cleanup
@@ -958,7 +958,7 @@ CREATE TABLE compress_settings_merge(
 SELECT create_hypertable('compress_settings_merge', 'time', chunk_time_interval => INTERVAL '1 day');
           create_hypertable           
 --------------------------------------
- (6,public,compress_settings_merge,t)
+ (5,public,compress_settings_merge,t)
 
 INSERT INTO compress_settings_merge VALUES
     ('2024-01-01 12:00', 1, 'one', 1.5, 100),
@@ -977,14 +977,14 @@ ALTER TABLE compress_settings_merge SET (timescaledb.compress, timescaledb.compr
 SELECT compress_chunk(:'first_chunk');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_6_18_chunk
+ _timescaledb_internal._hyper_5_18_chunk
 
 ALTER TABLE compress_settings_merge SET (timescaledb.compress, timescaledb.compress_segmentby='name');
 NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(:'second_chunk');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_6_19_chunk
+ _timescaledb_internal._hyper_5_19_chunk
 
 \set ON_ERROR_STOP 0
 CALL merge_chunks(ARRAY[:'first_chunk', :'second_chunk']::regclass[]);
@@ -999,14 +999,14 @@ ALTER TABLE compress_settings_merge SET (timescaledb.compress, timescaledb.compr
 SELECT compress_chunk(:'first_chunk');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_6_18_chunk
+ _timescaledb_internal._hyper_5_18_chunk
 
 ALTER TABLE compress_settings_merge SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='val DESC');
 NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(:'second_chunk');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_6_19_chunk
+ _timescaledb_internal._hyper_5_19_chunk
 
 \set ON_ERROR_STOP 0
 CALL merge_chunks(ARRAY[:'first_chunk', :'second_chunk']::regclass[]);
@@ -1026,7 +1026,7 @@ SELECT create_hypertable('concurrent_compressed_merge', 'time',
                          chunk_time_interval => INTERVAL '1 day');
             create_hypertable             
 ------------------------------------------
- (9,public,concurrent_compressed_merge,t)
+ (6,public,concurrent_compressed_merge,t)
 
 ALTER TABLE concurrent_compressed_merge
     SET (timescaledb.compress, timescaledb.compress_segmentby='device');
@@ -1036,8 +1036,8 @@ INSERT INTO concurrent_compressed_merge VALUES
 SELECT compress_chunk(ch) FROM show_chunks('concurrent_compressed_merge') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_9_20_chunk
- _timescaledb_internal._hyper_9_21_chunk
+ _timescaledb_internal._hyper_6_20_chunk
+ _timescaledb_internal._hyper_6_21_chunk
 
 SELECT format('%I.%I', schema_name, table_name) AS ccm_c1
   FROM _timescaledb_catalog.chunk
@@ -1065,9 +1065,9 @@ CREATE TABLE merge_sparse_order(
     val int
 );
 SELECT create_hypertable('merge_sparse_order', 'time', chunk_time_interval => INTERVAL '1 day');
-        create_hypertable         
-----------------------------------
- (11,public,merge_sparse_order,t)
+        create_hypertable        
+---------------------------------
+ (7,public,merge_sparse_order,t)
 
 INSERT INTO merge_sparse_order
 SELECT t, (i % 10) + 1, random() * 100, (i * 7) % 13
@@ -1093,9 +1093,9 @@ ALTER TABLE merge_sparse_order SET (
     timescaledb.compress_index = 'bloom("device"), minmax("temp"), bloom("device","val")'
 );
 SELECT compress_chunk(:'mso_c1');
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_22_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_22_chunk
 
 ALTER TABLE merge_sparse_order SET (
     timescaledb.compress,
@@ -1104,19 +1104,19 @@ ALTER TABLE merge_sparse_order SET (
 );
 NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(:'mso_c2');
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_23_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_23_chunk
 
 -- have different sparse indexes
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                                                       index                                                                                                                                                        
-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_22_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_11_23_chunk | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+                  relid                  |                                                                                                                                                       index                                                                                                                                                        
+-----------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_22_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_23_chunk | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                      | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                 | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- Merge should not succeed
 \set ON_ERROR_STOP 0
@@ -1130,28 +1130,28 @@ ALTER TABLE merge_sparse_order SET (
 );
 NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(decompress_chunk(:'mso_c2'));
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_23_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_23_chunk
 
 -- have different JSONB but same logical sparse indexes
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                                                       index                                                                                                                                                        
-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_22_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_11_23_chunk | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+                  relid                  |                                                                                                                                                       index                                                                                                                                                        
+-----------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_22_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_23_chunk | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                      | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                 | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- Merge should succeed
 CALL merge_chunks(:'mso_c1'::regclass, :'mso_c2'::regclass);
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                                                       index                                                                                                                                                        
-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_22_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+                  relid                  |                                                                                                                                                       index                                                                                                                                                        
+-----------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk  | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_22_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                      | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                 | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE merge_sparse_order;

@@ -501,22 +501,22 @@ check_table_in_rangevar_list(List *rvlist, Name schema_name, Name table_name)
 static void
 add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 {
+	NameData schema, table;
 	ProcessUtilityArgs *args = vargs;
 	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
-	Chunk *chunk;
 
 	/* Switch to the parent context for persistent allocations */
 	MemoryContext per_chunk_mcxt = MemoryContextSwitchTo(GetMemoryChunkContext(stmt));
 
-	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	/*
-	 * If chunk is in the same schema as the hypertable it could already be part of
-	 * the objects list in the case of "GRANT ALL IN SCHEMA" for example
-	 */
-	if (!check_table_in_rangevar_list(stmt->objects, &chunk->fd.schema_name, &chunk->fd.table_name))
+	char *schema_name = get_namespace_name(get_rel_namespace(chunk_relid));
+	char *table_name = get_rel_name(chunk_relid);
+
+	namestrcpy(&schema, schema_name);
+	namestrcpy(&table, table_name);
+
+	if (!check_table_in_rangevar_list(stmt->objects, &schema, &table))
 	{
-		RangeVar *rv =
-			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+		RangeVar *rv = makeRangeVar(schema_name, table_name, -1);
 		stmt->objects = lappend(stmt->objects, rv);
 	}
 	MemoryContextSwitchTo(per_chunk_mcxt);
@@ -1597,27 +1597,7 @@ process_truncate(ProcessUtilityArgs *args)
 	foreach (cell, hypertables)
 	{
 		Hypertable *ht = lfirst(cell);
-
-		Assert(ht != NULL);
-
 		handle_truncate_hypertable(args, stmt, ht);
-
-		/* propagate to the compressed hypertable */
-		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-		{
-			Hypertable *compressed_ht =
-				ts_hypertable_cache_get_entry_by_id(hcache, ht->fd.compressed_hypertable_id);
-			TruncateStmt compressed_stmt = *stmt;
-			compressed_stmt.relations =
-				list_make1(makeRangeVar(NameStr(compressed_ht->fd.schema_name),
-										NameStr(compressed_ht->fd.table_name),
-										-1));
-
-			/* TRUNCATE the compressed hypertable */
-			ExecuteTruncate(&compressed_stmt);
-
-			handle_truncate_hypertable(args, stmt, compressed_ht);
-		}
 	}
 
 	/* For all materialization hypertables, reset the watermark */
@@ -1760,30 +1740,11 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			if (ht)
 			{
-				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("dropping columnstore hypertables not supported"),
-							 errhint("Please drop the corresponding rowstore hypertable "
-									 "instead.")));
-				}
-
 				/*
 				 *  We need to drop hypertable chunks before the hypertable to avoid the need
 				 *  to CASCADE such drops;
 				 */
 				foreach_chunk(ht, process_drop_table_chunk, stmt, true);
-				/* The usual path for deleting an associated compressed hypertable uses
-				 * DROP_RESTRICT But if we are using DROP_CASCADE we should propagate that down to
-				 * the compressed hypertable.
-				 */
-				if (stmt->behavior == DROP_CASCADE && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-				{
-					Hypertable *compressed_hypertable =
-						ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-					ts_hypertable_drop(compressed_hypertable, DROP_CASCADE);
-				}
 			}
 
 			result = DDL_DONE;
@@ -2057,50 +2018,6 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 												  &cagg->data.partial_view_schema,
 												  &cagg->data.partial_view_name);
 					}
-
-					/*
-					 * If this is a hypertable and it has a compressed
-					 * hypertable associated with it, add it to the list of
-					 * hypertables to process.
-					 */
-					Hypertable *hypertable = ts_hypertable_cache_get_entry_rv(hcache, relation);
-					if (hypertable && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(hypertable))
-					{
-						Hypertable *compressed_hypertable =
-							ts_hypertable_get_by_id(hypertable->fd.compressed_hypertable_id);
-						Assert(compressed_hypertable);
-						process_grant_add_by_name(stmt,
-												  was_schema_op,
-												  &compressed_hypertable->fd.schema_name,
-												  &compressed_hypertable->fd.table_name);
-						List *chunks = ts_chunk_get_by_hypertable_id(hypertable->fd.id);
-						ListCell *cell;
-						foreach (cell, chunks)
-						{
-							Chunk *chunk = lfirst(cell);
-							Oid compressed_relid =
-								ts_relation_get_compressed_relid(chunk->table_id);
-							if (!OidIsValid(compressed_relid))
-							{
-								continue;
-							}
-							/*
-							 * makeRangeVar() keeps the name pointers without
-							 * copying, so the NameData must outlive this loop
-							 * iteration. Allocate it instead of using stack
-							 * storage which is reused on every iteration.
-							 */
-							NameData *compressed_schema_name = palloc(sizeof(NameData));
-							NameData *compressed_table_name = palloc(sizeof(NameData));
-							namestrcpy(compressed_schema_name,
-									   get_namespace_name(get_rel_namespace(compressed_relid)));
-							namestrcpy(compressed_table_name, get_rel_name(compressed_relid));
-							process_grant_add_by_name(stmt,
-													  was_schema_op,
-													  compressed_schema_name,
-													  compressed_table_name);
-						}
-					}
 				}
 
 				/* Process all hypertables, including those added in the loop above */
@@ -2111,7 +2028,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 					if (ht)
 					{
-						foreach_chunk(ht, add_chunk_oid, args, false);
+						foreach_chunk(ht, add_chunk_oid, args, true);
 					}
 				}
 
@@ -2948,14 +2865,6 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 
 	process_altertable_change_owner_bgw_jobs(ht->fd.id, newrole_oid);
 	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd, true);
-
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		Hypertable *compressed_hypertable =
-			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
-		process_altertable_change_owner(compressed_hypertable, cmd);
-	}
 }
 
 typedef struct ChunkConstraintInfo
@@ -4728,13 +4637,6 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
 	foreach_chunk(ht, process_altertable_chunk, cmd, true);
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		Hypertable *compressed_hypertable =
-			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
-		process_altertable_set_tablespace_end(compressed_hypertable, cmd);
-	}
 }
 
 static void

@@ -282,7 +282,7 @@ get_architecture_bit_size()
 }
 
 static void
-add_job_counts(JsonbParseState *state)
+add_job_counts(JsonbInState *state)
 {
 	BgwJobTypeCount counts = bgw_job_type_counts();
 
@@ -299,7 +299,7 @@ add_job_counts(JsonbParseState *state)
 }
 
 static JsonbValue *
-add_errors_by_sqlerrcode_internal(JsonbParseState *parse_state, const char *job_type,
+add_errors_by_sqlerrcode_internal(JsonbInState *parse_state, const char *job_type,
 								  Jsonb *sqlerrs_jsonb)
 {
 	JsonbIterator *it;
@@ -312,8 +312,8 @@ add_errors_by_sqlerrcode_internal(JsonbParseState *parse_state, const char *job_
 		.val.string.len = strlen(job_type),
 	};
 
-	ret = pushJsonbValue(&parse_state, WJB_KEY, &key);
-	ret = pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(parse_state, WJB_KEY, &key);
+	pushJsonbValueCompat(parse_state, WJB_BEGIN_OBJECT, NULL);
 
 	/* we don't expect nested values here */
 	it = JsonbIteratorInit(&sqlerrs_jsonb->root);
@@ -350,7 +350,8 @@ add_errors_by_sqlerrcode_internal(JsonbParseState *parse_state, const char *job_
 		}
 	}
 
-	ret = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(parse_state, WJB_END_OBJECT, NULL);
+	ret = parse_state->result;
 	return ret;
 }
 /* this function queries the database through SPI and gets back a set of records
@@ -361,7 +362,7 @@ add_errors_by_sqlerrcode_internal(JsonbParseState *parse_state, const char *job_
  Then for each returned row adds a new kv pair to the jsonb,
  which looks like "job_type": {"errtype1": errcnt1, ...} */
 static void
-add_errors_by_sqlerrcode(JsonbParseState *parse_state)
+add_errors_by_sqlerrcode(JsonbInState *parse_state)
 {
 	int res;
 	StringInfoData command;
@@ -449,15 +450,15 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 }
 
 static JsonbValue *
-add_job_stats_internal(JsonbParseState *state, const char *job_type, TelemetryJobStats *stats)
+add_job_stats_internal(JsonbInState *state, const char *job_type, TelemetryJobStats *stats)
 {
 	JsonbValue key = {
 		.type = jbvString,
 		.val.string.val = pstrdup(job_type),
 		.val.string.len = strlen(job_type),
 	};
-	pushJsonbValue(&state, WJB_KEY, &key);
-	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_KEY, &key);
+	pushJsonbValueCompat(state, WJB_BEGIN_OBJECT, NULL);
 
 	ts_jsonb_add_int64(state, "total_runs", stats->total_runs);
 	ts_jsonb_add_int64(state, "total_successes", stats->total_successes);
@@ -468,11 +469,12 @@ add_job_stats_internal(JsonbParseState *state, const char *job_type, TelemetryJo
 	ts_jsonb_add_interval(state, "total_duration", stats->total_duration);
 	ts_jsonb_add_interval(state, "total_duration_failures", stats->total_duration_failures);
 
-	return pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_END_OBJECT, NULL);
+	return state->result;
 }
 
 static void
-add_job_stats_by_job_type(JsonbParseState *parse_state)
+add_job_stats_by_job_type(JsonbInState *parse_state)
 {
 	StringInfoData command;
 	int res;
@@ -589,9 +591,9 @@ get_database_size()
 }
 
 static void
-add_related_extensions(JsonbParseState *state)
+add_related_extensions(JsonbInState *state)
 {
-	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_BEGIN_OBJECT, NULL);
 
 	for (size_t i = 0; i < sizeof(related_extensions) / sizeof(char *); i++)
 	{
@@ -600,7 +602,7 @@ add_related_extensions(JsonbParseState *state)
 		ts_jsonb_add_bool(state, ext, OidIsValid(get_extension_oid(ext, true)));
 	}
 
-	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_END_OBJECT, NULL);
 }
 
 static char *
@@ -664,16 +666,15 @@ format_iso8601(Datum value)
 #define REQ_RELKIND_CAGG_NESTED "num_caggs_nested"
 
 static JsonbValue *
-add_compression_stats_object(JsonbParseState *parse_state, StatsRelType reltype,
-							 const HyperStats *hs)
+add_compression_stats_object(JsonbInState *parse_state, StatsRelType reltype, const HyperStats *hs)
 {
 	JsonbValue name = {
 		.type = jbvString,
 		.val.string.val = pstrdup("compression"),
 		.val.string.len = strlen("compression"),
 	};
-	pushJsonbValue(&parse_state, WJB_KEY, &name);
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(parse_state, WJB_KEY, &name);
+	pushJsonbValueCompat(parse_state, WJB_BEGIN_OBJECT, NULL);
 
 	ts_jsonb_add_int64(parse_state, REQ_RELKIND_COMPRESSED_CHUNKS, hs->compressed_chunk_count);
 
@@ -708,20 +709,21 @@ add_compression_stats_object(JsonbParseState *parse_state, StatsRelType reltype,
 					   REQ_RELKIND_UNCOMPRESSED_INDEXES_SIZE,
 					   hs->uncompressed_indexes_size);
 
-	return pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(parse_state, WJB_END_OBJECT, NULL);
+	return parse_state->result;
 }
 
 static JsonbValue *
-add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
-						 const BaseStats *stats, StatsRelType reltype, StatsType statstype)
+add_relkind_stats_object(JsonbInState *parse_state, const char *relkindname, const BaseStats *stats,
+						 StatsRelType reltype, StatsType statstype)
 {
 	JsonbValue name = {
 		.type = jbvString,
 		.val.string.val = pstrdup(relkindname),
 		.val.string.len = strlen(relkindname),
 	};
-	pushJsonbValue(&parse_state, WJB_KEY, &name);
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(parse_state, WJB_KEY, &name);
+	pushJsonbValueCompat(parse_state, WJB_BEGIN_OBJECT, NULL);
 
 	ts_jsonb_add_int64(parse_state, REQ_RELKIND_COUNT, stats->relcount);
 
@@ -756,11 +758,12 @@ add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
 		ts_jsonb_add_int64(parse_state, REQ_RELKIND_CAGG_NESTED, cs->nested);
 	}
 
-	return pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(parse_state, WJB_END_OBJECT, NULL);
+	return parse_state->result;
 }
 
 static void
-add_function_call_telemetry(JsonbParseState *state)
+add_function_call_telemetry(JsonbInState *state)
 {
 	fn_telemetry_entry_vec *functions;
 	const char *visible_extensions[(sizeof(related_extensions) / sizeof(char *)) + 1];
@@ -771,7 +774,7 @@ add_function_call_telemetry(JsonbParseState *state)
 			.type = jbvNull,
 		};
 
-		pushJsonbValue(&state, WJB_VALUE, &value);
+		pushJsonbValueCompat(state, WJB_VALUE, &value);
 		return;
 	}
 
@@ -784,7 +787,7 @@ add_function_call_telemetry(JsonbParseState *state)
 	functions =
 		ts_function_telemetry_read(visible_extensions, sizeof(visible_extensions) / sizeof(char *));
 
-	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_BEGIN_OBJECT, NULL);
 
 	if (functions)
 	{
@@ -796,11 +799,11 @@ add_function_call_telemetry(JsonbParseState *state)
 		}
 	}
 
-	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_END_OBJECT, NULL);
 }
 
 static void
-add_replication_telemetry(JsonbParseState *state)
+add_replication_telemetry(JsonbInState *state)
 {
 	ReplicationInfo info = ts_telemetry_replication_info_gather();
 	if (info.got_num_wal_senders)
@@ -852,7 +855,7 @@ add_replication_telemetry(JsonbParseState *state)
  * }
  */
 static void
-add_query_result_dict(JsonbParseState *state, const char *query)
+add_query_result_dict(JsonbInState *state, const char *query)
 {
 	MemoryContext orig_context = CurrentMemoryContext;
 
@@ -871,7 +874,7 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 
 	MemoryContext spi_context = MemoryContextSwitchTo(orig_context);
 
-	(void) pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+	(void) pushJsonbValueCompat(state, WJB_BEGIN_OBJECT, NULL);
 	for (uint64 r = 0; r < SPI_processed; r++)
 	{
 		char *key_string = SPI_getvalue(SPI_tuptable->vals[r], SPI_tuptable->tupdesc, 1);
@@ -881,9 +884,9 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 			.val.string.len = strlen(key_string),
 		};
 
-		(void) pushJsonbValue(&state, WJB_KEY, &key);
+		(void) pushJsonbValueCompat(state, WJB_KEY, &key);
 
-		(void) pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+		(void) pushJsonbValueCompat(state, WJB_BEGIN_OBJECT, NULL);
 		for (int c = 1; c < SPI_tuptable->tupdesc->natts; ++c)
 		{
 			bool isnull;
@@ -899,7 +902,7 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 				ts_jsonb_add_value(state, key_string, &value);
 			}
 		}
-		pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+		pushJsonbValueCompat(state, WJB_END_OBJECT, NULL);
 	}
 
 	/* Restore search_path */
@@ -908,154 +911,154 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 	MemoryContextSwitchTo(spi_context);
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
-	(void) pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+	(void) pushJsonbValueCompat(state, WJB_END_OBJECT, NULL);
 }
 
 static Jsonb *
 build_telemetry_report()
 {
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 	JsonbValue key;
 	JsonbValue *result;
 	TelemetryStats relstats;
 	VersionOSInfo osinfo;
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 
-	ts_jsonb_add_int32(parse_state, REQ_TELEMETRY_VERSION, TS_TELEMETRY_VERSION);
-	ts_jsonb_add_str(parse_state,
+	ts_jsonb_add_int32(&parse_state, REQ_TELEMETRY_VERSION, TS_TELEMETRY_VERSION);
+	ts_jsonb_add_str(&parse_state,
 					 REQ_DB_UUID,
 					 DatumGetCString(DirectFunctionCall1(uuid_out, ts_metadata_get_uuid())));
-	ts_jsonb_add_str(parse_state,
+	ts_jsonb_add_str(&parse_state,
 					 REQ_EXPORTED_DB_UUID,
 					 DatumGetCString(
 						 DirectFunctionCall1(uuid_out, ts_metadata_get_exported_uuid())));
-	ts_jsonb_add_str(parse_state,
+	ts_jsonb_add_str(&parse_state,
 					 REQ_INSTALL_TIME,
 					 format_iso8601(ts_metadata_get_install_timestamp()));
-	ts_jsonb_add_str(parse_state, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
+	ts_jsonb_add_str(&parse_state, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
 
 	if (ts_version_get_os_info(&osinfo))
 	{
-		ts_jsonb_add_str(parse_state, REQ_OS, osinfo.sysname);
-		ts_jsonb_add_str(parse_state, REQ_OS_VERSION, osinfo.version);
-		ts_jsonb_add_str(parse_state, REQ_OS_RELEASE, osinfo.release);
+		ts_jsonb_add_str(&parse_state, REQ_OS, osinfo.sysname);
+		ts_jsonb_add_str(&parse_state, REQ_OS_VERSION, osinfo.version);
+		ts_jsonb_add_str(&parse_state, REQ_OS_RELEASE, osinfo.release);
 		if (osinfo.has_pretty_version)
 		{
-			ts_jsonb_add_str(parse_state, REQ_OS_VERSION_PRETTY, osinfo.pretty_version);
+			ts_jsonb_add_str(&parse_state, REQ_OS_VERSION_PRETTY, osinfo.pretty_version);
 		}
 	}
 	else
 	{
-		ts_jsonb_add_str(parse_state, REQ_OS, "Unknown");
+		ts_jsonb_add_str(&parse_state, REQ_OS, "Unknown");
 	}
 
-	ts_jsonb_add_str(parse_state, REQ_PS_VERSION, get_pgversion_string());
-	ts_jsonb_add_str(parse_state, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
-	ts_jsonb_add_str(parse_state, REQ_BUILD_OS, BUILD_OS_NAME);
-	ts_jsonb_add_str(parse_state, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
-	ts_jsonb_add_str(parse_state, REQ_BUILD_ARCHITECTURE, BUILD_PROCESSOR);
-	ts_jsonb_add_int32(parse_state, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
-	ts_jsonb_add_int64(parse_state, REQ_DATA_VOLUME, get_database_size());
+	ts_jsonb_add_str(&parse_state, REQ_PS_VERSION, get_pgversion_string());
+	ts_jsonb_add_str(&parse_state, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
+	ts_jsonb_add_str(&parse_state, REQ_BUILD_OS, BUILD_OS_NAME);
+	ts_jsonb_add_str(&parse_state, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
+	ts_jsonb_add_str(&parse_state, REQ_BUILD_ARCHITECTURE, BUILD_PROCESSOR);
+	ts_jsonb_add_int32(&parse_state, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
+	ts_jsonb_add_int64(&parse_state, REQ_DATA_VOLUME, get_database_size());
 	/* add job execution stats */
 	key.type = jbvString;
 	key.val.string.val = REQ_NUM_ERR_BY_SQLERRCODE;
 	key.val.string.len = strlen(REQ_NUM_ERR_BY_SQLERRCODE);
-	pushJsonbValue(&parse_state, WJB_KEY, &key);
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 
-	add_errors_by_sqlerrcode(parse_state);
+	add_errors_by_sqlerrcode(&parse_state);
 
-	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 
 	key.type = jbvString;
 	key.val.string.val = REQ_JOB_STATS_BY_JOB_TYPE;
 	key.val.string.len = strlen(REQ_JOB_STATS_BY_JOB_TYPE);
-	pushJsonbValue(&parse_state, WJB_KEY, &key);
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 
-	add_job_stats_by_job_type(parse_state);
+	add_job_stats_by_job_type(&parse_state);
 
-	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* Add relation stats */
 	ts_telemetry_stats_gather(&relstats);
 	key.type = jbvString;
 	key.val.string.val = REQ_RELS;
 	key.val.string.len = strlen(REQ_RELS);
-	pushJsonbValue(&parse_state, WJB_KEY, &key);
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 
-	add_relkind_stats_object(parse_state,
+	add_relkind_stats_object(&parse_state,
 							 REQ_RELS_TABLES,
 							 &relstats.tables.base,
 							 RELTYPE_TABLE,
 							 STATS_TYPE_STORAGE);
-	add_relkind_stats_object(parse_state,
+	add_relkind_stats_object(&parse_state,
 							 REQ_RELS_PARTITIONED_TABLES,
 							 &relstats.partitioned_tables.storage.base,
 							 RELTYPE_PARTITIONED_TABLE,
 							 STATS_TYPE_HYPER);
-	add_relkind_stats_object(parse_state,
+	add_relkind_stats_object(&parse_state,
 							 REQ_RELS_MATVIEWS,
 							 &relstats.materialized_views.base,
 							 RELTYPE_MATVIEW,
 							 STATS_TYPE_STORAGE);
-	add_relkind_stats_object(parse_state,
+	add_relkind_stats_object(&parse_state,
 							 REQ_RELS_VIEWS,
 							 &relstats.views,
 							 RELTYPE_VIEW,
 							 STATS_TYPE_BASE);
-	add_relkind_stats_object(parse_state,
+	add_relkind_stats_object(&parse_state,
 							 REQ_RELS_HYPERTABLES,
 							 &relstats.hypertables.storage.base,
 							 RELTYPE_HYPERTABLE,
 							 STATS_TYPE_HYPER);
 
-	add_relkind_stats_object(parse_state,
+	add_relkind_stats_object(&parse_state,
 							 REQ_RELS_CONTINUOUS_AGGS,
 							 &relstats.continuous_aggs.hyp.storage.base,
 							 RELTYPE_CONTINUOUS_AGG,
 							 STATS_TYPE_CAGG);
 
-	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 
-	add_job_counts(parse_state);
+	add_job_counts(&parse_state);
 
 	/* Add related extensions, which is a nested JSON */
 	key.type = jbvString;
 	key.val.string.val = REQ_RELATED_EXTENSIONS;
 	key.val.string.len = strlen(REQ_RELATED_EXTENSIONS);
-	pushJsonbValue(&parse_state, WJB_KEY, &key);
-	add_related_extensions(parse_state);
+	pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
+	add_related_extensions(&parse_state);
 
 	/* license */
 	key.type = jbvString;
 	key.val.string.val = REQ_LICENSE_INFO;
 	key.val.string.len = strlen(REQ_LICENSE_INFO);
-	pushJsonbValue(&parse_state, WJB_KEY, &key);
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	if (ts_license_is_apache())
 	{
-		ts_jsonb_add_str(parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
+		ts_jsonb_add_str(&parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
 	}
 	else
 	{
-		ts_jsonb_add_str(parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_COMMUNITY);
+		ts_jsonb_add_str(&parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_COMMUNITY);
 	}
-	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* add tuned info, which is optional */
 	char *last_tune_time = GetConfigOptionByName("timescaledb.last_tune_time", NULL, true);
 	if (last_tune_time != NULL)
 	{
-		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_TIME, last_tune_time);
+		ts_jsonb_add_str(&parse_state, REQ_TS_LAST_TUNE_TIME, last_tune_time);
 	}
 
 	char *last_tune_version = GetConfigOptionByName("timescaledb.last_tune_version", NULL, true);
 	if (last_tune_version != NULL)
 	{
-		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_VERSION, last_tune_version);
+		ts_jsonb_add_str(&parse_state, REQ_TS_LAST_TUNE_VERSION, last_tune_version);
 	}
 
 	/* add cloud to telemetry when set */
@@ -1064,50 +1067,51 @@ build_telemetry_report()
 		key.type = jbvString;
 		key.val.string.val = REQ_INSTANCE_METADATA;
 		key.val.string.len = strlen(REQ_INSTANCE_METADATA);
-		pushJsonbValue(&parse_state, WJB_KEY, &key);
+		pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
 
-		pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-		ts_jsonb_add_str(parse_state, REQ_TS_TELEMETRY_CLOUD, ts_telemetry_cloud);
-		pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+		pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+		ts_jsonb_add_str(&parse_state, REQ_TS_TELEMETRY_CLOUD, ts_telemetry_cloud);
+		pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 	}
 
 	/* Add additional content from metadata */
 	key.type = jbvString;
 	key.val.string.val = REQ_METADATA;
 	key.val.string.len = strlen(REQ_METADATA);
-	pushJsonbValue(&parse_state, WJB_KEY, &key);
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_telemetry_metadata_add_values(parse_state);
-	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_telemetry_metadata_add_values(&parse_state);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* Add function call telemetry */
 	key.type = jbvString;
 	key.val.string.val = REQ_FUNCTIONS_USED;
 	key.val.string.len = strlen(REQ_FUNCTIONS_USED);
-	pushJsonbValue(&parse_state, WJB_KEY, &key);
-	add_function_call_telemetry(parse_state);
+	pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
+	add_function_call_telemetry(&parse_state);
 
 	/* Add replication object */
 	key.type = jbvString;
 	key.val.string.val = REQ_REPLICATION;
 	key.val.string.len = strlen(REQ_REPLICATION);
-	pushJsonbValue(&parse_state, WJB_KEY, &key);
+	pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	add_replication_telemetry(parse_state);
-	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	add_replication_telemetry(&parse_state);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 
 	key.type = jbvString;
 	key.val.string.val = REQ_ACCESS_METHODS;
 	key.val.string.len = strlen(REQ_ACCESS_METHODS);
-	(void) pushJsonbValue(&parse_state, WJB_KEY, &key);
-	add_query_result_dict(parse_state,
+	(void) pushJsonbValueCompat(&parse_state, WJB_KEY, &key);
+	add_query_result_dict(&parse_state,
 						  "SELECT amname AS name, sum(relpages) AS pages, count(*) AS "
 						  "instances FROM pg_class JOIN pg_am ON relam = pg_am.oid "
 						  "GROUP BY amname");
 
 	/* end of telemetry object */
-	result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	result = parse_state.result;
 
 	return JsonbValueToJsonb(result);
 }
