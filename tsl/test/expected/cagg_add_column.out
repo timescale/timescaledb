@@ -375,9 +375,8 @@ SELECT count(*) AS chunks_compressed FROM (
 
 ALTER MATERIALIZED VIEW cagg_compressed
     ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp)) STORED;
--- look up the mat HT (schema, name) and the compressed HT id once.
-SELECT h.id as mat_ht_id,
-       h.compressed_hypertable_id AS compressed_ht_id
+-- look up the mat HT (schema, name)
+SELECT h.id as mat_ht_id
 FROM _timescaledb_catalog.continuous_agg ca
 JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
 WHERE ca.user_view_name = 'cagg_compressed' \gset
@@ -486,7 +485,7 @@ SELECT count(*) AS rows_visible FROM cagg_meta;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP MATERIALIZED VIEW cagg_meta;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_16_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_9_16_chunk
 -- =====================================================================
 -- Hierarchical CAgg: ADD COLUMN on parent, then on a child that
 -- references the parent's newly-added column.
@@ -495,7 +494,7 @@ CREATE TABLE hier_src (ts timestamptz NOT NULL, val double precision, temp doubl
 SELECT create_hypertable('hier_src', 'ts', chunk_time_interval => INTERVAL '1 day');
    create_hypertable    
 ------------------------
- (11,public,hier_src,t)
+ (10,public,hier_src,t)
 
 INSERT INTO hier_src
 SELECT '2026-01-01'::timestamptz + i*INTERVAL '1 hour', i, i * 0.1
@@ -545,8 +544,8 @@ SELECT day_bucket, daily_avg, min_avg, min_min_temp FROM cagg_child;
  Fri Jan 02 16:00:00 2026 PST |      43.5 |      40 |            4
 
 DROP MATERIALIZED VIEW cagg_child;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_21_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_21_chunk
 DROP MATERIALIZED VIEW cagg_parent;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_20_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_20_chunk
 DROP TABLE hier_src;
 DROP TABLE metrics;

@@ -63,7 +63,7 @@ SELECT * FROM _timescaledb_functions.get_create_command('test_table');
 
 --test adding one more closed dimension
 select add_dimension('test_schema.test_table', 'location', 4);
-select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
+select id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable where table_name = 'test_table';
 select * from _timescaledb_catalog.dimension;
 
 --test that we can change the number of partitions and that 1 is allowed
@@ -85,7 +85,7 @@ SELECT * FROM _timescaledb_functions.get_create_command('test_table');
 
 --test adding one more open dimension
 select add_dimension('test_schema.test_table', 'id', chunk_time_interval => 1000);
-select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
+select id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable where table_name = 'test_table';
 select * from _timescaledb_catalog.dimension;
 
 -- Test add_dimension: can use interval types for TIMESTAMPTZ columns
@@ -273,7 +273,7 @@ select create_hypertable('test_schema.test_migrate', 'time');
 select create_hypertable('test_schema.test_migrate', 'time', migrate_data => true);
 
 --there should be two new chunks
-select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
+select id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
 select id, hypertable_id, schema_name, table_name, status, osm_chunk from _timescaledb_catalog.chunk;
 select * from test_schema.test_migrate;
 --main table should now be empty

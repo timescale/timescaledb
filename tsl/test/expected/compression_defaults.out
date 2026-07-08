@@ -243,7 +243,7 @@ CREATE TABLE "public"."metrics" (
 SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
   create_hypertable   
 ----------------------
- (8,public,metrics,t)
+ (2,public,metrics,t)
 
 --no indexes
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
@@ -301,7 +301,7 @@ CREATE TABLE "public"."metrics" (
 SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
   create_hypertable   
 ----------------------
- (9,public,metrics,t)
+ (3,public,metrics,t)
 
 --minimum index
 CREATE UNIQUE INDEX test_idx ON metrics(id, time);
@@ -327,9 +327,9 @@ CREATE TABLE "public"."metrics" (
     "val" double precision
 ) WITH (autovacuum_enabled=0);
 SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>true);
-   create_hypertable   
------------------------
- (10,public,metrics,t)
+  create_hypertable   
+----------------------
+ (4,public,metrics,t)
 
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                                                                            get_segmentby_defaults                                                                                                           
@@ -373,9 +373,9 @@ CREATE TABLE "public"."metrics" (
     "val" double precision
 ) WITH (autovacuum_enabled=0);
 SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
-   create_hypertable   
------------------------
- (11,public,metrics,t)
+  create_hypertable   
+----------------------
+ (5,public,metrics,t)
 
 --skew device_id distribution compared to device_id2.
 --device_id2 will be the favourable default segmentby
@@ -506,9 +506,9 @@ DROP TABLE metrics;
 --test on an empty order_by
 CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
 SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
-  create_hypertable   
-----------------------
- (14,public,table1,t)
+  create_hypertable  
+---------------------
+ (6,public,table1,t)
 
 SELECT _timescaledb_functions.get_orderby_defaults('table1', ARRAY['col1']::text[]);
        get_orderby_defaults       
@@ -543,7 +543,7 @@ CREATE TABLE public.t1 (time timestamptz NOT NULL, segment_value text NOT NULL);
 SELECT public.create_hypertable('public.t1', 'time');
  create_hypertable 
 -------------------
- (16,public,t1,t)
+ (7,public,t1,t)
 
 ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
 RESET search_path;
@@ -559,9 +559,9 @@ CREATE TABLE schema1.page_events2 (
  page        TEXT              NOT NULL
 );
 SELECT create_hypertable('schema1.page_events2', 'time');
-      create_hypertable      
------------------------------
- (18,schema1,page_events2,t)
+     create_hypertable      
+----------------------------
+ (8,schema1,page_events2,t)
 
 ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
@@ -572,9 +572,9 @@ CREATE TABLE schema2.page_events2 (
  page        TEXT              NOT NULL
 );
 SELECT create_hypertable('schema2.page_events2', 'time');
-      create_hypertable      
------------------------------
- (20,schema2,page_events2,t)
+     create_hypertable      
+----------------------------
+ (9,schema2,page_events2,t)
 
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
@@ -591,7 +591,7 @@ CREATE TABLE schema1.page_events2 (
 SELECT create_hypertable('schema1.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (22,schema1,page_events2,t)
+ (10,schema1,page_events2,t)
 
 ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
@@ -605,7 +605,7 @@ CREATE TABLE schema2.page_events2 (
 SELECT create_hypertable('schema2.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (24,schema2,page_events2,t)
+ (11,schema2,page_events2,t)
 
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
@@ -625,7 +625,7 @@ SELECT create_hypertable(
 );
     create_hypertable     
 --------------------------
- (26,public,test_table,t)
+ (12,public,test_table,t)
 
 INSERT INTO test_table (ts, uuid, val) VALUES
   (1, 1001, 10.1),
@@ -765,6 +765,6 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
 SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
       hypertable       |                  chunk                   | segmentby |      orderby       |                                                                                                                                                               index                                                                                                                                                                
 -----------------------+------------------------------------------+-----------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_exclude_datetype | _timescaledb_internal._hyper_28_67_chunk | device_id | event_date,ts DESC | [{"type": "bloom", "column": ["ts", "event_date"], "source": "default"}, {"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "firstlast", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ test_exclude_datetype | _timescaledb_internal._hyper_13_67_chunk | device_id | event_date,ts DESC | [{"type": "bloom", "column": ["ts", "event_date"], "source": "default"}, {"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "firstlast", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 DROP TABLE test_exclude_datetype;

@@ -50,6 +50,13 @@ static const struct config_enum_entry telemetry_level_options[] = {
 #endif
 
 /* Copied from contrib/auto_explain/auto_explain.c */
+#if PG19_LT
+/*
+ * PG19 lets log_min_messages be set per process type (e.g. "warning,
+ * bgworker:debug1"), which supersedes our timescaledb.bgw_log_level GUC, so we
+ * only define it on earlier versions.
+ * https://github.com/postgres/postgres/commit/38e0190ced
+ */
 static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
 	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
@@ -57,6 +64,7 @@ static const struct config_enum_entry loglevel_options[] = {
 	{ "log", LOG, false },		 { "error", ERROR, false },	  { "fatal", FATAL, false },
 	{ NULL, 0, false }
 };
+#endif
 
 static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
@@ -136,7 +144,9 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
+#if PG19_LT
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
+#endif
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
@@ -1510,6 +1520,7 @@ _guc_init(void)
 							   /* assign_hook= */ ts_license_guc_assign_hook,
 							   /* show_hook= */ NULL);
 
+#if PG19_LT
 	DefineCustomEnumVariable(MAKE_EXTOPTION("bgw_log_level"),
 							 "Log level for the background worker subsystem",
 							 "Log level for the scheduler and workers of the background worker "
@@ -1522,6 +1533,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	/* this information is useful in general on customer deployments */
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_compression_path_info"),

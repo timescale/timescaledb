@@ -25,7 +25,12 @@
  * One-time init.
  */
 static void
+#if PG19_GE
+/* PG19 added an extra argument to the GetNamedDSMSegment init callback. */
+ts_stats_chunk_init_segment(void *ptr, void *arg)
+#else
 ts_stats_chunk_init_segment(void *ptr)
+#endif
 {
 	TsStatsChunkSegment *seg = (TsStatsChunkSegment *) ptr;
 	uint32 num_slots = (uint32) ts_guc_stats_max_chunks;
@@ -39,8 +44,13 @@ ts_stats_chunk_init_segment(void *ptr)
 
 	seg->magic = TS_STATS_SHMEM_MAGIC;
 	seg->dboid = MyDatabaseId;
+#if PG19_GE
+	/* PG19 merged tranche registration into LWLockNewTrancheId(name). */
+	LWLockInitialize(&seg->lock, LWLockNewTrancheId("ts_stats_chunk"));
+#else
 	LWLockInitialize(&seg->lock, LWLockNewTrancheId());
 	LWLockRegisterTranche(seg->lock.tranche, "ts_stats_chunk");
+#endif
 	seg->base_timestamp = GetCurrentTimestamp();
 	seg->num_slots = num_slots;
 
@@ -86,7 +96,11 @@ ts_get_stats_chunk_segment(void)
 	snprintf(name, sizeof(name), "ts_stats_chunk_db_%u", MyDatabaseId);
 
 	bool found;
+#if PG19_GE
+	cached_segment = GetNamedDSMSegment(name, seg_size, ts_stats_chunk_init_segment, &found, NULL);
+#else
 	cached_segment = GetNamedDSMSegment(name, seg_size, ts_stats_chunk_init_segment, &found);
+#endif
 
 	if (cached_segment != NULL && cached_segment->magic != TS_STATS_SHMEM_MAGIC)
 	{
@@ -212,7 +226,11 @@ ts_stats_chunk_create_segment(TsObservHandleTable *tbl)
 	dsm_handle local_handle = dsm_segment_handle(local_seg);
 
 	TsStatsChunkSegment *obs = dsm_segment_address(local_seg);
+#if PG19_GE
+	ts_stats_chunk_init_segment(obs, NULL);
+#else
 	ts_stats_chunk_init_segment(obs);
+#endif
 
 	LWLockAcquire(&tbl->lock, LW_EXCLUSIVE);
 
