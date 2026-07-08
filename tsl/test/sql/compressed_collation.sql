@@ -120,3 +120,29 @@ select count(compress_chunk(ch)) from show_chunks('t9998') ch;
 select name from t9998 order by name collate "C";
 
 drop table t9998 cascade;
+
+-- Test issue #9997: batch filtering for compressed DML should respect collation
+create collation case_insensitive_icu
+    (provider=icu, locale='und-u-ks-level2', deterministic=false);
+
+create table t9997 (
+    ts    timestamptz not null,
+    actor text collate case_insensitive_icu,
+    note  int
+);
+select count(*) from create_hypertable('t9997', 'ts');
+alter table t9997 set (timescaledb.compress);
+
+insert into t9997 values ('2024-01-01', 'alice', 1);
+
+SELECT count(compress_chunk(chunk_name)) FROM show_chunks('t9997') chunk_name;
+
+-- SELECT respects the collation, returns 1 row
+select note from t9997 where actor = 'ALICE';
+
+-- UPDATE respects the collation, updates 1 row
+update t9997 set note = 99 where actor = 'ALICE';
+select note from t9997 where actor = 'ALICE';
+
+drop table t9997 cascade;
+drop collation case_insensitive_icu;
