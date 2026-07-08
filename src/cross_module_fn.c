@@ -113,6 +113,9 @@ CROSSMODULE_WRAPPER(attach_chunk);
 
 CROSSMODULE_WRAPPER(estimate_compressed_batch_size);
 
+CROSSMODULE_WRAPPER(hypertable_get_tenant_tracking_info);
+CROSSMODULE_WRAPPER(tenant_tracking_map);
+
 /*
  * casting a function pointer to a pointer of another type is undefined
  * behavior, so we need one of these for every function type we have
@@ -421,6 +424,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 
 	.detach_chunk = error_no_default_fn_pg_community,
 	.attach_chunk = error_no_default_fn_pg_community,
+
+	.hypertable_get_tenant_tracking_info = error_no_default_fn_pg_community,
+	.tenant_tracking_map = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
