@@ -34,6 +34,7 @@
 #include <parser/parse_func.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
@@ -2344,6 +2345,79 @@ bool
 ts_hypertable_unset_compression(Hypertable *ht)
 {
 	return ts_hypertable_clear_status(ht, HYPERTABLE_STATUS_COMPRESSION);
+}
+
+TS_FUNCTION_INFO_V1(ts_hypertable_status);
+
+/*
+ * Return the raw status field of the hypertable as a bitwise or of the
+ * HYPERTABLE_STATUS_XXX values.
+ */
+Datum
+ts_hypertable_status(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_GETARG_OID(0);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+
+	if (ht == NULL)
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("table \"%s\" is not a hypertable", get_rel_name(relid))));
+	}
+
+	int32 status = ht->fd.status;
+	ts_cache_release(&hcache);
+	PG_RETURN_INT32(status);
+}
+
+TS_FUNCTION_INFO_V1(ts_hypertable_status_text);
+
+Datum
+ts_hypertable_status_text(PG_FUNCTION_ARGS)
+{
+	int32 status = PG_GETARG_INT32(0);
+
+	ArrayBuildState *astate = initArrayResult(TEXTOID, CurrentMemoryContext, false);
+
+	if (status & HYPERTABLE_STATUS_OSM)
+	{
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("OSM"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+	}
+
+	if (status & HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS)
+	{
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("OSM_CHUNK_NONCONTIGUOUS"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+	}
+
+	if (status & HYPERTABLE_STATUS_COMPRESSION)
+	{
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("COMPRESSION"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+	}
+
+	if (status < 0 || status > (HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS |
+								HYPERTABLE_STATUS_COMPRESSION))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid hypertable status %d", status)));
+	}
+
+	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
 }
 
 DimensionSlice *

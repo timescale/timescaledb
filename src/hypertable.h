@@ -23,6 +23,32 @@ typedef struct Chunk Chunk;
 typedef struct Hypercube Hypercube;
 typedef struct ChunkRangeSpace ChunkRangeSpace;
 
+/*
+ * Remember to update ts_hypertable_status functions when adding new status flags
+ */
+#define HYPERTABLE_STATUS_DEFAULT 0
+/* flag set when hypertable has an attached OSM chunk */
+#define HYPERTABLE_STATUS_OSM 1
+/*
+ * Currently, the time slice range metadata is updated in
+ * the timescaledb catalog with the min and max of the range managed by OSM.
+ * However, this range has to be contiguous in order to
+ * update our catalog with its min and max value. If it is not contiguous,
+ * then we cannot store the min and max in our catalog because tuple routing
+ * will not work properly with gaps in the range.
+ * When attempting to insert into one of the gaps, which do not in fact contain
+ * tiered data, we error out because this is perceived as an attempt to insert
+ * into tiered chunks, which are immutable.
+ * When the range is noncontiguous, we store [INT64_MAX - 1, INT64_MAX) and set
+ * this flag.
+ * This flag also serves to allow or block the ordered append optimization. When
+ * the range covered by OSM is contiguous, then it is possible to do ordered
+ * append.
+ */
+#define HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS 2
+/* compression enabled on hypertable */
+#define HYPERTABLE_STATUS_COMPRESSION 4
+
 #define TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht)                                                  \
 	(((ht)->fd.status & HYPERTABLE_STATUS_COMPRESSION) != 0)
 
