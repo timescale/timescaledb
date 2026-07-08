@@ -71,10 +71,6 @@ IncludeCategories: # we want to ensure c.h and postgres.h appear first
     Priority:        -1
   - Regex:            '^(<|")compat/compat\.h'
     Priority:        -2
-  - Regex:            '^"compat/compat-msvc-enter\.h'
-    Priority:        -1 
-  - Regex:            '^"compat/compat-msvc-exit\.h'
-    Priority:         2000000000
   - Regex:            '.*'
     Priority:         1
 IncludeIsMainRegex: '' # filename_<suffix> will be seen as the primary include

@@ -183,8 +183,8 @@ INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
             relname             
 --------------------------------
- _hyper_35_1_chunk
- _hyper_35_1_chunk_t11_time_idx
+ _hyper_18_1_chunk
+ _hyper_18_1_chunk_t11_time_idx
 
 ROLLBACK;
 BEGIN;
@@ -199,8 +199,8 @@ INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc2'::regnamespace ORDER BY 1;
             relname             
 --------------------------------
- _hyper_37_2_chunk
- _hyper_37_2_chunk_t11_time_idx
+ _hyper_19_2_chunk
+ _hyper_19_2_chunk_t11_time_idx
 
 ROLLBACK;
 -- associated_table_prefix
@@ -209,7 +209,7 @@ CREATE TABLE t12(time timestamptz NOT NULL, device text, value float) WITH (tsdb
 SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_name = 't12';
  associated_table_prefix 
 -------------------------
- _hyper_39
+ _hyper_20
 
 ROLLBACK;
 BEGIN;
@@ -239,7 +239,7 @@ INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
 SELECT compress_chunk(show_chunks('t13'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_43_4_chunk
+ _timescaledb_internal._hyper_22_4_chunk
 
 ROLLBACK;
 BEGIN;
@@ -255,7 +255,7 @@ INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
 SELECT compress_chunk(show_chunks('t13'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_45_5_chunk
+ _timescaledb_internal._hyper_23_5_chunk
 
 ROLLBACK;
 -- test segmentby and orderby
@@ -376,7 +376,7 @@ SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "
 FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy' AND proc_name = 'policy_compression';
  hypertable_name | schedule_interval |           next_start           |                       config                        
 -----------------+-------------------+--------------------------------+-----------------------------------------------------
- t25_policy      | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 70, "compress_after": "@ 7 days"}
+ t25_policy      | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 37, "compress_after": "@ 7 days"}
 
 ROLLBACK;
 -- test compression policy creation with custom chunk interval
@@ -386,7 +386,7 @@ SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "
 FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_custom' AND proc_name = 'policy_compression';
   hypertable_name  | schedule_interval |           next_start           |                       config                        
 -------------------+-------------------+--------------------------------+-----------------------------------------------------
- t25_policy_custom | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 72, "compress_after": "@ 3 days"}
+ t25_policy_custom | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 38, "compress_after": "@ 3 days"}
 
 ROLLBACK;
 -- test compression policy creation with integer partition column (int2)
@@ -401,7 +401,7 @@ SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "
 FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int2' AND proc_name = 'policy_compression';
  hypertable_name | schedule_interval |           next_start           |                    config                    
 -----------------+-------------------+--------------------------------+----------------------------------------------
- t25_policy_int2 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 74, "compress_after": 100}
+ t25_policy_int2 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 39, "compress_after": 100}
 
 ROLLBACK;
 -- test compression policy creation with integer partition column (int4)
@@ -416,7 +416,7 @@ SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "
 FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int4' AND proc_name = 'policy_compression';
  hypertable_name | schedule_interval |           next_start           |                    config                     
 -----------------+-------------------+--------------------------------+-----------------------------------------------
- t25_policy_int4 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 76, "compress_after": 1000}
+ t25_policy_int4 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 40, "compress_after": 1000}
 
 ROLLBACK;
 -- test compression policy creation with integer partition column (int8)
@@ -431,7 +431,7 @@ SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "
 FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int8' AND proc_name = 'policy_compression';
  hypertable_name | schedule_interval |           next_start           |                     config                     
 -----------------+-------------------+--------------------------------+------------------------------------------------
- t25_policy_int8 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 78, "compress_after": 10000}
+ t25_policy_int8 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 41, "compress_after": 10000}
 
 ROLLBACK;
 BEGIN;
@@ -554,8 +554,8 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 
 SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes') as next_start, config
 FROM timescaledb_information.jobs WHERE hypertable_name = 'events' AND proc_name = 'policy_compression';
- hypertable_name | schedule_interval |           next_start           |                        config                         
------------------+-------------------+--------------------------------+-------------------------------------------------------
- events          | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 100, "compress_after": "@ 2 hours"}
+ hypertable_name | schedule_interval |           next_start           |                        config                        
+-----------------+-------------------+--------------------------------+------------------------------------------------------
+ events          | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 57, "compress_after": "@ 2 hours"}
 
 ROLLBACK;

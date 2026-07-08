@@ -123,7 +123,7 @@ create table edges(t int, s int, ss int, f1 int);
 select create_hypertable('edges', 't', chunk_time_interval => 100000);
  create_hypertable  
 --------------------
- (3,public,edges,t)
+ (2,public,edges,t)
 
 alter table edges set (timescaledb.compress, timescaledb.compress_segmentby='s');
 insert into edges select
@@ -7157,5 +7157,14 @@ select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
  10 |     1 |  65
  11 |     1 |  65
  12 |     1 |  65
+
+-- NaN handling in Postgres minmax is different from other functions -- it treats
+-- NaN as bigger than any number. This test has a filter that ensures that
+-- NaNs go first in the source data, because some potentially buggy conditions
+-- can be only triggered in this case.
+select ss, min(cfloat4), max(cfloat4) from aggfns where cfloat4 = any(array['nan'::float4, 33.308792]) group by ss order by ss;
+ ss |   min   | max 
+----+---------+-----
+ 11 | 33.3088 | NaN
 
 reset max_parallel_workers_per_gather;

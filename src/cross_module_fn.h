@@ -52,6 +52,9 @@ typedef struct CrossModuleFunctions
 	PGFunction policy_reorder_proc;
 	PGFunction policy_reorder_check;
 	PGFunction policy_reorder_remove;
+	PGFunction policy_compaction_add;
+	PGFunction policy_compaction_check;
+	PGFunction policy_compaction_remove;
 	PGFunction policy_retention_add;
 	PGFunction policy_retention_proc;
 	PGFunction policy_retention_check;
@@ -138,7 +141,7 @@ typedef struct CrossModuleFunctions
 								TupleTableSlot *slot);
 	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
 	void (*compressor_close)(RowCompressor *compressor, BulkWriter *bulk_writer);
-	void (*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
+	void (*compression_chunk_create)(Chunk *src_chunk);
 
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module

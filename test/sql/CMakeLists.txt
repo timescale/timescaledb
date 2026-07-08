@@ -21,6 +21,7 @@ set(TEST_FILES
     ddl_extra.sql
     debug_utils.sql
     delete.sql
+    dml_system_columns.sql
     drop_extension.sql
     drop_hypertable.sql
     drop_rename_hypertable.sql
@@ -131,7 +132,7 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   list(APPEND TEST_FILES tableam_alter_defaults.sql
-       merge_not_matched_by_source.sql dml_system_columns.sql)
+       merge_not_matched_by_source.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))

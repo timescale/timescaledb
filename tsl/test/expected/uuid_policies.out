@@ -194,7 +194,7 @@ CREATE TABLE uuid_reorder_test(id uuid primary key, device int, temp float);
 SELECT create_hypertable('uuid_reorder_test', 'id', chunk_time_interval => interval '1 day');
        create_hypertable        
 --------------------------------
- (4,public,uuid_reorder_test,t)
+ (3,public,uuid_reorder_test,t)
 
 -- Create an index for reorder (by device)
 CREATE INDEX uuid_reorder_test_device_idx ON uuid_reorder_test(device);
@@ -227,9 +227,9 @@ SELECT device, chunk_name FROM (
 ) sub;
  device |               chunk_name                
 --------+-----------------------------------------
-      3 | _timescaledb_internal._hyper_4_13_chunk
-      2 | _timescaledb_internal._hyper_4_13_chunk
-      1 | _timescaledb_internal._hyper_4_13_chunk
+      3 | _timescaledb_internal._hyper_3_13_chunk
+      2 | _timescaledb_internal._hyper_3_13_chunk
+      1 | _timescaledb_internal._hyper_3_13_chunk
 
 -- Add reorder policy
 SELECT add_reorder_policy('uuid_reorder_test', 'uuid_reorder_test_device_idx') AS reorder_job_id \gset
@@ -237,7 +237,7 @@ SELECT add_reorder_policy('uuid_reorder_test', 'uuid_reorder_test_device_idx') A
 SELECT proc_name, config FROM timescaledb_information.jobs WHERE job_id = :reorder_job_id;
    proc_name    |                               config                               
 ----------------+--------------------------------------------------------------------
- policy_reorder | {"index_name": "uuid_reorder_test_device_idx", "hypertable_id": 4}
+ policy_reorder | {"index_name": "uuid_reorder_test_device_idx", "hypertable_id": 3}
 
 -- Run the reorder job (reorders eligible older chunks)
 CALL run_job(:reorder_job_id);
@@ -251,9 +251,9 @@ SELECT device, chunk_name FROM (
 ) sub;
  device |               chunk_name                
 --------+-----------------------------------------
-      1 | _timescaledb_internal._hyper_4_13_chunk
-      2 | _timescaledb_internal._hyper_4_13_chunk
-      3 | _timescaledb_internal._hyper_4_13_chunk
+      1 | _timescaledb_internal._hyper_3_13_chunk
+      2 | _timescaledb_internal._hyper_3_13_chunk
+      3 | _timescaledb_internal._hyper_3_13_chunk
 
 -- Clean up reorder test
 SELECT remove_reorder_policy('uuid_reorder_test', if_exists => true);

@@ -137,7 +137,7 @@ WARNING:  column type "timestamp without time zone" used for "start_dt" does not
 WARNING:  column type "timestamp without time zone" used for "end_dt" does not follow best practices
     create_hypertable     
 --------------------------
- (3,public,metaseg_tab,t)
+ (2,public,metaseg_tab,t)
 
 SELECT add_dimension('metaseg_tab', 'fmid', chunk_time_interval => 1);
          add_dimension         
@@ -149,7 +149,7 @@ INSERT INTO metaseg_tab values (56,0,'2012-12-10 09:45:00','2012-12-10 09:50:00'
 SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
+ _timescaledb_internal._hyper_2_3_chunk
 
 VACUUM FULL ANALYZE metaseg_tab;
 select factorid, end_dt, logret
@@ -169,15 +169,15 @@ and end_dt between '2012-12-10'::date and '2012-12-11'::date
 order by factorid, end_dt;
 --- QUERY PLAN ---
  Sort
-   Output: _hyper_3_3_chunk.factorid, _hyper_3_3_chunk.end_dt, _hyper_3_3_chunk.logret
-   Sort Key: _hyper_3_3_chunk.factorid, _hyper_3_3_chunk.end_dt
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk
-         Output: _hyper_3_3_chunk.factorid, _hyper_3_3_chunk.end_dt, _hyper_3_3_chunk.logret
-         Filter: ((_hyper_3_3_chunk.end_dt >= '12-10-2012'::date) AND (_hyper_3_3_chunk.end_dt <= '12-11-2012'::date))
-         Vectorized Filter: (_hyper_3_3_chunk.fmid = 56)
-         ->  Seq Scan on _timescaledb_internal._hyper_3_3_chunk_compressed
-               Output: _hyper_3_3_chunk_compressed._ts_meta_count, _hyper_3_3_chunk_compressed.fmid, _hyper_3_3_chunk_compressed.factorid, _hyper_3_3_chunk_compressed.start_dt, _hyper_3_3_chunk_compressed._ts_meta_min_1, _hyper_3_3_chunk_compressed._ts_meta_max_1, _hyper_3_3_chunk_compressed._ts_meta_v2_first_end_dt, _hyper_3_3_chunk_compressed._ts_meta_v2_last_end_dt, _hyper_3_3_chunk_compressed.end_dt, _hyper_3_3_chunk_compressed.interval_number, _hyper_3_3_chunk_compressed.logret, _hyper_3_3_chunk_compressed.knowledge_date
-               Filter: ((_hyper_3_3_chunk_compressed._ts_meta_v2_last_end_dt >= '12-10-2012'::date) AND (_hyper_3_3_chunk_compressed._ts_meta_v2_first_end_dt <= '12-11-2012'::date))
+   Output: _hyper_2_3_chunk.factorid, _hyper_2_3_chunk.end_dt, _hyper_2_3_chunk.logret
+   Sort Key: _hyper_2_3_chunk.factorid, _hyper_2_3_chunk.end_dt
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_3_chunk
+         Output: _hyper_2_3_chunk.factorid, _hyper_2_3_chunk.end_dt, _hyper_2_3_chunk.logret
+         Filter: ((_hyper_2_3_chunk.end_dt >= '12-10-2012'::date) AND (_hyper_2_3_chunk.end_dt <= '12-11-2012'::date))
+         Vectorized Filter: (_hyper_2_3_chunk.fmid = 56)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk_compressed
+               Output: _hyper_2_3_chunk_compressed._ts_meta_count, _hyper_2_3_chunk_compressed.fmid, _hyper_2_3_chunk_compressed.factorid, _hyper_2_3_chunk_compressed.start_dt, _hyper_2_3_chunk_compressed._ts_meta_min_1, _hyper_2_3_chunk_compressed._ts_meta_max_1, _hyper_2_3_chunk_compressed._ts_meta_v2_first_end_dt, _hyper_2_3_chunk_compressed._ts_meta_v2_last_end_dt, _hyper_2_3_chunk_compressed.end_dt, _hyper_2_3_chunk_compressed.interval_number, _hyper_2_3_chunk_compressed.logret, _hyper_2_3_chunk_compressed.knowledge_date
+               Filter: ((_hyper_2_3_chunk_compressed._ts_meta_v2_last_end_dt >= '12-10-2012'::date) AND (_hyper_2_3_chunk_compressed._ts_meta_v2_first_end_dt <= '12-11-2012'::date))
 
 --no pushdown here
 select factorid, end_dt, logret
@@ -197,14 +197,14 @@ and end_dt::date between '2012-12-10'::timestamp and '2012-12-11'::date
 order by factorid, end_dt;
 --- QUERY PLAN ---
  Sort
-   Output: _hyper_3_3_chunk.factorid, _hyper_3_3_chunk.end_dt, _hyper_3_3_chunk.logret
-   Sort Key: _hyper_3_3_chunk.factorid, _hyper_3_3_chunk.end_dt
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk
-         Output: _hyper_3_3_chunk.factorid, _hyper_3_3_chunk.end_dt, _hyper_3_3_chunk.logret
-         Filter: (((_hyper_3_3_chunk.end_dt)::date >= 'Mon Dec 10 00:00:00 2012'::timestamp without time zone) AND ((_hyper_3_3_chunk.end_dt)::date <= '12-11-2012'::date))
-         Vectorized Filter: (_hyper_3_3_chunk.fmid = 56)
-         ->  Seq Scan on _timescaledb_internal._hyper_3_3_chunk_compressed
-               Output: _hyper_3_3_chunk_compressed._ts_meta_count, _hyper_3_3_chunk_compressed.fmid, _hyper_3_3_chunk_compressed.factorid, _hyper_3_3_chunk_compressed.start_dt, _hyper_3_3_chunk_compressed._ts_meta_min_1, _hyper_3_3_chunk_compressed._ts_meta_max_1, _hyper_3_3_chunk_compressed._ts_meta_v2_first_end_dt, _hyper_3_3_chunk_compressed._ts_meta_v2_last_end_dt, _hyper_3_3_chunk_compressed.end_dt, _hyper_3_3_chunk_compressed.interval_number, _hyper_3_3_chunk_compressed.logret, _hyper_3_3_chunk_compressed.knowledge_date
+   Output: _hyper_2_3_chunk.factorid, _hyper_2_3_chunk.end_dt, _hyper_2_3_chunk.logret
+   Sort Key: _hyper_2_3_chunk.factorid, _hyper_2_3_chunk.end_dt
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_3_chunk
+         Output: _hyper_2_3_chunk.factorid, _hyper_2_3_chunk.end_dt, _hyper_2_3_chunk.logret
+         Filter: (((_hyper_2_3_chunk.end_dt)::date >= 'Mon Dec 10 00:00:00 2012'::timestamp without time zone) AND ((_hyper_2_3_chunk.end_dt)::date <= '12-11-2012'::date))
+         Vectorized Filter: (_hyper_2_3_chunk.fmid = 56)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk_compressed
+               Output: _hyper_2_3_chunk_compressed._ts_meta_count, _hyper_2_3_chunk_compressed.fmid, _hyper_2_3_chunk_compressed.factorid, _hyper_2_3_chunk_compressed.start_dt, _hyper_2_3_chunk_compressed._ts_meta_min_1, _hyper_2_3_chunk_compressed._ts_meta_max_1, _hyper_2_3_chunk_compressed._ts_meta_v2_first_end_dt, _hyper_2_3_chunk_compressed._ts_meta_v2_last_end_dt, _hyper_2_3_chunk_compressed.end_dt, _hyper_2_3_chunk_compressed.interval_number, _hyper_2_3_chunk_compressed.logret, _hyper_2_3_chunk_compressed.knowledge_date
 
 --should fail
 \set ON_ERROR_STOP 0
@@ -231,57 +231,57 @@ INSERT INTO pushdown_relabel SELECT '2000-01-01','varchar','char';
 SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_4_chunk
+ _timescaledb_internal._hyper_3_4_chunk
 
 VACUUM FULL ANALYZE pushdown_relabel;
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-   ->  Seq Scan on _hyper_5_4_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+   ->  Seq Scan on _hyper_3_4_chunk_compressed
          Filter: ((dev_vc)::text = 'varchar'::text)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-   ->  Seq Scan on _hyper_5_4_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+   ->  Seq Scan on _hyper_3_4_chunk_compressed
          Filter: (dev_c = 'char'::bpchar)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-   ->  Seq Scan on _hyper_5_4_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+   ->  Seq Scan on _hyper_3_4_chunk_compressed
          Filter: (((dev_vc)::text = 'varchar'::text) AND (dev_c = 'char'::bpchar))
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-   ->  Seq Scan on _hyper_5_4_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+   ->  Seq Scan on _hyper_3_4_chunk_compressed
          Filter: (((dev_vc)::bpchar = 'varchar   '::character(10)) AND (dev_c = 'char'::bpchar))
 
 -- test again with index scans
 SET enable_seqscan TO false;
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-   ->  Index Scan using _hyper_5_4_chunk_compressed_dev_vc_dev_c__ts_meta_v2_first__idx on _hyper_5_4_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+   ->  Index Scan using _hyper_3_4_chunk_compressed_dev_vc_dev_c__ts_meta_v2_first__idx on _hyper_3_4_chunk_compressed
          Index Cond: ((dev_vc)::text = 'varchar'::text)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-   ->  Index Scan using _hyper_5_4_chunk_compressed_dev_vc_dev_c__ts_meta_v2_first__idx on _hyper_5_4_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+   ->  Index Scan using _hyper_3_4_chunk_compressed_dev_vc_dev_c__ts_meta_v2_first__idx on _hyper_3_4_chunk_compressed
          Index Cond: (dev_c = 'char'::bpchar)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-   ->  Index Scan using _hyper_5_4_chunk_compressed_dev_vc_dev_c__ts_meta_v2_first__idx on _hyper_5_4_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+   ->  Index Scan using _hyper_3_4_chunk_compressed_dev_vc_dev_c__ts_meta_v2_first__idx on _hyper_3_4_chunk_compressed
          Index Cond: (((dev_vc)::text = 'varchar'::text) AND (dev_c = 'char'::bpchar))
 
 EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_4_chunk
-   ->  Index Scan using _hyper_5_4_chunk_compressed_dev_vc_dev_c__ts_meta_v2_first__idx on _hyper_5_4_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+   ->  Index Scan using _hyper_3_4_chunk_compressed_dev_vc_dev_c__ts_meta_v2_first__idx on _hyper_3_4_chunk_compressed
          Index Cond: (dev_c = 'char'::bpchar)
          Filter: ((dev_vc)::bpchar = 'varchar   '::character(10))
 
@@ -295,7 +295,7 @@ SELECT create_hypertable('deleteme', 'timestamp', migrate_data => true);
 NOTICE:  migrating data to chunks
    create_hypertable   
 -----------------------
- (7,public,deleteme,t)
+ (4,public,deleteme,t)
 
 ALTER TABLE deleteme SET (
   timescaledb.compress,
@@ -304,30 +304,30 @@ ALTER TABLE deleteme SET (
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_5_chunk
+ _timescaledb_internal._hyper_4_5_chunk
 
 VACUUM FULL ANALYZE deleteme;
 EXPLAIN (buffers off, costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 --- QUERY PLAN ---
  Finalize Aggregate
    ->  Custom Scan (VectorAgg)
-         ->  Custom Scan (ColumnarScan) on _hyper_7_5_chunk
-               ->  Seq Scan on _hyper_7_5_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_4_5_chunk
+               ->  Seq Scan on _hyper_4_5_chunk_compressed
                      Filter: ((segment)::text ~~ '%4%'::text)
 
 EXPLAIN (buffers off, costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 --- QUERY PLAN ---
  Finalize Aggregate
    ->  Custom Scan (VectorAgg)
-         ->  Custom Scan (ColumnarScan) on _hyper_7_5_chunk
-               ->  Seq Scan on _hyper_7_5_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_4_5_chunk
+               ->  Seq Scan on _hyper_4_5_chunk_compressed
                      Filter: ('4'::text = (segment)::text)
 
 CREATE TABLE deleteme_with_bytea(time bigint NOT NULL, bdata bytea);
 SELECT create_hypertable('deleteme_with_bytea', 'time', chunk_time_interval => 1000000);
         create_hypertable         
 ----------------------------------
- (9,public,deleteme_with_bytea,t)
+ (5,public,deleteme_with_bytea,t)
 
 INSERT INTO deleteme_with_bytea(time, bdata) VALUES (1001, E'\\x');
 INSERT INTO deleteme_with_bytea(time, bdata) VALUES (1001, NULL);
@@ -338,21 +338,21 @@ ALTER TABLE deleteme_with_bytea SET (
 SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_9_6_chunk
+ _timescaledb_internal._hyper_5_6_chunk
 
 VACUUM FULL ANALYZE deleteme_with_bytea;
 EXPLAIN (buffers off, costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
 --- QUERY PLAN ---
  Result
-   ->  Custom Scan (ColumnarScan) on _hyper_9_6_chunk
-         ->  Seq Scan on _hyper_9_6_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+         ->  Seq Scan on _hyper_5_6_chunk_compressed
                Filter: (bdata = '\x'::bytea)
 
 EXPLAIN (buffers off, costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';
 --- QUERY PLAN ---
  Result
-   ->  Custom Scan (ColumnarScan) on _hyper_9_6_chunk
-         ->  Seq Scan on _hyper_9_6_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+         ->  Seq Scan on _hyper_5_6_chunk_compressed
                Filter: ((bdata)::text = '123'::text)
 
 DROP table deleteme;
@@ -367,9 +367,9 @@ SELECT table_name FROM create_hypertable('svf_pushdown', 'time');
 ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentby='c_date,c_time, c_timetz,c_timestamp,c_name,c_bool');
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_11_7_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_6_7_chunk
 
 VACUUM FULL ANALYZE svf_pushdown;
 -- constraints should be pushed down into scan below decompresschunk in all cases
@@ -377,144 +377,144 @@ EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRE
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_date = CURRENT_DATE)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_timetz = CURRENT_TIME)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME(1);
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_timetz = CURRENT_TIME(1))
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_timestamp = CURRENT_TIMESTAMP)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP(1);
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_timestamp = CURRENT_TIMESTAMP(1))
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_time = LOCALTIME)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME(1);
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_time = LOCALTIME(1))
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_timestamp = LOCALTIMESTAMP)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP(1);
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_timestamp = LOCALTIMESTAMP(1))
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = USER;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_name = USER)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_name = CURRENT_USER)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = SESSION_USER;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_name = SESSION_USER)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER OR c_name = SESSION_USER;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: ((c_name = CURRENT_USER) OR (c_name = SESSION_USER))
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_CATALOG;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_name = CURRENT_CATALOG)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_SCHEMA;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
                Filter: (c_name = CURRENT_SCHEMA)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_bool;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-   ->  Seq Scan on _hyper_11_7_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+   ->  Seq Scan on _hyper_6_7_chunk_compressed
          Filter: c_bool
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_bool = true;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-   ->  Seq Scan on _hyper_11_7_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+   ->  Seq Scan on _hyper_6_7_chunk_compressed
          Filter: c_bool
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_bool = false;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-   ->  Seq Scan on _hyper_11_7_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+   ->  Seq Scan on _hyper_6_7_chunk_compressed
          Filter: (NOT c_bool)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE NOT c_bool;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_11_7_chunk
-   ->  Seq Scan on _hyper_11_7_chunk_compressed
+ Custom Scan (ColumnarScan) on _hyper_6_7_chunk
+   ->  Seq Scan on _hyper_6_7_chunk_compressed
          Filter: (NOT c_bool)
 
 -- current_query() is not a sqlvaluefunction and volatile so should not be pushed down
@@ -522,9 +522,9 @@ EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = curre
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_11_7_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_6_7_chunk
          Filter: (c_name = current_query())
-         ->  Seq Scan on _hyper_11_7_chunk_compressed
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
 
 -- test or constraints in lateral query #6912
 SELECT FROM svf_pushdown m1,
@@ -542,9 +542,9 @@ DROP TABLE svf_pushdown;
 -- expression tree.
 create table booltab(ts int, segmentby bool, flag bool, value int);
 select create_hypertable('booltab', 'ts');
-   create_hypertable   
------------------------
- (13,public,booltab,t)
+  create_hypertable   
+----------------------
+ (7,public,booltab,t)
 
 alter table booltab set (timescaledb.compress, timescaledb.compress_segmentby = 'segmentby',
     timescaledb.compress_orderby = 'ts, flag');
@@ -563,54 +563,54 @@ vacuum analyze booltab;
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from booltab where segmentby = (value = 1);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_13_8_chunk (actual rows=4.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_7_8_chunk (actual rows=4.00 loops=1)
    Filter: (segmentby = (value = 1))
-   ->  Seq Scan on _hyper_13_8_chunk_compressed (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_7_8_chunk_compressed (actual rows=2.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from booltab where segmentby = (ts = 1);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_13_8_chunk (actual rows=4.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_7_8_chunk (actual rows=4.00 loops=1)
    Filter: (segmentby = (ts = 1))
-   ->  Seq Scan on _hyper_13_8_chunk_compressed (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_7_8_chunk_compressed (actual rows=2.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from booltab where segmentby != (ts = 1);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_13_8_chunk (actual rows=0.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_7_8_chunk (actual rows=0.00 loops=1)
    Filter: (segmentby <> (ts = 1))
    Rows Removed by Filter: 4
-   ->  Seq Scan on _hyper_13_8_chunk_compressed (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_7_8_chunk_compressed (actual rows=2.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from booltab where (value = 1) = (ts = 1);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_13_8_chunk (actual rows=4.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_7_8_chunk (actual rows=4.00 loops=1)
    Filter: ((value = 1) = (ts = 1))
-   ->  Seq Scan on _hyper_13_8_chunk_compressed (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_7_8_chunk_compressed (actual rows=2.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from booltab where flag = (ts = 1);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_13_8_chunk (actual rows=4.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_7_8_chunk (actual rows=4.00 loops=1)
    Filter: (flag = (ts = 1))
-   ->  Seq Scan on _hyper_13_8_chunk_compressed (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_7_8_chunk_compressed (actual rows=2.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from booltab where flag = (ts = 99);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_13_8_chunk (actual rows=2.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_7_8_chunk (actual rows=2.00 loops=1)
    Filter: (flag = (ts = 99))
    Rows Removed by Filter: 2
-   ->  Seq Scan on _hyper_13_8_chunk_compressed (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_7_8_chunk_compressed (actual rows=2.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from booltab where flag = (ts = 99);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_13_8_chunk (actual rows=2.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_7_8_chunk (actual rows=2.00 loops=1)
    Filter: (flag = (ts = 99))
    Rows Removed by Filter: 2
-   ->  Seq Scan on _hyper_13_8_chunk_compressed (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_7_8_chunk_compressed (actual rows=2.00 loops=1)
 
 drop table booltab;
 -- Regression: GROUP BY time_bucket() with a filter on the bucket expression

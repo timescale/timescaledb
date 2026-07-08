@@ -1,9 +1,9 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
-SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | compression_state | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+--------
 
 SELECT * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
@@ -64,10 +64,10 @@ NOTICE:  table "should_drop" is already a hypertable, skipping
 --------------------------
  (1,public,should_drop,f)
 
-SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+-------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
-  1 | public      | should_drop | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable;
+ id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | compression_state | status 
+----+-------------+-------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------
+  1 | public      | should_drop | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |      0
 
 SELECT * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
@@ -83,10 +83,10 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  (4,public,should_drop,t)
 
 INSERT INTO should_drop VALUES (now(), 1.0);
-SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+-------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
-  4 | public      | should_drop | _timescaledb_internal  | _hyper_4                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable;
+ id | schema_name | table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | compression_state | status 
+----+-------------+-------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------
+  4 | public      | should_drop | _timescaledb_internal  | _hyper_4                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |      0
 
 SELECT * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 

@@ -35,6 +35,9 @@ CROSSMODULE_WRAPPER(policy_reorder_add);
 CROSSMODULE_WRAPPER(policy_reorder_proc);
 CROSSMODULE_WRAPPER(policy_reorder_check);
 CROSSMODULE_WRAPPER(policy_reorder_remove);
+CROSSMODULE_WRAPPER(policy_compaction_add);
+CROSSMODULE_WRAPPER(policy_compaction_check);
+CROSSMODULE_WRAPPER(policy_compaction_remove);
 CROSSMODULE_WRAPPER(policy_retention_add);
 CROSSMODULE_WRAPPER(policy_retention_proc);
 CROSSMODULE_WRAPPER(policy_retention_check);
@@ -318,6 +321,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policy_reorder_proc = error_no_default_fn_pg_community,
 	.policy_reorder_check = error_no_default_fn_pg_community,
 	.policy_reorder_remove = error_no_default_fn_pg_community,
+	.policy_compaction_add = error_no_default_fn_pg_community,
+	.policy_compaction_check = error_no_default_fn_pg_community,
+	.policy_compaction_remove = error_no_default_fn_pg_community,
 	.policy_retention_add = error_no_default_fn_pg_community,
 	.policy_retention_proc = error_no_default_fn_pg_community,
 	.policy_retention_check = error_no_default_fn_pg_community,
