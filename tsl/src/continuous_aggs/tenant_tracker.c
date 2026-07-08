@@ -944,3 +944,76 @@ ts_tenant_tracker_get_info(TenantTracking *tracking, TenantTrackerInfo *info)
 	info->late_threshold_start = (int64) pg_atomic_read_u64(&generation->late_threshold_start);
 	info->late_threshold_end = (int64) pg_atomic_read_u64(&generation->late_threshold_end);
 }
+
+/*
+ * Walk the tracker map once.  With result == NULL this only counts the entries;
+ * otherwise it fills up to `capacity` of them and stops.  Returns how many
+ * entries it saw / stored.
+ *
+ * dshash_seq_next holds the current bucket's partition lock, so the body does
+ * nothing but plain memory reads: no palloc, no catalog access, no ereport.  The
+ * tracker's dsa_pointer is only compared against InvalidDsaPointer, never
+ * dereferenced, so this touches no DSA memory either.
+ */
+static int
+tenant_tracker_map_scan(TenantTrackerMapEntry *result, int capacity)
+{
+	dshash_seq_status status;
+	TenantMapEntry *entry;
+	int nentries = 0;
+
+	dshash_seq_init(&status, tracker_map, false /* exclusive */);
+
+	while ((entry = (TenantMapEntry *) dshash_seq_next(&status)) != NULL)
+	{
+		if (result != NULL)
+		{
+			if (nentries == capacity)
+			{
+				break; /* array full: report what we collected */
+			}
+
+			result[nentries].database_id = entry->key.database_id;
+			result[nentries].hypertable_id = entry->key.hypertable_id;
+			result[nentries].is_tracked = (entry->tracker != InvalidDsaPointer);
+		}
+
+		nentries++;
+	}
+
+	dshash_seq_term(&status);
+
+	return nentries;
+}
+
+/* Slack over the counted size, to absorb entries added between the two scans. */
+#define TENANT_TRACKER_MAP_LIST_SLACK 16
+
+/*
+ * List every hypertable in the tracker map (all databases).  Diagnostic helper
+ * for the SQL-facing function in tenant_tracker_function.c; keeps both the
+ * tracker layout and the map internals private to this file.
+ *
+ * Count first, then allocate, then fill: allocation cannot happen inside the
+ * scan (see tenant_tracker_map_scan).  Map entries are only ever added and never
+ * removed, so the count can only grow between the two scans; the slack covers
+ * the usual case, and a listing is a best-effort snapshot anyway -- if more
+ * entries appear than fit, the extras are simply left out.
+ */
+int
+ts_tenant_tracker_map_get_entries(TenantTrackerMapEntry **entries)
+{
+	int capacity;
+
+	*entries = NULL;
+
+	if (!tenant_tracker_attach())
+	{
+		return 0; /* loader not present -> nothing is tracked */
+	}
+
+	capacity = tenant_tracker_map_scan(NULL, 0) + TENANT_TRACKER_MAP_LIST_SLACK;
+	*entries = palloc(capacity * sizeof(TenantTrackerMapEntry));
+
+	return tenant_tracker_map_scan(*entries, capacity);
+}

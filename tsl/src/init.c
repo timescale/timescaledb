@@ -35,6 +35,7 @@
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/rewrite_with_caggs.h"
+#include "continuous_aggs/tenant_tracker_function.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
@@ -197,6 +198,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.detach_chunk = chunk_detach,
 	.attach_chunk = chunk_attach,
 	.estimate_compressed_batch_size = tsl_estimate_compressed_batch_size,
+
+	.hypertable_get_tenant_tracking_info = tsl_hypertable_get_tenant_tracking_info,
+	.tenant_tracking_map = tsl_tenant_tracking_map,
 };
 
 static void

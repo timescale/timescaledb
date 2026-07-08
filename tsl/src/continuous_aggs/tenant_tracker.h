@@ -31,6 +31,22 @@ typedef struct TenantTrackerInfo
 	int64 late_threshold_end;
 } TenantTrackerInfo;
 
+/*
+ * One row of the tracker map: which hypertables (in which databases) the map
+ * knows about.  Fixed size and self-contained -- no pointers, so the whole
+ * listing is one flat array the shmem scan can fill without allocating.
+ *
+ * is_tracked is false for a map entry whose tracker allocation ran out of shared
+ * memory (the negative-cache marker): the hypertable is in the map but nothing
+ * is being tracked for it until restart.
+ */
+typedef struct TenantTrackerMapEntry
+{
+	Oid database_id;
+	int32 hypertable_id;
+	bool is_tracked;
+} TenantTrackerMapEntry;
+
 extern TenantTracking *ts_tenant_tracker_get_or_attach(int32 hypertable_id,
 													   int64 late_threshold_start,
 													   int64 late_threshold_end, int32 init_seqnum);
@@ -61,6 +77,13 @@ extern void ts_tenant_tracker_mark_invalid(TenantTracking *tracking);
 extern TenantTracking *ts_tenant_tracker_lookup(int32 hypertable_id);
 
 extern void ts_tenant_tracker_get_info(TenantTracking *tracking, TenantTrackerInfo *info);
+
+/*
+ * List every hypertable present in the tracker map, across all databases.
+ * Returns the number of entries and sets *entries to a palloc'd array of that
+ * length (NULL / 0 when the loader is absent).
+ */
+extern int ts_tenant_tracker_map_get_entries(TenantTrackerMapEntry **entries);
 
 extern void ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id,
 									int64 late_threshold_start, int64 late_threshold_end);
