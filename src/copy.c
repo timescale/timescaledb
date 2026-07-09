@@ -828,7 +828,7 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 		ereport(DEBUG1,
 				(errmsg("Using normal unbuffered copy operation (TS_CIM_SINGLE) "
 						"because triggers are defined on the destination table.")));
-		if (ts_guc_enable_direct_compress_copy)
+		if (ts_guc_enable_direct_compress_copy || TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
 		{
 			ereport(WARNING,
 					(errmsg("disabling direct compress copy due to presence of triggers on the "
@@ -837,7 +837,8 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 		return TS_CIM_SINGLE;
 	}
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && ts_guc_enable_direct_compress_copy)
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) &&
+		(ts_guc_enable_direct_compress_copy || TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht)))
 	{
 		if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
 		{
