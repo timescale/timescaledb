@@ -70,6 +70,7 @@ set(TEST_FILES
     decompress_index.sql
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
+    direct_compress_policy.sql
     move.sql
     plan_skip_scan_notnull.sql
     plan_skip_scan_pg_partition.sql

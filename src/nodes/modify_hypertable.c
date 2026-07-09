@@ -32,14 +32,14 @@ should_use_direct_compress(ModifyHypertableState *state)
 		return false;
 	}
 
-	if (!ts_guc_enable_direct_compress_insert)
-	{
-		return false;
-	}
-
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, state->cscan_state.custom_ps);
 	ResultRelInfo *resultRelInfo = mtstate->resultRelInfo;
 	Hypertable *ht = state->ctr->hypertable;
+
+	if (!ts_guc_enable_direct_compress_insert && !TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
+	{
+		return false;
+	}
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
