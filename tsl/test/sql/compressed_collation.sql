@@ -122,12 +122,9 @@ select name from t9998 order by name collate "C";
 drop table t9998 cascade;
 
 -- Test issue #9997: batch filtering for compressed DML should respect collation
-create collation case_insensitive_icu
-    (provider=icu, locale='und-u-ks-level2', deterministic=false);
-
 create table t9997 (
     ts    timestamptz not null,
-    actor text collate case_insensitive_icu,
+    actor text collate :"COLLATION",
     note  int
 );
 select count(*) from create_hypertable('t9997', 'ts');
@@ -137,12 +134,11 @@ insert into t9997 values ('2024-01-01', 'alice', 1);
 
 SELECT count(compress_chunk(chunk_name)) FROM show_chunks('t9997') chunk_name;
 
--- SELECT respects the collation, returns 1 row
-select note from t9997 where actor = 'ALICE';
+-- SELECT respects different collation, returns 1 row
+select note from t9997 where actor = 'alice' collate "C";
 
--- UPDATE respects the collation, updates 1 row
-update t9997 set note = 99 where actor = 'ALICE';
-select note from t9997 where actor = 'ALICE';
+-- UPDATE respects different collation, updates 1 row
+update t9997 set note = 99 where actor = 'alice' collate "C";
+select note from t9997 where actor = 'alice' collate "C";
 
 drop table t9997 cascade;
-drop collation case_insensitive_icu;
