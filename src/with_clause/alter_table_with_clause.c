@@ -57,6 +57,18 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 			.arg_names = {"compress_index", "compress_sparse_index", "index", "sparse_index", NULL},
 			 .type_id = TEXTOID,
 		},
+		[AlterTableFlagGranularRefreshColumn] = {
+			.arg_names = {"granular_refresh_column", NULL},
+			 .type_id = TEXTOID,
+		},
+		[AlterTableFlagGranularRefreshStartOffset] = {
+			.arg_names = {"granular_refresh_start_offset", NULL},
+			 .type_id = TEXTOID,
+		},
+		[AlterTableFlagGranularRefreshEndOffset] = {
+			.arg_names = {"granular_refresh_end_offset", NULL},
+			 .type_id = TEXTOID,
+		},
 };
 
 static const WithClauseDefinition sparse_index_with_clause_def[] = {

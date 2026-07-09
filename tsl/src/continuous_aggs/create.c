@@ -827,6 +827,14 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 				 errhint("Use ALTER MATERIALIZED VIEW to enable compression.")));
 	}
 
+	if (!with_clause_options[CreateMaterializedViewFlagEnableGranularRefresh].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot enable granular refresh while creating a continuous aggregate"),
+				 errhint("Use ALTER MATERIALIZED VIEW to enable granular refresh.")));
+	}
+
 	schema_name = get_namespace_name(nspid);
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery,
 											  schema_name,
