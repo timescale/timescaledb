@@ -165,6 +165,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.bloom1_hash = bloom1_hash,
 	.bloom1_get_hash_function = bloom1_get_hash_function,
 	.process_compress_table = tsl_process_compress_table,
+	.process_granular_refresh_options = tsl_process_granular_refresh_options,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
 	.compress_chunk = tsl_compress_chunk,
