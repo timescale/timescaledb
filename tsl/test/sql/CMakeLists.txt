@@ -104,6 +104,7 @@ set(TEST_TEMPLATES
     compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
+    memoize.sql.in
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in

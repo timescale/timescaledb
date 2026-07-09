@@ -13,7 +13,6 @@ set(TEST_FILES_SHARED
     gapfill_bug.sql
     generated_columns.sql
     lateral_subquery.sql
-    memoize.sql
     osm_api.sql
     parameterized_chunkappend.sql
     security_barrier.sql
