@@ -6,7 +6,7 @@
 \ir include/insert_two_partitions.sql
 \o
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM test.show_subtables('"two_Partitions"');
 SELECT * FROM "two_Partitions";
@@ -14,7 +14,7 @@ SELECT * FROM "two_Partitions";
 SET client_min_messages = WARNING;
 TRUNCATE "two_Partitions";
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 -- should be empty

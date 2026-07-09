@@ -160,7 +160,7 @@ job_config_check(BgwJob *job, Jsonb *config)
 
 	/* Both should either be empty or contain a schema and name */
 	Assert((strlen(NameStr(job->fd.check_schema)) == 0) ==
-		   (strlen(NameStr(job->fd.check_schema)) == 0));
+		   (strlen(NameStr(job->fd.check_name)) == 0));
 
 	/* If there is no function, just return */
 	if (strlen(NameStr(job->fd.check_name)) == 0)
@@ -1134,7 +1134,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
+#if PG19_LT
 	log_min_messages = ts_guc_bgw_log_level;
+#endif
 
 	elog(DEBUG2, "job %d started execution", params.job_id);
 

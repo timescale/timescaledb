@@ -166,7 +166,7 @@ CREATE TABLE measurements(time TIMESTAMPTZ NOT NULL, device INT, val FLOAT);
 SELECT create_hypertable('measurements', 'time', chunk_time_interval => INTERVAL '1 day');
      create_hypertable     
 ---------------------------
- (8,public,measurements,t)
+ (7,public,measurements,t)
 
 INSERT INTO measurements
 SELECT t, 1, 1.0
@@ -198,19 +198,19 @@ ORDER BY range_start;
 SELECT * FROM measurements_chunks;
     chunk_name     | range_start | is_compressed 
 -------------------+-------------+---------------
- _hyper_9_35_chunk | 01-01-2025  | f
- _hyper_9_36_chunk | 01-02-2025  | f
- _hyper_9_37_chunk | 01-03-2025  | f
- _hyper_9_34_chunk | 01-04-2025  | f
- _hyper_9_32_chunk | 01-05-2025  | f
- _hyper_9_38_chunk | 01-06-2025  | f
- _hyper_9_33_chunk | 01-07-2025  | f
- _hyper_9_39_chunk | 01-08-2025  | f
- _hyper_9_41_chunk | 01-09-2025  | f
- _hyper_9_40_chunk | 01-10-2025  | f
- _hyper_9_31_chunk | 01-11-2025  | f
- _hyper_9_29_chunk | 01-12-2025  | f
- _hyper_9_30_chunk | 01-13-2025  | f
+ _hyper_8_33_chunk | 01-01-2025  | f
+ _hyper_8_34_chunk | 01-02-2025  | f
+ _hyper_8_35_chunk | 01-03-2025  | f
+ _hyper_8_32_chunk | 01-04-2025  | f
+ _hyper_8_30_chunk | 01-05-2025  | f
+ _hyper_8_36_chunk | 01-06-2025  | f
+ _hyper_8_31_chunk | 01-07-2025  | f
+ _hyper_8_37_chunk | 01-08-2025  | f
+ _hyper_8_39_chunk | 01-09-2025  | f
+ _hyper_8_38_chunk | 01-10-2025  | f
+ _hyper_8_29_chunk | 01-11-2025  | f
+ _hyper_8_27_chunk | 01-12-2025  | f
+ _hyper_8_28_chunk | 01-13-2025  | f
 
 -- Mock now() at 2025-01-15. With start_offset = 8 days and end_offset = 4 days
 -- the refresh window is [2025-01-07, 2025-01-11). Chunks 01-07..01-10 should
@@ -227,25 +227,25 @@ SELECT config FROM alter_job(:job_id,
         '{compress_after_refresh}', 'true'));
                                                      config                                                     
 ----------------------------------------------------------------------------------------------------------------
- {"end_offset": "@ 4 days", "start_offset": "@ 8 days", "mat_hypertable_id": 9, "compress_after_refresh": true}
+ {"end_offset": "@ 4 days", "start_offset": "@ 8 days", "mat_hypertable_id": 8, "compress_after_refresh": true}
 
 CALL run_job(:job_id);
 SELECT * FROM measurements_chunks;
     chunk_name     | range_start | is_compressed 
 -------------------+-------------+---------------
- _hyper_9_35_chunk | 01-01-2025  | f
- _hyper_9_36_chunk | 01-02-2025  | f
- _hyper_9_37_chunk | 01-03-2025  | f
- _hyper_9_34_chunk | 01-04-2025  | f
- _hyper_9_32_chunk | 01-05-2025  | f
- _hyper_9_38_chunk | 01-06-2025  | f
- _hyper_9_33_chunk | 01-07-2025  | t
- _hyper_9_39_chunk | 01-08-2025  | t
- _hyper_9_41_chunk | 01-09-2025  | t
- _hyper_9_40_chunk | 01-10-2025  | t
- _hyper_9_31_chunk | 01-11-2025  | f
- _hyper_9_29_chunk | 01-12-2025  | f
- _hyper_9_30_chunk | 01-13-2025  | f
+ _hyper_8_33_chunk | 01-01-2025  | f
+ _hyper_8_34_chunk | 01-02-2025  | f
+ _hyper_8_35_chunk | 01-03-2025  | f
+ _hyper_8_32_chunk | 01-04-2025  | f
+ _hyper_8_30_chunk | 01-05-2025  | f
+ _hyper_8_36_chunk | 01-06-2025  | f
+ _hyper_8_31_chunk | 01-07-2025  | t
+ _hyper_8_37_chunk | 01-08-2025  | t
+ _hyper_8_39_chunk | 01-09-2025  | t
+ _hyper_8_38_chunk | 01-10-2025  | t
+ _hyper_8_29_chunk | 01-11-2025  | f
+ _hyper_8_27_chunk | 01-12-2025  | f
+ _hyper_8_28_chunk | 01-13-2025  | f
 
 SELECT delete_job(:job_id);
  delete_job 

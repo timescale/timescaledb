@@ -1711,16 +1711,23 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			sequential_paths = lappend(sequential_paths, unordered_uncompressed_path);
 		}
 
-		Path *plain_append = (Path *) create_append_path(root,
-														 chunk_rel,
-														 sequential_paths,
-														 parallel_paths,
-														 /* pathkeys = */ NIL,
-														 req_outer,
-														 workers,
-														 workers > 0,
-														 chunk_path_no_sort->rows +
-															 unordered_uncompressed_path->rows);
+		Path *plain_append =
+			(Path *) create_append_path(/* root = */ root,
+										/* rel = */ chunk_rel,
+#if PG19_GE
+										/* input = */
+										(AppendPathInput){ .subpaths = sequential_paths,
+														   .partial_subpaths = parallel_paths },
+#else
+										/* subpaths = */ sequential_paths,
+										/* partial_subpaths = */ parallel_paths,
+#endif
+										/* pathkeys = */ NIL,
+										/* required_outer = */ req_outer,
+										/* parallel_workers = */ workers,
+										/* parallel_aware = */ workers > 0,
+										/* rows = */ chunk_path_no_sort->rows +
+											unordered_uncompressed_path->rows);
 
 		combined_paths = lappend(combined_paths, plain_append);
 	}
@@ -1799,6 +1806,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 											  chunk_rel,
 											  list_make2(decompression_path,
 														 uncompressed_path_for_merge),
+#if PG19_GE
+											  /* child_append_relid_sets = */ NIL,
+#endif
 											  sort_info->decompressed_sort_pathkeys,
 											  req_outer);
 		combined_paths = lappend(combined_paths, merge_append);
@@ -2910,6 +2920,12 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		Var *var = castNode(Var, node);
 
 		if (var->varattno <= 0)
+		{
+			return false;
+		}
+		/* Pathkey collation different from underlying column collation may lead to different sort
+		 * order */
+		if (var->varcollid != pk->pk_eclass->ec_collation)
 		{
 			return false;
 		}

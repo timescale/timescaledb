@@ -193,9 +193,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 			/* recheck whether the chunk got compressed after acquiring the lock */
 			if (!ts_chunk_is_compressed(chunk))
 			{
-				Hypertable *compressed_ht =
-					ts_hypertable_get_by_id(ctr->hypertable->fd.compressed_hypertable_id);
-				ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
+				ts_cm_functions->compression_chunk_create(chunk);
 				created_compressed_chunk = true;
 
 				/* mark chunk as partial unless completely new chunk */
