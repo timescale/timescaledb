@@ -9,6 +9,7 @@
 #include <access/htup_details.h>
 #include <catalog/pg_type.h>
 #include <commands/defrem.h>
+#include <nodes/miscnodes.h>
 #include <nodes/parsenodes.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
@@ -83,19 +84,9 @@ ts_with_clause_definition_names(const WithClauseDefinition *args, Size nargs)
 	return buf.data;
 }
 
-/*
- * Deserialize and apply the values in a WITH clause based on the on_arg table.
- *
- * This function will go through every element in def_elems and search for a
- * corresponding argument in args, if one is found it will attempt to deserialize
- * the argument, using that table elements deserialize function, then apply it
- * to state.
- *
- * This is used to turn the list into a form more useful for our internal
- * functions
- */
-WithClauseResult *
-ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, Size nargs)
+static WithClauseResult *
+with_clauses_parse_internal(const List *def_elems, const WithClauseDefinition *args, Size nargs,
+							bool parse_values)
 {
 	ListCell *cell;
 	WithClauseResult *results = palloc0(sizeof(*results) * nargs);
@@ -130,7 +121,11 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 										def->defname)));
 					}
 
-					results[i].parsed = parse_arg(args[i], def);
+					/* RESET clauses carry only option names, so skip value parsing */
+					if (parse_values)
+					{
+						results[i].parsed = parse_arg(args[i], def);
+					}
 					results[i].is_default = false;
 					break;
 				}
@@ -151,6 +146,23 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 }
 
 /*
+ * Deserialize and apply the values in a WITH clause based on the on_arg table.
+ *
+ * This function will go through every element in def_elems and search for a
+ * corresponding argument in args, if one is found it will attempt to deserialize
+ * the argument, using that table elements deserialize function, then apply it
+ * to state.
+ *
+ * This is used to turn the list into a form more useful for our internal
+ * functions
+ */
+WithClauseResult *
+ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, Size nargs)
+{
+	return with_clauses_parse_internal(def_elems, args, nargs, true);
+}
+
+/*
  * This function handles parsing of WITH clauses for ALTER TABLE RESET.
  * Unlike ts_with_clauses_parse, it does not parse any option values,
  * as RESET clauses only include option names without associated values.
@@ -158,56 +170,7 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 WithClauseResult *
 ts_with_clauses_parse_reset(const List *def_elems, const WithClauseDefinition *args, Size nargs)
 {
-	ListCell *cell;
-	WithClauseResult *results = palloc0(sizeof(*results) * nargs);
-	Size i;
-
-	for (i = 0; i < nargs; i++)
-	{
-		results[i].definition = &args[i];
-		results[i].parsed = args[i].default_val;
-		results[i].is_default = true;
-	}
-
-	foreach (cell, def_elems)
-	{
-		DefElem *def = (DefElem *) lfirst(cell);
-		bool argument_recognized = false;
-
-		for (i = 0; i < nargs; i++)
-		{
-			for (int j = 0; args[i].arg_names[j] != NULL; ++j)
-			{
-				if (pg_strcasecmp(def->defname, args[i].arg_names[j]) == 0)
-				{
-					argument_recognized = true;
-
-					if (!results[i].is_default)
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
-								 errmsg("duplicate parameter \"%s.%s\"",
-										def->defnamespace,
-										def->defname)));
-					}
-
-					results[i].is_default = false;
-					break;
-				}
-			}
-		}
-
-		if (!argument_recognized)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unrecognized parameter \"%s.%s\"", def->defnamespace, def->defname),
-					 errhint("Valid timescaledb parameters are: %s",
-							 ts_with_clause_definition_names(args, nargs))));
-		}
-	}
-
-	return results;
+	return with_clauses_parse_internal(def_elems, args, nargs, false);
 }
 
 extern TSDLLEXPORT char *
@@ -227,6 +190,8 @@ parse_arg(WithClauseDefinition arg, DefElem *def)
 	Datum val;
 	Oid in_fn;
 	Oid typIOParam;
+	FmgrInfo in_fn_info;
+	ErrorSaveContext escontext = { .type = T_ErrorSaveContext };
 
 	if (!OidIsValid(arg.type_id))
 	{
@@ -256,38 +221,14 @@ parse_arg(WithClauseDefinition arg, DefElem *def)
 
 	Assert(OidIsValid(in_fn));
 
+	fmgr_info(in_fn, &in_fn_info);
+
 	/*
-	 * We could use InputFunctionCallSafe() here but this is just supported
-	 * for PG16 and later, so we opt for checking if the failure is what we
-	 * expected and re-throwing the error otherwise.
+	 * Parse the value with our own error context so we can raise a custom error message for invalid
+	 * input instead of the generic one from the type's input function.
 	 */
-	PG_TRY();
+	if (!InputFunctionCallSafe(&in_fn_info, value, typIOParam, -1, (Node *) &escontext, &val))
 	{
-		val = OidInputFunctionCall(in_fn, value, typIOParam, -1);
-	}
-	PG_CATCH();
-	{
-		const int sqlerrcode = geterrcode();
-		/*
-		 * We can deal with the Data Exception category and in the Syntax
-		 * Error or Access Rule Violation category, but if the error is an
-		 * insufficient resources category, for example, an out of memory
-		 * error, we should just re-throw it.
-		 *
-		 * Errors in other categories are unlikely, but we cannot do anything
-		 * with them anyway, so just re-throw them as well.
-		 */
-		if (ERRCODE_TO_CATEGORY(sqlerrcode) != ERRCODE_DATA_EXCEPTION &&
-			ERRCODE_TO_CATEGORY(sqlerrcode) != ERRCODE_SYNTAX_ERROR_OR_ACCESS_RULE_VIOLATION)
-		{
-			PG_RE_THROW();
-		}
-		FlushErrorState();
-
-		/* We are currently using the ErrorContext, but since we are going to
-		 * raise an error later, there is no reason to switch memory context
-		 * nor restore the resource owner here. */
-
 		Form_pg_type typetup;
 		HeapTuple tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(arg.type_id));
 		if (!HeapTupleIsValid(tup))
@@ -309,6 +250,6 @@ parse_arg(WithClauseDefinition arg, DefElem *def)
 						 def->defname,
 						 NameStr(typetup->typname))));
 	}
-	PG_END_TRY();
+
 	return val;
 }

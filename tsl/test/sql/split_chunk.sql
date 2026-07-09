@@ -388,7 +388,7 @@ select show_chunks('splitme');
 
 -- Still no data in non-compressed relations after split.
 select * from only _timescaledb_internal._hyper_1_2_chunk;
-select * from only _timescaledb_internal._hyper_1_13_chunk;
+select * from only _timescaledb_internal._hyper_1_12_chunk;
 
 -- Show how compressed segments are split across the resulting
 -- compressed chunks
@@ -398,7 +398,7 @@ select _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1
 from :compress_relid;
 
 select compress_relid from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_13_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_12_chunk'::regclass \gset
 select _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1
 from :compress_relid;
 
@@ -406,12 +406,12 @@ from :compress_relid;
 -- on compressed chunks
 create table chunk_data_after_split as
 select * from _timescaledb_internal._hyper_1_2_chunk;
-insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_13_chunk;
+insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_12_chunk;
 
 -- All data should be compressed so these queries should not return
 -- anything
 select * from only _timescaledb_internal._hyper_1_2_chunk;
-select * from only _timescaledb_internal._hyper_1_13_chunk;
+select * from only _timescaledb_internal._hyper_1_12_chunk;
 
 create table chunk_summary_after_split as
 select
@@ -459,7 +459,7 @@ select * from chunk_info;
 
 select table_name, status
 from _timescaledb_catalog.chunk
-where table_name in ('_hyper_1_3_chunk', '_hyper_1_16_chunk');
+where table_name in ('_hyper_1_3_chunk', '_hyper_1_13_chunk');
 
 -- Check that the non-compressed data rows ended up in separate partitions
 select *
@@ -467,13 +467,13 @@ from ONLY _timescaledb_internal._hyper_1_3_chunk
 order by time;
 
 select *
-from ONLY _timescaledb_internal._hyper_1_16_chunk
+from ONLY _timescaledb_internal._hyper_1_13_chunk
 order by time;
 
 -- Show aggregate summary. Should be equal to summary before split
 truncate chunk_data_after_split;
 insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_3_chunk;
-insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_16_chunk;
+insert into chunk_data_after_split select * from _timescaledb_internal._hyper_1_13_chunk;
 
 truncate chunk_summary_after_split;
 insert into chunk_summary_after_split
@@ -501,7 +501,7 @@ select
     sum(device) as device_sum,
     sum(location) as location_sum,
     round(sum(temp)::numeric, 5) as temp_sum
-    from _timescaledb_internal._hyper_1_16_chunk;
+    from _timescaledb_internal._hyper_1_13_chunk;
 
 
 select chunk_name, range_start, range_end, is_compressed
@@ -510,7 +510,7 @@ where hypertable_name = 'splitme'
 order by chunk_name, range_start, range_end;
 
 select compress_relid from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_16_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_13_chunk'::regclass \gset
 select count(*) from :compress_relid;
 
 --------------------------------------------------------------------
@@ -544,11 +544,11 @@ where relid = '_timescaledb_internal._hyper_1_8_chunk'::regclass \gset
 select count(*) from :compress_relid;
 
 select compress_relid from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_19_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_14_chunk'::regclass \gset
 select count(*) from :compress_relid;
 
 select count(*) from _timescaledb_internal._hyper_1_8_chunk;
-select count(*) from _timescaledb_internal._hyper_1_19_chunk;
+select count(*) from _timescaledb_internal._hyper_1_14_chunk;
 
 --------------------------------------------------------------------
 --------------------------------------------------------------------
@@ -560,7 +560,7 @@ select count(*) from _timescaledb_internal._hyper_1_19_chunk;
 --------------------------------------------------------------------
 --------------------------------------------------------------------
 select compress_relid from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_13_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_12_chunk'::regclass \gset
 
 select sum(_ts_meta_count) as original_count_sum from :compress_relid \gset
 select _ts_meta_count as meta_count, _ts_meta_min_1 as meta_min, _ts_meta_max_1 as meta_max, _ts_meta_min_1 as split_point_min, _ts_meta_max_1 as split_point_max
@@ -572,11 +572,11 @@ from :compress_relid order by meta_min limit 1 offset 2 \gset
 select :'meta_count' as meta_count, :'split_point_min' as split_point_min, :'split_point_max' as split_point_max;
 
 -- Split with a split point at min value
-call split_chunk_validate('_timescaledb_internal._hyper_1_13_chunk', split_at => :'split_point_min');
+call split_chunk_validate('_timescaledb_internal._hyper_1_12_chunk', split_at => :'split_point_min');
 
 
 select compress_relid as compress_relid2 from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_21_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_15_chunk'::regclass \gset
 
 -- The segment should remain intact, and be completely in the "new"
 -- chunk (to the "right side" of the split)
@@ -600,10 +600,10 @@ select :'original_count_sum' = ((select sum(_ts_meta_count) from :compress_relid
 -- new segment to the "right side" of the split (i.e., in the new
 -- chunk)
 select sum(_ts_meta_count) as original_count_sum from :compress_relid2 \gset
-call split_chunk_validate('_timescaledb_internal._hyper_1_21_chunk', split_at => :'split_point_max');
+call split_chunk_validate('_timescaledb_internal._hyper_1_15_chunk', split_at => :'split_point_max');
 
 select compress_relid as compress_relid3 from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_23_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_16_chunk'::regclass \gset
 
 select _ts_meta_count, _ts_meta_min_1 as meta_min, _ts_meta_max_1 as meta_max
 from :compress_relid2
@@ -619,8 +619,8 @@ order by meta_min;
 select :'original_count_sum' = ((select sum(_ts_meta_count) from :compress_relid2) + (select sum(_ts_meta_count) from :compress_relid3));
 
 select * from chunk_info;
-select count(*), min(time), max(time) from _timescaledb_internal._hyper_1_23_chunk;
-select max(time) as max_time from _timescaledb_internal._hyper_1_23_chunk \gset
+select count(*), min(time), max(time) from _timescaledb_internal._hyper_1_16_chunk;
+select max(time) as max_time from _timescaledb_internal._hyper_1_16_chunk \gset
 
 
 --------------------------------------------------------
@@ -635,16 +635,16 @@ insert into splitme (time, device, temp)
 select t, ceil(random()*10), random()*40
 from generate_series('2024-01-10 23:00'::timestamptz, '2024-01-12 22:00:00 PST', '10s') t;
 
-call convert_to_columnstore('_timescaledb_internal._hyper_1_25_chunk');
+call convert_to_columnstore('_timescaledb_internal._hyper_1_17_chunk');
 
-select * from chunk_info where chunk = '_hyper_1_25_chunk';
+select * from chunk_info where chunk = '_hyper_1_17_chunk';
 
 -- Check that all data is compressed
 select compress_relid as compress_relid
 from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_25_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_17_chunk'::regclass \gset
 
-select count(*) from only _timescaledb_internal._hyper_1_25_chunk;
+select count(*) from only _timescaledb_internal._hyper_1_17_chunk;
 select count(*) from :compress_relid;
 
 -- Insert non-compressed data
@@ -652,23 +652,23 @@ insert into splitme (time, device, temp)
 select t, ceil(random()*10), random()*40
 from generate_series('2024-01-12 23:00'::timestamptz, '2024-01-16 22:00:00 PST', '10s') t;
 
-select count(*) from only _timescaledb_internal._hyper_1_25_chunk;
+select count(*) from only _timescaledb_internal._hyper_1_17_chunk;
 select count(*) from :compress_relid;
 
 -- Split at a point between the compressed and non-compressed data
-call split_chunk_validate('_timescaledb_internal._hyper_1_25_chunk', split_at => '2024-01-12 22:30'::timestamptz);
+call split_chunk_validate('_timescaledb_internal._hyper_1_17_chunk', split_at => '2024-01-12 22:30'::timestamptz);
 
-select * from chunk_info where chunk in ('_hyper_1_25_chunk', '_hyper_1_27_chunk');
+select * from chunk_info where chunk in ('_hyper_1_17_chunk', '_hyper_1_18_chunk');
 
 -- Check that the distribution of data is such that one chunk has only
 -- compressed data and the other only non-compressed data.
 select compress_relid as compress_relid2
 from _timescaledb_catalog.compression_settings
-where relid = '_timescaledb_internal._hyper_1_27_chunk'::regclass \gset
+where relid = '_timescaledb_internal._hyper_1_18_chunk'::regclass \gset
 
-select count(*) from only _timescaledb_internal._hyper_1_25_chunk;
+select count(*) from only _timescaledb_internal._hyper_1_17_chunk;
 select count(*) from :compress_relid;
-select count(*) from only _timescaledb_internal._hyper_1_27_chunk;
+select count(*) from only _timescaledb_internal._hyper_1_18_chunk;
 select count(*) from :compress_relid2;
 
 

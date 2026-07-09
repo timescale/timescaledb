@@ -162,16 +162,7 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 	values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)] = Int32GetDatum(fd->hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)] = NameGetDatum(&fd->schema_name);
 	values[AttrNumberGetAttrOffset(Anum_chunk_table_name)] = NameGetDatum(&fd->table_name);
-	/*when we insert a chunk the compressed chunk id is always NULL */
-	if (fd->compressed_chunk_id == INVALID_CHUNK_ID)
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
-	}
-	else
-	{
-		values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] =
-			Int32GetDatum(fd->compressed_chunk_id);
-	}
+	nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
 	values[AttrNumberGetAttrOffset(Anum_chunk_status)] = Int32GetDatum(fd->status);
 	values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)] = BoolGetDatum(fd->osm_chunk);
 	values[AttrNumberGetAttrOffset(Anum_chunk_creation_time)] = Int64GetDatum(fd->creation_time);
@@ -205,16 +196,7 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 	namestrcpy(&fd->table_name,
 			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_chunk_table_name)]));
 
-	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)])
-	{
-		fd->compressed_chunk_id = INVALID_CHUNK_ID;
-	}
-	else
-	{
-		fd->compressed_chunk_id =
-			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)]);
-	}
-
+	fd->compressed_chunk_id = INVALID_CHUNK_ID;
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_status)]);
 	fd->osm_chunk = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
 	fd->creation_time = DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_chunk_creation_time)]);
@@ -875,7 +857,7 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 
 		if (len >= NAMEDATALEN)
 		{
-			elog(ERROR, "chunk table name too long");
+			ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk table name too long")));
 		}
 	}
 	else
@@ -1069,7 +1051,11 @@ chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 	pri.columns = columns;
 	pri.whereClause = whereClause;
 
+#if PG19_GE
+	publication_add_relation(puboid, &pri, true, NULL);
+#else
 	publication_add_relation(puboid, &pri, true);
+#endif
 
 	table_close(chunk_rel, AccessShareLock);
 }
@@ -1080,7 +1066,7 @@ chunk_add_to_publications(const Chunk *chunk)
 	List *puboids;
 	ListCell *lc;
 
-	puboids = GetRelationPublications(chunk->hypertable_relid);
+	puboids = GetRelationIncludedPublications(chunk->hypertable_relid);
 	foreach (lc, puboids)
 	{
 		Oid puboid = lfirst_oid(lc);
@@ -2282,13 +2268,6 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 				 errhint("The start of the time range must be before the end.")));
 	}
 
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
-				 errmsg("invalid operation on compressed hypertable")));
-	}
-
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
@@ -2978,8 +2957,11 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 			ts_compression_settings_delete(relid);
 		}
 
-		/* The chunk may have been deleted by a CASCADE */
-		if (OidIsValid(compressed_relid))
+		/* The compressed relation's oid is recorded in the compression
+		 * settings, but the relation itself may already have been dropped by a
+		 * CASCADE. Only drop it if it still exists; get_rel_name() returns NULL
+		 * once the relation is gone. */
+		if (OidIsValid(compressed_relid) && get_rel_name(compressed_relid) != NULL)
 		{
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
@@ -3539,7 +3521,7 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 
 /*Assume permissions are already checked */
 bool
-ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
+ts_chunk_set_compressed(Chunk *chunk)
 {
 	uint32 flags = CHUNK_STATUS_COMPRESSED;
 	uint32 mstatus = ts_set_flags_32(chunk->fd.status, flags);
@@ -3577,9 +3559,6 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 
 	/* re-applying the flags after locking the metadata tuple */
 	form.status = ts_set_flags_32(form.status, flags);
-	form.compressed_chunk_id = compressed_chunk_id;
-
-	chunk->fd.compressed_chunk_id = form.compressed_chunk_id;
 	chunk->fd.status = form.status;
 
 	chunk_update_catalog_tuple(&tid, &form);
@@ -3588,7 +3567,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 
 /*Assume permissions are already checked */
 bool
-ts_chunk_clear_compressed_chunk(Chunk *chunk)
+ts_chunk_clear_compressed(Chunk *chunk)
 {
 	uint32 flags = CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED |
 				   CHUNK_STATUS_COMPRESSED_PARTIAL;
@@ -3627,10 +3606,8 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 
 	/* re-applying the flags after locking the metadata tuple */
 	form.status = ts_clear_flags_32(form.status, flags);
-	form.compressed_chunk_id = INVALID_CHUNK_ID;
-
-	chunk->fd.compressed_chunk_id = form.compressed_chunk_id;
 	chunk->fd.status = form.status;
+	chunk->fd.compressed_chunk_id = INVALID_CHUNK_ID;
 
 	chunk_update_catalog_tuple(&tid, &form);
 	return true;
@@ -4845,10 +4822,8 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	 * Once the data is moved into the OSM chunk, then our catalog should be
 	 * updated with proper API calls from the OSM extension.
 	 */
-	parent_ht->fd.status =
-		ts_set_flags_32(parent_ht->fd.status,
-						HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update_status_osm(parent_ht);
+	ts_hypertable_add_status(parent_ht,
+							 HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 }
 
 void
@@ -5316,10 +5291,8 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	ts_chunk_drop(osm_chunk, DROP_RESTRICT, LOG);
 
 	/* reset hypertable OSM status */
-	ht->fd.status =
-		ts_clear_flags_32(ht->fd.status,
-						  HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update_status_osm(ht);
+	ts_hypertable_clear_status(ht,
+							   HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 	ts_cache_release(&hcache);
 	PG_RETURN_BOOL(true);
 }

@@ -51,7 +51,6 @@ default_ignored_tests = {
     "bgw_job_stat_history",
     "bgw_launcher",
     "telemetry",
-    "memoize",
     "net",
 }
 

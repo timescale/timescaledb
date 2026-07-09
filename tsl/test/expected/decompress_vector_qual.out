@@ -30,7 +30,7 @@ alter table vectorqual add column metric3 int4 default 777;
 insert into vectorqual(ts, device, metric2, metric3) values ('2022-01-01 00:00:00', 3, 32, 33);
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
  count 
 -------
      3
@@ -39,8 +39,8 @@ alter table vectorqual add column metric4 int8;
 insert into vectorqual(ts, device, metric2, metric3, metric4) values ('2023-01-01 00:00:00', 4, 42, 43, 44);
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
 NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
  count 
 -------
      4
@@ -127,7 +127,7 @@ create table arithmetic(ts int, a int2, b int4, c int8, d float4, e float8,
 select create_hypertable('arithmetic', 'ts');
     create_hypertable    
 -------------------------
- (3,public,arithmetic,t)
+ (2,public,arithmetic,t)
 
 alter table arithmetic set (timescaledb.compress);
 insert into arithmetic values (100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
@@ -154,9 +154,9 @@ alter table vectorqual add column tag name;
 insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
 NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_7_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
  count 
 -------
      5
@@ -544,7 +544,7 @@ select create_hypertable('singlebatch', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
     create_hypertable     
 --------------------------
- (5,public,singlebatch,t)
+ (3,public,singlebatch,t)
 
 alter table singlebatch set (timescaledb.compress);
 insert into singlebatch select '2022-02-02 02:02:02', metric2, device, metric3, metric4, tag from vectorqual;
@@ -1016,7 +1016,7 @@ create table date_table(ts date);
 select create_hypertable('date_table', 'ts');
     create_hypertable    
 -------------------------
- (7,public,date_table,t)
+ (4,public,date_table,t)
 
 alter table date_table set (timescaledb.compress);
 insert into date_table values ('2021-01-01'), ('2021-01-02'),
@@ -1095,7 +1095,7 @@ create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');
     create_hypertable    
 -------------------------
- (9,public,text_table,t)
+ (5,public,text_table,t)
 
 alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
 insert into text_table select x, 0 /*, default */ from generate_series(1, 1000) x;
@@ -1137,10 +1137,10 @@ select count(compress_chunk(x, true)) from show_chunks('text_table') x;
      1
 
 select compress_chunk(x) from show_chunks('text_table') x;
-NOTICE:  chunk "_hyper_9_17_chunk" is already converted to columnstore
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_9_17_chunk
+NOTICE:  chunk "_hyper_5_9_chunk" is already converted to columnstore
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_9_chunk
 
 -- Check result with decompression.
 set timescaledb.enable_bulk_decompression to on;
@@ -1404,9 +1404,9 @@ reset timescaledb.enable_bulk_decompression;
 -- Test the nonstandard Postgres NaN comparison that doesn't match the IEEE floats.
 create table nans(t int, cfloat4 float4, cfloat8 float8);
 select create_hypertable('nans', 't', chunk_time_interval => 1024 * 1024 * 1024);
- create_hypertable  
---------------------
- (11,public,nans,t)
+ create_hypertable 
+-------------------
+ (6,public,nans,t)
 
 alter table nans set (timescaledb.compress);
 insert into nans select pow(2, n), x, x

@@ -312,13 +312,13 @@ ORDER BY chunk_name;
     chunk_name     | compression_status 
 -------------------+--------------------
  _hyper_1_11_chunk | Uncompressed
+ _hyper_1_15_chunk | Uncompressed
  _hyper_1_16_chunk | Uncompressed
  _hyper_1_17_chunk | Uncompressed
- _hyper_1_18_chunk | Uncompressed
  _hyper_1_1_chunk  | Uncompressed
+ _hyper_1_29_chunk | Uncompressed
  _hyper_1_2_chunk  | Uncompressed
  _hyper_1_30_chunk | Uncompressed
- _hyper_1_31_chunk | Uncompressed
  _hyper_1_3_chunk  | Uncompressed
 
 -- Add columnstore policy on raw hypertable (columnstore already enabled above)
@@ -337,13 +337,13 @@ ORDER BY chunk_name;
     chunk_name     | compression_status 
 -------------------+--------------------
  _hyper_1_11_chunk | Compressed
+ _hyper_1_15_chunk | Compressed
  _hyper_1_16_chunk | Compressed
  _hyper_1_17_chunk | Compressed
- _hyper_1_18_chunk | Compressed
  _hyper_1_1_chunk  | Compressed
+ _hyper_1_29_chunk | Compressed
  _hyper_1_2_chunk  | Compressed
  _hyper_1_30_chunk | Compressed
- _hyper_1_31_chunk | Compressed
  _hyper_1_3_chunk  | Compressed
 
 -- Count compressed vs uncompressed chunks for uuid_events
@@ -362,7 +362,7 @@ ORDER BY chunk_name;
     chunk_name     | is_compressed 
 -------------------+---------------
  _hyper_3_13_chunk | f
- _hyper_3_22_chunk | f
+ _hyper_3_21_chunk | f
  _hyper_3_7_chunk  | t
  _hyper_3_8_chunk  | f
 
@@ -385,7 +385,7 @@ ORDER BY chunk_name;
     chunk_name     | is_compressed 
 -------------------+---------------
  _hyper_3_13_chunk | t
- _hyper_3_22_chunk | t
+ _hyper_3_21_chunk | t
  _hyper_3_7_chunk  | t
  _hyper_3_8_chunk  | t
 
@@ -425,7 +425,7 @@ CREATE TABLE uuid_realtime(id uuid primary key, device int, temp float);
 SELECT create_hypertable('uuid_realtime', 'id', chunk_time_interval => interval '1 day');
      create_hypertable      
 ----------------------------
- (9,public,uuid_realtime,t)
+ (7,public,uuid_realtime,t)
 
 INSERT INTO uuid_realtime VALUES
        ('0194214e-cd00-7000-a9a7-63f1416dab45', 1, 10.0),

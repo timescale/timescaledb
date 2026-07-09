@@ -117,7 +117,9 @@ extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
+#if PG19_LT
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
+#endif
 
 /*
  * Exit code to use when scheduler exits.

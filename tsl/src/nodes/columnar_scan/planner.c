@@ -1208,7 +1208,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			 * Find the equivalence member that belongs to decompressed relation.
 			 */
 			EquivalenceMember *em;
-			ListCell *membercell = NULL;
+			bool found = false;
 #if PG18_GE
 			/* In PG18, iterating over child ems requires you to
 			 * use child relids with a special iterator. Here we gather
@@ -1221,9 +1221,8 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			setup_eclass_member_iterator(&it, ec, dcpath->custom_path.path.parent->relids);
 			while ((em = eclass_member_iterator_next(&it)) != NULL)
 			{
-				/* Setting up so that the check below doesn't complain */
-				membercell = &list_make_int_cell(1);
 #else
+			ListCell *membercell;
 			foreach (membercell, ec->ec_members)
 			{
 				em = lfirst(membercell);
@@ -1288,10 +1287,11 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
 				sort_ops = lappend_oid(sort_ops, sortop);
 
+				found = true;
 				break;
 			}
 
-			Ensure(membercell != NULL,
+			Ensure(found,
 				   "could not find matching decompressed chunk column for batch sorted merge "
 				   "pathkey");
 		}

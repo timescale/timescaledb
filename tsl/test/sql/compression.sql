@@ -33,7 +33,7 @@ update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
 SET timescaledb.enable_columnarscan to OFF;
 
-SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable ORDER BY id;
+SELECT id, schema_name, table_name, status & 4 = 4 as compressed FROM _timescaledb_catalog.hypertable ORDER BY id;
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;
 SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;
 
@@ -126,7 +126,7 @@ select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
 
-SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
+SELECT id, schema_name, table_name, status & 4 = 4 as compressed FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'conditions'::regclass;
 
 select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
@@ -309,7 +309,7 @@ INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
 
-select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
+select id, schema_name, table_name, status & 4 = 4 as compressed from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_test'::regclass;
 
 --TEST try to compress a hypertable that has a continuous aggregate
@@ -628,13 +628,7 @@ SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, 
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
 order by relname;
 
-SELECT '_timescaledb_internal.' || compht.table_name as "STAT_COMP_TABLE",
-             compht.table_name  as "STAT_COMP_TABLE_NAME"
-FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable compht
-WHERE ht.table_name = 'stattest2' AND ht.compressed_hypertable_id = compht.id \gset
-
---analyze the compressed table, will update stats for the raw table.
-ANALYZE :STAT_COMP_TABLE;
+ANALYZE stattest2;
 
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
@@ -644,9 +638,12 @@ SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, 
 ORDER BY relname;
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM
-                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
-  WHERE ht.table_name = :'STAT_COMP_TABLE_NAME' AND ch.hypertable_id = ht.id )
+ WHERE oid in ( SELECT cs.compress_relid FROM
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht,
+                   _timescaledb_catalog.compression_settings cs
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id
+        AND cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        AND cs.compress_relid IS NOT NULL )
 ORDER BY relname;
 
 --analyze on stattest2 should not overwrite
@@ -658,9 +655,12 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class
 ORDER BY relname;
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class
- WHERE relname in ( SELECT ch.table_name FROM
-                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
-  WHERE ht.table_name = :'STAT_COMP_TABLE_NAME' AND ch.hypertable_id = ht.id )
+ WHERE oid in ( SELECT cs.compress_relid FROM
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht,
+                   _timescaledb_catalog.compression_settings cs
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id
+        AND cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        AND cs.compress_relid IS NOT NULL )
 ORDER BY relname;
 
 -- analyze on compressed hypertable should restore stats

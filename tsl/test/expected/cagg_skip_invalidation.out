@@ -165,7 +165,7 @@ SELECT count(*) AS after_skipped_direct_compress
                              0
 
 DROP MATERIALIZED VIEW skip_inv_dc_1h;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_5_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_4_chunk
 DROP TABLE skip_inv_dc;
 -- Case 7: DDL paths (drop_chunks, DROP TABLE chunk, TRUNCATE chunk,
 -- TRUNCATE hypertable) under the GUC. Verifies the DDL invalidation
@@ -174,7 +174,7 @@ CREATE TABLE skip_inv_ddl (ts timestamptz NOT NULL, v int);
 SELECT create_hypertable('skip_inv_ddl', 'ts', chunk_time_interval => '1 day'::interval);
      create_hypertable     
 ---------------------------
- (6,public,skip_inv_ddl,t)
+ (5,public,skip_inv_ddl,t)
 
 INSERT INTO skip_inv_ddl
 SELECT ts, 1 FROM generate_series('2030-03-01'::timestamptz, '2030-03-05', '6 hours') ts;
@@ -231,7 +231,7 @@ SELECT format('%I.%I', chunk_schema, chunk_name) AS skip_inv_ddl_chunk
 BEGIN;
 SET LOCAL timescaledb.skip_cagg_invalidation = on;
 SELECT format('TRUNCATE TABLE %s', :'skip_inv_ddl_chunk') \gexec
-TRUNCATE TABLE _timescaledb_internal._hyper_6_8_chunk
+TRUNCATE TABLE _timescaledb_internal._hyper_5_7_chunk
 COMMIT;
 SELECT count(*) AS after_skipped_truncate_chunk
   FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
@@ -267,7 +267,7 @@ SELECT format('%I.%I', chunk_schema, chunk_name) AS skip_inv_ddl_chunk2
 BEGIN;
 SET LOCAL timescaledb.skip_cagg_invalidation = on;
 SELECT format('DROP TABLE %s', :'skip_inv_ddl_chunk2') \gexec
-DROP TABLE _timescaledb_internal._hyper_6_12_chunk
+DROP TABLE _timescaledb_internal._hyper_5_11_chunk
 COMMIT;
 SELECT count(*) AS after_skipped_drop_table_chunk
   FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
@@ -308,7 +308,7 @@ CREATE TABLE skip_inv_hier (ts timestamptz NOT NULL, v int);
 SELECT create_hypertable('skip_inv_hier', 'ts', chunk_time_interval => '1 day'::interval);
      create_hypertable      
 ----------------------------
- (8,public,skip_inv_hier,t)
+ (7,public,skip_inv_hier,t)
 
 INSERT INTO skip_inv_hier
 SELECT ts, 1 FROM generate_series('2030-04-01'::timestamptz, '2030-04-03', '1 hour') ts;
@@ -349,6 +349,6 @@ SELECT count(*) AS after_skipped_truncate_hier_mat
                                0
 
 DROP MATERIALIZED VIEW skip_inv_hier_1d;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_21_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_9_20_chunk
 DROP MATERIALIZED VIEW skip_inv_hier_1h;
 DROP TABLE skip_inv_hier;

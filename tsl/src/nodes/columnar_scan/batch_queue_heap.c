@@ -76,12 +76,10 @@ compare_entries(HeapEntryColumn *entryA, HeapEntryColumn *entryB, const SortSupp
 }
 
 /*
- * Compare top tuples of two given batch array slots. We support specializations
- * for comparison of the first tuple, like tuplesort.
+ * Compare top tuples of two given batch array slots.
  */
-static pg_attribute_always_inline int32
-compare_heap_pos_impl(Datum a, Datum b, void *arg,
-					  int32 (*apply_first_datum_comparator)(Datum, bool, Datum, bool, SortSupport))
+static int32
+compare_heap_pos(Datum a, Datum b, void *arg)
 {
 	BatchQueueHeap *queue = (BatchQueueHeap *) arg;
 	PG_USED_FOR_ASSERTS_ONLY BatchArray *batch_array = &queue->queue.batch_array;
@@ -97,11 +95,11 @@ compare_heap_pos_impl(Datum a, Datum b, void *arg,
 	HeapEntryColumn *entryA = &queue->heap_entries[batchA * nkeys];
 	HeapEntryColumn *entryB = &queue->heap_entries[batchB * nkeys];
 
-	int compare = apply_first_datum_comparator(entryA[0].value,
-											   entryA[0].null,
-											   entryB[0].value,
-											   entryB[0].null,
-											   &sortkeys[0]);
+	int compare = ApplySortComparator(entryA[0].value,
+									  entryA[0].null,
+									  entryB[0].value,
+									  entryB[0].null,
+									  &sortkeys[0]);
 	if (compare != 0)
 	{
 		INVERT_COMPARE_RESULT(compare);
@@ -125,26 +123,6 @@ compare_heap_pos_impl(Datum a, Datum b, void *arg,
 
 	return 0;
 }
-
-static int32
-compare_heap_pos_generic(Datum a, Datum b, void *arg)
-{
-	return compare_heap_pos_impl(a, b, arg, ApplySortComparator);
-}
-
-static int32
-compare_heap_pos_int32(Datum a, Datum b, void *arg)
-{
-	return compare_heap_pos_impl(a, b, arg, ApplyInt32SortComparator);
-}
-
-#if SIZEOF_DATUM >= 8
-static int32
-compare_heap_pos_signed(Datum a, Datum b, void *arg)
-{
-	return compare_heap_pos_impl(a, b, arg, ApplySignedSortComparator);
-}
-#endif
 
 /* Add a new datum to the heap and perform an automatic resizing if needed. In contrast to
  * the binaryheap_add_unordered() function, the capacity of the heap is automatically
@@ -429,26 +407,7 @@ batch_queue_heap_create(int num_compressed_cols, const List *sortinfo,
 
 	queue->heap_entries = palloc(sizeof(HeapEntryColumn) * queue->nkeys * INITIAL_BATCH_CAPACITY);
 
-	/*
-	 * Choose a specialization for faster comparison of the first column. This is
-	 * the approach that tuplesort uses, see e.g. qsort_tuple_signed().
-	 * The ssup_datum_unsigned_cmp is used only for abbreviated keys which the
-	 * batch sorted merge doesn't use, so we use a generic comparator in this
-	 * case.
-	 */
-	binaryheap_comparator comparator = compare_heap_pos_generic;
-	if (queue->sortkeys[0].comparator == ssup_datum_int32_cmp)
-	{
-		comparator = compare_heap_pos_int32;
-	}
-#if SIZEOF_DATUM >= 8
-	else if (queue->sortkeys[0].comparator == ssup_datum_signed_cmp)
-	{
-		comparator = compare_heap_pos_signed;
-	}
-#endif
-
-	queue->merge_heap = binaryheap_allocate(INITIAL_BATCH_CAPACITY, comparator, queue);
+	queue->merge_heap = binaryheap_allocate(INITIAL_BATCH_CAPACITY, compare_heap_pos, queue);
 	queue->last_batch_first_tuple_slot = MakeSingleTupleTableSlot(result_tupdesc, &TTSOpsVirtual);
 	queue->last_batch_first_tuple_entry = palloc(sizeof(HeapEntryColumn) * queue->nkeys);
 	queue->queue.funcs = funcs;

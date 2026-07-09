@@ -32,7 +32,7 @@ BEGIN
 END
 $BODY$;
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 
 CREATE TRIGGER restore_trigger BEFORE INSERT ON "test_schema"."two_Partitions"
 
@@ -124,7 +124,7 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 SELECT chunk_id, id AS dimension_slice_id, format('constraint_%s', id)::name AS constraint_name FROM _timescaledb_catalog.dimension_slice ORDER BY chunk_id, dimension_slice_id;
 
 -- hypertable catalog should have been restored
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 
 --check simple ddl still works
 ALTER TABLE "test_schema"."two_Partitions" ADD COLUMN series_3 integer;

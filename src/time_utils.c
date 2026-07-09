@@ -206,7 +206,7 @@ coerce_to_time_type(Oid type)
 	ereport(ERROR,
 			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 			errmsg("unsupported time type \"%s\"",
-				   DatumGetPointer(DirectFunctionCall1(regtypeout, type))));
+				   DatumGetCString(DirectFunctionCall1(regtypeout, type))));
 	pg_unreachable();
 }
 

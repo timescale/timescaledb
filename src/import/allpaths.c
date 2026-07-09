@@ -84,7 +84,11 @@ set_tablesample_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *
 	if ((root->query_level > 1 || bms_membership(root->all_baserels) != BMS_SINGLETON) &&
 		!(GetTsmRoutine(rte->tablesample->tsmhandler)->repeatable_across_scans))
 	{
+#if PG19_GE
+		path = (Path *) create_material_path(rel, path, enable_material);
+#else
 		path = (Path *) create_material_path(rel, path);
+#endif
 	}
 
 	add_path(rel, path);
@@ -186,7 +190,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 */
 		Hypertable *ht;
 		TsRelType reltype = ts_classify_relation(root, child_rel, &ht);
-		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		if (reltype == TS_REL_CHUNK_CHILD)
 		{
 			const Chunk *chunk = ts_planner_chunk_fetch(root, child_rel);
 
@@ -325,8 +329,19 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 
 	/* Set up the dummy path */
 	add_path(rel,
-			 (Path *)
-				 create_append_path(NULL, rel, NIL, NIL, NIL, rel->lateral_relids, 0, false, -1));
+			 (Path *) create_append_path(/* root = */ NULL,
+										 rel,
+#if PG19_GE
+										 (AppendPathInput) { 0 },
+#else
+										 /* subpaths = */ NIL,
+										 /* partial_subpaths = */ NIL,
+#endif
+										 /* pathkeys = */ NIL,
+										 rel->lateral_relids,
+										 /* parallel_workers = */ 0,
+										 /* parallel_aware = */ false,
+										 /* rows = */ -1));
 
 	/*
 	 * We set the cheapest-path fields immediately, just in case they were
@@ -482,6 +497,16 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 		case RTE_RESULT:
 			/* RESULT RTEs, in themselves, are no problem. */
 			break;
+#if PG19_GE
+		case RTE_GRAPH_TABLE:
+
+			/*
+			 * Shouldn't happen since these are replaced by subquery RTEs when
+			 * rewriting queries.
+			 */
+			Assert(false);
+			return;
+#endif
 #if PG18_GE
 		case RTE_GROUP:
 			/* Shouldn't happen; we're only considering baserels here. */

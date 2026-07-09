@@ -328,7 +328,11 @@ static void
 log_terminate_signal(SIGNAL_ARGS)
 {
 	write_stderr("job got term signal\n");
+#if PG19_GE
+	die(postgres_signal_arg, pg_siginfo);
+#else
 	die(postgres_signal_arg);
+#endif
 }
 
 TS_FUNCTION_INFO_V1(ts_bgw_test_job_sleep);

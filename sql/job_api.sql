@@ -32,7 +32,8 @@ CREATE OR REPLACE FUNCTION @extschema@.alter_job(
     fixed_schedule BOOL = NULL,
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT DEFAULT NULL,
-    job_name TEXT DEFAULT NULL
+    job_name TEXT DEFAULT NULL,
+    config_merge JSONB = NULL
 )
 RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB,
 next_start TIMESTAMPTZ, check_config TEXT, fixed_schedule BOOL, initial_start TIMESTAMPTZ, timezone TEXT, application_name name)

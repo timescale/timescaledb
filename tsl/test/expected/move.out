@@ -437,7 +437,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | tablespace1
 
 SELECT * FROM test.show_indexesp((SELECT compress_relid::text FROM _timescaledb_catalog.compression_settings WHERE relid = '_timescaledb_internal._hyper_1_2_chunk'::regclass));
-                     Table                      |                                         Index                                         |                         Columns                         | Expr | Unique | Primary | Exclusion | Tablespace  
-------------------------------------------------+---------------------------------------------------------------------------------------+---------------------------------------------------------+------+--------+---------+-----------+-------------
- _timescaledb_internal.compress_hyper_2_3_chunk | _timescaledb_internal.compress_hyper_2_3_chunk_location__ts_meta_v2_first_time__t_idx | {location,_ts_meta_v2_first_time,_ts_meta_v2_last_time} |      | f      | f       | f         | tablespace1
+                       Table                       |                                         Index                                         |                         Columns                         | Expr | Unique | Primary | Exclusion | Tablespace  
+---------------------------------------------------+---------------------------------------------------------------------------------------+---------------------------------------------------------+------+--------+---------+-----------+-------------
+ _timescaledb_internal._hyper_1_2_chunk_compressed | _timescaledb_internal._hyper_1_2_chunk_compressed_location__ts_meta_v2_first_time_idx | {location,_ts_meta_v2_first_time,_ts_meta_v2_last_time} |      | f      | f       | f         | tablespace1
 

@@ -10,6 +10,8 @@
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
+#include <storage/latch.h>
+#include <storage/lock.h>
 #include <utils/datum.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
@@ -17,7 +19,9 @@
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/tuplesort.h>
 #include <utils/typcache.h>
+#include <utils/wait_event.h>
 
 #include "api.h"
 #include "batch_metadata_builder.h"
@@ -200,6 +204,16 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							"enable it by first setting "
 							"timescaledb.enable_segmentwise_recompression to on")));
 		}
+
+		if (!ts_guc_enable_optimizations)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("segmentwise recompression functionality disabled, "
+							"enable it by first setting "
+							"timescaledb.enable_optimizations to on")));
+		}
+
 		CompressionSettings *settings = ts_compression_settings_get(uncompressed_relid);
 		if (!settings->fd.orderby)
 		{
@@ -1325,8 +1339,8 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 						NameStr(uncompressed_chunk->fd.table_name))));
 	}
 
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-	Ensure(compressed_chunk != NULL,
+	Oid compressed_relid = ts_relation_get_compressed_relid(uncompressed_chunk->table_id);
+	Ensure(OidIsValid(compressed_relid),
 		   "compressed chunk not found for chunk \"%s\"",
 		   get_rel_name(uncompressed_chunk->table_id));
 
@@ -1341,8 +1355,7 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 	 * For uncompressed chunk, we just need to read so AccessShareLock is fine.
 	 */
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, AccessShareLock);
-	Relation compressed_chunk_rel =
-		table_open(compressed_chunk->table_id, ShareUpdateExclusiveLock);
+	Relation compressed_chunk_rel = table_open(compressed_relid, ShareUpdateExclusiveLock);
 
 	int count;
 	LOCKTAG locktag;
@@ -1405,6 +1418,14 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 
 	BulkWriter writer = bulk_writer_build(compressed_chunk_rel, 0);
 	Oid index_oid = get_compressed_chunk_index(writer.indexstate, settings);
+	if (!OidIsValid(index_oid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("could not find index on compressed chunk \"%s.%s\" for compaction",
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name))));
+	}
 	Relation index_rel = index_open(index_oid, RowExclusiveLock);
 	ereport(DEBUG1,
 			(errmsg("locks acquired for compaction: \"%s.%s\"",
@@ -1764,11 +1785,11 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 											   index_rel,
 											   false);
 
-	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-	Chunk *new_compressed_chunk =
-		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false, new_settings);
-	Relation new_compressed_chunk_rel = table_open(new_compressed_chunk->table_id, lockmode);
+	/* Free the deterministic compressed chunk name before creating the new one. */
+	rename_compressed_chunk_for_replacement(compressed_relid);
+	Oid new_compressed_relid =
+		create_compress_chunk(uncompressed_chunk, InvalidOid, false, new_settings);
+	Relation new_compressed_chunk_rel = table_open(new_compressed_relid, lockmode);
 
 	perform_recompression(recompress_ctx,
 						  compressed_chunk_rel,
@@ -2559,10 +2580,8 @@ void
 rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
 {
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 
 	LockRelationOid(ht->main_table_relid, AccessShareLock);
-	LockRelationOid(compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(uncompressed_chunk->table_id, ShareUpdateExclusiveLock);
 
 	/* Re-read chunk state after locks — another process may have changed it */

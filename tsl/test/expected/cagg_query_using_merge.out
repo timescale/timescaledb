@@ -1856,7 +1856,7 @@ INSERT INTO temperature
 --(which add -infinity, infinity) to the invalidation log, and the fact the the invalidation
 -- cutting during refresh won't merge entries which are not overlapping with its refresh window.
 -- The duplicates will be merged when there is a refresh that overlaps with them.
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
                   2 |  -9223372036854775808 |     -210866803200000001
@@ -1882,7 +1882,7 @@ CREATE MATERIALIZED VIEW cagg_1_year
     FROM temperature
     GROUP BY 1 ORDER BY 1;
 psql:include/cagg_query_common.sql:779: NOTICE:  refreshing continuous aggregate "cagg_1_year"
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
  materialization_id | lowest_modified_value | greatest_modified_value 
 --------------------+-----------------------+-------------------------
                   2 |  -9223372036854775808 |     -210866803200000001
@@ -1908,7 +1908,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_
 
 --try a refresh that overlaps with the invalidation log entries to check that they are merged properly
 --in this case, the duplicates at the +infinity end should be merged.
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
                              WHERE user_view_name = 'cagg_4_hours')
 ORDER BY 1, 2, 3;
@@ -1921,7 +1921,7 @@ ORDER BY 1, 2, 3;
                  33 |      1577995200000000 |     9223372036854775807
 
 CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz, options => '{"buckets_per_batch": 0}'::jsonb);
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
                              WHERE user_view_name = 'cagg_4_hours')
 ORDER BY 1, 2, 3;
