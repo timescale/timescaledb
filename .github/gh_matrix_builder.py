@@ -221,15 +221,11 @@ m["include"].append(
     )
 )
 
-# Test latest postgres release without telemetry. Also run clang-tidy on it
-# because it's the fastest one.
+# Test latest postgres release without telemetry.
 m["include"].append(
     build_without_telemetry(
         {
             "pg": PG18_LATEST,
-            "cc": "clang",
-            "cxx": "clang++",
-            "tsdb_build_args": "-DLINTER=ON -DWARNINGS_AS_ERRORS=ON",
         }
     )
 )

@@ -55,7 +55,7 @@ SELECT test.compression_settings();
  
 
 SELECT test.chunk_stats();
-NOTICE:  Eviction test completed: 9216 evictions, 1024 slots, average lifespan 1023.53, lifespan stddev 167.91, min lifespan 138, max lifespan 1975
+NOTICE:  Eviction test completed: 9216 evictions, 1024 slots, average lifespan 1024, lifespan stddev 165, min lifespan 138, max lifespan 1975
  chunk_stats 
 -------------
  

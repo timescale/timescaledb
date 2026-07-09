@@ -9,7 +9,7 @@
 
 #include "compression/compression.h"
 #include "nodes/columnar_scan/batch_array.h"
-#include "nodes/columnar_scan/batch_queue.h"
+#include "nodes/columnar_scan/batch_queue_heap.h"
 #include "nodes/columnar_scan/compressed_batch.h"
 
 typedef struct

@@ -347,7 +347,7 @@ TS_TEST_FN(ts_test_with_clause_parse)
 
 	values = palloc0(sizeof(*values) * funcctx->tuple_desc->natts);
 	nulls = palloc(sizeof(*nulls) * funcctx->tuple_desc->natts);
-	memset(nulls, true, sizeof(*nulls) * funcctx->tuple_desc->natts);
+	memset(nulls, 1, sizeof(*nulls) * funcctx->tuple_desc->natts);
 
 	values[0] = CStringGetTextDatum(test_args[result->i].arg_names[0]);
 	nulls[0] = false;
