@@ -965,6 +965,67 @@ RESET client_min_messages;
 DROP TABLE threshold_inc_data CASCADE;
 
 DROP TABLE sparse_data CASCADE;
+
+------------------------------------------------------------------------------------------
+-- #10221: policy-path variant. An invalidation whose greatest_modified_value sits
+-- EXACTLY on a bucket start must not lose its last bucket when the policy refresh
+-- window is split into batches. The policy has finite start/end offsets, so no
+-- null-restoration can mask a missing batch.
+------------------------------------------------------------------------------------------
+CREATE TABLE pol_boundary (
+    time    TIMESTAMPTZ NOT NULL,
+    device  INTEGER,
+    value   FLOAT
+);
+SELECT FROM create_hypertable('pol_boundary', 'time');
+
+-- device 1: mid-bucket rows, 2025-03-01 .. 2025-03-08
+INSERT INTO pol_boundary
+SELECT time, 1, 1.0
+FROM generate_series('2025-03-01 12:00:00+00'::timestamptz,
+                     '2025-03-08 12:00:00+00'::timestamptz,
+                     '1 day'::interval) AS time;
+
+CREATE MATERIALIZED VIEW pol_boundary_cagg
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time) AS bucket, device, count(*) AS cnt
+FROM pol_boundary
+GROUP BY 1, 2
+WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('pol_boundary_cagg',
+    start_offset => INTERVAL '30 days',
+    end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 hour',
+    buckets_per_batch => 1
+) AS pol_boundary_job_id \gset
+
+-- First run materializes everything and advances the watermark to 2025-03-09
+CALL run_job(:pol_boundary_job_id);
+
+-- device 2: three rows below the watermark whose greatest value (2025-03-04
+-- 00:00) lands exactly on a bucket start
+INSERT INTO pol_boundary VALUES
+    ('2025-03-02 12:00:00+00', 2, 1.0),
+    ('2025-03-03 12:00:00+00', 2, 1.0),
+    ('2025-03-04 00:00:00+00', 2, 1.0);
+
+-- Second run must refresh all three device-2 buckets, including
+-- [2025-03-04, 2025-03-05)
+CALL run_job(:pol_boundary_job_id);
+
+SELECT * FROM pol_boundary_cagg WHERE device = 2 ORDER BY bucket;
+
+-- No stranded invalidation may remain
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS stranded_low,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS stranded_high
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+                            WHERE user_view_name = 'pol_boundary_cagg')
+  AND lowest_modified_value  > -210866803200000000
+  AND greatest_modified_value < 9223372036854775807;
+
+DROP TABLE pol_boundary CASCADE;
 RESET timezone;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
