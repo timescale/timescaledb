@@ -954,8 +954,8 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 static int
 chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 {
-	Oid lhs = (*(Chunk **) c1)->table_id;
-	Oid rhs = (*(Chunk **) c2)->table_id;
+	Oid lhs = (*(Chunk **) c1)->fd.relid;
+	Oid rhs = (*(Chunk **) c2)->fd.relid;
 
 	if (lhs < rhs)
 	{
@@ -1343,7 +1343,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * Add the information about chunks to the baserel info cache for
 		 * classify_relation().
 		 */
-		ts_add_baserel_cache_entry_for_chunk(chunks[i]->table_id, ht);
+		ts_add_baserel_cache_entry_for_chunk(chunks[i]->fd.relid, ht);
 	}
 
 	oldrelation = table_open(parent_oid, NoLock);
@@ -1357,7 +1357,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
 		Chunk *chunk = chunks[i];
-		Oid child_oid = chunk->table_id;
+		Oid child_oid = chunk->fd.relid;
 		Relation newrelation;
 		RangeTblEntry *childrte;
 		Index child_rtindex;
@@ -1522,7 +1522,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 */
 		if (!IS_OSM_CHUNK(chunk))
 		{
-			Assert(chunk->table_id == root->simple_rte_array[child_rtindex]->relid);
+			Assert(chunk->fd.relid == root->simple_rte_array[child_rtindex]->relid);
 			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunk;
 		}
 	}

@@ -152,7 +152,7 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 						  Oid parentDelTrigger, Oid parentUpdTrigger)
 {
 	AttrNumber mapped_confkey[INDEX_MAX_KEYS];
-	Relation pkrel = table_open(chunk->table_id, AccessShareLock);
+	Relation pkrel = table_open(chunk->fd.relid, AccessShareLock);
 
 	/* Map the foreign key columns on the hypertable side to the chunk columns */
 	AttrMap *attmap =
@@ -191,7 +191,7 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 									   numfks,
 									   InvalidOid,
 									   indexoid,
-									   chunk->table_id,
+									   chunk->fd.relid,
 									   mapped_confkey,
 									   conpfeqop,
 									   conppeqop,
@@ -222,7 +222,7 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 
 	createForeignKeyActionTriggers(fk,
 								   fk->conrelid,
-								   chunk->table_id,
+								   chunk->fd.relid,
 								   conoid,
 								   indexoid,
 								   parentDelTrigger,
@@ -631,7 +631,7 @@ void
 ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 {
 	Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
-	List *fks = relation_get_referencing_fk(chunk->table_id);
+	List *fks = relation_get_referencing_fk(chunk->fd.relid);
 	ListCell *lc;
 
 	foreach (lc, fks)
@@ -662,7 +662,7 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 		elog(ERROR, "cache lookup failed for constraint %u", parent_fk_oid);
 	}
 
-	child_oid = get_relation_constraint_oid(chunk->table_id, parent_name, true);
+	child_oid = get_relation_constraint_oid(chunk->fd.relid, parent_name, true);
 	if (OidIsValid(child_oid))
 	{
 		/* Only adopt the existing constraint if it's a FK to the same target. */
@@ -685,7 +685,7 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("cannot inherit foreign key \"%s\" onto chunk \"%s\"",
 							parent_name,
-							get_rel_name(chunk->table_id)),
+							get_rel_name(chunk->fd.relid)),
 					 errdetail("A constraint with that name already exists on the chunk "
 							   "and does not match the hypertable's foreign key.")));
 		}
@@ -703,7 +703,7 @@ ts_chunk_inherit_outbound_fk_by_oid(const Chunk *chunk, Oid parent_fk_oid)
 	ts_process_utility_set_expect_chunk_modification(true);
 	CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
 						 ObjectIdGetDatum(parent_fk_oid),
-						 ObjectIdGetDatum(chunk->table_id));
+						 ObjectIdGetDatum(chunk->fd.relid));
 	ts_process_utility_set_expect_chunk_modification(false);
 	ts_catalog_restore_user(&sec_ctx);
 	CommandCounterIncrement();

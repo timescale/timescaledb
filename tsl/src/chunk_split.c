@@ -996,8 +996,8 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot split frozen chunk \"%s.%s\" scheduled for tiering",
-						NameStr(chunk->fd.schema_name),
-						NameStr(chunk->fd.table_name)),
+						ts_chunk_get_schema_name(chunk),
+						ts_chunk_get_table_name(chunk)),
 				 errhint("Untier the chunk before splitting it.")));
 	}
 
@@ -1164,7 +1164,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	bool created = false;
 	Chunk *new_chunk = ts_chunk_find_or_create_without_cuts(ht,
 															new_cube,
-															NameStr(chunk->fd.schema_name),
+															ts_chunk_get_schema_name(chunk),
 															NULL,
 															InvalidOid,
 															&created);
@@ -1195,7 +1195,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	 */
 	SplitRelationInfo split_relations[SPLIT_FACTOR] = {
 		[0] = { .relid = relid, .chunk_id = chunk->fd.id, .heap_swap = true },
-		[1] = { .relid = new_chunk->table_id, .chunk_id = new_chunk->fd.id, .heap_swap = false }
+		[1] = { .relid = new_chunk->fd.relid, .chunk_id = new_chunk->fd.id, .heap_swap = false }
 	};
 	SplitRelationInfo csplit_relations[SPLIT_FACTOR] = {};
 	SplitRelationInfo *compressed_split_relations = NULL;

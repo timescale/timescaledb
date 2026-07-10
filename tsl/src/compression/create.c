@@ -123,7 +123,7 @@ NameData
 build_compressed_relation_name(const Chunk *chunk)
 {
 	NameData name;
-	int ret = snprintf(NameStr(name), NAMEDATALEN, "%s_compressed", NameStr(chunk->fd.table_name));
+	int ret = snprintf(NameStr(name), NAMEDATALEN, "%s_compressed", ts_chunk_get_table_name(chunk));
 	if (ret < 0 || ret >= NAMEDATALEN)
 	{
 		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk name too long")));
@@ -928,7 +928,7 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 	 * on which to base this decision. We simply pick the same tablespace as the uncompressed chunk
 	 * for now.
 	 */
-	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
+	tablespace_oid = get_rel_tablespace(src_chunk->fd.relid);
 	if (!settings_provided)
 	{
 		settings = ts_compression_settings_get(src_chunk->hypertable_relid);
@@ -962,7 +962,7 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 
 	if (!OidIsValid(table_id))
 	{
-		List *column_defs = build_columndefs(settings, src_chunk->table_id);
+		List *column_defs = build_columndefs(settings, src_chunk->fd.relid);
 		table_id = compression_table_create(src_chunk, column_defs, tablespace_oid, settings);
 	}
 
@@ -974,7 +974,7 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 	/* Materialize current compression settings for this chunk */
 	if (!settings_provided)
 	{
-		ts_compression_settings_materialize(settings, src_chunk->table_id, table_id);
+		ts_compression_settings_materialize(settings, src_chunk->fd.relid, table_id);
 	}
 	else
 	{
@@ -2213,7 +2213,7 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 		if (!OidIsValid(compressed_relid))
 		{
 			continue;
@@ -2268,7 +2268,7 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 		if (!OidIsValid(compressed_relid))
 		{
 			continue;
@@ -2385,7 +2385,7 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 		if (!OidIsValid(compressed_relid))
 		{
 			continue;

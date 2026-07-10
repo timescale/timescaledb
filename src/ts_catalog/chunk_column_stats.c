@@ -829,13 +829,16 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 
+	const char *schema_name = ts_chunk_get_schema_name(chunk);
+	const char *table_name = ts_chunk_get_table_name(chunk);
+
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT pg_catalog.min(%s), pg_catalog.max(%s) FROM %s.%s",
 					 quote_identifier(col_name),
 					 quote_identifier(col_name),
-					 quote_identifier(NameStr(chunk->fd.schema_name)),
-					 quote_identifier(NameStr(chunk->fd.table_name)));
+					 quote_identifier(schema_name),
+					 quote_identifier(table_name));
 
 	/*
 	 * SPI_connect will switch MemoryContext so we need to keep track
@@ -856,8 +859,8 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the min/max values for column \"%s\" of chunk \"%s.%s\"",
 						 col_name,
-						 NameStr(chunk->fd.schema_name),
-						 NameStr(chunk->fd.table_name)))));
+						 schema_name,
+						 table_name))));
 	}
 
 	pfree(command.data);
@@ -933,8 +936,8 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 		Oid col_type;
 
 		attno = get_attnum(ht->main_table_relid, col_name);
-		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, attno);
-		col_type = get_atttype(chunk->table_id, attno);
+		attno = ts_map_attno(ht->main_table_relid, chunk->fd.relid, attno);
+		col_type = get_atttype(chunk->fd.relid, attno);
 
 		/* calculate the min/max range for this column on this chunk */
 		if (chunk_get_minmax(chunk, col_type, col_name, minmax))
@@ -1035,7 +1038,7 @@ ts_chunk_column_stats_insert(const Hypertable *ht, const Chunk *chunk)
 
 		/* Get the attribute number in the HT for this column, and map to the chunk */
 		attno = get_attnum(ht->main_table_relid, col_name);
-		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, attno);
+		attno = ts_map_attno(ht->main_table_relid, chunk->fd.relid, attno);
 
 		/* insert an entry for this ht_id, chunk_id for this col_name with -inf/+inf range */
 		fd.hypertable_id = ht->fd.id;

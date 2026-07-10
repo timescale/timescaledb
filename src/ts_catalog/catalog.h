@@ -393,10 +393,6 @@ typedef struct FormData_chunk
 	int32 id;
 	Oid relid;
 	int32 hypertable_id;
-	/* schema_name and table_name are not stored in the catalog; they are
-	 * derived from the chunk relation when the form is filled. */
-	NameData schema_name;
-	NameData table_name;
 	int32 status;
 	bool osm_chunk;
 	TimestampTz creation_time;

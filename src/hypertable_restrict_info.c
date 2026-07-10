@@ -1062,7 +1062,7 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 
 		if (NULL != nested_oids)
 		{
-			slot_chunk_oids = lappend_oid(slot_chunk_oids, chunk->table_id);
+			slot_chunk_oids = lappend_oid(slot_chunk_oids, chunk->fd.relid);
 		}
 
 		slice = chunk->cube->slices[0];

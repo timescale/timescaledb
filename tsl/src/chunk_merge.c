@@ -427,7 +427,7 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 		 * pattern. */
 		char old_check_name[NAMEDATALEN];
 		snprintf(old_check_name, NAMEDATALEN, "constraint_%d", old_slice_id);
-		Oid old_check_oid = get_relation_constraint_oid(chunk->table_id, old_check_name, true);
+		Oid old_check_oid = get_relation_constraint_oid(chunk->fd.relid, old_check_name, true);
 		if (OidIsValid(old_check_oid))
 		{
 			ObjectAddress constrobj = {
@@ -453,7 +453,7 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 	{
 		/* Adding a constraint should require AccessExclusivelock. It should
 		 * already be taken at this point, but specify it to be sure. */
-		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Relation rel = table_open(chunk->fd.relid, AccessExclusiveLock);
 		AddRelationNewConstraints(rel,
 								  NIL /* List *newColDefaults */,
 								  new_constraints,
@@ -1166,8 +1166,8 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot merge frozen chunk \"%s.%s\" scheduled for tiering",
-							NameStr(chunk->fd.schema_name),
-							NameStr(chunk->fd.table_name)),
+							ts_chunk_get_schema_name(chunk),
+							ts_chunk_get_table_name(chunk)),
 					 errhint("Untier the chunk before merging.")));
 		}
 
@@ -1240,7 +1240,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 */
 		if (ts_chunk_is_compressed(chunk))
 		{
-			Oid crelid = ts_relation_get_compressed_relid(chunk->table_id);
+			Oid crelid = ts_relation_get_compressed_relid(chunk->fd.relid);
 			Relation crel = table_open(crelid, lockmode);
 			rellocks = append_rellock(rellocks, crel, lockmode, merge_cxt);
 			table_close(crel, NoLock);
@@ -1257,7 +1257,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			{
 				elog(WARNING,
 					 "missing compression chunk size stats for compressed chunk \"%s\"",
-					 NameStr(chunk->fd.table_name));
+					 ts_chunk_get_table_name(chunk));
 			}
 		}
 
@@ -1276,9 +1276,9 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 					 errmsg("cannot merge chunks across different hypertables"),
 					 errdetail("Chunk \"%s\" is part of hypertable \"%s\" while chunk \"%s\" is "
 							   "part of hypertable \"%s\"",
-							   get_rel_name(chunk->table_id),
+							   get_rel_name(chunk->fd.relid),
 							   get_rel_name(chunk->hypertable_relid),
-							   get_rel_name(relinfos[i - 1].chunk->table_id),
+							   get_rel_name(relinfos[i - 1].chunk->fd.relid),
 							   get_rel_name(relinfos[i - 1].chunk->hypertable_relid))));
 		}
 
@@ -1364,7 +1364,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			RelationMergeInfo *crelinfo = &crelinfos[i];
 			/* Merging the compressed relation only needs its relid, not a full Chunk. */
 			crelinfo->chunk = NULL;
-			crelinfo->relid = ts_relation_get_compressed_relid(chunk->table_id);
+			crelinfo->relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 			crelinfo->rel = table_open(crelinfo->relid, lockmode);
 			crelinfo->isresult = relinfos[i].isresult;
 			crelinfo->iscompressed_rel = true;
@@ -1394,7 +1394,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 
 		if (ts_chunk_is_compressed(result_chunk))
 		{
-			result_settings = ts_compression_settings_get(result_chunk->table_id);
+			result_settings = ts_compression_settings_get(result_chunk->fd.relid);
 		}
 
 		for (int i = 0; i < nrelids; i++)
@@ -1407,7 +1407,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 				continue;
 			}
 
-			settings = ts_compression_settings_get(chunk->table_id);
+			settings = ts_compression_settings_get(chunk->fd.relid);
 
 			if (result_settings == NULL ||
 				!ts_compression_settings_equal(result_settings, settings))
@@ -1418,8 +1418,8 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 								"compression settings"),
 						 errdetail("Chunk \"%s\" was compressed with different "
 								   "settings than chunk \"%s\".",
-								   get_rel_name(chunk->table_id),
-								   get_rel_name(result_chunk->table_id)),
+								   get_rel_name(chunk->fd.relid),
+								   get_rel_name(result_chunk->fd.relid)),
 						 errhint("Decompress the affected chunks and recompress them "
 								 "with the current compression settings before merging.")));
 			}

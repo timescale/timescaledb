@@ -1046,7 +1046,7 @@ chunk_has_missing_attrs(Chunk *chunk)
 {
 	bool has_missing_attrs = false;
 	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
-	Relation chunk_rel = relation_open(chunk->table_id, AccessShareLock);
+	Relation chunk_rel = relation_open(chunk->fd.relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
 
 	for (int i = 0; i < tupdesc->natts; i++)
@@ -1091,8 +1091,8 @@ register_chunk_for_rebuild_if_needed(Oid chunk_relid, VacuumCtx *ctx)
 		 */
 		Ensure(!ts_chunk_is_frozen(chunk),
 			   "chunk \"%s.%s\" was altered unsafely after it was frozen",
-			   NameStr(chunk->fd.schema_name),
-			   NameStr(chunk->fd.table_name));
+			   ts_chunk_get_schema_name(chunk),
+			   ts_chunk_get_table_name(chunk));
 		ctx->rebuild_columnstore_chunk_oids =
 			lappend_oid(ctx->rebuild_columnstore_chunk_oids, chunk_relid);
 	}
@@ -1113,8 +1113,8 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
-	chunk_range_var->relname = NameStr(chunk->fd.table_name);
-	chunk_range_var->schemaname = NameStr(chunk->fd.schema_name);
+	chunk_range_var->relname = ts_chunk_get_table_name(chunk);
+	chunk_range_var->schemaname = ts_chunk_get_schema_name(chunk);
 	chunk_vacuum_rel =
 		makeVacuumRelation(chunk_range_var, chunk_relid, ctx->ht_vacuum_rel->va_cols);
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
@@ -1122,7 +1122,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	/* If we have a compressed chunk make sure to analyze it as well */
 	if (ts_chunk_is_compressed(chunk))
 	{
-		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+		Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 		/* Compressed chunk might be missing due to concurrent operations */
 		if (OidIsValid(compressed_relid))
 		{
@@ -1532,7 +1532,7 @@ process_truncate(ProcessUtilityArgs *args)
 						if (ts_chunk_is_compressed(chunk))
 						{
 							Oid compressed_relid =
-								ts_relation_get_compressed_relid(chunk->table_id);
+								ts_relation_get_compressed_relid(chunk->fd.relid);
 							if (OidIsValid(compressed_relid))
 							{
 								/* Create list item into the same context of the list. */
@@ -1671,7 +1671,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			 *  it would be blocked if there are dependent objects */
 			if (stmt->behavior == DROP_CASCADE && ts_chunk_is_compressed(chunk))
 			{
-				Oid compressed_relid = ts_relation_get_compressed_relid(chunk->table_id);
+				Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
 				/* The chunk may have been delete by a CASCADE */
 				if (OidIsValid(compressed_relid))
 				{
@@ -2581,7 +2581,7 @@ rename_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 	RenameStmt *stmt = (RenameStmt *) arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	RangeVar *chunk_rel =
-		makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0);
+		makeRangeVar(ts_chunk_get_schema_name(chunk), ts_chunk_get_table_name(chunk), 0);
 	char old_chunk_name[NAMEDATALEN];
 	char new_chunk_name[NAMEDATALEN];
 	Oid chunk_con_oid;
@@ -2711,7 +2711,8 @@ rename_hypertable_trigger(Hypertable *ht, Oid chunk_relid, void *arg)
 	RenameStmt *stmt = copyObject(castNode(RenameStmt, arg));
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
-	stmt->relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0);
+	stmt->relation =
+		makeRangeVar(ts_chunk_get_schema_name(chunk), ts_chunk_get_table_name(chunk), 0);
 	renametrig(stmt);
 }
 
@@ -2869,15 +2870,15 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 	if ((stmt->primary || stmt->unique) && ts_chunk_is_compressed(chunk))
 	{
 		StringInfoData command;
-		Oid nspcid = get_rel_namespace(chunk->table_id);
+		Oid nspcid = get_rel_namespace(chunk->fd.relid);
 		ListCell *lc;
-		List *dpcontext = deparse_context_for(get_rel_name(chunk->table_id), chunk->table_id);
+		List *dpcontext = deparse_context_for(get_rel_name(chunk->fd.relid), chunk->fd.relid);
 
 		initStringInfo(&command);
 		appendStringInfo(&command,
 						 "SELECT EXISTS(SELECT FROM %s.%s",
 						 quote_identifier(get_namespace_name(nspcid)),
-						 quote_identifier(get_rel_name(chunk->table_id)));
+						 quote_identifier(get_rel_name(chunk->fd.relid)));
 
 		if (!stmt->nulls_not_distinct)
 		{
@@ -2937,7 +2938,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 (errmsg("could not verify unique constraint on \"%s\"",
-							 get_rel_name(chunk->table_id)))));
+							 get_rel_name(chunk->fd.relid)))));
 		}
 
 		bool isnull;
@@ -2969,8 +2970,8 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 	if (ts_chunk_is_compressed(chunk))
 	{
 		StringInfoData command;
-		Oid nspcid = get_rel_namespace(chunk->table_id);
-		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Oid nspcid = get_rel_namespace(chunk->fd.relid);
+		Relation rel = table_open(chunk->fd.relid, AccessExclusiveLock);
 
 		initStringInfo(&command);
 		appendStringInfo(&command,
@@ -2995,7 +2996,7 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 (errmsg("could not verify check constraint on \"%s\"",
-							 get_rel_name(chunk->table_id)))));
+							 get_rel_name(chunk->fd.relid)))));
 		}
 
 		bool isnull;
@@ -3173,7 +3174,7 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 	{
 		StringInfoData command;
 		AlterTableCmd *cmd = (AlterTableCmd *) arg;
-		const CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		const CompressionSettings *settings = ts_compression_settings_get(chunk->fd.relid);
 		Oid nspcid = get_rel_namespace(settings->fd.compress_relid);
 
 		initStringInfo(&command);
@@ -3710,8 +3711,8 @@ process_index_start(ProcessUtilityArgs *args)
 					 * and cannot be passed to deparse_expression directly, so run the
 					 * standard PostgreSQL transformation first.
 					 */
-					Relation rel = table_open(chunk->table_id, AccessShareLock);
-					IndexStmt *transformed = transformIndexStmt(chunk->table_id, stmt, NULL);
+					Relation rel = table_open(chunk->fd.relid, AccessShareLock);
+					IndexStmt *transformed = transformIndexStmt(chunk->fd.relid, stmt, NULL);
 					table_close(rel, NoLock);
 					validate_index_constraints(chunk, transformed);
 				}
@@ -4574,8 +4575,8 @@ process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void 
 		{
 			elog(ERROR,
 				 "chunk \"%s.%s\" has no index corresponding to hypertable index \"%s\"",
-				 NameStr(chunk->fd.schema_name),
-				 NameStr(chunk->fd.table_name),
+				 ts_chunk_get_schema_name(chunk),
+				 ts_chunk_get_table_name(chunk),
 				 stmt->name);
 		}
 

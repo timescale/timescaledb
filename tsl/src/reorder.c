@@ -298,8 +298,8 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	 * because it expects indexes that need to be rechecked (due to new
 	 * transaction) to already have that mark set
 	 */
-	ts_chunk_index_mark_clustered(chunk->table_id, index_relid);
-	reorder_rel(chunk->table_id,
+	ts_chunk_index_mark_clustered(chunk->fd.relid, index_relid);
+	reorder_rel(chunk->fd.relid,
 				index_relid,
 				verbose,
 				wait_id,
@@ -345,14 +345,14 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 
 	if (OidIsValid(index_relid))
 	{
-		if (index_belongs_to_relation(chunk->table_id, index_relid))
+		if (index_belongs_to_relation(chunk->fd.relid, index_relid))
 		{
 			return index_relid;
 		}
 
 		if (index_belongs_to_relation(ht->main_table_relid, index_relid))
 		{
-			Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
+			Relation chunk_rel = table_open(chunk->fd.relid, AccessShareLock);
 			Oid chunk_index_oid =
 				ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, index_relid);
 			table_close(chunk_rel, NoLock);
@@ -362,7 +362,7 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 		return InvalidOid;
 	}
 
-	index_relid = ts_indexing_find_clustered_index(chunk->table_id);
+	index_relid = ts_indexing_find_clustered_index(chunk->fd.relid);
 	if (OidIsValid(index_relid))
 	{
 		return index_relid;
@@ -371,7 +371,7 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 	index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
 	if (OidIsValid(index_relid))
 	{
-		Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
+		Relation chunk_rel = table_open(chunk->fd.relid, AccessShareLock);
 		Oid chunk_index_oid = ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, index_relid);
 		table_close(chunk_rel, NoLock);
 		return chunk_index_oid;
