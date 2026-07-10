@@ -189,11 +189,11 @@ ERROR:  "int_tab" is not a continuous aggregate
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
 ERROR:  invalid parameter value for start_offset
 HINT:  Use time interval of type integer with the continuous aggregate.
+-- terse verbosity: the not-found message differs between PG versions
+\set VERBOSITY terse
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
-ERROR:  function add_continuous_aggregate_policy(unknown, interval, integer) does not exist
-LINE 1: SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::in...
-               ^
-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ERROR:  function add_continuous_aggregate_policy(unknown, interval, integer) does not exist at character 8
+\set VERBOSITY default
 SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
 ERROR:  invalid parameter value for end_offset
 HINT:  Use time interval of type integer with the continuous aggregate.

@@ -9,16 +9,17 @@ set(TEST_FILES_SHARED
     constraint_aware_append.sql
     decompress_join.sql
     decompress_placeholdervar.sql
-    decompress_tracking.sql
     gapfill_bug.sql
     generated_columns.sql
     lateral_subquery.sql
     osm_api.sql
-    parameterized_chunkappend.sql
     security_barrier.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
+    compression_dml.sql.in
+    decompress_tracking.sql.in
+    parameterized_chunkappend.sql.in
     gapfill.sql.in
     ordered_append_join.sql.in
     constify_timestamptz_op_interval.sql.in
@@ -26,7 +27,8 @@ set(TEST_TEMPLATES_SHARED
     space_constraint.sql.in
     transparent_decompress_chunk.sql.in)
 
-set(SOLO_TESTS cagg_compression.sql compression_dml.sql merge_dml.sql)
+set(SOLO_TESTS cagg_compression.sql compression_dml-${TEST_VERSION_SUFFIX}.sql
+               merge_dml.sql)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql
@@ -74,12 +76,16 @@ endif()
 
 set(GROUP_MEMBERS 0)
 foreach(TEST_FILE ${TEST_FILES_SHARED})
-  string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
-  if(GROUP_MEMBERS EQUAL 0)
-    file(APPEND ${TEST_SCHEDULE_SHARED} "\ntest: ")
+  # Solo tests are scheduled separately below, skip them here so a templated
+  # solo test does not also end up in a parallel group.
+  if(NOT (${TEST_FILE} IN_LIST SOLO_TESTS))
+    string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
+    if(GROUP_MEMBERS EQUAL 0)
+      file(APPEND ${TEST_SCHEDULE_SHARED} "\ntest: ")
+    endif()
+    file(APPEND ${TEST_SCHEDULE_SHARED} "${TESTS_TO_RUN} ")
+    math(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
   endif()
-  file(APPEND ${TEST_SCHEDULE_SHARED} "${TESTS_TO_RUN} ")
-  math(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
 endforeach(TEST_FILE)
 file(APPEND ${TEST_SCHEDULE_SHARED} "\n")
 
