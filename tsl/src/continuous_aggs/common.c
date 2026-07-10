@@ -205,7 +205,11 @@ process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *
 			if (!arg->constisnull)
 			{
 				bf->bucket_time_origin =
+#if PG19_GE
+					date2timestamptz_safe(DatumGetDateADT(arg->constvalue), NULL);
+#else
 					date2timestamptz_opt_overflow(DatumGetDateADT(arg->constvalue), NULL);
+#endif
 			}
 			*custom_origin = true;
 			break;

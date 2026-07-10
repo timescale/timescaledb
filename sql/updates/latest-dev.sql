@@ -1,6 +1,8 @@
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size(regclass);
 
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(INTEGER, INTEGER, ANYELEMENT, INTEGER, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN);
+
 --
 -- BEGIN chunk.compressed_chunk_id no longer used
 --

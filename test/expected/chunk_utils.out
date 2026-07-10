@@ -1513,3 +1513,51 @@ SELECT pg_typeof(_timescaledb_functions.chunk_status_text(0));
 -----------
  text[]
 
+-- Test hypertable_status and hypertable_status_text functions
+CREATE TABLE hypertable_status_test(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=false);
+SELECT _timescaledb_functions.hypertable_status_text(i) FROM generate_series(0,7) i;
+          hypertable_status_text           
+-------------------------------------------
+ {}
+ {OSM}
+ {OSM_CHUNK_NONCONTIGUOUS}
+ {OSM,OSM_CHUNK_NONCONTIGUOUS}
+ {COMPRESSION}
+ {OSM,COMPRESSION}
+ {OSM_CHUNK_NONCONTIGUOUS,COMPRESSION}
+ {OSM,OSM_CHUNK_NONCONTIGUOUS,COMPRESSION}
+
+SELECT _timescaledb_functions.hypertable_status('hypertable_status_test');
+ hypertable_status 
+-------------------
+                 0
+
+SELECT _timescaledb_functions.hypertable_status_text('hypertable_status_test'::regclass);
+ hypertable_status_text 
+------------------------
+ {}
+
+SELECT _timescaledb_functions.hypertable_status_text(NULL::int);
+ hypertable_status_text 
+------------------------
+ 
+
+SELECT _timescaledb_functions.hypertable_status_text(NULL::regclass);
+ hypertable_status_text 
+------------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.hypertable_status_text(-1);
+ERROR:  invalid hypertable status -1
+SELECT _timescaledb_functions.hypertable_status_text(8);
+ERROR:  invalid hypertable status 8
+SELECT _timescaledb_functions.hypertable_status('pg_class'::regclass);
+ERROR:  table "pg_class" is not a hypertable
+\set ON_ERROR_STOP 1
+-- Test that function exists and returns an array type
+SELECT pg_typeof(_timescaledb_functions.hypertable_status_text(0));
+ pg_typeof 
+-----------
+ text[]
+

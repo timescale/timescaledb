@@ -4298,11 +4298,10 @@ process_create_table_end(Node *parsetree)
 			AttrNumber time_attno = get_attnum(table_relid, time_column);
 			Oid time_type = get_atttype(table_relid, time_attno);
 
-			interval =
-				ts_create_table_parse_chunk_time_interval(create_table_info.with_clauses
-															  [CreateTableFlagChunkTimeInterval],
-														  time_type,
-														  &interval_type);
+			interval = ts_create_table_parse_interval_value(create_table_info.with_clauses
+																[CreateTableFlagChunkTimeInterval],
+															time_type,
+															&interval_type);
 		}
 
 		if (!create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].is_default)
@@ -5626,10 +5625,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		Oid time_type = get_atttype(dim->main_table_relid, dim->column_attno);
 		Oid interval_type = InvalidOid;
 		Datum interval =
-			ts_create_table_parse_chunk_time_interval(parse_results
-														  [AlterTableFlagChunkTimeInterval],
-													  time_type,
-													  &interval_type);
+			ts_create_table_parse_interval_value(parse_results[AlterTableFlagChunkTimeInterval],
+												 time_type,
+												 &interval_type);
 
 		int64 chunk_interval = ts_interval_value_to_internal(interval, interval_type);
 		ts_dimension_set_chunk_interval(dim, chunk_interval);
@@ -5642,6 +5640,13 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagIndex].is_default)
 	{
 		ts_cm_functions->process_compress_table(ht, parse_results);
+	}
+
+	if (ht && (!parse_results[AlterTableFlagGranularRefreshColumn].is_default ||
+			   !parse_results[AlterTableFlagGranularRefreshStartOffset].is_default ||
+			   !parse_results[AlterTableFlagGranularRefreshEndOffset].is_default))
+	{
+		ts_cm_functions->process_granular_refresh_options(ht, parse_results);
 	}
 
 	cmd->def = (Node *) pg_options;

@@ -157,6 +157,13 @@ process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_opt
 }
 
 static void
+process_granular_refresh_options_default(Hypertable *ht, WithClauseResult *with_clause_options)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
+static void
 columnstore_setup_default(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	error_no_default_fn_community();
@@ -366,6 +373,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.compressed_data_in = process_compressed_data_in,
 	.compressed_data_out = process_compressed_data_out,
 	.process_compress_table = process_compress_table_default,
+	.process_granular_refresh_options = process_granular_refresh_options_default,
 	.create_compressed_chunk = error_no_default_fn_pg_community,
 	.compress_chunk = error_no_default_fn_pg_community,
 	.decompress_chunk = error_no_default_fn_pg_community,

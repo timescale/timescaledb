@@ -73,7 +73,6 @@ jobs:
           compress_observ-*
           compress_qualpushdown_saop
           compress_sort_transform
-          compressed_collation
           compression_allocation
           merge_append_partially_compressed
           net

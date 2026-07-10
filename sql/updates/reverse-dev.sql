@@ -1,6 +1,10 @@
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_status(regclass);
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_status_text(int);
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_status_text(regclass);
 DROP FUNCTION IF EXISTS _timescaledb_functions.decompress_batch(record);
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size(regclass, double precision);
 DROP FUNCTION IF EXISTS _timescaledb_functions.compact_chunk(REGCLASS);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(INTEGER, INTEGER, ANYELEMENT, INTEGER, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN);
 
 --
 -- BEGIN compression status flag on hypertables

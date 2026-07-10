@@ -112,6 +112,87 @@ jobs:
         echo '::add-matcher::.github/problem-matchers/grep.json'
         ! grep '[f]ixme' -niR ./* .github/workflows/*
 
+  clang_tidy:
+    name: clang-tidy
+    runs-on: timescaledb-runner-arm64
+    env:
+      LLVM_VER: 17
+    steps:
+    - name: Install Linux Dependencies
+      timeout-minutes: 15
+      run: |
+        gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+        gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+
+        . /etc/os-release
+        echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+        sudo apt-get update
+
+        sudo apt-get install clang-${LLVM_VER} lld-${LLVM_VER} clang-tidy-${LLVM_VER}
+
+        sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${LLVM_VER} 100
+        sudo update-alternatives --set clang-tidy /usr/bin/clang-tidy-${LLVM_VER}
+        sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${LLVM_VER} 100
+        sudo update-alternatives --set clang /usr/bin/clang-${LLVM_VER}
+
+    - name: Checkout source
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+    - name: Read configuration
+      id: config
+      run: python -B .github/gh_config_reader.py
+
+    # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
+    # ages after the original problem.
+    - name: Get date for build caching
+      id: get-date
+      run: echo "date=$(date +"%V")" >> $GITHUB_OUTPUT
+
+    - name: Get key for caching
+      id: cache-key
+      run: echo "key=postgresql-tidy-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}" >> $GITHUB_OUTPUT
+
+    - name: Restore PostgreSQL Cache
+      id: restore-postgresql
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: install
+        key: ${{ steps.cache-key.outputs.key }}
+
+    - name: Build PostgreSQL
+      if: steps.restore-postgresql.outputs.cache-hit != 'true'
+      run: |
+       wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
+         https://ftp.postgresql.org/pub/source/v${{ steps.config.outputs.PG16_LATEST }}/postgresql-${{ steps.config.outputs.PG16_LATEST }}.tar.bz2
+        mkdir -p pg build-pg install
+        tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
+        cd build-pg
+        CC=clang-${LLVM_VER} ../pg/configure --prefix=$(readlink -e "$(pwd)/../install") --with-openssl \
+          --without-readline --without-zlib --without-libxml --without-llvm \
+          --enable-cassert --enable-debug
+        make -j$(getconf _NPROCESSORS_ONLN) install
+
+    - name: Save PostgreSQL Cache
+      if: steps.restore-postgresql.outputs.cache-matched-key == ''
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: install
+        key: ${{ steps.cache-key.outputs.key }}
+
+    - name: Upload config.log
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: config.log for PostgreSQL
+        path: build-pg/config.log
+
+    - name: Run clang-tidy
+      run: |
+        cmake -S . -B build-ts-tidy -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang-${LLVM_VER} \
+          -DPG_PATH=install -DLINTER=ON -DWARNINGS_AS_ERRORS=ON
+        make -C build-ts-tidy -j8 -k
+
+
   python_checks:
     name: Check Python code in tree
     runs-on: timescaledb-runner-arm64
@@ -121,10 +202,12 @@ jobs:
           pip install --upgrade pip
           pip install black prospector pylint dodgy \
             mccabe pycodestyle pyflakes \
-            psutil pygithub pglast testgres more_itertools
+            psutil pygithub testgres more_itertools
           # pinning snowballstemmer to version 2.2.0 due to:
           # https://github.com/prospector-dev/prospector/issues/763
           pip install --force-reinstall --no-deps snowballstemmer==2.2.0
+          # pinning pglast due to build issues
+          pip install --force-reinstall --no-deps pglast==7.16
           pip list
           pip list --user
 

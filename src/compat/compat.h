@@ -67,6 +67,36 @@
 #endif
 
 /*
+ * PG19 renamed UpperUniquePath to UniquePath
+ * https://github.com/postgres/postgres/commit/24225ad9aa
+ */
+#if PG19_LT
+#define UniquePathCompat UpperUniquePath
+#define T_UniquePathCompat T_UpperUniquePath
+#define create_unique_path create_upper_unique_path
+#else
+#define UniquePathCompat UniquePath
+#define T_UniquePathCompat T_UniquePath
+#endif
+
+/*
+ * PG19 renamed OnConflictSetState to OnConflictActionState.
+ * https://github.com/postgres/postgres/commit/8832709
+ */
+#if PG19_LT
+#define OnConflictActionState OnConflictSetState
+#define T_OnConflictActionState T_OnConflictSetState
+#endif
+
+/*
+ * PG19 removed the PointerIsValid macro that used to live in c.h. Provide it
+ * when the server headers no longer do.
+ */
+#ifndef PointerIsValid
+#define PointerIsValid(pointer) ((const void *) (pointer) != NULL)
+#endif
+
+/*
  * PG19 reworked jsonb construction: pushJsonbValue() now takes a JsonbInState *
  * and returns void, leaving the completed value in state->result (populated only
  * when the outermost container is closed). Older versions took a JsonbParseState **
@@ -266,6 +296,31 @@ get_reindex_options(ReindexStmt *stmt)
 						  skip_build,                                                              \
 						  quiet)                                                                   \
 	DefineIndex(relationId,                                                                        \
+				stmt,                                                                              \
+				indexRelationId,                                                                   \
+				parentIndexId,                                                                     \
+				parentConstraintId,                                                                \
+				total_parts,                                                                       \
+				is_alter_table,                                                                    \
+				check_rights,                                                                      \
+				check_not_in_use,                                                                  \
+				skip_build,                                                                        \
+				quiet)
+#else
+/* PG19 adds a leading ParseState argument to DefineIndex. */
+#define DefineIndexCompat(relationId,                                                              \
+						  stmt,                                                                    \
+						  indexRelationId,                                                         \
+						  parentIndexId,                                                           \
+						  parentConstraintId,                                                      \
+						  total_parts,                                                             \
+						  is_alter_table,                                                          \
+						  check_rights,                                                            \
+						  check_not_in_use,                                                        \
+						  skip_build,                                                              \
+						  quiet)                                                                   \
+	DefineIndex(NULL,                                                                              \
+				relationId,                                                                        \
 				stmt,                                                                              \
 				indexRelationId,                                                                   \
 				parentIndexId,                                                                     \
