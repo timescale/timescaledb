@@ -2625,9 +2625,9 @@ EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: test_partials."time"
-         ->  Sort
-               Sort Key: _hyper_18_35_chunk."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_18_35_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_18_35_chunk
+               ->  Sort
+                     Sort Key: _hyper_18_35_chunk_compressed._ts_meta_v2_first_time, _hyper_18_35_chunk_compressed._ts_meta_v2_last_time
                      ->  Seq Scan on _hyper_18_35_chunk_compressed
          ->  Index Scan Backward using _hyper_18_35_chunk_test_partials_time_idx on _hyper_18_35_chunk
    ->  Merge Append
