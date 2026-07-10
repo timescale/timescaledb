@@ -36,7 +36,9 @@ SET enable_memoize TO 'off';
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
 \set TEST_TABLE 'metrics_compressed'
+SET timescaledb.enable_bulk_decompression TO 'off';
 \ir :TEST_QUERY_NAME
+SET timescaledb.enable_bulk_decompression TO 'on';
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
 
