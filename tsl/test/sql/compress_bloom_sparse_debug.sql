@@ -124,6 +124,8 @@ select _timescaledb_functions.bloom1_contains('\x'::_timescaledb_internal.bloom1
 
 select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, ROW());
 
+select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, NULL::record[]);
+
 -- The hash function is callable by user, so must return proper error
 select _timescaledb_functions.bloom1_hash(ROW(1, 2, 3, 4, 5, 6, 7, 8, 9));
 
