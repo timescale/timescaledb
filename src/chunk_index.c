@@ -456,19 +456,19 @@ ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		if (!OidIsValid(chunk->table_id))
+		if (!OidIsValid(chunk->fd.relid))
 		{
 			continue;
 		}
 
-		Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
+		Relation chunk_rel = table_open(chunk->fd.relid, AccessShareLock);
 		Oid chunk_indexrelid =
 			ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, hypertable_indexrelid);
 		table_close(chunk_rel, AccessShareLock);
 		if (OidIsValid(chunk_indexrelid))
 		{
 			ChunkIndexMapping *cim = palloc0(sizeof(ChunkIndexMapping));
-			cim->chunkoid = chunk->table_id;
+			cim->chunkoid = chunk->fd.relid;
 			cim->indexoid = chunk_indexrelid;
 			cim->parent_indexoid = hypertable_indexrelid;
 			cim->hypertableoid = ht->fd.id;
@@ -507,12 +507,12 @@ ts_chunk_index_rename(Hypertable *ht, Oid hypertable_indexrelid, const char *ht_
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		if (!OidIsValid(chunk->table_id))
+		if (!OidIsValid(chunk->fd.relid))
 		{
 			continue;
 		}
 
-		Relation chunk_rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Relation chunk_rel = table_open(chunk->fd.relid, AccessExclusiveLock);
 		Oid chunk_indexrelid =
 			ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, hypertable_indexrelid);
 		table_close(chunk_rel, NoLock);
@@ -520,9 +520,9 @@ ts_chunk_index_rename(Hypertable *ht, Oid hypertable_indexrelid, const char *ht_
 		/* If there is no matching index on the chunk, skip it */
 		if (OidIsValid(chunk_indexrelid))
 		{
-			Oid chunk_schemaoid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
+			Oid chunk_schemaoid = get_namespace_oid(ts_chunk_get_schema_name(chunk), false);
 			const char *chunk_new_name =
-				chunk_index_choose_name(NameStr(chunk->fd.table_name), ht_name, chunk_schemaoid);
+				chunk_index_choose_name(ts_chunk_get_table_name(chunk), ht_name, chunk_schemaoid);
 
 			RenameRelationInternal(chunk_indexrelid, chunk_new_name, false, true);
 		}
@@ -538,7 +538,7 @@ ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, char *t
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		Relation chunk_rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Relation chunk_rel = table_open(chunk->fd.relid, AccessExclusiveLock);
 		Oid chunk_indexrelid =
 			ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, hypertable_indexrelid);
 		table_close(chunk_rel, NoLock);

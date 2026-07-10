@@ -704,8 +704,8 @@ decompress_unique_update_conflict_batches(ModifyHypertableState *ht_state, Chunk
 		return false;
 	}
 
-	CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
-	Oid chunk_relid = chunk->table_id;
+	CompressionSettings *settings = ts_compression_settings_get(chunk->fd.relid);
+	Oid chunk_relid = chunk->fd.relid;
 	bool batches_decompressed = false;
 
 	/*
@@ -851,7 +851,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	ScanKeyData *mem_scankeys = NULL;
 	List *bloom_filters = NIL;
 
-	CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+	CompressionSettings *settings = ts_compression_settings_get(chunk->fd.relid);
 	bool delete_only = ht_state->mt->operation == CMD_DELETE && !plan_requires_decompression &&
 					   direct_delete_prerequisites(ht_state);
 	InvalidationContext invalidation_ctx = { 0 };
@@ -879,10 +879,10 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	{
 		const Dimension *time_dim = hyperspace_get_open_dimension(ht_state->ht->space, 0);
 		const char *time_col_name = NameStr(time_dim->fd.column_name);
-		AttrNumber chunk_time_attno = get_attnum(chunk->table_id, time_col_name);
+		AttrNumber chunk_time_attno = get_attnum(chunk->fd.relid, time_col_name);
 
 		invalidation_ctx.hypertable_id = ht_state->ht->fd.id;
-		invalidation_ctx.chunk_relid = chunk->table_id;
+		invalidation_ctx.chunk_relid = chunk->fd.relid;
 		invalidation_ctx.time_type_oid = time_dim->fd.column_type;
 
 		if (ts_array_is_member(settings->fd.segmentby, time_col_name))
@@ -901,20 +901,20 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 		{
 			invalidation_ctx.min_time_attno =
 				compressed_column_metadata_attno(settings,
-												 chunk->table_id,
+												 chunk->fd.relid,
 												 chunk_time_attno,
 												 settings->fd.compress_relid,
 												 "min");
 			invalidation_ctx.max_time_attno =
 				compressed_column_metadata_attno(settings,
-												 chunk->table_id,
+												 chunk->fd.relid,
 												 chunk_time_attno,
 												 settings->fd.compress_relid,
 												 "max");
 		}
 	}
 
-	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
+	chunk_rel = table_open(chunk->fd.relid, RowExclusiveLock);
 	comp_chunk_rel = table_open(settings->fd.compress_relid, RowExclusiveLock);
 
 	if (index_filters)
@@ -2015,7 +2015,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 					continue;
 				}
 
-				column_name = get_attname(ch->table_id, var->varattno, false);
+				column_name = get_attname(ch->fd.relid, var->varattno, false);
 				TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
 				int op_strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
 
@@ -2116,7 +2116,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 				}
 
 				int max_attno = compressed_column_metadata_attno(settings,
-																 ch->table_id,
+																 ch->fd.relid,
 																 var->varattno,
 																 settings->fd.compress_relid,
 																 "max");
@@ -2235,7 +2235,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 
 				collation = sa_expr->inputcollid;
 
-				column_name = get_attname(ch->table_id, var->varattno, false);
+				column_name = get_attname(ch->fd.relid, var->varattno, false);
 				TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
 				int op_strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
 				if (ts_array_is_member(settings->fd.segmentby, column_name))
@@ -2286,7 +2286,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 						*all_predicates_enforced = false;
 						continue;
 					}
-					column_name = get_attname(ch->table_id, var->varattno, false);
+					column_name = get_attname(ch->fd.relid, var->varattno, false);
 					if (ts_array_is_member(settings->fd.segmentby, column_name))
 					{
 						*index_filters =
@@ -2343,7 +2343,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 	{
 		SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
 		TsBmsList per_column_attnos =
-			ts_resolve_columns_to_attnos_from_parsed_settings(parsed, ch->table_id);
+			ts_resolve_columns_to_attnos_from_parsed_settings(parsed, ch->fd.relid);
 
 		/* Build a Bitmapset of equality predicate attnums for bms_is_subset() */
 		Bitmapset *eq_pred_attnos = NULL;
@@ -2389,7 +2389,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 			int attnum = -1;
 			while ((attnum = bms_next_member(bloom_attnos, attnum)) >= 0)
 			{
-				type_oids[col_idx] = get_atttype(ch->table_id, attnum);
+				type_oids[col_idx] = get_atttype(ch->fd.relid, attnum);
 
 				/* Find the matching equality predicate for this attnum */
 				foreach_ptr(EqualityPredicate, ep, eq_preds)

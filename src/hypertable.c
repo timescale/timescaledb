@@ -1020,11 +1020,7 @@ ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point,
 {
 	Assert(ts_subspace_store_get(h->chunk_cache, point) == NULL);
 
-	Chunk *chunk = ts_chunk_create_for_point(h,
-											 point,
-											 NameStr(h->fd.associated_schema_name),
-											 NameStr(h->fd.associated_table_prefix),
-											 chunk_lockmode);
+	Chunk *chunk = ts_chunk_create_for_point(h, point, chunk_lockmode);
 
 	/* Also add the chunk to the hypertable's chunk store */
 	Chunk *cached_chunk = ts_hypertable_chunk_store_add(h, chunk);
@@ -1059,7 +1055,7 @@ ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point, LOCK
 			chunk = ts_hypertable_chunk_store_add(h, chunk);
 		}
 	}
-	else if (!ts_chunk_lock_if_exists(chunk->table_id, lockmode))
+	else if (!ts_chunk_lock_if_exists(chunk->fd.relid, lockmode))
 	{
 		return NULL;
 	}
@@ -1067,7 +1063,7 @@ ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point, LOCK
 #ifdef USE_ASSERT_CHECKING
 	if (chunk)
 	{
-		Relation chunk_rel = RelationIdGetRelation(chunk->table_id);
+		Relation chunk_rel = RelationIdGetRelation(chunk->fd.relid);
 		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
 		RelationClose(chunk_rel);
 	}
@@ -1493,10 +1489,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 
 		if (closed_dim_info && !closed_dim_info->num_slices_is_set)
 		{
-			/* If the number of partitions isn't specified, default to setting it
-			 * to the number of data nodes */
-			int16 num_partitions = closed_dim_info->num_slices;
-			closed_dim_info->num_slices = num_partitions;
+			/* Keep the default number of partitions when unspecified. */
 			closed_dim_info->num_slices_is_set = true;
 		}
 

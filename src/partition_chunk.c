@@ -369,8 +369,8 @@ partition_chunk_attach(const Hypertable *ht, const Chunk *chunk)
 	};
 	PartitionCmd partcmd = {
 		.type = T_PartitionCmd,
-		.name = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
-							 (char *) NameStr(chunk->fd.table_name),
+		.name = makeRangeVar((char *) ts_chunk_get_schema_name(chunk),
+							 (char *) ts_chunk_get_table_name(chunk),
 							 0),
 		.bound = &pbspec,
 		.concurrent = false,

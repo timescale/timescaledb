@@ -1635,7 +1635,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 									"current \"timescaledb.license\""),
 							 errdetail("Chunk \"%s\" is compressed and requires "
 									   "the TimescaleDB Community Edition to query.",
-									   get_rel_name(chunk->table_id)),
+									   get_rel_name(chunk->fd.relid)),
 							 errhint("Set timescaledb.license to 'timescale' and install the "
 									 "TimescaleDB Community Edition to query compressed data.")));
 				}

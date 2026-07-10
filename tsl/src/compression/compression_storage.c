@@ -89,11 +89,11 @@ compression_table_create(Chunk *src_chunk, List *column_defs, Oid tablespace_oid
 	/* NewRelationCreateToastTable calls CommandCounterIncrement */
 	NameData relname = build_compressed_relation_name(src_chunk);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	compress_rel = makeRangeVar(NameStr(src_chunk->fd.schema_name), NameStr(relname), -1);
+	compress_rel = makeRangeVar(ts_chunk_get_schema_name(src_chunk), NameStr(relname), -1);
 
 	create->relation = compress_rel;
 	/* Inherit the persistence (LOGGED or UNLOGGED) from the uncompressed chunk */
-	create->relation->relpersistence = get_rel_persistence(src_chunk->table_id);
+	create->relation->relpersistence = get_rel_persistence(src_chunk->fd.relid);
 
 	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
 	CommandCounterIncrement();

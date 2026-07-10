@@ -64,7 +64,6 @@ typedef struct Chunk
 {
 	FormData_chunk fd;
 	char relkind;
-	Oid table_id;
 	Oid hypertable_relid;
 
 	/*
@@ -153,12 +152,12 @@ extern void ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti);
 extern int32 ts_chunk_point_find_chunk_id(const Hypertable *ht, const Point *p,
 										  const ScanTupLock *slice_lock);
 extern Chunk *ts_chunk_find_for_point(const Hypertable *ht, const Point *p, LOCKMODE lockmode);
-extern Chunk *ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *schema,
-										const char *prefix, LOCKMODE chunk_lockmode);
+extern Chunk *ts_chunk_create_for_point(const Hypertable *ht, const Point *p,
+										LOCKMODE chunk_lockmode);
 List *ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs);
 
-extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind);
-extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
+extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id);
+extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id);
 extern TSDLLEXPORT Chunk *ts_chunk_copy(const Chunk *chunk);
 extern TSDLLEXPORT Chunk *
 ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *table_name,
@@ -166,7 +165,15 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 										 MemoryContext mctx, bool fail_if_not_found);
 extern TSDLLEXPORT void ts_chunk_insert_lock(const Chunk *chunk, LOCKMODE lock);
 
+/*
+ * A chunk's schema and table name are not stored in the catalog; they are
+ * looked up from the chunk relation on demand.
+ */
+extern TSDLLEXPORT char *ts_chunk_get_schema_name(const Chunk *chunk);
+extern TSDLLEXPORT char *ts_chunk_get_table_name(const Chunk *chunk);
+
 extern TSDLLEXPORT Oid ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht,
+											 const char *schema_name, const char *table_name,
 											 const char *tablespacename);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_id_with_slice_lock(int32 id, LOCKMODE chunk_lockmode,
 															 const ScanTupLock *slice_lock,
@@ -228,9 +235,7 @@ extern TSDLLEXPORT List *ts_chunk_get_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_end(const Chunk *chunk);
-extern Chunk *ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti,
-												 const ChunkStub *stub,
-												 const ScanTupLock *slice_lock);
+extern Chunk *ts_chunk_build_from_tuple(Chunk **chunkptr, TupleInfo *ti);
 
 extern TM_Result ts_chunk_lock_for_creating_compressed_chunk(Chunk *chunk);
 extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
@@ -261,7 +266,7 @@ extern TSDLLEXPORT void ts_chunk_detach_by_relid(Oid relid);
 		Assert(chunk);                                                                             \
 		Assert((chunk)->fd.id > 0);                                                                \
 		Assert((chunk)->fd.hypertable_id > 0);                                                     \
-		Assert(OidIsValid((chunk)->table_id));                                                     \
+		Assert(OidIsValid((chunk)->fd.relid));                                                     \
 		Assert(OidIsValid((chunk)->hypertable_relid));                                             \
 		Assert((chunk)->cube);                                                                     \
 		Assert((chunk)->relkind == RELKIND_RELATION || (chunk)->relkind == RELKIND_FOREIGN_TABLE); \

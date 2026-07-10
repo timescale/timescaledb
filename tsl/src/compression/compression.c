@@ -1150,20 +1150,20 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	}
 
 	/* Can happen for partial chunks, but problematic if happening otherwise */
-	if (!CheckRelationOidLockedByMe(src_chunk->table_id, AccessExclusiveLock, false))
+	if (!CheckRelationOidLockedByMe(src_chunk->fd.relid, AccessExclusiveLock, false))
 	{
 		/* Since the segmentby rebuild is triggered by a DML, expect at least RowExclusiveLock */
-		Ensure(CheckRelationOidLockedByMe(src_chunk->table_id, RowExclusiveLock, true),
+		Ensure(CheckRelationOidLockedByMe(src_chunk->fd.relid, RowExclusiveLock, true),
 			   "hypertable chunk \"%s\".\"%s\" must have at least a RowExclusiveLock "
 			   "to apply segmentby",
-			   NameStr(src_chunk->fd.schema_name),
-			   NameStr(src_chunk->fd.table_name));
+			   ts_chunk_get_schema_name(src_chunk),
+			   ts_chunk_get_table_name(src_chunk));
 
 		elog(DEBUG1,
 			 "chunk \"%s\".\"%s\" does not have AccessExclusiveLock "
 			 "but trying to apply segmentby",
-			 NameStr(src_chunk->fd.schema_name),
-			 NameStr(src_chunk->fd.table_name));
+			 ts_chunk_get_schema_name(src_chunk),
+			 ts_chunk_get_table_name(src_chunk));
 	}
 
 	Ensure(CheckRelationOidLockedByMe(old_compressed_relid, AccessExclusiveLock, false),
@@ -1197,7 +1197,7 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 		return;
 	}
 
-	Relation in_rel = table_open(src_chunk->table_id, NoLock);
+	Relation in_rel = table_open(src_chunk->fd.relid, NoLock);
 
 	/* Create before drop. We must update settings first to point to the new chunk. */
 	rename_compressed_chunk_for_replacement(old_compressed_relid);
