@@ -1,0 +1,414 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ON_ERROR_STOP 0
+CREATE VIEW hypertable_details AS
+WITH
+  names AS (SELECT * FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace)
+SELECT (SELECT format('%I.%I', ht.schema_name, ht.table_name) FROM names
+	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable,
+       (SELECT relacl FROM names
+	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable_acl
+  FROM _timescaledb_catalog.hypertable ht;
+-- Lists every compressed chunk relation with the ACL of the relation and
+-- of its parent hypertable. Compressed chunks are not separate catalog
+-- chunks, so the compressed relation is found through compression_settings.
+CREATE VIEW chunk_details AS
+SELECT format('%I.%I', ht.schema_name, ht.table_name) AS hypertable,
+       htcls.relacl AS hypertable_acl,
+       format('%I.%I', cns.nspname, compress.relname) AS chunk,
+       compress.relacl AS chunk_acl
+  FROM _timescaledb_catalog.hypertable ht
+  JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
+  JOIN pg_class htcls ON htcls.oid = format('%I.%I', ht.schema_name, ht.table_name)::regclass
+  JOIN _timescaledb_catalog.compression_settings cs
+    ON cs.relid = ch.relid
+  JOIN pg_class compress ON compress.oid = cs.compress_relid
+  JOIN pg_namespace cns ON cns.oid = compress.relnamespace;
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      location2    char(10)              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=>'1month'::interval);
+ table_name 
+------------
+ conditions
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+ERROR:  must be owner of table conditions
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+ERROR:  permission denied for table conditions
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+--now owner tries and succeeds --
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+--try modifying compress properties --
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'humidity');
+ERROR:  must be owner of table conditions
+--- compress_chunks and decompress_chunks fail without correct perm --
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT compress_chunk(show_chunks('conditions'));
+ERROR:  must be owner of hypertable "conditions"
+SELECT compress_chunk(show_chunks('conditions'), recompress => true);
+ERROR:  must be owner of hypertable "conditions"
+SELECT decompress_chunk(show_chunks('conditions'));
+ERROR:  must be owner of hypertable "conditions"
+SELECT show_chunks('conditions') AS chunk LIMIT 1 \gset
+CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
+ERROR:  must be owner of hypertable "conditions"
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(show_chunks('conditions'));
+ERROR:  must be owner of hypertable "conditions"
+select add_compression_policy('conditions', '1day'::interval);
+ERROR:  must be owner of hypertable "conditions"
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+select add_compression_policy('conditions', '1day'::interval);
+ add_compression_policy 
+------------------------
+                   1000
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+--try dropping policy
+select remove_compression_policy('conditions', true);
+ERROR:  must be owner of hypertable "conditions"
+--Tests for GRANTS.
+-- as owner grant select , compress chunk and check SELECT works
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT SELECT on conditions to :ROLE_DEFAULT_PERM_USER_2;
+SELECT count(compress_chunk(ch)) FROM show_chunks('conditions') ch;
+ count 
+-------
+     2
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select count(*) from conditions;
+ count 
+-------
+    31
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT INSERT on conditions to :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+insert into conditions
+select '2019-04-01 00:00+0'::timestamp with time zone, 'NYC', 'klick', 55, 75;
+select count(*) from conditions;
+ count 
+-------
+    32
+
+update conditions
+set location = 'SFO'
+where timec = '2019-04-01 00:00+0'::timestamp with time zone;
+ERROR:  permission denied for table conditions
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+GRANT UPDATE, DELETE on conditions to :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+ NYC
+
+--NOTE constraint exclusion excludes the other chunks here
+--otherwise update would fail
+update conditions
+set location = 'SFO'
+where timec = '2019-04-01 00:00+0'::timestamp with time zone;
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+ SFO
+
+--update expected to fail as executor touches all chunks
+update conditions
+set location = 'PNC'
+where location = 'SFO';
+delete from conditions
+where timec = '2019-04-01 00:00+0'::timestamp with time zone;
+select location from conditions where timec = '2019-04-01 00:00+0';
+ location 
+----------
+
+CREATE VIEW v2 as select * from conditions;
+select count(*) from v2;
+ count 
+-------
+    31
+
+--should fail after revoking permissions
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+REVOKE SELECT on conditions FROM :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+select count(*) from v2;
+ERROR:  permission denied for table conditions
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to view v2
+-- Testing that permissions propagate to compressed hypertables and to
+-- compressed chunks.
+-- Table is created by superuser
+CREATE TABLE conditions (
+      timec TIMESTAMPTZ NOT NULL,
+      location TEXT NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity DOUBLE PRECISION  NULL
+    );
+SELECT table_name FROM create_hypertable( 'conditions', 'timec',
+       chunk_time_interval => '1 week'::interval);
+ table_name 
+------------
+ conditions
+
+ALTER TABLE conditions SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'location',
+      timescaledb.compress_orderby = 'timec'
+);
+INSERT INTO conditions
+SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75;
+SELECT compress_chunk(show_chunks('conditions'));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_2_4_chunk
+ _timescaledb_internal._hyper_2_5_chunk
+ _timescaledb_internal._hyper_2_6_chunk
+ _timescaledb_internal._hyper_2_7_chunk
+ _timescaledb_internal._hyper_2_8_chunk
+
+-- Check that ACL propagates to compressed hypertable.  We could prune
+-- the listing by only selecting chunks where the ACL does not match
+-- the hypertable ACL, but for now we list all to make debugging easy.
+\x on
+SELECT * FROM hypertable_details WHERE hypertable = 'public.conditions';
+-[ RECORD 1 ]--+------------------
+hypertable     | public.conditions
+hypertable_acl | 
+
+SELECT hypertable, hypertable_acl, chunk, chunk_acl
+  FROM chunk_details WHERE hypertable = 'public.conditions'
+ORDER BY hypertable, chunk;
+-[ RECORD 1 ]--+--------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | 
+chunk          | _timescaledb_internal._hyper_2_4_chunk_compressed
+chunk_acl      | 
+-[ RECORD 2 ]--+--------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | 
+chunk          | _timescaledb_internal._hyper_2_5_chunk_compressed
+chunk_acl      | 
+-[ RECORD 3 ]--+--------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | 
+chunk          | _timescaledb_internal._hyper_2_6_chunk_compressed
+chunk_acl      | 
+-[ RECORD 4 ]--+--------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | 
+chunk          | _timescaledb_internal._hyper_2_7_chunk_compressed
+chunk_acl      | 
+-[ RECORD 5 ]--+--------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | 
+chunk          | _timescaledb_internal._hyper_2_8_chunk_compressed
+chunk_acl      | 
+
+GRANT SELECT ON conditions TO :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM hypertable_details WHERE hypertable = 'public.conditions';
+-[ RECORD 1 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+
+SELECT hypertable, hypertable_acl, chunk, chunk_acl
+  FROM chunk_details WHERE hypertable = 'public.conditions'
+ORDER BY hypertable, chunk;
+-[ RECORD 1 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_4_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 2 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_5_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 3 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_6_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 4 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_7_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 5 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_8_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+
+-- Add some new data and compress the chunks. The chunks should get
+-- the permissions of the hypertable. We pick a start date to make
+-- sure that we are not inserting into an already compressed chunk.
+INSERT INTO conditions
+SELECT generate_series('2019-01-07 00:00'::timestamp, '2019-02-07 00:00'::timestamp, '1 day'), 'XYZ', 47, 11;
+SELECT compress_chunk(show_chunks('conditions', newer_than => '2019-01-01'));
+-[ RECORD 1 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_2_9_chunk
+-[ RECORD 2 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_2_10_chunk
+-[ RECORD 3 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_2_11_chunk
+-[ RECORD 4 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_2_12_chunk
+-[ RECORD 5 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_2_13_chunk
+-[ RECORD 6 ]--+----------------------------------------
+compress_chunk | _timescaledb_internal._hyper_2_14_chunk
+
+SELECT hypertable, hypertable_acl, chunk, chunk_acl
+  FROM chunk_details WHERE hypertable = 'public.conditions'
+ORDER BY hypertable, chunk;
+-[ RECORD 1 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_10_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 2 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_11_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 3 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_12_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 4 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_13_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 5 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_14_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 6 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_4_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 7 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_5_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 8 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_6_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 9 ]--+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_7_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 10 ]-+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_8_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+-[ RECORD 11 ]-+----------------------------------------------------------------
+hypertable     | public.conditions
+hypertable_acl | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+chunk          | _timescaledb_internal._hyper_2_9_chunk_compressed
+chunk_acl      | {super_user=arwdDxtm/super_user,default_perm_user=r/super_user}
+
+\x off
+--TEST user that has insert permission can insert into a compressed chunk
+GRANT INSERT ON conditions TO :ROLE_DEFAULT_PERM_USER;
+SELECT count(*) FROM conditions;
+ count 
+-------
+    63
+
+SELECT count(*) FROM ( SELECT show_chunks('conditions'))q;
+ count 
+-------
+    11
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+--insert into a compressed chunk --
+INSERT INTO conditions VALUES( '2018-12-02 00:00'::timestamp, 'NYC', 75, 95);
+SELECT count(*) FROM conditions;
+ count 
+-------
+    64
+
+SELECT count(*) FROM ( SELECT show_chunks('conditions'))q;
+ count 
+-------
+    11
+
+-- Verify that members of pg_database_owner (the database owner) can run
+-- hypertable and policy configuration alongside the relation/job owner.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE dbowner_conditions (
+    timec       TIMESTAMPTZ      NOT NULL,
+    location    TEXT             NOT NULL,
+    temperature DOUBLE PRECISION NULL
+);
+SELECT FROM create_hypertable('dbowner_conditions', 'timec', chunk_time_interval => INTERVAL '1 day');
+--
+
+ALTER TABLE dbowner_conditions SET (timescaledb.compress);
+SELECT add_retention_policy('dbowner_conditions', INTERVAL '1 year') AS dbowner_retention_id \gset
+-- ROLE_DEFAULT_PERM_USER_2 is currently neither the table owner nor
+-- the database owner: all configuration calls below must fail.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT set_chunk_time_interval('dbowner_conditions', INTERVAL '7 days');
+ERROR:  must be owner of hypertable "dbowner_conditions"
+SELECT add_compression_policy('dbowner_conditions', INTERVAL '6 months');
+ERROR:  must be owner of hypertable "dbowner_conditions"
+SELECT alter_job(:dbowner_retention_id, schedule_interval => INTERVAL '1 hour');
+ERROR:  insufficient permissions to alter job 1001
+SELECT delete_job(:dbowner_retention_id);
+ERROR:  insufficient permissions to delete job owned by "default_perm_user"
+\set ON_ERROR_STOP 1
+-- Make ROLE_DEFAULT_PERM_USER_2 the database owner. They become an
+-- implicit member of pg_database_owner.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT set_chunk_time_interval('dbowner_conditions', INTERVAL '7 days');
+ set_chunk_time_interval 
+-------------------------
+ 
+
+SELECT add_compression_policy('dbowner_conditions', INTERVAL '6 months') > 0 AS added;
+ added 
+-------
+ t
+
+SELECT (alter_job(:dbowner_retention_id, schedule_interval => INTERVAL '1 hour')).schedule_interval AS altered;
+ altered  
+----------
+ @ 1 hour
+
+SELECT delete_job(:dbowner_retention_id);
+ delete_job 
+------------
+ 
+
+-- Restore the database owner so the runner can drop the database
+-- during teardown.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
