@@ -435,7 +435,9 @@ CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
 
-\d _timescaledb_internal._hyper_14_28_chunk
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_columns(ch) ORDER BY 1, 2;
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_indexespred(ch) ORDER BY 1, 2;
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_constraints(ch) ORDER BY 1, 2;
 
 DROP TABLE p_hypertable;
 
