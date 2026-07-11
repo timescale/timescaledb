@@ -1212,7 +1212,9 @@ WHERE user_view_name = 'cashflows'
 -- references are correct in the view as well.
 \d+ "_timescaledb_internal".:"DIRECT_VIEW_NAME"
 \d+ "_timescaledb_internal".:"PART_VIEW_NAME"
-\d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
+-- Show the materialized hypertable columns via a helper since the \d child
+-- table listing format changed in PG19.
+SELECT * FROM test.show_columns(('_timescaledb_internal.' || :'MAT_TABLE_NAME')::regclass);
 \d+ 'cashflows'
 
 SELECT * FROM cashflows ORDER BY cashflows;
