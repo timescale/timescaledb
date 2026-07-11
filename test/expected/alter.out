@@ -694,19 +694,23 @@ ALTER TABLE p_hypertable DROP COLUMN b, ADD COLUMN d boolean;
 CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
-\d _timescaledb_internal._hyper_14_28_chunk
- Table "_timescaledb_internal._hyper_14_28_chunk"
- Column |  Type   | Collation | Nullable | Default 
---------+---------+-----------+----------+---------
- a      | integer |           | not null | 
- c      | integer |           |          | 
- d      | boolean |           |          | 
-Indexes:
-    "_hyper_14_28_chunk_idx_ht" btree (a, c) WHERE NOT d
-    "_hyper_14_28_chunk_p_hypertable_a_idx" btree (a DESC)
-Check constraints:
-    "constraint_39" CHECK (a >= 0 AND a < 3)
-Inherits: p_hypertable
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_columns(ch) ORDER BY 1, 2;
+                    ch                    | Column |  Type   | NotNull 
+------------------------------------------+--------+---------+---------
+ _timescaledb_internal._hyper_14_28_chunk | a      | integer | t
+ _timescaledb_internal._hyper_14_28_chunk | c      | integer | f
+ _timescaledb_internal._hyper_14_28_chunk | d      | boolean | f
+
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_indexespred(ch) ORDER BY 1, 2;
+                    ch                    |                            Index                            | Columns | Expr | Pred  | Unique | Primary | Exclusion | Tablespace 
+------------------------------------------+-------------------------------------------------------------+---------+------+-------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_14_28_chunk | _timescaledb_internal._hyper_14_28_chunk_p_hypertable_a_idx | {a}     |      |       | f      | f       | f         | 
+ _timescaledb_internal._hyper_14_28_chunk | _timescaledb_internal._hyper_14_28_chunk_idx_ht             | {a,c}   |      | NOT d | f      | f       | f         | 
+
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_constraints(ch) ORDER BY 1, 2;
+                    ch                    |  Constraint   | Type | Columns | Index |          Expr          | Deferrable | Deferred | Validated 
+------------------------------------------+---------------+------+---------+-------+------------------------+------------+----------+-----------
+ _timescaledb_internal._hyper_14_28_chunk | constraint_39 | c    | {a}     | -     | ((a >= 0) AND (a < 3)) | f          | f        | t
 
 DROP TABLE p_hypertable;
 -- check none of our hooks interact badly with normal alter view handling
