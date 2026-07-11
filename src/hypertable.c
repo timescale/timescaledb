@@ -55,6 +55,7 @@
 #include "error_utils.h"
 #include "errors.h"
 #include "extension.h"
+#include "foreign_key.h"
 #include "guc.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
@@ -1954,6 +1955,11 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 		timescaledb_move_from_table_to_chunks(ht, RowExclusiveLock);
 	}
+
+#if PG19_GE
+	/* Route pre-existing inbound foreign key checks through the hypertable. */
+	ts_fk_swap_referencing_check_triggers(table_relid);
+#endif
 
 	ts_cache_release(&hcache);
 
