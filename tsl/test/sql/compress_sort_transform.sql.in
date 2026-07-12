@@ -8,6 +8,7 @@
 
 set work_mem to '64MB';
 set enable_hashagg to off;
+set timescaledb.enable_deferred_chunk_scan TO false;
 
 \set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 

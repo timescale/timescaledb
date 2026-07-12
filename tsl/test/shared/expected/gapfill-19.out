@@ -3634,11 +3634,19 @@ ORDER BY 1,2;
          ->  Values Scan on "*VALUES*"
          ->  Custom Scan (GapFill)
                InitPlan expr_1
-                 ->  Aggregate
-                       ->  Seq Scan on _hyper_X_X_chunk m2
+                 ->  Result
+                       InitPlan minmax_1
+                         ->  Limit
+                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2
+                                     Order: "time"
+                                     Filter: (("time" IS NOT NULL))
                InitPlan expr_2
-                 ->  Aggregate
-                       ->  Seq Scan on _hyper_X_X_chunk m2_1
+                 ->  Result
+                       InitPlan minmax_2
+                         ->  Limit
+                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_1
+                                     Order: "time" DESC
+                                     Filter: (("time" IS NOT NULL))
                ->  GroupAggregate
                      Group Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
                      ->  Sort
@@ -3708,11 +3716,19 @@ ORDER BY 1,2;
          ->  Values Scan on "*VALUES*"
          ->  Custom Scan (GapFill)
                InitPlan expr_2
-                 ->  Aggregate
-                       ->  Seq Scan on _hyper_X_X_chunk m2_2
+                 ->  Result
+                       InitPlan minmax_1
+                         ->  Limit
+                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_2
+                                     Order: "time"
+                                     Filter: (("time" IS NOT NULL))
                InitPlan expr_3
-                 ->  Aggregate
-                       ->  Seq Scan on _hyper_X_X_chunk m2_3
+                 ->  Result
+                       InitPlan minmax_2
+                         ->  Limit
+                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_3
+                                     Order: "time" DESC
+                                     Filter: (("time" IS NOT NULL))
                ->  Group
                      Group Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
                      ->  Sort
@@ -3739,8 +3755,12 @@ GROUP BY 1,2 ORDER BY 2,1;
 --- QUERY PLAN ---
  Custom Scan (GapFill)
    InitPlan expr_2
-     ->  Aggregate
-           ->  Seq Scan on _hyper_X_X_chunk m2_2
+     ->  Result
+           InitPlan minmax_2
+             ->  Limit
+                   ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_2
+                         Order: "time" DESC
+                         Filter: (("time" IS NOT NULL))
    ->  GroupAggregate
          Group Key: m1.device_id, (time_bucket_gapfill('@ 20 mins'::interval, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
          ->  Sort
