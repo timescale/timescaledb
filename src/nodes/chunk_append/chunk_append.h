@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <lib/stringinfo.h>
 #include <nodes/extensible.h>
 
 #include "hypertable.h"
@@ -63,6 +64,10 @@ extern TSDLLEXPORT bool ts_is_chunk_append_path(Path *path);
 extern TSDLLEXPORT bool ts_is_chunk_append_plan(Plan *plan);
 
 extern Scan *ts_chunk_append_get_scan_plan(Plan *plan);
+
+/* Append EXPLAIN sort-order decoration (DESC/USING/NULLS/COLLATE) for a sort key. */
+extern TSDLLEXPORT void ts_show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator,
+												  Oid collation, bool nullsFirst);
 
 void _chunk_append_init(void);
 
