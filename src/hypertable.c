@@ -1297,6 +1297,14 @@ ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode)
 	return find_inheritance_children(table_relid, lockmode) != NIL;
 }
 
+/* True when the hypertable has a tiered (OSM) chunk with a non-contiguous range. */
+bool
+ts_hypertable_has_noncontiguous_osm_chunk(const Hypertable *ht)
+{
+	return ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID &&
+		   ts_flags_are_set_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+}
+
 static void
 hypertable_create_schema(const char *schema_name)
 {

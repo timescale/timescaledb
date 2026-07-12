@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+SET timescaledb.enable_deferred_chunk_scan TO false;
+
 create table metrics(ts timestamp, id int, value float);
 select create_hypertable('metrics', 'ts');
 insert into metrics values ('2022-02-02 02:02:02', 2, 2.),

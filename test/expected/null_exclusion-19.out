@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
+SET timescaledb.enable_deferred_chunk_scan TO false;
 create table metrics(ts timestamp, id int, value float);
 select create_hypertable('metrics', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
