@@ -1854,7 +1854,7 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 				 * In all other cases of direct modification of chunks we dont interfere
 				 * and do not add a ModifyHypertable node.
 				 */
-				Oid uncompressed_relid = ts_relation_get_uncompressed_relid(rte->relid);
+				Oid uncompressed_relid = ts_relation_get_uncompressed_relid(rte->relid, NULL);
 				if (OidIsValid(uncompressed_relid))
 				{
 					Chunk *uncompressed = ts_chunk_get_by_relid(uncompressed_relid, true);
