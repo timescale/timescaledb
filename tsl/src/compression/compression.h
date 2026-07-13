@@ -354,8 +354,7 @@ extern Datum tsl_compressed_data_column_size(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_to_array(PG_FUNCTION_ARGS);
 extern Datum tsl_decompress_batch(PG_FUNCTION_ARGS);
 
-static void
-pg_attribute_unused() assert_num_compression_algorithms_sane(void)
+pg_attribute_unused() static void assert_num_compression_algorithms_sane(void)
 {
 	/* make sure not too many compression algorithms   */
 	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS <= _MAX_NUM_COMPRESSION_ALGORITHMS,

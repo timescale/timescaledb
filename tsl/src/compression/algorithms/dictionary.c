@@ -58,8 +58,7 @@ dictionary_compressed_has_nulls(const CompressedDataHeader *header)
 	return dc->has_nulls;
 }
 
-static void
-pg_attribute_unused() assertions(void)
+pg_attribute_unused() static void assertions(void)
 {
 	DictionaryCompressed test_val;
 	/* make sure no padding bytes make it to disk */
