@@ -145,7 +145,7 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 
 	if (ts_relation_is_compressed_chunk_relation(chunk_id))
 	{
-		Oid uncompressed_relid = ts_relation_get_uncompressed_relid(chunk_id);
+		Oid uncompressed_relid = ts_relation_get_uncompressed_relid(chunk_id, NULL);
 
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
