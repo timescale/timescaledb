@@ -45,6 +45,7 @@ set(TEST_FILES
     compress_qualpushdown_saop.sql
     compress_sort_transform.sql
     compress_sparse_config.sql
+    compress_stats.sql
     compress_unordered_sort.sql
     compressed_collation.sql
     compressed_detoaster.sql
@@ -103,6 +104,7 @@ set(TEST_TEMPLATES
     compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
+    memoize.sql.in
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in

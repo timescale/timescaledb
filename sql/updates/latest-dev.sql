@@ -1,6 +1,8 @@
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size(regclass);
 
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(INTEGER, INTEGER, ANYELEMENT, INTEGER, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN);
+
 --
 -- BEGIN chunk.compressed_chunk_id no longer used
 --
@@ -73,4 +75,6 @@ WHERE compression_state = 1;
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_dim_compress_check;
 ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_num_dimensions_check CHECK (num_dimensions > 0);
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_compress_check;
+
+DROP FUNCTION IF EXISTS @extschema@.alter_job(job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ, if_exists BOOL, check_config REGPROC, fixed_schedule BOOL, initial_start TIMESTAMPTZ, timezone TEXT, job_name TEXT);
 

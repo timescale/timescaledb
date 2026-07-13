@@ -2050,7 +2050,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 										   var->varattno,
 										   op_strategy,
 										   arg_value->consttype,
-										   arg_value->constcollid,
+										   collation, /* need to use OpExpr input collation */
 										   opcode,
 										   arg_value->constisnull ? 0 : arg_value->constvalue);
 				}

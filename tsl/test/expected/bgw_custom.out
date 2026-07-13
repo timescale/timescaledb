@@ -224,6 +224,44 @@ SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
 -----------+------------------
  f         | {"test": "test"}
 
+-- config_merge merges its keys into the existing config
+SELECT job_id FROM alter_job(1001, config_merge => '{"key1":"value1"}');
+ job_id 
+--------
+   1001
+
+SELECT config FROM timescaledb_information.jobs WHERE job_id = 1001;
+               config               
+------------------------------------
+ {"key1": "value1", "test": "test"}
+
+-- keys in config_merge take precedence over existing keys
+SELECT job_id FROM alter_job(1001, config_merge => '{"test":"overwritten"}');
+ job_id 
+--------
+   1001
+
+SELECT config FROM timescaledb_information.jobs WHERE job_id = 1001;
+                  config                   
+-------------------------------------------
+ {"key1": "value1", "test": "overwritten"}
+
+-- specifying both config and config_merge in the same call is an error
+\set ON_ERROR_STOP 0
+SELECT job_id FROM alter_job(1001, config => '{"a":"1"}', config_merge => '{"b":"2"}');
+ERROR:  cannot specify both "config" and "config_merge"
+\set ON_ERROR_STOP 1
+SELECT config FROM timescaledb_information.jobs WHERE job_id = 1001;
+                  config                   
+-------------------------------------------
+ {"key1": "value1", "test": "overwritten"}
+
+-- restore the config used by the following tests
+SELECT job_id FROM alter_job(1001, config => '{"test":"test"}');
+ job_id 
+--------
+   1001
+
 -- test updating the job name
 SELECT job_id, application_name FROM alter_job(1001,job_name:='custom_name_2');
  job_id |   application_name   
@@ -1189,3 +1227,25 @@ SELECT delete_job(:job_work_mem);
 
 DROP TABLE work_mem_log;
 DROP PROCEDURE log_work_mem;
+-- config_merge on a job without any config sets the configuration
+SELECT add_job('custom_func', '1h', initial_start => :'time_zero'::TIMESTAMPTZ) AS job_no_config \gset
+SELECT config FROM timescaledb_information.jobs WHERE job_id = :job_no_config;
+ config 
+--------
+ 
+
+SELECT job_id FROM alter_job(:job_no_config, config_merge => '{"fresh":"config"}');
+ job_id 
+--------
+   1024
+
+SELECT config FROM timescaledb_information.jobs WHERE job_id = :job_no_config;
+       config        
+---------------------
+ {"fresh": "config"}
+
+SELECT delete_job(:job_no_config);
+ delete_job 
+------------
+ 
+
