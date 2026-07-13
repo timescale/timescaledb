@@ -663,8 +663,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME     
 --------------+-------------------
-            9 | _hyper_9_19_chunk
-            9 | _hyper_9_20_chunk
+            1 | _hyper_9_19_chunk
+            1 | _hyper_9_20_chunk
 
 DROP TABLE sample_table;
 -- test for IS NOT NULL values in SEGMENTBY column
@@ -2830,13 +2830,12 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = substring(CURRENT_USER,
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches scanned: 1
-   Batches decompressed: 1
-   Tuples decompressed: 1
+   Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
-         ->  Custom Scan (ChunkAppend) on test_pushdown (actual rows=1.00 loops=1)
+         ->  Custom Scan (ChunkAppend) on test_pushdown (actual rows=0.00 loops=1)
                Chunks excluded during startup: 0
-               ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                      Filter: (device = ("substring"((CURRENT_USER)::text, (length((CURRENT_USER)::text) + 1)) || 'c'::text))
 
 -- JOIN tests
@@ -2994,13 +2993,12 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',CURRENT_USER); RO
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches scanned: 1
-   Batches decompressed: 1
-   Tuples decompressed: 1
+   Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
-         ->  Custom Scan (ChunkAppend) on test_pushdown (actual rows=1.00 loops=1)
+         ->  Custom Scan (ChunkAppend) on test_pushdown (actual rows=0.00 loops=1)
                Chunks excluded during startup: 0
-               ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                      Filter: (device = ANY (ARRAY['a'::text, (CURRENT_USER)::text]))
 
 -- arroyop pushdown only works for segmentby columns atm so 3 decompressions are expected for now
@@ -3328,3 +3326,318 @@ SELECT to_timestamp(lowest_modified_value / 1000000.0) AS lowest,
 
 RESET TIME ZONE;
 RESET
+-- github issue 10129: delete on compressed rows silently deletes
+-- rows when the predicate on a segmentby column is <> ANY(NULL::array)
+CREATE TABLE trade_ticks (
+    ts       timestamptz NOT NULL,
+    exchange int,
+    price    int
+);
+CREATE TABLE
+SELECT create_hypertable('trade_ticks', 'ts',
+                         chunk_time_interval => interval '1 day');
+     create_hypertable     
+---------------------------
+ (51,public,trade_ticks,t)
+
+ALTER TABLE trade_ticks SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'exchange',
+    timescaledb.compress_orderby   = 'ts'
+);
+ALTER TABLE
+INSERT INTO trade_ticks
+SELECT '2024-01-01'::timestamptz + (g * interval '5 minutes'),
+       g % 4, g
+FROM generate_series(0, 287) g;
+INSERT 0 288
+SELECT compress_chunk(c) FROM show_chunks('trade_ticks') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_51_95_chunk
+ _timescaledb_internal._hyper_51_96_chunk
+
+-- Predicate matches zero rows:
+SELECT count(*) AS matching_rows
+FROM trade_ticks
+WHERE exchange <> ANY (NULL::int[]);
+ matching_rows 
+---------------
+             0
+
+-- matching_rows = 0
+-- Baseline: optimization off, correct result.
+BEGIN;
+BEGIN
+SET LOCAL timescaledb.enable_compressed_direct_batch_delete = off;
+SET
+DELETE FROM trade_ticks WHERE exchange <> ANY (NULL::int[]);
+DELETE 0
+-- DELETE 0
+SELECT count(*) AS rows_baseline FROM trade_ticks;
+ rows_baseline 
+---------------
+           288
+
+-- rows_baseline = 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | count 
+----------+-------
+        0 |    72
+        1 |    72
+        2 |    72
+        3 |    72
+
+ROLLBACK;
+ROLLBACK
+-- Bug: direct batch delete silently removes rows.
+BEGIN;
+BEGIN
+DELETE FROM trade_ticks WHERE exchange <> ANY (NULL::int[]);
+DELETE 0
+-- DELETE 216 if the bug exists, expected DELETE 0
+SELECT count(*) AS rows_after FROM trade_ticks;
+ rows_after 
+------------
+        288
+
+-- rows_after = 72 if the bug exists, expected 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | count 
+----------+-------
+        0 |    72
+        1 |    72
+        2 |    72
+        3 |    72
+
+-- only exchange=0 survives if the bug exists
+ROLLBACK;
+ROLLBACK
+-- Other variations, with NULL array members
+-- Baseline, deleting all exchanges except '0'
+BEGIN;
+BEGIN
+SET LOCAL timescaledb.enable_compressed_direct_batch_delete = off;
+SET
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[0, NULL]::int[]);
+DELETE 216
+-- DELETE 216
+SELECT count(*) AS rows_baseline FROM trade_ticks;
+ rows_baseline 
+---------------
+            72
+
+-- rows_baseline = 72
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | count 
+----------+-------
+        0 |    72
+
+-- only exchange=0 remains
+ROLLBACK;
+ROLLBACK
+-- The bug deletes all rows, doesn't spare exchange=0
+BEGIN;
+BEGIN
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[0, NULL]::int[]);
+DELETE 216
+-- expected DELETE 216
+SELECT count(*) AS rows_after FROM trade_ticks;
+ rows_after 
+------------
+         72
+
+-- expected 72
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | count 
+----------+-------
+        0 |    72
+
+-- expected exchange=0
+ROLLBACK;
+ROLLBACK
+-- Baseline, should not delete anything with a single NULL member
+BEGIN;
+BEGIN
+SET LOCAL timescaledb.enable_compressed_direct_batch_delete = off;
+SET
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[NULL]::int[]);
+DELETE 0
+-- DELETE 0
+SELECT count(*) AS rows_baseline FROM trade_ticks;
+ rows_baseline 
+---------------
+           288
+
+-- rows_baseline = 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | count 
+----------+-------
+        0 |    72
+        1 |    72
+        2 |    72
+        3 |    72
+
+ROLLBACK;
+ROLLBACK
+-- The bug deletes all rows
+BEGIN;
+BEGIN
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[NULL]::int[]);
+DELETE 0
+-- expected DELETE 0
+SELECT count(*) AS rows_after FROM trade_ticks;
+ rows_after 
+------------
+        288
+
+-- expected 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | count 
+----------+-------
+        0 |    72
+        1 |    72
+        2 |    72
+        3 |    72
+
+-- expected all exchanges
+ROLLBACK;
+ROLLBACK
+-- Baseline, check if we can handle multiple NULLs, should not delete anything
+BEGIN;
+BEGIN
+SET LOCAL timescaledb.enable_compressed_direct_batch_delete = off;
+SET
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[NULL,NULL]::int[]);
+DELETE 0
+-- DELETE 0
+SELECT count(*) AS rows_baseline FROM trade_ticks;
+ rows_baseline 
+---------------
+           288
+
+-- rows_baseline = 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | count 
+----------+-------
+        0 |    72
+        1 |    72
+        2 |    72
+        3 |    72
+
+ROLLBACK;
+ROLLBACK
+-- The bug deletes all rows
+BEGIN;
+BEGIN
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[NULL,NULL]::int[]);
+DELETE 0
+-- expected DELETE 0
+SELECT count(*) AS rows_after FROM trade_ticks;
+ rows_after 
+------------
+        288
+
+-- expected 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | count 
+----------+-------
+        0 |    72
+        1 |    72
+        2 |    72
+        3 |    72
+
+-- expected all exchanges
+ROLLBACK;
+ROLLBACK
+-- This should keep exchange=0 and 1, and delete exchange=2 and 3
+DELETE FROM trade_ticks WHERE exchange <> ALL(ARRAY[0, 1]);
+DELETE 144
+SELECT exchange, count(*) AS cnt FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ exchange | cnt 
+----------+-----
+        0 |  72
+        1 |  72
+
+DROP TABLE trade_ticks;
+DROP TABLE
+-- LLM Fuzzer found that we need to test the UPDATE path against crashes
+CREATE TABLE crash_test (
+    ts  timestamptz NOT NULL,
+    seg int,
+    val int
+);
+CREATE TABLE
+SELECT create_hypertable('crash_test', 'ts',
+                         chunk_time_interval => interval '1 day');
+    create_hypertable     
+--------------------------
+ (53,public,crash_test,t)
+
+ALTER TABLE crash_test SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'seg',
+    timescaledb.compress_orderby   = 'ts'
+);
+ALTER TABLE
+INSERT INTO crash_test
+SELECT '2024-01-01'::timestamptz + (g * interval '5 minutes'),
+       g % 4, g
+FROM generate_series(0, 287) g;
+INSERT 0 288
+SELECT compress_chunk(c) FROM show_chunks('crash_test') c;
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_53_99_chunk
+ _timescaledb_internal._hyper_53_100_chunk
+
+BEGIN;
+BEGIN
+UPDATE crash_test SET val = 0 WHERE seg = ANY(NULL::int[]);
+UPDATE 0
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+UPDATE crash_test SET val = 0 WHERE seg <> ANY(NULL::int[]);
+UPDATE 0
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+UPDATE crash_test SET val = 0 WHERE seg = ANY(ARRAY[0,NULL]::int[]);
+UPDATE 72
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+UPDATE crash_test SET val = 0 WHERE seg <> ANY(ARRAY[0,NULL]::int[]);
+UPDATE 216
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+UPDATE crash_test SET val = 0 WHERE seg = ANY(ARRAY[NULL]::int[]);
+UPDATE 0
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+UPDATE crash_test SET val = 0 WHERE seg <> ANY(ARRAY[NULL]::int[]);
+UPDATE 0
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+UPDATE crash_test SET val = 0 WHERE seg = ANY(ARRAY[NULL, NULL]::int[]);
+UPDATE 0
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+UPDATE crash_test SET val = 0 WHERE seg <> ANY(ARRAY[NULL, NULL]::int[]);
+UPDATE 0
+ROLLBACK;
+ROLLBACK
+DROP TABLE crash_test;
+DROP TABLE
