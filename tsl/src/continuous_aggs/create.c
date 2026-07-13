@@ -172,6 +172,10 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 
 	nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)] = true;
 
+	/* Granular refresh is disabled by default; enabled later via the API. */
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] =
+		BoolGetDatum(false);
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
