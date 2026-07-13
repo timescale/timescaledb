@@ -184,4 +184,17 @@ RETURNING ctid, xmin, tableoid::regclass, *
 DROP TABLE ht_dummy;
 
 
+-- It's possible for a hypertable itself to be excluded by constraint exclusion
+-- under a non-default GUC setting.
+CREATE TABLE ht_excluded(time timestamptz NOT NULL, val int CHECK (val > 0));
+SELECT create_hypertable('ht_excluded', 'time');
+INSERT INTO ht_excluded VALUES ('2020-01-15', 1);
+
+SET constraint_exclusion = on;
+
+UPDATE ht_excluded SET val = 99 WHERE val < 0;
+
+DROP TABLE ht_excluded;
+
+
 RESET enable_material;
