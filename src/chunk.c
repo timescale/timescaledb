@@ -50,6 +50,7 @@
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/palloc.h>
+#include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 #include <utils/typcache.h>
@@ -98,6 +99,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
+TS_FUNCTION_INFO_V1(ts_hypertable_relid_from_chunk_relid);
 
 static bool ts_chunk_add_status(Chunk *chunk, int32 status);
 
@@ -2604,7 +2606,7 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok,
 }
 
 static bool
-chunk_simple_scan_by_relid(Oid relid, FormData_chunk *form, bool missing_ok)
+chunk_simple_scan_by_relid(Oid relid, FormData_chunk *form, Snapshot snapshot, bool missing_ok)
 {
 	ScanIterator iterator;
 	static const DisplayKeyData displaykey[] = {
@@ -2617,6 +2619,7 @@ chunk_simple_scan_by_relid(Oid relid, FormData_chunk *form, bool missing_ok)
 	}
 
 	iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	iterator.ctx.snapshot = snapshot;
 	init_scan_by_relid(&iterator, relid);
 
 	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
@@ -2631,13 +2634,17 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 		return false;
 	}
 
-	return chunk_simple_scan_by_relid(ts_get_relation_relid(schema, table, true), form, missing_ok);
+	return chunk_simple_scan_by_relid(ts_get_relation_relid(schema, table, true),
+									  form,
+									  NULL,
+									  missing_ok);
 }
 
-bool
-ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
+static inline bool
+ts_chunk_simple_scan_by_reloid_internal(Oid reloid, FormData_chunk *form, Snapshot snapshot,
+										bool missing_ok)
 {
-	bool found = chunk_simple_scan_by_relid(reloid, form, missing_ok);
+	bool found = chunk_simple_scan_by_relid(reloid, form, snapshot, missing_ok);
 
 	if (!found && !missing_ok)
 	{
@@ -2647,6 +2654,12 @@ ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok
 	}
 
 	return found;
+}
+
+bool
+ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
+{
+	return ts_chunk_simple_scan_by_reloid_internal(reloid, form, NULL, missing_ok);
 }
 
 static bool
@@ -2685,6 +2698,68 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	last_id = form.id;
 
 	PG_RETURN_INT32(last_id);
+}
+
+Datum
+ts_hypertable_relid_from_chunk_relid(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	Datum values[2];
+	bool nulls[2] = { false, false };
+	Oid hypertable_relid = InvalidOid;
+	bool is_compressed = false;
+	FormData_chunk chunk_fd;
+
+	if (!OidIsValid(relid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid relation: cannot be NULL")));
+	}
+
+	/* Resolve the TupleDesc from the OUT-parameter signature */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
+		elog(ERROR, "function returning record called in context that cannot accept type record");
+	}
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	/* Use active snapshot for catalog lookups */
+	Snapshot snapshot = GetActiveSnapshot();
+	Oid uncompressed_relid = ts_relation_get_uncompressed_relid(relid, snapshot);
+
+	if (OidIsValid(uncompressed_relid))
+	{
+		relid = uncompressed_relid;
+		is_compressed = true;
+	}
+
+	/* If the relid belongs to a chunk find its hypertable relid */
+	if (ts_chunk_simple_scan_by_reloid_internal(relid, &chunk_fd, snapshot, true))
+	{
+		int32 hypertable_id = chunk_fd.hypertable_id;
+
+		if (hypertable_id != INVALID_HYPERTABLE_ID)
+		{
+			hypertable_relid =
+				ts_hypertable_id_to_relid_with_snapshot(hypertable_id, snapshot, true);
+		}
+	}
+
+	if (OidIsValid(hypertable_relid))
+	{
+		values[0] = ObjectIdGetDatum(hypertable_relid);
+		values[1] = BoolGetDatum(is_compressed);
+	}
+	else
+	{
+		nulls[0] = nulls[1] = true;
+	}
+
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
 bool
