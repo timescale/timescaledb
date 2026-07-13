@@ -17,7 +17,7 @@ select * from test where tag = '1';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '1'::text)
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_tag, TEST-HASHES::bigint[])
 
 -- Create a bloom index with the old column name, should be disabled.
@@ -34,7 +34,7 @@ select * from test where tag = '1';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '1'::text)
-   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
 
 -- Try to enable it with the GUC.
 set timescaledb.read_legacy_bloom1_v1 to on;
@@ -43,7 +43,7 @@ select * from test where tag = '1';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '1'::text)
-   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_tag, TEST-HASHES::bigint[])
 
 reset timescaledb.read_legacy_bloom1_v1;
@@ -58,7 +58,7 @@ select * from test where tag = '2';
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
          Vectorized Filter: (tag = '2'::text)
          Rows Removed by Filter: 1
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=1.00 loops=1)
          Filter: (tag = '2'::text)
 
@@ -74,7 +74,7 @@ select * from test where tag = '1';
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '1'::text)
    Rows Removed by Filter: 1
-   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=2.00 loops=1)
 
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '2';
@@ -82,7 +82,7 @@ select * from test where tag = '2';
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '2'::text)
    Rows Removed by Filter: 1
-   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=2.00 loops=1)
 
 set timescaledb.read_legacy_bloom1_v1 to on;
 explain (analyze, costs off, buffers off, timing off, summary off)
@@ -91,7 +91,7 @@ select * from test where tag = '1';
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '1'::text)
    Rows Removed by Filter: 1
-   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=2.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_tag, TEST-HASHES::bigint[])
 
 explain (analyze, costs off, buffers off, timing off, summary off)
@@ -99,7 +99,7 @@ select * from test where tag = '2';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '2'::text)
-   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_tag, TEST-HASHES::bigint[])
          Rows Removed by Filter: 1
 

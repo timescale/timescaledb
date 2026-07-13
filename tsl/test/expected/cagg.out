@@ -1463,7 +1463,7 @@ ORDER BY 1;
      chunk_name     |         range_start          |          range_end           | is_compressed 
 --------------------+------------------------------+------------------------------+---------------
  _hyper_41_79_chunk | Fri Dec 24 16:00:00 1999 PST | Mon May 22 17:00:00 2000 PDT | t
- _hyper_41_83_chunk | Sun Mar 18 16:00:00 2001 PST | Wed Aug 15 17:00:00 2001 PDT | f
+ _hyper_41_82_chunk | Sun Mar 18 16:00:00 2001 PST | Wed Aug 15 17:00:00 2001 PDT | f
 
 SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id = :'MAT_HTID' ORDER BY 1, 2,3;
@@ -1515,7 +1515,7 @@ CREATE TABLE test_morecols ( time TIMESTAMPTZ NOT NULL,
 SELECT create_hypertable('test_morecols', 'time', chunk_time_interval=> '7 days'::interval);
       create_hypertable      
 -----------------------------
- (43,public,test_morecols,t)
+ (42,public,test_morecols,t)
 
 INSERT INTO test_morecols
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 55, 75, 40, 70, NULL, 100, 200, 200;
@@ -1528,7 +1528,7 @@ NOTICE:  defaulting compress_orderby to time_bucket
 SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_44_89_chunk
+ _timescaledb_internal._hyper_43_88_chunk
 
 SELECT * FROM test_morecols_cagg ORDER BY time_bucket;
          time_bucket          |         avg         | count 
@@ -1558,7 +1558,7 @@ CREATE INDEX ON issue3248(device_id,time DESC);
 SELECT create_hypertable('issue3248','time',create_default_indexes:=false);
     create_hypertable    
 -------------------------
- (46,public,issue3248,t)
+ (44,public,issue3248,t)
 
 ALTER TABLE issue3248 DROP COLUMN filler_1;
 INSERT INTO issue3248(time,device_id,v0,v1,v2,v3)
@@ -1594,7 +1594,7 @@ value numeric
 select create_hypertable('test_group_idx', 'time');
       create_hypertable       
 ------------------------------
- (48,public,test_group_idx,t)
+ (46,public,test_group_idx,t)
 
 insert into test_group_idx
 select t, round(random()*10), random()*5
@@ -1631,9 +1631,9 @@ select view_name, materialization_hypertable_name from timescaledb_information.c
 where view_name like 'cagg_index_%' ORDER BY view_name;
      view_name      | materialization_hypertable_name 
 --------------------+---------------------------------
- cagg_index_default | _materialized_hypertable_51
- cagg_index_false   | _materialized_hypertable_50
- cagg_index_true    | _materialized_hypertable_49
+ cagg_index_default | _materialized_hypertable_49
+ cagg_index_false   | _materialized_hypertable_48
+ cagg_index_true    | _materialized_hypertable_47
 
 -- now make sure a group index has been created when explicitly asked for
 \x on
@@ -1647,34 +1647,34 @@ where view_name like 'cagg_index_%')
 order by tablename, indexname;
 -[ RECORD 1 ]-------------------------------------------------------------------------------------------------------------------------------------------------
 schemaname | _timescaledb_internal
+tablename  | _materialized_hypertable_47
+indexname  | _materialized_hypertable_47_bucket_idx
+tablespace | 
+indexdef   | CREATE INDEX _materialized_hypertable_47_bucket_idx ON _timescaledb_internal._materialized_hypertable_47 USING btree (bucket DESC)
+-[ RECORD 2 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+schemaname | _timescaledb_internal
+tablename  | _materialized_hypertable_47
+indexname  | _materialized_hypertable_47_symbol_bucket_idx
+tablespace | 
+indexdef   | CREATE INDEX _materialized_hypertable_47_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_47 USING btree (symbol, bucket DESC)
+-[ RECORD 3 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+schemaname | _timescaledb_internal
+tablename  | _materialized_hypertable_48
+indexname  | _materialized_hypertable_48_bucket_idx
+tablespace | 
+indexdef   | CREATE INDEX _materialized_hypertable_48_bucket_idx ON _timescaledb_internal._materialized_hypertable_48 USING btree (bucket DESC)
+-[ RECORD 4 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+schemaname | _timescaledb_internal
 tablename  | _materialized_hypertable_49
 indexname  | _materialized_hypertable_49_bucket_idx
 tablespace | 
 indexdef   | CREATE INDEX _materialized_hypertable_49_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (bucket DESC)
--[ RECORD 2 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+-[ RECORD 5 ]-------------------------------------------------------------------------------------------------------------------------------------------------
 schemaname | _timescaledb_internal
 tablename  | _materialized_hypertable_49
 indexname  | _materialized_hypertable_49_symbol_bucket_idx
 tablespace | 
 indexdef   | CREATE INDEX _materialized_hypertable_49_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (symbol, bucket DESC)
--[ RECORD 3 ]-------------------------------------------------------------------------------------------------------------------------------------------------
-schemaname | _timescaledb_internal
-tablename  | _materialized_hypertable_50
-indexname  | _materialized_hypertable_50_bucket_idx
-tablespace | 
-indexdef   | CREATE INDEX _materialized_hypertable_50_bucket_idx ON _timescaledb_internal._materialized_hypertable_50 USING btree (bucket DESC)
--[ RECORD 4 ]-------------------------------------------------------------------------------------------------------------------------------------------------
-schemaname | _timescaledb_internal
-tablename  | _materialized_hypertable_51
-indexname  | _materialized_hypertable_51_bucket_idx
-tablespace | 
-indexdef   | CREATE INDEX _materialized_hypertable_51_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (bucket DESC)
--[ RECORD 5 ]-------------------------------------------------------------------------------------------------------------------------------------------------
-schemaname | _timescaledb_internal
-tablename  | _materialized_hypertable_51
-indexname  | _materialized_hypertable_51_symbol_bucket_idx
-tablespace | 
-indexdef   | CREATE INDEX _materialized_hypertable_51_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (symbol, bucket DESC)
 
 \x off
 --
@@ -1694,7 +1694,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'timec');
     create_hypertable     
 --------------------------
- (52,public,conditions,t)
+ (50,public,conditions,t)
 
 INSERT INTO conditions
 VALUES
@@ -1768,7 +1768,7 @@ SELECT * FROM mat_m1 ORDER BY 1, 2;
 
 -- ordered set aggr
 DROP MATERIALIZED VIEW mat_m1;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_55_116_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_53_114_chunk
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
@@ -1848,18 +1848,18 @@ NOTICE:  refreshing continuous aggregate "mat_m1"
 SELECT pg_get_viewdef('mat_m1',true);
                                                                                   pg_get_viewdef                                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- ( SELECT _materialized_hypertable_59.time_bucket,                                                                                                                                +
-     _materialized_hypertable_59.count,                                                                                                                                           +
-     _materialized_hypertable_59.sum                                                                                                                                              +
-    FROM _timescaledb_internal._materialized_hypertable_59                                                                                                                        +
-   WHERE _materialized_hypertable_59.time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone)+
-   ORDER BY _materialized_hypertable_59.sum DESC)                                                                                                                                 +
+ ( SELECT _materialized_hypertable_57.time_bucket,                                                                                                                                +
+     _materialized_hypertable_57.count,                                                                                                                                           +
+     _materialized_hypertable_57.sum                                                                                                                                              +
+    FROM _timescaledb_internal._materialized_hypertable_57                                                                                                                        +
+   WHERE _materialized_hypertable_57.time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(57)), '-infinity'::timestamp with time zone)+
+   ORDER BY _materialized_hypertable_57.sum DESC)                                                                                                                                 +
  UNION ALL                                                                                                                                                                        +
  ( SELECT time_bucket('@ 7 days'::interval, conditions.timec) AS time_bucket,                                                                                                     +
      count(conditions.location) AS count,                                                                                                                                         +
      sum(conditions.temperature) AS sum                                                                                                                                           +
     FROM conditions                                                                                                                                                               +
-   WHERE conditions.timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone)                      +
+   WHERE conditions.timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(57)), '-infinity'::timestamp with time zone)                      +
    GROUP BY (time_bucket('@ 7 days'::interval, conditions.timec))                                                                                                                 +
    ORDER BY (sum(conditions.temperature)) DESC)                                                                                                                                   +
    ORDER BY 3 DESC;
@@ -1896,11 +1896,11 @@ SELECT * FROM mat_m1;
 EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1;
 --- QUERY PLAN ---
  Merge Append
-   Sort Key: _materialized_hypertable_59.sum DESC
+   Sort Key: _materialized_hypertable_57.sum DESC
    ->  Merge Append
-         Sort Key: _materialized_hypertable_59.sum DESC
-         ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-         ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+         Sort Key: _materialized_hypertable_57.sum DESC
+         ->  Index Scan Backward using _hyper_57_121_chunk__materialized_hypertable_57_sum_time_bucket on _hyper_57_121_chunk
+         ->  Index Scan Backward using _hyper_57_122_chunk__materialized_hypertable_57_sum_time_bucket on _hyper_57_122_chunk
                Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
    ->  Sort
          Sort Key: (sum(conditions.temperature)) DESC
@@ -1908,12 +1908,12 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1;
                Group Key: (time_bucket('@ 7 days'::interval, conditions.timec))
                ->  Append
                      ->  Partial HashAggregate
-                           Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
-                           ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
+                           Group Key: time_bucket('@ 7 days'::interval, _hyper_50_109_chunk.timec)
+                           ->  Index Scan Backward using _hyper_50_109_chunk_conditions_timec_idx on _hyper_50_109_chunk
                                  Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
                      ->  Partial HashAggregate
-                           Group Key: time_bucket('@ 7 days'::interval, _hyper_52_125_chunk.timec)
-                           ->  Seq Scan on _hyper_52_125_chunk
+                           Group Key: time_bucket('@ 7 days'::interval, _hyper_50_123_chunk.timec)
+                           ->  Seq Scan on _hyper_50_123_chunk
 
 -- Ordering by another column
 SELECT * FROM mat_m1 ORDER BY count;
@@ -1927,13 +1927,13 @@ SELECT * FROM mat_m1 ORDER BY count;
 EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
 --- QUERY PLAN ---
  Sort
-   Sort Key: _materialized_hypertable_59.count
+   Sort Key: _materialized_hypertable_57.count
    ->  Merge Append
-         Sort Key: _materialized_hypertable_59.sum DESC
+         Sort Key: _materialized_hypertable_57.sum DESC
          ->  Merge Append
-               Sort Key: _materialized_hypertable_59.sum DESC
-               ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-               ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+               Sort Key: _materialized_hypertable_57.sum DESC
+               ->  Index Scan Backward using _hyper_57_121_chunk__materialized_hypertable_57_sum_time_bucket on _hyper_57_121_chunk
+               ->  Index Scan Backward using _hyper_57_122_chunk__materialized_hypertable_57_sum_time_bucket on _hyper_57_122_chunk
                      Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
          ->  Sort
                Sort Key: (sum(conditions.temperature)) DESC
@@ -1941,12 +1941,12 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                      Group Key: (time_bucket('@ 7 days'::interval, conditions.timec))
                      ->  Append
                            ->  Partial HashAggregate
-                                 Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
-                                 ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
+                                 Group Key: time_bucket('@ 7 days'::interval, _hyper_50_109_chunk.timec)
+                                 ->  Index Scan Backward using _hyper_50_109_chunk_conditions_timec_idx on _hyper_50_109_chunk
                                        Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
                            ->  Partial HashAggregate
-                                 Group Key: time_bucket('@ 7 days'::interval, _hyper_52_125_chunk.timec)
-                                 ->  Seq Scan on _hyper_52_125_chunk
+                                 Group Key: time_bucket('@ 7 days'::interval, _hyper_50_123_chunk.timec)
+                                 ->  Seq Scan on _hyper_50_123_chunk
 
 -- Change the type of cagg
 ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);
@@ -1957,7 +1957,7 @@ SELECT pg_get_viewdef('mat_m1',true);
   SELECT time_bucket,                                     +
      count,                                               +
      sum                                                  +
-    FROM _timescaledb_internal._materialized_hypertable_59+
+    FROM _timescaledb_internal._materialized_hypertable_57+
    ORDER BY sum DESC;
 
 -- Now the query will show only the materialized data, without last two
@@ -1973,9 +1973,9 @@ SELECT * FROM mat_m1;
 EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1;
 --- QUERY PLAN ---
  Merge Append
-   Sort Key: _materialized_hypertable_59.sum DESC
-   ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-   ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+   Sort Key: _materialized_hypertable_57.sum DESC
+   ->  Index Scan Backward using _hyper_57_121_chunk__materialized_hypertable_57_sum_time_bucket on _hyper_57_121_chunk
+   ->  Index Scan Backward using _hyper_57_122_chunk__materialized_hypertable_57_sum_time_bucket on _hyper_57_122_chunk
 
 -- Ordering by another column
 SELECT * FROM mat_m1 ORDER BY count;
@@ -1988,11 +1988,11 @@ SELECT * FROM mat_m1 ORDER BY count;
 EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
 --- QUERY PLAN ---
  Sort
-   Sort Key: _materialized_hypertable_59.count
+   Sort Key: _materialized_hypertable_57.count
    ->  Merge Append
-         Sort Key: _materialized_hypertable_59.sum DESC
-         ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-         ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+         Sort Key: _materialized_hypertable_57.sum DESC
+         ->  Index Scan Backward using _hyper_57_121_chunk__materialized_hypertable_57_sum_time_bucket on _hyper_57_121_chunk
+         ->  Index Scan Backward using _hyper_57_122_chunk__materialized_hypertable_57_sum_time_bucket on _hyper_57_122_chunk
 
 SELECT h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME"
@@ -2060,7 +2060,7 @@ view_owner                        | default_perm_user
 materialized_only                 | t
 compression_enabled               | f
 materialization_hypertable_schema | _timescaledb_internal
-materialization_hypertable_name   | _materialized_hypertable_61
+materialization_hypertable_name   | _materialized_hypertable_59
 view_definition                   |  SELECT time_bucket('@ 1 day'::interval, timec) AS timec,+
                                   |     min(location) AS minl,                               +
                                   |     sum(temperature) AS sumt,                            +
@@ -2112,25 +2112,25 @@ SET parallel_tuple_cost = 0;
 EXPLAIN (BUFFERS OFF, COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket >= '2023-07-01';
 --- QUERY PLAN ---
  Merge Append
-   Sort Key: _materialized_hypertable_63.sum DESC
+   Sort Key: _materialized_hypertable_61.sum DESC
    ->  Gather Merge
          Workers Planned: 2
          ->  Sort
-               Sort Key: _materialized_hypertable_63.sum DESC
+               Sort Key: _materialized_hypertable_61.sum DESC
                ->  Parallel Append
-                     ->  Parallel Index Scan using _hyper_63_185_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_185_chunk
+                     ->  Parallel Index Scan using _hyper_61_183_chunk__materialized_hypertable_61_time_bucket_idx on _hyper_61_183_chunk
                            Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-                     ->  Parallel Index Scan using _hyper_63_187_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_187_chunk
+                     ->  Parallel Index Scan using _hyper_61_185_chunk__materialized_hypertable_61_time_bucket_idx on _hyper_61_185_chunk
                            Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-                     ->  Parallel Seq Scan on _hyper_63_184_chunk
+                     ->  Parallel Seq Scan on _hyper_61_182_chunk
    ->  Sort
-         Sort Key: (sum(_hyper_62_182_chunk.temperature)) DESC
+         Sort Key: (sum(_hyper_60_180_chunk.temperature)) DESC
          ->  HashAggregate
-               Group Key: (time_bucket('@ 1 day'::interval, _hyper_62_182_chunk.timec))
+               Group Key: (time_bucket('@ 1 day'::interval, _hyper_60_180_chunk.timec))
                ->  Gather
                      Workers Planned: 1
                      ->  Result
-                           ->  Parallel Index Scan Backward using _hyper_62_182_chunk_conditions_timec_idx on _hyper_62_182_chunk
+                           ->  Parallel Index Scan Backward using _hyper_60_180_chunk_conditions_timec_idx on _hyper_60_180_chunk
                                  Index Cond: ((timec >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (timec >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
                                  Filter: (time_bucket('@ 1 day'::interval, timec) >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone)
 

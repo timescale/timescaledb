@@ -218,7 +218,7 @@ CREATE TABLE cagg_analyze_src(time timestamptz NOT NULL, device int, value float
 SELECT create_hypertable('cagg_analyze_src', 'time', chunk_time_interval => interval '1 day');
        create_hypertable       
 -------------------------------
- (9,public,cagg_analyze_src,t)
+ (5,public,cagg_analyze_src,t)
 
 INSERT INTO cagg_analyze_src
 SELECT '2024-01-01'::timestamptz + (i || ' minute')::interval,
@@ -241,9 +241,9 @@ WHERE c.user_view_name = 'cagg_analyze_view' \gset
 SELECT relname, last_analyze IS NOT NULL AS has_analyze
 FROM pg_stat_all_tables
 WHERE relid = :'mat_ht'::regclass;
-           relname           | has_analyze 
------------------------------+-------------
- _materialized_hypertable_10 | f
+          relname           | has_analyze 
+----------------------------+-------------
+ _materialized_hypertable_6 | f
 
 CREATE FUNCTION cagg_analyze_count_analyzed(view_name name) RETURNS bigint
 LANGUAGE sql AS $$
@@ -298,5 +298,5 @@ WHERE parent.hypertable_id = (SELECT mat_hypertable_id
 
 DROP FUNCTION cagg_analyze_count_analyzed(name);
 DROP MATERIALIZED VIEW cagg_analyze_view;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_17_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_9_chunk
 DROP TABLE cagg_analyze_src;

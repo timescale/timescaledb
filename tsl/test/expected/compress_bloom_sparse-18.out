@@ -32,10 +32,10 @@ select count(compress_chunk(x)) from show_chunks('bloom') x;
      1
 
 select * from settings;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                                             index                                                                                                                                              
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- bloom                                  |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_2_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value", "source": "default"}, {"type": "bloom", "column": "u", "source": "default"}, {"type": "minmax", "column": "ts", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+                 relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                                             index                                                                                                                                              
+----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ bloom                                  |                                                   | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_compressed | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value", "source": "default"}, {"type": "bloom", "column": "u", "source": "default"}, {"type": "minmax", "column": "ts", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 vacuum full analyze bloom;
 select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
@@ -73,9 +73,9 @@ select count(*) from bloom where value = md5(7248::text);
                Vectorized Filter: (_hyper_1_1_chunk.value = '1f4183315762e30ea441d3caef5e64ad'::text)
                Rows Removed by Filter: 999
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_value, TEST-HASHES::bigint[])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_value, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 9
 
 select count(*) from bloom where value = md5(7248::text);
@@ -105,8 +105,8 @@ select count(*) from bloom natural join query;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=10000.00 loops=3)
                Output: _hyper_1_1_chunk.value
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10.00 loops=3)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=10.00 loops=3)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
 
 ;
 with query(value) as materialized (values (md5(3516::text)), (md5(9347::text)),
@@ -135,9 +135,9 @@ select count(*) from bloom where value =
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (never executed)
                Vectorized Filter: (_hyper_1_1_chunk.value = CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN '81b073de9370ea873f548e31b8adc081'::text ELSE NULL::text END)
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_value, '{NULL}'::bigint[])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=0.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_value, '{NULL}'::bigint[])
                      Rows Removed by Filter: 10
 
 reset timescaledb.enable_chunk_append;
@@ -157,9 +157,9 @@ select count(*) from bloom where value =
                Vectorized Filter: (_hyper_1_1_chunk.value = CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN '81b073de9370ea873f548e31b8adc081'::text ELSE 'd1e39c9bda5c80ac3d8ea9d658163967'::text END)
                Rows Removed by Filter: 999
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_value, TEST-HASHES::bigint[])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_value, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 9
 
 -- Stable expression on minmax index
@@ -178,9 +178,9 @@ select count(*) from bloom where x <
                Vectorized Filter: (_hyper_1_1_chunk.x < CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE 1000 END)
                Rows Removed by Filter: 1
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: (compress_hyper_2_2_chunk._ts_meta_v2_first_x < CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE 1000 END)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: (_hyper_1_1_chunk_compressed._ts_meta_v2_first_x < CASE WHEN (now() < 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 1 ELSE 1000 END)
                      Rows Removed by Filter: 9
 
 -- Parameter on minmax index
@@ -200,9 +200,9 @@ execute p(1000);
                Vectorized Filter: (_hyper_1_1_chunk.x < $1)
                Rows Removed by Filter: 1
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: (compress_hyper_2_2_chunk._ts_meta_v2_first_x < $1)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: (_hyper_1_1_chunk_compressed._ts_meta_v2_first_x < $1)
                      Rows Removed by Filter: 9
 
 deallocate p;
@@ -221,9 +221,9 @@ execute p(md5('2345'));
                Vectorized Filter: (_hyper_1_1_chunk.value = $1)
                Rows Removed by Filter: 999
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_value, ARRAY[_timescaledb_functions.bloom1_hash($1)])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_value, ARRAY[_timescaledb_functions.bloom1_hash($1)])
                      Rows Removed by Filter: 9
 
 -- Null parameter on bloom index
@@ -238,9 +238,9 @@ execute p(null);
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (never executed)
                Vectorized Filter: (_hyper_1_1_chunk.value = $1)
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_value, ARRAY[_timescaledb_functions.bloom1_hash($1)])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=0.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_value, ARRAY[_timescaledb_functions.bloom1_hash($1)])
                      Rows Removed by Filter: 10
 
 reset timescaledb.enable_chunk_append;
@@ -261,9 +261,9 @@ execute p('2345');
                Vectorized Filter: (_hyper_1_1_chunk.value = md5($1))
                Rows Removed by Filter: 999
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_value, ARRAY[_timescaledb_functions.bloom1_hash(md5($1))])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_value, ARRAY[_timescaledb_functions.bloom1_hash(md5($1))])
                      Rows Removed by Filter: 9
 
 deallocate p;
@@ -282,9 +282,9 @@ select count(*) from bloom where x < any(array[1000, 2000]::int[]);
                Vectorized Filter: (_hyper_1_1_chunk.x < ANY ('{1000,2000}'::integer[]))
                Rows Removed by Filter: 1
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: ((compress_hyper_2_2_chunk._ts_meta_v2_first_x < 1000) OR (compress_hyper_2_2_chunk._ts_meta_v2_first_x < 2000))
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=2.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: ((_hyper_1_1_chunk_compressed._ts_meta_v2_first_x < 1000) OR (_hyper_1_1_chunk_compressed._ts_meta_v2_first_x < 2000))
                      Rows Removed by Filter: 8
 
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
@@ -299,9 +299,9 @@ select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
                Vectorized Filter: (_hyper_1_1_chunk.value = ANY ('{a9b7ba70783b617e9998dc4dd82eb3c5,08f90c1a417155361a5c4b8d297e0d78}'::text[]))
                Rows Removed by Filter: 1998
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_value, TEST-HASHES::bigint[])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=2.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_value, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 8
 
 -- UUID uses bloom
@@ -317,9 +317,9 @@ select count(*) from bloom where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
                Vectorized Filter: (_hyper_1_1_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
                Rows Removed by Filter: 999
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_u, TEST-HASHES::bigint[])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_u, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 9
 
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
@@ -334,9 +334,9 @@ select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
                Vectorized Filter: (_hyper_1_1_chunk.u = '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid)
                Rows Removed by Filter: 1
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_u, TEST-HASHES::bigint[])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=10.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_u, TEST-HASHES::bigint[])
 
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcac';
@@ -349,9 +349,9 @@ select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcac';
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (never executed)
                Vectorized Filter: (_hyper_1_1_chunk.u = '6c1d0998-05f3-452c-abd3-45afe72bbcac'::uuid)
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_2_2_chunk.regress-test-bloom_u, TEST-HASHES::bigint[])
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=0.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_1_1_chunk_compressed.regress-test-bloom_u, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 10
 
 -- Timestamp uses minmax
@@ -367,9 +367,9 @@ select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';
                Vectorized Filter: ((_hyper_1_1_chunk.ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (_hyper_1_1_chunk.ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
                Rows Removed by Filter: 831
                Bulk Decompression: true
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_v2_first_x, compress_hyper_2_2_chunk._ts_meta_v2_last_x, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.regress-test-bloom_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk.regress-test-bloom_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-                     Filter: ((compress_hyper_2_2_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_2_2_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_x, _hyper_1_1_chunk_compressed._ts_meta_v2_last_x, _hyper_1_1_chunk_compressed.x, _hyper_1_1_chunk_compressed.regress-test-bloom_value, _hyper_1_1_chunk_compressed.value, _hyper_1_1_chunk_compressed.regress-test-bloom_u, _hyper_1_1_chunk_compressed.u, _hyper_1_1_chunk_compressed._ts_meta_v2_min_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_max_ts, _hyper_1_1_chunk_compressed.ts
+                     Filter: ((_hyper_1_1_chunk_compressed._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (_hyper_1_1_chunk_compressed._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
                      Rows Removed by Filter: 9
 
 -- Test some corner cases
@@ -377,7 +377,7 @@ create table corner(ts int, s text, c text);
 select create_hypertable('corner', 'ts');
   create_hypertable  
 ---------------------
- (3,public,corner,t)
+ (2,public,corner,t)
 
 alter table corner set (timescaledb.compress, timescaledb.compress_segmentby = 's',
     timescaledb.compress_orderby = 'ts');
@@ -399,41 +399,41 @@ vacuum full analyze corner;
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'short';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1.00 loops=1)
-   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
-   Vectorized Filter: (_hyper_3_3_chunk.c = 'short'::text)
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=1.00 loops=1)
+   Output: _hyper_2_2_chunk.ts, _hyper_2_2_chunk.s, _hyper_2_2_chunk.c
+   Vectorized Filter: (_hyper_2_2_chunk.c = 'short'::text)
    Rows Removed by Filter: 1
    Batches Removed by Filter: 1
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=2.00 loops=1)
-         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk._ts_meta_v2_first_ts, compress_hyper_4_4_chunk._ts_meta_v2_last_ts, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk.regress-test-bloom_c, compress_hyper_4_4_chunk.c
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_4_4_chunk.regress-test-bloom_c, TEST-HASHES::bigint[])
+   ->  Seq Scan on _timescaledb_internal._hyper_2_2_chunk_compressed (actual rows=2.00 loops=1)
+         Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.s, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_ts, _hyper_2_2_chunk_compressed._ts_meta_v2_last_ts, _hyper_2_2_chunk_compressed.ts, _hyper_2_2_chunk_compressed.regress-test-bloom_c, _hyper_2_2_chunk_compressed.c
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_2_2_chunk_compressed.regress-test-bloom_c, TEST-HASHES::bigint[])
          Rows Removed by Filter: 2
 
 -- Cross-type equality operator.
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'short'::name;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1.00 loops=1)
-   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
-   Filter: (_hyper_3_3_chunk.c = 'short'::name)
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=1.00 loops=1)
+   Output: _hyper_2_2_chunk.ts, _hyper_2_2_chunk.s, _hyper_2_2_chunk.c
+   Filter: (_hyper_2_2_chunk.c = 'short'::name)
    Rows Removed by Filter: 1002
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=4.00 loops=1)
-         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk._ts_meta_v2_first_ts, compress_hyper_4_4_chunk._ts_meta_v2_last_ts, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk.regress-test-bloom_c, compress_hyper_4_4_chunk.c
+   ->  Seq Scan on _timescaledb_internal._hyper_2_2_chunk_compressed (actual rows=4.00 loops=1)
+         Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.s, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_ts, _hyper_2_2_chunk_compressed._ts_meta_v2_last_ts, _hyper_2_2_chunk_compressed.ts, _hyper_2_2_chunk_compressed.regress-test-bloom_c, _hyper_2_2_chunk_compressed.c
 
 -- Comparison with segmentby.
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = s;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1.00 loops=1)
-   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
-   Filter: (_hyper_3_3_chunk.c = _hyper_3_3_chunk.s)
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=1.00 loops=1)
+   Output: _hyper_2_2_chunk.ts, _hyper_2_2_chunk.s, _hyper_2_2_chunk.c
+   Filter: (_hyper_2_2_chunk.c = _hyper_2_2_chunk.s)
    Rows Removed by Filter: 1
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=2.00 loops=1)
-         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk._ts_meta_v2_first_ts, compress_hyper_4_4_chunk._ts_meta_v2_last_ts, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk.regress-test-bloom_c, compress_hyper_4_4_chunk.c
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_4_4_chunk.regress-test-bloom_c, ARRAY[_timescaledb_functions.bloom1_hash(compress_hyper_4_4_chunk.s)])
+   ->  Seq Scan on _timescaledb_internal._hyper_2_2_chunk_compressed (actual rows=2.00 loops=1)
+         Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.s, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_ts, _hyper_2_2_chunk_compressed._ts_meta_v2_last_ts, _hyper_2_2_chunk_compressed.ts, _hyper_2_2_chunk_compressed.regress-test-bloom_c, _hyper_2_2_chunk_compressed.c
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_2_2_chunk_compressed.regress-test-bloom_c, ARRAY[_timescaledb_functions.bloom1_hash(_hyper_2_2_chunk_compressed.s)])
          Rows Removed by Filter: 2
 
 -- Can push down only some parts of the expression but not the others, so the
@@ -446,13 +446,13 @@ select * from corner where c = s or c = random()::text;
    Startup Exclusion: true
    Runtime Exclusion: false
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1.00 loops=1)
-         Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
-         Filter: ((_hyper_3_3_chunk.c = _hyper_3_3_chunk.s) OR (_hyper_3_3_chunk.c = (random())::text))
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Output: _hyper_2_2_chunk.ts, _hyper_2_2_chunk.s, _hyper_2_2_chunk.c
+         Filter: ((_hyper_2_2_chunk.c = _hyper_2_2_chunk.s) OR (_hyper_2_2_chunk.c = (random())::text))
          Rows Removed by Filter: 1002
          Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=4.00 loops=1)
-               Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk._ts_meta_v2_first_ts, compress_hyper_4_4_chunk._ts_meta_v2_last_ts, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk.regress-test-bloom_c, compress_hyper_4_4_chunk.c
+         ->  Seq Scan on _timescaledb_internal._hyper_2_2_chunk_compressed (actual rows=4.00 loops=1)
+               Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.s, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_ts, _hyper_2_2_chunk_compressed._ts_meta_v2_last_ts, _hyper_2_2_chunk_compressed.ts, _hyper_2_2_chunk_compressed.regress-test-bloom_c, _hyper_2_2_chunk_compressed.c
 
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'test'
@@ -464,36 +464,36 @@ select * from corner where c = 'test'
    Startup Exclusion: true
    Runtime Exclusion: false
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=0.00 loops=1)
-         Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
-         Filter: ((_hyper_3_3_chunk.c = 'test'::text) OR (_hyper_3_3_chunk.c = CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 'test2'::text ELSE (random())::text END))
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=0.00 loops=1)
+         Output: _hyper_2_2_chunk.ts, _hyper_2_2_chunk.s, _hyper_2_2_chunk.c
+         Filter: ((_hyper_2_2_chunk.c = 'test'::text) OR (_hyper_2_2_chunk.c = CASE WHEN (now() > 'Thu Jan 01 00:00:00 1970 PST'::timestamp with time zone) THEN 'test2'::text ELSE (random())::text END))
          Rows Removed by Filter: 1003
          Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=4.00 loops=1)
-               Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk._ts_meta_v2_first_ts, compress_hyper_4_4_chunk._ts_meta_v2_last_ts, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk.regress-test-bloom_c, compress_hyper_4_4_chunk.c
+         ->  Seq Scan on _timescaledb_internal._hyper_2_2_chunk_compressed (actual rows=4.00 loops=1)
+               Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.s, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_ts, _hyper_2_2_chunk_compressed._ts_meta_v2_last_ts, _hyper_2_2_chunk_compressed.ts, _hyper_2_2_chunk_compressed.regress-test-bloom_c, _hyper_2_2_chunk_compressed.c
 
 -- Unsupported operator
 explain (buffers off, costs off)
 select * from corner where c > s;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_3_3_chunk
+ Custom Scan (ColumnarScan) on _hyper_2_2_chunk
    Filter: (c > s)
-   ->  Seq Scan on compress_hyper_4_4_chunk
+   ->  Seq Scan on _hyper_2_2_chunk_compressed
 
 -- Scalar array operation
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = any(array['short', 'nonexistent'])
 ;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1.00 loops=1)
-   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
-   Vectorized Filter: (_hyper_3_3_chunk.c = ANY ('{short,nonexistent}'::text[]))
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_2_chunk (actual rows=1.00 loops=1)
+   Output: _hyper_2_2_chunk.ts, _hyper_2_2_chunk.s, _hyper_2_2_chunk.c
+   Vectorized Filter: (_hyper_2_2_chunk.c = ANY ('{short,nonexistent}'::text[]))
    Rows Removed by Filter: 1
    Batches Removed by Filter: 1
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=2.00 loops=1)
-         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk._ts_meta_v2_first_ts, compress_hyper_4_4_chunk._ts_meta_v2_last_ts, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk.regress-test-bloom_c, compress_hyper_4_4_chunk.c
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_4_4_chunk.regress-test-bloom_c, TEST-HASHES::bigint[])
+   ->  Seq Scan on _timescaledb_internal._hyper_2_2_chunk_compressed (actual rows=2.00 loops=1)
+         Output: _hyper_2_2_chunk_compressed._ts_meta_count, _hyper_2_2_chunk_compressed.s, _hyper_2_2_chunk_compressed._ts_meta_min_1, _hyper_2_2_chunk_compressed._ts_meta_max_1, _hyper_2_2_chunk_compressed._ts_meta_v2_first_ts, _hyper_2_2_chunk_compressed._ts_meta_v2_last_ts, _hyper_2_2_chunk_compressed.ts, _hyper_2_2_chunk_compressed.regress-test-bloom_c, _hyper_2_2_chunk_compressed.c
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_2_2_chunk_compressed.regress-test-bloom_c, TEST-HASHES::bigint[])
          Rows Removed by Filter: 2
 
 -- Test a bad hash function.
@@ -539,7 +539,7 @@ create table badtable(ts int, s int, b badint);
 select create_hypertable('badtable', 'ts');
    create_hypertable   
 -----------------------
- (5,public,badtable,t)
+ (3,public,badtable,t)
 
 \set ON_ERROR_STOP 0
 alter table badtable set (timescaledb.compress, timescaledb.compress_orderby = '"ts" desc', timescaledb.compress_segmentby = 's',
@@ -612,14 +612,14 @@ select count(compress_chunk(x)) from show_chunks('badtable') x;
      1
 
 select * from settings;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                                             index                                                                                                                                              
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- badtable                               |                                                | {s}       | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
- bloom                                  |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
- corner                                 |                                                | {s}       | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_2_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value", "source": "default"}, {"type": "bloom", "column": "u", "source": "default"}, {"type": "minmax", "column": "ts", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal.compress_hyper_4_4_chunk | {s}       | {ts}    | {f}          | {f}                | [{"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
- _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal.compress_hyper_6_7_chunk | {s}       | {ts}    | {f}          | {f}                | [{"type": "bloom", "column": "b", "source": "default"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+                 relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                                             index                                                                                                                                              
+----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ badtable                               |                                                   | {s}       | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ bloom                                  |                                                   | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+ corner                                 |                                                   | {s}       | {ts}    | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_compressed | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value", "source": "default"}, {"type": "bloom", "column": "u", "source": "default"}, {"type": "minmax", "column": "ts", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_2_chunk | _timescaledb_internal._hyper_2_2_chunk_compressed | {s}       | {ts}    | {f}          | {f}                | [{"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {s}       | {ts}    | {f}          | {f}                | [{"type": "bloom", "column": "b", "source": "default"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 vacuum full analyze badtable;
 -- Verify that we actually got the bloom filter index.
@@ -646,10 +646,10 @@ select * from test.show_columns_ext(:'chunk'::regclass);
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_5_chunk (actual rows=1.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_3_3_chunk (actual rows=1.00 loops=1)
    Filter: (b = '1000'::badint)
    Rows Removed by Filter: 5999
-   ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=6.00 loops=1)
+   ->  Seq Scan on _hyper_3_3_chunk_compressed (actual rows=6.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b, TEST-HASHES::bigint[])
          Rows Removed by Filter: 64
 
@@ -669,10 +669,10 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
    SubPlan 2
      ->  Custom Scan (ChunkAppend) on badtable (actual rows=1.00 loops=9)
            Hypertables excluded during runtime: 0
-           ->  Custom Scan (ColumnarScan) on _hyper_5_5_chunk (actual rows=1.00 loops=9)
+           ->  Custom Scan (ColumnarScan) on _hyper_3_3_chunk (actual rows=1.00 loops=9)
                  Filter: (b = v_badint.b)
                  Rows Removed by Filter: 3229
-                 ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=4.22 loops=9)
+                 ->  Seq Scan on _hyper_3_3_chunk_compressed (actual rows=4.22 loops=9)
                        Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b, ARRAY[_timescaledb_functions.bloom1_hash(v_badint.b)])
                        Rows Removed by Filter: 23
 
@@ -715,10 +715,10 @@ vacuum full analyze badtable;
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_5_chunk (actual rows=1.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_3_3_chunk (actual rows=1.00 loops=1)
    Filter: (b = '1000'::badint)
    Rows Removed by Filter: 69999
-   ->  Seq Scan on compress_hyper_6_8_chunk (actual rows=70.00 loops=1)
+   ->  Seq Scan on _hyper_3_3_chunk_compressed (actual rows=70.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b, TEST-HASHES::bigint[])
 
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -733,10 +733,10 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
    SubPlan 2
      ->  Custom Scan (ChunkAppend) on badtable (actual rows=1.00 loops=9)
            Hypertables excluded during runtime: 0
-           ->  Custom Scan (ColumnarScan) on _hyper_5_5_chunk (actual rows=1.00 loops=9)
+           ->  Custom Scan (ColumnarScan) on _hyper_3_3_chunk (actual rows=1.00 loops=9)
                  Filter: (b = v_badint.b)
                  Rows Removed by Filter: 25784
-                 ->  Seq Scan on compress_hyper_6_8_chunk (actual rows=26.78 loops=9)
+                 ->  Seq Scan on _hyper_3_3_chunk_compressed (actual rows=26.78 loops=9)
                        Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b, ARRAY[_timescaledb_functions.bloom1_hash(v_badint.b)])
 
 ;
@@ -762,7 +762,7 @@ create table byref(ts int, x macaddr8);
 select create_hypertable('byref', 'ts');
  create_hypertable  
 --------------------
- (7,public,byref,t)
+ (4,public,byref,t)
 
 create index on byref(x);
 alter table byref set (timescaledb.compress, timescaledb.compress_segmentby = '',
@@ -780,14 +780,14 @@ vacuum analyze byref;
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from byref where x = float8tomacaddr8(mix(1));
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_7_9_chunk (actual rows=1.00 loops=1)
-   Output: _hyper_7_9_chunk.ts, _hyper_7_9_chunk.x
-   Filter: (_hyper_7_9_chunk.x = '3f:b6:70:e3:3c:00:00:00'::macaddr8)
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_4_4_chunk (actual rows=1.00 loops=1)
+   Output: _hyper_4_4_chunk.ts, _hyper_4_4_chunk.x
+   Filter: (_hyper_4_4_chunk.x = '3f:b6:70:e3:3c:00:00:00'::macaddr8)
    Rows Removed by Filter: 999
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_8_10_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_8_10_chunk._ts_meta_count, compress_hyper_8_10_chunk._ts_meta_min_1, compress_hyper_8_10_chunk._ts_meta_max_1, compress_hyper_8_10_chunk._ts_meta_v2_first_ts, compress_hyper_8_10_chunk._ts_meta_v2_last_ts, compress_hyper_8_10_chunk.ts, compress_hyper_8_10_chunk.regress-test-bloom_x, compress_hyper_8_10_chunk.x
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_8_10_chunk.regress-test-bloom_x, TEST-HASHES::bigint[])
+   ->  Seq Scan on _timescaledb_internal._hyper_4_4_chunk_compressed (actual rows=1.00 loops=1)
+         Output: _hyper_4_4_chunk_compressed._ts_meta_count, _hyper_4_4_chunk_compressed._ts_meta_min_1, _hyper_4_4_chunk_compressed._ts_meta_max_1, _hyper_4_4_chunk_compressed._ts_meta_v2_first_ts, _hyper_4_4_chunk_compressed._ts_meta_v2_last_ts, _hyper_4_4_chunk_compressed.ts, _hyper_4_4_chunk_compressed.regress-test-bloom_x, _hyper_4_4_chunk_compressed.x
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_4_4_chunk_compressed.regress-test-bloom_x, TEST-HASHES::bigint[])
          Rows Removed by Filter: 9
 
 -- Test an array type.
@@ -796,7 +796,7 @@ select create_hypertable('arraybloom', 'x');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
     create_hypertable    
 -------------------------
- (9,public,arraybloom,t)
+ (5,public,arraybloom,t)
 
 insert into arraybloom
 select x, array[x],
@@ -817,13 +817,13 @@ select count(*) from arraybloom where value = array[7248::int];
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
    Output: count(*)
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_9_11_chunk (actual rows=1.00 loops=1)
-         Filter: (_hyper_9_11_chunk.value = '{7248}'::integer[])
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_5_chunk (actual rows=1.00 loops=1)
+         Filter: (_hyper_5_5_chunk.value = '{7248}'::integer[])
          Rows Removed by Filter: 999
          Bulk Decompression: false
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_10_12_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_10_12_chunk._ts_meta_count, compress_hyper_10_12_chunk._ts_meta_min_1, compress_hyper_10_12_chunk._ts_meta_max_1, compress_hyper_10_12_chunk._ts_meta_v2_first_x, compress_hyper_10_12_chunk._ts_meta_v2_last_x, compress_hyper_10_12_chunk.x, compress_hyper_10_12_chunk.regress-test-bloom_value, compress_hyper_10_12_chunk.value, compress_hyper_10_12_chunk.ts
-               Filter: _timescaledb_functions.bloom1_contains_any_hashes(compress_hyper_10_12_chunk.regress-test-bloom_value, TEST-HASHES::bigint[])
+         ->  Seq Scan on _timescaledb_internal._hyper_5_5_chunk_compressed (actual rows=1.00 loops=1)
+               Output: _hyper_5_5_chunk_compressed._ts_meta_count, _hyper_5_5_chunk_compressed._ts_meta_min_1, _hyper_5_5_chunk_compressed._ts_meta_max_1, _hyper_5_5_chunk_compressed._ts_meta_v2_first_x, _hyper_5_5_chunk_compressed._ts_meta_v2_last_x, _hyper_5_5_chunk_compressed.x, _hyper_5_5_chunk_compressed.regress-test-bloom_value, _hyper_5_5_chunk_compressed.value, _hyper_5_5_chunk_compressed.ts
+               Filter: _timescaledb_functions.bloom1_contains_any_hashes(_hyper_5_5_chunk_compressed.regress-test-bloom_value, TEST-HASHES::bigint[])
                Rows Removed by Filter: 9
 
 select count(*) from arraybloom where value = array[7248::int];
@@ -847,32 +847,32 @@ vacuum full analyze bloom_composite;
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from bloom_composite where x = (2, 3);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_11_13_chunk (actual rows=1.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_6_6_chunk (actual rows=1.00 loops=1)
    Filter: (x = '(2,3)'::record)
-   ->  Seq Scan on compress_hyper_12_14_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_6_6_chunk_compressed (actual rows=1.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from bloom_composite where x = (2, 3)::ctype;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_11_13_chunk (actual rows=1.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_6_6_chunk (actual rows=1.00 loops=1)
    Filter: (x = '(2,3)'::ctype)
-   ->  Seq Scan on compress_hyper_12_14_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_6_6_chunk_compressed (actual rows=1.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_x, TEST-HASHES::bigint[])
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from bloom_composite where x = (3, 4);
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_11_13_chunk (actual rows=0.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_6_6_chunk (actual rows=0.00 loops=1)
    Filter: (x = '(3,4)'::record)
    Rows Removed by Filter: 1
-   ->  Seq Scan on compress_hyper_12_14_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_6_6_chunk_compressed (actual rows=1.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from bloom_composite where x = (3, 4)::ctype;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_11_13_chunk (actual rows=0.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_6_6_chunk (actual rows=0.00 loops=1)
    Filter: (x = '(3,4)'::ctype)
-   ->  Seq Scan on compress_hyper_12_14_chunk (actual rows=0.00 loops=1)
+   ->  Seq Scan on _hyper_6_6_chunk_compressed (actual rows=0.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_x, TEST-HASHES::bigint[])
          Rows Removed by Filter: 1
 

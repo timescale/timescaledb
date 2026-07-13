@@ -9,7 +9,7 @@ name: Code style
 jobs:
   cmake_checks:
     name: Check CMake files
-    runs-on: ubuntu-22.04
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Install prerequisites
         run: pip install cmakelang
@@ -24,7 +24,7 @@ jobs:
 
   perl_checks:
     name: Check Perl code in tree
-    runs-on: ubuntu-22.04
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Install prerequisites
         run: sudo apt install perltidy
@@ -44,7 +44,7 @@ jobs:
 
   yaml_checks:
     name: Check YAML code in tree
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Install prerequisites
         run: |
@@ -57,7 +57,7 @@ jobs:
 
   spelling_checks:
     name: Check spelling
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Install prerequisites
         run: |
@@ -71,7 +71,7 @@ jobs:
 
   cc_checks:
     name: Check code formatting
-    runs-on: ubuntu-22.04
+    runs-on: timescaledb-runner-arm64
     strategy:
       fail-fast: false
     env:
@@ -114,17 +114,19 @@ jobs:
 
   python_checks:
     name: Check Python code in tree
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Install prerequisites
         run: |
           pip install --upgrade pip
           pip install black prospector pylint dodgy \
             mccabe pycodestyle pyflakes \
-            psutil pygithub pglast testgres more_itertools
+            psutil pygithub testgres more_itertools
           # pinning snowballstemmer to version 2.2.0 due to:
           # https://github.com/prospector-dev/prospector/issues/763
           pip install --force-reinstall --no-deps snowballstemmer==2.2.0
+          # pinning pglast due to build issues
+          pip install --force-reinstall --no-deps pglast==7.16
           pip list
           pip list --user
 
@@ -139,10 +141,18 @@ jobs:
 
   misc_checks:
     name: Check license, update scripts, git hooks, missing gitignore entries and unnecessary template tests
-    runs-on: ubuntu-24.04
+    runs-on: timescaledb-runner-arm64
     strategy:
       fail-fast: false
     steps:
+    - name: Install prerequisites
+      if: always()
+      run: |
+        sudo apt-get update
+        # PostgreSQL 18 is not in the Ubuntu 22.04 archives, so add the official PGDG apt repository
+        sudo apt-get install -y postgresql-common
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+        sudo apt-get install -y postgresql-server-dev-18
     - name: Checkout source
       if: always()
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

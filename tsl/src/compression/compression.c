@@ -1140,8 +1140,6 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	CompressionSettings *settings =
 		ts_compression_settings_get_by_compress_relid(old_compressed_relid);
 	Chunk *src_chunk = ts_chunk_get_by_relid(settings->fd.relid, true);
-	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
-	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 
 	if (settings->fd.segmentby)
 	{
@@ -1201,11 +1199,11 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	Relation in_rel = table_open(src_chunk->table_id, NoLock);
 
 	/* Create before drop. We must update settings first to point to the new chunk. */
-	Chunk *new_compressed_chunk =
-		create_compress_chunk(compress_ht, src_chunk, InvalidOid, false, settings);
+	rename_compressed_chunk_for_replacement(old_compressed_relid);
+	Oid new_compressed_relid = create_compress_chunk(src_chunk, InvalidOid, false, settings);
 
 	/* Initialize the new bulk writer and compressor against the new compressed relation */
-	Relation out_rel = table_open(new_compressed_chunk->table_id, RowExclusiveLock);
+	Relation out_rel = table_open(new_compressed_relid, RowExclusiveLock);
 
 	BulkWriter new_bulk_writer = bulk_writer_build(out_rel, /* insert_options = */ 0);
 
@@ -1287,6 +1285,8 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 
 	MemoryContextSwitchTo(old_context);
 
+	ts_compression_settings_free(settings);
+
 	return compressor;
 }
 
@@ -1297,10 +1297,8 @@ void
 row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *settings,
 					const TupleDesc noncompressed_tupdesc, const TupleDesc compressed_tupdesc)
 {
-	Name count_metadata_name = DatumGetName(
-		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
 	AttrNumber count_metadata_column_num =
-		get_attnum(settings->fd.compress_relid, NameStr(*count_metadata_name));
+		get_attnum(settings->fd.compress_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
 	if (count_metadata_column_num == InvalidAttrNumber)
 	{
@@ -1985,12 +1983,15 @@ bulk_writer_build(Relation out_rel, int insert_options)
 {
 	BulkWriter writer = {
 		.out_rel = out_rel,
-		.indexstate = CatalogOpenIndexes(out_rel),
 		.mycid = GetCurrentCommandId(true),
-		.bistate = GetBulkInsertState(),
 		.estate = CreateExecutorState(),
 		.insert_options = insert_options,
 	};
+
+	MemoryContext oldcxt = MemoryContextSwitchTo(writer.estate->es_query_cxt);
+	writer.indexstate = CatalogOpenIndexes(out_rel);
+	writer.bistate = GetBulkInsertState();
+	MemoryContextSwitchTo(oldcxt);
 
 	return writer;
 }

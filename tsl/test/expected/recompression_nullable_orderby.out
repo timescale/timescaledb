@@ -46,7 +46,7 @@ INSERT INTO t1 SELECT 1, 1, g FROM generate_series(901,1400) g;
 SET timescaledb.debug_compression_path_info TO ON;
 SELECT compress_chunk(show_chunks('t1'), if_not_compressed => true);
 INFO:  in-memory recompression is disabled due to nullable order by with no firstlast, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_1_1_chunk"
-INFO:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_v2_first_v1__ts_meta__idx" for recompression
+INFO:  Using index "_hyper_1_1_chunk_compressed_dev__ts_meta_v2_first_v1__ts_me_idx" for recompression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -70,7 +70,7 @@ SELECT compress_chunk(show_chunks('t1'), if_not_compressed => true);
 LOG:  statement: SELECT compress_chunk(show_chunks('t1'), if_not_compressed => true);
 DEBUG:  in-memory recompression is disabled due to nullable order by with no firstlast, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_1_1_chunk"
 DEBUG:  acquiring locks for recompression: "_timescaledb_internal._hyper_1_1_chunk"
-DEBUG:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_v2_first_v1__ts_meta__idx" for recompression
+DEBUG:  Using index "_hyper_1_1_chunk_compressed_dev__ts_meta_v2_first_v1__ts_me_idx" for recompression
 DEBUG:  locks acquired for recompression: "_timescaledb_internal._hyper_1_1_chunk"
 DEBUG:  finished compressing 500 rows from "_hyper_1_1_chunk"
 DEBUG:  cleared chunk status for recompression: "_timescaledb_internal._hyper_1_1_chunk"
@@ -92,7 +92,7 @@ SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_recompress
 LOG:  statement: SELECT _timescaledb_functions.recompress_chunk_segmentwise('_timescaledb_internal._hyper_1_1_chunk');
 DEBUG:  in-memory recompression is disabled due to nullable order by with no firstlast, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_1_1_chunk"
 DEBUG:  acquiring locks for recompression: "_timescaledb_internal._hyper_1_1_chunk"
-DEBUG:  Using index "compress_hyper_2_2_chunk_dev__ts_meta_v2_first_v1__ts_meta__idx" for recompression
+DEBUG:  Using index "_hyper_1_1_chunk_compressed_dev__ts_meta_v2_first_v1__ts_me_idx" for recompression
 DEBUG:  locks acquired for recompression: "_timescaledb_internal._hyper_1_1_chunk"
 DEBUG:  finished compressing 601 rows from "_hyper_1_1_chunk"
 DEBUG:  cleared chunk status for recompression: "_timescaledb_internal._hyper_1_1_chunk"
@@ -107,7 +107,7 @@ CREATE TABLE t2(time int NOT NULL, v1 int NOT NULL, v2 int);
 SELECT create_hypertable('t2', 'time', chunk_time_interval => 10000);
  create_hypertable 
 -------------------
- (3,public,t2,t)
+ (2,public,t2,t)
 
 ALTER TABLE t2 SET (timescaledb.compress, timescaledb.compress_orderby='v1,v2');
 INSERT INTO t2 SELECT 1, 1, g FROM generate_series(1,800) g;
@@ -115,7 +115,7 @@ INSERT INTO t2 SELECT 1, 1, NULL FROM generate_series(1,200);
 SELECT compress_chunk(show_chunks('t2'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
+ _timescaledb_internal._hyper_2_2_chunk
 
 -- Remove firstlast index from nullable order by column "v2"
 update _timescaledb_catalog.compression_settings
@@ -141,11 +141,11 @@ INSERT INTO t2 SELECT 1, 1, g FROM generate_series(901,1400) g;
 SELECT show_chunks as chunk_to_recompress FROM show_chunks('t2') LIMIT 1 \gset
 SET timescaledb.debug_compression_path_info TO ON;
 SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_recompress');
-INFO:  in-memory recompression is disabled due to nullable order by with no firstlast, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_3_3_chunk"
-INFO:  Using index "compress_hyper_4_4_chunk__ts_meta_v2_first_v1__ts_meta_v2_l_idx" for recompression
+INFO:  in-memory recompression is disabled due to nullable order by with no firstlast, performing segmentwise decompress/compress on chunk "_timescaledb_internal._hyper_2_2_chunk"
+INFO:  Using index "_hyper_2_2_chunk_compressed__ts_meta_v2_first_v1__ts_meta_v_idx" for recompression
       recompress_chunk_segmentwise      
 ----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
+ _timescaledb_internal._hyper_2_2_chunk
 
 RESET timescaledb.debug_compression_path_info;
 -- This query orders NULLS LAST, so we can't have a non-NULL value after a NULL value.
@@ -167,7 +167,7 @@ CREATE TABLE test1(time int, dev int, v1 int);
 SELECT create_hypertable('test1', 'time', chunk_time_interval => 10000);
  create_hypertable  
 --------------------
- (5,public,test1,t)
+ (3,public,test1,t)
 
 ALTER TABLE test1 SET (timescaledb.compress, timescaledb.compress_segmentby='dev', timescaledb.compress_orderby='v1');
 -- Insert data for one segment
@@ -176,17 +176,17 @@ INSERT INTO test1 SELECT 1, 1, NULL FROM generate_series(1,200);
 SELECT compress_chunk(show_chunks('test1'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_5_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 -- Now this chunk is partial, this batch should match [1, NULL] batch instead of sorting after it
 INSERT INTO test1 SELECT 1, 1, g FROM generate_series(901,1400) g;
 -- Should not see info about nullable order by
 SET timescaledb.debug_compression_path_info TO ON;
 SELECT compress_chunk(show_chunks('test1'), if_not_compressed => true);
-INFO:  Using index "compress_hyper_6_6_chunk_dev__ts_meta_v2_first_v1__ts_meta__idx" for recompression
+INFO:  Using index "_hyper_3_3_chunk_compressed_dev__ts_meta_v2_first_v1__ts_me_idx" for recompression
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_5_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 RESET timescaledb.debug_compression_path_info;
 -- This query orders NULLS LAST, so we can't have a non-NULL value after a NULL value.
@@ -203,7 +203,7 @@ CREATE TABLE test2(time int NOT NULL, val int);
 SELECT create_hypertable('test2', 'time', chunk_time_interval => 10000);
  create_hypertable  
 --------------------
- (7,public,test2,t)
+ (4,public,test2,t)
 
 ALTER TABLE test2 SET (timescaledb.compress, timescaledb.compress_orderby='val');
 INSERT INTO test2 SELECT 1, g FROM generate_series(501,1500) g;
@@ -211,14 +211,14 @@ INSERT INTO test2 SELECT 1, NULL FROM generate_series(1,1000);
 SELECT compress_chunk(show_chunks('test2'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_7_chunk
+ _timescaledb_internal._hyper_4_4_chunk
 
 -- Now this chunk is partial, recompress will be applied
 INSERT INTO test2 SELECT 1, g FROM generate_series(1300,1600) g;
 SELECT compress_chunk(show_chunks('test2'), if_not_compressed => true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_7_chunk
+ _timescaledb_internal._hyper_4_4_chunk
 
 -- Should return 0
 SELECT count(*) AS wrong_rows FROM (
@@ -233,7 +233,7 @@ CREATE TABLE test3(time int NOT NULL, val int);
 SELECT create_hypertable('test3', 'time', chunk_time_interval => 10000);
  create_hypertable  
 --------------------
- (9,public,test3,t)
+ (5,public,test3,t)
 
 ALTER TABLE test3 SET (timescaledb.compress, timescaledb.compress_orderby='val NULLS FIRST');
 INSERT INTO test3 SELECT 1, NULL FROM generate_series(1,1000);
@@ -241,14 +241,14 @@ INSERT INTO test3 SELECT 1, g FROM generate_series(501,1500) g;
 SELECT compress_chunk(show_chunks('test3'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_9_9_chunk
+ _timescaledb_internal._hyper_5_5_chunk
 
 -- Now this chunk is partial, recompress will be applied
 INSERT INTO test3 SELECT 1, g FROM generate_series(400,600) g;
 SELECT compress_chunk(show_chunks('test3'), if_not_compressed => true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_9_9_chunk
+ _timescaledb_internal._hyper_5_5_chunk
 
 -- Should return 0
 SELECT count(*) AS wrong_rows FROM (
@@ -262,26 +262,26 @@ SELECT count(*) AS wrong_rows FROM (
 CREATE TABLE test4(time int, dev int, v1 int);
 -- t1 is declared NOT NULL on a hypertable as partitioning column
 SELECT create_hypertable('test4', 'time', chunk_time_interval => 10000);
-  create_hypertable  
----------------------
- (11,public,test4,t)
+ create_hypertable  
+--------------------
+ (6,public,test4,t)
 
 ALTER TABLE test4 SET (timescaledb.compress, timescaledb.compress_segmentby='dev', timescaledb.compress_orderby='v1 NULLS FIRST');
 -- Insert data for one segment
 INSERT INTO test4 SELECT 1, 1, NULL FROM generate_series(1,200);
 INSERT INTO test4 SELECT 1, 1, g FROM generate_series(1001,1800) g;
 SELECT compress_chunk(show_chunks('test4'));
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_11_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_6_6_chunk
 
 -- Now this chunk is partial, recompress will be applied
 -- This batch should match [NULL... 1001...1800] batch instead of going before it
 INSERT INTO test4 SELECT 1, 1, g FROM generate_series(500,900) g;
 SELECT compress_chunk(show_chunks('test4'), if_not_compressed => true);
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_11_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_6_6_chunk
 
 -- This query orders NULLS FIRST, so we can't have a non-NULL value before a NULL value.
 -- Should return 0.

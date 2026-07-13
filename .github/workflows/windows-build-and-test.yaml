@@ -416,7 +416,7 @@ jobs:
     name: Regression Windows summary
     needs: [check_paths, build]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

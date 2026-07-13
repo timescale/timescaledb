@@ -73,6 +73,7 @@ jobs:
           compress_observ-*
           compress_qualpushdown_saop
           compress_sort_transform
+          compressed_collation
           compression_allocation
           merge_append_partially_compressed
           net
@@ -338,7 +339,7 @@ jobs:
     name: Regression Linux i386 summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

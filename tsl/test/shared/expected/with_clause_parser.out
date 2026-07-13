@@ -316,7 +316,7 @@ ERROR:  raised requested error code "53200"
 -- Division by zero, "soft" error. Shows invalid value message (with a
 -- strange message in this case).
 SELECT * FROM test_with_clause_parse('{{"timescaledb", "sqlstate_raise", "22012"}}');
-ERROR:  invalid value for timescaledb.sqlstate_raise '22012'
+ERROR:  raised requested error code "22012"
 \set ON_ERROR_STOP 1
 -- defaults get overridden
 SELECT * FROM test_with_clause_parse('{{"timescaledb", "default", "1"}}');
