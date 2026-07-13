@@ -1795,3 +1795,180 @@ SELECT to_timestamp(lowest_modified_value / 1000000.0) AS lowest,
                          WHERE table_name = 'cagg_inval_segmentby_time');
 RESET TIME ZONE;
 
+-- github issue 10129: delete on compressed rows silently deletes
+-- rows when the predicate on a segmentby column is <> ANY(NULL::array)
+
+CREATE TABLE trade_ticks (
+    ts       timestamptz NOT NULL,
+    exchange int,
+    price    int
+);
+SELECT create_hypertable('trade_ticks', 'ts',
+                         chunk_time_interval => interval '1 day');
+ALTER TABLE trade_ticks SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'exchange',
+    timescaledb.compress_orderby   = 'ts'
+);
+
+INSERT INTO trade_ticks
+SELECT '2024-01-01'::timestamptz + (g * interval '5 minutes'),
+       g % 4, g
+FROM generate_series(0, 287) g;
+
+SELECT compress_chunk(c) FROM show_chunks('trade_ticks') c;
+
+-- Predicate matches zero rows:
+SELECT count(*) AS matching_rows
+FROM trade_ticks
+WHERE exchange <> ANY (NULL::int[]);
+-- matching_rows = 0
+
+-- Baseline: optimization off, correct result.
+BEGIN;
+SET LOCAL timescaledb.enable_compressed_direct_batch_delete = off;
+DELETE FROM trade_ticks WHERE exchange <> ANY (NULL::int[]);
+-- DELETE 0
+SELECT count(*) AS rows_baseline FROM trade_ticks;
+-- rows_baseline = 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ROLLBACK;
+
+-- Bug: direct batch delete silently removes rows.
+BEGIN;
+DELETE FROM trade_ticks WHERE exchange <> ANY (NULL::int[]);
+-- DELETE 216 if the bug exists, expected DELETE 0
+SELECT count(*) AS rows_after FROM trade_ticks;
+-- rows_after = 72 if the bug exists, expected 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+-- only exchange=0 survives if the bug exists
+ROLLBACK;
+
+-- Other variations, with NULL array members
+
+-- Baseline, deleting all exchanges except '0'
+BEGIN;
+SET LOCAL timescaledb.enable_compressed_direct_batch_delete = off;
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[0, NULL]::int[]);
+-- DELETE 216
+SELECT count(*) AS rows_baseline FROM trade_ticks;
+-- rows_baseline = 72
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+-- only exchange=0 remains
+ROLLBACK;
+
+-- The bug deletes all rows, doesn't spare exchange=0
+BEGIN;
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[0, NULL]::int[]);
+-- expected DELETE 216
+SELECT count(*) AS rows_after FROM trade_ticks;
+-- expected 72
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+-- expected exchange=0
+ROLLBACK;
+
+
+-- Baseline, should not delete anything with a single NULL member
+BEGIN;
+SET LOCAL timescaledb.enable_compressed_direct_batch_delete = off;
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[NULL]::int[]);
+-- DELETE 0
+SELECT count(*) AS rows_baseline FROM trade_ticks;
+-- rows_baseline = 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ROLLBACK;
+
+-- The bug deletes all rows
+BEGIN;
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[NULL]::int[]);
+-- expected DELETE 0
+SELECT count(*) AS rows_after FROM trade_ticks;
+-- expected 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+-- expected all exchanges
+ROLLBACK;
+
+
+-- Baseline, check if we can handle multiple NULLs, should not delete anything
+BEGIN;
+SET LOCAL timescaledb.enable_compressed_direct_batch_delete = off;
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[NULL,NULL]::int[]);
+-- DELETE 0
+SELECT count(*) AS rows_baseline FROM trade_ticks;
+-- rows_baseline = 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+ROLLBACK;
+
+-- The bug deletes all rows
+BEGIN;
+DELETE FROM trade_ticks WHERE exchange <> ANY (ARRAY[NULL,NULL]::int[]);
+-- expected DELETE 0
+SELECT count(*) AS rows_after FROM trade_ticks;
+-- expected 288
+SELECT exchange, count(*) FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+-- expected all exchanges
+ROLLBACK;
+
+-- This should keep exchange=0 and 1, and delete exchange=2 and 3
+DELETE FROM trade_ticks WHERE exchange <> ALL(ARRAY[0, 1]);
+SELECT exchange, count(*) AS cnt FROM trade_ticks GROUP BY exchange ORDER BY exchange;
+
+DROP TABLE trade_ticks;
+
+-- LLM Fuzzer found that we need to test the UPDATE path against crashes
+CREATE TABLE crash_test (
+    ts  timestamptz NOT NULL,
+    seg int,
+    val int
+);
+
+SELECT create_hypertable('crash_test', 'ts',
+                         chunk_time_interval => interval '1 day');
+
+ALTER TABLE crash_test SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'seg',
+    timescaledb.compress_orderby   = 'ts'
+);
+
+INSERT INTO crash_test
+SELECT '2024-01-01'::timestamptz + (g * interval '5 minutes'),
+       g % 4, g
+FROM generate_series(0, 287) g;
+
+SELECT compress_chunk(c) FROM show_chunks('crash_test') c;
+
+BEGIN;
+UPDATE crash_test SET val = 0 WHERE seg = ANY(NULL::int[]);
+ROLLBACK;
+
+BEGIN;
+UPDATE crash_test SET val = 0 WHERE seg <> ANY(NULL::int[]);
+ROLLBACK;
+
+BEGIN;
+UPDATE crash_test SET val = 0 WHERE seg = ANY(ARRAY[0,NULL]::int[]);
+ROLLBACK;
+
+BEGIN;
+UPDATE crash_test SET val = 0 WHERE seg <> ANY(ARRAY[0,NULL]::int[]);
+ROLLBACK;
+
+BEGIN;
+UPDATE crash_test SET val = 0 WHERE seg = ANY(ARRAY[NULL]::int[]);
+ROLLBACK;
+
+BEGIN;
+UPDATE crash_test SET val = 0 WHERE seg <> ANY(ARRAY[NULL]::int[]);
+ROLLBACK;
+
+BEGIN;
+UPDATE crash_test SET val = 0 WHERE seg = ANY(ARRAY[NULL, NULL]::int[]);
+ROLLBACK;
+
+BEGIN;
+UPDATE crash_test SET val = 0 WHERE seg <> ANY(ARRAY[NULL, NULL]::int[]);
+ROLLBACK;
+
+DROP TABLE crash_test;
+
