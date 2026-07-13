@@ -44,8 +44,7 @@ typedef struct UuidCompressed
 	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } UuidCompressed;
 
-static void
-pg_attribute_unused() assertions(void)
+pg_attribute_unused() static void assertions(void)
 {
 	StaticAssertStmt(sizeof(UuidCompressed) == 16, "UuidCompressed wrong size");
 	StaticAssertStmt(offsetof(UuidCompressed, alignment_sentinel) % MAXIMUM_ALIGNOF == 0,
@@ -763,8 +762,7 @@ decompression_iterator_init(UuidDecompressionIterator *iter, void *compressed, O
 	};
 }
 
-static void
-pg_attribute_unused() silence_unused_warning(void)
+pg_attribute_unused() static void silence_unused_warning(void)
 {
 	simple8brle_serialized_recv(NULL);
 }
