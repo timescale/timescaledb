@@ -542,7 +542,7 @@ VACUUM FREEZE ANALYZE ht_dummy;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.ht_dummy (actual rows=0.00 loops=1)
          ->  Result (actual rows=0.00 loops=1)
-               Output: 99, NULL::oid, NULL::tid
+               Output: 99, ctid
                One-Time Filter: false
 
 :PREFIX DELETE FROM ht_dummy WHERE false;
@@ -550,7 +550,7 @@ VACUUM FREEZE ANALYZE ht_dummy;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.ht_dummy (actual rows=0.00 loops=1)
          ->  Result (actual rows=0.00 loops=1)
-               Output: NULL::oid, NULL::tid
+               Output: ctid
                One-Time Filter: false
 
 :PREFIX UPDATE ht_dummy SET v = 99 WHERE time IS NULL;
@@ -567,11 +567,11 @@ RETURNING ctid, xmin, tableoid::regclass, *
 ;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Output: ht_dummy.ctid, ht_dummy.xmin, ((ht_dummy.tableoid)::regclass), ht_dummy."time", ht_dummy.v
+   Output: ctid, xmin, ((tableoid)::regclass), "time", v
    ->  Update on public.ht_dummy (actual rows=0.00 loops=1)
-         Output: ht_dummy.ctid, ht_dummy.xmin, (ht_dummy.tableoid)::regclass, ht_dummy."time", ht_dummy.v
+         Output: ctid, xmin, (tableoid)::regclass, "time", v
          ->  Result (actual rows=0.00 loops=1)
-               Output: 99, NULL::oid, NULL::tid
+               Output: 99, ctid
                One-Time Filter: false
 
 DROP TABLE ht_dummy;

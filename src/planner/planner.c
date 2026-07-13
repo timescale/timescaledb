@@ -163,6 +163,8 @@ ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable)
 static void
 rte_mark_for_expansion(RangeTblEntry *rte)
 {
+	// mybt();
+
 	Assert(rte->rtekind == RTE_RELATION);
 	Assert(rte->ctename == NULL);
 	rte->ctename = (char *) TS_CTE_EXPAND;
@@ -1192,7 +1194,11 @@ expand_all_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 			Assert(ht != NULL);
 
 			Assert(ht != NULL && in_rel != NULL);
-			ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
+
+			if (!IS_DUMMY_REL(in_rel))
+			{
+				ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
+			}
 
 			in_rte->inh = true;
 			expanded_some_hypertables = true;
@@ -1576,6 +1582,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		case TS_REL_HYPERTABLE:
 		{
+			Assert(!IS_DUMMY_REL(rel)); /* FIXME when would that happen? */
+
 			/*
 			 * Mark hypertable RTEs we'd like to expand ourselves. We do this
 			 * for hypertables participating SELECT, UPDATE and DELETE,
