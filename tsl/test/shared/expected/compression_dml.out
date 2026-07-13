@@ -509,11 +509,10 @@ BEGIN;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches scanned: 2
-   Batches decompressed: 2
-   Tuples decompressed: 2
+   Batches deleted: 2
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
-         ->  Seq Scan on _hyper_X_X_chunk direct_delete_1 (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk direct_delete_1 (actual rows=0.00 loops=1)
                Filter: (reading IS NULL)
 
 -- 6 tuples should still be there
@@ -529,11 +528,10 @@ BEGIN;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches scanned: 6
-   Batches decompressed: 6
-   Tuples decompressed: 6
+   Batches deleted: 6
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
-         ->  Seq Scan on _hyper_X_X_chunk direct_delete_1 (actual rows=6.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk direct_delete_1 (actual rows=0.00 loops=1)
                Filter: (reading IS NOT NULL)
 
 -- 2 tuples should still be there
@@ -991,18 +989,17 @@ BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches scanned: 14
-   Batches decompressed: 14
-   Tuples decompressed: 12076
+   Batches deleted: 14
    ->  Delete on metrics_compressed (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk metrics_compressed_1
          Delete on _hyper_X_X_chunk metrics_compressed_2
          Delete on _hyper_X_X_chunk metrics_compressed_3
-         ->  Append (actual rows=13674.00 loops=1)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_compressed_1 (actual rows=3598.00 loops=1)
+         ->  Append (actual rows=1598.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk metrics_compressed_1 (actual rows=1598.00 loops=1)
                      Filter: ((device_id IS NOT NULL) AND (device_id = 1))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_compressed_2 (actual rows=5038.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk metrics_compressed_2 (actual rows=0.00 loops=1)
                      Filter: ((device_id IS NOT NULL) AND (device_id = 1))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_compressed_3 (actual rows=5038.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk metrics_compressed_3 (actual rows=0.00 loops=1)
                      Filter: ((device_id IS NOT NULL) AND (device_id = 1))
 
 BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where device_id <> 1 AND device_id <> 2;ROLLBACK;
