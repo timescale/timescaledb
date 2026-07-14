@@ -54,6 +54,8 @@ jobs:
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: [matrixbuilder, check_paths]
     runs-on: ${{ matrix.os }}
+    # The flaky check is advisory, so its failure must not fail the summary.
+    continue-on-error: ${{ contains(matrix.name, 'Flaky') }}
 
     env:
       PG_SRC_DIR: pgbuild
