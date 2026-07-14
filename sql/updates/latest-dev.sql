@@ -147,3 +147,6 @@ GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- END add chunk.relid
 --
 
+
+INSERT INTO _timescaledb_catalog.compression_algorithm( id, version, name, description) values
+( 8, 1, 'COMPRESSION_ALGORITHM_EXTERNAL', 'external');

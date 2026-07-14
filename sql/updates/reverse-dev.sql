@@ -250,3 +250,5 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.policy_compaction_check(JSONB);
 
 DROP FUNCTION IF EXISTS @extschema@.alter_job(job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ, if_exists BOOL, check_config REGPROC, fixed_schedule BOOL, initial_start TIMESTAMPTZ, timezone TEXT, job_name TEXT, config_merge JSONB);
 
+
+DELETE FROM _timescaledb_catalog.compression_algorithm WHERE id = 8 AND version = 1 AND name = 'COMPRESSION_ALGORITHM_EXTERNAL';

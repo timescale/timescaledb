@@ -35,6 +35,7 @@
 #include "algorithms/bool_compress.h"
 #include "algorithms/deltadelta.h"
 #include "algorithms/dictionary.h"
+#include "algorithms/external.h"
 #include "algorithms/gorilla.h"
 #include "algorithms/null.h"
 #include "algorithms/uuid_compress.h"
@@ -76,6 +77,7 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_NULL] = NULL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_UUID] = UUID_COMPRESS_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_EXTERNAL] = EXTERNAL_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -87,6 +89,7 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
 	[COMPRESSION_ALGORITHM_NULL] = { "NULL" },
 	[COMPRESSION_ALGORITHM_UUID] = { "UUID" },
+	[COMPRESSION_ALGORITHM_EXTERNAL] = { "EXTERNAL" },
 };
 
 Name
@@ -3224,6 +3227,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_UUID:
 			has_nulls = uuid_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_EXTERNAL:
+			has_nulls = external_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -3270,6 +3276,9 @@ compressed_data_has_nulls(Datum compressed_data)
 			break;
 		case COMPRESSION_ALGORITHM_UUID:
 			has_nulls = uuid_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_EXTERNAL:
+			has_nulls = external_compressed_has_nulls(header);
 			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
@@ -3345,6 +3354,11 @@ compression_get_default_algorithm(Oid typeoid)
 
 		default:
 		{
+			/* Prefer the type's own registered compress/decompress function pair */
+			if (external_codec_lookup(typeoid, NULL, NULL))
+			{
+				return COMPRESSION_ALGORITHM_EXTERNAL;
+			}
 			/* use dictionary if possible, otherwise use array */
 			TypeCacheEntry *tentry =
 				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);

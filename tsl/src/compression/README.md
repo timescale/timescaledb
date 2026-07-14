@@ -90,6 +90,18 @@ The algorithm checks the cardinality of the values in the compressed batch and b
 the cardinality it decides wether it is worth to recompress the batch using the dictionary
 compression algorithm. In that case it recompresses and stores the UUIDs as a dictionary.
 
+### External
+
+The external method delegates compression to the column's data type. A type
+opts in by providing two SQL functions in its own schema,
+`<typename>_compress(<type>[]) RETURNS bytea` and
+`<typename>_decompress(bytea) RETURNS <type>[]`. It is then selected by
+default over dictionary/array for that type. NULLs are stripped into a bitmap
+before the compress call and re-inserted after decompression, so these functions
+only see non-null values. The returned bytea is stored with TOAST compression
+disabled. This lets extension types with internal structure (records, histograms)
+compress across rows in ways the generic algorithms cannot.
+
 # Merging chunks while compressing #
 
 ## Setup ##

@@ -1,0 +1,1 @@
+Implements: #1524 Add external compression, letting a type supply its own compress/decompress functions
