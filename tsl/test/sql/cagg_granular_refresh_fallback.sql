@@ -75,6 +75,7 @@ FROM (
 -- the generation INVALID, taking the whole interval down the same full-refresh
 -- fall back -- so the long-keyed sensor and a normal one in the same interval
 -- are both materialized correctly.
+-- NULL tenant key also triggers INVALID.
 -- ============================================================================
 INSERT INTO conditions VALUES
   ('2020-02-01 00:00+00', repeat('x', 100), 10),
@@ -96,6 +97,62 @@ SELECT length(sensor_id) AS key_len, avg
 FROM cond_daily
 WHERE bucket = '2020-02-01 00:00+00'
 ORDER BY key_len;
+
+-- A NULL tenant is unstorable and trips the generation INVALID (status 1).  The
+-- whole transaction is skipped, so nentries stays 0 even though 'named' is storable.
+INSERT INTO conditions VALUES
+  ('2020-05-01 00:00+00', 'named', 40),
+  ('2020-05-01 00:00+00', NULL, 50);
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::regclass);
+
+-- Both groups materialize via the fall back.
+CALL refresh_continuous_aggregate('cond_daily', '2020-05-01 00:00+00', '2020-05-02 00:00+00');
+SELECT sensor_id, avg
+FROM cond_daily
+WHERE bucket = '2020-05-01 00:00+00'
+ORDER BY sensor_id NULLS LAST;
+
+-- ============================================================================
+-- NULL tenant on the direct-compress ingest path: the tenant is read from the
+-- slot before the row is folded into a compressed batch, so a NULL there must
+-- trip the generation INVALID exactly like the DML path above, and the fall
+-- back must still materialize the NULL group.  Same hypertable as above, with
+-- the columnstore enabled so direct compress can engage.
+-- ============================================================================
+ALTER TABLE conditions SET (timescaledb.compress, timescaledb.compress_orderby = 'time');
+
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_sort_batches = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = false;
+
+-- 2000 rows (large enough to engage direct compress): 1000 for 'named' and 1000
+-- with a NULL tenant, all landing in the same bucket.
+INSERT INTO conditions
+SELECT v.ts, v.sensor, v.val
+FROM (VALUES ('2020-06-01 00:00+00'::timestamptz, 'named'::text, 40::float),
+             ('2020-06-01 00:00+00'::timestamptz, NULL::text, 50::float)) v(ts, sensor, val),
+     generate_series(1, 1000) g;
+
+-- Confirm the direct-compress ingest path ran: the 2020-06-01 chunk is COMPRESSED.
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk)
+FROM show_chunks('conditions', older_than => '2020-06-15 00:00+00'::timestamptz,
+                               newer_than => '2020-05-15 00:00+00'::timestamptz) chunk;
+
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.enable_direct_compress_insert_sort_batches;
+RESET timescaledb.enable_direct_compress_insert_client_sorted;
+
+-- Same as the DML path: generation INVALID (status 1), nothing buffered.
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::regclass);
+
+-- Both groups materialize via the fall back.
+CALL refresh_continuous_aggregate('cond_daily', '2020-06-01 00:00+00', '2020-06-02 00:00+00');
+SELECT sensor_id, avg
+FROM cond_daily
+WHERE bucket = '2020-06-01 00:00+00'
+ORDER BY sensor_id NULLS LAST;
 
 -- ============================================================================
 -- Tracking not configured: a hypertable with no granular refresh

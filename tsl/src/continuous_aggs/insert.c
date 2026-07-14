@@ -290,11 +290,28 @@ get_cache_inval_entry(int32 hypertable_id, Oid chunk_relid)
 
 /*
  * Used by direct compress invalidation
+ *
+ * tenants_unknown says the caller invalidated [start, end] without being able to
+ * enumerate the tenants in it, so this transaction's tenant tracking is
+ * incomplete.  Force the tracker INVALID at commit (tenant_local_htab_write),
+ * which leaves seqnum 0 on the invalidation entries and makes the refresh fall
+ * back to a full, non-tenant-scoped refresh of the range.
+ *
+ * Without that a mixed transaction silently corrupts the aggregate: any other
+ * DML in it buffers a tenant for the hypertable, so cache_inval_entry_write
+ * stamps a live seqnum on the untracked range too, and the refresh then scopes
+ * that range to the tenants it happens to know about.
  */
 void
-continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 start, int64 end)
+continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 start, int64 end,
+								bool tenants_unknown)
 {
 	ContinuousAggsCacheInvalEntry *cache_entry = get_cache_inval_entry(hypertable_id, chunk_relid);
+
+	if (tenants_unknown && cache_entry->tenant_col.attno != InvalidAttrNumber)
+	{
+		tenant_buffer_unencodable = true;
+	}
 
 	cache_entry->value_is_set = true;
 	Assert(start <= end);
@@ -445,46 +462,22 @@ resolve_tenant_tracker(int32 hypertable_id)
 }
 
 /*
- * Buffer one inserted row's <tenant, time> into the per-transaction local
- * buffer.  The tenant range for a single row is [time, time]; repeated rows for
- * the same tenant fold into one entry's [min,max].  The buffer is drained into
- * the shared tracker at commit (tenant_local_htab_write), where the late-arrival
- * window gate is applied against the tracker generation's pinned threshold -- so
- * we buffer every row's tenant here without a time filter.
- * The tenant value is keyed by its canonical
- * text form (the type's output function).
+ * Buffer one (tenant, time) pair into the per-transaction local tenant buffer.
+ * Used by DML path (record_tenant_invalidation) and the direct-compress path
+ * (continuous_agg_record_tenant_from_slot).
  */
-
 static void
-record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Relation chunk_rel,
-						   HeapTuple tuple)
+record_tenant_invalidation_values(const ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval,
+								  Datum tenant_datum)
 {
-	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
-	Datum time_datum;
-	Datum tenant_datum;
-	bool isnull;
-	int64 timeval;
 	char *key;
 	int key_len;
 	TenantLocalKey lookup;
 	TenantLocalEntry *entry;
 	bool found;
 
-	/* Tracking disabled (e.g. to baseline overhead), or no tenant column. */
+	/* No tenant column -> nothing to record. */
 	if (cache_entry->tenant_col.attno == InvalidAttrNumber)
-	{
-		return;
-	}
-
-	time_datum = heap_getattr(tuple, cache_entry->open_dimension_attno, tupdesc, &isnull);
-	if (isnull)
-	{
-		return;
-	}
-	timeval = ts_time_value_to_internal(time_datum, cache_entry->open_dimension_type);
-
-	tenant_datum = heap_getattr(tuple, cache_entry->tenant_col.attno, tupdesc, &isnull);
-	if (isnull)
 	{
 		return;
 	}
@@ -565,6 +558,87 @@ record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Rel
 			entry->max_ts = timeval;
 		}
 	}
+}
+
+/*
+ * DML path: extract the tenant and time values from a chunk heap tuple and
+ * buffer them for tenant-level invalidation tracking.
+ */
+static void
+record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Relation chunk_rel,
+						   HeapTuple tuple)
+{
+	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
+	Datum time_datum;
+	Datum tenant_datum;
+	bool isnull;
+	int64 timeval;
+
+	/* No tenant column -> nothing to record. */
+	if (cache_entry->tenant_col.attno == InvalidAttrNumber)
+	{
+		return;
+	}
+
+	time_datum = heap_getattr(tuple, cache_entry->open_dimension_attno, tupdesc, &isnull);
+	if (isnull)
+	{
+		return;
+	}
+	timeval = ts_time_value_to_internal(time_datum, cache_entry->open_dimension_type);
+
+	tenant_datum = heap_getattr(tuple, cache_entry->tenant_col.attno, tupdesc, &isnull);
+	if (isnull)
+	{
+		/* A NULL tenant is a valid group but cannot be keyed -> tracking is
+		 * incomplete for this transaction; force the tracker INVALID at commit
+		 * so the refresh falls back. */
+		tenant_buffer_unencodable = true;
+		return;
+	}
+
+	record_tenant_invalidation_values(cache_entry, timeval, tenant_datum);
+}
+
+/*
+ * Direct-compress path: extract the tenant and time values from an uncompressed
+ * chunk-layout slot (available before the row is folded into a compressed batch)
+ * and buffer them for tenant-level invalidation tracking.  Called once per input
+ * row from tsl_compressor_add_slot.
+ */
+void
+continuous_agg_record_tenant_from_slot(int32 hypertable_id, Oid chunk_relid, TupleTableSlot *slot)
+{
+	ContinuousAggsCacheInvalEntry *cache_entry;
+	Datum time_datum;
+	Datum tenant_datum;
+	bool isnull;
+	int64 timeval;
+
+	cache_entry = get_cache_inval_entry(hypertable_id, chunk_relid);
+	if (cache_entry->tenant_col.attno == InvalidAttrNumber)
+	{
+		return;
+	}
+
+	time_datum = slot_getattr(slot, cache_entry->open_dimension_attno, &isnull);
+	if (isnull)
+	{
+		return;
+	}
+	timeval = ts_time_value_to_internal(time_datum, cache_entry->open_dimension_type);
+
+	tenant_datum = slot_getattr(slot, cache_entry->tenant_col.attno, &isnull);
+	if (isnull)
+	{
+		/* A NULL tenant is a valid group but cannot be keyed -> tracking is
+		 * incomplete for this transaction; force the tracker INVALID at commit
+		 * so the refresh falls back. */
+		tenant_buffer_unencodable = true;
+		return;
+	}
+
+	record_tenant_invalidation_values(cache_entry, timeval, tenant_datum);
 }
 
 /*
