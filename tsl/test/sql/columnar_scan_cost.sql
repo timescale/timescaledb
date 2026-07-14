@@ -144,17 +144,22 @@ vacuum analyze estimate_count;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-with hypertables as (
-    select unnest(array[compressed_hypertable_id, id])
-    from _timescaledb_catalog.hypertable
-    where (schema_name || '.' || table_name)::regclass = 'estimate_count'::regclass)
-, chunks as (
-    select (schema_name || '.' || table_name)::regclass
+with chunks as (
+    select relid
     from _timescaledb_catalog.chunk
-    where hypertable_id in (select * from hypertables)
+    where hypertable_id = (
+        select id
+        from _timescaledb_catalog.hypertable
+        where (schema_name || '.' || table_name)::regclass = 'estimate_count'::regclass)
 )
 delete from pg_statistic
-where starelid in (select * from chunks)
+where starelid in (
+    select relid from chunks
+    union all
+    select cs.compress_relid
+    from _timescaledb_catalog.compression_settings cs
+    join chunks on cs.relid = chunks.relid
+)
 ;
 
 explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
@@ -192,7 +197,7 @@ vacuum freeze analyze lastmax;
 
 select cs.compress_relid::regclass chunk, 'c' column from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'lastmax') limit 1
 \gset

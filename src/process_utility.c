@@ -18,7 +18,6 @@
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
-#include <commands/cluster.h>
 #include <commands/copy.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
@@ -334,6 +333,14 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetAccessMethod:
 			case AT_SetLogged:
 			case AT_SetUnLogged:
+			case AT_EnableTrig:
+			case AT_EnableAlwaysTrig:
+			case AT_EnableReplicaTrig:
+			case AT_DisableTrig:
+			case AT_EnableTrigAll:
+			case AT_DisableTrigAll:
+			case AT_EnableTrigUser:
+			case AT_DisableTrigUser:
 				continue;
 				/*
 				 * BLOCKED:
@@ -493,22 +500,22 @@ check_table_in_rangevar_list(List *rvlist, Name schema_name, Name table_name)
 static void
 add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 {
+	NameData schema, table;
 	ProcessUtilityArgs *args = vargs;
 	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
-	Chunk *chunk;
 
 	/* Switch to the parent context for persistent allocations */
 	MemoryContext per_chunk_mcxt = MemoryContextSwitchTo(GetMemoryChunkContext(stmt));
 
-	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	/*
-	 * If chunk is in the same schema as the hypertable it could already be part of
-	 * the objects list in the case of "GRANT ALL IN SCHEMA" for example
-	 */
-	if (!check_table_in_rangevar_list(stmt->objects, &chunk->fd.schema_name, &chunk->fd.table_name))
+	char *schema_name = get_namespace_name(get_rel_namespace(chunk_relid));
+	char *table_name = get_rel_name(chunk_relid);
+
+	namestrcpy(&schema, schema_name);
+	namestrcpy(&table, table_name);
+
+	if (!check_table_in_rangevar_list(stmt->objects, &schema, &table))
 	{
-		RangeVar *rv =
-			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+		RangeVar *rv = makeRangeVar(schema_name, table_name, -1);
 		stmt->objects = lappend(stmt->objects, rv);
 	}
 	MemoryContextSwitchTo(per_chunk_mcxt);
@@ -782,7 +789,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 
 	Assert(alterstmt->objectType == OBJECT_TABLE);
 
-	if (NULL == alterstmt->relation)
+	if (!alterstmt->relation)
 	{
 		return;
 	}
@@ -796,7 +803,11 @@ process_altertableschema(ProcessUtilityArgs *args)
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
-	if (ht == NULL)
+	if (ht)
+	{
+		ts_hypertable_set_schema(ht, alterstmt->newschema);
+	}
+	else
 	{
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
 
@@ -804,20 +815,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 		{
 			alterstmt->objectType = OBJECT_MATVIEW;
 			process_alterviewschema(args);
-			ts_cache_release(&hcache);
-			return;
 		}
-
-		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-		if (NULL != chunk)
-		{
-			ts_chunk_set_schema(chunk, alterstmt->newschema);
-		}
-	}
-	else
-	{
-		ts_hypertable_set_schema(ht, alterstmt->newschema);
 	}
 
 	ts_cache_release(&hcache);
@@ -1589,27 +1587,7 @@ process_truncate(ProcessUtilityArgs *args)
 	foreach (cell, hypertables)
 	{
 		Hypertable *ht = lfirst(cell);
-
-		Assert(ht != NULL);
-
 		handle_truncate_hypertable(args, stmt, ht);
-
-		/* propagate to the compressed hypertable */
-		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-		{
-			Hypertable *compressed_ht =
-				ts_hypertable_cache_get_entry_by_id(hcache, ht->fd.compressed_hypertable_id);
-			TruncateStmt compressed_stmt = *stmt;
-			compressed_stmt.relations =
-				list_make1(makeRangeVar(NameStr(compressed_ht->fd.schema_name),
-										NameStr(compressed_ht->fd.table_name),
-										-1));
-
-			/* TRUNCATE the compressed hypertable */
-			ExecuteTruncate(&compressed_stmt);
-
-			handle_truncate_hypertable(args, stmt, compressed_ht);
-		}
 	}
 
 	/* For all materialization hypertables, reset the watermark */
@@ -1752,30 +1730,11 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			if (ht)
 			{
-				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("dropping columnstore hypertables not supported"),
-							 errhint("Please drop the corresponding rowstore hypertable "
-									 "instead.")));
-				}
-
 				/*
 				 *  We need to drop hypertable chunks before the hypertable to avoid the need
 				 *  to CASCADE such drops;
 				 */
 				foreach_chunk(ht, process_drop_table_chunk, stmt, true);
-				/* The usual path for deleting an associated compressed hypertable uses
-				 * DROP_RESTRICT But if we are using DROP_CASCADE we should propagate that down to
-				 * the compressed hypertable.
-				 */
-				if (stmt->behavior == DROP_CASCADE && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-				{
-					Hypertable *compressed_hypertable =
-						ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-					ts_hypertable_drop(compressed_hypertable, DROP_CASCADE);
-				}
 			}
 
 			result = DDL_DONE;
@@ -2049,50 +2008,6 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 												  &cagg->data.partial_view_schema,
 												  &cagg->data.partial_view_name);
 					}
-
-					/*
-					 * If this is a hypertable and it has a compressed
-					 * hypertable associated with it, add it to the list of
-					 * hypertables to process.
-					 */
-					Hypertable *hypertable = ts_hypertable_cache_get_entry_rv(hcache, relation);
-					if (hypertable && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(hypertable))
-					{
-						Hypertable *compressed_hypertable =
-							ts_hypertable_get_by_id(hypertable->fd.compressed_hypertable_id);
-						Assert(compressed_hypertable);
-						process_grant_add_by_name(stmt,
-												  was_schema_op,
-												  &compressed_hypertable->fd.schema_name,
-												  &compressed_hypertable->fd.table_name);
-						List *chunks = ts_chunk_get_by_hypertable_id(hypertable->fd.id);
-						ListCell *cell;
-						foreach (cell, chunks)
-						{
-							Chunk *chunk = lfirst(cell);
-							Oid compressed_relid =
-								ts_relation_get_compressed_relid(chunk->table_id);
-							if (!OidIsValid(compressed_relid))
-							{
-								continue;
-							}
-							/*
-							 * makeRangeVar() keeps the name pointers without
-							 * copying, so the NameData must outlive this loop
-							 * iteration. Allocate it instead of using stack
-							 * storage which is reused on every iteration.
-							 */
-							NameData *compressed_schema_name = palloc(sizeof(NameData));
-							NameData *compressed_table_name = palloc(sizeof(NameData));
-							namestrcpy(compressed_schema_name,
-									   get_namespace_name(get_rel_namespace(compressed_relid)));
-							namestrcpy(compressed_table_name, get_rel_name(compressed_relid));
-							process_grant_add_by_name(stmt,
-													  was_schema_op,
-													  compressed_schema_name,
-													  compressed_table_name);
-						}
-					}
 				}
 
 				/* Process all hypertables, including those added in the loop above */
@@ -2103,7 +2018,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 					if (ht)
 					{
-						foreach_chunk(ht, add_chunk_oid, args, false);
+						foreach_chunk(ht, add_chunk_oid, args, true);
 					}
 				}
 
@@ -2432,14 +2347,18 @@ process_rename_view(Oid relid, RenameStmt *stmt)
 }
 
 /*
- * Rename a hypertable, chunk or continuous aggregate.
+ * Rename a hypertable or continuous aggregate.
  */
 static void
 process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 
-	if (NULL == ht)
+	if (ht)
+	{
+		ts_hypertable_set_name(ht, stmt->newname);
+	}
+	else
 	{
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
 
@@ -2447,19 +2366,7 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 		{
 			stmt->renameType = OBJECT_MATVIEW;
 			process_rename_view(relid, stmt);
-			return;
 		}
-
-		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-		if (NULL != chunk)
-		{
-			ts_chunk_set_name(chunk, stmt->newname);
-		}
-	}
-	else
-	{
-		ts_hypertable_set_name(ht, stmt->newname);
 	}
 }
 
@@ -2653,7 +2560,6 @@ process_rename_schema(RenameStmt *stmt)
 	}
 
 	ts_bgw_job_rename_schema_name(stmt->subname, stmt->newname);
-	ts_chunks_rename_schema_name(stmt->subname, stmt->newname);
 	ts_dimensions_rename_schema_name(stmt->subname, stmt->newname);
 	ts_hypertables_rename_schema_name(stmt->subname, stmt->newname);
 	ts_continuous_agg_rename_schema_name(stmt->subname, stmt->newname);
@@ -2940,14 +2846,6 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 
 	process_altertable_change_owner_bgw_jobs(ht->fd.id, newrole_oid);
 	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd, true);
-
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		Hypertable *compressed_hypertable =
-			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
-		process_altertable_change_owner(compressed_hypertable, cmd);
-	}
 }
 
 typedef struct ChunkConstraintInfo
@@ -4059,21 +3957,38 @@ chunk_index_mappings_cmp(const void *p1, const void *p2)
 static DDLResult
 process_cluster_start(ProcessUtilityArgs *args)
 {
+#if PG19_GE
+	RepackStmt *stmt = (RepackStmt *) args->parsetree;
+	Cache *hcache;
+	Hypertable *ht;
+	DDLResult result = DDL_CONTINUE;
+	RangeVar *cluster_rv = stmt->relation ? stmt->relation->relation : NULL;
+
+	Assert(IsA(stmt, RepackStmt));
+
+	/* We only intercept CLUSTER; let REPACK and VACUUM FULL fall through */
+	if (stmt->command != REPACK_COMMAND_CLUSTER)
+	{
+		return DDL_CONTINUE;
+	}
+#else
 	ClusterStmt *stmt = (ClusterStmt *) args->parsetree;
 	Cache *hcache;
 	Hypertable *ht;
 	DDLResult result = DDL_CONTINUE;
+	RangeVar *cluster_rv = stmt->relation;
 
 	Assert(IsA(stmt, ClusterStmt));
+#endif
 
 	/* If this is a re-cluster on all tables, there is nothing we need to do */
-	if (NULL == stmt->relation)
+	if (NULL == cluster_rv)
 	{
 		return DDL_CONTINUE;
 	}
 
 	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
+	ht = ts_hypertable_cache_get_entry_rv(hcache, cluster_rv);
 
 	if (NULL != ht)
 	{
@@ -4207,11 +4122,18 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * Since we keep OIDs between transactions, there is a potential
 			 * issue if an OID gets reassigned between two subtransactions
 			 */
-#if PG18_LT
-			cluster_rel(cim->chunkoid, cim->indexoid, get_cluster_options(stmt));
-#else
+#if PG19_GE
 			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
-			cluster_rel(rel, cim->indexoid, get_cluster_options(stmt));
+			cluster_rel(REPACK_COMMAND_CLUSTER,
+						rel,
+						cim->indexoid,
+						get_cluster_options(stmt->params),
+						is_top_level);
+#elif PG18_GE
+			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
+			cluster_rel(rel, cim->indexoid, get_cluster_options(stmt->params));
+#else
+			cluster_rel(cim->chunkoid, cim->indexoid, get_cluster_options(stmt->params));
 #endif
 			PopActiveSnapshot();
 			CommitTransactionCommand();
@@ -4381,11 +4303,10 @@ process_create_table_end(Node *parsetree)
 			AttrNumber time_attno = get_attnum(table_relid, time_column);
 			Oid time_type = get_atttype(table_relid, time_attno);
 
-			interval =
-				ts_create_table_parse_chunk_time_interval(create_table_info.with_clauses
-															  [CreateTableFlagChunkTimeInterval],
-														  time_type,
-														  &interval_type);
+			interval = ts_create_table_parse_interval_value(create_table_info.with_clauses
+																[CreateTableFlagChunkTimeInterval],
+															time_type,
+															&interval_type);
 		}
 
 		if (!create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].is_default)
@@ -4602,6 +4523,27 @@ process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	AlterTableInternal(chunk_relid, list_make1(cmd), false);
 }
 
+/*
+ * Recurse ENABLE/DISABLE TRIGGER to chunks.
+ *
+ * Only row triggers are cloned to chunks, so a command naming a specific
+ * trigger must be skipped on chunks that do not have it (e.g. statement-level
+ * triggers, which live only on the hypertable root). The ALL/USER variants
+ * carry no name and apply to whatever triggers a chunk has.
+ */
+static void
+process_altertable_chunk_trigger(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	AlterTableCmd *cmd = arg;
+
+	if (cmd->name != NULL && !OidIsValid(get_trigger_oid(chunk_relid, cmd->name, true)))
+	{
+		return;
+	}
+
+	AlterTableInternal(chunk_relid, list_make1(cmd), false);
+}
+
 static void
 process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void *arg)
 {
@@ -4699,13 +4641,6 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
 	foreach_chunk(ht, process_altertable_chunk, cmd, true);
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		Hypertable *compressed_hypertable =
-			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
-		process_altertable_set_tablespace_end(compressed_hypertable, cmd);
-	}
 }
 
 static void
@@ -5272,7 +5207,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DisableTrigAll:
 		case AT_EnableTrigUser:
 		case AT_DisableTrigUser:
-			foreach_chunk(ht, process_altertable_chunk, cmd, false);
+			foreach_chunk(ht, process_altertable_chunk_trigger, cmd, false);
 			break;
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);
@@ -5695,10 +5630,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		Oid time_type = get_atttype(dim->main_table_relid, dim->column_attno);
 		Oid interval_type = InvalidOid;
 		Datum interval =
-			ts_create_table_parse_chunk_time_interval(parse_results
-														  [AlterTableFlagChunkTimeInterval],
-													  time_type,
-													  &interval_type);
+			ts_create_table_parse_interval_value(parse_results[AlterTableFlagChunkTimeInterval],
+												 time_type,
+												 &interval_type);
 
 		int64 chunk_interval = ts_interval_value_to_internal(interval, interval_type);
 		ts_dimension_set_chunk_interval(dim, chunk_interval);
@@ -5711,6 +5645,13 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagIndex].is_default)
 	{
 		ts_cm_functions->process_compress_table(ht, parse_results);
+	}
+
+	if (ht && (!parse_results[AlterTableFlagGranularRefreshColumn].is_default ||
+			   !parse_results[AlterTableFlagGranularRefreshStartOffset].is_default ||
+			   !parse_results[AlterTableFlagGranularRefreshEndOffset].is_default))
+	{
+		ts_cm_functions->process_granular_refresh_options(ht, parse_results);
 	}
 
 	cmd->def = (Node *) pg_options;
@@ -6128,9 +6069,15 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_ReindexStmt:
 			handler = process_reindex;
 			break;
+#if PG19_GE
+		case T_RepackStmt:
+			handler = process_cluster_start;
+			break;
+#else
 		case T_ClusterStmt:
 			handler = process_cluster_start;
 			break;
+#endif
 		case T_ViewStmt:
 			handler = process_viewstmt;
 			break;

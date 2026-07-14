@@ -19,7 +19,7 @@ ALTER TABLE hyper SET (
 INSERT INTO meta VALUES (1), (2), (3), (4), (5);
 INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2), (11, 5, 2);
 
-SELECT ch1.table_name AS "CHUNK_NAME", ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_FULL_NAME"
+SELECT ch1.relid::text AS "CHUNK_NAME", ch1.relid::text AS "CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 ORDER BY ch1.id LIMIT 1 \gset

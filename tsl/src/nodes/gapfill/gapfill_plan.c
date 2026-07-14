@@ -779,7 +779,10 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	group_rel->pathlist = NIL;
 	group_rel->cheapest_total_path = NULL;
 	group_rel->cheapest_startup_path = NULL;
+#if PG19_LT
+	/* PG19 removed the cheapest_unique_path cache from RelOptInfo. */
 	group_rel->cheapest_unique_path = NULL;
+#endif
 
 	/*
 	 * cheapest_parameterized_paths will be rebuilt by set_cheapest()

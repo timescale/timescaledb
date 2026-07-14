@@ -74,12 +74,12 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.get_chunk_info(IN chunk REGCLA
   SELECT
 		ch.id AS chunk_id,
 		ch.hypertable_id, ht.schema_name AS ht_schema_name, ht.table_name AS ht_table_name,
-    ch.schema_name AS chunk_schema, ch.table_name AS chunk_name,
+    ns.nspname AS chunk_schema, c.relname AS chunk_name,
     ch.osm_chunk AS is_osm_chunk,
     (ch.status & 4)::bool AS is_frozen
 	FROM _timescaledb_catalog.chunk ch
-  JOIN pg_class c ON c.oid=$1 AND ch.table_name=c.relname
-  JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = ch.schema_name
+  JOIN pg_class c ON c.oid = ch.relid AND c.oid = $1
+  JOIN pg_namespace ns ON ns.oid = c.relnamespace
   JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id;
 $$ LANGUAGE SQL STABLE SET search_path = pg_catalog, pg_temp;
 
@@ -87,11 +87,13 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.get_chunk_info_by_id(IN chunk_
   SELECT
 		ch.id AS chunk_id,
 		ch.hypertable_id, ht.schema_name AS ht_schema_name, ht.table_name AS ht_table_name,
-    ch.schema_name AS chunk_schema, ch.table_name AS chunk_name,
+    ns.nspname AS chunk_schema, c.relname AS chunk_name,
     ch.osm_chunk AS is_osm_chunk,
     (ch.status & 4)::bool AS is_frozen
 	FROM _timescaledb_catalog.chunk ch
   JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
+  JOIN pg_class c ON c.oid = ch.relid
+  JOIN pg_namespace ns ON ns.oid = c.relnamespace
   WHERE ch.id = $1;
 $$ LANGUAGE SQL STABLE SET search_path = pg_catalog, pg_temp;
 
@@ -100,8 +102,7 @@ AS $$
   SELECT range_start, range_end
   FROM _timescaledb_catalog.dimension_slice d
   JOIN _timescaledb_catalog.chunk ch ON ch.id = d.chunk_id
-  JOIN pg_class c ON c.oid=$1 AND ch.table_name=c.relname
-  JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = ch.schema_name
+  WHERE ch.relid = $1
   ORDER BY dimension_id LIMIT 1;
 $$ LANGUAGE SQL STABLE SET search_path = pg_catalog, pg_temp;
 

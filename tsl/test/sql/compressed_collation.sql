@@ -47,7 +47,7 @@ FROM _timescaledb_catalog.hypertable ht
     INNER JOIN _timescaledb_catalog.chunk ch
     ON ch.hypertable_id = ht.id
     INNER JOIN _timescaledb_catalog.compression_settings cs
-    ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+    ON cs.relid = ch.relid
 WHERE ht.table_name = 'compressed_collation_ht' \gset
 
 create index on :CHUNK (name);
@@ -102,3 +102,45 @@ select min(name), max(name) from collation_agg_c;
 
 reset enable_sort;
 reset timescaledb.debug_require_vector_agg;
+
+-- Test #9998: should not match query sort key with a different collation to compressed index sort key
+create table t9998 (
+    ts   timestamptz not null,
+    name text collate :"COLLATION"
+);
+select table_name from create_hypertable('t9998', 'ts');
+insert into t9998 values
+    ('2024-01-01', 'B'),
+    ('2024-01-01', 'a');
+alter table t9998 set (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'name'
+);
+select count(compress_chunk(ch)) from show_chunks('t9998') ch;
+
+-- C collation sorts capital before lowercase: expected order is 'B', 'a'.
+select name from t9998 order by name collate "C";
+
+drop table t9998 cascade;
+
+-- Test issue #9997: batch filtering for compressed DML should respect collation
+create table t9997 (
+    ts    timestamptz not null,
+    actor text collate :"COLLATION",
+    note  int
+);
+select count(*) from create_hypertable('t9997', 'ts');
+alter table t9997 set (timescaledb.compress);
+
+insert into t9997 values ('2024-01-01', 'alice', 1);
+
+SELECT count(compress_chunk(chunk_name)) FROM show_chunks('t9997') chunk_name;
+
+-- SELECT respects different collation, returns 1 row
+select note from t9997 where actor = 'alice' collate "C";
+
+-- UPDATE respects different collation, updates 1 row
+update t9997 set note = 99 where actor = 'alice' collate "C";
+select note from t9997 where actor = 'alice' collate "C";
+
+drop table t9997 cascade;

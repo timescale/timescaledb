@@ -54,15 +54,15 @@ SELECT add_dimension('public.drop_chunk_test3', 'device_id', 2);
 -----------------------------------------
  (6,public,drop_chunk_test3,device_id,t)
 
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
- chunk_id | hypertable_id | chunk_schema | chunk_table | range_start | range_end 
-----------+---------------+--------------+-------------+-------------+-----------
+ chunk_id | hypertable_id | chunk_table | range_start | range_end 
+----------+---------------+-------------+-------------+-----------
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
  schema | name | type | owner 
@@ -96,27 +96,27 @@ INSERT INTO PUBLIC.drop_chunk_test3 VALUES(3, 3.0, 'dev1');
 INSERT INTO PUBLIC.drop_chunk_test3 VALUES(4, 4.0, 'dev7');
 INSERT INTO PUBLIC.drop_chunk_test3 VALUES(5, 5.0, 'dev7');
 INSERT INTO PUBLIC.drop_chunk_test3 VALUES(6, 6.0, 'dev7');
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
- chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
-----------+---------------+-----------------------+-------------------+-------------+-----------
-        1 |             1 | _timescaledb_internal | _hyper_1_1_chunk  |           1 |         2
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           2 |         3
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
-        7 |             2 | _timescaledb_internal | _hyper_2_7_chunk  |           1 |         2
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
+ chunk_id | hypertable_id |               chunk_table               | range_start | range_end 
+----------+---------------+-----------------------------------------+-------------+-----------
+        1 |             1 | _timescaledb_internal._hyper_1_1_chunk  |           1 |         2
+        2 |             1 | _timescaledb_internal._hyper_1_2_chunk  |           2 |         3
+        3 |             1 | _timescaledb_internal._hyper_1_3_chunk  |           3 |         4
+        4 |             1 | _timescaledb_internal._hyper_1_4_chunk  |           4 |         5
+        5 |             1 | _timescaledb_internal._hyper_1_5_chunk  |           5 |         6
+        6 |             1 | _timescaledb_internal._hyper_1_6_chunk  |           6 |         7
+        7 |             2 | _timescaledb_internal._hyper_2_7_chunk  |           1 |         2
+        8 |             2 | _timescaledb_internal._hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal._hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal._hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal._hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal._hyper_2_12_chunk |           6 |         7
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name        | type  |       owner       
@@ -183,48 +183,48 @@ SELECT drop_chunks(3533, older_than => 3);
 ERROR:  invalid hypertable or continuous aggregate
 \set ON_ERROR_STOP 1
 -- show created constraints and dimension slices for each chunk
-SELECT c.table_name, format('constraint_%s', ds.id)::name AS constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+SELECT c.relid::text AS table_name, format('constraint_%s', ds.id)::name AS constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id)
 ORDER BY c.id, ds.id;
-    table_name     | constraint_name | dimension_slice_id |     range_start      |      range_end      
--------------------+-----------------+--------------------+----------------------+---------------------
- _hyper_1_1_chunk  | constraint_1    |                  1 |                    1 |                   2
- _hyper_1_1_chunk  | constraint_2    |                  2 |           1073741823 | 9223372036854775807
- _hyper_1_2_chunk  | constraint_3    |                  3 |                    2 |                   3
- _hyper_1_2_chunk  | constraint_4    |                  4 |           1073741823 | 9223372036854775807
- _hyper_1_3_chunk  | constraint_5    |                  5 |                    3 |                   4
- _hyper_1_3_chunk  | constraint_6    |                  6 |           1073741823 | 9223372036854775807
- _hyper_1_4_chunk  | constraint_7    |                  7 |                    4 |                   5
- _hyper_1_4_chunk  | constraint_8    |                  8 | -9223372036854775808 |          1073741823
- _hyper_1_5_chunk  | constraint_9    |                  9 |                    5 |                   6
- _hyper_1_5_chunk  | constraint_10   |                 10 | -9223372036854775808 |          1073741823
- _hyper_1_6_chunk  | constraint_11   |                 11 |                    6 |                   7
- _hyper_1_6_chunk  | constraint_12   |                 12 | -9223372036854775808 |          1073741823
- _hyper_2_7_chunk  | constraint_13   |                 13 |                    1 |                   2
- _hyper_2_7_chunk  | constraint_14   |                 14 |           1073741823 | 9223372036854775807
- _hyper_2_8_chunk  | constraint_15   |                 15 |                    2 |                   3
- _hyper_2_8_chunk  | constraint_16   |                 16 |           1073741823 | 9223372036854775807
- _hyper_2_9_chunk  | constraint_17   |                 17 |                    3 |                   4
- _hyper_2_9_chunk  | constraint_18   |                 18 |           1073741823 | 9223372036854775807
- _hyper_2_10_chunk | constraint_19   |                 19 |                    4 |                   5
- _hyper_2_10_chunk | constraint_20   |                 20 | -9223372036854775808 |          1073741823
- _hyper_2_11_chunk | constraint_21   |                 21 |                    5 |                   6
- _hyper_2_11_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
- _hyper_2_12_chunk | constraint_23   |                 23 |                    6 |                   7
- _hyper_2_12_chunk | constraint_24   |                 24 | -9223372036854775808 |          1073741823
- _hyper_3_13_chunk | constraint_25   |                 25 |                    1 |                   2
- _hyper_3_13_chunk | constraint_26   |                 26 |           1073741823 | 9223372036854775807
- _hyper_3_14_chunk | constraint_27   |                 27 |                    2 |                   3
- _hyper_3_14_chunk | constraint_28   |                 28 |           1073741823 | 9223372036854775807
- _hyper_3_15_chunk | constraint_29   |                 29 |                    3 |                   4
- _hyper_3_15_chunk | constraint_30   |                 30 |           1073741823 | 9223372036854775807
- _hyper_3_16_chunk | constraint_31   |                 31 |                    4 |                   5
- _hyper_3_16_chunk | constraint_32   |                 32 | -9223372036854775808 |          1073741823
- _hyper_3_17_chunk | constraint_33   |                 33 |                    5 |                   6
- _hyper_3_17_chunk | constraint_34   |                 34 | -9223372036854775808 |          1073741823
- _hyper_3_18_chunk | constraint_35   |                 35 |                    6 |                   7
- _hyper_3_18_chunk | constraint_36   |                 36 | -9223372036854775808 |          1073741823
+               table_name                | constraint_name | dimension_slice_id |     range_start      |      range_end      
+-----------------------------------------+-----------------+--------------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk  | constraint_1    |                  1 |                    1 |                   2
+ _timescaledb_internal._hyper_1_1_chunk  | constraint_2    |                  2 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_1_2_chunk  | constraint_3    |                  3 |                    2 |                   3
+ _timescaledb_internal._hyper_1_2_chunk  | constraint_4    |                  4 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_1_3_chunk  | constraint_5    |                  5 |                    3 |                   4
+ _timescaledb_internal._hyper_1_3_chunk  | constraint_6    |                  6 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_1_4_chunk  | constraint_7    |                  7 |                    4 |                   5
+ _timescaledb_internal._hyper_1_4_chunk  | constraint_8    |                  8 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_1_5_chunk  | constraint_9    |                  9 |                    5 |                   6
+ _timescaledb_internal._hyper_1_5_chunk  | constraint_10   |                 10 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_1_6_chunk  | constraint_11   |                 11 |                    6 |                   7
+ _timescaledb_internal._hyper_1_6_chunk  | constraint_12   |                 12 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_7_chunk  | constraint_13   |                 13 |                    1 |                   2
+ _timescaledb_internal._hyper_2_7_chunk  | constraint_14   |                 14 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_2_8_chunk  | constraint_15   |                 15 |                    2 |                   3
+ _timescaledb_internal._hyper_2_8_chunk  | constraint_16   |                 16 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_2_9_chunk  | constraint_17   |                 17 |                    3 |                   4
+ _timescaledb_internal._hyper_2_9_chunk  | constraint_18   |                 18 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_2_10_chunk | constraint_19   |                 19 |                    4 |                   5
+ _timescaledb_internal._hyper_2_10_chunk | constraint_20   |                 20 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_11_chunk | constraint_21   |                 21 |                    5 |                   6
+ _timescaledb_internal._hyper_2_11_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_12_chunk | constraint_23   |                 23 |                    6 |                   7
+ _timescaledb_internal._hyper_2_12_chunk | constraint_24   |                 24 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_13_chunk | constraint_25   |                 25 |                    1 |                   2
+ _timescaledb_internal._hyper_3_13_chunk | constraint_26   |                 26 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_3_14_chunk | constraint_27   |                 27 |                    2 |                   3
+ _timescaledb_internal._hyper_3_14_chunk | constraint_28   |                 28 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_3_15_chunk | constraint_29   |                 29 |                    3 |                   4
+ _timescaledb_internal._hyper_3_15_chunk | constraint_30   |                 30 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_3_16_chunk | constraint_31   |                 31 |                    4 |                   5
+ _timescaledb_internal._hyper_3_16_chunk | constraint_32   |                 32 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_17_chunk | constraint_33   |                 33 |                    5 |                   6
+ _timescaledb_internal._hyper_3_17_chunk | constraint_34   |                 34 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_18_chunk | constraint_35   |                 35 |                    6 |                   7
+ _timescaledb_internal._hyper_3_18_chunk | constraint_36   |                 36 | -9223372036854775808 |          1073741823
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | chunk_id | dimension_id |     range_start      |      range_end      
@@ -285,46 +285,46 @@ SELECT count(*) FROM _timescaledb_internal._hyper_2_7_chunk;
 -- with other chunks in the same hypertable
 DROP TABLE _timescaledb_internal._hyper_2_7_chunk;
 -- Two constraints deleted compared to above
-SELECT c.table_name, format('constraint_%s', ds.id)::name AS constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+SELECT c.relid::text AS table_name, format('constraint_%s', ds.id)::name AS constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id)
 ORDER BY c.id, ds.id;
-    table_name     | constraint_name | dimension_slice_id |     range_start      |      range_end      
--------------------+-----------------+--------------------+----------------------+---------------------
- _hyper_1_1_chunk  | constraint_1    |                  1 |                    1 |                   2
- _hyper_1_1_chunk  | constraint_2    |                  2 |           1073741823 | 9223372036854775807
- _hyper_1_2_chunk  | constraint_3    |                  3 |                    2 |                   3
- _hyper_1_2_chunk  | constraint_4    |                  4 |           1073741823 | 9223372036854775807
- _hyper_1_3_chunk  | constraint_5    |                  5 |                    3 |                   4
- _hyper_1_3_chunk  | constraint_6    |                  6 |           1073741823 | 9223372036854775807
- _hyper_1_4_chunk  | constraint_7    |                  7 |                    4 |                   5
- _hyper_1_4_chunk  | constraint_8    |                  8 | -9223372036854775808 |          1073741823
- _hyper_1_5_chunk  | constraint_9    |                  9 |                    5 |                   6
- _hyper_1_5_chunk  | constraint_10   |                 10 | -9223372036854775808 |          1073741823
- _hyper_1_6_chunk  | constraint_11   |                 11 |                    6 |                   7
- _hyper_1_6_chunk  | constraint_12   |                 12 | -9223372036854775808 |          1073741823
- _hyper_2_8_chunk  | constraint_15   |                 15 |                    2 |                   3
- _hyper_2_8_chunk  | constraint_16   |                 16 |           1073741823 | 9223372036854775807
- _hyper_2_9_chunk  | constraint_17   |                 17 |                    3 |                   4
- _hyper_2_9_chunk  | constraint_18   |                 18 |           1073741823 | 9223372036854775807
- _hyper_2_10_chunk | constraint_19   |                 19 |                    4 |                   5
- _hyper_2_10_chunk | constraint_20   |                 20 | -9223372036854775808 |          1073741823
- _hyper_2_11_chunk | constraint_21   |                 21 |                    5 |                   6
- _hyper_2_11_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
- _hyper_2_12_chunk | constraint_23   |                 23 |                    6 |                   7
- _hyper_2_12_chunk | constraint_24   |                 24 | -9223372036854775808 |          1073741823
- _hyper_3_13_chunk | constraint_25   |                 25 |                    1 |                   2
- _hyper_3_13_chunk | constraint_26   |                 26 |           1073741823 | 9223372036854775807
- _hyper_3_14_chunk | constraint_27   |                 27 |                    2 |                   3
- _hyper_3_14_chunk | constraint_28   |                 28 |           1073741823 | 9223372036854775807
- _hyper_3_15_chunk | constraint_29   |                 29 |                    3 |                   4
- _hyper_3_15_chunk | constraint_30   |                 30 |           1073741823 | 9223372036854775807
- _hyper_3_16_chunk | constraint_31   |                 31 |                    4 |                   5
- _hyper_3_16_chunk | constraint_32   |                 32 | -9223372036854775808 |          1073741823
- _hyper_3_17_chunk | constraint_33   |                 33 |                    5 |                   6
- _hyper_3_17_chunk | constraint_34   |                 34 | -9223372036854775808 |          1073741823
- _hyper_3_18_chunk | constraint_35   |                 35 |                    6 |                   7
- _hyper_3_18_chunk | constraint_36   |                 36 | -9223372036854775808 |          1073741823
+               table_name                | constraint_name | dimension_slice_id |     range_start      |      range_end      
+-----------------------------------------+-----------------+--------------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_1_chunk  | constraint_1    |                  1 |                    1 |                   2
+ _timescaledb_internal._hyper_1_1_chunk  | constraint_2    |                  2 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_1_2_chunk  | constraint_3    |                  3 |                    2 |                   3
+ _timescaledb_internal._hyper_1_2_chunk  | constraint_4    |                  4 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_1_3_chunk  | constraint_5    |                  5 |                    3 |                   4
+ _timescaledb_internal._hyper_1_3_chunk  | constraint_6    |                  6 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_1_4_chunk  | constraint_7    |                  7 |                    4 |                   5
+ _timescaledb_internal._hyper_1_4_chunk  | constraint_8    |                  8 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_1_5_chunk  | constraint_9    |                  9 |                    5 |                   6
+ _timescaledb_internal._hyper_1_5_chunk  | constraint_10   |                 10 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_1_6_chunk  | constraint_11   |                 11 |                    6 |                   7
+ _timescaledb_internal._hyper_1_6_chunk  | constraint_12   |                 12 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_8_chunk  | constraint_15   |                 15 |                    2 |                   3
+ _timescaledb_internal._hyper_2_8_chunk  | constraint_16   |                 16 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_2_9_chunk  | constraint_17   |                 17 |                    3 |                   4
+ _timescaledb_internal._hyper_2_9_chunk  | constraint_18   |                 18 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_2_10_chunk | constraint_19   |                 19 |                    4 |                   5
+ _timescaledb_internal._hyper_2_10_chunk | constraint_20   |                 20 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_11_chunk | constraint_21   |                 21 |                    5 |                   6
+ _timescaledb_internal._hyper_2_11_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_12_chunk | constraint_23   |                 23 |                    6 |                   7
+ _timescaledb_internal._hyper_2_12_chunk | constraint_24   |                 24 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_13_chunk | constraint_25   |                 25 |                    1 |                   2
+ _timescaledb_internal._hyper_3_13_chunk | constraint_26   |                 26 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_3_14_chunk | constraint_27   |                 27 |                    2 |                   3
+ _timescaledb_internal._hyper_3_14_chunk | constraint_28   |                 28 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_3_15_chunk | constraint_29   |                 29 |                    3 |                   4
+ _timescaledb_internal._hyper_3_15_chunk | constraint_30   |                 30 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_3_16_chunk | constraint_31   |                 31 |                    4 |                   5
+ _timescaledb_internal._hyper_3_16_chunk | constraint_32   |                 32 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_17_chunk | constraint_33   |                 33 |                    5 |                   6
+ _timescaledb_internal._hyper_3_17_chunk | constraint_34   |                 34 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_18_chunk | constraint_35   |                 35 |                    6 |                   7
+ _timescaledb_internal._hyper_3_18_chunk | constraint_36   |                 36 | -9223372036854775808 |          1073741823
 
 -- Only one dimension slice deleted
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
@@ -375,42 +375,42 @@ SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_3_13_chunk
 
-SELECT c.table_name, format('constraint_%s', ds.id)::name AS constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+SELECT c.relid::text AS table_name, format('constraint_%s', ds.id)::name AS constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 FULL OUTER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id)
 ORDER BY c.id, ds.id;
-    table_name     | constraint_name | dimension_slice_id |     range_start      |      range_end      
--------------------+-----------------+--------------------+----------------------+---------------------
- _hyper_1_2_chunk  | constraint_3    |                  3 |                    2 |                   3
- _hyper_1_2_chunk  | constraint_4    |                  4 |           1073741823 | 9223372036854775807
- _hyper_1_3_chunk  | constraint_5    |                  5 |                    3 |                   4
- _hyper_1_3_chunk  | constraint_6    |                  6 |           1073741823 | 9223372036854775807
- _hyper_1_4_chunk  | constraint_7    |                  7 |                    4 |                   5
- _hyper_1_4_chunk  | constraint_8    |                  8 | -9223372036854775808 |          1073741823
- _hyper_1_5_chunk  | constraint_9    |                  9 |                    5 |                   6
- _hyper_1_5_chunk  | constraint_10   |                 10 | -9223372036854775808 |          1073741823
- _hyper_1_6_chunk  | constraint_11   |                 11 |                    6 |                   7
- _hyper_1_6_chunk  | constraint_12   |                 12 | -9223372036854775808 |          1073741823
- _hyper_2_8_chunk  | constraint_15   |                 15 |                    2 |                   3
- _hyper_2_8_chunk  | constraint_16   |                 16 |           1073741823 | 9223372036854775807
- _hyper_2_9_chunk  | constraint_17   |                 17 |                    3 |                   4
- _hyper_2_9_chunk  | constraint_18   |                 18 |           1073741823 | 9223372036854775807
- _hyper_2_10_chunk | constraint_19   |                 19 |                    4 |                   5
- _hyper_2_10_chunk | constraint_20   |                 20 | -9223372036854775808 |          1073741823
- _hyper_2_11_chunk | constraint_21   |                 21 |                    5 |                   6
- _hyper_2_11_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
- _hyper_2_12_chunk | constraint_23   |                 23 |                    6 |                   7
- _hyper_2_12_chunk | constraint_24   |                 24 | -9223372036854775808 |          1073741823
- _hyper_3_14_chunk | constraint_27   |                 27 |                    2 |                   3
- _hyper_3_14_chunk | constraint_28   |                 28 |           1073741823 | 9223372036854775807
- _hyper_3_15_chunk | constraint_29   |                 29 |                    3 |                   4
- _hyper_3_15_chunk | constraint_30   |                 30 |           1073741823 | 9223372036854775807
- _hyper_3_16_chunk | constraint_31   |                 31 |                    4 |                   5
- _hyper_3_16_chunk | constraint_32   |                 32 | -9223372036854775808 |          1073741823
- _hyper_3_17_chunk | constraint_33   |                 33 |                    5 |                   6
- _hyper_3_17_chunk | constraint_34   |                 34 | -9223372036854775808 |          1073741823
- _hyper_3_18_chunk | constraint_35   |                 35 |                    6 |                   7
- _hyper_3_18_chunk | constraint_36   |                 36 | -9223372036854775808 |          1073741823
+               table_name                | constraint_name | dimension_slice_id |     range_start      |      range_end      
+-----------------------------------------+-----------------+--------------------+----------------------+---------------------
+ _timescaledb_internal._hyper_1_2_chunk  | constraint_3    |                  3 |                    2 |                   3
+ _timescaledb_internal._hyper_1_2_chunk  | constraint_4    |                  4 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_1_3_chunk  | constraint_5    |                  5 |                    3 |                   4
+ _timescaledb_internal._hyper_1_3_chunk  | constraint_6    |                  6 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_1_4_chunk  | constraint_7    |                  7 |                    4 |                   5
+ _timescaledb_internal._hyper_1_4_chunk  | constraint_8    |                  8 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_1_5_chunk  | constraint_9    |                  9 |                    5 |                   6
+ _timescaledb_internal._hyper_1_5_chunk  | constraint_10   |                 10 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_1_6_chunk  | constraint_11   |                 11 |                    6 |                   7
+ _timescaledb_internal._hyper_1_6_chunk  | constraint_12   |                 12 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_8_chunk  | constraint_15   |                 15 |                    2 |                   3
+ _timescaledb_internal._hyper_2_8_chunk  | constraint_16   |                 16 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_2_9_chunk  | constraint_17   |                 17 |                    3 |                   4
+ _timescaledb_internal._hyper_2_9_chunk  | constraint_18   |                 18 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_2_10_chunk | constraint_19   |                 19 |                    4 |                   5
+ _timescaledb_internal._hyper_2_10_chunk | constraint_20   |                 20 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_11_chunk | constraint_21   |                 21 |                    5 |                   6
+ _timescaledb_internal._hyper_2_11_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_2_12_chunk | constraint_23   |                 23 |                    6 |                   7
+ _timescaledb_internal._hyper_2_12_chunk | constraint_24   |                 24 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_14_chunk | constraint_27   |                 27 |                    2 |                   3
+ _timescaledb_internal._hyper_3_14_chunk | constraint_28   |                 28 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_3_15_chunk | constraint_29   |                 29 |                    3 |                   4
+ _timescaledb_internal._hyper_3_15_chunk | constraint_30   |                 30 |           1073741823 | 9223372036854775807
+ _timescaledb_internal._hyper_3_16_chunk | constraint_31   |                 31 |                    4 |                   5
+ _timescaledb_internal._hyper_3_16_chunk | constraint_32   |                 32 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_17_chunk | constraint_33   |                 33 |                    5 |                   6
+ _timescaledb_internal._hyper_3_17_chunk | constraint_34   |                 34 | -9223372036854775808 |          1073741823
+ _timescaledb_internal._hyper_3_18_chunk | constraint_35   |                 35 |                    6 |                   7
+ _timescaledb_internal._hyper_3_18_chunk | constraint_36   |                 36 | -9223372036854775808 |          1073741823
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | chunk_id | dimension_id |     range_start      |      range_end      
@@ -446,25 +446,25 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  35 |       18 |            3 |                    6 |                   7
  36 |       18 |            6 | -9223372036854775808 |          1073741823
 
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
- chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
-----------+---------------+-----------------------+-------------------+-------------+-----------
-        2 |             1 | _timescaledb_internal | _hyper_1_2_chunk  |           2 |         3
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
+ chunk_id | hypertable_id |               chunk_table               | range_start | range_end 
+----------+---------------+-----------------------------------------+-------------+-----------
+        2 |             1 | _timescaledb_internal._hyper_1_2_chunk  |           2 |         3
+        3 |             1 | _timescaledb_internal._hyper_1_3_chunk  |           3 |         4
+        4 |             1 | _timescaledb_internal._hyper_1_4_chunk  |           4 |         5
+        5 |             1 | _timescaledb_internal._hyper_1_5_chunk  |           5 |         6
+        6 |             1 | _timescaledb_internal._hyper_1_6_chunk  |           6 |         7
+        8 |             2 | _timescaledb_internal._hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal._hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal._hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal._hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal._hyper_2_12_chunk |           6 |         7
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -512,24 +512,24 @@ SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
 
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
- chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
-----------+---------------+-----------------------+-------------------+-------------+-----------
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
+ chunk_id | hypertable_id |               chunk_table               | range_start | range_end 
+----------+---------------+-----------------------------------------+-------------+-----------
+        3 |             1 | _timescaledb_internal._hyper_1_3_chunk  |           3 |         4
+        4 |             1 | _timescaledb_internal._hyper_1_4_chunk  |           4 |         5
+        5 |             1 | _timescaledb_internal._hyper_1_5_chunk  |           5 |         6
+        6 |             1 | _timescaledb_internal._hyper_1_6_chunk  |           6 |         7
+        8 |             2 | _timescaledb_internal._hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal._hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal._hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal._hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal._hyper_2_12_chunk |           6 |         7
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name        | type  |       owner       
@@ -576,24 +576,24 @@ SELECT * FROM show_chunks('drop_chunk_test2');
 ----------------+-------------------------+-------------------------
               0 |                       5 |                       5
 
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2' OR h.table_name = 'drop_chunk_test3')
 ORDER BY c.id;
- chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
-----------+---------------+-----------------------+-------------------+-------------+-----------
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
-        6 |             1 | _timescaledb_internal | _hyper_1_6_chunk  |           6 |         7
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
+ chunk_id | hypertable_id |               chunk_table               | range_start | range_end 
+----------+---------------+-----------------------------------------+-------------+-----------
+        3 |             1 | _timescaledb_internal._hyper_1_3_chunk  |           3 |         4
+        4 |             1 | _timescaledb_internal._hyper_1_4_chunk  |           4 |         5
+        5 |             1 | _timescaledb_internal._hyper_1_5_chunk  |           5 |         6
+        6 |             1 | _timescaledb_internal._hyper_1_6_chunk  |           6 |         7
+        8 |             2 | _timescaledb_internal._hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal._hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal._hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal._hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal._hyper_2_12_chunk |           6 |         7
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name        | type  |       owner       
@@ -618,23 +618,23 @@ SELECT show_chunks('drop_chunk_test4', 5);
 ERROR:  relation "drop_chunk_test4" does not exist at character 20
 \set ON_ERROR_STOP 1
 DROP TABLE _timescaledb_internal._hyper_1_6_chunk;
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
- chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
-----------+---------------+-----------------------+-------------------+-------------+-----------
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk  |           3 |         4
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        5 |             1 | _timescaledb_internal | _hyper_1_5_chunk  |           5 |         6
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
+ chunk_id | hypertable_id |               chunk_table               | range_start | range_end 
+----------+---------------+-----------------------------------------+-------------+-----------
+        3 |             1 | _timescaledb_internal._hyper_1_3_chunk  |           3 |         4
+        4 |             1 | _timescaledb_internal._hyper_1_4_chunk  |           4 |         5
+        5 |             1 | _timescaledb_internal._hyper_1_5_chunk  |           5 |         6
+        8 |             2 | _timescaledb_internal._hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal._hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal._hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal._hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal._hyper_2_12_chunk |           6 |         7
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name        | type  |       owner       
@@ -658,17 +658,17 @@ psql:include/query_result_test_equal.sql:16: INFO:  dropping chunk _timescaledb_
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
 
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1')
 ORDER BY c.id;
- chunk_id | hypertable_id |     chunk_schema      |   chunk_table    | range_start | range_end 
-----------+---------------+-----------------------+------------------+-------------+-----------
-        3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |           3 |         4
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |           4 |         5
+ chunk_id | hypertable_id |              chunk_table               | range_start | range_end 
+----------+---------------+----------------------------------------+-------------+-----------
+        3 |             1 | _timescaledb_internal._hyper_1_3_chunk |           3 |         4
+        4 |             1 | _timescaledb_internal._hyper_1_4_chunk |           4 |         5
 
 SELECT show_chunks('drop_chunk_test1');
               show_chunks               
@@ -695,16 +695,16 @@ SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
 
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1')
 ORDER BY c.id;
- chunk_id | hypertable_id |     chunk_schema      |   chunk_table    | range_start | range_end 
-----------+---------------+-----------------------+------------------+-------------+-----------
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |           4 |         5
+ chunk_id | hypertable_id |              chunk_table               | range_start | range_end 
+----------+---------------+----------------------------------------+-------------+-----------
+        4 |             1 | _timescaledb_internal._hyper_1_4_chunk |           4 |         5
 
 -- the call of show_chunks should give same set of chunks as above
 SELECT show_chunks('drop_chunk_test1');
@@ -712,21 +712,21 @@ SELECT show_chunks('drop_chunk_test1');
 ----------------------------------------
  _timescaledb_internal._hyper_1_4_chunk
 
-SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+SELECT c.id AS chunk_id, c.hypertable_id, c.relid::text AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 INNER JOIN  dimension_get_time(h.id) time_dimension ON(true)
 INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.chunk_id = c.id AND ds.dimension_id = time_dimension.id)
 WHERE h.schema_name = 'public'
 ORDER BY c.id;
- chunk_id | hypertable_id |     chunk_schema      |    chunk_table    | range_start | range_end 
-----------+---------------+-----------------------+-------------------+-------------+-----------
-        4 |             1 | _timescaledb_internal | _hyper_1_4_chunk  |           4 |         5
-        8 |             2 | _timescaledb_internal | _hyper_2_8_chunk  |           2 |         3
-        9 |             2 | _timescaledb_internal | _hyper_2_9_chunk  |           3 |         4
-       10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
-       11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
-       12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
+ chunk_id | hypertable_id |               chunk_table               | range_start | range_end 
+----------+---------------+-----------------------------------------+-------------+-----------
+        4 |             1 | _timescaledb_internal._hyper_1_4_chunk  |           4 |         5
+        8 |             2 | _timescaledb_internal._hyper_2_8_chunk  |           2 |         3
+        9 |             2 | _timescaledb_internal._hyper_2_9_chunk  |           3 |         4
+       10 |             2 | _timescaledb_internal._hyper_2_10_chunk |           4 |         5
+       11 |             2 | _timescaledb_internal._hyper_2_11_chunk |           5 |         6
+       12 |             2 | _timescaledb_internal._hyper_2_12_chunk |           6 |         7
 
 -- We support show/drop chunks using timestamps/interval even with integer partitioning
 -- the chunk creation time gets used for these. But we need to use "created_before, created_after"
@@ -1209,13 +1209,13 @@ ALTER TABLE drop_chunk_test2 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 --drop chunks 3 will have a chunk we a dependent object (a view)
 --we create the dependent object now
 INSERT INTO PUBLIC.drop_chunk_test3 VALUES(1, 1.0, 'dev1');
-SELECT c.schema_name as chunk_schema, c.table_name as chunk_table
+SELECT c.relid::text as chunk_table
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
 WHERE h.schema_name = 'public' AND h.table_name = 'drop_chunk_test3'
 ORDER BY c.id \gset
-create view dependent_view as SELECT * FROM :"chunk_schema".:"chunk_table";
-create view dependent_view2 as SELECT * FROM :"chunk_schema".:"chunk_table";
+create view dependent_view as SELECT * FROM :chunk_table;
+create view dependent_view2 as SELECT * FROM :chunk_table;
 ALTER TABLE drop_chunk_test3 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
@@ -1509,6 +1509,54 @@ ERROR:  chunk not found
 \set ON_ERROR_STOP 1
 -- Test that function exists and returns an array type
 SELECT pg_typeof(_timescaledb_functions.chunk_status_text(0));
+ pg_typeof 
+-----------
+ text[]
+
+-- Test hypertable_status and hypertable_status_text functions
+CREATE TABLE hypertable_status_test(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=false);
+SELECT _timescaledb_functions.hypertable_status_text(i) FROM generate_series(0,7) i;
+          hypertable_status_text           
+-------------------------------------------
+ {}
+ {OSM}
+ {OSM_CHUNK_NONCONTIGUOUS}
+ {OSM,OSM_CHUNK_NONCONTIGUOUS}
+ {COMPRESSION}
+ {OSM,COMPRESSION}
+ {OSM_CHUNK_NONCONTIGUOUS,COMPRESSION}
+ {OSM,OSM_CHUNK_NONCONTIGUOUS,COMPRESSION}
+
+SELECT _timescaledb_functions.hypertable_status('hypertable_status_test');
+ hypertable_status 
+-------------------
+                 0
+
+SELECT _timescaledb_functions.hypertable_status_text('hypertable_status_test'::regclass);
+ hypertable_status_text 
+------------------------
+ {}
+
+SELECT _timescaledb_functions.hypertable_status_text(NULL::int);
+ hypertable_status_text 
+------------------------
+ 
+
+SELECT _timescaledb_functions.hypertable_status_text(NULL::regclass);
+ hypertable_status_text 
+------------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.hypertable_status_text(-1);
+ERROR:  invalid hypertable status -1
+SELECT _timescaledb_functions.hypertable_status_text(8);
+ERROR:  invalid hypertable status 8
+SELECT _timescaledb_functions.hypertable_status('pg_class'::regclass);
+ERROR:  table "pg_class" is not a hypertable
+\set ON_ERROR_STOP 1
+-- Test that function exists and returns an array type
+SELECT pg_typeof(_timescaledb_functions.hypertable_status_text(0));
  pg_typeof 
 -----------
  text[]

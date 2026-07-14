@@ -68,7 +68,7 @@ test_eviction()
 	Oid uncompressed_relid = 54321;
 	int32 slot_indices[NUM_SLOTS] = { 0 };
 	uint64 slot_seqno[NUM_SLOTS] = { 0 };
-	uint64 sum_lifespan = 0;
+	double sum_lifespan = 0;
 	double sumsq_lifespan = 0;
 	int32 num_evictions = 0;
 	uint64 min_lifespan = UINT64_MAX;
@@ -119,8 +119,8 @@ test_eviction()
 	}
 
 	elog(NOTICE,
-		 "Eviction test completed: %d evictions, %d slots, average lifespan %.2f, lifespan stddev "
-		 "%.2f, min lifespan %d, max lifespan %d",
+		 "Eviction test completed: %d evictions, %d slots, average lifespan %.0f, lifespan stddev "
+		 "%.0f, min lifespan %d, max lifespan %d",
 		 num_evictions,
 		 NUM_SLOTS,
 		 (double) sum_lifespan / num_evictions,

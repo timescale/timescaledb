@@ -378,10 +378,8 @@ enum
 enum Anum_chunk
 {
 	Anum_chunk_id = 1,
+	Anum_chunk_relid,
 	Anum_chunk_hypertable_id,
-	Anum_chunk_schema_name,
-	Anum_chunk_table_name,
-	Anum_chunk_compressed_chunk_id,
 	Anum_chunk_status,
 	Anum_chunk_osm_chunk,
 	Anum_chunk_creation_time,
@@ -393,10 +391,12 @@ enum Anum_chunk
 typedef struct FormData_chunk
 {
 	int32 id;
+	Oid relid;
 	int32 hypertable_id;
+	/* schema_name and table_name are not stored in the catalog; they are
+	 * derived from the chunk relation when the form is filled. */
 	NameData schema_name;
 	NameData table_name;
-	int32 compressed_chunk_id;
 	int32 status;
 	bool osm_chunk;
 	TimestampTz creation_time;
@@ -408,8 +408,7 @@ enum
 {
 	CHUNK_ID_INDEX = 0,
 	CHUNK_HYPERTABLE_ID_INDEX,
-	CHUNK_SCHEMA_NAME_INDEX,
-	CHUNK_COMPRESSED_CHUNK_ID_INDEX,
+	CHUNK_RELID_INDEX,
 	CHUNK_OSM_CHUNK_INDEX,
 	CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX,
 	_MAX_CHUNK_INDEX,
@@ -425,15 +424,9 @@ enum Anum_chunk_hypertable_id_idx
 	Anum_chunk_hypertable_id_idx_hypertable_id = 1,
 };
 
-enum Anum_chunk_compressed_chunk_id_idx
+enum Anum_chunk_relid_idx
 {
-	Anum_chunk_compressed_chunk_id_idx_compressed_chunk_id = 1,
-};
-
-enum Anum_chunk_schema_name_idx
-{
-	Anum_chunk_schema_name_idx_schema_name = 1,
-	Anum_chunk_schema_name_idx_table_name,
+	Anum_chunk_relid_idx_relid = 1,
 };
 
 enum Anum_chunk_osm_chunk_idx
@@ -1321,27 +1314,6 @@ typedef struct CatalogSecurityContext
 	Oid saved_uid;
 	int saved_security_context;
 } CatalogSecurityContext;
-
-#define HYPERTABLE_STATUS_DEFAULT 0
-/* flag set when hypertable has an attached OSM chunk */
-#define HYPERTABLE_STATUS_OSM 1
-/*
- * Currently, the time slice range metadata is updated in
- * the timescaledb catalog with the min and max of the range managed by OSM.
- * However, this range has to be contiguous in order to
- * update our catalog with its min and max value. If it is not contiguous,
- * then we cannot store the min and max in our catalog because tuple routing
- * will not work properly with gaps in the range.
- * When attempting to insert into one of the gaps, which do not in fact contain
- * tiered data, we error out because this is perceived as an attempt to insert
- * into tiered chunks, which are immutable.
- * When the range is noncontiguous, we store [INT64_MAX - 1, INT64_MAX) and set
- * this flag.
- * This flag also serves to allow or block the ordered append optimization. When
- * the range covered by OSM is contiguous, then it is possible to do ordered
- * append.
- */
-#define HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS 2
 
 extern void ts_catalog_table_info_init(CatalogTableInfo *tables, int max_table,
 									   const TableInfoDef *table_ary,

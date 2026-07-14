@@ -1149,13 +1149,14 @@ ExecDeleteAct(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 {
 	EState	   *estate = context->estate;
 
-	return table_tuple_delete(resultRelInfo->ri_RelationDesc, tupleid,
-							  estate->es_output_cid,
-							  estate->es_snapshot,
-							  estate->es_crosscheck_snapshot,
-							  true /* wait for commit */ ,
-							  &context->tmfd,
-							  changingPart);
+	return table_tuple_delete_compat(resultRelInfo->ri_RelationDesc,
+									 tupleid,
+									 estate->es_output_cid,
+									 changingPart ? TABLE_DELETE_CHANGING_PARTITION : 0,
+									 estate->es_snapshot,
+									 estate->es_crosscheck_snapshot,
+									 true /* wait for commit */,
+									 &context->tmfd);
 }
 
 /*
@@ -1666,13 +1667,17 @@ ExecUpdateAct(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	 * for referential integrity updates in transaction-snapshot mode
 	 * transactions.
 	 */
-	result = table_tuple_update(resultRelationDesc, tupleid, slot,
-								estate->es_output_cid,
-								estate->es_snapshot,
-								estate->es_crosscheck_snapshot,
-								true /* wait for commit */ ,
-								&context->tmfd, &updateCxt->lockmode,
-								&updateCxt->updateIndexes);
+	result = table_tuple_update_compat(resultRelationDesc,
+									   tupleid,
+									   slot,
+									   estate->es_output_cid,
+									   0, /* options */
+									   estate->es_snapshot,
+									   estate->es_crosscheck_snapshot,
+									   true /* wait for commit */,
+									   &context->tmfd,
+									   &updateCxt->lockmode,
+									   &updateCxt->updateIndexes);
 
 	return result;
 }
@@ -1693,11 +1698,14 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 
 	/* insert index entries for tuple if necessary */
 	if (resultRelInfo->ri_NumIndices > 0 && (updateCxt->updateIndexes != TU_None))
-		recheckIndexes = ExecInsertIndexTuples(resultRelInfo,
-											   slot, context->estate,
-											   true, false,
-											   NULL, NIL,
-											   (updateCxt->updateIndexes == TU_Summarizing));
+		recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
+													 slot,
+													 context->estate,
+													 true,
+													 false,
+													 NULL,
+													 NIL,
+													 (updateCxt->updateIndexes == TU_Summarizing));
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,

@@ -1311,36 +1311,28 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 		ts_columnar_estimate_compressed_batch_size(compression_info->compressed_rte->relid);
 
 	/*
-	 * Estimate the size of decompressed chunk based on the compressed chunk.
-	 *
-	 * The tuple estimates derived from pg_class will be empty, so we have to
-	 * compute that based on the compressed relation as well. Wrong estimates
-	 * there lead to wrong join order choice and wrong low cost for Sort over
-	 * Append, and also different MergeAppend costs on Postgres before 17 due to
-	 * a bug there.
+	 * Add the decompressed row estimate to the chunk rel. The chunk_rel->rows
+	 * already has the PG estimate for uncompressed chunk table, which is nonzero
+	 * for partial chunks.
 	 */
-	const double new_row_estimate = compressed_rel->rows * compression_info->compressed_batch_size;
-	const double new_tuples_estimate =
+	const double compressed_row_estimate =
+		compressed_rel->rows * compression_info->compressed_batch_size;
+	const double compressed_tuples_estimate =
 		compressed_rel->tuples * compression_info->compressed_batch_size;
 	if (!compression_info->single_chunk)
 	{
-		/*
-		 * Adjust the hypertable estimate by the diff of new and old chunk
-		 * estimate.
-		 */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		const double delta = new_row_estimate - chunk_rel->rows;
-		hypertable_rel->rows += delta;
+		hypertable_rel->rows += compressed_row_estimate;
 		/*
 		 * For appendrel, set tuples to the same value as rows,
 		 * like set_append_rel_size() does.
 		 */
-		hypertable_rel->tuples += delta;
+		hypertable_rel->tuples += compressed_row_estimate;
 	}
-	chunk_rel->rows = new_row_estimate;
-	chunk_rel->tuples = new_tuples_estimate;
+	chunk_rel->rows += compressed_row_estimate;
+	chunk_rel->tuples += compressed_tuples_estimate;
 
 	/*
 	 * Create the paths for the compressed chunk table.
@@ -1719,16 +1711,23 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			sequential_paths = lappend(sequential_paths, unordered_uncompressed_path);
 		}
 
-		Path *plain_append = (Path *) create_append_path(root,
-														 chunk_rel,
-														 sequential_paths,
-														 parallel_paths,
-														 /* pathkeys = */ NIL,
-														 req_outer,
-														 workers,
-														 workers > 0,
-														 chunk_path_no_sort->rows +
-															 unordered_uncompressed_path->rows);
+		Path *plain_append =
+			(Path *) create_append_path(/* root = */ root,
+										/* rel = */ chunk_rel,
+#if PG19_GE
+										/* input = */
+										(AppendPathInput){ .subpaths = sequential_paths,
+														   .partial_subpaths = parallel_paths },
+#else
+										/* subpaths = */ sequential_paths,
+										/* partial_subpaths = */ parallel_paths,
+#endif
+										/* pathkeys = */ NIL,
+										/* required_outer = */ req_outer,
+										/* parallel_workers = */ workers,
+										/* parallel_aware = */ workers > 0,
+										/* rows = */ chunk_path_no_sort->rows +
+											unordered_uncompressed_path->rows);
 
 		combined_paths = lappend(combined_paths, plain_append);
 	}
@@ -1807,6 +1806,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 											  chunk_rel,
 											  list_make2(decompression_path,
 														 uncompressed_path_for_merge),
+#if PG19_GE
+											  /* child_append_relid_sets = */ NIL,
+#endif
 											  sort_info->decompressed_sort_pathkeys,
 											  req_outer);
 		combined_paths = lappend(combined_paths, merge_append);
@@ -2918,6 +2920,12 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		Var *var = castNode(Var, node);
 
 		if (var->varattno <= 0)
+		{
+			return false;
+		}
+		/* Pathkey collation different from underlying column collation may lead to different sort
+		 * order */
+		if (var->varcollid != pk->pk_eclass->ec_collation)
 		{
 			return false;
 		}

@@ -444,9 +444,9 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 
 		foreach (lc, output_rel->pathlist)
 		{
-			if (IsA(lfirst(lc), UpperUniquePath))
+			if (IsA(lfirst(lc), UniquePathCompat))
 			{
-				UpperUniquePath *unique = (UpperUniquePath *) lfirst_node(UpperUniquePath, lc);
+				UniquePathCompat *unique = (UniquePathCompat *) lfirst_node(UniquePathCompat, lc);
 
 				/* We can handle DISTINCT on more than one key if all keys are guaranteed not-nulls.
 				 * To do so, we break down the SkipScan into subproblems: first
@@ -526,8 +526,8 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 	 * shallow copy is enough. */
 	if (dpinfo->stage == UPPERREL_DISTINCT)
 	{
-		UpperUniquePath *unique = makeNode(UpperUniquePath);
-		memcpy(unique, lfirst_node(UpperUniquePath, lc), sizeof(UpperUniquePath));
+		UniquePathCompat *unique = makeNode(UniquePathCompat);
+		memcpy(unique, lfirst_node(UniquePathCompat, lc), sizeof(UniquePathCompat));
 		dpinfo->unique_path = (Path *) unique;
 	}
 	else if (dpinfo->stage == UPPERREL_GROUP_AGG)
@@ -588,7 +588,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		return;
 	}
 
-	Assert(IsA(dpinfo.unique_path, UpperUniquePath) || IsA(dpinfo.unique_path, AggPath));
+	Assert(IsA(dpinfo.unique_path, UniquePathCompat) || IsA(dpinfo.unique_path, AggPath));
 	ListCell *lc;
 	foreach (lc, input_rel->pathlist)
 	{
@@ -599,7 +599,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		List *top_pathkeys = NULL;
 
 		/* Unique path has to be sorted on at least DISTINCT ON key */
-		if (IsA(dpinfo.unique_path, UpperUniquePath))
+		if (IsA(dpinfo.unique_path, UniquePathCompat))
 		{
 			if (!pathkeys_contained_in(dpinfo.unique_path->pathkeys, subpath->pathkeys))
 			{
@@ -666,6 +666,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			subpath = (Path *) create_merge_append_path(root,
 														merge_path->path.parent,
 														new_paths,
+#if PG19_GE
+														merge_path->child_append_relid_sets,
+#endif
 														merge_path->path.pathkeys,
 														NULL);
 			subpath->pathtarget = copy_pathtarget(merge_path->path.pathtarget);
@@ -690,15 +693,23 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 				continue;
 			}
 
-			subpath = (Path *) create_append_path(root,
-												  append_path->path.parent,
-												  new_paths,
-												  NULL,
-												  append_path->path.pathkeys,
-												  NULL,
-												  append_path->path.parallel_workers,
-												  append_path->path.parallel_aware,
-												  -1);
+			subpath = (Path *)
+				create_append_path(/* root = */ root,
+								   /* rel = */ append_path->path.parent,
+#if PG19_GE
+								   /* input = */
+								   (AppendPathInput){ .subpaths = new_paths,
+													  .child_append_relid_sets =
+														  append_path->child_append_relid_sets },
+#else
+								   /* subpaths = */ new_paths,
+								   /* partial_subpaths = */ NULL,
+#endif
+								   /* pathkeys = */ append_path->path.pathkeys,
+								   /* required_outer = */ NULL,
+								   /* parallel_workers = */ append_path->path.parallel_workers,
+								   /* parallel_aware = */ append_path->path.parallel_aware,
+								   /* rows = */ -1);
 			subpath->pathtarget = copy_pathtarget(append_path->path.pathtarget);
 		}
 		else if (ts_is_chunk_append_path(subpath))
@@ -733,14 +744,11 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 		Path *new_unique = NULL;
 
-		if (IsA(dpinfo.unique_path, UpperUniquePath))
+		if (IsA(dpinfo.unique_path, UniquePathCompat))
 		{
-			UpperUniquePath *unique = (UpperUniquePath *) dpinfo.unique_path;
-			new_unique = (Path *) create_upper_unique_path(root,
-														   output_rel,
-														   subpath,
-														   unique->numkeys,
-														   unique->path.rows);
+			UniquePathCompat *unique = (UniquePathCompat *) dpinfo.unique_path;
+			new_unique = (Path *)
+				create_unique_path(root, output_rel, subpath, unique->numkeys, unique->path.rows);
 			new_unique->pathtarget = unique->path.pathtarget;
 
 			if (proj)

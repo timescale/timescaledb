@@ -10,6 +10,8 @@
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
+#include <storage/latch.h>
+#include <storage/lock.h>
 #include <utils/datum.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
@@ -17,7 +19,9 @@
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/tuplesort.h>
 #include <utils/typcache.h>
+#include <utils/wait_event.h>
 
 #include "api.h"
 #include "batch_metadata_builder.h"
@@ -584,7 +588,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
 
 	TupleTableSlot *uncompressed_slot =
-		MakeTupleTableSlot(uncompressed_rel_tupdesc, &TTSOpsMinimalTuple);
+		MakeTupleTableSlotCompat(uncompressed_rel_tupdesc, &TTSOpsMinimalTuple, 0);
 	TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
 
 	Datum *values = palloc(sizeof(Datum) * recompress_ctx->n_keys);
@@ -1414,6 +1418,14 @@ compact_chunk_impl(Chunk *uncompressed_chunk)
 
 	BulkWriter writer = bulk_writer_build(compressed_chunk_rel, 0);
 	Oid index_oid = get_compressed_chunk_index(writer.indexstate, settings);
+	if (!OidIsValid(index_oid))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("could not find index on compressed chunk \"%s.%s\" for compaction",
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name))));
+	}
 	Relation index_rel = index_open(index_oid, RowExclusiveLock);
 	ereport(DEBUG1,
 			(errmsg("locks acquired for compaction: \"%s.%s\"",
@@ -1773,11 +1785,11 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 											   index_rel,
 											   false);
 
-	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-	Chunk *new_compressed_chunk =
-		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false, new_settings);
-	Relation new_compressed_chunk_rel = table_open(new_compressed_chunk->table_id, lockmode);
+	/* Free the deterministic compressed chunk name before creating the new one. */
+	rename_compressed_chunk_for_replacement(compressed_relid);
+	Oid new_compressed_relid =
+		create_compress_chunk(uncompressed_chunk, InvalidOid, false, new_settings);
+	Relation new_compressed_chunk_rel = table_open(new_compressed_relid, lockmode);
 
 	perform_recompression(recompress_ctx,
 						  compressed_chunk_rel,
@@ -1904,7 +1916,7 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 {
 	bool matching_exist = false;
 
-	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, 0);
+	TableScanDesc scan = table_beginscan_compat(uncompressed_chunk_rel, snapshot, 0, 0, 0);
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -2092,16 +2104,16 @@ delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot)
 	TM_Result result;
 	TM_FailureData tmfd;
 
-	result =
-		table_tuple_delete(rel,
-						   tid,
-						   GetCurrentCommandId(true),
-						   snapshot,
-						   InvalidSnapshot,
-						   true /* for now, just wait for commit/abort, that might let us proceed */
-						   ,
-						   &tmfd,
-						   true /* changingPart */);
+	result = table_tuple_delete_compat(rel,
+									   tid,
+									   GetCurrentCommandId(true),
+									   TABLE_DELETE_CHANGING_PARTITION, /* options */
+									   snapshot,
+									   InvalidSnapshot,
+									   true /* for now, just wait for commit/abort, that might let
+											   us proceed */
+									   ,
+									   &tmfd);
 
 	return result == TM_Ok;
 }
@@ -2117,7 +2129,8 @@ static void
 try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel)
 {
 	PushActiveSnapshot(GetLatestSnapshot());
-	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, GetActiveSnapshot(), 0, 0);
+	TableScanDesc scan =
+		table_beginscan_compat(uncompressed_chunk_rel, GetActiveSnapshot(), 0, 0, 0);
 	ScanDirection scan_dir = BackwardScanDirection;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
@@ -2486,7 +2499,7 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 							  List *builders, bool *repl)
 {
 	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
-	TableScanDesc scan = table_beginscan(compressed_rel, GetActiveSnapshot(), 0, NULL);
+	TableScanDesc scan = table_beginscan_compat(compressed_rel, GetActiveSnapshot(), 0, NULL, 0);
 	TupleTableSlot *scan_slot = table_slot_create(compressed_rel, NULL);
 	TupleTableSlot *update_slot = MakeSingleTupleTableSlot(compressed_desc, &TTSOpsHeapTuple);
 
@@ -2568,10 +2581,8 @@ void
 rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
 {
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 
 	LockRelationOid(ht->main_table_relid, AccessShareLock);
-	LockRelationOid(compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(uncompressed_chunk->table_id, ShareUpdateExclusiveLock);
 
 	/* Re-read chunk state after locks — another process may have changed it */

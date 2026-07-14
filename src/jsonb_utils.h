@@ -9,23 +9,23 @@
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
+#include "compat/compat.h"
 #include "export.h"
 
-extern TSDLLEXPORT void ts_jsonb_add_null(JsonbParseState *state, const char *key);
-extern TSDLLEXPORT void ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean);
-extern TSDLLEXPORT void ts_jsonb_add_str(JsonbParseState *state, const char *key,
-										 const char *value);
-extern TSDLLEXPORT void ts_jsonb_add_str_array(JsonbParseState *state, const char *key,
+extern TSDLLEXPORT void ts_jsonb_add_null(JsonbInState *state, const char *key);
+extern TSDLLEXPORT void ts_jsonb_add_bool(JsonbInState *state, const char *key, bool boolean);
+extern TSDLLEXPORT void ts_jsonb_add_str(JsonbInState *state, const char *key, const char *value);
+extern TSDLLEXPORT void ts_jsonb_add_str_array(JsonbInState *state, const char *key,
 											   const char **values, int num_values);
-extern TSDLLEXPORT void ts_jsonb_add_interval(JsonbParseState *state, const char *key,
+extern TSDLLEXPORT void ts_jsonb_add_interval(JsonbInState *state, const char *key,
 											  Interval *interval);
-extern TSDLLEXPORT void ts_jsonb_add_int32(JsonbParseState *state, const char *key,
-										   const int32 value);
-extern TSDLLEXPORT void ts_jsonb_add_int64(JsonbParseState *state, const char *key,
-										   const int64 value);
+extern TSDLLEXPORT void ts_jsonb_add_timestamptz(JsonbInState *state, const char *key,
+												 const TimestampTz value);
+extern TSDLLEXPORT void ts_jsonb_add_int32(JsonbInState *state, const char *key, const int32 value);
+extern TSDLLEXPORT void ts_jsonb_add_int64(JsonbInState *state, const char *key, const int64 value);
 extern TSDLLEXPORT void ts_jsonb_set_value_by_type(JsonbValue *value, Oid typeid, Datum datum);
 
-extern void ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value);
+extern void ts_jsonb_add_value(JsonbInState *state, const char *key, JsonbValue *value);
 
 extern TSDLLEXPORT char *ts_jsonb_get_str_field(const Jsonb *jsonb, const char *key);
 extern TSDLLEXPORT Interval *ts_jsonb_get_interval_field(const Jsonb *jsonb, const char *key);

@@ -504,7 +504,7 @@ copy_tuples_for_split(SplitContext *scontext)
 	 * can transfer tuples that are deleted or updated but still visible to
 	 * concurrent transactions.
 	 */
-	scan = table_beginscan(srcrel, SnapshotAny, 0, NULL);
+	scan = table_beginscan_compat(srcrel, SnapshotAny, 0, NULL, 0);
 
 	/*
 	 * Switch to per-tuple memory context and reset it for each tuple
@@ -732,6 +732,9 @@ split_relation(Relation rel, SplitPoint *sp, unsigned int split_factor,
 							 false /* swap toast by content */,
 							 true, /* check constraints */
 							 true, /* internal? */
+#if PG19_GE
+							 true, /* reindex */
+#endif
 							 scontext.cutoffs.FreezeLimit,
 							 scontext.cutoffs.MultiXactCutoff,
 							 relpersistence);
@@ -861,7 +864,6 @@ update_compression_stats_for_split(const SplitRelationInfo *split_relations,
 
 			compression_chunk_size_catalog_insert(sri->chunk_id,
 												  &relsize,
-												  csri->chunk_id,
 												  &compressed_relsize,
 												  new_ccs.numrows_pre_compression,
 												  new_ccs.numrows_post_compression,
@@ -1169,13 +1171,11 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	Ensure(created, "could not create chunk for split");
 	Assert(new_chunk);
 
-	Chunk *new_compressed_chunk = NULL;
+	Oid new_compressed_relid = InvalidOid;
 
 	if (compress_settings != NULL)
 	{
-		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-		new_compressed_chunk =
-			create_compress_chunk(ht_compressed, new_chunk, InvalidOid, false, NULL);
+		new_compressed_relid = create_compress_chunk(new_chunk, InvalidOid, false, NULL);
 	}
 
 	CommandCounterIncrement();
@@ -1201,7 +1201,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	SplitRelationInfo *compressed_split_relations = NULL;
 
 	/* Split and rewrite the compressed relation first, if one exists. */
-	if (new_compressed_chunk)
+	if (OidIsValid(new_compressed_relid))
 	{
 		int orderby_pos = ts_array_position(compress_settings->fd.orderby, NameStr(splitdim_name));
 		Ensure(orderby_pos > 0,
@@ -1236,9 +1236,8 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 		csplit_relations[0] =
 			(SplitRelationInfo){ .relid = compress_settings->fd.compress_relid, .heap_swap = true };
-		csplit_relations[1] = (SplitRelationInfo){ .relid = new_compressed_chunk->table_id,
-												   .chunk_id = new_compressed_chunk->fd.id,
-												   .heap_swap = false };
+		csplit_relations[1] =
+			(SplitRelationInfo){ .relid = new_compressed_relid, .heap_swap = false };
 
 		Relation compressed_rel =
 			table_open(compress_settings->fd.compress_relid, AccessExclusiveLock);

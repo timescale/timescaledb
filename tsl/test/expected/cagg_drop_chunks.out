@@ -157,7 +157,7 @@ BEGIN
     INTO _r
     FROM
         _chunks
-        JOIN _timescaledb_catalog.chunk ON chunk.schema_name = _chunks.nspname AND chunk.table_name = _chunks.relname
+        JOIN _timescaledb_catalog.chunk ON chunk.relid = format('%I.%I', _chunks.nspname, _chunks.relname)::regclass
         JOIN _timescaledb_catalog.dimension_slice ON dimension_slice.chunk_id = chunk.id;
 
     RAISE INFO 'range_start=% range_end=%', _r.range_start::int, _r.range_end::int;

@@ -194,17 +194,14 @@ extern TSDLLEXPORT int ts_chunk_delete_by_name(const char *schema, const char *t
 											   DropBehavior behavior);
 extern int ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname,
 												const char *tablename, DropBehavior behavior);
-extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
-extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
-extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 
 extern TSDLLEXPORT bool ts_chunk_set_partial(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_unset_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_frozen(const Chunk *chunk);
-extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
-extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_set_compressed(Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_clear_compressed(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT void ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
@@ -278,9 +275,8 @@ extern TSDLLEXPORT void ts_chunk_detach_by_relid(Oid relid);
  */
 #define CHUNK_STATUS_DEFAULT 0
 /*
- * Setting a chunk status field as CHUNK_STATUS_COMPRESSED means that the corresponding
- * compressed_chunk_id field points to a chunk that holds the compressed data. Otherwise,
- * the corresponding compressed_chunk_id is NULL.
+ * Setting a chunk status field as CHUNK_STATUS_COMPRESSED means that a corresponding
+ * compressed chunk exists for this chunk.
  */
 #define CHUNK_STATUS_COMPRESSED 1
 /*

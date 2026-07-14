@@ -1029,7 +1029,7 @@ decompress_batch_beginscan(Relation in_rel, Relation index_rel, Snapshot snapsho
 	}
 	else
 	{
-		scan->scan = table_beginscan(in_rel, snapshot, num_scankeys, scankeys);
+		scan->scan = table_beginscan_compat(in_rel, snapshot, num_scankeys, scankeys, 0);
 		scan->index_scan = NULL;
 	}
 
@@ -1333,14 +1333,14 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		}
 
 		TM_FailureData tmfd;
-		result = table_tuple_delete(in_rel,
-									&compressed_tuple->t_self,
-									GetCurrentCommandId(true),
-									snapshot,
-									InvalidSnapshot,
-									true,
-									&tmfd,
-									false);
+		result = table_tuple_delete_compat(in_rel,
+										   &compressed_tuple->t_self,
+										   GetCurrentCommandId(true),
+										   0, /* options (not changing partition) */
+										   snapshot,
+										   InvalidSnapshot,
+										   true,
+										   &tmfd);
 
 		/* skip reporting error if isolation level is < Repeatable Read
 		 * since somebody decompressed the data concurrently, we need to take
@@ -2050,7 +2050,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 										   var->varattno,
 										   op_strategy,
 										   arg_value->consttype,
-										   arg_value->constcollid,
+										   collation, /* need to use OpExpr input collation */
 										   opcode,
 										   arg_value->constisnull ? 0 : arg_value->constvalue);
 				}

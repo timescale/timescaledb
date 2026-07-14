@@ -284,7 +284,7 @@ SELECT compress_chunk(c)
 FROM show_chunks('test2') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_7_chunk
+ _timescaledb_internal._hyper_3_4_chunk
 
 -- test if default value for b is used
 INSERT INTO test2(timec, i, t) values('2020-01-02 10:16:00-05' , 11, 'default' );
@@ -299,19 +299,19 @@ SELECT b from test2 ORDER BY 1;
 \set ON_ERROR_STOP 0
 --null value for t, should fail
 INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 100, 200, NULL);
-ERROR:  null value in column "t" of relation "_hyper_5_7_chunk" violates not-null constraint
+ERROR:  null value in column "t" of relation "_hyper_3_4_chunk" violates not-null constraint
 COPY test2 FROM STDIN DELIMITER ',' NULL 'NULL';
-ERROR:  null value in column "t" of relation "_hyper_5_7_chunk" violates not-null constraint
+ERROR:  null value in column "t" of relation "_hyper_3_4_chunk" violates not-null constraint
 -- i=1, should fail
 INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 1, 10, 'null i');
-ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "test2_i_check"
+ERROR:  new row for relation "_hyper_3_4_chunk" violates check constraint "test2_i_check"
 COPY test2 FROM STDIN DELIMITER ',';
-ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "test2_i_check"
+ERROR:  new row for relation "_hyper_3_4_chunk" violates check constraint "test2_i_check"
 -- b < i, should fail
 INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 22, 1, 'null i');
-ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "rowconstr"
+ERROR:  new row for relation "_hyper_3_4_chunk" violates check constraint "rowconstr"
 COPY test2 FROM STDIN DELIMITER ',';
-ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "rowconstr"
+ERROR:  new row for relation "_hyper_3_4_chunk" violates check constraint "rowconstr"
 \set ON_ERROR_STOP 1
 --verify we are still INSERTing into the compressed chunk i.e did not
 --create a new chunk
@@ -347,7 +347,7 @@ SELECT compress_chunk(c)
 FROM show_chunks('vessels') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_9_chunk
+ _timescaledb_internal._hyper_4_5_chunk
 
 -- test if default value for b and sequence value for id is used
 INSERT INTO vessels(timec, i, t) values('2020-01-02 10:16:00-05' , 11, 'default' );
@@ -367,7 +367,7 @@ CREATE table test_gen (
 SELECT create_hypertable('test_gen', 'id', chunk_time_interval=>10);
    create_hypertable   
 -----------------------
- (9,public,test_gen,t)
+ (5,public,test_gen,t)
 
 ALTER TABLE test_gen set (timescaledb.compress);
 INSERT into test_gen (payload) SELECT generate_series(1,15) ;
@@ -378,10 +378,10 @@ SELECT max(id) from test_gen;
 
 SELECT compress_chunk(c)
 FROM show_chunks('test_gen') c;
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_9_11_chunk
- _timescaledb_internal._hyper_9_12_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_6_chunk
+ _timescaledb_internal._hyper_5_7_chunk
 
 INSERT INTO test_gen (payload) values(17);
 SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
@@ -428,9 +428,9 @@ END
 $$ LANGUAGE plpgsql;
 CREATE TABLE trigger_test(time timestamptz NOT NULL, device int, value int, dropcol1 int);
 SELECT create_hypertable('trigger_test','time');
-     create_hypertable      
-----------------------------
- (11,public,trigger_test,t)
+     create_hypertable     
+---------------------------
+ (6,public,trigger_test,t)
 
 --create chunk and compress
 --the first chunk is created with dropcol1
@@ -439,9 +439,9 @@ INSERT INTO trigger_test(time, device, value,dropcol1) SELECT '2000-01-01',1,1,1
 ALTER TABLE trigger_test DROP COLUMN dropcol1;
 ALTER TABLE trigger_test SET (timescaledb.compress,timescaledb.compress_segmentby='device');
 SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_15_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_6_8_chunk
 
 -- BEFORE ROW trigger
 CREATE TRIGGER t1 BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_gt_0();
@@ -453,10 +453,10 @@ SELECT count(*) FROM trigger_test;
 
 -- try insert that gets skipped by trigger
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
-NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_6_8_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
 NOTICE:  Skipping insert
 COPY trigger_test FROM STDIN DELIMITER ',';
-NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_6_8_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
 NOTICE:  Skipping insert
 -- should not insert rows. count is 1
 SELECT count(*) FROM trigger_test;
@@ -467,9 +467,9 @@ SELECT count(*) FROM trigger_test;
 -- try again without being skipped
 BEGIN;
 INSERT INTO trigger_test SELECT '2000-01-01',1,1;
-NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,1) <NULL>
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_6_8_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,1) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,1) <NULL>
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_6_8_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,1) <NULL>
 -- should be 3
 SELECT count(*) FROM trigger_test;
  count 
@@ -482,9 +482,9 @@ DROP TRIGGER t1 ON trigger_test;
 CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
 BEGIN;
 INSERT INTO trigger_test SELECT '2000-01-01',1,11;
-NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_6_8_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_6_8_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
 -- value for both new tuples should be > 100
 SELECT * FROM trigger_test ORDER BY 3;
              time             | device | value 
@@ -513,9 +513,9 @@ ROLLBACK;
 -- test with condition being true
 BEGIN;
 INSERT INTO trigger_test SELECT '2000-01-01',1,11;
-NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_6_8_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_6_8_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
 -- value for both new tuples should be > 100
 SELECT * FROM trigger_test ORDER BY 3;
              time             | device | value 
@@ -530,9 +530,9 @@ DROP TRIGGER t1_cond ON trigger_test;
 CREATE TRIGGER t1_error BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_error();
 \set ON_ERROR_STOP 0
 INSERT INTO trigger_test SELECT '2000-01-01',1,11;
-ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_6_8_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_6_8_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
 \set ON_ERROR_STOP 1
 -- should not insert rows. count is 1
 SELECT count(*) FROM trigger_test;
@@ -612,9 +612,9 @@ CREATE TRIGGER t4_ar AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION 
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
-NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_6_8_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_6_8_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -- should not insert rows. count is 1
@@ -625,9 +625,9 @@ SELECT count(*) FROM trigger_test;
 
 BEGIN;
 INSERT INTO trigger_test SELECT '2001-01-01',1,0;
-NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Mon Jan 01 00:00:00 2001 PST",1,0) <NULL>
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_6_9_chunk: ("Mon Jan 01 00:00:00 2001 PST",1,0) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Sun Dec 31 22:00:00 2000 PST",1,0) <NULL>
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_6_9_chunk: ("Sun Dec 31 22:00:00 2000 PST",1,0) <NULL>
 -- insert into new uncompressed chunk should not be blocked
 SELECT count(*) FROM trigger_test;
  count 
@@ -640,9 +640,9 @@ DROP TRIGGER t4_ar ON trigger_test;
 CREATE CONSTRAINT TRIGGER t4_constraint AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
 \set ON_ERROR_STOP 0
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
-NOTICE:  Trigger t4_constraint AFTER INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
+NOTICE:  Trigger t4_constraint AFTER INSERT ROW on _hyper_6_8_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-NOTICE:  Trigger t4_constraint AFTER INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
+NOTICE:  Trigger t4_constraint AFTER INSERT ROW on _hyper_6_8_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
 \set ON_ERROR_STOP 1
 -- should not insert rows. count is 1
 SELECT count(*) FROM trigger_test;
@@ -658,10 +658,10 @@ ALTER TABLE trigger_test ADD COLUMN addcoli integer;
 INSERT INTO trigger_test(time, device, value, addcolv, addcoli)
 VALUES ( '2010-01-01', 10, 10, 'ten', 222);
 SELECT compress_chunk(c, true) FROM show_chunks('trigger_test') c;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_15_chunk
- _timescaledb_internal._hyper_11_18_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_6_8_chunk
+ _timescaledb_internal._hyper_6_10_chunk
 
 CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
 SELECT count(*) FROM trigger_test;
@@ -673,8 +673,8 @@ BEGIN;
 INSERT INTO trigger_test VALUES
                    ( '2000-01-01',1,11, 'eleven', 111),
                    ( '2010-01-01',10,10, 'ten', 222);
-NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11,eleven,111) <NULL>
-NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_18_chunk: ("Fri Jan 01 00:00:00 2010 PST",10,10,ten,222) <NULL>
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_6_8_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11,eleven,111) <NULL>
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_6_10_chunk: ("Fri Jan 01 00:00:00 2010 PST",10,10,ten,222) <NULL>
 SELECT * FROM trigger_test ORDER BY 1 ,2, 3, 5;
              time             | device | value | addcolv | addcoli 
 ------------------------------+--------+-------+---------+---------
@@ -709,21 +709,21 @@ INSERT INTO test_ordering VALUES (5),(4),(3);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 --- QUERY PLAN ---
- Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
+ Index Only Scan Backward using _hyper_7_11_chunk_test_ordering_time_idx on _hyper_7_11_chunk
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_13_20_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_11_chunk
 
 VACUUM ANALYZE test_ordering;
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_13_20_chunk
+ Custom Scan (ColumnarScan) on _hyper_7_11_chunk
    ->  Sort
-         Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_first_time, compress_hyper_14_21_chunk._ts_meta_v2_last_time
-         ->  Seq Scan on compress_hyper_14_21_chunk
+         Sort Key: _hyper_7_11_chunk_compressed._ts_meta_v2_first_time, _hyper_7_11_chunk_compressed._ts_meta_v2_last_time
+         ->  Seq Scan on _hyper_7_11_chunk_compressed
 
 INSERT INTO test_ordering SELECT 1;
 VACUUM ANALYZE test_ordering;
@@ -740,11 +740,11 @@ VACUUM ANALYZE test_ordering;
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: test_ordering."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_first_time, compress_hyper_14_21_chunk._ts_meta_v2_last_time
-                     ->  Seq Scan on compress_hyper_14_21_chunk
-         ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
+                     Sort Key: _hyper_7_11_chunk_compressed._ts_meta_v2_first_time, _hyper_7_11_chunk_compressed._ts_meta_v2_last_time
+                     ->  Seq Scan on _hyper_7_11_chunk_compressed
+         ->  Index Only Scan Backward using _hyper_7_11_chunk_test_ordering_time_idx on _hyper_7_11_chunk
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
 VACUUM ANALYZE test_ordering;
@@ -755,12 +755,12 @@ VACUUM ANALYZE test_ordering;
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: test_ordering."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_first_time, compress_hyper_14_21_chunk._ts_meta_v2_last_time
-                     ->  Seq Scan on compress_hyper_14_21_chunk
-         ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
-   ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
+                     Sort Key: _hyper_7_11_chunk_compressed._ts_meta_v2_first_time, _hyper_7_11_chunk_compressed._ts_meta_v2_last_time
+                     ->  Seq Scan on _hyper_7_11_chunk_compressed
+         ->  Index Only Scan Backward using _hyper_7_11_chunk_test_ordering_time_idx on _hyper_7_11_chunk
+   ->  Index Only Scan Backward using _hyper_7_12_chunk_test_ordering_time_idx on _hyper_7_12_chunk
 
 --insert into compressed + uncompressed chunk
 INSERT INTO test_ordering VALUES (21), (22),(113);
@@ -783,17 +783,17 @@ INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING *;
   115
 
 INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING tableoid::regclass, *;
-                 tableoid                 | time 
-------------------------------------------+------
- _timescaledb_internal._hyper_13_20_chunk |   23
- _timescaledb_internal._hyper_13_20_chunk |   24
- _timescaledb_internal._hyper_13_22_chunk |  115
+                tableoid                 | time 
+-----------------------------------------+------
+ _timescaledb_internal._hyper_7_11_chunk |   23
+ _timescaledb_internal._hyper_7_11_chunk |   24
+ _timescaledb_internal._hyper_7_12_chunk |  115
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_13_20_chunk
- _timescaledb_internal._hyper_13_22_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_11_chunk
+ _timescaledb_internal._hyper_7_12_chunk
 
 VACUUM ANALYZE test_ordering;
 -- should be ordered append
@@ -801,14 +801,14 @@ VACUUM ANALYZE test_ordering;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_21_chunk._ts_meta_v2_first_time, compress_hyper_14_21_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on compress_hyper_14_21_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_13_22_chunk
+               Sort Key: _hyper_7_11_chunk_compressed._ts_meta_v2_first_time, _hyper_7_11_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _hyper_7_11_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_7_12_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_23_chunk._ts_meta_v2_first_time, compress_hyper_14_23_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on compress_hyper_14_23_chunk
+               Sort Key: _hyper_7_12_chunk_compressed._ts_meta_v2_first_time, _hyper_7_12_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _hyper_7_12_chunk_compressed
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
 -- TEST cagg triggers with insert into compressed chunk
@@ -838,16 +838,16 @@ SELECT * FROM cagg_conditions ORDER BY 1;
 
 ALTER TABLE conditions SET (timescaledb.compress);
 SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_15_24_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_13_chunk
 
 SELECT chunk_name, range_start, range_end, is_compressed
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions';
-     chunk_name     |         range_start          |          range_end           | is_compressed 
---------------------+------------------------------+------------------------------+---------------
- _hyper_15_24_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
+    chunk_name     |         range_start          |          range_end           | is_compressed 
+-------------------+------------------------------+------------------------------+---------------
+ _hyper_8_13_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
 
 --now insert into compressed chunk
 INSERT INTO conditions VALUES('2010-01-01 12:00:00-08', 10, 20);
@@ -868,24 +868,6 @@ SELECT * FROM cagg_conditions ORDER BY 1;
 ------------------------------+-----+------
  Sun Dec 27 16:00:00 2009 PST |   8 |  485
 
--- TEST direct insert into internal compressed hypertable should be blocked
-CREATE TABLE direct_insert(time timestamptz not null);
-SELECT table_name FROM create_hypertable('direct_insert','time');
-  table_name   
----------------
- direct_insert
-
-ALTER TABLE direct_insert SET(timescaledb.compress);
-SELECT
-  format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
-FROM
-  _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
-      AND uncompress.table_name = 'direct_insert') \gset
-\set ON_ERROR_STOP 0
-INSERT INTO :TABLENAME SELECT;
-ERROR:  direct insert into internal compressed hypertable is not supported
-\set ON_ERROR_STOP 1
 -- Test that inserting into a compressed table works even when the
 -- column has been dropped.
 CREATE TABLE test4 (
@@ -898,7 +880,7 @@ SELECT * FROM create_hypertable('test4', 'timestamp');
 WARNING:  column type "timestamp without time zone" used for "timestamp" does not follow best practices
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            20 | public      | test4      | t
+            10 | public      | test4      | t
 
 INSERT INTO test4 ( timestamp, ident ) VALUES ( '2021-10-14 17:50:16.207', '2' );
 INSERT INTO test4 ( timestamp, ident ) VALUES ( '2021-11-14 17:50:16.207', '1' );
@@ -932,7 +914,7 @@ CREATE UNIQUE INDEX timestamp_id_idx ON test_copy(timestamp, id);
 SELECT * FROM create_hypertable('test_copy', 'timestamp', chunk_time_interval=>10);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            22 | public      | test_copy  | t
+            11 | public      | test_copy  | t
 
 ALTER TABLE test_copy SET (
     timescaledb.compress,
@@ -966,7 +948,7 @@ CREATE TABLE test_limit (
 SELECT * FROM create_hypertable('test_limit', 'timestamp', chunk_time_interval=>1000);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            24 | public      | test_limit | t
+            12 | public      | test_limit | t
 
 INSERT INTO test_limit SELECT t, i FROM generate_series(1,10000,1) t CROSS JOIN generate_series(1,3,1) i;
 CREATE UNIQUE INDEX timestamp_id_idx ON test_limit(timestamp, id);
@@ -986,11 +968,11 @@ SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set ON_ERROR_STOP 0
 -- Inserting in the same period should decompress tuples
 INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
-ERROR:  duplicate key value violates unique constraint "_hyper_24_53_chunk_timestamp_id_idx"
+ERROR:  duplicate key value violates unique constraint "_hyper_12_28_chunk_timestamp_id_idx"
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
 INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
-ERROR:  duplicate key value violates unique constraint "_hyper_24_53_chunk_timestamp_id_idx"
+ERROR:  duplicate key value violates unique constraint "_hyper_12_28_chunk_timestamp_id_idx"
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
@@ -1011,13 +993,13 @@ SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
 \set ON_ERROR_STOP 0
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u1_key"
+ERROR:  duplicate key value violates unique constraint "39_multi_unique_time_u1_key"
 DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 1, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u1_key"
+ERROR:  duplicate key value violates unique constraint "39_multi_unique_time_u1_key"
 DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 1, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "75_multi_unique_time_u2_key"
+ERROR:  duplicate key value violates unique constraint "39_multi_unique_time_u2_key"
 DETAIL:  Key ("time", u2)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 \set ON_ERROR_STOP 1
 DROP TABLE multi_unique;
@@ -1038,7 +1020,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
 \set ON_ERROR_STOP 0
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
-ERROR:  duplicate key value violates unique constraint "77_unique_null_time_u1_u2_key"
+ERROR:  duplicate key value violates unique constraint "40_unique_null_time_u1_u2_key"
 \set ON_ERROR_STOP 1
 -- neither of these should need to decompress
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
@@ -1131,35 +1113,35 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
 -- test duplicates
 \set ON_ERROR_STOP 0
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, false, 1.0, 1.0, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 2.0, 1.0, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 2.0, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'second', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 2, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"second":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:08', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:09', 1, NULL, 1.0, 1.0, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:10', 1, true, NULL, 1.0, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:11', 1, true, 1.0, NULL, 'first', 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:12', 1, true, 1.0, 1.0, NULL, 1, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:13', 1, true, 1.0, 1.0, 'first', NULL, '{"first":true}');
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:14', 1, true, 1.0, 1.0, 'first', 1, NULL);
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 \set ON_ERROR_STOP 1
 -- test non-duplicates
 INSERT INTO unique_all VALUES('2024-01-01 00:01:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
@@ -1175,7 +1157,7 @@ DROP INDEX ultimate_unique;
 CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type, added_non_null) NULLS NOT DISTINCT;
 \set ON_ERROR_STOP 0
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4);
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 \set ON_ERROR_STOP 1
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5);
 -- make sure everything is correct after recompressing the chunk
@@ -1191,7 +1173,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
 
 \set ON_ERROR_STOP 0
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4);
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 \set ON_ERROR_STOP 1
 -- test non-duplicates with NULL default values
 ALTER TABLE unique_all ADD COLUMN added_null int DEFAULT NULL;
@@ -1199,9 +1181,9 @@ DROP INDEX ultimate_unique;
 CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type, added_non_null, added_null) NULLS NOT DISTINCT;
 \set ON_ERROR_STOP 0
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4, NULL);
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5, NULL);
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 \set ON_ERROR_STOP 1
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 6, NULL);
 -- make sure everything is correct after recompressing the chunk
@@ -1217,9 +1199,9 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
 
 \set ON_ERROR_STOP 0
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4, NULL);
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5, NULL);
-ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_15_41_chunk_ultimate_unique"
 \set ON_ERROR_STOP 1
 DROP TABLE unique_all;
 -- test NULL compression algorithm
@@ -1250,14 +1232,14 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
 
 \set ON_ERROR_STOP 0
 INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1);
-ERROR:  duplicate key value violates unique constraint "_hyper_32_83_chunk_unique_nulls"
+ERROR:  duplicate key value violates unique constraint "_hyper_16_42_chunk_unique_nulls"
 \set ON_ERROR_STOP 1
 ALTER TABLE unique_null ADD COLUMN tag3 text DEFAULT 'default value';
 DROP INDEX unique_nulls;
 CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2, tag3) NULLS NOT DISTINCT;
 \set ON_ERROR_STOP 0
 INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1, 'default value');
-ERROR:  duplicate key value violates unique constraint "_hyper_32_83_chunk_unique_nulls"
+ERROR:  duplicate key value violates unique constraint "_hyper_16_42_chunk_unique_nulls"
 \set ON_ERROR_STOP 1
 INSERT INTO unique_null VALUES
 	('2024-01-01 00:01', 1, NULL, '1', 1, 'default value'),
@@ -1340,7 +1322,7 @@ SELECT create_hypertable(
 );
   create_hypertable   
 ----------------------
- (38,public,t_1sec,t)
+ (19,public,t_1sec,t)
 
 ALTER TABLE t_1sec SET (
 	timescaledb.compress,
@@ -1355,7 +1337,7 @@ insert into t_1sec ( "timestamp", device_id, speed, derived) values
 SELECT compress_chunk(show_chunks('t_1sec'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_38_89_chunk
+ _timescaledb_internal._hyper_19_45_chunk
 
 insert into t_1sec ( "timestamp", device_id, speed, derived) values
 ( '2025-06-06 10:03:00', 'device_id_1', 100, true),
@@ -1383,7 +1365,7 @@ SELECT create_hypertable(
 );
     create_hypertable     
 --------------------------
- (40,public,gen_column,t)
+ (20,public,gen_column,t)
 
 ALTER TABLE gen_column SET (
 	timescaledb.compress,
@@ -1397,7 +1379,7 @@ insert into gen_column ( "timestamp", device_id, speed) values
 SELECT compress_chunk(show_chunks('gen_column'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_40_91_chunk
+ _timescaledb_internal._hyper_20_46_chunk
 
 insert into gen_column ( "timestamp", device_id, speed) values
 ( '2025-06-06 10:03:00', 'device_id_1', 100),
@@ -1418,7 +1400,7 @@ ORDER BY 1;
 SELECT decompress_chunk(show_chunks('gen_column'));
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_40_91_chunk
+ _timescaledb_internal._hyper_20_46_chunk
 
 ALTER TABLE gen_column SET (
 	timescaledb.compress,
@@ -1431,7 +1413,7 @@ HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 SELECT compress_chunk(show_chunks('gen_column'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_40_91_chunk
+ _timescaledb_internal._hyper_20_46_chunk
 
 insert into gen_column ( "timestamp", device_id, speed) values
 ( '2025-06-06 10:04:00', 'device_id_1', 100),
@@ -1463,7 +1445,7 @@ create table generated_with_dropped (
 select create_hypertable('generated_with_dropped', by_range('timestamp', '1 week'::interval));
  create_hypertable 
 -------------------
- (42,t)
+ (21,t)
 
 -- Dropping a column to verify we are using the correct
 -- tuple desc when generating generated column.
@@ -1479,7 +1461,7 @@ ALTER TABLE generated_with_dropped SET(
 select compress_chunk(chunk) from show_chunks('generated_with_dropped') as chunk;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_42_94_chunk
+ _timescaledb_internal._hyper_21_47_chunk
 
 -- This should not segfault
 insert into generated_with_dropped (f, timestamp, a, b, d, e) values
@@ -1497,7 +1479,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('direct_compressed_insert') c;
 -------
      1
 
-SELECT cs.compress_relid::text AS "CHUNK" FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk c ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id WHERE h.table_name = 'direct_compressed_insert' AND cs.compress_relid IS NOT NULL ORDER BY c.id DESC LIMIT 1 \gset
+SELECT cs.compress_relid::text AS "CHUNK" FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk c ON cs.relid = c.relid JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id WHERE h.table_name = 'direct_compressed_insert' AND cs.compress_relid IS NOT NULL ORDER BY c.id DESC LIMIT 1 \gset
 CREATE TABLE compressed_batches AS SELECT * FROM :CHUNK;
 SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;
  _ts_meta_count | count 
@@ -1508,7 +1490,7 @@ SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 D
 -- should have not ModifyHypertable node
 EXPLAIN (costs off,timing off, summary off) INSERT INTO :CHUNK SELECT * FROM compressed_batches;
 --- QUERY PLAN ---
- Insert on compress_hyper_45_97_chunk
+ Insert on _hyper_22_48_chunk_compressed
    ->  Seq Scan on compressed_batches
 
 INSERT INTO :CHUNK SELECT * FROM compressed_batches;
@@ -1542,9 +1524,9 @@ SELECT * FROM sv_default;
 -- Duplicates should fail
 \set ON_ERROR_STOP 0
 INSERT INTO sv_default VALUES('2025-01-02', 1, 42);
-ERROR:  duplicate key value violates unique constraint "_hyper_46_98_chunk_sv_default_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_23_49_chunk_sv_default_unique"
 INSERT INTO sv_default VALUES('2025-01-03', 1, 42);
-ERROR:  duplicate key value violates unique constraint "_hyper_46_98_chunk_sv_default_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_23_49_chunk_sv_default_unique"
 \set ON_ERROR_STOP 1
 -- Non-duplicate should succeed
 INSERT INTO sv_default VALUES('2025-01-02', 1, 23);
@@ -1570,9 +1552,9 @@ CREATE UNIQUE INDEX sv_null_unique ON sv_null(time, tag) NULLS NOT DISTINCT;
 -- Duplicate of first row - should fail
 \set ON_ERROR_STOP 0
 INSERT INTO sv_null VALUES('2025-01-02', 1, NULL, 999);
-ERROR:  duplicate key value violates unique constraint "_hyper_48_100_chunk_sv_null_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_24_50_chunk_sv_null_unique"
 INSERT INTO sv_null VALUES('2025-01-03', 1, NULL, 999);
-ERROR:  duplicate key value violates unique constraint "_hyper_48_100_chunk_sv_null_unique"
+ERROR:  duplicate key value violates unique constraint "_hyper_24_50_chunk_sv_null_unique"
 \set ON_ERROR_STOP 1
 -- Non-duplicate should succeed
 INSERT INTO sv_null VALUES('2024-01-05', 1, NULL, 6.0);
@@ -1594,9 +1576,9 @@ HINT:  Use "timescaledb.partition_column" to specify a different column to use a
 -- Insert initial data and compress
 INSERT INTO i9314 VALUES ('2024-01-01', 1);
 SELECT compress_chunk(show_chunks('i9314'));
-              compress_chunk               
--------------------------------------------
- _timescaledb_internal._hyper_50_103_chunk
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_25_52_chunk
 
 -- Insert multiple rows into the compressed chunk
 -- All rows should have correct generated column values
@@ -1605,15 +1587,15 @@ INSERT INTO i9314 VALUES
     ('2024-01-03', 3),
     ('2024-01-04', 4);
 SELECT compress_chunk(show_chunks('i9314'));
-              compress_chunk               
--------------------------------------------
- _timescaledb_internal._hyper_50_103_chunk
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_25_52_chunk
 
 -- show explain to ensure its all compressed
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_50_103_chunk
-   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_v2_first_time__ts_meta_idx on compress_hyper_51_104_chunk
+ Custom Scan (ColumnarScan) on _hyper_25_52_chunk
+   ->  Index Scan Backward using _hyper_25_52_chunk_compressed__ts_meta_v2_first_time__ts_me_idx on _hyper_25_52_chunk_compressed
 
 SELECT * FROM i9314 ORDER BY time;
              time             | value | doubled 
@@ -1630,10 +1612,10 @@ INSERT INTO i9314 SELECT '2024-02-01'::timestamptz + format('%s day',i)::interva
 SET timescaledb.debug_require_batch_sorted_merge = 'force';
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+ Custom Scan (ColumnarScan) on _hyper_25_52_chunk
    ->  Sort
-         Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
-         ->  Seq Scan on compress_hyper_51_104_chunk
+         Sort Key: _hyper_25_52_chunk_compressed._ts_meta_v2_last_time
+         ->  Seq Scan on _hyper_25_52_chunk_compressed
 
 SELECT * FROM i9314 ORDER BY time;
              time             | value | doubled 
@@ -1657,18 +1639,18 @@ RESET timescaledb.debug_require_batch_sorted_merge;
 -- test copy
 COPY i9314 FROM STDIN DELIMITER ',' CSV;
 SELECT compress_chunk(show_chunks('i9314'));
-              compress_chunk               
--------------------------------------------
- _timescaledb_internal._hyper_50_103_chunk
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_25_52_chunk
 
 -- Should use BatchSortedMerge for unordered chunks with no segmentby and matching orderby
 SET timescaledb.debug_require_batch_sorted_merge = 'force';
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+ Custom Scan (ColumnarScan) on _hyper_25_52_chunk
    ->  Sort
-         Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
-         ->  Seq Scan on compress_hyper_51_104_chunk
+         Sort Key: _hyper_25_52_chunk_compressed._ts_meta_v2_last_time
+         ->  Seq Scan on _hyper_25_52_chunk_compressed
 
 SELECT * FROM i9314 ORDER BY time;
              time             | value | doubled 
@@ -1702,14 +1684,14 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on i9314
    Order: i9314."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_25_52_chunk
          ->  Sort
-               Sort Key: compress_hyper_51_104_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on compress_hyper_51_104_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_50_105_chunk
+               Sort Key: _hyper_25_52_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _hyper_25_52_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_25_53_chunk
          ->  Sort
-               Sort Key: compress_hyper_51_106_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on compress_hyper_51_106_chunk
+               Sort Key: _hyper_25_53_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _hyper_25_53_chunk_compressed
 
 SELECT * FROM i9314 ORDER BY time;
              time             | value | doubled 

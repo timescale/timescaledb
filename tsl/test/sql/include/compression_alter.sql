@@ -44,11 +44,13 @@ SELECT count(*) from test1 where new_colv  = '101t';
 CREATE INDEX new_index ON test1(new_colv);
 
 -- TEST 2:  ALTER TABLE rename column
-SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, status
+ from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
 
 ALTER TABLE test1 RENAME new_coli TO coli;
-SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, status
+ from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
 
 SELECT count(*) from test1 where coli  = 100;
@@ -74,7 +76,7 @@ WHERE hypertable_id =  ( SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'test1' );
 
 SELECT count(*) FROM pg_attribute att
-INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = ch.relid
 INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname = 'bigintcol';
@@ -83,7 +85,7 @@ WHERE
 --the correct column name
 SELECT count(*) FROM pg_attribute att
 INNER JOIN _timescaledb_catalog.compression_settings cs ON att.attrelid = cs.compress_relid
-INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid
 INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname = 'bigintcol';
@@ -99,7 +101,7 @@ WHERE hypertable_name = 'test1' and attname like 'ccc%';
 
 SELECT count(*) FROM pg_attribute att
 INNER JOIN _timescaledb_catalog.compression_settings cs ON att.attrelid = cs.compress_relid
-INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid
 INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
 WHERE
   attname like 'ccc%a';
@@ -189,6 +191,7 @@ SELECT * FROM test_drop ORDER BY 1;
 -- check dropped columns got removed from catalog
 -- only segmentby and orderby are in catalog which we dont support removing
 -- atm, so nothing to see here
-SELECT * FROM _timescaledb_catalog.hypertable WHERE table_name = 'test_drop';
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema,  chunk_sizing_func_name, status
+ from _timescaledb_catalog.hypertable WHERE table_name = 'test_drop';
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_drop'::regclass;
 

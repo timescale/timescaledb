@@ -485,7 +485,7 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 
 	PushActiveSnapshot(GetLatestSnapshot());
 	rel = table_open(chunk_relid, AccessShareLock);
-	scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
+	scandesc = table_beginscan_compat(rel, GetActiveSnapshot(), 0, NULL, 0);
 	slot = table_slot_create(rel, NULL);
 
 	while (table_scan_getnextslot(scandesc, ForwardScanDirection, slot))

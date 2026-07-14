@@ -40,31 +40,31 @@ ORDER BY device_id, time;
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort
-               Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val
-               Sort Key: compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_5_chunk
-                     Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val
+               Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val
+               Sort Key: _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
          Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.val
          ->  Sort
-               Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
-               Sort Key: compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_6_chunk
-                     Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
+               Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
+               Sort Key: _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed
+                     Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
          Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.val
          ->  Sort
-               Output: compress_hyper_2_7_chunk._ts_meta_count, compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk.val
-               Sort Key: compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk
-                     Output: compress_hyper_2_7_chunk._ts_meta_count, compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk.val
+               Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val
+               Sort Key: _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed
+                     Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk
          Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.val
          ->  Sort
-               Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-               Sort Key: compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
-                     Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
+               Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
+               Sort Key: _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk_compressed
+                     Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
 
 SELECT * FROM hyper
 ORDER BY device_id, time;
@@ -93,34 +93,34 @@ ORDER BY device_id DESC, time DESC;
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val
-               Sort Key: compress_hyper_2_5_chunk.device_id DESC, compress_hyper_2_5_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_5_chunk._ts_meta_v2_last_time DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_5_chunk
-                     Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val
+               Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val
+               Sort Key: _hyper_1_1_chunk_compressed.device_id DESC, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
          Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
-               Sort Key: compress_hyper_2_6_chunk.device_id DESC, compress_hyper_2_6_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_6_chunk._ts_meta_v2_last_time DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_6_chunk
-                     Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
+               Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
+               Sort Key: _hyper_1_2_chunk_compressed.device_id DESC, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed
+                     Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
          Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_2_7_chunk._ts_meta_count, compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk.val
-               Sort Key: compress_hyper_2_7_chunk.device_id DESC, compress_hyper_2_7_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_7_chunk._ts_meta_v2_last_time DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk
-                     Output: compress_hyper_2_7_chunk._ts_meta_count, compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk.val
+               Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val
+               Sort Key: _hyper_1_3_chunk_compressed.device_id DESC, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed
+                     Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk
          Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-               Sort Key: compress_hyper_2_8_chunk.device_id DESC, compress_hyper_2_8_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_8_chunk._ts_meta_v2_last_time DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
-                     Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
+               Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
+               Sort Key: _hyper_1_4_chunk_compressed.device_id DESC, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk_compressed
+                     Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
 
 SELECT * FROM hyper
 ORDER BY device_id DESC, time DESC;
@@ -145,7 +145,7 @@ SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relnam
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
@@ -169,7 +169,7 @@ SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relnam
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id OFFSET 2 LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
@@ -199,31 +199,31 @@ ORDER BY device_id, time;
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort
-               Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val, compress_hyper_2_5_chunk._ts_meta_sequence_num
-               Sort Key: compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_sequence_num
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_5_chunk
-                     Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val, compress_hyper_2_5_chunk._ts_meta_sequence_num
+               Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val, _hyper_1_1_chunk_compressed._ts_meta_sequence_num
+               Sort Key: _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_sequence_num
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val, _hyper_1_1_chunk_compressed._ts_meta_sequence_num
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
          Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.val
          ->  Sort
-               Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
-               Sort Key: compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_6_chunk
-                     Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
+               Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
+               Sort Key: _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed
+                     Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
          Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.val
          ->  Sort
-               Output: compress_hyper_2_7_chunk._ts_meta_count, compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk.val, compress_hyper_2_7_chunk._ts_meta_sequence_num
-               Sort Key: compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_sequence_num
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk
-                     Output: compress_hyper_2_7_chunk._ts_meta_count, compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk.val, compress_hyper_2_7_chunk._ts_meta_sequence_num
+               Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val, _hyper_1_3_chunk_compressed._ts_meta_sequence_num
+               Sort Key: _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_sequence_num
+               ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed
+                     Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val, _hyper_1_3_chunk_compressed._ts_meta_sequence_num
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk
          Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.val
          ->  Sort
-               Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-               Sort Key: compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
-                     Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
+               Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
+               Sort Key: _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk_compressed
+                     Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
 
 SELECT * FROM hyper
 ORDER BY device_id, time;
@@ -252,34 +252,34 @@ ORDER BY device_id DESC, time DESC;
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val, compress_hyper_2_5_chunk._ts_meta_sequence_num
-               Sort Key: compress_hyper_2_5_chunk.device_id DESC, compress_hyper_2_5_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_5_chunk
-                     Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val, compress_hyper_2_5_chunk._ts_meta_sequence_num
+               Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val, _hyper_1_1_chunk_compressed._ts_meta_sequence_num
+               Sort Key: _hyper_1_1_chunk_compressed.device_id DESC, _hyper_1_1_chunk_compressed._ts_meta_sequence_num DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val, _hyper_1_1_chunk_compressed._ts_meta_sequence_num
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
          Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
-               Sort Key: compress_hyper_2_6_chunk.device_id DESC, compress_hyper_2_6_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_6_chunk._ts_meta_v2_last_time DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_6_chunk
-                     Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
+               Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
+               Sort Key: _hyper_1_2_chunk_compressed.device_id DESC, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed
+                     Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
          Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_2_7_chunk._ts_meta_count, compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk.val, compress_hyper_2_7_chunk._ts_meta_sequence_num
-               Sort Key: compress_hyper_2_7_chunk.device_id DESC, compress_hyper_2_7_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk
-                     Output: compress_hyper_2_7_chunk._ts_meta_count, compress_hyper_2_7_chunk.device_id, compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_v2_first_time, compress_hyper_2_7_chunk._ts_meta_v2_last_time, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk.val, compress_hyper_2_7_chunk._ts_meta_sequence_num
+               Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val, _hyper_1_3_chunk_compressed._ts_meta_sequence_num
+               Sort Key: _hyper_1_3_chunk_compressed.device_id DESC, _hyper_1_3_chunk_compressed._ts_meta_sequence_num DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed
+                     Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val, _hyper_1_3_chunk_compressed._ts_meta_sequence_num
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk
          Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-               Sort Key: compress_hyper_2_8_chunk.device_id DESC, compress_hyper_2_8_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_8_chunk._ts_meta_v2_last_time DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
-                     Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
+               Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
+               Sort Key: _hyper_1_4_chunk_compressed.device_id DESC, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk_compressed
+                     Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
 
 SELECT * FROM hyper
 ORDER BY device_id DESC, time DESC;
@@ -324,31 +324,31 @@ ORDER BY device_id, time;
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort
-               Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val, compress_hyper_2_5_chunk._ts_meta_sequence_num
-               Sort Key: compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_sequence_num
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_5_chunk
-                     Output: compress_hyper_2_5_chunk._ts_meta_count, compress_hyper_2_5_chunk.device_id, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1, compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time, compress_hyper_2_5_chunk."time", compress_hyper_2_5_chunk.val, compress_hyper_2_5_chunk._ts_meta_sequence_num
+               Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val, _hyper_1_1_chunk_compressed._ts_meta_sequence_num
+               Sort Key: _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_sequence_num
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed
+                     Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.val, _hyper_1_1_chunk_compressed._ts_meta_sequence_num
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
          Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.val
          ->  Sort
-               Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
-               Sort Key: compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_6_chunk
-                     Output: compress_hyper_2_6_chunk._ts_meta_count, compress_hyper_2_6_chunk.device_id, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1, compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time, compress_hyper_2_6_chunk."time", compress_hyper_2_6_chunk.val
+               Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
+               Sort Key: _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed
+                     Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
          Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.val
          ->  Sort
-               Output: compress_hyper_2_9_chunk._ts_meta_count, compress_hyper_2_9_chunk.device_id, compress_hyper_2_9_chunk._ts_meta_min_1, compress_hyper_2_9_chunk._ts_meta_max_1, compress_hyper_2_9_chunk._ts_meta_v2_first_time, compress_hyper_2_9_chunk._ts_meta_v2_last_time, compress_hyper_2_9_chunk."time", compress_hyper_2_9_chunk.val
-               Sort Key: compress_hyper_2_9_chunk.device_id, compress_hyper_2_9_chunk._ts_meta_v2_first_time, compress_hyper_2_9_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_9_chunk
-                     Output: compress_hyper_2_9_chunk._ts_meta_count, compress_hyper_2_9_chunk.device_id, compress_hyper_2_9_chunk._ts_meta_min_1, compress_hyper_2_9_chunk._ts_meta_max_1, compress_hyper_2_9_chunk._ts_meta_v2_first_time, compress_hyper_2_9_chunk._ts_meta_v2_last_time, compress_hyper_2_9_chunk."time", compress_hyper_2_9_chunk.val
+               Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val
+               Sort Key: _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk_compressed
+                     Output: _hyper_1_3_chunk_compressed._ts_meta_count, _hyper_1_3_chunk_compressed.device_id, _hyper_1_3_chunk_compressed._ts_meta_min_1, _hyper_1_3_chunk_compressed._ts_meta_max_1, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time, _hyper_1_3_chunk_compressed."time", _hyper_1_3_chunk_compressed.val
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_4_chunk
          Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device_id, _hyper_1_4_chunk.val
          ->  Sort
-               Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-               Sort Key: compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
-                     Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk._ts_meta_v2_first_time, compress_hyper_2_8_chunk._ts_meta_v2_last_time, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
+               Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
+               Sort Key: _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk_compressed
+                     Output: _hyper_1_4_chunk_compressed._ts_meta_count, _hyper_1_4_chunk_compressed.device_id, _hyper_1_4_chunk_compressed._ts_meta_min_1, _hyper_1_4_chunk_compressed._ts_meta_max_1, _hyper_1_4_chunk_compressed._ts_meta_v2_first_time, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time, _hyper_1_4_chunk_compressed."time", _hyper_1_4_chunk_compressed.val
 
 -- test case without segmentby
 TRUNCATE hyper;
@@ -359,12 +359,12 @@ ALTER TABLE hyper SET (
 NOTICE:  updated compression settings will only apply to future compressions
 INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2), (11, 5, 2), (21, 2, 3), (22, 3, 3), (23, 4, 3), (30, 1, 4), (31, 3, 4), (31, 5, 4);
 SELECT compress_chunk(show_chunks('hyper'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_1_10_chunk
- _timescaledb_internal._hyper_1_11_chunk
- _timescaledb_internal._hyper_1_12_chunk
- _timescaledb_internal._hyper_1_13_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
 
 VACUUM ANALYZE hyper;
 :EXPLAIN SELECT * FROM hyper
@@ -375,41 +375,41 @@ ORDER BY time;
    Order: hyper."time"
    Startup Exclusion: false
    Runtime Exclusion: false
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk
-         Output: _hyper_1_10_chunk."time", _hyper_1_10_chunk.device_id, _hyper_1_10_chunk.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_5_chunk
+         Output: _hyper_1_5_chunk."time", _hyper_1_5_chunk.device_id, _hyper_1_5_chunk.val
          ->  Sort
-               Output: compress_hyper_2_14_chunk._ts_meta_count, compress_hyper_2_14_chunk._ts_meta_min_1, compress_hyper_2_14_chunk._ts_meta_max_1, compress_hyper_2_14_chunk._ts_meta_v2_first_time, compress_hyper_2_14_chunk._ts_meta_v2_last_time, compress_hyper_2_14_chunk."time", compress_hyper_2_14_chunk.device_id, compress_hyper_2_14_chunk.val
-               Sort Key: compress_hyper_2_14_chunk._ts_meta_v2_first_time, compress_hyper_2_14_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_14_chunk
-                     Output: compress_hyper_2_14_chunk._ts_meta_count, compress_hyper_2_14_chunk._ts_meta_min_1, compress_hyper_2_14_chunk._ts_meta_max_1, compress_hyper_2_14_chunk._ts_meta_v2_first_time, compress_hyper_2_14_chunk._ts_meta_v2_last_time, compress_hyper_2_14_chunk."time", compress_hyper_2_14_chunk.device_id, compress_hyper_2_14_chunk.val
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_11_chunk
-         Output: _hyper_1_11_chunk."time", _hyper_1_11_chunk.device_id, _hyper_1_11_chunk.val
+               Output: _hyper_1_5_chunk_compressed._ts_meta_count, _hyper_1_5_chunk_compressed._ts_meta_min_1, _hyper_1_5_chunk_compressed._ts_meta_max_1, _hyper_1_5_chunk_compressed._ts_meta_v2_first_time, _hyper_1_5_chunk_compressed._ts_meta_v2_last_time, _hyper_1_5_chunk_compressed."time", _hyper_1_5_chunk_compressed.device_id, _hyper_1_5_chunk_compressed.val
+               Sort Key: _hyper_1_5_chunk_compressed._ts_meta_v2_first_time, _hyper_1_5_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_5_chunk_compressed
+                     Output: _hyper_1_5_chunk_compressed._ts_meta_count, _hyper_1_5_chunk_compressed._ts_meta_min_1, _hyper_1_5_chunk_compressed._ts_meta_max_1, _hyper_1_5_chunk_compressed._ts_meta_v2_first_time, _hyper_1_5_chunk_compressed._ts_meta_v2_last_time, _hyper_1_5_chunk_compressed."time", _hyper_1_5_chunk_compressed.device_id, _hyper_1_5_chunk_compressed.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_6_chunk
+         Output: _hyper_1_6_chunk."time", _hyper_1_6_chunk.device_id, _hyper_1_6_chunk.val
          ->  Sort
-               Output: compress_hyper_2_15_chunk._ts_meta_count, compress_hyper_2_15_chunk._ts_meta_min_1, compress_hyper_2_15_chunk._ts_meta_max_1, compress_hyper_2_15_chunk._ts_meta_v2_first_time, compress_hyper_2_15_chunk._ts_meta_v2_last_time, compress_hyper_2_15_chunk."time", compress_hyper_2_15_chunk.device_id, compress_hyper_2_15_chunk.val
-               Sort Key: compress_hyper_2_15_chunk._ts_meta_v2_first_time, compress_hyper_2_15_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_15_chunk
-                     Output: compress_hyper_2_15_chunk._ts_meta_count, compress_hyper_2_15_chunk._ts_meta_min_1, compress_hyper_2_15_chunk._ts_meta_max_1, compress_hyper_2_15_chunk._ts_meta_v2_first_time, compress_hyper_2_15_chunk._ts_meta_v2_last_time, compress_hyper_2_15_chunk."time", compress_hyper_2_15_chunk.device_id, compress_hyper_2_15_chunk.val
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_12_chunk
-         Output: _hyper_1_12_chunk."time", _hyper_1_12_chunk.device_id, _hyper_1_12_chunk.val
+               Output: _hyper_1_6_chunk_compressed._ts_meta_count, _hyper_1_6_chunk_compressed._ts_meta_min_1, _hyper_1_6_chunk_compressed._ts_meta_max_1, _hyper_1_6_chunk_compressed._ts_meta_v2_first_time, _hyper_1_6_chunk_compressed._ts_meta_v2_last_time, _hyper_1_6_chunk_compressed."time", _hyper_1_6_chunk_compressed.device_id, _hyper_1_6_chunk_compressed.val
+               Sort Key: _hyper_1_6_chunk_compressed._ts_meta_v2_first_time, _hyper_1_6_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_6_chunk_compressed
+                     Output: _hyper_1_6_chunk_compressed._ts_meta_count, _hyper_1_6_chunk_compressed._ts_meta_min_1, _hyper_1_6_chunk_compressed._ts_meta_max_1, _hyper_1_6_chunk_compressed._ts_meta_v2_first_time, _hyper_1_6_chunk_compressed._ts_meta_v2_last_time, _hyper_1_6_chunk_compressed."time", _hyper_1_6_chunk_compressed.device_id, _hyper_1_6_chunk_compressed.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_7_chunk
+         Output: _hyper_1_7_chunk."time", _hyper_1_7_chunk.device_id, _hyper_1_7_chunk.val
          ->  Sort
-               Output: compress_hyper_2_16_chunk._ts_meta_count, compress_hyper_2_16_chunk._ts_meta_min_1, compress_hyper_2_16_chunk._ts_meta_max_1, compress_hyper_2_16_chunk._ts_meta_v2_first_time, compress_hyper_2_16_chunk._ts_meta_v2_last_time, compress_hyper_2_16_chunk."time", compress_hyper_2_16_chunk.device_id, compress_hyper_2_16_chunk.val
-               Sort Key: compress_hyper_2_16_chunk._ts_meta_v2_first_time, compress_hyper_2_16_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_16_chunk
-                     Output: compress_hyper_2_16_chunk._ts_meta_count, compress_hyper_2_16_chunk._ts_meta_min_1, compress_hyper_2_16_chunk._ts_meta_max_1, compress_hyper_2_16_chunk._ts_meta_v2_first_time, compress_hyper_2_16_chunk._ts_meta_v2_last_time, compress_hyper_2_16_chunk."time", compress_hyper_2_16_chunk.device_id, compress_hyper_2_16_chunk.val
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_13_chunk
-         Output: _hyper_1_13_chunk."time", _hyper_1_13_chunk.device_id, _hyper_1_13_chunk.val
+               Output: _hyper_1_7_chunk_compressed._ts_meta_count, _hyper_1_7_chunk_compressed._ts_meta_min_1, _hyper_1_7_chunk_compressed._ts_meta_max_1, _hyper_1_7_chunk_compressed._ts_meta_v2_first_time, _hyper_1_7_chunk_compressed._ts_meta_v2_last_time, _hyper_1_7_chunk_compressed."time", _hyper_1_7_chunk_compressed.device_id, _hyper_1_7_chunk_compressed.val
+               Sort Key: _hyper_1_7_chunk_compressed._ts_meta_v2_first_time, _hyper_1_7_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_7_chunk_compressed
+                     Output: _hyper_1_7_chunk_compressed._ts_meta_count, _hyper_1_7_chunk_compressed._ts_meta_min_1, _hyper_1_7_chunk_compressed._ts_meta_max_1, _hyper_1_7_chunk_compressed._ts_meta_v2_first_time, _hyper_1_7_chunk_compressed._ts_meta_v2_last_time, _hyper_1_7_chunk_compressed."time", _hyper_1_7_chunk_compressed.device_id, _hyper_1_7_chunk_compressed.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_8_chunk
+         Output: _hyper_1_8_chunk."time", _hyper_1_8_chunk.device_id, _hyper_1_8_chunk.val
          ->  Sort
-               Output: compress_hyper_2_17_chunk._ts_meta_count, compress_hyper_2_17_chunk._ts_meta_min_1, compress_hyper_2_17_chunk._ts_meta_max_1, compress_hyper_2_17_chunk._ts_meta_v2_first_time, compress_hyper_2_17_chunk._ts_meta_v2_last_time, compress_hyper_2_17_chunk."time", compress_hyper_2_17_chunk.device_id, compress_hyper_2_17_chunk.val
-               Sort Key: compress_hyper_2_17_chunk._ts_meta_v2_first_time, compress_hyper_2_17_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_17_chunk
-                     Output: compress_hyper_2_17_chunk._ts_meta_count, compress_hyper_2_17_chunk._ts_meta_min_1, compress_hyper_2_17_chunk._ts_meta_max_1, compress_hyper_2_17_chunk._ts_meta_v2_first_time, compress_hyper_2_17_chunk._ts_meta_v2_last_time, compress_hyper_2_17_chunk."time", compress_hyper_2_17_chunk.device_id, compress_hyper_2_17_chunk.val
+               Output: _hyper_1_8_chunk_compressed._ts_meta_count, _hyper_1_8_chunk_compressed._ts_meta_min_1, _hyper_1_8_chunk_compressed._ts_meta_max_1, _hyper_1_8_chunk_compressed._ts_meta_v2_first_time, _hyper_1_8_chunk_compressed._ts_meta_v2_last_time, _hyper_1_8_chunk_compressed."time", _hyper_1_8_chunk_compressed.device_id, _hyper_1_8_chunk_compressed.val
+               Sort Key: _hyper_1_8_chunk_compressed._ts_meta_v2_first_time, _hyper_1_8_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_8_chunk_compressed
+                     Output: _hyper_1_8_chunk_compressed._ts_meta_count, _hyper_1_8_chunk_compressed._ts_meta_min_1, _hyper_1_8_chunk_compressed._ts_meta_max_1, _hyper_1_8_chunk_compressed._ts_meta_v2_first_time, _hyper_1_8_chunk_compressed._ts_meta_v2_last_time, _hyper_1_8_chunk_compressed."time", _hyper_1_8_chunk_compressed.device_id, _hyper_1_8_chunk_compressed.val
 
 -- modify two chunks by adding sequence number to the segments
 SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relname AS "CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 SET ROLE :ROLE_SUPERUSER;
@@ -427,7 +427,7 @@ SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relnam
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id OFFSET 3 LIMIT 1 \gset
 SET ROLE :ROLE_SUPERUSER;
@@ -450,34 +450,34 @@ ORDER BY time;
    Order: hyper."time"
    Startup Exclusion: false
    Runtime Exclusion: false
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk
-         Output: _hyper_1_10_chunk."time", _hyper_1_10_chunk.device_id, _hyper_1_10_chunk.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_5_chunk
+         Output: _hyper_1_5_chunk."time", _hyper_1_5_chunk.device_id, _hyper_1_5_chunk.val
          ->  Sort
-               Output: compress_hyper_2_14_chunk._ts_meta_count, compress_hyper_2_14_chunk._ts_meta_min_1, compress_hyper_2_14_chunk._ts_meta_max_1, compress_hyper_2_14_chunk._ts_meta_v2_first_time, compress_hyper_2_14_chunk._ts_meta_v2_last_time, compress_hyper_2_14_chunk."time", compress_hyper_2_14_chunk.device_id, compress_hyper_2_14_chunk.val, compress_hyper_2_14_chunk._ts_meta_sequence_num
-               Sort Key: compress_hyper_2_14_chunk._ts_meta_sequence_num
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_14_chunk
-                     Output: compress_hyper_2_14_chunk._ts_meta_count, compress_hyper_2_14_chunk._ts_meta_min_1, compress_hyper_2_14_chunk._ts_meta_max_1, compress_hyper_2_14_chunk._ts_meta_v2_first_time, compress_hyper_2_14_chunk._ts_meta_v2_last_time, compress_hyper_2_14_chunk."time", compress_hyper_2_14_chunk.device_id, compress_hyper_2_14_chunk.val, compress_hyper_2_14_chunk._ts_meta_sequence_num
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_11_chunk
-         Output: _hyper_1_11_chunk."time", _hyper_1_11_chunk.device_id, _hyper_1_11_chunk.val
+               Output: _hyper_1_5_chunk_compressed._ts_meta_count, _hyper_1_5_chunk_compressed._ts_meta_min_1, _hyper_1_5_chunk_compressed._ts_meta_max_1, _hyper_1_5_chunk_compressed._ts_meta_v2_first_time, _hyper_1_5_chunk_compressed._ts_meta_v2_last_time, _hyper_1_5_chunk_compressed."time", _hyper_1_5_chunk_compressed.device_id, _hyper_1_5_chunk_compressed.val, _hyper_1_5_chunk_compressed._ts_meta_sequence_num
+               Sort Key: _hyper_1_5_chunk_compressed._ts_meta_sequence_num
+               ->  Seq Scan on _timescaledb_internal._hyper_1_5_chunk_compressed
+                     Output: _hyper_1_5_chunk_compressed._ts_meta_count, _hyper_1_5_chunk_compressed._ts_meta_min_1, _hyper_1_5_chunk_compressed._ts_meta_max_1, _hyper_1_5_chunk_compressed._ts_meta_v2_first_time, _hyper_1_5_chunk_compressed._ts_meta_v2_last_time, _hyper_1_5_chunk_compressed."time", _hyper_1_5_chunk_compressed.device_id, _hyper_1_5_chunk_compressed.val, _hyper_1_5_chunk_compressed._ts_meta_sequence_num
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_6_chunk
+         Output: _hyper_1_6_chunk."time", _hyper_1_6_chunk.device_id, _hyper_1_6_chunk.val
          ->  Sort
-               Output: compress_hyper_2_15_chunk._ts_meta_count, compress_hyper_2_15_chunk._ts_meta_min_1, compress_hyper_2_15_chunk._ts_meta_max_1, compress_hyper_2_15_chunk._ts_meta_v2_first_time, compress_hyper_2_15_chunk._ts_meta_v2_last_time, compress_hyper_2_15_chunk."time", compress_hyper_2_15_chunk.device_id, compress_hyper_2_15_chunk.val
-               Sort Key: compress_hyper_2_15_chunk._ts_meta_v2_first_time, compress_hyper_2_15_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_15_chunk
-                     Output: compress_hyper_2_15_chunk._ts_meta_count, compress_hyper_2_15_chunk._ts_meta_min_1, compress_hyper_2_15_chunk._ts_meta_max_1, compress_hyper_2_15_chunk._ts_meta_v2_first_time, compress_hyper_2_15_chunk._ts_meta_v2_last_time, compress_hyper_2_15_chunk."time", compress_hyper_2_15_chunk.device_id, compress_hyper_2_15_chunk.val
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_12_chunk
-         Output: _hyper_1_12_chunk."time", _hyper_1_12_chunk.device_id, _hyper_1_12_chunk.val
+               Output: _hyper_1_6_chunk_compressed._ts_meta_count, _hyper_1_6_chunk_compressed._ts_meta_min_1, _hyper_1_6_chunk_compressed._ts_meta_max_1, _hyper_1_6_chunk_compressed._ts_meta_v2_first_time, _hyper_1_6_chunk_compressed._ts_meta_v2_last_time, _hyper_1_6_chunk_compressed."time", _hyper_1_6_chunk_compressed.device_id, _hyper_1_6_chunk_compressed.val
+               Sort Key: _hyper_1_6_chunk_compressed._ts_meta_v2_first_time, _hyper_1_6_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_6_chunk_compressed
+                     Output: _hyper_1_6_chunk_compressed._ts_meta_count, _hyper_1_6_chunk_compressed._ts_meta_min_1, _hyper_1_6_chunk_compressed._ts_meta_max_1, _hyper_1_6_chunk_compressed._ts_meta_v2_first_time, _hyper_1_6_chunk_compressed._ts_meta_v2_last_time, _hyper_1_6_chunk_compressed."time", _hyper_1_6_chunk_compressed.device_id, _hyper_1_6_chunk_compressed.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_7_chunk
+         Output: _hyper_1_7_chunk."time", _hyper_1_7_chunk.device_id, _hyper_1_7_chunk.val
          ->  Sort
-               Output: compress_hyper_2_16_chunk._ts_meta_count, compress_hyper_2_16_chunk._ts_meta_min_1, compress_hyper_2_16_chunk._ts_meta_max_1, compress_hyper_2_16_chunk._ts_meta_v2_first_time, compress_hyper_2_16_chunk._ts_meta_v2_last_time, compress_hyper_2_16_chunk."time", compress_hyper_2_16_chunk.device_id, compress_hyper_2_16_chunk.val
-               Sort Key: compress_hyper_2_16_chunk._ts_meta_v2_first_time, compress_hyper_2_16_chunk._ts_meta_v2_last_time
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_16_chunk
-                     Output: compress_hyper_2_16_chunk._ts_meta_count, compress_hyper_2_16_chunk._ts_meta_min_1, compress_hyper_2_16_chunk._ts_meta_max_1, compress_hyper_2_16_chunk._ts_meta_v2_first_time, compress_hyper_2_16_chunk._ts_meta_v2_last_time, compress_hyper_2_16_chunk."time", compress_hyper_2_16_chunk.device_id, compress_hyper_2_16_chunk.val
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_13_chunk
-         Output: _hyper_1_13_chunk."time", _hyper_1_13_chunk.device_id, _hyper_1_13_chunk.val
+               Output: _hyper_1_7_chunk_compressed._ts_meta_count, _hyper_1_7_chunk_compressed._ts_meta_min_1, _hyper_1_7_chunk_compressed._ts_meta_max_1, _hyper_1_7_chunk_compressed._ts_meta_v2_first_time, _hyper_1_7_chunk_compressed._ts_meta_v2_last_time, _hyper_1_7_chunk_compressed."time", _hyper_1_7_chunk_compressed.device_id, _hyper_1_7_chunk_compressed.val
+               Sort Key: _hyper_1_7_chunk_compressed._ts_meta_v2_first_time, _hyper_1_7_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _timescaledb_internal._hyper_1_7_chunk_compressed
+                     Output: _hyper_1_7_chunk_compressed._ts_meta_count, _hyper_1_7_chunk_compressed._ts_meta_min_1, _hyper_1_7_chunk_compressed._ts_meta_max_1, _hyper_1_7_chunk_compressed._ts_meta_v2_first_time, _hyper_1_7_chunk_compressed._ts_meta_v2_last_time, _hyper_1_7_chunk_compressed."time", _hyper_1_7_chunk_compressed.device_id, _hyper_1_7_chunk_compressed.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_8_chunk
+         Output: _hyper_1_8_chunk."time", _hyper_1_8_chunk.device_id, _hyper_1_8_chunk.val
          ->  Sort
-               Output: compress_hyper_2_17_chunk._ts_meta_count, compress_hyper_2_17_chunk._ts_meta_min_1, compress_hyper_2_17_chunk._ts_meta_max_1, compress_hyper_2_17_chunk._ts_meta_v2_first_time, compress_hyper_2_17_chunk._ts_meta_v2_last_time, compress_hyper_2_17_chunk."time", compress_hyper_2_17_chunk.device_id, compress_hyper_2_17_chunk.val, compress_hyper_2_17_chunk._ts_meta_sequence_num
-               Sort Key: compress_hyper_2_17_chunk._ts_meta_sequence_num
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_17_chunk
-                     Output: compress_hyper_2_17_chunk._ts_meta_count, compress_hyper_2_17_chunk._ts_meta_min_1, compress_hyper_2_17_chunk._ts_meta_max_1, compress_hyper_2_17_chunk._ts_meta_v2_first_time, compress_hyper_2_17_chunk._ts_meta_v2_last_time, compress_hyper_2_17_chunk."time", compress_hyper_2_17_chunk.device_id, compress_hyper_2_17_chunk.val, compress_hyper_2_17_chunk._ts_meta_sequence_num
+               Output: _hyper_1_8_chunk_compressed._ts_meta_count, _hyper_1_8_chunk_compressed._ts_meta_min_1, _hyper_1_8_chunk_compressed._ts_meta_max_1, _hyper_1_8_chunk_compressed._ts_meta_v2_first_time, _hyper_1_8_chunk_compressed._ts_meta_v2_last_time, _hyper_1_8_chunk_compressed."time", _hyper_1_8_chunk_compressed.device_id, _hyper_1_8_chunk_compressed.val, _hyper_1_8_chunk_compressed._ts_meta_sequence_num
+               Sort Key: _hyper_1_8_chunk_compressed._ts_meta_sequence_num
+               ->  Seq Scan on _timescaledb_internal._hyper_1_8_chunk_compressed
+                     Output: _hyper_1_8_chunk_compressed._ts_meta_count, _hyper_1_8_chunk_compressed._ts_meta_min_1, _hyper_1_8_chunk_compressed._ts_meta_max_1, _hyper_1_8_chunk_compressed._ts_meta_v2_first_time, _hyper_1_8_chunk_compressed._ts_meta_v2_last_time, _hyper_1_8_chunk_compressed."time", _hyper_1_8_chunk_compressed.device_id, _hyper_1_8_chunk_compressed.val, _hyper_1_8_chunk_compressed._ts_meta_sequence_num
 
 -- test rolling up chunks during compression
 -- this will not work with chunks which have sequence numbers
@@ -487,18 +487,18 @@ INSERT INTO hyper VALUES (41, 1, 1), (42, 2, 1), (43, 3, 1), (50, 3, 2), (51, 4,
 -- compression should leave the previous 4 chunks alone
 -- and roll up the two new chunks into a single chunk
 SELECT compress_chunk(show_chunks('hyper'));
-NOTICE:  chunk "_hyper_1_10_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_11_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_12_chunk" is already converted to columnstore
-NOTICE:  chunk "_hyper_1_13_chunk" is already converted to columnstore
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_1_10_chunk
- _timescaledb_internal._hyper_1_11_chunk
- _timescaledb_internal._hyper_1_12_chunk
- _timescaledb_internal._hyper_1_13_chunk
- _timescaledb_internal._hyper_1_18_chunk
- _timescaledb_internal._hyper_1_18_chunk
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_6_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_7_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_8_chunk" is already converted to columnstore
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+ _timescaledb_internal._hyper_1_9_chunk
 
 -- gh issue #7384
 -- modifying compressed chunk OID to over INT32_MAX
@@ -513,17 +513,17 @@ INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2)
 SELECT compress_chunk(show_chunks('hyper'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_1_21_chunk
- _timescaledb_internal._hyper_1_21_chunk
- _timescaledb_internal._hyper_1_21_chunk
- _timescaledb_internal._hyper_1_21_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+ _timescaledb_internal._hyper_1_11_chunk
 
 VACUUM ANALYZE hyper;
 SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relname AS "CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 SET ROLE :ROLE_SUPERUSER;
@@ -538,14 +538,14 @@ WHERE compress_relid = :CHUNK_OID;
 :EXPLAIN SELECT * FROM hyper
 WHERE device_id = 1 ORDER BY time;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_21_chunk
-   Output: _hyper_1_21_chunk."time", _hyper_1_21_chunk.device_id, _hyper_1_21_chunk.val
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_11_chunk
+   Output: _hyper_1_11_chunk."time", _hyper_1_11_chunk.device_id, _hyper_1_11_chunk.val
    ->  Sort
-         Output: compress_hyper_2_25_chunk._ts_meta_count, compress_hyper_2_25_chunk.device_id, compress_hyper_2_25_chunk._ts_meta_min_1, compress_hyper_2_25_chunk._ts_meta_max_1, compress_hyper_2_25_chunk._ts_meta_v2_first_time, compress_hyper_2_25_chunk._ts_meta_v2_last_time, compress_hyper_2_25_chunk."time", compress_hyper_2_25_chunk.val
-         Sort Key: compress_hyper_2_25_chunk._ts_meta_v2_first_time, compress_hyper_2_25_chunk._ts_meta_v2_last_time
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_25_chunk
-               Output: compress_hyper_2_25_chunk._ts_meta_count, compress_hyper_2_25_chunk.device_id, compress_hyper_2_25_chunk._ts_meta_min_1, compress_hyper_2_25_chunk._ts_meta_max_1, compress_hyper_2_25_chunk._ts_meta_v2_first_time, compress_hyper_2_25_chunk._ts_meta_v2_last_time, compress_hyper_2_25_chunk."time", compress_hyper_2_25_chunk.val
-               Filter: (compress_hyper_2_25_chunk.device_id = 1)
+         Output: _hyper_1_11_chunk_compressed._ts_meta_count, _hyper_1_11_chunk_compressed.device_id, _hyper_1_11_chunk_compressed._ts_meta_min_1, _hyper_1_11_chunk_compressed._ts_meta_max_1, _hyper_1_11_chunk_compressed._ts_meta_v2_first_time, _hyper_1_11_chunk_compressed._ts_meta_v2_last_time, _hyper_1_11_chunk_compressed."time", _hyper_1_11_chunk_compressed.val
+         Sort Key: _hyper_1_11_chunk_compressed._ts_meta_v2_first_time, _hyper_1_11_chunk_compressed._ts_meta_v2_last_time
+         ->  Seq Scan on _timescaledb_internal._hyper_1_11_chunk_compressed
+               Output: _hyper_1_11_chunk_compressed._ts_meta_count, _hyper_1_11_chunk_compressed.device_id, _hyper_1_11_chunk_compressed._ts_meta_min_1, _hyper_1_11_chunk_compressed._ts_meta_max_1, _hyper_1_11_chunk_compressed._ts_meta_v2_first_time, _hyper_1_11_chunk_compressed._ts_meta_v2_last_time, _hyper_1_11_chunk_compressed."time", _hyper_1_11_chunk_compressed.val
+               Filter: (_hyper_1_11_chunk_compressed.device_id = 1)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE hyper;
@@ -560,7 +560,7 @@ WARNING:  column type "character varying" used for "device_id" does not follow b
 WARNING:  column type "character varying" used for "text" does not follow best practices
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             3 | public      | varchar    | t
+             2 | public      | varchar    | t
 
 -- test case with segmentby
 ALTER TABLE varchar SET (
@@ -571,8 +571,8 @@ INSERT INTO varchar SELECT t, t::text, t::text, 1 FROM generate_series(1, 10, 1)
 SELECT compress_chunk(show_chunks('varchar'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_3_26_chunk
- _timescaledb_internal._hyper_3_27_chunk
+ _timescaledb_internal._hyper_2_15_chunk
+ _timescaledb_internal._hyper_2_16_chunk
 
 VACUUM ANALYZE varchar;
 SELECT * FROM varchar WHERE device_id = '1' ORDER BY text, time LIMIT 5;
@@ -593,19 +593,19 @@ GROUP BY device_id, text;
          Sort Key: "varchar".device_id, "varchar".text
          ->  Append
                ->  Partial GroupAggregate
-                     Output: _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text
-                     Group Key: _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text
-                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_26_chunk
-                           Output: _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text
-                           ->  Index Scan using compress_hyper_4_28_chunk_device_id__ts_meta_v2_first_text__idx on _timescaledb_internal.compress_hyper_4_28_chunk
-                                 Output: compress_hyper_4_28_chunk._ts_meta_count, compress_hyper_4_28_chunk.device_id, compress_hyper_4_28_chunk._ts_meta_min_2, compress_hyper_4_28_chunk._ts_meta_max_2, compress_hyper_4_28_chunk._ts_meta_v2_first_time, compress_hyper_4_28_chunk._ts_meta_v2_last_time, compress_hyper_4_28_chunk."time", compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1, compress_hyper_4_28_chunk._ts_meta_v2_first_text, compress_hyper_4_28_chunk._ts_meta_v2_last_text, compress_hyper_4_28_chunk.text, compress_hyper_4_28_chunk.val
+                     Output: _hyper_2_15_chunk.device_id, _hyper_2_15_chunk.text
+                     Group Key: _hyper_2_15_chunk.device_id, _hyper_2_15_chunk.text
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_15_chunk
+                           Output: _hyper_2_15_chunk.device_id, _hyper_2_15_chunk.text
+                           ->  Index Scan using _hyper_2_15_chunk_compressed_device_id__ts_meta_v2_first_te_idx on _timescaledb_internal._hyper_2_15_chunk_compressed
+                                 Output: _hyper_2_15_chunk_compressed._ts_meta_count, _hyper_2_15_chunk_compressed.device_id, _hyper_2_15_chunk_compressed._ts_meta_min_2, _hyper_2_15_chunk_compressed._ts_meta_max_2, _hyper_2_15_chunk_compressed._ts_meta_v2_first_time, _hyper_2_15_chunk_compressed._ts_meta_v2_last_time, _hyper_2_15_chunk_compressed."time", _hyper_2_15_chunk_compressed._ts_meta_min_1, _hyper_2_15_chunk_compressed._ts_meta_max_1, _hyper_2_15_chunk_compressed._ts_meta_v2_first_text, _hyper_2_15_chunk_compressed._ts_meta_v2_last_text, _hyper_2_15_chunk_compressed.text, _hyper_2_15_chunk_compressed.val
                ->  Partial GroupAggregate
-                     Output: _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text
-                     Group Key: _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text
-                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_27_chunk
-                           Output: _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text
-                           ->  Index Scan using compress_hyper_4_29_chunk_device_id__ts_meta_v2_first_text__idx on _timescaledb_internal.compress_hyper_4_29_chunk
-                                 Output: compress_hyper_4_29_chunk._ts_meta_count, compress_hyper_4_29_chunk.device_id, compress_hyper_4_29_chunk._ts_meta_min_2, compress_hyper_4_29_chunk._ts_meta_max_2, compress_hyper_4_29_chunk._ts_meta_v2_first_time, compress_hyper_4_29_chunk._ts_meta_v2_last_time, compress_hyper_4_29_chunk."time", compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1, compress_hyper_4_29_chunk._ts_meta_v2_first_text, compress_hyper_4_29_chunk._ts_meta_v2_last_text, compress_hyper_4_29_chunk.text, compress_hyper_4_29_chunk.val
+                     Output: _hyper_2_16_chunk.device_id, _hyper_2_16_chunk.text
+                     Group Key: _hyper_2_16_chunk.device_id, _hyper_2_16_chunk.text
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_16_chunk
+                           Output: _hyper_2_16_chunk.device_id, _hyper_2_16_chunk.text
+                           ->  Index Scan using _hyper_2_16_chunk_compressed_device_id__ts_meta_v2_first_te_idx on _timescaledb_internal._hyper_2_16_chunk_compressed
+                                 Output: _hyper_2_16_chunk_compressed._ts_meta_count, _hyper_2_16_chunk_compressed.device_id, _hyper_2_16_chunk_compressed._ts_meta_min_2, _hyper_2_16_chunk_compressed._ts_meta_max_2, _hyper_2_16_chunk_compressed._ts_meta_v2_first_time, _hyper_2_16_chunk_compressed._ts_meta_v2_last_time, _hyper_2_16_chunk_compressed."time", _hyper_2_16_chunk_compressed._ts_meta_min_1, _hyper_2_16_chunk_compressed._ts_meta_max_1, _hyper_2_16_chunk_compressed._ts_meta_v2_first_text, _hyper_2_16_chunk_compressed._ts_meta_v2_last_text, _hyper_2_16_chunk_compressed.text, _hyper_2_16_chunk_compressed.val
 
 SELECT device_id, text FROM varchar
 GROUP BY device_id, text;
@@ -628,16 +628,16 @@ ORDER BY device_id DESC, text DESC;
 --- QUERY PLAN ---
  Merge Append
    Sort Key: "varchar".device_id DESC, "varchar".text DESC
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_26_chunk
-         Output: _hyper_3_26_chunk."time", _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text, _hyper_3_26_chunk.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_15_chunk
+         Output: _hyper_2_15_chunk."time", _hyper_2_15_chunk.device_id, _hyper_2_15_chunk.text, _hyper_2_15_chunk.val
          Reverse: true
-         ->  Index Scan Backward using compress_hyper_4_28_chunk_device_id__ts_meta_v2_first_text__idx on _timescaledb_internal.compress_hyper_4_28_chunk
-               Output: compress_hyper_4_28_chunk._ts_meta_count, compress_hyper_4_28_chunk.device_id, compress_hyper_4_28_chunk._ts_meta_min_2, compress_hyper_4_28_chunk._ts_meta_max_2, compress_hyper_4_28_chunk._ts_meta_v2_first_time, compress_hyper_4_28_chunk._ts_meta_v2_last_time, compress_hyper_4_28_chunk."time", compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1, compress_hyper_4_28_chunk._ts_meta_v2_first_text, compress_hyper_4_28_chunk._ts_meta_v2_last_text, compress_hyper_4_28_chunk.text, compress_hyper_4_28_chunk.val
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_27_chunk
-         Output: _hyper_3_27_chunk."time", _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text, _hyper_3_27_chunk.val
+         ->  Index Scan Backward using _hyper_2_15_chunk_compressed_device_id__ts_meta_v2_first_te_idx on _timescaledb_internal._hyper_2_15_chunk_compressed
+               Output: _hyper_2_15_chunk_compressed._ts_meta_count, _hyper_2_15_chunk_compressed.device_id, _hyper_2_15_chunk_compressed._ts_meta_min_2, _hyper_2_15_chunk_compressed._ts_meta_max_2, _hyper_2_15_chunk_compressed._ts_meta_v2_first_time, _hyper_2_15_chunk_compressed._ts_meta_v2_last_time, _hyper_2_15_chunk_compressed."time", _hyper_2_15_chunk_compressed._ts_meta_min_1, _hyper_2_15_chunk_compressed._ts_meta_max_1, _hyper_2_15_chunk_compressed._ts_meta_v2_first_text, _hyper_2_15_chunk_compressed._ts_meta_v2_last_text, _hyper_2_15_chunk_compressed.text, _hyper_2_15_chunk_compressed.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_16_chunk
+         Output: _hyper_2_16_chunk."time", _hyper_2_16_chunk.device_id, _hyper_2_16_chunk.text, _hyper_2_16_chunk.val
          Reverse: true
-         ->  Index Scan Backward using compress_hyper_4_29_chunk_device_id__ts_meta_v2_first_text__idx on _timescaledb_internal.compress_hyper_4_29_chunk
-               Output: compress_hyper_4_29_chunk._ts_meta_count, compress_hyper_4_29_chunk.device_id, compress_hyper_4_29_chunk._ts_meta_min_2, compress_hyper_4_29_chunk._ts_meta_max_2, compress_hyper_4_29_chunk._ts_meta_v2_first_time, compress_hyper_4_29_chunk._ts_meta_v2_last_time, compress_hyper_4_29_chunk."time", compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1, compress_hyper_4_29_chunk._ts_meta_v2_first_text, compress_hyper_4_29_chunk._ts_meta_v2_last_text, compress_hyper_4_29_chunk.text, compress_hyper_4_29_chunk.val
+         ->  Index Scan Backward using _hyper_2_16_chunk_compressed_device_id__ts_meta_v2_first_te_idx on _timescaledb_internal._hyper_2_16_chunk_compressed
+               Output: _hyper_2_16_chunk_compressed._ts_meta_count, _hyper_2_16_chunk_compressed.device_id, _hyper_2_16_chunk_compressed._ts_meta_min_2, _hyper_2_16_chunk_compressed._ts_meta_max_2, _hyper_2_16_chunk_compressed._ts_meta_v2_first_time, _hyper_2_16_chunk_compressed._ts_meta_v2_last_time, _hyper_2_16_chunk_compressed."time", _hyper_2_16_chunk_compressed._ts_meta_min_1, _hyper_2_16_chunk_compressed._ts_meta_max_1, _hyper_2_16_chunk_compressed._ts_meta_v2_first_text, _hyper_2_16_chunk_compressed._ts_meta_v2_last_text, _hyper_2_16_chunk_compressed.text, _hyper_2_16_chunk_compressed.val
 
 SELECT * FROM varchar
 ORDER BY device_id DESC, text DESC;
@@ -661,22 +661,22 @@ ORDER BY device_id DESC, text DESC;
 --- QUERY PLAN ---
  Merge Append
    Sort Key: "varchar".device_id DESC, "varchar".text DESC
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_26_chunk
-         Output: _hyper_3_26_chunk."time", _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text, _hyper_3_26_chunk.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_15_chunk
+         Output: _hyper_2_15_chunk."time", _hyper_2_15_chunk.device_id, _hyper_2_15_chunk.text, _hyper_2_15_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_4_28_chunk._ts_meta_count, compress_hyper_4_28_chunk.device_id, compress_hyper_4_28_chunk._ts_meta_min_2, compress_hyper_4_28_chunk._ts_meta_max_2, compress_hyper_4_28_chunk._ts_meta_v2_first_time, compress_hyper_4_28_chunk._ts_meta_v2_last_time, compress_hyper_4_28_chunk."time", compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1, compress_hyper_4_28_chunk._ts_meta_v2_first_text, compress_hyper_4_28_chunk._ts_meta_v2_last_text, compress_hyper_4_28_chunk.text, compress_hyper_4_28_chunk.val
-               Sort Key: compress_hyper_4_28_chunk.device_id DESC, compress_hyper_4_28_chunk._ts_meta_v2_first_text DESC, compress_hyper_4_28_chunk._ts_meta_v2_last_text DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_4_28_chunk
-                     Output: compress_hyper_4_28_chunk._ts_meta_count, compress_hyper_4_28_chunk.device_id, compress_hyper_4_28_chunk._ts_meta_min_2, compress_hyper_4_28_chunk._ts_meta_max_2, compress_hyper_4_28_chunk._ts_meta_v2_first_time, compress_hyper_4_28_chunk._ts_meta_v2_last_time, compress_hyper_4_28_chunk."time", compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1, compress_hyper_4_28_chunk._ts_meta_v2_first_text, compress_hyper_4_28_chunk._ts_meta_v2_last_text, compress_hyper_4_28_chunk.text, compress_hyper_4_28_chunk.val
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_27_chunk
-         Output: _hyper_3_27_chunk."time", _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text, _hyper_3_27_chunk.val
+               Output: _hyper_2_15_chunk_compressed._ts_meta_count, _hyper_2_15_chunk_compressed.device_id, _hyper_2_15_chunk_compressed._ts_meta_min_2, _hyper_2_15_chunk_compressed._ts_meta_max_2, _hyper_2_15_chunk_compressed._ts_meta_v2_first_time, _hyper_2_15_chunk_compressed._ts_meta_v2_last_time, _hyper_2_15_chunk_compressed."time", _hyper_2_15_chunk_compressed._ts_meta_min_1, _hyper_2_15_chunk_compressed._ts_meta_max_1, _hyper_2_15_chunk_compressed._ts_meta_v2_first_text, _hyper_2_15_chunk_compressed._ts_meta_v2_last_text, _hyper_2_15_chunk_compressed.text, _hyper_2_15_chunk_compressed.val
+               Sort Key: _hyper_2_15_chunk_compressed.device_id DESC, _hyper_2_15_chunk_compressed._ts_meta_v2_first_text DESC, _hyper_2_15_chunk_compressed._ts_meta_v2_last_text DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_2_15_chunk_compressed
+                     Output: _hyper_2_15_chunk_compressed._ts_meta_count, _hyper_2_15_chunk_compressed.device_id, _hyper_2_15_chunk_compressed._ts_meta_min_2, _hyper_2_15_chunk_compressed._ts_meta_max_2, _hyper_2_15_chunk_compressed._ts_meta_v2_first_time, _hyper_2_15_chunk_compressed._ts_meta_v2_last_time, _hyper_2_15_chunk_compressed."time", _hyper_2_15_chunk_compressed._ts_meta_min_1, _hyper_2_15_chunk_compressed._ts_meta_max_1, _hyper_2_15_chunk_compressed._ts_meta_v2_first_text, _hyper_2_15_chunk_compressed._ts_meta_v2_last_text, _hyper_2_15_chunk_compressed.text, _hyper_2_15_chunk_compressed.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_16_chunk
+         Output: _hyper_2_16_chunk."time", _hyper_2_16_chunk.device_id, _hyper_2_16_chunk.text, _hyper_2_16_chunk.val
          Reverse: true
          ->  Sort
-               Output: compress_hyper_4_29_chunk._ts_meta_count, compress_hyper_4_29_chunk.device_id, compress_hyper_4_29_chunk._ts_meta_min_2, compress_hyper_4_29_chunk._ts_meta_max_2, compress_hyper_4_29_chunk._ts_meta_v2_first_time, compress_hyper_4_29_chunk._ts_meta_v2_last_time, compress_hyper_4_29_chunk."time", compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1, compress_hyper_4_29_chunk._ts_meta_v2_first_text, compress_hyper_4_29_chunk._ts_meta_v2_last_text, compress_hyper_4_29_chunk.text, compress_hyper_4_29_chunk.val
-               Sort Key: compress_hyper_4_29_chunk.device_id DESC, compress_hyper_4_29_chunk._ts_meta_v2_first_text DESC, compress_hyper_4_29_chunk._ts_meta_v2_last_text DESC
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_4_29_chunk
-                     Output: compress_hyper_4_29_chunk._ts_meta_count, compress_hyper_4_29_chunk.device_id, compress_hyper_4_29_chunk._ts_meta_min_2, compress_hyper_4_29_chunk._ts_meta_max_2, compress_hyper_4_29_chunk._ts_meta_v2_first_time, compress_hyper_4_29_chunk._ts_meta_v2_last_time, compress_hyper_4_29_chunk."time", compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1, compress_hyper_4_29_chunk._ts_meta_v2_first_text, compress_hyper_4_29_chunk._ts_meta_v2_last_text, compress_hyper_4_29_chunk.text, compress_hyper_4_29_chunk.val
+               Output: _hyper_2_16_chunk_compressed._ts_meta_count, _hyper_2_16_chunk_compressed.device_id, _hyper_2_16_chunk_compressed._ts_meta_min_2, _hyper_2_16_chunk_compressed._ts_meta_max_2, _hyper_2_16_chunk_compressed._ts_meta_v2_first_time, _hyper_2_16_chunk_compressed._ts_meta_v2_last_time, _hyper_2_16_chunk_compressed."time", _hyper_2_16_chunk_compressed._ts_meta_min_1, _hyper_2_16_chunk_compressed._ts_meta_max_1, _hyper_2_16_chunk_compressed._ts_meta_v2_first_text, _hyper_2_16_chunk_compressed._ts_meta_v2_last_text, _hyper_2_16_chunk_compressed.text, _hyper_2_16_chunk_compressed.val
+               Sort Key: _hyper_2_16_chunk_compressed.device_id DESC, _hyper_2_16_chunk_compressed._ts_meta_v2_first_text DESC, _hyper_2_16_chunk_compressed._ts_meta_v2_last_text DESC
+               ->  Seq Scan on _timescaledb_internal._hyper_2_16_chunk_compressed
+                     Output: _hyper_2_16_chunk_compressed._ts_meta_count, _hyper_2_16_chunk_compressed.device_id, _hyper_2_16_chunk_compressed._ts_meta_min_2, _hyper_2_16_chunk_compressed._ts_meta_max_2, _hyper_2_16_chunk_compressed._ts_meta_v2_first_time, _hyper_2_16_chunk_compressed._ts_meta_v2_last_time, _hyper_2_16_chunk_compressed."time", _hyper_2_16_chunk_compressed._ts_meta_min_1, _hyper_2_16_chunk_compressed._ts_meta_max_1, _hyper_2_16_chunk_compressed._ts_meta_v2_first_text, _hyper_2_16_chunk_compressed._ts_meta_v2_last_text, _hyper_2_16_chunk_compressed.text, _hyper_2_16_chunk_compressed.val
 
 SELECT * FROM varchar
 ORDER BY device_id DESC, text DESC;

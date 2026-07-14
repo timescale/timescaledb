@@ -22,8 +22,8 @@ SELECT oid::regclass,relpersistence from pg_class where relpersistence = 'u' AND
  t1_time_idx                                                                           | u
  _timescaledb_internal._hyper_1_1_chunk                                                | u
  _timescaledb_internal._hyper_1_1_chunk_t1_time_idx                                    | u
- _timescaledb_internal.compress_hyper_2_2_chunk                                        | u
- _timescaledb_internal.compress_hyper_2_2_chunk__ts_meta_v2_first_time__ts_meta_v2_idx | u
+ _timescaledb_internal._hyper_1_1_chunk_compressed                                     | u
+ _timescaledb_internal._hyper_1_1_chunk_compressed__ts_meta_v2_first_time__ts_meta_idx | u
 
 ALTER TABLE t1 SET LOGGED;
 SELECT oid::regclass,relpersistence from pg_class where relpersistence = 'u' AND relnamespace <> 'pg_toast'::regnamespace ORDER BY oid::regclass;
@@ -38,8 +38,8 @@ SELECT oid::regclass,relpersistence from pg_class where relpersistence = 'u' AND
 ---------------------------------------------------------------------------------------+----------------
  _timescaledb_internal._hyper_1_1_chunk                                                | u
  _timescaledb_internal._hyper_1_1_chunk_t1_time_idx                                    | u
- _timescaledb_internal.compress_hyper_2_2_chunk                                        | u
- _timescaledb_internal.compress_hyper_2_2_chunk__ts_meta_v2_first_time__ts_meta_v2_idx | u
+ _timescaledb_internal._hyper_1_1_chunk_compressed                                     | u
+ _timescaledb_internal._hyper_1_1_chunk_compressed__ts_meta_v2_first_time__ts_meta_idx | u
 
 ALTER TABLE t1 SET LOGGED;
 -- all objects should be logged now
@@ -64,8 +64,8 @@ SELECT oid::regclass,relpersistence from pg_class where relpersistence = 'u' AND
 ----------------------------------------------------+----------------
  t2                                                 | u
  t2_time_idx                                        | u
- _timescaledb_internal._hyper_3_3_chunk             | u
- _timescaledb_internal._hyper_3_3_chunk_t2_time_idx | u
+ _timescaledb_internal._hyper_2_2_chunk             | u
+ _timescaledb_internal._hyper_2_2_chunk_t2_time_idx | u
 
 ALTER TABLE t2 SET LOGGED;
 -- everything should be logged now

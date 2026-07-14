@@ -65,7 +65,7 @@ UPDATE metrics_compressed SET v3 = 42 WHERE device_id=1 AND time > '2000-01-01' 
 -- the tests since they all use the modern layout.
 select cs.compress_relid::regclass chunk, 'c' column from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'metrics_compressed') order by ch.id limit 1
 \gset
@@ -116,10 +116,9 @@ ANALYZE metrics_space_compressed;
 ALTER TABLE metrics_space_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(show_chunks('metrics_space_compressed'));
 
--- Reindexing compressed hypertable to update statistics
--- this is for planner tests which depend on them
--- necessary because this operation was previously done by compress_chunk
-REINDEX TABLE _timescaledb_internal._compressed_hypertable_6;
+-- Do not analyze the compressed relations here: they are tiny (a single page)
+-- and accurate statistics would make the planner prefer sequential over index
+-- scans, changing the plans that the planner tests below check for.
 
 CREATE TABLE metrics_int(
     time int NOT NULL,

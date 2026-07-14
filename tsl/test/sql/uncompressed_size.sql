@@ -14,7 +14,10 @@ VACUUM FULL t2;
 SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
 SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
 
-SELECT cs.compress_relid, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk uc ON uc.id=ccs.chunk_id JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=format('%I.%I',uc.schema_name,uc.table_name)::regclass JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(cs.compress_relid)) l ON true;
+SELECT cs.compress_relid, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk uc ON uc.id=ccs.chunk_id JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=uc.relid JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(cs.compress_relid)) l ON true;
+
+-- look up the compressed chunk relation for t1 instead of hardcoding the name
+SELECT cs.compress_relid AS "COMPRESSED_CHUNK" FROM show_chunks('t1') chunk JOIN _timescaledb_catalog.compression_settings cs ON cs.relid=chunk \gset
 
 -- samplerate of 100 reads the whole chunk and matches the default
 SELECT
@@ -22,8 +25,8 @@ SELECT
   d.relation_size = s.relation_size AS relation_size_match,
   d.index_size = s.index_size AS index_size_match,
   d.total_size = s.total_size AS total_size_match
-FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk') d,
-     _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk', 100) s;
+FROM _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK') d,
+     _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK', 100) s;
 
 -- samplerate scales the sampled variable length size back up to the full chunk
 SELECT
@@ -31,13 +34,13 @@ SELECT
   s.relation_size BETWEEN d.relation_size * 0.8 AND d.relation_size * 1.2 AS relation_size_in_range,
   s.index_size BETWEEN d.index_size * 0.8 AND d.index_size * 1.2 AS index_size_in_range,
   s.total_size BETWEEN d.total_size * 0.8 AND d.total_size * 1.2 AS total_size_in_range
-FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk') d,
-     _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk', 50) s;
+FROM _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK') d,
+     _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK', 50) s;
 
 -- samplerate outside the (0, 100] range is rejected
 \set ON_ERROR_STOP 0
-SELECT * FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk', 0);
-SELECT * FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_3_chunk', -5);
+SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK', 0);
+SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(:'COMPRESSED_CHUNK', -5);
 \set ON_ERROR_STOP 1
 
 -- test NULL compression does not error and returns NULL

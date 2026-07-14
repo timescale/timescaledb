@@ -15,8 +15,8 @@
 CREATE OR REPLACE VIEW chunk_view AS
   SELECT
     ht.table_name AS hypertable_name,
-    srcch.schema_name AS schema_name,
-    srcch.table_name AS chunk_name,
+    n.nspname AS schema_name,
+    cl.relname AS chunk_name,
     _timescaledb_functions.to_timestamp(dimsl.range_start)
      AS range_start,
     dimsl.range_start AS range_start_int,
@@ -26,7 +26,9 @@ CREATE OR REPLACE VIEW chunk_view AS
   FROM _timescaledb_catalog.chunk srcch
     INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id
     INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dimsl.chunk_id = srcch.id
-    INNER JOIN _timescaledb_catalog.dimension dim ON dim.id = dimsl.dimension_id;
+    INNER JOIN _timescaledb_catalog.dimension dim ON dim.id = dimsl.dimension_id
+    INNER JOIN pg_class cl ON cl.oid = srcch.relid
+    INNER JOIN pg_namespace n ON n.oid = cl.relnamespace;
 GRANT SELECT on chunk_view TO PUBLIC;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -135,16 +137,16 @@ INSERT INTO test1.hyper1 VALUES ( 31, 31);
 SELECT * from test1.hyper1 ORDER BY 1;
 
 -- TEST unfreeze frozen chunk and then drop
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
+SELECT cl.relname AS table_name, c.status
+FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid WHERE cl.relname = :'CHUNK_NAME';
 
 SELECT  _timescaledb_functions.unfreeze_chunk( :'CHNAME');
 
 SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
 
 --verify status in catalog
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
+SELECT cl.relname AS table_name, c.status
+FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid WHERE cl.relname = :'CHUNK_NAME';
 
 -- Test update works after unfreeze
 UPDATE test1.hyper1 SET temp = 40;
@@ -177,8 +179,8 @@ ORDER BY chunk_name LIMIT 1
 SELECT  compress_chunk( :'CHNAME');
 SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME');
 
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
+SELECT cl.relname AS table_name, c.status
+FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid WHERE cl.relname = :'CHUNK_NAME';
 
 --now chunk is frozen, cannot decompress
 \set ON_ERROR_STOP 0
@@ -380,16 +382,16 @@ BEGIN;
 -- before updating the ranges
 :EXPLAIN SELECT * FROM ht_try ORDER BY 1;
 -- range before update
-SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
-WHERE c.table_name = 'child_fdw_table' AND ds.chunk_id = c.id;
+SELECT ds.chunk_id, cl.relname AS table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid, _timescaledb_catalog.dimension_slice ds
+WHERE cl.relname = 'child_fdw_table' AND ds.chunk_id = c.id;
 
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-01 01:00'::timestamptz, '2020-01-02');
 SELECT id, schema_name, table_name, status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
 -- verify range was updated
-SELECT ds.chunk_id, c.table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.dimension_slice ds
-WHERE c.table_name = 'child_fdw_table' AND ds.chunk_id = c.id;
+SELECT ds.chunk_id, cl.relname AS table_name, c.status, c.osm_chunk, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid, _timescaledb_catalog.dimension_slice ds
+WHERE cl.relname = 'child_fdw_table' AND ds.chunk_id = c.id;
 -- should be ordered append now
 :EXPLAIN SELECT * FROM ht_try ORDER BY 1;
 SELECT * FROM ht_try ORDER BY 1;
@@ -539,7 +541,7 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table'
 -- transaction so that we could roll it back in the end
 BEGIN;
 -- get OSM chunk id
-SELECT c.id as osm_chunk_id, c.table_name as osm_chunk_name, ds.id as osm_dimension_slice
+SELECT c.id as osm_chunk_id, c.relid::text as osm_chunk_name, ds.id as osm_dimension_slice
 FROM _timescaledb_catalog.chunk c
 JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
 JOIN _timescaledb_catalog.dimension_slice ds ON ds.chunk_id = c.id
@@ -578,11 +580,11 @@ DROP TABLE ht_try;
 
 SELECT relname FROM pg_class WHERE relname = 'child_fdw_table';
 
-SELECT table_name, status, osm_chunk
+SELECT relid::text AS table_name, status, osm_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
                         WHERE table_name = 'ht_try')
-ORDER BY table_name;
+ORDER BY relid::text COLLATE "C";
 
 -- TEST can create OSM chunk if there are constraints on the hypertable
 \c :TEST_DBNAME :ROLE_4
@@ -631,11 +633,11 @@ FROM chunk_view
 WHERE hypertable_name = 'hyper_constr'
 ORDER BY chunk_name;
 
-SELECT table_name, status, osm_chunk
+SELECT relid::text AS table_name, status, osm_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
                         WHERE table_name = 'hyper_constr')
-ORDER BY table_name;
+ORDER BY relid::text COLLATE "C";
 
 SELECT * FROM hyper_constr order by time;
 -- TEST verify data from fdw is selected correctly
@@ -648,8 +650,9 @@ SELECT * FROM test.show_constraints('child_hyper_constr');
 -- dimension slices owned by the OSM chunk
 SELECT ds.id AS dimension_slice_id, ds.dimension_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
+JOIN pg_class cl ON cl.oid = c.relid
 JOIN _timescaledb_catalog.dimension_slice ds ON ds.chunk_id = c.id
-WHERE c.table_name = 'child_hyper_constr'
+WHERE cl.relname = 'child_hyper_constr'
 ORDER BY ds.id;
 
 -- TEST foreign key trigger: deleting data from foreign table measure
@@ -689,9 +692,9 @@ SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
 SELECT ts_setup_osm_hook();
 BEGIN;
 SELECT drop_chunks('hyper_constr', 10::int);
-SELECT id, table_name FROM _timescaledb_catalog.chunk
-where hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name = 'hyper_constr')
-ORDER BY id;
+SELECT c.id, cl.relname AS table_name FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid
+where c.hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name = 'hyper_constr')
+ORDER BY c.id;
 -- show_chunks will not show the OSM chunk which is visible via the above query
 SELECT show_chunks('hyper_constr');
 ROLLBACK;
@@ -727,8 +730,8 @@ ORDER BY chunk_name LIMIT 1
 SELECT _timescaledb_functions.freeze_chunk( :'COPY_CHNAME');
 
 -- Check state
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
+SELECT cl.relname AS table_name, c.status
+FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid WHERE cl.relname = :'COPY_CHUNK_NAME';
 
 \set ON_ERROR_STOP 0
 -- Copy should fail because one of che chunks is frozen
@@ -742,8 +745,8 @@ COPY test1.copy_test FROM STDIN DELIMITER ',';
 SELECT COUNT(*) FROM test1.copy_test;
 
 -- Check state
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
+SELECT cl.relname AS table_name, c.status
+FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid WHERE cl.relname = :'COPY_CHUNK_NAME';
 
 \set ON_ERROR_STOP 0
 -- Copy should fail because one of che chunks is frozen
@@ -760,8 +763,8 @@ SELECT COUNT(*) FROM test1.copy_test;
 SELECT _timescaledb_functions.unfreeze_chunk( :'COPY_CHNAME');
 
 -- Check state
-SELECT table_name, status
-FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
+SELECT cl.relname AS table_name, c.status
+FROM _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid WHERE cl.relname = :'COPY_CHUNK_NAME';
 
 -- Copy should work now
 COPY test1.copy_test FROM STDIN DELIMITER ',';
@@ -988,11 +991,11 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('ht_pub_test', 'osm_chunk_p
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_pub_test', '2020-01-01'::timestamptz, '2020-01-02');
 
 -- Check chunks also have OSM chunk
-SELECT schema_name, table_name, status, osm_chunk
+SELECT relid::text AS table_name, status, osm_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
                         WHERE table_name = 'ht_pub_test')
-ORDER BY table_name;
+ORDER BY relid::text COLLATE "C";
 
 -- Verify: still only 1 normal chunk in publication (OSM chunk NOT added)
 \c :TEST_DBNAME :ROLE_SUPERUSER

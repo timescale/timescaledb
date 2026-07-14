@@ -80,6 +80,10 @@ singlestep_update() {
             > string_to_array(regexp_replace('${current}', '[^0-9.].*\$', ''), '.')::int[]
       ORDER BY string_to_array(regexp_replace(target, '[^0-9.].*\$', ''), '.')::int[]
       LIMIT 1")
+    if [ -z "${next}" ]; then
+      echo "No update path forward from ${current} to ${TO_VERSION} (dead end at ${current})" >&2
+      exit 1
+    fi
     run_sql "ALTER EXTENSION timescaledb UPDATE TO \"${next}\";"
     current="${next}"
   done

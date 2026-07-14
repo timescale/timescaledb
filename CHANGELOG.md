@@ -2,6 +2,20 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.28.2 (2026-06-30)
+
+This release contains bug fixes since the 2.28.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#10126](https://github.com/timescale/timescaledb/pull/10126) Fix `bgw_job_stat_history` migration for 2.28.1
+* [#10133](https://github.com/timescale/timescaledb/pull/10133) Fix `chunk_constraint` migration
+* [#10137](https://github.com/timescale/timescaledb/pull/10137) Fix column ordering on `first`/`last`-based sparse indexes
+* [#10164](https://github.com/timescale/timescaledb/pull/10164) Automatically drop incompatible smallint bloom filters when upgrading instead of stopping the upgrade
+
+**Thanks**
+* @juantxorena for reporting an issue with update script for 2.28.1
+* @rusha1333 for reporting an issue when upgrading to 2.28.1
+
 ## 2.28.1 (2026-06-23)
 
 This release contains performance improvements and bug fixes since the 2.28.0 release. We recommend that you upgrade at the next available opportunity.

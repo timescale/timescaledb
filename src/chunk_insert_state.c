@@ -231,8 +231,8 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 	Relation hyper_rel = ht_rri->ri_RelationDesc;
 	ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
 
-	OnConflictSetState *onconfl = makeNode(OnConflictSetState);
-	memcpy(onconfl, ht_rri->ri_onConflict, sizeof(OnConflictSetState));
+	OnConflictActionState *onconfl = makeNode(OnConflictActionState);
+	memcpy(onconfl, ht_rri->ri_onConflict, sizeof(OnConflictActionState));
 	chunk_rri->ri_onConflict = onconfl;
 
 	chunk_rri->ri_RootToChildMap = map;

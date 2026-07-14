@@ -66,45 +66,158 @@
 #error "Unsupported PostgreSQL version"
 #endif
 
-#if ((PG_VERSION_NUM >= 150009 && PG_VERSION_NUM < 160000) ||                                      \
-	 (PG_VERSION_NUM >= 160005 && PG_VERSION_NUM < 170000) || (PG_VERSION_NUM >= 170001))
 /*
- * The above versions introduced a fix for potentially losing updates to
- * pg_class and pg_database due to inplace updates done to those catalog
- * tables by PostgreSQL. The fix requires taking a lock on the tuple via
- * SearchSysCacheLocked1(). For older PG versions, we just map the new
- * function to the unlocked version and the unlocking of the tuple is a noop.
- *
- * https://github.com/postgres/postgres/commit/3b7a689e1a805c4dac2f35ff14fd5c9fdbddf150
- *
- * Here's an excerpt from README.tuplock that explains the need for additional
- * tuple locks:
- *
- * If IsInplaceUpdateRelation() returns true for a table, the table is a
- * system catalog that receives systable_inplace_update_begin() calls.
- * Preparing a heap_update() of these tables follows additional locking rules,
- * to ensure we don't lose the effects of an inplace update. In particular,
- * consider a moment when a backend has fetched the old tuple to modify, not
- * yet having called heap_update(). Another backend's inplace update starting
- * then can't conclude until the heap_update() places its new tuple in a
- * buffer. We enforce that using locktags as follows. While DDL code is the
- * main audience, the executor follows these rules to make e.g. "MERGE INTO
- * pg_class" safer. Locking rules are per-catalog:
- *
- * pg_class heap_update() callers: before copying the tuple to modify, take a
- * lock on the tuple, a ShareUpdateExclusiveLock on the relation, or a
- * ShareRowExclusiveLock or stricter on the relation.
+ * PG19 renamed UpperUniquePath to UniquePath
+ * https://github.com/postgres/postgres/commit/24225ad9aa
  */
-#define SYSCACHE_TUPLE_LOCK_NEEDED 1
-#define AssertSufficientPgClassUpdateLockHeld(relid)                                               \
-	Assert(CheckRelationOidLockedByMe(relid, ShareUpdateExclusiveLock, false) ||                   \
-		   CheckRelationOidLockedByMe(relid, ShareRowExclusiveLock, true));
-#define UnlockSysCacheTuple(rel, tid) UnlockTuple(rel, tid, InplaceUpdateTupleLock);
+#if PG19_LT
+#define UniquePathCompat UpperUniquePath
+#define T_UniquePathCompat T_UpperUniquePath
+#define create_unique_path create_upper_unique_path
 #else
-#define SearchSysCacheLockedCopy1(rel, datum) SearchSysCacheCopy1(rel, datum)
-#define UnlockSysCacheTuple(rel, tid)
-#define AssertSufficientPgClassUpdateLockHeld(relid)
+#define UniquePathCompat UniquePath
+#define T_UniquePathCompat T_UniquePath
 #endif
+
+/*
+ * PG19 renamed OnConflictSetState to OnConflictActionState.
+ * https://github.com/postgres/postgres/commit/8832709
+ */
+#if PG19_LT
+#define OnConflictActionState OnConflictSetState
+#define T_OnConflictActionState T_OnConflictSetState
+#endif
+
+/*
+ * PG19 removed the PointerIsValid macro that used to live in c.h. Provide it
+ * when the server headers no longer do.
+ */
+#ifndef PointerIsValid
+#define PointerIsValid(pointer) ((const void *) (pointer) != NULL)
+#endif
+
+/*
+ * PG19 added a "flags" argument to table_beginscan(). Provide a wrapper taking
+ * the new signature that drops the flags on earlier versions.
+ */
+#include <access/tableam.h>
+static inline TableScanDesc
+table_beginscan_compat(Relation rel, Snapshot snapshot, int nkeys, ScanKey key, uint32 flags)
+{
+#if PG19_GE
+	return table_beginscan(rel, snapshot, nkeys, key, flags);
+#else
+	return table_beginscan(rel, snapshot, nkeys, key);
+#endif
+}
+
+/*
+ * PG19 replaced the "changingPart" boolean of table_tuple_delete() with an
+ * "options" bitmask and added an "options" argument to table_tuple_update().
+ * Provide wrappers with the new signature; on earlier versions the changingPart
+ * flag is derived from the bitmask and the update options are dropped.
+ */
+#if PG19_LT
+#define TABLE_DELETE_CHANGING_PARTITION (1 << 0)
+#endif
+
+static inline TM_Result
+table_tuple_delete_compat(Relation rel, ItemPointer tid, CommandId cid, uint32 options,
+						  Snapshot snapshot, Snapshot crosscheck, bool wait, TM_FailureData *tmfd)
+{
+#if PG19_GE
+	return table_tuple_delete(rel, tid, cid, options, snapshot, crosscheck, wait, tmfd);
+#else
+	return table_tuple_delete(rel,
+							  tid,
+							  cid,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  (options & TABLE_DELETE_CHANGING_PARTITION) != 0);
+#endif
+}
+
+static inline TM_Result
+table_tuple_update_compat(Relation rel, ItemPointer otid, TupleTableSlot *slot, CommandId cid,
+						  uint32 options, Snapshot snapshot, Snapshot crosscheck, bool wait,
+						  TM_FailureData *tmfd, LockTupleMode *lockmode,
+						  TU_UpdateIndexes *update_indexes)
+{
+#if PG19_GE
+	return table_tuple_update(rel,
+							  otid,
+							  slot,
+							  cid,
+							  options,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  lockmode,
+							  update_indexes);
+#else
+	return table_tuple_update(rel,
+							  otid,
+							  slot,
+							  cid,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  lockmode,
+							  update_indexes);
+#endif
+}
+
+/*
+ * PG19 added a "flags" argument to MakeTupleTableSlot(). Provide a wrapper with
+ * the new signature that drops the flags on earlier versions.
+ */
+#if PG19_GE
+#define MakeTupleTableSlotCompat(tupleDesc, tts_ops, flags)                                        \
+	MakeTupleTableSlot(tupleDesc, tts_ops, flags)
+#else
+#define MakeTupleTableSlotCompat(tupleDesc, tts_ops, flags) MakeTupleTableSlot(tupleDesc, tts_ops)
+#endif
+
+#if PG19_GE
+/*
+ * PG19 generalized CLUSTER into REPACK and renamed the CLUSTER progress
+ * constants accordingly.
+ */
+#define PROGRESS_CLUSTER_PHASE PROGRESS_REPACK_PHASE
+#define PROGRESS_CLUSTER_PHASE_SWAP_REL_FILES PROGRESS_REPACK_PHASE_SWAP_REL_FILES
+#define PROGRESS_CLUSTER_PHASE_REBUILD_INDEX PROGRESS_REPACK_PHASE_REBUILD_INDEX
+#define PROGRESS_CLUSTER_PHASE_FINAL_CLEANUP PROGRESS_REPACK_PHASE_FINAL_CLEANUP
+#endif
+
+/*
+ * PG19 reworked jsonb construction: pushJsonbValue() now takes a JsonbInState *
+ * and returns void, leaving the completed value in state->result (populated only
+ * when the outermost container is closed). Older versions took a JsonbParseState **
+ * and returned the completed value directly.
+ *
+ * https://github.com/postgres/postgres/commit/0986e95161
+ */
+#if PG19_LT
+typedef struct JsonbInState
+{
+	JsonbParseState *parseState;
+	JsonbValue *result;
+} JsonbInState;
+#endif
+
+static inline void
+pushJsonbValueCompat(JsonbInState *state, JsonbIteratorToken seq, JsonbValue *jbval)
+{
+#if PG19_GE
+	pushJsonbValue(state, seq, jbval);
+#else
+	state->result = pushJsonbValue(&state->parseState, seq, jbval);
+#endif
+}
 
 /*
  * The following are compatibility functions for different versions of
@@ -126,6 +239,14 @@
  * behavior of the new version we simply adopt the new version's name.
  */
 
+/*
+ * GetRelationPublications was renamed to GetRelationIncludedPublications in PG19.
+ * https://github.com/postgres/postgres/commit/fd366065e0
+ */
+#if PG19_LT
+#define GetRelationIncludedPublications(relid) GetRelationPublications(relid)
+#endif
+
 #if PG19_LT
 #define ExecInsertIndexTuplesCompat(rri,                                                           \
 									slot,                                                          \
@@ -143,6 +264,24 @@
 						  specConflict,                                                            \
 						  arbiterIndexes,                                                          \
 						  onlySummarizing)
+#else
+/* PG19 replaced the bool arguments with a flags bitmask and reordered them. */
+#define ExecInsertIndexTuplesCompat(rri,                                                           \
+									slot,                                                          \
+									estate,                                                        \
+									update,                                                        \
+									noDupErr,                                                      \
+									specConflict,                                                  \
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
+	ExecInsertIndexTuples(rri,                                                                     \
+						  estate,                                                                  \
+						  (((update) ? EIIT_IS_UPDATE : 0) |                                       \
+						   ((noDupErr) ? EIIT_NO_DUPE_ERROR : 0) |                                 \
+						   ((onlySummarizing) ? EIIT_ONLY_SUMMARIZING : 0)),                       \
+						  slot,                                                                    \
+						  arbiterIndexes,                                                          \
+						  specConflict)
 #endif
 
 /* fmgr
@@ -187,14 +326,14 @@
 #define ts_tuptableslot_set_table_oid(slot, table_oid) (slot)->tts_tableOid = table_oid
 
 static inline ClusterParams *
-get_cluster_options(const ClusterStmt *stmt)
+get_cluster_options(List *stmt_params)
 {
 	ListCell *lc;
 	ClusterParams *params = palloc0(sizeof(ClusterParams));
 	bool verbose = false;
 
 	/* Parse option list */
-	foreach (lc, stmt->params)
+	foreach (lc, stmt_params)
 	{
 		DefElem *opt = (DefElem *) lfirst(lc);
 		if (strcmp(opt->defname, "verbose") == 0)
@@ -272,6 +411,31 @@ get_reindex_options(ReindexStmt *stmt)
 						  skip_build,                                                              \
 						  quiet)                                                                   \
 	DefineIndex(relationId,                                                                        \
+				stmt,                                                                              \
+				indexRelationId,                                                                   \
+				parentIndexId,                                                                     \
+				parentConstraintId,                                                                \
+				total_parts,                                                                       \
+				is_alter_table,                                                                    \
+				check_rights,                                                                      \
+				check_not_in_use,                                                                  \
+				skip_build,                                                                        \
+				quiet)
+#else
+/* PG19 adds a leading ParseState argument to DefineIndex. */
+#define DefineIndexCompat(relationId,                                                              \
+						  stmt,                                                                    \
+						  indexRelationId,                                                         \
+						  parentIndexId,                                                           \
+						  parentConstraintId,                                                      \
+						  total_parts,                                                             \
+						  is_alter_table,                                                          \
+						  check_rights,                                                            \
+						  check_not_in_use,                                                        \
+						  skip_build,                                                              \
+						  quiet)                                                                   \
+	DefineIndex(NULL,                                                                              \
+				relationId,                                                                        \
 				stmt,                                                                              \
 				indexRelationId,                                                                   \
 				parentIndexId,                                                                     \
@@ -485,7 +649,7 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, nkeys, norderbys)
-#else
+#elif PG19_LT
 #define index_beginscan_compat(heapRelation,                                                       \
 							   indexRelation,                                                      \
 							   snapshot,                                                           \
@@ -493,6 +657,15 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys)
+#else
+/* PG19 adds a trailing flags argument to index_beginscan. */
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys, 0)
 #endif
 
 /* Copied from PG17. We can remove it once we deprecate older versions. */

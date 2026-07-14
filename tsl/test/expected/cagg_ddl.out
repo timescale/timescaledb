@@ -814,7 +814,7 @@ SELECT ht.schema_name, ht.table_name, relname AS chunk_name,
   FROM pg_class c,
        _timescaledb_catalog.hypertable ht,
        _timescaledb_catalog.chunk ch
- WHERE ch.table_name = c.relname AND ht.id = ch.hypertable_id;
+ WHERE ch.relid = c.oid AND ht.id = ch.hypertable_id;
 CREATE TABLE whatever(time BIGINT NOT NULL, data INTEGER);
 SELECT hypertable_id AS whatever_nid
   FROM create_hypertable('whatever', 'time', chunk_time_interval => 10)
@@ -1645,7 +1645,7 @@ CREATE TABLE transactions
 SELECT create_hypertable('transactions', 'time');
      create_hypertable      
 ----------------------------
- (45,public,transactions,t)
+ (43,public,transactions,t)
 
 INSERT INTO transactions VALUES ( '2018-01-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
 INSERT INTO transactions VALUES ( '2018-01-02 09:30:00-08', 0, 0, 0, 0, 0, -1, 10);
@@ -1687,7 +1687,7 @@ WHERE user_view_name = 'cashflows'
 -- Show both the columns and the view definitions to see that
 -- references are correct in the view as well.
 \d+ "_timescaledb_internal".:"DIRECT_VIEW_NAME"
-                         View "_timescaledb_internal._direct_view_46"
+                         View "_timescaledb_internal._direct_view_44"
   Column   |           Type           | Collation | Nullable | Default | Storage | Description 
 -----------+--------------------------+-----------+----------+---------+---------+-------------
  bucket    | timestamp with time zone |           |          |         | plain   | 
@@ -1706,7 +1706,7 @@ View definition:
   GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
 \d+ "_timescaledb_internal".:"PART_VIEW_NAME"
-                         View "_timescaledb_internal._partial_view_46"
+                         View "_timescaledb_internal._partial_view_44"
   Column   |           Type           | Collation | Nullable | Default | Storage | Description 
 -----------+--------------------------+-----------+----------+---------+---------+-------------
  bucket    | timestamp with time zone |           |          |         | plain   | 
@@ -1725,7 +1725,7 @@ View definition:
   GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
-                          Table "_timescaledb_internal._materialized_hypertable_46"
+                          Table "_timescaledb_internal._materialized_hypertable_44"
   Column   |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
 -----------+--------------------------+-----------+----------+---------+---------+--------------+-------------
  bucket    | timestamp with time zone |           | not null |         | plain   |              | 
@@ -1733,10 +1733,10 @@ View definition:
  cashflow  | bigint                   |           |          |         | plain   |              | 
  cashflow2 | bigint                   |           |          |         | plain   |              | 
 Indexes:
-    "_materialized_hypertable_46_amount_bucket_idx" btree (amount, bucket DESC)
-    "_materialized_hypertable_46_bucket_idx" btree (bucket DESC)
-Child tables: _timescaledb_internal._hyper_46_55_chunk,
-              _timescaledb_internal._hyper_46_56_chunk
+    "_materialized_hypertable_44_amount_bucket_idx" btree (amount, bucket DESC)
+    "_materialized_hypertable_44_bucket_idx" btree (bucket DESC)
+Child tables: _timescaledb_internal._hyper_44_55_chunk,
+              _timescaledb_internal._hyper_44_56_chunk
 
 \d+ 'cashflows'
                                     View "public.cashflows"
@@ -1751,7 +1751,7 @@ View definition:
     amount,
     cashflow,
     cashflow2
-   FROM _timescaledb_internal._materialized_hypertable_46;
+   FROM _timescaledb_internal._materialized_hypertable_44;
 
 SELECT * FROM cashflows ORDER BY cashflows;
             bucket            | amount | cashflow | cashflow2 
@@ -1869,7 +1869,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
     create_hypertable     
 --------------------------
- (53,public,conditions,t)
+ (51,public,conditions,t)
 
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
 INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'POR', 100);
@@ -1901,7 +1901,7 @@ View definition:
  SELECT location,
     bucket,
     avg
-   FROM _timescaledb_internal._materialized_hypertable_54;
+   FROM _timescaledb_internal._materialized_hypertable_52;
 
 -- Should return NO ROWS
 SELECT * FROM conditions_daily ORDER BY bucket, location;
@@ -1917,17 +1917,17 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=fals
  bucket   | timestamp with time zone |           |          |         | plain    | 
  avg      | double precision         |           |          |         | plain    | 
 View definition:
- SELECT _materialized_hypertable_54.location,
-    _materialized_hypertable_54.bucket,
-    _materialized_hypertable_54.avg
-   FROM _timescaledb_internal._materialized_hypertable_54
-  WHERE _materialized_hypertable_54.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(54)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_52.location,
+    _materialized_hypertable_52.bucket,
+    _materialized_hypertable_52.avg
+   FROM _timescaledb_internal._materialized_hypertable_52
+  WHERE _materialized_hypertable_52.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(52)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT conditions.location,
     time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     avg(conditions.temperature) AS avg
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(54)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(52)), '-infinity'::timestamp with time zone)
   GROUP BY conditions.location, (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- Should return ROWS because now it is realtime
@@ -1954,7 +1954,7 @@ View definition:
  SELECT location,
     bucket,
     avg
-   FROM _timescaledb_internal._materialized_hypertable_54;
+   FROM _timescaledb_internal._materialized_hypertable_52;
 
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 SELECT * FROM conditions_daily ORDER BY bucket, location;
@@ -2042,7 +2042,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
      1
 
 DROP MATERIALIZED VIEW cagg1;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_57_70_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_55_70_chunk
 SELECT * FROM _timescaledb_catalog.compression_settings;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------

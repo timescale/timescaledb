@@ -23,31 +23,42 @@ SELECT count(compress_chunk(ch, true)) FROM show_chunks('compress') ch;
 SELECT * FROM compress ORDER BY time DESC, small_cardinality, large_cardinality, some_double, some_int, some_custom, some_bool;
 
 \x on
-WITH hypertables AS (
-        SELECT ht.id hypertable_id,
-	       ht.schema_name,
-	       ht.table_name,
-	       ht.compressed_hypertable_id
-          FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
-	  JOIN _timescaledb_catalog.hypertable ht ON relname = ht.table_name AND nspname = ht.schema_name
-    ),
-    table_summary AS (
-	SELECT format('%I.%I', ht1.schema_name, ht1.table_name) AS hypertable_name,
-	       format('%I.%I', ht2.schema_name, ht2.table_name) AS compressed_hypertable_name,
-	       format('%I.%I', ch2.schema_name, ch2.table_name) AS compressed_chunk_name
-	FROM hypertables ht1
-	JOIN hypertables ht2 ON ht1.compressed_hypertable_id = ht2.hypertable_id
-        JOIN _timescaledb_catalog.chunk ch2 ON ch2.hypertable_id = ht2.hypertable_id
-    )
-SELECT hypertable_name,
-       (SELECT relacl FROM pg_class WHERE oid = hypertable_name::regclass) AS hypertable_acl,
-       compressed_hypertable_name,
-       (SELECT relacl FROM pg_class WHERE oid = compressed_hypertable_name::regclass) AS compressed_hypertable_acl,
-       -- the compressed relation keeps its pre-upgrade name across a downgrade,
-       -- so normalize it; the acl is still looked up by the real name
-       pg_temp.normalize_chunk(compressed_chunk_name) AS compressed_chunk_name,
-       (SELECT relacl FROM pg_class WHERE oid = compressed_chunk_name::regclass) AS compressed_chunk_acl
-  FROM table_summary
-  ORDER BY hypertable_name, compressed_hypertable_name, pg_temp.normalize_chunk(compressed_chunk_name);
+\if :has_chunk_relid
+WITH chunks AS (
+  SELECT
+    to_regclass(format('%I.%I', ht.schema_name, ht.table_name)) AS hypertable,
+    cs.relid AS uncompressed_relation,
+    cs.compress_relid AS compressed_relation
+	  FROM _timescaledb_catalog.hypertable ht
+    JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
+    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid
+)
+SELECT hypertable,
+       (SELECT relacl FROM pg_class WHERE oid = hypertable) AS hypertable_acl,
+       pg_temp.normalize_chunk(uncompressed_relation::text) AS chunk_name,
+       (SELECT relacl FROM pg_class WHERE oid = uncompressed_relation) AS uncompressed_chunk_acl,
+       pg_temp.normalize_chunk(compressed_relation::text) AS compressed_chunk_name,
+       (SELECT relacl FROM pg_class WHERE oid = compressed_relation) AS compressed_chunk_acl
+  FROM chunks
+  ORDER BY hypertable::text COLLATE "C", pg_temp.normalize_chunk(uncompressed_relation::text) COLLATE "C";
+\else
+WITH chunks AS (
+  SELECT
+    to_regclass(format('%I.%I', ht.schema_name, ht.table_name)) AS hypertable,
+    cs.relid AS uncompressed_relation,
+    cs.compress_relid AS compressed_relation
+	  FROM _timescaledb_catalog.hypertable ht
+    JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
+    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+)
+SELECT hypertable,
+       (SELECT relacl FROM pg_class WHERE oid = hypertable) AS hypertable_acl,
+       pg_temp.normalize_chunk(uncompressed_relation::text) AS chunk_name,
+       (SELECT relacl FROM pg_class WHERE oid = uncompressed_relation) AS uncompressed_chunk_acl,
+       pg_temp.normalize_chunk(compressed_relation::text) AS compressed_chunk_name,
+       (SELECT relacl FROM pg_class WHERE oid = compressed_relation) AS compressed_chunk_acl
+  FROM chunks
+  ORDER BY hypertable::text COLLATE "C", pg_temp.normalize_chunk(uncompressed_relation::text) COLLATE "C";
+\endif
 \x off
 

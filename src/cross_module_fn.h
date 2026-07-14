@@ -52,6 +52,9 @@ typedef struct CrossModuleFunctions
 	PGFunction policy_reorder_proc;
 	PGFunction policy_reorder_check;
 	PGFunction policy_reorder_remove;
+	PGFunction policy_compaction_add;
+	PGFunction policy_compaction_check;
+	PGFunction policy_compaction_remove;
 	PGFunction policy_retention_add;
 	PGFunction policy_retention_proc;
 	PGFunction policy_retention_check;
@@ -119,6 +122,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_info;
 	PGFunction compressed_data_has_nulls;
 	bool (*process_compress_table)(Hypertable *ht, WithClauseResult *with_clause_options);
+	void (*process_granular_refresh_options)(Hypertable *ht, WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
 	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
 	PGFunction create_compressed_chunk;
@@ -138,7 +142,7 @@ typedef struct CrossModuleFunctions
 								TupleTableSlot *slot);
 	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
 	void (*compressor_close)(RowCompressor *compressor, BulkWriter *bulk_writer);
-	void (*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
+	void (*compression_chunk_create)(Chunk *src_chunk);
 
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module

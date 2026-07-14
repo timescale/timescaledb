@@ -102,7 +102,7 @@ WHERE hypertable.table_name like 'test_retention_table';
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = chunk.relid AND cs.compress_relid IS NOT NULL
 WHERE hypertable.table_name like 'test_retention_table';
  count_chunks_compressed 
 -------------------------
@@ -141,7 +141,7 @@ WHERE hypertable.table_name like 'test_retention_table';
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = chunk.relid AND cs.compress_relid IS NOT NULL
 WHERE hypertable.table_name like 'test_retention_table';
  count_chunks_compressed 
 -------------------------
@@ -157,7 +157,7 @@ CREATE INDEX test_reorder_chunks_table_time_idx ON test_reorder_chunks_table(tim
 SELECT create_hypertable('test_reorder_chunks_table', 'time', chunk_time_interval => 1);
            create_hypertable            
 ----------------------------------------
- (3,public,test_reorder_chunks_table,t)
+ (2,public,test_reorder_chunks_table,t)
 
 -- These inserts should create 6 different chunks
 INSERT INTO test_reorder_chunks_table VALUES (1, 1);
@@ -170,10 +170,10 @@ INSERT INTO test_reorder_chunks_table VALUES (6, 6);
 ALTER TABLE test_reorder_chunks_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
 -- Compress 2 chunks:
 SELECT compress_chunk(show_chunks('test_reorder_chunks_table', newer_than => 2, older_than => 4));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_3_12_chunk
- _timescaledb_internal._hyper_3_13_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_2_7_chunk
+ _timescaledb_internal._hyper_2_8_chunk
 
 -- make sure we have total of 6 chunks:
 SELECT count(*) as count_chunks_uncompressed
@@ -188,7 +188,7 @@ WHERE hypertable.table_name like 'test_reorder_chunks_table';
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = chunk.relid AND cs.compress_relid IS NOT NULL
 WHERE hypertable.table_name like 'test_reorder_chunks_table';
  count_chunks_compressed 
 -------------------------
@@ -220,9 +220,9 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
 SELECT indexrelid::regclass, indisclustered
     FROM pg_index
     WHERE indisclustered = true ORDER BY 1;
-                                 indexrelid                                 | indisclustered 
-----------------------------------------------------------------------------+----------------
- _timescaledb_internal._hyper_3_11_chunk_test_reorder_chunks_table_time_idx | t
+                                indexrelid                                 | indisclustered 
+---------------------------------------------------------------------------+----------------
+ _timescaledb_internal._hyper_2_6_chunk_test_reorder_chunks_table_time_idx | t
 
 -- second call to scheduler
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
@@ -241,8 +241,8 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
 SELECT indexrelid::regclass, indisclustered
     FROM pg_index
     WHERE indisclustered = true ORDER BY 1;
-                                 indexrelid                                 | indisclustered 
-----------------------------------------------------------------------------+----------------
- _timescaledb_internal._hyper_3_11_chunk_test_reorder_chunks_table_time_idx | t
- _timescaledb_internal._hyper_3_14_chunk_test_reorder_chunks_table_time_idx | t
+                                indexrelid                                 | indisclustered 
+---------------------------------------------------------------------------+----------------
+ _timescaledb_internal._hyper_2_6_chunk_test_reorder_chunks_table_time_idx | t
+ _timescaledb_internal._hyper_2_9_chunk_test_reorder_chunks_table_time_idx | t
 

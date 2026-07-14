@@ -32,30 +32,30 @@ explain (buffers off, costs off) select * from t order by ts;
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Seq Scan on _hyper_1_1_chunk_compressed
 
 explain (buffers off, costs off) select * from t where low_card = 1 order by ts;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_v2_fir_idx on compress_hyper_2_2_chunk
+         ->  Index Scan using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
                Index Cond: (low_card = 1)
 
 explain (buffers off, costs off) select * from t where high_card = 1 order by ts;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
-         Sort Key: compress_hyper_2_2_chunk._ts_meta_v2_last_ts
-         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_v2_fir_idx on compress_hyper_2_2_chunk
+         Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_ts
+         ->  Index Scan using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
                Index Cond: (high_card = 1)
 
 explain (buffers off, costs off) select * from t where low_card = 1 and high_card = 1 order by ts;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
-         Sort Key: compress_hyper_2_2_chunk._ts_meta_v2_first_ts, compress_hyper_2_2_chunk._ts_meta_v2_last_ts
-         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_v2_fir_idx on compress_hyper_2_2_chunk
+         Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_last_ts
+         ->  Index Scan using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
                Index Cond: ((low_card = 1) AND (high_card = 1))
 
 -- Test that batch sorted merge is not disabled by enable_sort. We have another
@@ -65,8 +65,8 @@ explain (buffers off, costs off) select * from t where high_card = 1 order by ts
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
-         Sort Key: compress_hyper_2_2_chunk._ts_meta_v2_last_ts
-         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_v2_fir_idx on compress_hyper_2_2_chunk
+         Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_ts
+         ->  Index Scan using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
                Index Cond: (high_card = 1)
 
 reset enable_sort;
@@ -75,8 +75,8 @@ explain (buffers off, costs off) select * from t where high_card < 10 order by t
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
-         Sort Key: compress_hyper_2_2_chunk._ts_meta_v2_last_ts
-         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_v2_fir_idx on compress_hyper_2_2_chunk
+         Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_ts
+         ->  Index Scan using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
                Index Cond: (high_card < 10)
 
 explain (buffers off, costs off) select * from t where high_card < 500 order by ts;
@@ -84,7 +84,7 @@ explain (buffers off, costs off) select * from t where high_card < 500 order by 
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Seq Scan on _hyper_1_1_chunk_compressed
                Filter: (high_card < 500)
 
 -- Test that batch sorted merge respects the working memory limit.
@@ -94,7 +94,7 @@ explain (buffers off, costs off) select * from t where high_card < 10 order by t
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_v2_fir_idx on compress_hyper_2_2_chunk
+         ->  Index Scan using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
                Index Cond: (high_card < 10)
 
 reset work_mem;
@@ -108,8 +108,8 @@ explain (buffers off, costs off) select * from t where high_card < 10 order by t
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
-         Sort Key: compress_hyper_2_2_chunk._ts_meta_v2_last_ts
-         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_v2_fir_idx on compress_hyper_2_2_chunk
+         Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_ts
+         ->  Index Scan using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
                Index Cond: (high_card < 10)
 
 reset work_mem;

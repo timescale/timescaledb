@@ -179,7 +179,7 @@ jobs:
     - name: Build TimescaleDB
       run: |
         # Show the actual architecture this CI runner has
-        "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
+        gcc -march=native -E -v - </dev/null 2>&1 | grep cc1
 
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
@@ -385,7 +385,7 @@ jobs:
     name: Regression summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

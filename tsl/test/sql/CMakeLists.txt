@@ -11,6 +11,7 @@ set(TEST_FILES
     cagg_ddl.sql
     cagg_direct_compress.sql
     cagg_errors.sql
+    cagg_granular_refresh_api.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
     cagg_planning.sql
@@ -28,6 +29,7 @@ set(TEST_FILES
     columnar_scan_cost.sql
     columnstore_aliases.sql
     compact_chunk.sql
+    compaction_policy.sql
     compress_auto_sparse_index.sql
     compress_batch_size.sql
     compress_bitmap_scan.sql
@@ -44,6 +46,7 @@ set(TEST_FILES
     compress_qualpushdown_saop.sql
     compress_sort_transform.sql
     compress_sparse_config.sql
+    compress_stats.sql
     compress_unordered_sort.sql
     compressed_collation.sql
     compressed_detoaster.sql
@@ -102,6 +105,7 @@ set(TEST_TEMPLATES
     compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
+    memoize.sql.in
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
@@ -211,12 +215,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  # WAL numbers will differ on 32-bit platform so we only run on 64-bit only run
-  # on PG17+ since the test can be flaky at times
-  if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
-    list(APPEND TEST_FILES explain_wal.sql)
-  endif()
-
   list(APPEND TEST_FILES privilege_maintain.sql
        merge_append_partially_compressed.sql)
   if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -226,6 +224,12 @@ endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
   list(APPEND TEST_FILES constraints_not_valid.sql)
+
+  # WAL numbers will differ on 32-bit platform so we only run on 64-bit only run
+  # on PG17+ since the test can be flaky at times
+  if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+    list(APPEND TEST_FILES explain_wal.sql)
+  endif()
 endif()
 
 set(SOLO_TESTS

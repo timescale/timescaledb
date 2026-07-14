@@ -154,8 +154,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[CHUNK_ID_INDEX] = "chunk_pkey",
 			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
-			[CHUNK_SCHEMA_NAME_INDEX] = "chunk_schema_name_table_name_key",
-			[CHUNK_COMPRESSED_CHUNK_ID_INDEX] = "chunk_compressed_chunk_id_idx",
+			[CHUNK_RELID_INDEX] = "chunk_relid_key",
 			[CHUNK_OSM_CHUNK_INDEX] = "chunk_osm_chunk_idx",
 			[CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX] = "chunk_hypertable_id_creation_time_idx",
 		},
@@ -504,6 +503,9 @@ ts_catalog_get(void)
 	for (i = 0; i < _MAX_INTERNAL_FUNCTIONS; i++)
 	{
 		InternalFunctionDef def = internal_function_definitions[i];
+#if PG19_GE
+		int fgc_flags = 0; /* PG19 writes the result bitmask here; must not be NULL */
+#endif
 		FuncCandidateList funclist =
 			FuncnameGetCandidates(list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
 											 makeString(def.name)),
@@ -512,7 +514,12 @@ ts_catalog_get(void)
 								  false,
 								  false, /* include_out_arguments */
 								  false,
-								  false);
+								  false /* missing_ok */
+#if PG19_GE
+								  ,
+								  &fgc_flags
+#endif
+			);
 
 		if (funclist == NULL || funclist->next)
 		{

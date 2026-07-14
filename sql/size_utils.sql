@@ -22,8 +22,8 @@ SELECT
     h.table_name AS hypertable_name,
     h.id AS hypertable_id,
     c.id AS chunk_id,
-    c.schema_name AS chunk_schema,
-    c.table_name AS chunk_name,
+    n.nspname AS chunk_schema,
+    cl.relname AS chunk_name,
     COALESCE((relsize).total_size, 0) AS total_bytes,
     COALESCE((relsize).heap_size, 0) AS heap_bytes,
     COALESCE((relsize).index_size, 0) AS index_bytes,
@@ -35,9 +35,8 @@ SELECT
 FROM
     _timescaledb_catalog.hypertable h
     JOIN _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
-    JOIN pg_class cl ON cl.relname = c.table_name AND cl.relkind = 'r'
+    JOIN pg_class cl ON cl.oid = c.relid AND cl.relkind = 'r'
     JOIN pg_namespace n ON n.oid = cl.relnamespace
-    AND n.nspname = c.schema_name
     JOIN LATERAL _timescaledb_functions.relation_size(cl.oid) AS relsize ON TRUE
     LEFT JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = cl.oid
     LEFT JOIN LATERAL _timescaledb_functions.relation_size(cs.compress_relid) AS relcompsize ON TRUE;
@@ -340,7 +339,7 @@ BEGIN
     -- for hypertables return the sum of the row counts of all chunks
     SELECT id FROM _timescaledb_catalog.hypertable INTO v_hypertable_id WHERE table_name = v_name AND schema_name = v_schema;
     IF FOUND THEN
-        RETURN (SELECT coalesce(sum(_timescaledb_functions.get_approx_row_count(format('%I.%I',schema_name,table_name))),0)
+        RETURN (SELECT coalesce(sum(_timescaledb_functions.get_approx_row_count(relid)),0)
           FROM _timescaledb_catalog.chunk
           WHERE hypertable_id = v_hypertable_id);
     END IF;
@@ -392,8 +391,8 @@ CREATE OR REPLACE VIEW _timescaledb_internal.compressed_chunk_stats AS
 SELECT
     srcht.schema_name AS hypertable_schema,
     srcht.table_name AS hypertable_name,
-    srcch.schema_name AS chunk_schema,
-    srcch.table_name AS chunk_name,
+    n.nspname AS chunk_schema,
+    cl.relname AS chunk_name,
     CASE WHEN srcch.status & 1 = 1 THEN
         'Compressed'::text
     ELSE
@@ -410,7 +409,9 @@ SELECT
 FROM
     _timescaledb_catalog.hypertable AS srcht
     JOIN _timescaledb_catalog.chunk AS srcch ON srcht.id = srcch.hypertable_id
-        AND srcht.compressed_hypertable_id IS NOT NULL
+        AND srcht.status & 4 = 4
+    JOIN pg_class cl ON cl.oid = srcch.relid
+    JOIN pg_namespace n ON n.oid = cl.relnamespace
     LEFT JOIN _timescaledb_catalog.compression_chunk_size map ON srcch.id = map.chunk_id;
 
 GRANT SELECT ON _timescaledb_internal.compressed_chunk_stats TO PUBLIC;

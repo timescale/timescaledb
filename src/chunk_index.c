@@ -14,7 +14,6 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_depend.h>
 #include <catalog/pg_index.h>
-#include <commands/cluster.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
@@ -27,6 +26,7 @@
 #include <utils/rel.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable.h"
@@ -271,7 +271,7 @@ chunk_index_create_from_indexinfo(int32 hypertable_id, Relation template_indexre
 	oidvector *indclassoid;
 	List *colnames = create_index_colnames(template_indexrel);
 	Oid tablespace;
-	bits16 flags = 0;
+	uint16 flags = 0;
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(RelationGetRelid(template_indexrel)));
 

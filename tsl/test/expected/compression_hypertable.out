@@ -119,15 +119,7 @@ psql:include/compression_test_hypertable.sql:7: NOTICE:  table "original_result"
 -- check stats
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
- WHERE attrelid = '_timescaledb_internal._compressed_hypertable_2'::REGCLASS
-   AND attnum > 0
- ORDER BY attname;
- attname | attstattarget 
----------+---------------
-
-SELECT DISTINCT attname, attstattarget
-  FROM pg_attribute
-  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1'))
+  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1'))
     AND attnum > 0
   ORDER BY attname;
         attname         | attstattarget 
@@ -144,7 +136,7 @@ SELECT DISTINCT attname, attstattarget
 
 -- Test that the GUC to disable bulk decompression works.
 vacuum analyze test1;
-SELECT format('%I.%I', ch.schema_name, ch.table_name) AS chunk
+SELECT ch.relid::text AS chunk
   FROM _timescaledb_catalog.chunk ch
   JOIN _timescaledb_catalog.hypertable h ON ch.hypertable_id = h.id
  WHERE h.table_name = 'test1'
@@ -157,8 +149,8 @@ select * from :chunk;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=15.00 loops=1)
    Output: _hyper_1_1_chunk."Time", _hyper_1_1_chunk.i, _hyper_1_1_chunk.b, _hyper_1_1_chunk.t
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_65_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_2_65_chunk._ts_meta_count, compress_hyper_2_65_chunk._ts_meta_min_1, compress_hyper_2_65_chunk._ts_meta_max_1, compress_hyper_2_65_chunk."_ts_meta_v2_first_Time", compress_hyper_2_65_chunk."_ts_meta_v2_last_Time", compress_hyper_2_65_chunk."Time", compress_hyper_2_65_chunk.i, compress_hyper_2_65_chunk.b, compress_hyper_2_65_chunk.t
+   ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+         Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed."_ts_meta_v2_first_Time", _hyper_1_1_chunk_compressed."_ts_meta_v2_last_Time", _hyper_1_1_chunk_compressed."Time", _hyper_1_1_chunk_compressed.i, _hyper_1_1_chunk_compressed.b, _hyper_1_1_chunk_compressed.t
 
 set timescaledb.enable_bulk_decompression to false;
 explain (analyze, verbose, timing off, buffers off, costs off, summary off)
@@ -167,8 +159,8 @@ select * from :chunk;
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=15.00 loops=1)
    Output: _hyper_1_1_chunk."Time", _hyper_1_1_chunk.i, _hyper_1_1_chunk.b, _hyper_1_1_chunk.t
    Bulk Decompression: false
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_65_chunk (actual rows=1.00 loops=1)
-         Output: compress_hyper_2_65_chunk._ts_meta_count, compress_hyper_2_65_chunk._ts_meta_min_1, compress_hyper_2_65_chunk._ts_meta_max_1, compress_hyper_2_65_chunk."_ts_meta_v2_first_Time", compress_hyper_2_65_chunk."_ts_meta_v2_last_Time", compress_hyper_2_65_chunk."Time", compress_hyper_2_65_chunk.i, compress_hyper_2_65_chunk.b, compress_hyper_2_65_chunk.t
+   ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+         Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed."_ts_meta_v2_first_Time", _hyper_1_1_chunk_compressed."_ts_meta_v2_last_Time", _hyper_1_1_chunk_compressed."Time", _hyper_1_1_chunk_compressed.i, _hyper_1_1_chunk_compressed.b, _hyper_1_1_chunk_compressed.t
 
 reset timescaledb.enable_bulk_decompression;
 TRUNCATE test1;
@@ -177,12 +169,11 @@ SELECT * FROM test1;
  Time | i | b | t 
 ------+---+---+---
 
-/* nor compressed table */
-SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
---
-
-/* the compressed table should not have chunks */
-SELECT count(*) FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test1');
+/* there should be no compressed relation */
+SELECT count(*)
+FROM _timescaledb_catalog.chunk ch
+JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id AND ht.table_name = 'test1'
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid;
  count 
 -------
      0
@@ -261,11 +252,11 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = ''
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_82_chunk" is already converted to columnstore
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_83_chunk" is already converted to columnstore
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_84_chunk" is already converted to columnstore
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_85_chunk" is already converted to columnstore
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_86_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_2_28_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_2_29_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_2_30_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_2_31_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_2_32_chunk" is already converted to columnstore
  count 
 -------
      5
@@ -286,7 +277,7 @@ CREATE TABLE test4 (
 select create_hypertable( 'test4', 'timec', chunk_time_interval=> '1 year'::interval);
  create_hypertable  
 --------------------
- (5,public,test4,t)
+ (3,public,test4,t)
 
 alter table test4 set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
 insert into test4
@@ -359,15 +350,7 @@ group by location ORDER BY location;
 -- check stats with segmentby
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
- WHERE attrelid = '_timescaledb_internal._compressed_hypertable_6'::REGCLASS
-   AND attnum > 0
- ORDER BY attname;
- attname | attstattarget 
----------+---------------
-
-SELECT DISTINCT attname, attstattarget
-  FROM pg_attribute
-  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test4'))
+  WHERE attrelid in (SELECT compress_relid FROM _timescaledb_catalog.compression_settings cs JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid WHERE ch.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test4'))
     AND attnum > 0
   ORDER BY attname;
          attname         | attstattarget 
@@ -393,7 +376,7 @@ CREATE TABLE test5 (
 select create_hypertable( 'test5', 'time', chunk_time_interval=> '1 day'::interval);
  create_hypertable  
 --------------------
- (7,public,test5,t)
+ (4,public,test5,t)
 
 alter table test5 set (timescaledb.compress, timescaledb.compress_orderby = 'device_id, time');
 insert into test5
@@ -464,7 +447,7 @@ CREATE table test6(
 SELECT create_hypertable('test6', 'time', chunk_time_interval=> 50);
  create_hypertable  
 --------------------
- (9,public,test6,t)
+ (5,public,test6,t)
 
 ALTER TABLE test6 SET
   (timescaledb.compress, timescaledb.compress_segmentby='device_id', timescaledb.compress_orderby = 'time DESC');
@@ -525,9 +508,9 @@ DROP TABLE test6;
 CREATE TABLE test7(time INT, c1 DATE, c2 TIMESTAMP, c3 FLOAT, n TEXT);
 SELECT create_hypertable('test7', 'time', chunk_time_interval=> 200);
 WARNING:  column type "timestamp without time zone" used for "c2" does not follow best practices
-  create_hypertable  
----------------------
- (11,public,test7,t)
+ create_hypertable  
+--------------------
+ (6,public,test7,t)
 
 ALTER TABLE test7 SET
   (timescaledb.compress, timescaledb.compress_orderby = 'time DESC, c1 DESC');
@@ -593,9 +576,9 @@ create or replace function mix(x float4) returns float4 as $$ select ((hashfloat
 -- test gorilla for float4 and deltadelta for int32 and other types
 create table test8(ts date, id int, value float4, valueint2 int2, valuebool bool);
 select create_hypertable('test8', 'ts');
-  create_hypertable  
----------------------
- (13,public,test8,t)
+ create_hypertable  
+--------------------
+ (7,public,test8,t)
 
 alter table test8 set (timescaledb.compress,
     timescaledb.compress_segmentby = 'id',
@@ -610,14 +593,14 @@ insert into test8
     from generate_series(1, 10000) x(x)
 ;
 select compress_chunk(x) from show_chunks('test8') x;
-              compress_chunk               
--------------------------------------------
- _timescaledb_internal._hyper_13_148_chunk
- _timescaledb_internal._hyper_13_149_chunk
- _timescaledb_internal._hyper_13_150_chunk
- _timescaledb_internal._hyper_13_151_chunk
- _timescaledb_internal._hyper_13_152_chunk
- _timescaledb_internal._hyper_13_153_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_50_chunk
+ _timescaledb_internal._hyper_7_51_chunk
+ _timescaledb_internal._hyper_7_52_chunk
+ _timescaledb_internal._hyper_7_53_chunk
+ _timescaledb_internal._hyper_7_54_chunk
+ _timescaledb_internal._hyper_7_55_chunk
 
 select distinct on (id) * from test8
 order by id, ts desc, value

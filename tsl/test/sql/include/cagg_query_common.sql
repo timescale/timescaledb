@@ -770,7 +770,7 @@ INSERT INTO temperature
 -- cutting during refresh won't merge entries which are not overlapping with its refresh window.
 -- The duplicates will be merged when there is a refresh that overlaps with them.
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
 
 CREATE MATERIALIZED VIEW cagg_1_year
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -778,19 +778,19 @@ CREATE MATERIALIZED VIEW cagg_1_year
     FROM temperature
     GROUP BY 1 ORDER BY 1;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
 
 --try a refresh that overlaps with the invalidation log entries to check that they are merged properly
 --in this case, the duplicates at the +infinity end should be merged.
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
                              WHERE user_view_name = 'cagg_4_hours')
 ORDER BY 1, 2, 3;
 
 CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz, options => '{"buckets_per_batch": 0}'::jsonb);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, lowest_modified_value, greatest_modified_value FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
                              WHERE user_view_name = 'cagg_4_hours')
 ORDER BY 1, 2, 3;
