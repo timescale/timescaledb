@@ -56,6 +56,8 @@
 #define IS_INTEGER_TYPE(type) (type == INT2OID || type == INT4OID || type == INT8OID)
 #define IS_TIMESTAMP_TYPE(type) (type == TIMESTAMPOID || type == TIMESTAMPTZOID || type == DATEOID)
 #define IS_UUID_TYPE(type) (type == UUIDOID)
+#define IS_STRING_TYPE(type)                                                                       \
+	(type == TEXTOID || type == VARCHAROID || type == BPCHAROID || type == CHAROID)
 #define IS_VALID_TIME_TYPE(type)                                                                   \
 	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || IS_UUID_TYPE(type))
 

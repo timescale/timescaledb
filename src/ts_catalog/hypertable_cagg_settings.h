@@ -8,6 +8,12 @@
 #include <postgres.h>
 
 #include "export.h"
+#include "ts_catalog/catalog.h"
+
+#define IS_VALID_GRANULAR_REFRESH_COLUMN(type) (IS_VALID_TIME_TYPE(type) || IS_STRING_TYPE(type))
+
+/* Whether typid is allowed as a granular-refresh tracking column. */
+extern TSDLLEXPORT bool ts_tenant_type_is_supported(Oid typid);
 
 /*
  * Catalog access for _timescaledb_catalog.hypertable_cagg_settings.
@@ -17,4 +23,14 @@
  * hypertable.
  */
 
+extern TSDLLEXPORT bool ts_hypertable_cagg_settings_get(int32 hypertable_id,
+														FormData_hypertable_cagg_settings *form);
+extern TSDLLEXPORT void
+ts_hypertable_cagg_settings_insert(const FormData_hypertable_cagg_settings *form);
 extern TSDLLEXPORT void ts_hypertable_cagg_settings_delete(int32 hypertable_id);
+extern TSDLLEXPORT bool ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id,
+																			   int64 *window_start,
+																			   int64 *window_end);
+extern TSDLLEXPORT bool
+ts_hypertable_cagg_settings_get_tenant_tracking_column(int32 hypertable_id,
+													   const char **column_name);
