@@ -256,6 +256,7 @@ typedef struct InvalidationSettings
 	int32 hypertable_id;
 	Oid chunk_relid;
 	AttrNumber invalidation_column_offset;
+	bool tenant_tracking_enabled;
 } InvalidationSettings;
 
 typedef struct RowCompressor
