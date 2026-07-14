@@ -8,7 +8,7 @@ CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
    h.table_name AS hypertable_name,
-   c.schema_name || '.' || c.table_name as chunk_name,
+   c.relid::text as chunk_name,
    c.status as chunk_status
 FROM
    _timescaledb_catalog.hypertable h JOIN
@@ -93,7 +93,7 @@ ALTER TABLE sample_table SET (
 SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
 SELECT compress_chunk(:'CH_NAME');
 
-SELECT id AS "CHUNK_ID" from _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' \gset
+SELECT c.id AS "CHUNK_ID" from _timescaledb_catalog.chunk c JOIN pg_class cl ON cl.oid = c.relid WHERE cl.relname = '_hyper_1_1_chunk' \gset
 
 -- There should be an entry with min/max range computed for this chunk for this
 -- "sensor_id" column.

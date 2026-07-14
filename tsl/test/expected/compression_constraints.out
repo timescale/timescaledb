@@ -125,7 +125,7 @@ CREATE UNIQUE INDEX dist_null_idx ON dist_null(time,device) NULLS DISTINCT;
 DROP INDEX dist_null_idx;
 \set ON_ERROR_STOP 0
 CREATE UNIQUE INDEX dist_null_idx ON dist_null(time,device) NULLS NOT DISTINCT;
-ERROR:  could not create unique index "_hyper_3_8_chunk_dist_null_idx"
+ERROR:  could not create unique index "_hyper_2_8_chunk_dist_null_idx"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 -- test behaviour with conflict in compressed
@@ -168,7 +168,7 @@ INSERT INTO dist_null SELECT '2025-01-02', 'd', 0.1;
 INSERT INTO dist_null SELECT '2025-01-02', 'd', 0.1;
 \set ON_ERROR_STOP 0
 CREATE UNIQUE INDEX dist_null_idx ON dist_null(time,device) NULLS DISTINCT;
-ERROR:  could not create unique index "_hyper_3_11_chunk_dist_null_idx"
+ERROR:  could not create unique index "_hyper_2_11_chunk_dist_null_idx"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 -- test NULLs present but conflict in non-NULL tuples
@@ -179,7 +179,7 @@ INSERT INTO dist_null SELECT '2025-01-02', 'd', 0.1;
 INSERT INTO dist_null SELECT '2025-01-02', 'd', 0.1;
 \set ON_ERROR_STOP 0
 CREATE UNIQUE INDEX dist_null_idx ON dist_null(time,device) NULLS NOT DISTINCT;
-ERROR:  could not create unique index "_hyper_3_12_chunk_dist_null_idx"
+ERROR:  could not create unique index "_hyper_2_12_chunk_dist_null_idx"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 -- test NULLs present but conflict in non-NULL tuples (full compressed)
@@ -252,7 +252,7 @@ CREATE TABLE metrics(time timestamptz NOT NULL, device text, value float, PRIMAR
 SELECT create_hypertable('metrics','time');
   create_hypertable   
 ----------------------
- (5,public,metrics,t)
+ (3,public,metrics,t)
 
 INSERT INTO metrics SELECT '2025-01-01','d1',0.1;
 INSERT INTO metrics SELECT '2025-01-01','d2',0.1;
@@ -272,7 +272,7 @@ ALTER TABLE metrics ADD CONSTRAINT device_fk FOREIGN KEY(device) REFERENCES devi
 INSERT INTO metrics SELECT '2025-03-01','d2',0.3;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-03-01','d3',0.3;
-ERROR:  insert or update on table "_hyper_5_18_chunk" violates foreign key constraint "device_fk"
+ERROR:  insert or update on table "_hyper_3_18_chunk" violates foreign key constraint "device_fk"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 BEGIN;
@@ -302,7 +302,7 @@ ALTER TABLE metrics ADD CONSTRAINT device_fk FOREIGN KEY(device) REFERENCES devi
 INSERT INTO metrics SELECT '2025-03-01','d2',0.3;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-03-01','d3',0.3;
-ERROR:  insert or update on table "_hyper_5_20_chunk" violates foreign key constraint "device_fk"
+ERROR:  insert or update on table "_hyper_3_20_chunk" violates foreign key constraint "device_fk"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 BEGIN;
@@ -322,16 +322,16 @@ CREATE TABLE metrics(time timestamptz not null, device text, value float);
 SELECT create_hypertable('metrics','time');
   create_hypertable   
 ----------------------
- (7,public,metrics,t)
+ (4,public,metrics,t)
 
 ALTER TABLE metrics SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
 INSERT INTO metrics SELECT '2025-01-01','d1',1;
 INSERT INTO metrics SELECT '2025-01-01','d1',NULL;
 \set ON_ERROR_STOP 0
 ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 9000);
-ERROR:  check constraint "metrics_check" of relation "_hyper_7_22_chunk" is violated by some row
+ERROR:  check constraint "metrics_check" of relation "_hyper_4_22_chunk" is violated by some row
 ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (time > '2026-01-01' AND value > 0);
-ERROR:  check constraint "metrics_check" of relation "_hyper_7_22_chunk" is violated by some row
+ERROR:  check constraint "metrics_check" of relation "_hyper_4_22_chunk" is violated by some row
 \set ON_ERROR_STOP 1
 BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 0.9);
@@ -339,7 +339,7 @@ ALTER TABLE metrics ADD CONSTRAINT metrics_check2 CHECK (time >= '2025-01-01' AN
 INSERT INTO metrics SELECT '2025-01-01','d1',2;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-01-01','d1',0;
-ERROR:  new row for relation "_hyper_7_22_chunk" violates check constraint "metrics_check"
+ERROR:  new row for relation "_hyper_4_22_chunk" violates check constraint "metrics_check"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
@@ -349,9 +349,9 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 
 \set ON_ERROR_STOP 0
 ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 9000);
-ERROR:  check constraint "metrics_check" of relation "_hyper_7_22_chunk" is violated by some row
+ERROR:  check constraint "metrics_check" of relation "_hyper_4_22_chunk" is violated by some row
 ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (time > '2026-01-01' AND value > 0);
-ERROR:  check constraint "metrics_check" of relation "_hyper_7_22_chunk" is violated by some row
+ERROR:  check constraint "metrics_check" of relation "_hyper_4_22_chunk" is violated by some row
 \set ON_ERROR_STOP 1
 BEGIN;
 ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 0.9);
@@ -359,7 +359,7 @@ ALTER TABLE metrics ADD CONSTRAINT metrics_check2 CHECK (time >= '2025-01-01' AN
 INSERT INTO metrics SELECT '2025-01-01','d1',2;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-01-01','d1',0;
-ERROR:  new row for relation "_hyper_7_22_chunk" violates check constraint "metrics_check"
+ERROR:  new row for relation "_hyper_4_22_chunk" violates check constraint "metrics_check"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 DROP TABLE metrics CASCADE;
@@ -368,14 +368,14 @@ CREATE TABLE metrics(time timestamptz not null, device text, value float);
 SELECT create_hypertable('metrics','time');
   create_hypertable   
 ----------------------
- (9,public,metrics,t)
+ (5,public,metrics,t)
 
 ALTER TABLE metrics SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
 INSERT INTO metrics SELECT '2025-01-01','d1',1;
 -- should fail in validation since the new column will be NULL for existing tuples
 \set ON_ERROR_STOP 0
 ALTER TABLE metrics ADD COLUMN c1 int CHECK ( c1 IS NOT NULL );
-ERROR:  check constraint "metrics_c1_check" of relation "_hyper_9_23_chunk" is violated by some row
+ERROR:  check constraint "metrics_c1_check" of relation "_hyper_5_23_chunk" is violated by some row
 \set ON_ERROR_STOP 1
 BEGIN;
 -- should succeed since the CHECK constraint will succeed for NULL values
@@ -383,7 +383,7 @@ ALTER TABLE metrics ADD COLUMN c1 int CHECK (c1 <> 42);
 INSERT INTO metrics SELECT '2025-01-01','d1',1,23;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-01-01','d1',1,42;
-ERROR:  new row for relation "_hyper_9_23_chunk" violates check constraint "metrics_c1_check"
+ERROR:  new row for relation "_hyper_5_23_chunk" violates check constraint "metrics_c1_check"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
@@ -394,7 +394,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 -- should fail in validation since the new column will be NULL for existing tuples
 \set ON_ERROR_STOP 0
 ALTER TABLE metrics ADD COLUMN c1 int CHECK ( c1 IS NOT NULL );
-ERROR:  check constraint "metrics_c1_check" of relation "_hyper_9_23_chunk" is violated by some row
+ERROR:  check constraint "metrics_c1_check" of relation "_hyper_5_23_chunk" is violated by some row
 \set ON_ERROR_STOP 1
 BEGIN;
 -- should succeed since the CHECK constraint will succeed for NULL values
@@ -402,7 +402,7 @@ ALTER TABLE metrics ADD COLUMN c1 int CHECK (c1 <> 42);
 INSERT INTO metrics SELECT '2025-01-01','d1',1,23;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-01-01','d1',1,42;
-ERROR:  new row for relation "_hyper_9_23_chunk" violates check constraint "metrics_c1_check"
+ERROR:  new row for relation "_hyper_5_23_chunk" violates check constraint "metrics_c1_check"
 \set ON_ERROR_STOP 1
 ROLLBACK;
 -- test unique expression indexes
@@ -438,9 +438,9 @@ DROP TABLE metrics CASCADE;
 -- reproduces use-after-free only detectable with sanitizers (#10045)
 CREATE TABLE sensor_readings(ts timestamptz NOT NULL, val int);
 SELECT create_hypertable('sensor_readings', 'ts', chunk_time_interval => INTERVAL '1 day');
-       create_hypertable       
--------------------------------
- (11,public,sensor_readings,t)
+      create_hypertable       
+------------------------------
+ (6,public,sensor_readings,t)
 
 INSERT INTO sensor_readings VALUES ('2024-01-01', 1), ('2024-01-02', NULL);
 SELECT count(*) AS num_chunks FROM show_chunks('sensor_readings');
@@ -450,20 +450,20 @@ SELECT count(*) AS num_chunks FROM show_chunks('sensor_readings');
 
 ALTER TABLE sensor_readings SET (tsdb.compress);
 SELECT compress_chunk(c) FROM show_chunks('sensor_readings') c;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_24_chunk
- _timescaledb_internal._hyper_11_25_chunk
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_6_24_chunk
+ _timescaledb_internal._hyper_6_25_chunk
 
 \set ON_ERROR_STOP 0
 ALTER TABLE sensor_readings ADD CONSTRAINT val_notnull CHECK (val IS NOT NULL);
-ERROR:  check constraint "val_notnull" of relation "_hyper_11_25_chunk" is violated by some row
+ERROR:  check constraint "val_notnull" of relation "_hyper_6_25_chunk" is violated by some row
 \set ON_ERROR_STOP 1
 -- check successful ALTER
 DELETE FROM sensor_readings WHERE val IS NULL;
 ALTER TABLE sensor_readings ADD CONSTRAINT val_notnull CHECK (val IS NOT NULL);
 \set ON_ERROR_STOP 0
 INSERT INTO sensor_readings VALUES ('2024-01-01', 1), ('2024-01-02', NULL);
-ERROR:  new row for relation "_hyper_11_25_chunk" violates check constraint "val_notnull"
+ERROR:  new row for relation "_hyper_6_25_chunk" violates check constraint "val_notnull"
 \set ON_ERROR_STOP 1
 DROP TABLE sensor_readings CASCADE;

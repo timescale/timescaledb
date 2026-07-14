@@ -11,12 +11,12 @@ SELECT * FROM _timescaledb_functions.get_hypertable_info(0);
 SELECT * FROM _timescaledb_functions.get_hypertable_info('pg_catalog.pg_class'::regclass);
 
 SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(1);
-SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(8);
+SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(6);
 SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(0);
 SELECT * FROM _timescaledb_functions.get_hypertable_info_by_id(NULL);
 
 SELECT * FROM _timescaledb_functions.get_primary_dimension(1);
-SELECT * FROM _timescaledb_functions.get_primary_dimension(8);
+SELECT * FROM _timescaledb_functions.get_primary_dimension(6);
 SELECT * FROM _timescaledb_functions.get_primary_dimension(0);
 SELECT * FROM _timescaledb_functions.get_primary_dimension(NULL);
 
@@ -45,7 +45,7 @@ SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(-1::int);
 SELECT * FROM _timescaledb_functions.get_chunk_primary_range_by_id(NULL::int);
 
 SELECT * FROM _timescaledb_functions.get_integer_now_func(1);
-SELECT * FROM _timescaledb_functions.get_integer_now_func(8);
+SELECT * FROM _timescaledb_functions.get_integer_now_func(6);
 SELECT * FROM _timescaledb_functions.get_integer_now_func(0);
 SELECT * FROM _timescaledb_functions.get_integer_now_func(-1);
 SELECT * FROM _timescaledb_functions.get_integer_now_func(NULL);

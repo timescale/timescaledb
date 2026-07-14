@@ -2,14 +2,28 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- Chunk relation names are not deterministic between a fresh install and a post-upgrade catalog.
+-- Chunk relation names are not deterministic between a fresh install and a
+-- post-upgrade catalog. The embedded hypertable id also shifts because a fresh
+-- install no longer creates internal compressed hypertables, so normalize both
+-- the hypertable id and the chunk id in relation names.
 CREATE OR REPLACE FUNCTION pg_temp.normalize_chunk(t text) RETURNS text
   LANGUAGE sql IMMUTABLE AS $$
   SELECT regexp_replace(
-           regexp_replace(t,
-             'compress_hyper_[0-9]+_[0-9]+_chunk|_hyper_[0-9]+_[0-9]+_chunk_compressed',
-             'compressed_chunk', 'g'),
-           '(_hyper_[0-9]+)_[0-9]+_chunk', '\1_X_chunk', 'g')
+           regexp_replace(
+             regexp_replace(t,
+               'compress_hyper_[0-9]+_[0-9]+_chunk|_hyper_[0-9]+_[0-9]+_chunk_compressed',
+               'compressed_chunk', 'g'),
+             '_hyper_[0-9]+_[0-9]+_chunk', '_hyper_X_X_chunk', 'g'),
+           '_compressed_hypertable_[0-9]+', '_compressed_hypertable_X', 'g')
+$$;
+
+-- Hypertable ids shift when internal compressed hypertables are present in one
+-- catalog but not the other. Map an id to the normalized name of its hypertable
+-- so the value is stable between a fresh install and a post-upgrade catalog.
+CREATE OR REPLACE FUNCTION pg_temp.normalize_hypertable_id(id int) RETURNS text
+  LANGUAGE sql STABLE AS $$
+  SELECT pg_temp.normalize_chunk(format('%I.%I', h.schema_name, h.table_name))
+  FROM _timescaledb_catalog.hypertable h WHERE h.id = normalize_hypertable_id.id
 $$;
 
 SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_compression_algorithms
@@ -17,6 +31,11 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
  WHERE extname = 'timescaledb' \gset
 
 SELECT (extversion >= '2.28.0') AS has_chunk_owned_slices
+  FROM pg_extension WHERE extname = 'timescaledb' \gset
+
+-- The chunk catalog stores its relation as schema_name/table_name before 2.29.0
+-- and as a single relid afterwards.
+SELECT (extversion >= '2.29.0') AS has_chunk_relid
   FROM pg_extension WHERE extname = 'timescaledb' \gset
 
 \if :PG_UPGRADE_TEST
@@ -211,10 +230,18 @@ SELECT unnest(extconfig)::regclass::text, unnest(extcondition) FROM pg_extension
 
 -- Show chunks that include owner in the output. The chunk id is not
 -- deterministic post-upgrade, so drop it and normalize the chunk relation name.
-SELECT c.hypertable_id, c.schema_name, pg_temp.normalize_chunk(c.table_name) AS table_name, cl.relowner::regrole
+\if :has_chunk_relid
+SELECT pg_temp.normalize_hypertable_id(c.hypertable_id) AS hypertable, n.nspname AS schema_name, pg_temp.normalize_chunk(cl.relname) AS table_name, cl.relowner::regrole
 FROM  _timescaledb_catalog.chunk c
-INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
-ORDER BY c.hypertable_id, pg_temp.normalize_chunk(c.table_name);
+INNER JOIN pg_class cl ON (cl.oid = c.relid)
+INNER JOIN pg_namespace n ON (n.oid = cl.relnamespace)
+ORDER BY pg_temp.normalize_hypertable_id(c.hypertable_id), pg_temp.normalize_chunk(cl.relname);
+\else
+SELECT pg_temp.normalize_hypertable_id(c.hypertable_id) AS hypertable, c.schema_name, pg_temp.normalize_chunk(c.table_name) AS table_name, cl.relowner::regrole
+FROM  _timescaledb_catalog.chunk c
+INNER JOIN pg_class cl ON (cl.oid = format('%I.%I', c.schema_name, c.table_name)::regclass)
+ORDER BY pg_temp.normalize_hypertable_id(c.hypertable_id), pg_temp.normalize_chunk(c.table_name);
+\endif
 
 -- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and chunk ids
 -- are renumbered, so both differ between a fresh install and a post-upgrade
@@ -267,8 +294,8 @@ ORDER BY 1, 2, 3;
 -- orderby sparse index type changed across releases and existing chunks are
 -- not rewritten on upgrade), so it differs between a fresh install and a
 -- post-upgrade catalog. Skip it and compare the remaining columns.
-SELECT pg_temp.normalize_chunk(relid::regclass::text) AS relid,
+SELECT pg_temp.normalize_chunk(relid::text) AS relid,
        pg_temp.normalize_chunk(compress_relid::regclass::text) AS compress_relid,
        segmentby, orderby, orderby_desc, orderby_nullsfirst
 FROM _timescaledb_catalog.compression_settings
-ORDER BY pg_temp.normalize_chunk(relid::regclass::text), segmentby, orderby;
+ORDER BY pg_temp.normalize_chunk(relid::text), segmentby, orderby;

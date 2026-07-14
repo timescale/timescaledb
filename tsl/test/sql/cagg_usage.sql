@@ -294,7 +294,7 @@ SELECT * FROM cagg4;
 
 -- should return 4 chunks
 SELECT
-   c.table_name as chunk_name,
+   c.relid::text as chunk_name,
    c.status as chunk_status
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
@@ -305,7 +305,7 @@ SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestampt
 
 -- should return 3 chunks
 SELECT
-   c.table_name as chunk_name,
+   c.relid::text as chunk_name,
    c.status as chunk_status
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id AND h.table_name = 'metrics'
@@ -316,7 +316,7 @@ SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestampt
 
 -- should return 2 chunks
 SELECT
-   c.table_name as chunk_name,
+   c.relid::text as chunk_name,
    c.status as chunk_status
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
@@ -327,7 +327,7 @@ SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestampt
 
 -- should return 1 chunk
 SELECT
-   c.table_name as chunk_name,
+   c.relid::text as chunk_name,
    c.status as chunk_status
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'

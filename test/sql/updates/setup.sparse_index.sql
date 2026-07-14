@@ -41,14 +41,9 @@ SELECT * FROM _timescaledb_catalog.compression_settings;
 
 SELECT
     cs.compress_relid::text AS chunk
-FROM _timescaledb_catalog.chunk ch
+FROM show_chunks('bloom') ch
 JOIN _timescaledb_catalog.compression_settings cs
-    ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
-WHERE ch.hypertable_id = (
-    SELECT id
-    FROM _timescaledb_catalog.hypertable
-    WHERE table_name = 'bloom'
-)
+    ON cs.relid = ch
 LIMIT 1
 \gset
 

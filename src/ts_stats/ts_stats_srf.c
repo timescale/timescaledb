@@ -12,6 +12,7 @@
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <utils/builtins.h>
+#include <utils/palloc.h>
 #include <utils/timestamp.h>
 #include <utils/tuplestore.h>
 
@@ -153,8 +154,8 @@ ts_stats_chunks(PG_FUNCTION_ARGS)
 		else
 		{
 			/* safe to read, take a snapshot */
-			slot_snap = palloc(sizeof(TsStatsChunk));
-			meta_snap = palloc(sizeof(TsStatsChunkMetadata));
+			slot_snap = palloc_aligned(sizeof(TsStatsChunk), 8, 0);
+			meta_snap = palloc_aligned(sizeof(TsStatsChunkMetadata), 8, 0);
 			memcpy(slot_snap, slot, sizeof(TsStatsChunk));
 			memcpy(meta_snap, meta, sizeof(TsStatsChunkMetadata));
 			snap_count = 1;
@@ -163,8 +164,8 @@ ts_stats_chunks(PG_FUNCTION_ARGS)
 	else if (uncomp_filter)
 	{
 		/* Linear scan of the metadata matching uncompressed_relid, but only one  */
-		slot_snap = palloc(sizeof(TsStatsChunk));
-		meta_snap = palloc(sizeof(TsStatsChunkMetadata));
+		slot_snap = palloc_aligned(sizeof(TsStatsChunk), 8, 0);
+		meta_snap = palloc_aligned(sizeof(TsStatsChunkMetadata), 8, 0);
 		retry_map = palloc0(sizeof(bool) * seg->num_slots);
 
 		for (uint32 i = 0; i < seg->num_slots; i++)
@@ -221,8 +222,8 @@ ts_stats_chunks(PG_FUNCTION_ARGS)
 	else
 	{
 		/* full scan in slot order. check since timestamp if needed. */
-		slot_snap = palloc(sizeof(TsStatsChunk) * seg->num_slots);
-		meta_snap = palloc(sizeof(TsStatsChunkMetadata) * seg->num_slots);
+		slot_snap = palloc_aligned(sizeof(TsStatsChunk) * seg->num_slots, 8, 0);
+		meta_snap = palloc_aligned(sizeof(TsStatsChunkMetadata) * seg->num_slots, 8, 0);
 		retry_map = palloc0(sizeof(bool) * seg->num_slots);
 
 		for (uint32 i = 0; i < seg->num_slots; i++)

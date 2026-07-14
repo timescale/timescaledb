@@ -676,45 +676,45 @@ time;
 CREATE INDEX idx_asc_null_first ON tab3(name COLLATE "C", time ASC NULLS FIRST);
 ALTER TABLE tab3 SET(timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'name, time NULLS FIRST');
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  using tuplesort to scan rows from "_hyper_5_9_chunk" for converting to columnstore
-INFO:  using tuplesort to scan rows from "_hyper_5_10_chunk" for converting to columnstore
-INFO:  using tuplesort to scan rows from "_hyper_5_11_chunk" for converting to columnstore
-INFO:  using tuplesort to scan rows from "_hyper_5_12_chunk" for converting to columnstore
+INFO:  using tuplesort to scan rows from "_hyper_3_9_chunk" for converting to columnstore
+INFO:  using tuplesort to scan rows from "_hyper_3_10_chunk" for converting to columnstore
+INFO:  using tuplesort to scan rows from "_hyper_3_11_chunk" for converting to columnstore
+INFO:  using tuplesort to scan rows from "_hyper_3_12_chunk" for converting to columnstore
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
 
 SELECT decompress_chunk(show_chunks('tab3'));
             decompress_chunk             
 -----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
 
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  using index "_hyper_5_9_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
-INFO:  using index "_hyper_5_10_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
-INFO:  using index "_hyper_5_11_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
-INFO:  using index "_hyper_5_12_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
+INFO:  using index "_hyper_3_9_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
+INFO:  using index "_hyper_3_10_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
+INFO:  using index "_hyper_3_11_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
+INFO:  using index "_hyper_3_12_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
 
 SELECT decompress_chunk(show_chunks('tab3'));
             decompress_chunk             
 -----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
 
 DROP INDEX idx_asc_null_first;
 DROP INDEX idxcol_asc_null_first;
@@ -723,45 +723,45 @@ CREATE INDEX idx_asc_null_first ON tab3(name COLLATE "ucs_basic", time ASC NULLS
 ALTER TABLE tab3 SET(timescaledb.compress, timescaledb.compress_segmentby = 'name', timescaledb.compress_orderby = 'time NULLS FIRST');
 NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  using tuplesort to scan rows from "_hyper_5_9_chunk" for converting to columnstore
-INFO:  using tuplesort to scan rows from "_hyper_5_10_chunk" for converting to columnstore
-INFO:  using tuplesort to scan rows from "_hyper_5_11_chunk" for converting to columnstore
-INFO:  using tuplesort to scan rows from "_hyper_5_12_chunk" for converting to columnstore
+INFO:  using tuplesort to scan rows from "_hyper_3_9_chunk" for converting to columnstore
+INFO:  using tuplesort to scan rows from "_hyper_3_10_chunk" for converting to columnstore
+INFO:  using tuplesort to scan rows from "_hyper_3_11_chunk" for converting to columnstore
+INFO:  using tuplesort to scan rows from "_hyper_3_12_chunk" for converting to columnstore
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
 
 SELECT decompress_chunk(show_chunks('tab3'));
             decompress_chunk             
 -----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
 
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab3'));
-INFO:  using index "_hyper_5_9_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
-INFO:  using index "_hyper_5_10_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
-INFO:  using index "_hyper_5_11_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
-INFO:  using index "_hyper_5_12_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
+INFO:  using index "_hyper_3_9_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
+INFO:  using index "_hyper_3_10_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
+INFO:  using index "_hyper_3_11_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
+INFO:  using index "_hyper_3_12_chunk_idxcol_asc_null_first" to scan rows for converting to columnstore
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
 
 SELECT decompress_chunk(show_chunks('tab3'));
             decompress_chunk             
 -----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
- _timescaledb_internal._hyper_5_10_chunk
- _timescaledb_internal._hyper_5_11_chunk
- _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+ _timescaledb_internal._hyper_3_10_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
 
 DROP INDEX idx_asc_null_first;
 DROP INDEX idxcol_asc_null_first;

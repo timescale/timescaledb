@@ -230,7 +230,7 @@ static void
 RelationDeleteAllRows(Relation rel, Snapshot snap)
 {
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
-	TableScanDesc scan = table_beginscan(rel, snap, 0, NULL);
+	TableScanDesc scan = table_beginscan_compat(rel, snap, 0, NULL, 0);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -686,7 +686,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 	TableScanDesc scan;
 	TupleTableSlot *slot;
 	tuplesortstate = compression_create_tuplesort_state(settings, in_rel, false);
-	scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, NULL);
+	scan = table_beginscan_compat(in_rel, GetActiveSnapshot(), 0, NULL, 0);
 	slot = table_slot_create(in_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -1075,7 +1075,8 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 				compressor_apply_segmentby_and_rebuild(compressor, bulk_writer);
 			}
 
-			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
+			TupleTableSlot *slot =
+				MakeTupleTableSlotCompat(compressor->in_desc, &TTSOpsMinimalTuple, 0);
 			while (tuplesort_gettupleslot(compressor->sort_state,
 										  true /*=forward*/,
 										  false /*=copy*/,
@@ -1222,7 +1223,8 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 	new_compressor.invalidation = old_compressor->invalidation;
 
 	/* Transfer from old sort state into the new one with segmentby settings */
-	TupleTableSlot *slot = MakeTupleTableSlot(old_compressor->in_desc, &TTSOpsMinimalTuple);
+	TupleTableSlot *slot =
+		MakeTupleTableSlotCompat(old_compressor->in_desc, &TTSOpsMinimalTuple, 0);
 	while (tuplesort_gettupleslot(old_compressor->sort_state,
 								  true /*=forward*/,
 								  false /*=copy*/,
@@ -1357,7 +1359,8 @@ void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
 								  Relation in_rel, BulkWriter *writer)
 {
-	TupleTableSlot *slot = MakeTupleTableSlot(row_compressor->in_desc, &TTSOpsMinimalTuple);
+	TupleTableSlot *slot =
+		MakeTupleTableSlotCompat(row_compressor->in_desc, &TTSOpsMinimalTuple, 0);
 	int64 nrows_processed = 0;
 	int64 report_reltuples;
 
@@ -2149,7 +2152,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 													  RelationGetRelid(in_rel),
 													  RelationGetRelid(out_rel));
 	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
-	TableScanDesc scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, (ScanKey) NULL);
+	TableScanDesc scan = table_beginscan_compat(in_rel, GetActiveSnapshot(), 0, (ScanKey) NULL, 0);
 	int64 report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -3505,7 +3508,7 @@ analyze_and_get_segmentby(CompressionSettings *settings, RowCompressor *compress
 	 * Step 2: Load data and process necessary information for future analysis.
 	 * Current Criteria: Reject candidates with too many distinct values or too few rows per value
 	 */
-	TupleTableSlot *slot = MakeTupleTableSlot(in_desc, &TTSOpsMinimalTuple);
+	TupleTableSlot *slot = MakeTupleTableSlotCompat(in_desc, &TTSOpsMinimalTuple, 0);
 	int candidates_rejected = 0;
 	while (tuplesort_gettupleslot(compressor->sort_state,
 								  true /*=forward*/,

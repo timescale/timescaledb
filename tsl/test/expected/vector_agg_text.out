@@ -134,7 +134,7 @@ create table long(t int, a text, b text, c text, d text);
 select create_hypertable('long', 't');
  create_hypertable 
 -------------------
- (3,public,long,t)
+ (2,public,long,t)
 
 insert into long select n, x, x, x, x from (
     select n, repeat('1', 100 * 4 + n) x

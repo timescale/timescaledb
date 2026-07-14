@@ -35,6 +35,9 @@ CROSSMODULE_WRAPPER(policy_reorder_add);
 CROSSMODULE_WRAPPER(policy_reorder_proc);
 CROSSMODULE_WRAPPER(policy_reorder_check);
 CROSSMODULE_WRAPPER(policy_reorder_remove);
+CROSSMODULE_WRAPPER(policy_compaction_add);
+CROSSMODULE_WRAPPER(policy_compaction_check);
+CROSSMODULE_WRAPPER(policy_compaction_remove);
 CROSSMODULE_WRAPPER(policy_retention_add);
 CROSSMODULE_WRAPPER(policy_retention_proc);
 CROSSMODULE_WRAPPER(policy_retention_check);
@@ -148,6 +151,13 @@ tsl_postprocess_plan_stub(PlannedStmt *stmt)
 
 static bool
 process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_options)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
+static void
+process_granular_refresh_options_default(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -318,6 +328,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policy_reorder_proc = error_no_default_fn_pg_community,
 	.policy_reorder_check = error_no_default_fn_pg_community,
 	.policy_reorder_remove = error_no_default_fn_pg_community,
+	.policy_compaction_add = error_no_default_fn_pg_community,
+	.policy_compaction_check = error_no_default_fn_pg_community,
+	.policy_compaction_remove = error_no_default_fn_pg_community,
 	.policy_retention_add = error_no_default_fn_pg_community,
 	.policy_retention_proc = error_no_default_fn_pg_community,
 	.policy_retention_check = error_no_default_fn_pg_community,
@@ -360,6 +373,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.compressed_data_in = process_compressed_data_in,
 	.compressed_data_out = process_compressed_data_out,
 	.process_compress_table = process_compress_table_default,
+	.process_granular_refresh_options = process_granular_refresh_options_default,
 	.create_compressed_chunk = error_no_default_fn_pg_community,
 	.compress_chunk = error_no_default_fn_pg_community,
 	.decompress_chunk = error_no_default_fn_pg_community,

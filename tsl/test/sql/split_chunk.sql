@@ -28,8 +28,7 @@ begin
     select * into chunk_stats_before
     from _timescaledb_catalog.compression_chunk_size ccs
     join _timescaledb_catalog.chunk c on (c.id = ccs.chunk_id)
-    join pg_class cl on (cl.relname = c.table_name)
-    join pg_namespace ns on (ns.oid = cl.relnamespace and c.schema_name = ns.nspname)
+    join pg_class cl on (cl.oid = c.relid)
     where cl.oid = chunk;
 
     -- Compare chunk children before and after split to get new chunk
@@ -77,7 +76,7 @@ begin
             into uncompressed_heap_size_sum, compressed_heap_size_sum
             from _timescaledb_catalog.compression_chunk_size ccs
             join _timescaledb_catalog.chunk c on (c.id = ccs.chunk_id)
-            join pg_class cl on (cl.relname = c.table_name)
+            join pg_class cl on (cl.oid = c.relid)
             where cl.oid in (chunk, new_chunk);
 
         if chunk_stats_before.uncompressed_heap_size = uncompressed_heap_size_sum and
@@ -99,7 +98,7 @@ $$ language plpgsql;
 create view chunk_slices as
 select
     h.table_name as hypertable_name,
-    c.table_name as chunk_name,
+    c.relid::text as chunk_name,
     _timescaledb_functions.to_timestamp(ds.range_start) as range_start,
     _timescaledb_functions.to_timestamp(ds.range_end) as range_end
 from _timescaledb_catalog.chunk c
@@ -164,12 +163,12 @@ alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
 
 -- Split an OSM chunk is not supported
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = true where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = false where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 
 -- Split a frozen chunk is not supported
@@ -437,8 +436,8 @@ select *
 from ONLY _timescaledb_internal._hyper_1_3_chunk
 order by time;
 
-select table_name, status
-from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
+select relid::text AS table_name, status
+from _timescaledb_catalog.chunk where relid = '_timescaledb_internal._hyper_1_3_chunk'::regclass;
 analyze _timescaledb_internal._hyper_1_3_chunk;
 
 truncate chunk_summary_before_split;
@@ -457,9 +456,9 @@ call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
 -- Check that the resulting chunks look OK and have the right access method
 select * from chunk_info;
 
-select table_name, status
+select relid::text AS table_name, status
 from _timescaledb_catalog.chunk
-where table_name in ('_hyper_1_3_chunk', '_hyper_1_13_chunk');
+where relid in ('_timescaledb_internal._hyper_1_3_chunk'::regclass, '_timescaledb_internal._hyper_1_13_chunk'::regclass);
 
 -- Check that the non-compressed data rows ended up in separate partitions
 select *

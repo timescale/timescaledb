@@ -654,6 +654,9 @@ copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 									NULL,
 									false,
 									cutoffs->OldestXmin,
+#if PG19_GE
+									NULL, /* snapshot (only used by REPACK CONCURRENTLY) */
+#endif
 									&cutoffs->FreezeLimit,
 									&cutoffs->MultiXactCutoff,
 									&num_tuples,

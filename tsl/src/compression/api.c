@@ -237,7 +237,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 
 	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
 
-	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(srcht))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(srcht))
 	{
 		NameData cagg_ht_name;
 		get_hypertable_or_cagg_name(srcht, &cagg_ht_name);
@@ -590,26 +590,8 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 		ts_hypertable_cache_get_cache_and_entry(uncompressed_chunk->hypertable_relid,
 												CACHE_FLAG_NONE,
 												&hcache);
-	Hypertable *compressed_hypertable;
 
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
-
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(uncompressed_hypertable))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg(
-					 "convert_to_rowstore must not be called on the internal columnstore chunk")));
-	}
-
-	compressed_hypertable =
-		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
-	if (compressed_hypertable == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("missing columnstore-enabled hypertable")));
-	}
 
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
 	{
@@ -631,13 +613,25 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
 	Oid compressed_relid = ts_relation_get_compressed_relid(uncompressed_chunk->table_id);
 
+	/*
+	 * The chunk is marked as compressed but its compressed relation is
+	 * missing. This can happen with a corrupted chunk status.
+	 */
+	if (!OidIsValid(compressed_relid))
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s\" is missing its compressed relation",
+						get_rel_name(uncompressed_chunk->table_id))));
+	}
+
 	ereport(DEBUG1,
 			(errmsg("acquiring locks for converting to rowstore \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(uncompressed_hypertable->main_table_relid, AccessShareLock);
-	LockRelationOid(compressed_hypertable->main_table_relid, AccessShareLock);
 
 	/*
 	 * Acquire an ExclusiveLock on the uncompressed and the compressed
@@ -971,13 +965,6 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
 	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
-
-	if (!ht->fd.compressed_hypertable_id)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("missing columnstore-enabled hypertable")));
-	}
 
 	if (!ts_chunk_is_compressed(uncompressed_chunk))
 	{

@@ -11,10 +11,13 @@
 -- from a clean install even though the slice rows match.
 -- chunk_id_seq is excluded too: a fresh install no longer burns chunk ids for
 -- compressed relations, so the next id is lower than in a pre-upgrade catalog.
+-- hypertable_id_seq is excluded for the same reason: a fresh install no longer
+-- burns hypertable ids for internal compressed hypertables.
 SELECT seqrelid::regclass,
   CASE WHEN seqrelid::regclass::text IN ('_timescaledb_catalog.chunk_constraint_name',
                                          '_timescaledb_catalog.dimension_slice_id_seq',
-                                         '_timescaledb_catalog.chunk_id_seq')
+                                         '_timescaledb_catalog.chunk_id_seq',
+                                         '_timescaledb_catalog.hypertable_id_seq')
        THEN NULL ELSE nextval(seqrelid) END AS nextval,
   seqstart,
   seqincrement,

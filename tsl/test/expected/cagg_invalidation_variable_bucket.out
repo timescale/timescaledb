@@ -7,7 +7,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
 CREATE VIEW hyper_inval_log AS
-SELECT ht.schema_name || '.' || ht.table_name AS hypertable,
+SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass::text AS hypertable,
        _timescaledb_functions.to_timestamp(lowest_modified_value) AS inval_start,
        _timescaledb_functions.to_timestamp(greatest_modified_value) AS inval_end
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log hil
@@ -81,9 +81,9 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_monthly';
 -----------------------------------------------------------------------
 INSERT INTO monthly_data VALUES ('2024-02-15 12:00:00', 1, 999.0);
 SELECT * FROM hyper_inval_log;
-     hypertable      |      inval_start       |       inval_end        
----------------------+------------------------+------------------------
- public.monthly_data | 2024-02-15 12:00:00+00 | 2024-02-15 12:00:00+00
+  hypertable  |      inval_start       |       inval_end        
+--------------+------------------------+------------------------
+ monthly_data | 2024-02-15 12:00:00+00 | 2024-02-15 12:00:00+00
 
 -- Refresh only February
 CALL refresh_continuous_aggregate('cagg_monthly', '2024-02-01 00:00:00', '2024-03-01 00:00:00');
@@ -107,10 +107,10 @@ INSERT INTO monthly_data VALUES ('2024-02-29 23:59:59.999999', 1, 888.0);
 -- Insert at the very first moment of Mar 1
 INSERT INTO monthly_data VALUES ('2024-03-01 00:00:00', 1, 777.0);
 SELECT * FROM hyper_inval_log;
-     hypertable      |          inval_start          |           inval_end           
----------------------+-------------------------------+-------------------------------
- public.monthly_data | 2024-02-29 23:59:59.999999+00 | 2024-02-29 23:59:59.999999+00
- public.monthly_data | 2024-03-01 00:00:00+00        | 2024-03-01 00:00:00+00
+  hypertable  |          inval_start          |           inval_end           
+--------------+-------------------------------+-------------------------------
+ monthly_data | 2024-02-29 23:59:59.999999+00 | 2024-02-29 23:59:59.999999+00
+ monthly_data | 2024-03-01 00:00:00+00        | 2024-03-01 00:00:00+00
 
 -- Refresh February only
 CALL refresh_continuous_aggregate('cagg_monthly', '2024-02-01 00:00:00', '2024-03-01 00:00:00');
@@ -223,10 +223,10 @@ INSERT INTO yearly_data VALUES ('2023-12-31 23:59:59.999999', 1111.0);
 INSERT INTO yearly_data VALUES ('2024-01-01 00:00:00', 2222.0);
 -- Check that both years are invalidated
 SELECT * FROM hyper_inval_log;
-     hypertable     |          inval_start          |           inval_end           
---------------------+-------------------------------+-------------------------------
- public.yearly_data | 2023-12-31 23:59:59.999999+00 | 2023-12-31 23:59:59.999999+00
- public.yearly_data | 2024-01-01 00:00:00+00        | 2024-01-01 00:00:00+00
+ hypertable  |          inval_start          |           inval_end           
+-------------+-------------------------------+-------------------------------
+ yearly_data | 2023-12-31 23:59:59.999999+00 | 2023-12-31 23:59:59.999999+00
+ yearly_data | 2024-01-01 00:00:00+00        | 2024-01-01 00:00:00+00
 
 -- Refresh only 2023 - should leave 2024 invalidation in the log
 CALL refresh_continuous_aggregate('cagg_yearly', '2023-01-01 00:00:00', '2024-01-01 00:00:00');
@@ -439,10 +439,10 @@ INSERT INTO offset_data VALUES ('2024-02-15 23:59:59.999999', 1, 888.0);
 -- Insert at the bucket boundary
 INSERT INTO offset_data VALUES ('2024-02-16 00:00:00', 1, 777.0);
 SELECT * FROM hyper_inval_log;
-     hypertable     |          inval_start          |           inval_end           
---------------------+-------------------------------+-------------------------------
- public.offset_data | 2024-02-15 23:59:59.999999+00 | 2024-02-15 23:59:59.999999+00
- public.offset_data | 2024-02-16 00:00:00+00        | 2024-02-16 00:00:00+00
+ hypertable  |          inval_start          |           inval_end           
+-------------+-------------------------------+-------------------------------
+ offset_data | 2024-02-15 23:59:59.999999+00 | 2024-02-15 23:59:59.999999+00
+ offset_data | 2024-02-16 00:00:00+00        | 2024-02-16 00:00:00+00
 
 CALL refresh_continuous_aggregate('cagg_month_offset', '2024-01-01 00:00:00', '2024-04-01 00:00:00');
 SELECT bucket, cnt FROM cagg_month_offset
@@ -592,10 +592,10 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_bimonth_origin';
 INSERT INTO origin_data VALUES ('2025-03-31 23:59:59.999999', 1, 888.0);
 INSERT INTO origin_data VALUES ('2025-04-01 00:00:00', 1, 777.0);
 SELECT * FROM hyper_inval_log;
-     hypertable     |          inval_start          |           inval_end           
---------------------+-------------------------------+-------------------------------
- public.origin_data | 2025-03-31 23:59:59.999999+00 | 2025-03-31 23:59:59.999999+00
- public.origin_data | 2025-04-01 00:00:00+00        | 2025-04-01 00:00:00+00
+ hypertable  |          inval_start          |           inval_end           
+-------------+-------------------------------+-------------------------------
+ origin_data | 2025-03-31 23:59:59.999999+00 | 2025-03-31 23:59:59.999999+00
+ origin_data | 2025-04-01 00:00:00+00        | 2025-04-01 00:00:00+00
 
 CALL refresh_continuous_aggregate('cagg_bimonth_origin', '2025-02-01 00:00:00', '2025-06-01 00:00:00');
 -- Verify Feb+Mar and Apr+May buckets are updated

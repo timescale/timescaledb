@@ -76,20 +76,8 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics_ordered_idx') ch;
 -------
      5
 
--- reindexing compressed hypertable to update statistics
-DO
-$$
-DECLARE
-  hyper_id int;
-BEGIN
-  SELECT h.compressed_hypertable_id
-  INTO hyper_id
-  FROM _timescaledb_catalog.hypertable h
-  WHERE h.table_name = 'metrics_ordered_idx';
-  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
-    hyper_id);
-END;
-$$;
+-- reindexing hypertable to update statistics
+REINDEX TABLE metrics_ordered_idx;
 VACUUM FULL ANALYZE metrics_ordered_idx;
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
@@ -123,7 +111,7 @@ CREATE TABLE metrics_ordered_idx2(time timestamptz NOT NULL, device_id int, devi
 SELECT create_hypertable('metrics_ordered_idx2','time', chunk_time_interval=>'2days'::interval);
          create_hypertable         
 -----------------------------------
- (3,public,metrics_ordered_idx2,t)
+ (2,public,metrics_ordered_idx2,t)
 
 ALTER TABLE metrics_ordered_idx2 SET (timescaledb.compress, timescaledb.compress_orderby='time ASC, v0 desc',timescaledb.compress_segmentby='device_id,device_id_peer');
 INSERT INTO metrics_ordered_idx2(time,device_id,device_id_peer,v0, v1) SELECT generate_series('2000-01-20 0:00:00+0'::timestamptz,'2000-01-20 11:55:00+0','10s') , 3, 3, generate_series(1,5,1) , generate_series(555,559,1);
@@ -138,39 +126,39 @@ VACUUM ANALYZE metrics_ordered_idx2;
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC LIMIT 10;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=10.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
-               Sort Key: _hyper_3_6_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_3_6_chunk_compressed._ts_meta_v2_last_time DESC
+               Sort Key: _hyper_2_6_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_2_6_chunk_compressed._ts_meta_v2_last_time DESC
                Sort Method: quicksort 
-               ->  Index Scan using _hyper_3_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_3_6_chunk_compressed (actual rows=5.00 loops=1)
+               ->  Index Scan using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed (actual rows=5.00 loops=1)
                      Index Cond: ((device_id = 3) AND (device_id_peer = 3))
 
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 asc LIMIT 10;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=10.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
-               Sort Key: _hyper_3_6_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_3_6_chunk_compressed._ts_meta_v2_last_time DESC, _hyper_3_6_chunk_compressed._ts_meta_v2_first_v0, _hyper_3_6_chunk_compressed._ts_meta_v2_last_v0
+               Sort Key: _hyper_2_6_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_2_6_chunk_compressed._ts_meta_v2_last_time DESC, _hyper_2_6_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_6_chunk_compressed._ts_meta_v2_last_v0
                Sort Method: quicksort 
-               ->  Index Scan using _hyper_3_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_3_6_chunk_compressed (actual rows=5.00 loops=1)
+               ->  Index Scan using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed (actual rows=5.00 loops=1)
                      Index Cond: ((device_id = 3) AND (device_id_peer = 3))
 
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 desc LIMIT 10;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
    ->  Sort (actual rows=10.00 loops=1)
-         Sort Key: _hyper_3_6_chunk."time" DESC, _hyper_3_6_chunk.v0 DESC
+         Sort Key: _hyper_2_6_chunk."time" DESC, _hyper_2_6_chunk.v0 DESC
          Sort Method: top-N heapsort 
-         ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=4291.00 loops=1)
-               ->  Index Scan using _hyper_3_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_3_6_chunk_compressed (actual rows=5.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=4291.00 loops=1)
+               ->  Index Scan using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed (actual rows=5.00 loops=1)
                      Index Cond: ((device_id = 3) AND (device_id_peer = 3))
 
 :PREFIX SELECT d.device_id, m.time,  m.time
  FROM metrics_ordered_idx2 d INNER JOIN LATERAL (SELECT * FROM metrics_ordered_idx2 m WHERE m.device_id=d.device_id AND m.device_id_peer = 3 ORDER BY time DESC LIMIT 1 ) m ON m.device_id_peer = d.device_id_peer;
 --- QUERY PLAN ---
  Nested Loop (actual rows=4291.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk d (actual rows=4291.00 loops=1)
-         ->  Seq Scan on _hyper_3_6_chunk_compressed (actual rows=5.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk d (actual rows=4291.00 loops=1)
+         ->  Seq Scan on _hyper_2_6_chunk_compressed (actual rows=5.00 loops=1)
    ->  Subquery Scan on m (actual rows=1.00 loops=4291)
          Filter: (d.device_id_peer = m.device_id_peer)
          ->  Limit (actual rows=1.00 loops=4291)
@@ -178,8 +166,8 @@ VACUUM ANALYZE metrics_ordered_idx2;
                      ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 m_1 (actual rows=1.00 loops=4291)
                            Order: m_1."time" DESC
                            Hypertables excluded during runtime: 0
-                           ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk m_2 (actual rows=1.00 loops=4291)
-                                 ->  Index Scan Backward using _hyper_3_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_3_6_chunk_compressed _hyper_3_6_chunk_compressed_1 (actual rows=1.00 loops=4291)
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk m_2 (actual rows=1.00 loops=4291)
+                                 ->  Index Scan Backward using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed _hyper_2_6_chunk_compressed_1 (actual rows=1.00 loops=4291)
                                        Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
 
 SET enable_seqscan = FALSE;
@@ -1001,7 +989,7 @@ CREATE TABLE entity_m2
 SELECT create_hypertable('entity_m2', 'timec', chunk_time_interval=>'30 days'::interval);
    create_hypertable    
 ------------------------
- (5,public,entity_m2,t)
+ (3,public,entity_m2,t)
 
 INSERT INTO entity_m2 values (
  '2020-12-21 15:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  2097152 ,           0 ,  100);
@@ -1013,7 +1001,7 @@ timescaledb.compress_orderby = 'type, timec');
 SELECT compress_chunk(c) FROM show_chunks('entity_m2') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_7_chunk
+ _timescaledb_internal._hyper_3_7_chunk
 
 VACUUM FULL ANALYZE entity_m2;
 CREATE TABLE entity_m1
@@ -1029,7 +1017,7 @@ timec         timestamp with time zone  ,
 SELECT create_hypertable('entity_m1', 'timec', chunk_time_interval=>'30 days'::interval);
    create_hypertable    
 ------------------------
- (7,public,entity_m1,t)
+ (4,public,entity_m1,t)
 
 INSERT INTO entity_m1 values (
  '2020-12-21 16:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  100 ,           0 );
@@ -1075,7 +1063,7 @@ timescaledb.compress_orderby = 'type, timec');
 SELECT compress_chunk(c) FROM show_chunks('entity_m1') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_8_chunk
+ _timescaledb_internal._hyper_4_8_chunk
 
 VACUUM FULL ANALYZE entity_m1;
 SELECT m.timec, avg(m.utilization) AS avg_util

@@ -24,10 +24,10 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 \set VERBOSITY default
 ALTER TABLE alter_before SET (tsdb.invalid_option = true);
 ERROR:  unrecognized parameter "tsdb.invalid_option"
-HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index
+HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset
 ALTER TABLE alter_before SET (timescaledb.nonexistent = false);
 ERROR:  unrecognized parameter "timescaledb.nonexistent"
-HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index
+HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
 INSERT INTO alter_before VALUES ('2017-03-22T09:18:22', 23.5, 1);
@@ -189,24 +189,24 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_
 
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id |      schema_name      |    table_name    | status | osm_chunk 
-----+---------------+-----------------------+------------------+--------+-----------
-  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |      0 | f
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+ id |                 relid                  | hypertable_id | status | osm_chunk 
+----+----------------------------------------+---------------+--------+-----------
+  2 | _timescaledb_internal._hyper_2_2_chunk |             2 |      0 | f
 
 -- Rename chunk
 ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id |      schema_name      |   table_name   | status | osm_chunk 
-----+---------------+-----------------------+----------------+--------+-----------
-  2 |             2 | _timescaledb_internal | new_chunk_name |      0 | f
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+ id |                relid                 | hypertable_id | status | osm_chunk 
+----+--------------------------------------+---------------+--------+-----------
+  2 | _timescaledb_internal.new_chunk_name |             2 |      0 | f
 
 -- Set schema
 ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
- id | hypertable_id | schema_name |   table_name   | status | osm_chunk 
-----+---------------+-------------+----------------+--------+-----------
-  2 |             2 | public      | new_chunk_name |      0 | f
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE id = 2;
+ id |     relid      | hypertable_id | status | osm_chunk 
+----+----------------+---------------+--------+-----------
+  2 | new_chunk_name |             2 |      0 | f
 
 -- Test that we cannot rename chunk columns
 \set ON_ERROR_STOP 0
@@ -629,16 +629,16 @@ INSERT INTO my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
 ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
 INSERT INTO my_table (date, quantity) VALUES ('2018-08-10T23:00:00+00:00', 20);
 -- Make sure the schema name is changed in both catalog tables
-SELECT * from _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
- 12 | public      | my_table   | new_associated_schema  | _hyper_12               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status from _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | compression_state | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------
+ 12 | public      | my_table   | new_associated_schema  | _hyper_12               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |      0
 
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk from _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |     table_name     | status | osm_chunk 
-----+---------------+-----------------------+--------------------+--------+-----------
- 24 |            12 | new_associated_schema | _hyper_12_24_chunk |      0 | f
- 25 |            12 | new_associated_schema | _hyper_12_25_chunk |      0 | f
+SELECT id, relid, hypertable_id, status, osm_chunk from _timescaledb_catalog.chunk;
+ id |                  relid                   | hypertable_id | status | osm_chunk 
+----+------------------------------------------+---------------+--------+-----------
+ 24 | new_associated_schema._hyper_12_24_chunk |            12 |      0 | f
+ 25 | new_associated_schema._hyper_12_25_chunk |            12 |      0 | f
 
 DROP TABLE my_table;
 -- test renaming unique constraints/indexes
@@ -656,7 +656,7 @@ ALTER INDEX t_hypertable_id_time_key RENAME TO t_new_constraint;
 SELECT con.conname AS constraint_name
 FROM _timescaledb_catalog.chunk c
 JOIN pg_constraint con
-  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+  ON con.conrelid = c.relid
 WHERE con.conname LIKE '%t_new_constraint%'
 ORDER BY 1;
            constraint_name           
@@ -672,7 +672,7 @@ ALTER TABLE t_hypertable RENAME CONSTRAINT t_hypertable_id_time_key TO t_new_con
 SELECT con.conname AS constraint_name
 FROM _timescaledb_catalog.chunk c
 JOIN pg_constraint con
-  ON con.conrelid = format('%I.%I', c.schema_name, c.table_name)::regclass
+  ON con.conrelid = c.relid
 WHERE con.conname LIKE '%t_new_constraint%'
 ORDER BY 1;
    constraint_name   
@@ -694,19 +694,23 @@ ALTER TABLE p_hypertable DROP COLUMN b, ADD COLUMN d boolean;
 CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
-\d _timescaledb_internal._hyper_14_28_chunk
- Table "_timescaledb_internal._hyper_14_28_chunk"
- Column |  Type   | Collation | Nullable | Default 
---------+---------+-----------+----------+---------
- a      | integer |           | not null | 
- c      | integer |           |          | 
- d      | boolean |           |          | 
-Indexes:
-    "_hyper_14_28_chunk_idx_ht" btree (a, c) WHERE NOT d
-    "_hyper_14_28_chunk_p_hypertable_a_idx" btree (a DESC)
-Check constraints:
-    "constraint_39" CHECK (a >= 0 AND a < 3)
-Inherits: p_hypertable
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_columns(ch) ORDER BY 1, 2;
+                    ch                    | Column |  Type   | NotNull 
+------------------------------------------+--------+---------+---------
+ _timescaledb_internal._hyper_14_28_chunk | a      | integer | t
+ _timescaledb_internal._hyper_14_28_chunk | c      | integer | f
+ _timescaledb_internal._hyper_14_28_chunk | d      | boolean | f
+
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_indexespred(ch) ORDER BY 1, 2;
+                    ch                    |                            Index                            | Columns | Expr | Pred  | Unique | Primary | Exclusion | Tablespace 
+------------------------------------------+-------------------------------------------------------------+---------+------+-------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_14_28_chunk | _timescaledb_internal._hyper_14_28_chunk_p_hypertable_a_idx | {a}     |      |       | f      | f       | f         | 
+ _timescaledb_internal._hyper_14_28_chunk | _timescaledb_internal._hyper_14_28_chunk_idx_ht             | {a,c}   |      | NOT d | f      | f       | f         | 
+
+SELECT * FROM show_chunks('p_hypertable') ch, LATERAL test.show_constraints(ch) ORDER BY 1, 2;
+                    ch                    |  Constraint   | Type | Columns | Index |          Expr          | Deferrable | Deferred | Validated 
+------------------------------------------+---------------+------+---------+-------+------------------------+------------+----------+-----------
+ _timescaledb_internal._hyper_14_28_chunk | constraint_39 | c    | {a}     | -     | ((a >= 0) AND (a < 3)) | f          | f        | t
 
 DROP TABLE p_hypertable;
 -- check none of our hooks interact badly with normal alter view handling

@@ -390,7 +390,7 @@ create table srf_sort(time timestamptz not null, dev int, seg int);
 select create_hypertable('srf_sort', 'time', chunk_time_interval => interval '1 day');
    create_hypertable   
 -----------------------
- (3,public,srf_sort,t)
+ (2,public,srf_sort,t)
 
 insert into srf_sort values
     ('2025-01-01', 3, 1),
@@ -419,12 +419,12 @@ explain (costs off) select generate_series(1, dev) g from srf_sort order by g li
          Sort Key: (generate_series(1, srf_sort.dev))
          ->  ProjectSet
                ->  Append
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_4_chunk
-                           ->  Seq Scan on _hyper_3_4_chunk_compressed
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
-                           ->  Seq Scan on _hyper_3_5_chunk_compressed
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk
-                           ->  Seq Scan on _hyper_3_6_chunk_compressed
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk
+                           ->  Seq Scan on _hyper_2_4_chunk_compressed
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk
+                           ->  Seq Scan on _hyper_2_5_chunk_compressed
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk
+                           ->  Seq Scan on _hyper_2_6_chunk_compressed
 
 -- Without a LIMIT it produces the same data.
 select generate_series(1, dev) g from srf_sort order by g;
@@ -447,18 +447,18 @@ explain (costs off) select generate_series(1, dev) g, time from srf_sort order b
    ->  ProjectSet
          ->  Custom Scan (ChunkAppend) on srf_sort
                Order: srf_sort."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_3_4_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk
                      ->  Sort
-                           Sort Key: _hyper_3_4_chunk_compressed._ts_meta_v2_first_time
-                           ->  Seq Scan on _hyper_3_4_chunk_compressed
-               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+                           Sort Key: _hyper_2_4_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_2_4_chunk_compressed
+               ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk
                      ->  Sort
-                           Sort Key: _hyper_3_5_chunk_compressed._ts_meta_v2_first_time
-                           ->  Seq Scan on _hyper_3_5_chunk_compressed
-               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk
+                           Sort Key: _hyper_2_5_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_2_5_chunk_compressed
+               ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk
                      ->  Sort
-                           Sort Key: _hyper_3_6_chunk_compressed._ts_meta_v2_first_time
-                           ->  Seq Scan on _hyper_3_6_chunk_compressed
+                           Sort Key: _hyper_2_6_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_2_6_chunk_compressed
 
 -- Sorting on a real column followed by a set-returning function.
 select dev, generate_series(1, dev) g from srf_sort order by dev, g limit 4;
@@ -480,17 +480,17 @@ explain (costs off) select seg, generate_series(1, dev) g from srf_sort order by
                ->  Merge Append
                      Sort Key: srf_sort.seg
                      ->  Sort
-                           Sort Key: _hyper_3_4_chunk.seg
-                           ->  Custom Scan (ColumnarScan) on _hyper_3_4_chunk
-                                 ->  Seq Scan on _hyper_3_4_chunk_compressed
+                           Sort Key: _hyper_2_4_chunk.seg
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk
+                                 ->  Seq Scan on _hyper_2_4_chunk_compressed
                      ->  Sort
-                           Sort Key: _hyper_3_5_chunk.seg
-                           ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
-                                 ->  Seq Scan on _hyper_3_5_chunk_compressed
+                           Sort Key: _hyper_2_5_chunk.seg
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk
+                                 ->  Seq Scan on _hyper_2_5_chunk_compressed
                      ->  Sort
-                           Sort Key: _hyper_3_6_chunk.seg
-                           ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk
-                                 ->  Seq Scan on _hyper_3_6_chunk_compressed
+                           Sort Key: _hyper_2_6_chunk.seg
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk
+                                 ->  Seq Scan on _hyper_2_6_chunk_compressed
 
 select seg, generate_series(1, dev) g from srf_sort order by seg, g limit 4;
  seg | g 

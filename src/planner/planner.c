@@ -103,9 +103,19 @@ typedef struct BaserelInfoEntry
 void _planner_init(void);
 void _planner_fini(void);
 
+/*
+ * PG19 replaced get_relation_info_hook with build_simple_rel_hook. Adopt the
+ * new name on older versions so the hook variable and its install/restore code
+ * are version independent; only the callback signature differs.
+ */
+#if PG19_LT
+typedef get_relation_info_hook_type build_simple_rel_hook_type;
+#define build_simple_rel_hook get_relation_info_hook
+#endif
+
 static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
-static get_relation_info_hook_type prev_get_relation_info_hook;
+static build_simple_rel_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
 static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sortcl,
 										List *outer_tlist);
@@ -461,24 +471,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 					/* This lookup will warm the cache with all hypertables in the query */
 					ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
 
-					if (ht)
-					{
-						/*
-						 * Hypertable expansion marking is done in the
-						 * get_relation_info_hook, which also handles
-						 * hypertables appearing after function	or view inlining.
-						 */
-
-						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-						{
-							int compr_htid = ht->fd.compressed_hypertable_id;
-
-							/* Also warm the cache with the compressed
-							 * companion hypertable */
-							ts_hypertable_cache_get_entry_by_id(hcache, compr_htid);
-						}
-					}
-					else
+					if (!ht)
 					{
 						/* To properly keep track of SELECT FROM ONLY <chunk> we
 						 * have to mark the rte here because postgres will set
@@ -633,7 +626,12 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 
 static PlannedStmt *
 timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
-					ParamListInfo bound_params)
+					ParamListInfo bound_params
+#if PG19_GE
+					,
+					ExplainState *es
+#endif
+)
 {
 	PlannedStmt *stmt;
 	ListCell *lc;
@@ -717,12 +715,28 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 		if (prev_planner_hook != NULL)
 		{
 			/* Call any earlier hooks */
-			stmt = (prev_planner_hook) (context.rootquery, query_string, cursor_opts, bound_params);
+			stmt = (prev_planner_hook) (context.rootquery,
+										query_string,
+										cursor_opts,
+										bound_params
+#if PG19_GE
+										,
+										es
+#endif
+			);
 		}
 		else
 		{
 			/* Call the standard planner */
-			stmt = standard_planner(context.rootquery, query_string, cursor_opts, bound_params);
+			stmt = standard_planner(context.rootquery,
+									query_string,
+									cursor_opts,
+									bound_params
+#if PG19_GE
+									,
+									es
+#endif
+			);
 		}
 
 		if (ts_extension_is_loaded_and_not_upgrading())
@@ -1181,27 +1195,24 @@ rte_should_expand(const RangeTblEntry *rte)
 }
 
 static void
-expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+expand_all_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	bool set_pathlist_for_current_rel = false;
 	double total_pages;
-	bool reenabled_inheritance = false;
+	bool expanded_some_hypertables = false;
 
 	for (int i = 1; i < root->simple_rel_array_size; i++)
 	{
 		RangeTblEntry *in_rte = root->simple_rte_array[i];
 
-#if PG18_GE
-		/* RTE could be removed due to self-join
-		 * elimination optimization.
-		 *
-		 * https://github.com/postgres/postgres/commit/5f6f95
-		 */
 		if (!in_rte)
 		{
+			/*
+			 * Starting with PG18, an RTE can be removed due to self-join
+			 * elimination optimization.
+			 */
 			continue;
 		}
-#endif
 
 		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
 		{
@@ -1212,10 +1223,7 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 			ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
 
 			in_rte->inh = true;
-			reenabled_inheritance = true;
-			/* Redo set_rel_consider_parallel, as results of the call may no longer be valid
-			 * here (due to adding more tables to the set of tables under consideration here).
-			 * This is especially true if dealing with foreign data wrappers. */
+			expanded_some_hypertables = true;
 
 			/*
 			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
@@ -1243,7 +1251,7 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 		}
 	}
 
-	if (!reenabled_inheritance)
+	if (!expanded_some_hypertables)
 	{
 		return;
 	}
@@ -1312,7 +1320,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			 * Since the sort optimization adds new paths to the rel it has
 			 * to happen before any optimizations that replace pathlist.
 			 */
-			List *transformed_query_pathkeys = ts_sort_transform_get_pathkeys(root, rel, rte, ht);
+			List *transformed_query_pathkeys = ts_sort_transform_get_pathkeys(root, rel);
 			if (transformed_query_pathkeys != NIL)
 			{
 				List *orig_query_pathkeys = root->query_pathkeys;
@@ -1461,10 +1469,21 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	reltype = ts_classify_relation(root, rel, &ht);
 
-	/* Check for unexpanded hypertable */
-	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
+	/*
+	 * Check for unexpanded hypertable.
+	 *
+	 * We're going to expand all hypertables in the query when this hook is
+	 * called for one of them. This control flow is somewhat unexpected, but
+	 * unfortunately this is the best point available for some calculations,
+	 * given the Postgres hook call sequence. Namely, we need a point where all
+	 * hypertables are already expanded, but no paths are created yet, to update
+	 * the PlannerInfo.total_table_pages which influences the index path cost.
+	 */
+	if (rte_should_expand(rte))
 	{
-		expand_hypertables(root, rel, rti, rte);
+		expand_all_hypertables(root, rel, rti, rte);
+
+		Assert(!rte_should_expand(rte));
 	}
 
 	if (ts_guc_enable_optimizations)
@@ -1532,14 +1551,8 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
  * chunk relations that we need during planning. We also expand hypertables
  * here. */
 static void
-timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, bool inhparent,
-								   RelOptInfo *rel)
+timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent)
 {
-	if (prev_get_relation_info_hook != NULL)
-	{
-		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
-	}
-
 	if (!valid_hook_call())
 	{
 		return;
@@ -1610,7 +1623,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * relation here has observable side effects (schema USAGE checks
 			 * fire before the parent's table-level ACL check).
 			 */
-			if (ts_license_is_apache() && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+			if (ts_license_is_apache() && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 			{
 				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
 
@@ -1640,9 +1653,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * in cases when these functions don't run, we have to do it here.
 			 */
 			const bool use_columnar_scan =
-				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht);
-			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE) &&
-											 !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht);
+				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
+			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
 
@@ -1674,6 +1686,36 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			break;
 	}
 }
+
+/*
+ * The hook fires once per base relation. PG19 renamed it and passes the range
+ * table entry, whereas earlier versions passed the relation OID and inhparent
+ * flag; adapt the arguments to our shared implementation here.
+ */
+#if PG19_GE
+static void
+timescaledb_get_relation_info_hook(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
+{
+	if (prev_get_relation_info_hook != NULL)
+	{
+		prev_get_relation_info_hook(root, rel, rte);
+	}
+
+	timescaledb_get_relation_info(root, rel, rte->inh);
+}
+#else
+static void
+timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, bool inhparent,
+								   RelOptInfo *rel)
+{
+	if (prev_get_relation_info_hook != NULL)
+	{
+		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
+	}
+
+	timescaledb_get_relation_info(root, rel, inhparent);
+}
+#endif
 
 static bool
 join_involves_hypertable(const PlannerInfo *root, const RelOptInfo *rel)
@@ -1758,19 +1800,6 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 			Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
-			/* Direct INSERT into internal compressed hypertable is not supported.
-			 * Compressed chunks have no dimensions so we could not do tuple routing.
-			 * Additionally internal compressed hypertable has no columns so you
-			 * couldn't even insert any actual data.
-			 */
-			if (ht && ht->fd.compression_state == HypertableInternalCompressionTable)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("direct insert into internal compressed hypertable is not "
-								"supported")));
-			}
-
 			/* Check for DML on chunk directly */
 			if (!ht)
 			{
@@ -1826,7 +1855,7 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					 * - Compressed chunks need decompression for correct
 					 *   join evaluation of matched vs not-matched rows
 					 */
-					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht));
+					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 					if (!need_modify)
 					{
 						List *firstMergeActionList = linitial(mt->mergeActionLists);
@@ -2085,8 +2114,8 @@ _planner_init(void)
 	prev_set_rel_pathlist_hook = set_rel_pathlist_hook;
 	set_rel_pathlist_hook = timescaledb_set_rel_pathlist;
 
-	prev_get_relation_info_hook = get_relation_info_hook;
-	get_relation_info_hook = timescaledb_get_relation_info_hook;
+	prev_get_relation_info_hook = build_simple_rel_hook;
+	build_simple_rel_hook = timescaledb_get_relation_info_hook;
 
 	prev_create_upper_paths_hook = create_upper_paths_hook;
 	create_upper_paths_hook = timescaledb_create_upper_paths_hook;
@@ -2097,6 +2126,6 @@ _planner_fini(void)
 {
 	planner_hook = prev_planner_hook;
 	set_rel_pathlist_hook = prev_set_rel_pathlist_hook;
-	get_relation_info_hook = prev_get_relation_info_hook;
+	build_simple_rel_hook = prev_get_relation_info_hook;
 	create_upper_paths_hook = prev_create_upper_paths_hook;
 }

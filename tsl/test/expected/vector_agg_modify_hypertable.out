@@ -29,7 +29,7 @@ CREATE TABLE target_ht(device_id int NOT NULL, total bigint, cnt bigint);
 SELECT create_hypertable('target_ht', 'device_id', chunk_time_interval => 10);
    create_hypertable    
 ------------------------
- (3,public,target_ht,t)
+ (2,public,target_ht,t)
 
 SET timescaledb.debug_require_vector_agg = 'require';
 INSERT INTO target_ht

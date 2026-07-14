@@ -89,7 +89,7 @@ INSERT INTO ht_missing_indexes SELECT generate_series('2000-01-01'::timestamptz,
 SELECT format('%I.%I',i.schemaname,i.indexname) AS "INDEX_NAME"
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id = ht.id
-INNER JOIN pg_indexes i ON i.schemaname = c.schema_name AND i.tablename=c.table_name
+INNER JOIN pg_indexes i ON format('%I.%I', i.schemaname, i.tablename)::regclass = c.relid
 WHERE ht.table_name = 'ht_missing_indexes'
 ORDER BY c.id LIMIT 1 OFFSET 1 \gset
 DROP INDEX :INDEX_NAME;
@@ -178,7 +178,7 @@ ANALYZE sortopt_test;
 -- print chunks ordered by time to ensure ordering we want
 SELECT
   ht.table_name AS hypertable,
-  c.table_name AS chunk,
+  c.relid::text AS chunk,
   ds.range_start
 FROM
   _timescaledb_catalog.chunk c
@@ -186,63 +186,63 @@ FROM
   INNER JOIN _timescaledb_catalog.dimension d ON ds.dimension_id = d.id
   INNER JOIN _timescaledb_catalog.hypertable ht ON d.hypertable_id = ht.id
 ORDER BY ht.table_name, range_start, chunk;
-       hypertable       |       chunk       |   range_start   
-------------------------+-------------------+-----------------
- dimension_last         | _hyper_2_4_chunk  | 946684800000000
- dimension_last         | _hyper_2_5_chunk  | 946771200000000
- dimension_last         | _hyper_2_6_chunk  | 946857600000000
- dimension_last         | _hyper_2_7_chunk  | 946944000000000
- dimension_only         | _hyper_3_8_chunk  | 946684800000000
- dimension_only         | _hyper_3_9_chunk  | 946857600000000
- dimension_only         | _hyper_3_10_chunk | 947030400000000
- dimension_only         | _hyper_3_11_chunk | 947203200000000
- ht_dropped_columns     | _hyper_5_15_chunk | 946512000000000
- ht_dropped_columns     | _hyper_5_16_chunk | 947116800000000
- ht_dropped_columns     | _hyper_5_17_chunk | 947721600000000
- ht_dropped_columns     | _hyper_5_18_chunk | 948326400000000
- ht_dropped_columns     | _hyper_5_19_chunk | 948931200000000
- ht_missing_indexes     | _hyper_4_12_chunk | 946512000000000
- ht_missing_indexes     | _hyper_4_13_chunk | 947116800000000
- ht_missing_indexes     | _hyper_4_14_chunk | 947721600000000
- ordered_append_reverse | _hyper_1_3_chunk  | 946512000000000
- ordered_append_reverse | _hyper_1_2_chunk  | 947116800000000
- ordered_append_reverse | _hyper_1_1_chunk  | 947721600000000
- sortopt_test           | _hyper_8_55_chunk | 946512000000000
- sortopt_test           | _hyper_8_54_chunk | 947116800000000
- space2                 | _hyper_6_21_chunk | 946512000000000
- space2                 | _hyper_6_23_chunk | 946512000000000
- space2                 | _hyper_6_25_chunk | 946512000000000
- space2                 | _hyper_6_27_chunk | 946512000000000
- space2                 | _hyper_6_29_chunk | 946512000000000
- space2                 | _hyper_6_31_chunk | 946512000000000
- space2                 | _hyper_6_33_chunk | 946512000000000
- space2                 | _hyper_6_35_chunk | 946512000000000
- space2                 | _hyper_6_37_chunk | 946512000000000
- space2                 | _hyper_6_20_chunk | 947116800000000
- space2                 | _hyper_6_22_chunk | 947116800000000
- space2                 | _hyper_6_24_chunk | 947116800000000
- space2                 | _hyper_6_26_chunk | 947116800000000
- space2                 | _hyper_6_28_chunk | 947116800000000
- space2                 | _hyper_6_30_chunk | 947116800000000
- space2                 | _hyper_6_32_chunk | 947116800000000
- space2                 | _hyper_6_34_chunk | 947116800000000
- space2                 | _hyper_6_36_chunk | 947116800000000
- space3                 | _hyper_7_39_chunk | 946512000000000
- space3                 | _hyper_7_41_chunk | 946512000000000
- space3                 | _hyper_7_43_chunk | 946512000000000
- space3                 | _hyper_7_45_chunk | 946512000000000
- space3                 | _hyper_7_47_chunk | 946512000000000
- space3                 | _hyper_7_49_chunk | 946512000000000
- space3                 | _hyper_7_51_chunk | 946512000000000
- space3                 | _hyper_7_53_chunk | 946512000000000
- space3                 | _hyper_7_38_chunk | 947116800000000
- space3                 | _hyper_7_40_chunk | 947116800000000
- space3                 | _hyper_7_42_chunk | 947116800000000
- space3                 | _hyper_7_44_chunk | 947116800000000
- space3                 | _hyper_7_46_chunk | 947116800000000
- space3                 | _hyper_7_48_chunk | 947116800000000
- space3                 | _hyper_7_50_chunk | 947116800000000
- space3                 | _hyper_7_52_chunk | 947116800000000
+       hypertable       |                  chunk                  |   range_start   
+------------------------+-----------------------------------------+-----------------
+ dimension_last         | _timescaledb_internal._hyper_2_4_chunk  | 946684800000000
+ dimension_last         | _timescaledb_internal._hyper_2_5_chunk  | 946771200000000
+ dimension_last         | _timescaledb_internal._hyper_2_6_chunk  | 946857600000000
+ dimension_last         | _timescaledb_internal._hyper_2_7_chunk  | 946944000000000
+ dimension_only         | _timescaledb_internal._hyper_3_8_chunk  | 946684800000000
+ dimension_only         | _timescaledb_internal._hyper_3_9_chunk  | 946857600000000
+ dimension_only         | _timescaledb_internal._hyper_3_10_chunk | 947030400000000
+ dimension_only         | _timescaledb_internal._hyper_3_11_chunk | 947203200000000
+ ht_dropped_columns     | _timescaledb_internal._hyper_5_15_chunk | 946512000000000
+ ht_dropped_columns     | _timescaledb_internal._hyper_5_16_chunk | 947116800000000
+ ht_dropped_columns     | _timescaledb_internal._hyper_5_17_chunk | 947721600000000
+ ht_dropped_columns     | _timescaledb_internal._hyper_5_18_chunk | 948326400000000
+ ht_dropped_columns     | _timescaledb_internal._hyper_5_19_chunk | 948931200000000
+ ht_missing_indexes     | _timescaledb_internal._hyper_4_12_chunk | 946512000000000
+ ht_missing_indexes     | _timescaledb_internal._hyper_4_13_chunk | 947116800000000
+ ht_missing_indexes     | _timescaledb_internal._hyper_4_14_chunk | 947721600000000
+ ordered_append_reverse | _timescaledb_internal._hyper_1_3_chunk  | 946512000000000
+ ordered_append_reverse | _timescaledb_internal._hyper_1_2_chunk  | 947116800000000
+ ordered_append_reverse | _timescaledb_internal._hyper_1_1_chunk  | 947721600000000
+ sortopt_test           | _timescaledb_internal._hyper_8_55_chunk | 946512000000000
+ sortopt_test           | _timescaledb_internal._hyper_8_54_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_21_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_23_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_25_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_27_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_29_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_31_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_33_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_35_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_37_chunk | 946512000000000
+ space2                 | _timescaledb_internal._hyper_6_20_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_22_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_24_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_26_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_28_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_30_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_32_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_34_chunk | 947116800000000
+ space2                 | _timescaledb_internal._hyper_6_36_chunk | 947116800000000
+ space3                 | _timescaledb_internal._hyper_7_39_chunk | 946512000000000
+ space3                 | _timescaledb_internal._hyper_7_41_chunk | 946512000000000
+ space3                 | _timescaledb_internal._hyper_7_43_chunk | 946512000000000
+ space3                 | _timescaledb_internal._hyper_7_45_chunk | 946512000000000
+ space3                 | _timescaledb_internal._hyper_7_47_chunk | 946512000000000
+ space3                 | _timescaledb_internal._hyper_7_49_chunk | 946512000000000
+ space3                 | _timescaledb_internal._hyper_7_51_chunk | 946512000000000
+ space3                 | _timescaledb_internal._hyper_7_53_chunk | 946512000000000
+ space3                 | _timescaledb_internal._hyper_7_38_chunk | 947116800000000
+ space3                 | _timescaledb_internal._hyper_7_40_chunk | 947116800000000
+ space3                 | _timescaledb_internal._hyper_7_42_chunk | 947116800000000
+ space3                 | _timescaledb_internal._hyper_7_44_chunk | 947116800000000
+ space3                 | _timescaledb_internal._hyper_7_46_chunk | 947116800000000
+ space3                 | _timescaledb_internal._hyper_7_48_chunk | 947116800000000
+ space3                 | _timescaledb_internal._hyper_7_50_chunk | 947116800000000
+ space3                 | _timescaledb_internal._hyper_7_52_chunk | 947116800000000
 
 -- test ASC for reverse ordered chunks
 :PREFIX SELECT
