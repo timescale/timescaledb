@@ -163,8 +163,6 @@ ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid, Hypertable *hypertable)
 static void
 rte_mark_for_expansion(RangeTblEntry *rte)
 {
-	// mybt();
-
 	Assert(rte->rtekind == RTE_RELATION);
 	Assert(rte->ctename == NULL);
 	rte->ctename = (char *) TS_CTE_EXPAND;
