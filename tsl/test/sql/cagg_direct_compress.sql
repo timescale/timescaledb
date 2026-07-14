@@ -138,3 +138,75 @@ GROUP BY ROLLUP(bucket)
 ORDER BY bucket ASC NULLS FIRST;
 
 RESET timescaledb.enable_direct_compress_on_cagg_refresh;
+
+-- Tenant tracking on the direct-compress ingest path.
+SET timezone TO 'UTC';
+-- Anchor the granular-refresh start offset to a fixed date safely before all
+-- the fixed fixture dates below, computed relative to today so the window keeps
+-- covering them regardless of when this test actually runs.
+SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_lookback \gset
+
+--  view over the tenant tracking catalog 
+CREATE VIEW continuous_aggs_tenant_tracking_view AS
+SELECT hypertable_id,
+       tenant_id,
+       _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+       _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking;
+
+CREATE TABLE tenant_conditions(time timestamptz NOT NULL, sensor_id text, value float)
+  WITH (tsdb.hypertable, tsdb.orderby = 'time');
+ALTER TABLE tenant_conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW tenant_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM tenant_conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW tenant_daily SET (timescaledb.enable_granular_refresh = true);
+
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_sort_batches = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = false;
+
+-- Direct-compress a batch of 2020 rows for three tenants (1000 rows each so the
+-- batch is large enough to engage direct compress).  Each tenant has a single
+-- distinct timestamp, so its tracked range is a point (min == max).
+INSERT INTO tenant_conditions
+SELECT v.ts, v.sensor, g
+FROM (VALUES ('2020-01-01 00:00+00'::timestamptz, 'sensor_a'),
+             ('2020-01-02 00:00+00'::timestamptz, 'sensor_b'),
+             ('2020-01-03 00:00+00'::timestamptz, 'sensor_c')) v(ts, sensor),
+     generate_series(1, 1000) g;
+
+-- Confirm the direct-compress ingest path ran: the chunk is COMPRESSED.
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk)
+FROM show_chunks('tenant_conditions') chunk;
+
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.enable_direct_compress_insert_sort_batches;
+RESET timescaledb.enable_direct_compress_insert_client_sorted;
+
+-- A fresh 2025 row gives the refresh work to do so it drains the tracker.
+-- Refreshing the 2025 window . All seqnum=1 entries for 2020 and 2025 can
+-- be observed
+INSERT INTO tenant_conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('tenant_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect sensor_a/sensor_b/sensor_c from the direct-compress INSERT, each with
+-- min == max at its distinct day.
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'tenant_daily')
+ORDER BY tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW tenant_daily;
+DROP TABLE tenant_conditions;
+DROP VIEW continuous_aggs_tenant_tracking_view;
