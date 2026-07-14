@@ -97,14 +97,15 @@ CREATE TABLE _timescaledb_catalog.dimension_slice (
 CREATE INDEX dimension_slice_dimension_id_range_start_range_end_idx
     ON _timescaledb_catalog.dimension_slice (dimension_id, range_start, range_end);
 
--- One fresh slice row per (chunk_id, old_slice) pair, derived from the
--- existing chunk_constraint mapping. Slices that were shared across
--- chunks become per-chunk duplicates here.
-INSERT INTO _timescaledb_catalog.dimension_slice (chunk_id, dimension_id, range_start, range_end)
-SELECT cc.chunk_id, tmp.dimension_id, tmp.range_start, tmp.range_end
+-- Keep the original id for the first chunk of each slice; shared slices get
+-- fresh ids for their remaining chunks below.
+INSERT INTO _timescaledb_catalog.dimension_slice (id, chunk_id, dimension_id, range_start, range_end)
+SELECT DISTINCT ON (cc.dimension_slice_id)
+    tmp.id, cc.chunk_id, tmp.dimension_id, tmp.range_start, tmp.range_end
 FROM _timescaledb_catalog.chunk_constraint cc
 JOIN _timescaledb_internal.tmp_dimension_slice tmp ON tmp.id = cc.dimension_slice_id
-WHERE cc.dimension_slice_id IS NOT NULL;
+WHERE cc.dimension_slice_id IS NOT NULL
+ORDER BY cc.dimension_slice_id, cc.chunk_id;
 
 ALTER SEQUENCE _timescaledb_catalog.dimension_slice_id_seq OWNED BY _timescaledb_catalog.dimension_slice.id;
 SELECT setval('_timescaledb_catalog.dimension_slice_id_seq',
@@ -112,11 +113,21 @@ SELECT setval('_timescaledb_catalog.dimension_slice_id_seq',
                        COALESCE((SELECT max(id) FROM _timescaledb_catalog.dimension_slice), 0)),
               true);
 
--- Rename each chunk-side dimensional CHECK from constraint_<old_slice_id> to
--- constraint_<new_slice_id> so the on-disk name matches the id stored in the
--- rebuilt dimension_slice. Without this, code that derives the name from
--- slice->fd.id (chunk_constraints_recreate, chunk detach, merge-on-dimension,
--- the ALTER TABLE DROP CONSTRAINT guard) fails to locate the existing CHECK.
+-- Extra chunks of a shared slice, one fresh id each.
+INSERT INTO _timescaledb_catalog.dimension_slice (chunk_id, dimension_id, range_start, range_end)
+SELECT cc.chunk_id, tmp.dimension_id, tmp.range_start, tmp.range_end
+FROM (
+    SELECT cc.chunk_id, cc.dimension_slice_id,
+           row_number() OVER (PARTITION BY cc.dimension_slice_id ORDER BY cc.chunk_id) AS rn
+    FROM _timescaledb_catalog.chunk_constraint cc
+    WHERE cc.dimension_slice_id IS NOT NULL
+) cc
+JOIN _timescaledb_internal.tmp_dimension_slice tmp ON tmp.id = cc.dimension_slice_id
+WHERE cc.rn > 1;
+
+-- Rename the chunk-side CHECK constraint_<old_id> to constraint_<new_id> for the
+-- reid'd shared slices so it matches the code-derived name. Only these slices
+-- change, so unshared ones lock no chunks.
 DO $$
 DECLARE
     r RECORD;
