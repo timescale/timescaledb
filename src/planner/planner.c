@@ -1193,8 +1193,6 @@ expand_all_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
 			Assert(ht != NULL);
 
-			Assert(ht != NULL && in_rel != NULL);
-
 			if (!IS_DUMMY_REL(in_rel))
 			{
 				ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
@@ -1213,6 +1211,11 @@ expand_all_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 			if (bms_is_member(i, root->all_result_relids))
 			{
 				distribute_row_identity_vars(root);
+			}
+
+			if (IS_DUMMY_REL(in_rel))
+			{
+				continue;
 			}
 
 			/*
@@ -1440,9 +1443,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	TsRelType reltype;
 	Hypertable *ht;
 
-	//	mybt();
-	//	fprintf(stderr, "dummy rel %d: %d\n", rel->relid, IS_DUMMY_REL(rel));
-
 	/*
 	 * Quick exit if this is a relation we're not interested in.
 	 *
@@ -1450,9 +1450,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 * the relation rte->relid (e.g., a transition table for a trigger), but
 	 * not the relation itself.
 	 */
-	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid)
-		//		|| IS_DUMMY_REL(rel)
-	)
+	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid))
 	{
 		if (prev_set_rel_pathlist_hook != NULL)
 		{
@@ -1582,7 +1580,12 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		case TS_REL_HYPERTABLE:
 		{
-			Assert(!IS_DUMMY_REL(rel)); /* FIXME when would that happen? */
+			/*
+			 * The tables are not yet marked as dummy at this point, it happens
+			 * after this hook is called. We have to have some special handling
+			 * for dummy tables, but only at later stages.
+			 */
+			Assert(!IS_DUMMY_REL(rel));
 
 			/*
 			 * Mark hypertable RTEs we'd like to expand ourselves. We do this
@@ -1597,9 +1600,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * `inhparent` goes to false in two cases: a hypertable without
 			 * chunks or a SELECT FROM ONLY hypertable.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-				inhparent && rte->ctename == NULL &&
-				!IS_DUMMY_REL(rel))
+			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
+				rte->ctename == NULL)
 			{
 				if (rel->relid != (Index) query->resultRelation)
 				{
@@ -1610,8 +1612,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 					rte_mark_for_expansion(rte);
 				}
 			}
-			//			mybt();
-			//			fprintf(stderr, "dummy rel %d: %d\n", rel->relid, IS_DUMMY_REL(rel));
+
 			ts_create_private_reloptinfo(rel);
 
 			if (ts_guc_enable_optimizations)

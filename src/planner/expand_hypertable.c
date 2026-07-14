@@ -1376,19 +1376,16 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 										   newrelation,
 										   &childrte,
 										   &child_rtindex);
-		/*
-		 * For compatibility with the old planner code that didn't create
-		 * per-chunk aliases, use the parent aliases. These aliases have only a
-		 * cosmetic function, and changing them would lead to EXPLAIN changes in
-		 * basically every test.
-		 *
-		 * For DML result relations, keep the alias that
-		 * ts_expand_single_inheritance_child() set (parent name), so
-		 * ruleutils adds _1/_2 suffixes for disambiguation, matching
-		 * the convention PG uses for inherited tables.
-		 */
+
 		if (!bms_is_member(ht_relindex, root->all_result_relids))
 		{
+			/*
+			 * For compatibility with the old planner code that didn't create
+			 * per-chunk aliases, use the parent aliases. These aliases have only a
+			 * cosmetic function, and changing them would lead to EXPLAIN changes in
+			 * basically every test.
+			 */
+
 			childrte->alias = copyObject(ht_rte->alias);
 			childrte->eref = copyObject(ht_rte->eref);
 		}
