@@ -17,6 +17,13 @@ SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
     ON hypertable_id = ht.id
 ORDER BY 1;
 
+CREATE VIEW cagg_matlog_view AS
+SELECT materialization_id, seqnum,
+        _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_ts,
+        _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_ts
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+
+
 CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
 
@@ -1199,4 +1206,82 @@ ORDER BY 1,2;
 DROP TABLE test_data CASCADE;
 
 
+RESET timezone;
+
+-- test direct compress copy  works with granular refresh. Tenant
+-- invalidations should be recorded
+--
+SET timezone TO 'UTC';
+-- Anchor the granular-refresh start offset to a fixed date safely before all
+-- the fixed fixture dates below, computed relative to today so the window keeps
+-- covering them regardless of when this test actually runs.
+SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_lookback \gset
+CREATE TABLE tenant_copy(time timestamptz NOT NULL, sensor_id text, value float) WITH (tsdb.hypertable);
+ALTER TABLE tenant_copy SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+CREATE MATERIALIZED VIEW tenant_copy_daily WITH (tsdb.continuous) AS
+  SELECT time_bucket('1day', time) AS bucket, sensor_id, avg(value)
+  FROM tenant_copy GROUP BY bucket, sensor_id WITH NO DATA;
+ALTER MATERIALIZED VIEW tenant_copy_daily SET (timescaledb.enable_granular_refresh = true);
+
+SET timescaledb.enable_direct_compress_copy = true;
+-- Two tenants, each at a distinct day, so each tracked range is a point.
+COPY tenant_copy FROM STDIN;
+2023-01-01	sensor_a	1
+2023-01-01	sensor_a	1
+2023-01-02	sensor_b	2
+2023-01-02	sensor_b	2
+\.
+RESET timescaledb.enable_direct_compress_copy;
+
+-- Confirm the direct-compress ingest path ran: a compressed chunk exists.
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk)
+FROM show_chunks('tenant_copy') chunk;
+
+-- A fresh 2025 row gives the refresh work to do so it drains the tracker.
+-- Refreshing only the 2025 window . 2023 and 2025 entries in tracking until
+-- they are cleaned up later.
+INSERT INTO tenant_copy VALUES ('2025-01-01', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('tenant_copy_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect sensor_a and sensor_b from the direct-compress COPY, each min == max.
+SELECT tt.tenant_id AS tenant_id,
+       _timescaledb_functions.to_timestamp(tt.min_timestamp) AS min_timestamp,
+       _timescaledb_functions.to_timestamp(tt.max_timestamp) AS max_timestamp,
+       tt.seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt
+JOIN _timescaledb_catalog.hypertable h ON tt.hypertable_id = h.id
+WHERE h.table_name = 'tenant_copy'
+ORDER BY 1, 4;
+
+-- note there are no corresponding invalidation entries for 2023 as they were
+-- never materialized before.
+SELECT * FROM cagg_matlog_view
+WHERE materialization_id = (SELECT mat_hypertable_id 
+      FROM _timescaledb_catalog.continuous_agg
+      WHERE user_view_name = 'tenant_copy_daily');
+
+--additional refreshes to see seqnum=1 entries removed
+INSERT INTO tenant_copy VALUES ('2025-01-02', 'sensor_b', 0);
+CALL refresh_continuous_aggregate('tenant_copy_daily', '2025-01-01 00:00+00', NULL);
+INSERT INTO tenant_copy VALUES ('2025-01-03', 'sensor_b', 0);
+CALL refresh_continuous_aggregate('tenant_copy_daily', '2025-01-01 00:00+00', NULL);
+SELECT * FROM cagg_matlog_view
+WHERE materialization_id = (SELECT mat_hypertable_id 
+      FROM _timescaledb_catalog.continuous_agg
+      WHERE user_view_name = 'tenant_copy_daily');
+--no seqnum=1 entries anymore
+SELECT tt.tenant_id AS tenant_id,
+       _timescaledb_functions.to_timestamp(tt.min_timestamp) AS min_timestamp,
+       _timescaledb_functions.to_timestamp(tt.max_timestamp) AS max_timestamp,
+       tt.seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt
+JOIN _timescaledb_catalog.hypertable h ON tt.hypertable_id = h.id
+WHERE h.table_name = 'tenant_copy'
+ORDER BY 1, 4;
+DROP MATERIALIZED VIEW tenant_copy_daily;
+DROP TABLE tenant_copy;
 RESET timezone;
