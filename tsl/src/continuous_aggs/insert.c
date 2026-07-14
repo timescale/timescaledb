@@ -60,6 +60,7 @@ typedef struct ContinuousAggsCacheInvalEntry
 	Oid chunk_relid;
 	int32 hypertable_id;
 	Dimension hypertable_open_dimension;
+	Oid open_dimension_type; /* partition type of the open dimension, cached */
 	AttrNumber open_dimension_attno;
 	TrackingColumnInfo tenant_col;
 	bool value_is_set;
@@ -191,11 +192,9 @@ update_cache_from_tuple(ContinuousAggsCacheInvalEntry *cache_entry, HeapTuple tu
 {
 	Datum datum;
 	bool isnull;
-	Oid dimtype;
-	Dimension *d = &cache_entry->hypertable_open_dimension;
 	AttrNumber col = cache_entry->open_dimension_attno;
 
-	Assert(d->type == DIMENSION_TYPE_OPEN);
+	Assert(cache_entry->hypertable_open_dimension.type == DIMENSION_TYPE_OPEN);
 
 	datum = heap_getattr(tuple, col, tupdesc, &isnull);
 	/*
@@ -208,8 +207,7 @@ update_cache_from_tuple(ContinuousAggsCacheInvalEntry *cache_entry, HeapTuple tu
 		return;
 	}
 
-	dimtype = ts_dimension_get_partition_type(d);
-	int64 timeval = ts_time_value_to_internal(datum, dimtype);
+	int64 timeval = ts_time_value_to_internal(datum, cache_entry->open_dimension_type);
 
 	cache_entry->value_is_set = true;
 	if (timeval < cache_entry->lowest_modified_value)
@@ -236,6 +234,7 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	cache_entry->chunk_relid = chunk_relid;
 	cache_entry->hypertable_id = hypertable_id;
 	cache_entry->hypertable_open_dimension = *open_dim;
+	cache_entry->open_dimension_type = ts_dimension_get_partition_type(open_dim);
 	cache_entry->open_dimension_attno = get_attnum(chunk_relid, NameStr(open_dim->fd.column_name));
 
 	/* Resolve the tracking column for this chunk.  attno == InvalidAttrNumber
@@ -464,7 +463,6 @@ record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Rel
 	Datum time_datum;
 	Datum tenant_datum;
 	bool isnull;
-	Oid dimtype;
 	int64 timeval;
 	char *key;
 	int key_len;
@@ -483,8 +481,7 @@ record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Rel
 	{
 		return;
 	}
-	dimtype = ts_dimension_get_partition_type(&cache_entry->hypertable_open_dimension);
-	timeval = ts_time_value_to_internal(time_datum, dimtype);
+	timeval = ts_time_value_to_internal(time_datum, cache_entry->open_dimension_type);
 
 	tenant_datum = heap_getattr(tuple, cache_entry->tenant_col.attno, tupdesc, &isnull);
 	if (isnull)
