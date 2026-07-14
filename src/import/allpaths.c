@@ -190,7 +190,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 */
 		Hypertable *ht;
 		TsRelType reltype = ts_classify_relation(root, child_rel, &ht);
-		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		if (reltype == TS_REL_CHUNK_CHILD)
 		{
 			const Chunk *chunk = ts_planner_chunk_fetch(root, child_rel);
 
@@ -497,6 +497,16 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 		case RTE_RESULT:
 			/* RESULT RTEs, in themselves, are no problem. */
 			break;
+#if PG19_GE
+		case RTE_GRAPH_TABLE:
+
+			/*
+			 * Shouldn't happen since these are replaced by subquery RTEs when
+			 * rewriting queries.
+			 */
+			Assert(false);
+			return;
+#endif
 #if PG18_GE
 		case RTE_GROUP:
 			/* Shouldn't happen; we're only considering baserels here. */

@@ -207,4 +207,10 @@ select ss, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
 select ss, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
 select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
 
+-- NaN handling in Postgres minmax is different from other functions -- it treats
+-- NaN as bigger than any number. This test has a filter that ensures that
+-- NaNs go first in the source data, because some potentially buggy conditions
+-- can be only triggered in this case.
+select ss, min(cfloat4), max(cfloat4) from aggfns where cfloat4 = any(array['nan'::float4, 33.308792]) group by ss order by ss;
+
 reset max_parallel_workers_per_gather;

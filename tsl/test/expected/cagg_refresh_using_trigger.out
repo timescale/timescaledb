@@ -579,7 +579,7 @@ CALL refresh_continuous_aggregate('daily_temp_decompress_limit', NULL, NULL);
 SELECT compress_chunk(show_chunks('daily_temp_decompress_limit'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_17_26_chunk
+ _timescaledb_internal._hyper_16_26_chunk
 
 INSERT INTO conditions_decompress_limit SELECT '2020-01-01','d' || i::text, 2.0 FROM generate_series(1,100) g(i);
 SET timescaledb.max_tuples_decompressed_per_dml_transaction TO 1;

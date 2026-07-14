@@ -66,45 +66,31 @@
 #error "Unsupported PostgreSQL version"
 #endif
 
-#if ((PG_VERSION_NUM >= 150009 && PG_VERSION_NUM < 160000) ||                                      \
-	 (PG_VERSION_NUM >= 160005 && PG_VERSION_NUM < 170000) || (PG_VERSION_NUM >= 170001))
 /*
- * The above versions introduced a fix for potentially losing updates to
- * pg_class and pg_database due to inplace updates done to those catalog
- * tables by PostgreSQL. The fix requires taking a lock on the tuple via
- * SearchSysCacheLocked1(). For older PG versions, we just map the new
- * function to the unlocked version and the unlocking of the tuple is a noop.
+ * PG19 reworked jsonb construction: pushJsonbValue() now takes a JsonbInState *
+ * and returns void, leaving the completed value in state->result (populated only
+ * when the outermost container is closed). Older versions took a JsonbParseState **
+ * and returned the completed value directly.
  *
- * https://github.com/postgres/postgres/commit/3b7a689e1a805c4dac2f35ff14fd5c9fdbddf150
- *
- * Here's an excerpt from README.tuplock that explains the need for additional
- * tuple locks:
- *
- * If IsInplaceUpdateRelation() returns true for a table, the table is a
- * system catalog that receives systable_inplace_update_begin() calls.
- * Preparing a heap_update() of these tables follows additional locking rules,
- * to ensure we don't lose the effects of an inplace update. In particular,
- * consider a moment when a backend has fetched the old tuple to modify, not
- * yet having called heap_update(). Another backend's inplace update starting
- * then can't conclude until the heap_update() places its new tuple in a
- * buffer. We enforce that using locktags as follows. While DDL code is the
- * main audience, the executor follows these rules to make e.g. "MERGE INTO
- * pg_class" safer. Locking rules are per-catalog:
- *
- * pg_class heap_update() callers: before copying the tuple to modify, take a
- * lock on the tuple, a ShareUpdateExclusiveLock on the relation, or a
- * ShareRowExclusiveLock or stricter on the relation.
+ * https://github.com/postgres/postgres/commit/0986e95161
  */
-#define SYSCACHE_TUPLE_LOCK_NEEDED 1
-#define AssertSufficientPgClassUpdateLockHeld(relid)                                               \
-	Assert(CheckRelationOidLockedByMe(relid, ShareUpdateExclusiveLock, false) ||                   \
-		   CheckRelationOidLockedByMe(relid, ShareRowExclusiveLock, true));
-#define UnlockSysCacheTuple(rel, tid) UnlockTuple(rel, tid, InplaceUpdateTupleLock);
-#else
-#define SearchSysCacheLockedCopy1(rel, datum) SearchSysCacheCopy1(rel, datum)
-#define UnlockSysCacheTuple(rel, tid)
-#define AssertSufficientPgClassUpdateLockHeld(relid)
+#if PG19_LT
+typedef struct JsonbInState
+{
+	JsonbParseState *parseState;
+	JsonbValue *result;
+} JsonbInState;
 #endif
+
+static inline void
+pushJsonbValueCompat(JsonbInState *state, JsonbIteratorToken seq, JsonbValue *jbval)
+{
+#if PG19_GE
+	pushJsonbValue(state, seq, jbval);
+#else
+	state->result = pushJsonbValue(&state->parseState, seq, jbval);
+#endif
+}
 
 /*
  * The following are compatibility functions for different versions of

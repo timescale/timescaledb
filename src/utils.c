@@ -1742,7 +1742,8 @@ ts_copy_relation_acl(const Oid source_relid, const Oid target_relid, const Oid o
 		 * which takes an AccessExclusiveLock and should be enough to handle any
 		 * inplace update issues.
 		 */
-		AssertSufficientPgClassUpdateLockHeld(target_relid);
+		Assert(CheckRelationOidLockedByMe(target_relid, ShareUpdateExclusiveLock, false) ||
+			   CheckRelationOidLockedByMe(target_relid, ShareRowExclusiveLock, true));
 
 		/* Find the tuple for the target in `pg_class` */
 		target_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(target_relid));
@@ -1940,9 +1941,7 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 	{
 		elog(ERROR, "cache lookup failed for relation %u", relid);
 	}
-#ifdef SYSCACHE_TUPLE_LOCK_NEEDED
 	ItemPointerData otid = tuple->t_self;
-#endif
 
 	/* Get the old reloptions */
 	Datum datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
@@ -1971,7 +1970,7 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 	/* Not sure if we need this one, but keeping it as a precaution */
 	InvokeObjectPostAlterHook(RelationRelationId, RelationGetRelid(rel), 0);
 
-	UnlockSysCacheTuple(pgclass, &otid);
+	UnlockTuple(pgclass, &otid, InplaceUpdateTupleLock);
 	heap_freetuple(newtuple);
 	heap_freetuple(tuple);
 	table_close(pgclass, RowExclusiveLock);
@@ -2010,86 +2009,87 @@ ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode)
 Jsonb *
 ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
 {
-	JsonbParseState *parse_state = NULL;
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	JsonbInState parse_state = { 0 };
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	if (edata->sqlerrcode)
 	{
-		ts_jsonb_add_str(parse_state, "sqlerrcode", unpack_sql_state(edata->sqlerrcode));
+		ts_jsonb_add_str(&parse_state, "sqlerrcode", unpack_sql_state(edata->sqlerrcode));
 	}
 	if (edata->message)
 	{
-		ts_jsonb_add_str(parse_state, "message", edata->message);
+		ts_jsonb_add_str(&parse_state, "message", edata->message);
 	}
 	if (edata->detail)
 	{
-		ts_jsonb_add_str(parse_state, "detail", edata->detail);
+		ts_jsonb_add_str(&parse_state, "detail", edata->detail);
 	}
 	if (edata->hint)
 	{
-		ts_jsonb_add_str(parse_state, "hint", edata->hint);
+		ts_jsonb_add_str(&parse_state, "hint", edata->hint);
 	}
 	if (edata->filename)
 	{
-		ts_jsonb_add_str(parse_state, "filename", edata->filename);
+		ts_jsonb_add_str(&parse_state, "filename", edata->filename);
 	}
 	if (edata->lineno)
 	{
-		ts_jsonb_add_int32(parse_state, "lineno", edata->lineno);
+		ts_jsonb_add_int32(&parse_state, "lineno", edata->lineno);
 	}
 	if (edata->funcname)
 	{
-		ts_jsonb_add_str(parse_state, "funcname", edata->funcname);
+		ts_jsonb_add_str(&parse_state, "funcname", edata->funcname);
 	}
 	if (edata->domain)
 	{
-		ts_jsonb_add_str(parse_state, "domain", edata->domain);
+		ts_jsonb_add_str(&parse_state, "domain", edata->domain);
 	}
 	if (edata->context_domain)
 	{
-		ts_jsonb_add_str(parse_state, "context_domain", edata->context_domain);
+		ts_jsonb_add_str(&parse_state, "context_domain", edata->context_domain);
 	}
 	if (edata->context)
 	{
-		ts_jsonb_add_str(parse_state, "context", edata->context);
+		ts_jsonb_add_str(&parse_state, "context", edata->context);
 	}
 	if (edata->schema_name)
 	{
-		ts_jsonb_add_str(parse_state, "schema_name", edata->schema_name);
+		ts_jsonb_add_str(&parse_state, "schema_name", edata->schema_name);
 	}
 	if (edata->table_name)
 	{
-		ts_jsonb_add_str(parse_state, "table_name", edata->table_name);
+		ts_jsonb_add_str(&parse_state, "table_name", edata->table_name);
 	}
 	if (edata->column_name)
 	{
-		ts_jsonb_add_str(parse_state, "column_name", edata->column_name);
+		ts_jsonb_add_str(&parse_state, "column_name", edata->column_name);
 	}
 	if (edata->datatype_name)
 	{
-		ts_jsonb_add_str(parse_state, "datatype_name", edata->datatype_name);
+		ts_jsonb_add_str(&parse_state, "datatype_name", edata->datatype_name);
 	}
 	if (edata->constraint_name)
 	{
-		ts_jsonb_add_str(parse_state, "constraint_name", edata->constraint_name);
+		ts_jsonb_add_str(&parse_state, "constraint_name", edata->constraint_name);
 	}
 	if (edata->internalquery)
 	{
-		ts_jsonb_add_str(parse_state, "internalquery", edata->internalquery);
+		ts_jsonb_add_str(&parse_state, "internalquery", edata->internalquery);
 	}
 	if (edata->detail_log)
 	{
-		ts_jsonb_add_str(parse_state, "detail_log", edata->detail_log);
+		ts_jsonb_add_str(&parse_state, "detail_log", edata->detail_log);
 	}
 	if (strlen(NameStr(*proc_schema)) > 0)
 	{
-		ts_jsonb_add_str(parse_state, "proc_schema", NameStr(*proc_schema));
+		ts_jsonb_add_str(&parse_state, "proc_schema", NameStr(*proc_schema));
 	}
 	if (strlen(NameStr(*proc_name)) > 0)
 	{
-		ts_jsonb_add_str(parse_state, "proc_name", NameStr(*proc_name));
+		ts_jsonb_add_str(&parse_state, "proc_name", NameStr(*proc_name));
 	}
 	/* we add the schema qualified name here as well*/
-	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	JsonbValue *result = parse_state.result;
 	return JsonbValueToJsonb(result);
 }
 

@@ -71,7 +71,7 @@ create table collation_agg(time int, name text collate :"COLLATION");
 select create_hypertable('collation_agg', 'time', chunk_time_interval => 10);
      create_hypertable      
 ----------------------------
- (3,public,collation_agg,t)
+ (2,public,collation_agg,t)
 
 alter table collation_agg set (timescaledb.compress, timescaledb.compress_orderby = 'time');
 insert into collation_agg select x, case x % 3 when 0 then 'á' when 1 then 'b' else 'ç' end
@@ -99,7 +99,7 @@ create table collation_agg_c(time int, name text collate "C");
 select create_hypertable('collation_agg_c', 'time', chunk_time_interval => 10);
       create_hypertable       
 ------------------------------
- (5,public,collation_agg_c,t)
+ (3,public,collation_agg_c,t)
 
 alter table collation_agg_c set (timescaledb.compress, timescaledb.compress_orderby = 'time');
 insert into collation_agg_c select x, case x % 3 when 0 then 'á' when 1 then 'b' else 'ç' end
@@ -149,3 +149,38 @@ select name from t9998 order by name collate "C";
  a
 
 drop table t9998 cascade;
+-- Test issue #9997: batch filtering for compressed DML should respect collation
+create collation case_insensitive_icu
+    (provider=icu, locale='und-u-ks-level2', deterministic=false);
+create table t9997 (
+    ts    timestamptz not null,
+    actor text collate case_insensitive_icu,
+    note  int
+);
+select count(*) from create_hypertable('t9997', 'ts');
+ count 
+-------
+     1
+
+alter table t9997 set (timescaledb.compress);
+insert into t9997 values ('2024-01-01', 'alice', 1);
+SELECT count(compress_chunk(chunk_name)) FROM show_chunks('t9997') chunk_name;
+ count 
+-------
+     1
+
+-- SELECT respects the collation, returns 1 row
+select note from t9997 where actor = 'ALICE';
+ note 
+------
+    1
+
+-- UPDATE respects the collation, updates 1 row
+update t9997 set note = 99 where actor = 'ALICE';
+select note from t9997 where actor = 'ALICE';
+ note 
+------
+   99
+
+drop table t9997 cascade;
+drop collation case_insensitive_icu;

@@ -923,22 +923,6 @@ const Dimension *
 cagg_hypertable_dim_supported(RangeTblEntry *ht_rte, Hypertable *ht, StringInfo msg,
 							  StringInfo detail, StringInfo hint, const bool for_rewrites)
 {
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		if (!for_rewrites)
-		{
-			appendStringInfoString(msg, "hypertable is an internal compressed hypertable");
-		}
-		else if (msg)
-		{
-			appendStringInfo(msg,
-							 "hypertable \"%s.%s\" is an internal compressed hypertable",
-							 NameStr(ht->fd.schema_name),
-							 NameStr(ht->fd.table_name));
-		}
-		return NULL;
-	}
-
 	if (ht_rte->relkind == RELKIND_RELATION)
 	{
 		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);

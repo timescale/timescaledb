@@ -25,7 +25,7 @@ SELECT "testSchema0".create_hypertable('test_ts', 'time', 'device', 2);
 SELECT "testSchema0".create_hypertable('test_tz', 'time', 'device', 2);
 SELECT "testSchema0".create_hypertable('test_dt', 'time', 'device', 2);
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 
 INSERT INTO test_ts VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
 INSERT INTO test_ts VALUES('Mon Mar 20 09:27:00.936242 2017', 22, 'dev2');

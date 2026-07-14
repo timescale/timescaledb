@@ -87,12 +87,12 @@ WHERE hypertable.table_name like 'test1' \gset
 
 ALTER TABLE test1 SET TABLESPACE tablespace1;
 
---all chunks + both the compressed and uncompressed hypertable moved to new tablespace
-SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
+--all chunks + the hypertable moved to new tablespace
+SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 1)
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
 ALTER TABLE test1 SET TABLESPACE tablespace2;
-SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 2)
+SELECT count(*) = (:COUNT_CHUNKS_UNCOMPRESSED +:COUNT_CHUNKS_COMPRESSED + 1)
 FROM pg_tables WHERE tablespace = 'tablespace2';
 
 SELECT
@@ -302,15 +302,6 @@ WHERE chunk.id IS NULL;
 -- DROP HYPERTABLE
 --
 
-SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
-FROM _timescaledb_catalog.hypertable comp_hyper
-INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
-WHERE uncomp_hyper.table_name like 'test1' ORDER BY comp_hyper.id LIMIT 1 \gset
-
-\set ON_ERROR_STOP 0
-DROP TABLE :COMPRESSED_HYPER_NAME;
-\set ON_ERROR_STOP 1
-
 BEGIN;
 SELECT hypertable.schema_name|| '.' || hypertable.table_name as "UNCOMPRESSED_HYPER_NAME"
 FROM _timescaledb_catalog.hypertable hypertable
@@ -331,20 +322,6 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
 SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE id >= 1000;
 
 ROLLBACK;
-
---create a dependent object on the compressed hypertable to test cascade behaviour
-
-CREATE VIEW dependent_1 AS SELECT * FROM :COMPRESSED_HYPER_NAME;
-\set ON_ERROR_STOP 0
-DROP TABLE :UNCOMPRESSED_HYPER_NAME;
-\set ON_ERROR_STOP 1
-
-BEGIN;
-DROP TABLE :UNCOMPRESSED_HYPER_NAME CASCADE;
-SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
-ROLLBACK;
-DROP VIEW dependent_1;
-
 
 --create a cont agg view on the ht as well then the drop should nuke everything
 CREATE MATERIALIZED VIEW test1_cont_view
@@ -375,7 +352,6 @@ ALTER TABLE test1 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 
 --make sure new owner is propagated down
 SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = 'test1'::regclass;
-SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = :'COMPRESSED_HYPER_NAME'::regclass;
 SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = :'COMPRESSED_CHUNK_NAME'::regclass;
 
 --make sure compression policy job owner is propagated
@@ -401,7 +377,6 @@ ALTER table test1 set (timescaledb.compress='f');
 
 --only one hypertable left
 SELECT count(*) = 1 FROM _timescaledb_catalog.hypertable hypertable;
-SELECT compressed_hypertable_id IS NULL FROM _timescaledb_catalog.hypertable hypertable WHERE hypertable.table_name like 'test1' ;
 
 --make sure there are no orphaned  _timescaledb_catalog.compression_chunk_size entries (should be 0)
 SELECT count(*) as orphaned_compression_chunk_size
@@ -585,48 +560,6 @@ WHERE reltablespace in
 DROP TABLE test2 CASCADE;
 DROP TABLESPACE tablespace2;
 
--- Create a table with a compressed table and then delete the
--- compressed table and see that the drop of the hypertable does not
--- generate an error. This scenario can be triggered if an extension
--- is created with compressed hypertables since the tables are dropped
--- as part of the drop of the extension.
-CREATE TABLE issue4140("time" timestamptz NOT NULL, device_id int);
-SELECT create_hypertable('issue4140', 'time');
-ALTER TABLE issue4140 SET(timescaledb.compress);
-SELECT format('%I.%I', schema_name, table_name)::regclass AS ctable
-FROM _timescaledb_catalog.hypertable
-WHERE id = (SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'issue4140') \gset
-SELECT timescaledb_pre_restore();
-DROP TABLE :ctable;
-SELECT timescaledb_post_restore();
-DROP TABLE issue4140;
-
--- github issue 5104
-CREATE TABLE metric(
-	time TIMESTAMPTZ NOT NULL,
-	value DOUBLE PRECISION NOT NULL,
-	series_id BIGINT NOT NULL);
-
-SELECT create_hypertable('metric', 'time',
-	chunk_time_interval => interval '1 h',
-	create_default_indexes => false);
-
--- enable compression
-ALTER TABLE metric set(timescaledb.compress,
-    timescaledb.compress_segmentby = 'series_id, value',
-    timescaledb.compress_orderby = 'time'
-);
-
-SELECT
-      comp_hypertable.schema_name AS "COMP_SCHEMA_NAME",
-      comp_hypertable.table_name AS "COMP_TABLE_NAME"
-FROM _timescaledb_catalog.hypertable uc_hypertable
-INNER JOIN _timescaledb_catalog.hypertable comp_hypertable ON (comp_hypertable.id = uc_hypertable.compressed_hypertable_id)
-WHERE uc_hypertable.table_name like 'metric' \gset
-
--- get definition of compressed hypertable and notice the index
-\d :COMP_SCHEMA_NAME.:COMP_TABLE_NAME
-
 -- #5290 Compression can't be enabled on caggs
 CREATE TABLE "tEst2" (
     "Id" uuid NOT NULL,
@@ -688,8 +621,6 @@ ALTER MATERIALIZED VIEW test1_cont_view2 SET (
 ALTER MATERIALIZED VIEW test1_cont_view2 SET (
   timescaledb.compress = false
 );
-
-DROP TABLE metric CASCADE;
 
 -- inserting into compressed chunks with different physical layouts
 CREATE TABLE compression_insert(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);

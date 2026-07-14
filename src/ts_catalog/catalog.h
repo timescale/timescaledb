@@ -1336,6 +1336,7 @@ typedef struct CatalogSecurityContext
  * append.
  */
 #define HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS 2
+#define HYPERTABLE_STATUS_COMPRESSION 4
 
 extern void ts_catalog_table_info_init(CatalogTableInfo *tables, int max_table,
 									   const TableInfoDef *table_ary,
