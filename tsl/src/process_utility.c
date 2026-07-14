@@ -24,6 +24,7 @@
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
 #include "with_clause/with_clause_parser.h"
@@ -81,9 +82,8 @@ parse_granular_refresh_offset(WithClauseResult option, Oid time_type)
  * Enables granular refresh of continuous aggregates on the raw hypertable.
  * Continuous aggregates opt in separately and share these settings.
  *
- * All three options are required in one statement. The options are parsed and
- * validated, but the feature itself is not implemented yet, so enabling it
- * raises an error after validation.
+ * All three options are required in one statement. Once configured, the
+ * settings can be neither changed nor cleared.
  */
 void
 tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clause_options)
@@ -92,6 +92,16 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 	bool set_start_offset =
 		!with_clause_options[AlterTableFlagGranularRefreshStartOffset].is_default;
 	bool set_end_offset = !with_clause_options[AlterTableFlagGranularRefreshEndOffset].is_default;
+	FormData_hypertable_cagg_settings settings = { 0 };
+
+	if (ts_hypertable_cagg_settings_get(ht->fd.id, &settings))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("granular refresh is already configured on hypertable \"%s\"",
+						NameStr(ht->fd.table_name)),
+				 errhint("Changing or disabling granular refresh settings is not supported.")));
+	}
 
 	Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 	Ensure(dim, "hypertable without open dimension");
@@ -130,6 +140,15 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 						 "valid column.")));
 	}
 
+	if (!ts_tenant_type_is_supported(getBaseType(get_atttype(ht->main_table_relid, attno))))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid granular refresh column type"),
+				 errhint("timescaledb.granular_refresh_column must be a date, integer, UUID, "
+						 "or string type.")));
+	}
+
 	int64 start_offset =
 		parse_granular_refresh_offset(with_clause_options[AlterTableFlagGranularRefreshStartOffset],
 									  time_type);
@@ -150,11 +169,15 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 						   "timescaledb.granular_refresh_end_offset.")));
 	}
 
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("granular refresh is not implemented yet"),
-			 errhint("Granular refresh of continuous aggregates is a feature under "
-					 "development.")));
+	settings.hypertable_id = ht->fd.id;
+	/* store the normalized column name */
+	namestrcpy(&settings.granular_refresh_column, get_attname(ht->main_table_relid, attno, false));
+	settings.granular_refresh_start_offset =
+		DatumGetTextPCopy(with_clause_options[AlterTableFlagGranularRefreshStartOffset].parsed);
+	settings.granular_refresh_end_offset =
+		DatumGetTextPCopy(with_clause_options[AlterTableFlagGranularRefreshEndOffset].parsed);
+
+	ts_hypertable_cagg_settings_insert(&settings);
 }
 
 void
