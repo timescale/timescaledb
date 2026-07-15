@@ -1324,7 +1324,11 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			if (transformed_query_pathkeys != NIL)
 			{
 				List *orig_query_pathkeys = root->query_pathkeys;
+				List *orig_sort_pathkeys = root->sort_pathkeys;
+				List *orig_window_pathkeys = root->window_pathkeys;
 				root->query_pathkeys = transformed_query_pathkeys;
+				root->sort_pathkeys = transformed_query_pathkeys;
+				root->window_pathkeys = transformed_query_pathkeys;
 
 				/* Create index paths with transformed pathkeys */
 				create_index_paths(root, rel);
@@ -1339,6 +1343,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				}
 
 				root->query_pathkeys = orig_query_pathkeys;
+				root->sort_pathkeys = orig_sort_pathkeys;
+				root->window_pathkeys = orig_window_pathkeys;
 
 				/*
 				 * change returned paths to use original pathkeys. have to go through

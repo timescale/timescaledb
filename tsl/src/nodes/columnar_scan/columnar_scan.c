@@ -2653,10 +2653,14 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 		 * out root->query_pathkeys to allow matching to pathkeys produces by
 		 * decompression
 		 */
-		List *orig_pathkeys = root->query_pathkeys;
+		List *orig_query_pathkeys = root->query_pathkeys;
+		List *orig_sort_pathkeys = root->sort_pathkeys;
+		List *orig_window_pathkeys = root->window_pathkeys;
 		List *orig_eq_classes = root->eq_classes;
 		Bitmapset *orig_eclass_indexes = compression_info->compressed_rel->eclass_indexes;
 		root->query_pathkeys = sort_info->required_compressed_pathkeys;
+		root->sort_pathkeys = sort_info->required_compressed_pathkeys;
+		root->window_pathkeys = sort_info->required_compressed_pathkeys;
 
 		/* We can optimize iterating over EquivalenceClasses by reducing them to
 		 * the subset which are from the compressed chunk. This only works if we don't
@@ -2680,7 +2684,9 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 
 		check_index_predicates(root, compressed_rel);
 		create_index_paths(root, compressed_rel);
-		root->query_pathkeys = orig_pathkeys;
+		root->query_pathkeys = orig_query_pathkeys;
+		root->sort_pathkeys = orig_sort_pathkeys;
+		root->window_pathkeys = orig_window_pathkeys;
 		root->eq_classes = orig_eq_classes;
 		compression_info->compressed_rel->eclass_indexes = orig_eclass_indexes;
 	}
