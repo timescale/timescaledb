@@ -3,7 +3,7 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_status_text(int);
 DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_status_text(regclass);
 DROP FUNCTION IF EXISTS _timescaledb_functions.decompress_batch(record);
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size(regclass, double precision);
-DROP FUNCTION IF EXISTS _timescaledb_functions.compact_chunk(REGCLASS);
+DROP FUNCTION IF EXISTS _timescaledb_functions.compact_chunk(REGCLASS, INTEGER);
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(INTEGER, INTEGER, ANYELEMENT, INTEGER, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN);
 
 --
@@ -243,7 +243,7 @@ ALTER TABLE _timescaledb_catalog.compression_chunk_size
 
 -- Remove compaction policy jobs since the policy does not exist in the older version.
 DELETE FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_compaction';
-DROP FUNCTION IF EXISTS @extschema@.add_compaction_policy(REGCLASS, BOOL, INTERVAL, TIMESTAMPTZ, TEXT, INTEGER, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.add_compaction_policy(REGCLASS, BOOL, INTERVAL, TIMESTAMPTZ, TEXT, INTEGER, INTEGER, INTERVAL);
 DROP FUNCTION IF EXISTS @extschema@.remove_compaction_policy(REGCLASS, BOOL);
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compaction(INTEGER, JSONB);
 DROP FUNCTION IF EXISTS _timescaledb_functions.policy_compaction_check(JSONB);

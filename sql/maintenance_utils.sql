@@ -90,7 +90,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_segmentwise' LANGUAGE C STRICT VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.compact_chunk(
-    uncompressed_chunk REGCLASS
+    uncompressed_chunk REGCLASS,
+    max_batches INTEGER DEFAULT 0
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compact_chunk' LANGUAGE C STRICT VOLATILE;
 
 -- find the index on the compressed chunk that can be used to recompress efficiently
