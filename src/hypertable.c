@@ -658,7 +658,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	bool isnull;
 	int hypertable_id = DatumGetInt32(slot_getattr(ti->slot, Anum_hypertable_id, &isnull));
 
-	ts_tablespace_delete(hypertable_id, NULL, InvalidOid);
+	ts_tablespace_delete(hypertable_id, NULL);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
 	ts_dimension_delete_by_hypertable_id(hypertable_id, true);
 

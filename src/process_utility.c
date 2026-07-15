@@ -3479,7 +3479,6 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 
 	ts_chunk_index_create_from_adjusted_index_info(ht->fd.id,
 												   hypertable_index_rel,
-												   chunk->fd.id,
 												   chunk_rel,
 												   indexinfo);
 
@@ -3575,7 +3574,6 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 
 		ts_chunk_index_create_from_adjusted_index_info(hypertable_id,
 													   hypertable_index_rel,
-													   chunk->fd.id,
 													   chunk_rel,
 													   indexinfo);
 
@@ -4635,9 +4633,7 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 	if (tspcs->num_tablespaces == 1)
 	{
 		Assert(ts_hypertable_has_tablespace(ht, tspcs->tablespaces[0].tablespace_oid));
-		ts_tablespace_delete(ht->fd.id,
-							 NameStr(tspcs->tablespaces[0].fd.tablespace_name),
-							 tspcs->tablespaces[0].tablespace_oid);
+		ts_tablespace_delete(ht->fd.id, NameStr(tspcs->tablespaces[0].fd.tablespace_name));
 	}
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);
@@ -6218,7 +6214,7 @@ process_drop_table(EventTriggerDropObject *obj)
 	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
-	ts_chunk_delete_by_relid_and_relname(table->relid, table->schema, table->name, DROP_RESTRICT);
+	ts_chunk_delete_by_relid(table->relid, DROP_RESTRICT);
 	ts_hypertable_delete_by_name(table->schema, table->name);
 	/*
 	 * Normally, dependent catalogs (like compression settings) are cleaned up

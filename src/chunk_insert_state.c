@@ -148,8 +148,7 @@ get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_cla
 }
 
 static List *
-translate_clause(List *inclause, TupleConversionMap *chunk_map, Index varno, Relation hyper_rel,
-				 Relation chunk_rel)
+translate_clause(List *inclause, TupleConversionMap *chunk_map, Index varno, Relation chunk_rel)
 {
 	List *clause = copyObject(inclause);
 	bool found_whole_row;
@@ -292,11 +291,7 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 				convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(hyper_rel));
 		}
 
-		onconflset = translate_clause(onconflset,
-									  chunk_map,
-									  ht_rri->ri_RangeTableIndex,
-									  hyper_rel,
-									  chunk_rel);
+		onconflset = translate_clause(onconflset, chunk_map, ht_rri->ri_RangeTableIndex, chunk_rel);
 
 		chunk_rri->ri_ChildToRootMap = chunk_map;
 		chunk_rri->ri_ChildToRootMapValid = true;
@@ -334,7 +329,6 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 			List *clause = translate_clause(castNode(List, onconflict_where),
 											chunk_map,
 											ht_rri->ri_RangeTableIndex,
-											hyper_rel,
 											chunk_rel);
 
 			chunk_rri->ri_onConflict->oc_WhereClause = ExecInitQual(clause, NULL);

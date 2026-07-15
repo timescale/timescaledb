@@ -1088,7 +1088,7 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	bool reverse;
 	int order_attno;
 
-	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
+	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(ht);
 
 	/*
 	 * This is where the magic happens: use our HypertableRestrictInfo

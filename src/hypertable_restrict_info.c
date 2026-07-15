@@ -291,7 +291,7 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 }
 
 HypertableRestrictInfo *
-ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
+ts_hypertable_restrict_info_create(Hypertable *ht)
 {
 	/* If chunk skipping is disabled, we have to empty range_space
 	 * in case it was cached earlier.

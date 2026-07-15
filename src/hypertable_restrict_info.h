@@ -45,7 +45,7 @@ typedef struct HypertableRestrictInfo
 	DimensionRestrictInfo *dimension_restriction[FLEXIBLE_ARRAY_MEMBER];
 } HypertableRestrictInfo;
 
-extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht);
+extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(Hypertable *ht);
 
 /* Add restrictions based on a List of RestrictInfo */
 extern void ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
