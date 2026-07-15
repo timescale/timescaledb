@@ -70,6 +70,16 @@ policy_compaction_check(PG_FUNCTION_ARGS)
 						POL_COMPACTION_CONF_KEY_MAX_CHUNKS)));
 	}
 
+	int32 max_batches =
+		ts_jsonb_get_int32_field(config, POL_COMPACTION_CONF_KEY_MAX_BATCHES, &found);
+	if (found && max_batches < 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("%s must be greater than or equal to 0",
+						POL_COMPACTION_CONF_KEY_MAX_BATCHES)));
+	}
+
 	/* Reading the field parses it, raising on a malformed interval */
 	Interval *inactive_for =
 		ts_jsonb_get_interval_field(config, POL_COMPACTION_CONF_KEY_INACTIVE_FOR);
@@ -106,7 +116,8 @@ policy_compaction_add(PG_FUNCTION_ARGS)
 	bool if_not_exists = PG_GETARG_BOOL(1);
 	bool user_defined_schedule_interval = !PG_ARGISNULL(2);
 	int32 max_chunks = PG_ARGISNULL(5) ? 0 : PG_GETARG_INT32(5);
-	Interval *inactive_for = PG_ARGISNULL(6) ? NULL : PG_GETARG_INTERVAL_P(6);
+	int32 max_batches = PG_ARGISNULL(6) ? 0 : PG_GETARG_INT32(6);
+	Interval *inactive_for = PG_ARGISNULL(7) ? NULL : PG_GETARG_INTERVAL_P(7);
 	Cache *hcache;
 	Hypertable *ht;
 	int32 hypertable_id;
@@ -135,6 +146,13 @@ policy_compaction_add(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("max_chunks must be greater than or equal to 0")));
+	}
+
+	if (max_batches < 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("max_batches must be greater than or equal to 0")));
 	}
 
 	ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
@@ -204,6 +222,10 @@ policy_compaction_add(PG_FUNCTION_ARGS)
 	if (max_chunks > 0)
 	{
 		ts_jsonb_add_int32(&parse_state, POL_COMPACTION_CONF_KEY_MAX_CHUNKS, max_chunks);
+	}
+	if (max_batches > 0)
+	{
+		ts_jsonb_add_int32(&parse_state, POL_COMPACTION_CONF_KEY_MAX_BATCHES, max_batches);
 	}
 	if (inactive_for != NULL)
 	{

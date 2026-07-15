@@ -35,6 +35,7 @@ DROP TABLE plain;
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.policy_compaction_check('{"max_chunks": 1}');
 SELECT _timescaledb_functions.policy_compaction_check('{"hypertable_id": 1, "max_chunks": -1}');
+SELECT _timescaledb_functions.policy_compaction_check('{"hypertable_id": 1, "max_batches": -1}');
 SELECT _timescaledb_functions.policy_compaction_check('{"hypertable_id": 1, "inactive_for": "-1 hour"}');
 SELECT _timescaledb_functions.policy_compaction_check('{"hypertable_id": 1, "inactive_for": "not an interval"}');
 \set ON_ERROR_STOP 1
@@ -179,6 +180,55 @@ SELECT _timescaledb_functions.chunk_statistics_reset();
 CALL run_job(:job_id);
 SELECT unordered_count('gate');
 DROP TABLE gate;
+
+----------------------------------------------------------------------
+-- max_batches limits batches recompressed per chunk
+----------------------------------------------------------------------
+
+CREATE TABLE mb (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
+
+-- Negative max_batches is rejected.
+\set ON_ERROR_STOP 0
+SELECT add_compaction_policy('mb', max_batches => -1);
+\set ON_ERROR_STOP 1
+
+-- max_batches is unlimited (0)
+SELECT add_compaction_policy('mb', max_batches => 0) AS job_id \gset
+SELECT config FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,3000) i;
+INSERT INTO mb SELECT '2025-07-06'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,3000) i;
+
+SELECT unordered_count('mb');
+CALL run_job(:job_id);
+SELECT unordered_count('mb'); -- should be 0
+
+SELECT remove_compaction_policy('mb');
+TRUNCATE mb;
+
+-- max_batches = 4
+SELECT add_compaction_policy('mb', max_batches => 4) AS job_id \gset
+SELECT config FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+
+-- Three isolated overlap groups (2 + 2 + 3 batches) with gaps between them.
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,200) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(100,300) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(500,700) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(600,800) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1000,1200) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1100,1300) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1200,1400) i;
+SELECT unordered_count('mb');
+
+-- First run (2 compactions), hitting the limit of 4. 3 batches remain unmerged.
+CALL run_job(:job_id);
+SELECT unordered_count('mb');
+
+-- Second run compacts the remaining 3 batches.
+CALL run_job(:job_id);
+SELECT unordered_count('mb');
+
+DROP TABLE mb;
 
 ----------------------------------------------------------------------
 -- remove behavior

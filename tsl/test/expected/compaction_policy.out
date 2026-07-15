@@ -37,6 +37,8 @@ SELECT _timescaledb_functions.policy_compaction_check('{"max_chunks": 1}');
 ERROR:  could not find hypertable_id in config for job
 SELECT _timescaledb_functions.policy_compaction_check('{"hypertable_id": 1, "max_chunks": -1}');
 ERROR:  max_chunks must be greater than or equal to 0
+SELECT _timescaledb_functions.policy_compaction_check('{"hypertable_id": 1, "max_batches": -1}');
+ERROR:  max_batches must be greater than or equal to 0
 SELECT _timescaledb_functions.policy_compaction_check('{"hypertable_id": 1, "inactive_for": "-1 hour"}');
 ERROR:  inactive_for must not be negative
 SELECT _timescaledb_functions.policy_compaction_check('{"hypertable_id": 1, "inactive_for": "not an interval"}');
@@ -251,6 +253,77 @@ SELECT unordered_count('gate');
 
 DROP TABLE gate;
 ----------------------------------------------------------------------
+-- max_batches limits batches recompressed per chunk
+----------------------------------------------------------------------
+CREATE TABLE mb (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
+NOTICE:  using column "time" as partitioning column
+-- Negative max_batches is rejected.
+\set ON_ERROR_STOP 0
+SELECT add_compaction_policy('mb', max_batches => -1);
+ERROR:  max_batches must be greater than or equal to 0
+\set ON_ERROR_STOP 1
+-- max_batches is unlimited (0)
+SELECT add_compaction_policy('mb', max_batches => 0) AS job_id \gset
+SELECT config FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+        config        
+----------------------
+ {"hypertable_id": 7}
+
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,3000) i;
+INSERT INTO mb SELECT '2025-07-06'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,3000) i;
+SELECT unordered_count('mb');
+ unordered_count 
+-----------------
+               1
+
+CALL run_job(:job_id);
+SELECT unordered_count('mb'); -- should be 0
+ unordered_count 
+-----------------
+               0
+
+SELECT remove_compaction_policy('mb');
+ remove_compaction_policy 
+--------------------------
+ 
+
+TRUNCATE mb;
+-- max_batches = 4
+SELECT add_compaction_policy('mb', max_batches => 4) AS job_id \gset
+SELECT config FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+                 config                 
+----------------------------------------
+ {"max_batches": 4, "hypertable_id": 7}
+
+-- Three isolated overlap groups (2 + 2 + 3 batches) with gaps between them.
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,200) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(100,300) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(500,700) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(600,800) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1000,1200) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1100,1300) i;
+INSERT INTO mb SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1200,1400) i;
+SELECT unordered_count('mb');
+ unordered_count 
+-----------------
+               1
+
+-- First run (2 compactions), hitting the limit of 4. 3 batches remain unmerged.
+CALL run_job(:job_id);
+SELECT unordered_count('mb');
+ unordered_count 
+-----------------
+               1
+
+-- Second run compacts the remaining 3 batches.
+CALL run_job(:job_id);
+SELECT unordered_count('mb');
+ unordered_count 
+-----------------
+               0
+
+DROP TABLE mb;
+----------------------------------------------------------------------
 -- remove behavior
 ----------------------------------------------------------------------
 CREATE TABLE m2 (time TIMESTAMPTZ NOT NULL, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
@@ -258,7 +331,7 @@ NOTICE:  using column "time" as partitioning column
 SELECT add_compaction_policy('m2');
  add_compaction_policy 
 -----------------------
-                  1012
+                  1015
 
 SELECT remove_compaction_policy('m2');
  remove_compaction_policy 

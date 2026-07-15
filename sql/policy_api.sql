@@ -52,6 +52,7 @@ CREATE OR REPLACE FUNCTION @extschema@.add_compaction_policy(
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL,
     max_chunks INTEGER = NULL,
+    max_batches INTEGER = NULL,
     inactive_for INTERVAL = NULL
 ) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compaction_add'

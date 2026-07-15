@@ -27,6 +27,7 @@ AS $$
 DECLARE
   htid               INTEGER;
   max_chunks         INTEGER := 0;
+  max_batches        INTEGER := 0;
   numchunks          INTEGER := 0;
   processed          INTEGER := 0;
   chunk_rec          RECORD;
@@ -53,6 +54,7 @@ BEGIN
 
   verbose_log := COALESCE(jsonb_object_field_text(config, 'verbose_log')::BOOLEAN, FALSE);
   max_chunks  := COALESCE(jsonb_object_field_text(config, 'max_chunks')::INTEGER, 0);
+  max_batches := COALESCE(jsonb_object_field_text(config, 'max_batches')::INTEGER, 0);
   -- when set, skip chunks written within this window; NULL disables the gate
   inactive_for := jsonb_object_field_text(config, 'inactive_for')::INTERVAL;
 
@@ -74,7 +76,7 @@ BEGIN
         WHERE s.last_update >= now() - inactive_for))
   LOOP
     BEGIN
-      PERFORM _timescaledb_functions.compact_chunk(chunk_rec.relid);
+      PERFORM _timescaledb_functions.compact_chunk(chunk_rec.relid, max_batches);
       numchunks := numchunks + 1;
     EXCEPTION WHEN OTHERS THEN
       GET STACKED DIAGNOSTICS
