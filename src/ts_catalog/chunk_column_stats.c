@@ -254,8 +254,7 @@ ts_chunk_column_stats_update_by_id(int32 chunk_column_stats_id,
 }
 
 static void
-ts_chunk_column_stats_validate(Form_chunk_column_stats info, const Oid hypertable_relid,
-							   bool if_not_exists)
+ts_chunk_column_stats_validate(Form_chunk_column_stats info, const Oid hypertable_relid)
 {
 	HeapTuple tuple;
 	Datum datum;
@@ -317,7 +316,7 @@ ts_chunk_column_stats_add_internal(FunctionCallInfo fcinfo, Oid table_relid, Nam
 	namestrcpy(&fd.column_name, NameStr(*colname));
 	LockRelationOid(table_relid, AccessShareLock);
 
-	ts_chunk_column_stats_validate(&fd, table_relid, if_not_exists);
+	ts_chunk_column_stats_validate(&fd, table_relid);
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
@@ -574,7 +573,7 @@ ts_chunk_column_stats_fill_dummy_dimension(FormData_chunk_column_stats *r, Oid m
  */
 static Constraint *
 create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_table_relid,
-								  Oid chunk_relid, const char *name)
+								  const char *name)
 {
 	Constraint *constr = NULL;
 	Node *rangedef;
@@ -1502,7 +1501,6 @@ ts_chunk_column_stats_set_invalid(int32 hypertable_id, int32 chunk_id)
 
 typedef struct CheckList
 {
-	Oid chunk_relid;
 	Oid main_table_relid;
 	List *cclist;
 } CheckList;
@@ -1518,10 +1516,7 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
 
 	fill_form_from_slot(ti->slot, &fd);
 
-	constr = create_col_stats_check_constraint(&fd,
-											   checklist->main_table_relid,
-											   checklist->chunk_relid,
-											   NULL);
+	constr = create_col_stats_check_constraint(&fd, checklist->main_table_relid, NULL);
 
 	if (constr)
 	{
@@ -1556,7 +1551,6 @@ ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid,
 		return NIL;
 	}
 
-	clist.chunk_relid = reloid;
 	clist.main_table_relid = ts_hypertable_id_to_relid(fd.hypertable_id, false);
 
 	Assert(fd.id != INVALID_CHUNK_ID);

@@ -3001,8 +3001,7 @@ ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior beha
 }
 
 int
-ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname, const char *tablename,
-									 DropBehavior behavior)
+ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior)
 {
 	if (!OidIsValid(relid))
 	{
@@ -3620,16 +3619,16 @@ ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 		.objectId = chunk->fd.relid,
 	};
 
-	const char *schema_name = ts_chunk_get_schema_name(chunk);
-	const char *table_name = ts_chunk_get_table_name(chunk);
-
 	if (log_level >= 0)
 	{
+		const char *schema_name = ts_chunk_get_schema_name(chunk);
+		const char *table_name = ts_chunk_get_table_name(chunk);
+
 		elog(log_level, "dropping chunk %s.%s", schema_name, table_name);
 	}
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid_and_relname(chunk->fd.relid, schema_name, table_name, behavior);
+	ts_chunk_delete_by_relid(chunk->fd.relid, behavior);
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
@@ -3646,16 +3645,16 @@ ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level)
 		.objectId = relid,
 	};
 
-	const char *schema_name = get_namespace_name(get_rel_namespace(relid));
-	const char *table_name = get_rel_name(relid);
-
 	if (log_level >= 0)
 	{
+		const char *schema_name = get_namespace_name(get_rel_namespace(relid));
+		const char *table_name = get_rel_name(relid);
+
 		elog(log_level, "dropping chunk %s.%s", schema_name, table_name);
 	}
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid_and_relname(relid, schema_name, table_name, behavior);
+	ts_chunk_delete_by_relid(relid, behavior);
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);

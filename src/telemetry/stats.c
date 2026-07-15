@@ -91,7 +91,7 @@ classify_partitioned_table(const Form_pg_class class)
 }
 
 static StatsRelType
-classify_foreign_table(Cache *htcache, Oid relid, const Hypertable **ht, const Chunk **chunk)
+classify_foreign_table(Oid relid, const Chunk **chunk)
 {
 	*chunk = ts_chunk_get_by_relid(relid, false);
 	if (*chunk)
@@ -107,7 +107,7 @@ classify_foreign_table(Cache *htcache, Oid relid, const Hypertable **ht, const C
 }
 
 static StatsRelType
-classify_view(const Form_pg_class class, Cache *htcache, const ContinuousAgg **cagg)
+classify_view(const Form_pg_class class, const ContinuousAgg **cagg)
 {
 	const Catalog *catalog = ts_catalog_get();
 
@@ -141,11 +141,11 @@ classify_relation(const Form_pg_class class, Cache *htcache, const Hypertable **
 		case RELKIND_PARTITIONED_TABLE:
 			return classify_partitioned_table(class);
 		case RELKIND_FOREIGN_TABLE:
-			return classify_foreign_table(htcache, class->oid, ht, chunk);
+			return classify_foreign_table(class->oid, chunk);
 		case RELKIND_MATVIEW:
 			return RELTYPE_MATVIEW;
 		case RELKIND_VIEW:
-			return classify_view(class, htcache, cagg);
+			return classify_view(class, cagg);
 		default:
 			return RELTYPE_OTHER;
 	}

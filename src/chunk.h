@@ -199,8 +199,7 @@ extern void ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int3
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT int ts_chunk_delete_by_name(const char *schema, const char *table,
 											   DropBehavior behavior);
-extern int ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname,
-												const char *tablename, DropBehavior behavior);
+extern int ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior);
 
 extern TSDLLEXPORT bool ts_chunk_set_partial(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);

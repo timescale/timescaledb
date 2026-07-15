@@ -349,8 +349,8 @@ chunk_index_create_from_indexinfo(int32 hypertable_id, Relation template_indexre
  * it should, for each hypertable index, have a corresponding index of its own.
  */
 static void
-chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypertable_idxrel,
-				   int32 chunk_id, Relation chunkrel, Oid constraint_oid, Oid index_tblspc)
+chunk_index_create(Relation hypertable_rel, Relation hypertable_idxrel, Relation chunkrel,
+				   Oid constraint_oid, Oid index_tblspc)
 {
 	if (OidIsValid(constraint_oid))
 	{
@@ -375,8 +375,7 @@ chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypert
 
 void
 ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id, Relation hypertable_idxrel,
-											   int32 chunk_id, Relation chunkrel,
-											   IndexInfo *indexinfo)
+											   Relation chunkrel, IndexInfo *indexinfo)
 {
 	chunk_index_create_from_indexinfo(hypertable_id,
 									  hypertable_idxrel,
@@ -432,9 +431,7 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 		Relation hypertable_idxrel = index_open(hypertable_idxoid, AccessShareLock);
 
 		chunk_index_create(htrel,
-						   hypertable_id,
 						   hypertable_idxrel,
-						   chunk_id,
 						   chunkrel,
 						   get_index_constraint(hypertable_idxoid),
 						   index_tblspc);
