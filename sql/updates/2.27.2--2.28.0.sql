@@ -44,7 +44,7 @@ BEGIN
         SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
                cc.constraint_name AS old_name,
                CASE WHEN parent.contype = 'f' THEN cc.hypertable_constraint_name
-                    ELSE format('%s_%s', c.id, cc.hypertable_constraint_name)
+                    ELSE format('%s_%s', c.id, cc.hypertable_constraint_name)::name
                END AS new_name
         FROM _timescaledb_catalog.chunk_constraint cc
         JOIN _timescaledb_catalog.chunk c ON c.id = cc.chunk_id
