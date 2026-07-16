@@ -1,0 +1,116 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- Test INSERT ... ON CONFLICT DO SELECT on hypertables (PG19+ feature)
+CREATE TABLE ht_ocs(
+    time timestamptz NOT NULL,
+    device int NOT NULL,
+    value float,
+    label text,
+    PRIMARY KEY (time)
+) WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 10.0, 'a');
+INSERT INTO ht_ocs VALUES ('2024-01-02 01:00', 2, 20.0, 'b');
+-- Get-or-create: conflicting row is returned unchanged, no new tuple written
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 99, 99.0, 'x')
+ON CONFLICT (time) DO SELECT RETURNING *;
+             time             | device | value | label 
+------------------------------+--------+-------+-------
+ Mon Jan 01 01:00:00 2024 PST |      1 |    10 | a
+
+-- No conflict: the freshly inserted row is returned
+INSERT INTO ht_ocs VALUES ('2024-01-03 01:00', 3, 30.0, 'c')
+ON CONFLICT (time) DO SELECT RETURNING *;
+             time             | device | value | label 
+------------------------------+--------+-------+-------
+ Wed Jan 03 01:00:00 2024 PST |      3 |    30 | c
+
+-- Multi-value insert mixing new rows and conflicts, spanning several chunks
+INSERT INTO ht_ocs VALUES
+    ('2024-01-01 01:00', 1, 11.0, 'a2'),
+    ('2024-01-04 01:00', 4, 40.0, 'd'),
+    ('2024-01-02 01:00', 2, 22.0, 'b2')
+ON CONFLICT (time) DO SELECT RETURNING time, device, value;
+             time             | device | value 
+------------------------------+--------+-------
+ Mon Jan 01 01:00:00 2024 PST |      1 |    10
+ Thu Jan 04 01:00:00 2024 PST |      4 |    40
+ Tue Jan 02 01:00:00 2024 PST |      2 |    20
+
+SELECT * FROM ht_ocs ORDER BY time;
+             time             | device | value | label 
+------------------------------+--------+-------+-------
+ Mon Jan 01 01:00:00 2024 PST |      1 |    10 | a
+ Tue Jan 02 01:00:00 2024 PST |      2 |    20 | b
+ Wed Jan 03 01:00:00 2024 PST |      3 |    30 | c
+ Thu Jan 04 01:00:00 2024 PST |      4 |    40 | d
+
+-- Projected RETURNING list
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0, 'z')
+ON CONFLICT (time) DO SELECT RETURNING device, value * 2 AS double_value;
+ device | double_value 
+--------+--------------
+      1 |           20
+
+-- WHERE clause: returns the row only when the qual matches
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0, 'z')
+ON CONFLICT (time) DO SELECT WHERE ht_ocs.device = 1 RETURNING device;
+ device 
+--------
+      1
+
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0, 'z')
+ON CONFLICT (time) DO SELECT WHERE ht_ocs.device = 12345 RETURNING device;
+ device 
+--------
+
+-- Lock the conflicting row FOR UPDATE / FOR SHARE
+INSERT INTO ht_ocs VALUES ('2024-01-02 01:00', 2, 0, 'z')
+ON CONFLICT (time) DO SELECT FOR UPDATE RETURNING time, device;
+             time             | device 
+------------------------------+--------
+ Tue Jan 02 01:00:00 2024 PST |      2
+
+INSERT INTO ht_ocs VALUES ('2024-01-02 01:00', 2, 0, 'z')
+ON CONFLICT (time) DO SELECT FOR SHARE RETURNING time, device;
+             time             | device 
+------------------------------+--------
+ Tue Jan 02 01:00:00 2024 PST |      2
+
+-- RETURNING is mandatory for DO SELECT
+\set ON_ERROR_STOP 0
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0, 'z') ON CONFLICT (time) DO SELECT;
+ERROR:  ON CONFLICT DO SELECT requires a RETURNING clause at character 59
+\set ON_ERROR_STOP 1
+-- Chunk tuple descriptor differs from the hypertable root (dropped column).
+-- The column is dropped after the first chunk exists, so the new chunk below
+-- exercises the attribute-remapping path in the per-chunk ON CONFLICT setup.
+ALTER TABLE ht_ocs DROP COLUMN label;
+INSERT INTO ht_ocs VALUES ('2024-02-01 01:00', 5, 50.0);
+INSERT INTO ht_ocs VALUES ('2024-02-01 01:00', 6, 60.0)
+ON CONFLICT (time) DO SELECT RETURNING *;
+             time             | device | value 
+------------------------------+--------+-------
+ Thu Feb 01 01:00:00 2024 PST |      5 |    50
+
+-- DO SELECT against a compressed chunk
+ALTER TABLE ht_ocs SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+NOTICE:  updated compression settings will only apply to future compressions
+SELECT count(compress_chunk(c)) FROM show_chunks('ht_ocs') c;
+ count 
+-------
+     5
+
+INSERT INTO ht_ocs VALUES ('2024-01-01 01:00', 1, 0)
+ON CONFLICT (time) DO SELECT RETURNING time, device, value;
+             time             | device | value 
+------------------------------+--------+-------
+ Mon Jan 01 01:00:00 2024 PST |      1 |    10
+
+-- The conflicting compressed row must be returned unchanged, not duplicated
+SELECT count(*), min(value) FROM ht_ocs WHERE time = '2024-01-01 01:00';
+ count | min 
+-------+-----
+     1 |  10
+
+DROP TABLE ht_ocs;
