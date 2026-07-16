@@ -614,14 +614,34 @@ murmurhash64(uint64 data)
 
 #if PG17_LT
 /* 'mergeActions' argument was added in 5f2e179bd31e */
-#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+#define CheckValidResultRelCompat(resultRelInfo,                                                   \
+								  operation,                                                       \
+								  onConflictAction,                                                \
+								  mergeActions,                                                    \
+								  mtnode)                                                          \
 	CheckValidResultRel(resultRelInfo, operation)
 #elif PG18_LT
-#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+#define CheckValidResultRelCompat(resultRelInfo,                                                   \
+								  operation,                                                       \
+								  onConflictAction,                                                \
+								  mergeActions,                                                    \
+								  mtnode)                                                          \
 	CheckValidResultRel(resultRelInfo, operation, mergeActions)
-#else
-#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+#elif PG19_LT
+#define CheckValidResultRelCompat(resultRelInfo,                                                   \
+								  operation,                                                       \
+								  onConflictAction,                                                \
+								  mergeActions,                                                    \
+								  mtnode)                                                          \
 	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions)
+#else
+/* 'mtnode' argument was added in PG19 */
+#define CheckValidResultRelCompat(resultRelInfo,                                                   \
+								  operation,                                                       \
+								  onConflictAction,                                                \
+								  mergeActions,                                                    \
+								  mtnode)                                                          \
+	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions, mtnode)
 #endif
 
 #if PG17_LT

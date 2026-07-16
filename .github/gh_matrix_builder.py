@@ -196,7 +196,7 @@ m["include"].append(
         {
             "pg": PG19_LATEST,
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DEXPERIMENTAL=ON",
-            "pginstallcheck": False,
+            "pginstallcheck": True,
         }
     )
 )
