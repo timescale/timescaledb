@@ -1,1 +1,0 @@
-Fixes: #10230 Batch filtering for compressed DML should respect collation
