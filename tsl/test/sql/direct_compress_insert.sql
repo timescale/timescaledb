@@ -551,3 +551,21 @@ RESET timescaledb.enable_direct_compress_insert;
 DROP VIEW metrics_view_pos;
 DROP TABLE metrics_view;
 
+-- Direct compress must be disabled when the table has an exclusion constraint
+CREATE TABLE dc_excl(time timestamptz NOT NULL, device text NOT NULL, value float,
+    EXCLUDE USING btree (time WITH =, device WITH =))
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+ALTER TABLE dc_excl SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SET timescaledb.enable_direct_compress_insert = true;
+-- insert warns, disables direct compress and falls back to a normal insert
+INSERT INTO dc_excl SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(1,100) i;
+-- chunk stays uncompressed since direct compress was disabled
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('dc_excl') chunk;
+-- exclusion constraint is still enforced
+\set ON_ERROR_STOP 0
+INSERT INTO dc_excl VALUES ('2025-01-01'::timestamptz + INTERVAL '1 minute', 'd1', 99);
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM dc_excl;
+RESET timescaledb.enable_direct_compress_insert;
+DROP TABLE dc_excl;
+

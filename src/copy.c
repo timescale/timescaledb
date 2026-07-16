@@ -845,6 +845,12 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 					(errmsg("disabling direct compress because the destination table has unique "
 							"constraints")));
 		}
+		else if (ts_indexing_relation_has_exclusion_constraint(ccstate->rel))
+		{
+			ereport(WARNING,
+					(errmsg("disabling direct compress because the destination table has exclusion "
+							"constraints")));
+		}
 		else if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->numtriggers > 1)
 		{
 			ereport(WARNING,

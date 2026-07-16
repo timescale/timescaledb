@@ -337,6 +337,40 @@ ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 	return result;
 }
 
+bool TSDLLEXPORT
+ts_indexing_relation_has_exclusion_constraint(Relation htrel)
+{
+	List *indexoidlist = RelationGetIndexList(htrel);
+	ListCell *lc;
+	bool result = false;
+
+	foreach (lc, indexoidlist)
+	{
+		Oid indexoid = lfirst_oid(lc);
+		HeapTuple index_tuple;
+		Form_pg_index index;
+
+		index_tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
+		if (!HeapTupleIsValid(index_tuple)) /* should not happen */
+		{
+			elog(ERROR,
+				 "cache lookup failed for index %u in \"%s\" ",
+				 indexoid,
+				 RelationGetRelationName(htrel));
+		}
+		index = (Form_pg_index) GETSTRUCT(index_tuple);
+		result = index->indisexclusion;
+		ReleaseSysCache(index_tuple);
+		if (result)
+		{
+			break;
+		}
+	}
+
+	list_free(indexoidlist);
+	return result;
+}
+
 /*
  * Collect the heap attribute numbers covered by any valid unique index
  * (PRIMARY KEY included) on the relation. Returns a Bitmapset of raw attribute

@@ -61,6 +61,14 @@ should_use_direct_compress(ModifyHypertableState *state)
 		return false;
 	}
 
+	if (ts_indexing_relation_has_exclusion_constraint(state->ctr->root_rel))
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has exclusion "
+						"constraints")));
+		return false;
+	}
+
 	Plan *subplan = mtstate->ps.plan->lefttree;
 	if (subplan->plan_rows < 10)
 	{
