@@ -879,7 +879,7 @@ process_copy(ProcessUtilityArgs *args)
 			 * if the chunk belongs to a frozen chunk otherwise let postgres handle it.
 			 * Uncompressed frozen chunks are intercepted as part of tuple routing.
 			 */
-			Oid uncompressed_relid = ts_relation_get_uncompressed_relid(relid, NULL);
+			Oid uncompressed_relid = ts_relation_get_uncompressed_relid(relid);
 			if (OidIsValid(uncompressed_relid))
 			{
 				Chunk *uncompressed = ts_chunk_get_by_relid(uncompressed_relid, true);

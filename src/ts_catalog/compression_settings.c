@@ -505,7 +505,7 @@ ts_relation_is_compressed_chunk_relation(Oid compress_relid)
  * of any compressed chunk.
  */
 TSDLLEXPORT Oid
-ts_relation_get_uncompressed_relid(Oid compress_relid, Snapshot snapshot)
+ts_relation_get_uncompressed_relid(Oid compress_relid)
 {
 	if (!OidIsValid(compress_relid))
 	{
@@ -514,7 +514,6 @@ ts_relation_get_uncompressed_relid(Oid compress_relid, Snapshot snapshot)
 
 	ScanIterator iterator =
 		ts_scan_iterator_create(COMPRESSION_SETTINGS, AccessShareLock, CurrentMemoryContext);
-	iterator.ctx.snapshot = snapshot;
 	init_scan_by_compress_relid(&iterator, compress_relid);
 
 	Oid relid = InvalidOid;
