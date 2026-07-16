@@ -1,0 +1,1 @@
+Fixes: #10209 Potentially wrong result of stddev(float4/8) when used together with avg() in columnar query execution pipeline.
