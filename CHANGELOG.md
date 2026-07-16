@@ -6,16 +6,16 @@
 
 This release contains performance improvements and bug fixes since the 2.28.2 release. We recommend that you upgrade at the next available opportunity.
 
-
 **Bugfixes**
-* [#10082](https://github.com/timescale/timescaledb/pull/10082) Wrong result when evaluating a function returning NULL in the columnar query execution pipeline
+* [#10082](https://github.com/timescale/timescaledb/pull/10082) Wrong result when evaluating a function returning `NULL` in the columnar query execution pipeline
 * [#10178](https://github.com/timescale/timescaledb/pull/10178) Fix incorrect usage of sort transformation for sort key expressions with negative constants
 * [#10179](https://github.com/timescale/timescaledb/pull/10179) Allow enabling and disabling triggers on hypertables with columnstore enabled
-* [#10182](https://github.com/timescale/timescaledb/pull/10182) Fix columnstore sort pushdown to check for different query `sortkey` collation
+* [#10182](https://github.com/timescale/timescaledb/pull/10182) Fix columnstore sort pushdown to check for different query sort key collation
+* [#10209](https://github.com/timescale/timescaledb/pull/10209) Fix potentially wrong results for `stddev(float4)` and `stddev(float8)` when used with `avg()` in the columnar query execution pipeline
 * [#10212](https://github.com/timescale/timescaledb/pull/10212) Fix race condition when enabling compression on a hypertable
-* [#10230](https://github.com/timescale/timescaledb/pull/10230) Batch filtering for compressed DML should respect collation
-* [#10254](https://github.com/timescale/timescaledb/pull/10254) Direct delete didn't handle array predicates with NULLs and deleted more than intended ([#10129](https://github.com/timescale/timescaledb/pull/10129))
-* [#10257](https://github.com/timescale/timescaledb/pull/10257) Reuse existing `dimension_slice` ids when possible
+* [#10230](https://github.com/timescale/timescaledb/pull/10230) Batch filtering for compressed `DML` should respect collation
+* [#10254](https://github.com/timescale/timescaledb/pull/10254) Direct delete failed to handle array predicates with `NULL` values and deleted more rows than intended ([#10129](https://github.com/timescale/timescaledb/pull/10129))
+* [#10257](https://github.com/timescale/timescaledb/pull/10257) Reuse existing `dimension_slice` IDs when possible
 * [#10265](https://github.com/timescale/timescaledb/pull/10265) Truncate constraint name before trying to rename
 
 **Thanks**
