@@ -996,7 +996,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 #endif
 	ExecInitResultRelation(estate, resultRelInfo, 1);
 
-	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT, ONCONFLICT_NONE, NIL);
+	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT, ONCONFLICT_NONE, NIL, NULL);
 
 	ExecOpenIndices(resultRelInfo, false);
 
