@@ -49,7 +49,7 @@ typedef struct GroupingPolicy
 	/*
 	 * Emit a partial aggregation result into the result slot.
 	 */
-	bool (*gp_do_emit)(GroupingPolicy *gp, TupleTableSlot *aggregated_slot);
+	bool (*gp_do_emit)(GroupingPolicy *gp, List *aggregated_tlist, TupleTableSlot *aggregated_slot);
 
 	/*
 	 * Destroy the grouping policy.

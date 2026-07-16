@@ -7055,6 +7055,29 @@ order by count(*) desc, cint2 limit 10
     16 |    16 | -35.1643 |   -296
     16 |    16 | -45.4426 |   1373
 
+-- Test aggregate transition state sharing.
+select count(cfloat8), round(avg(cfloat8)), round(sum(cfloat8)),
+    round(stddev(cfloat8)) from aggfns
+group by cint2 order by cint2 limit 10
+;
+ count | round | round | round 
+-------+-------+-------+-------
+     6 |     9 |    55 |    30
+     6 |   -24 |  -146 |    24
+     7 |     7 |    46 |    26
+     8 |   -11 |   -86 |    27
+     5 |   -11 |   -57 |    27
+     9 |    22 |   196 |    26
+     5 |    11 |    56 |    33
+     8 |     5 |    39 |    36
+     6 |    -9 |   -52 |    28
+     7 |    -6 |   -42 |    31
+
+select round(stddev(cint4)), count(cint4), sum(cint4), round(avg(cint4)) from aggfns;
+ round | count  |   sum   | round 
+-------+--------+---------+-------
+  9450 | 200000 | -987383 |    -5
+
 -- Test edge cases for various batch sizes and the filter matching around batch
 -- end.
 select count(*) from edges;
