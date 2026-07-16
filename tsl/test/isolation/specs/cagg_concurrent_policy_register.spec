@@ -216,4 +216,4 @@ permutation "s1_select" "s3_lock_before_register" "s1_run_pol7d_3d_refresh" "s12
 
 ## TEST: two concurrent refresh policies on the hierarchical L2 CAgg serialize on registration,
 ## then both execute succesfully. L2 stays consistent with L1.
-permutation "s3_lock_before_register" "s1_run_l2_hist" "s12_run_l2_recent"("s1_run_l2_hist") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations" "s5_l2_consistency"
+permutation "s3_lock_before_register" "s1_run_l2_hist" "s12_run_l2_recent"("s1_run_l2_hist") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations" "s5_l2_consistency"("s1_run_l2_hist","s12_run_l2_recent")
