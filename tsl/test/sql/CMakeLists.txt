@@ -237,7 +237,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
-  list(APPEND TEST_FILES repack.sql)
+  list(APPEND TEST_FILES upsert_do_select.sql repack.sql)
 endif()
 
 set(SOLO_TESTS
