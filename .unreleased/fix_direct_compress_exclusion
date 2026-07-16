@@ -1,0 +1,1 @@
+Fixes: #10281 Disable Direct Compress when the destination table has an exclusion constraint so the constraint is still enforced
