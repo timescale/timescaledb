@@ -1,1 +1,0 @@
-Fixes: #10254 Direct delete didn't handle array predicates with NULLs and deleted more than intended (#10129)
