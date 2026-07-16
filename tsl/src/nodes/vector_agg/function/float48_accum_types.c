@@ -6,8 +6,7 @@
 
 /*
  * Functions handled by *accum() aggregate functions states, implementation for
- * all types. They use the same Youngs-Cramer state, but for AVG we can skip
- * calculating the Sxx variable.
+ * all types.
  */
 
 #define PG_TYPE FLOAT4
@@ -23,4 +22,3 @@
 #include "float48_accum_single.c"
 
 #undef AGG_NAME
-#undef NEED_SXX
