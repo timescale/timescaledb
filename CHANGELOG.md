@@ -2,6 +2,35 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.28.3 (2026-07-16)
+
+This release contains performance improvements and bug fixes since the 2.28.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.28.3**
+* 
+
+**Backward-Incompatible Changes**
+
+**Features**
+
+**Bugfixes**
+* [#10082](https://github.com/timescale/timescaledb/pull/10082) Wrong result when evaluating a function returning NULL in the columnar query execution pipeline
+* [#10178](https://github.com/timescale/timescaledb/pull/10178) Fix incorrect usage of sort transformation for sort key expressions with negative constants 
+* [#10179](https://github.com/timescale/timescaledb/pull/10179) Allow enabling and disabling triggers on hypertables with columnstore enabled
+* [#10182](https://github.com/timescale/timescaledb/pull/10182) Fix columnstore sort pushdown to check for different query sortkey collation
+* [#10212](https://github.com/timescale/timescaledb/pull/10212) Fix race condition when enabling compression on a hypertable
+* [#10230](https://github.com/timescale/timescaledb/pull/10230) Batch filtering for compressed DML should respect collation
+* [#10254](https://github.com/timescale/timescaledb/pull/10254) Direct delete didn't handle array predicates with NULLs and deleted more than intended ([#10129](https://github.com/timescale/timescaledb/pull/10129))
+* [#10257](https://github.com/timescale/timescaledb/pull/10257) Reuse existing dimension_slice ids when possible
+* [#10265](https://github.com/timescale/timescaledb/pull/10265) Truncate constraint name before trying to rename
+
+**New Settings**
+
+**GUCs**
+
+**Thanks**
+* @juantxorena for reporting that triggers could not be enabled or disabled on hypertables with columnstore enabled
+
 ## 2.28.2 (2026-06-30)
 
 This release contains bug fixes since the 2.28.1 release. We recommend that you upgrade at the next available opportunity.
