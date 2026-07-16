@@ -86,14 +86,19 @@ fl_result_bytes(uint32 n, uint8 w, fl_elem_width_t t)
 {
 	/* tier is defined as bitwidth */
 	uint32 tier = (uint32) fl_tier_select(n, t);
-	/* stride length is the number of 't' elems fit in the tier */
-	uint32 s = tier / (uint32) t;
-	/* r is the full strides needed to cover n */
-	uint32 r = (n + s - 1) / s;
 
-	/* the size is defined as the product of full strides and the encoding
-	 * bitwidth (w), in full tier widths, expressed in bytes */
-	return (size_t) ((r * w + (uint32) t - 1) / (uint32) t) * (tier / 8);
+	/* stride length (s) is the number of 't' elems fit in the tier */
+	uint32 s = (t == FL_ELEM_W64) ? (tier >> 6) :
+			   (t == FL_ELEM_W32) ? (tier >> 5) :
+			   (t == FL_ELEM_W16) ? (tier >> 4) :
+									(tier >> 3);
+
+	/* n_pad is 'n' rounded up to full strides */
+	uint32 n_pad = (n + s - 1) & ~(s - 1);
+
+	/* the size is n_pad elems of w bits, rounded up to
+	 * full tier widths, expressed in bytes */
+	return (size_t) ((n_pad * w + tier - 1) & ~(tier - 1)) >> 3;
 }
 
 /* Required alignment for the _packed_ input and output buffers.
