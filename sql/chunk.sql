@@ -28,7 +28,21 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_relid_from_chunk_re
       OUT hypertable    REGCLASS,
       OUT is_compressed BOOLEAN)
 RETURNS RECORD
-AS '@MODULE_PATHNAME@', 'ts_hypertable_relid_from_chunk_relid' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+AS $$
+    SELECT
+        pc.oid::regclass,
+        cs.compress_relid IS NOT NULL
+    FROM _timescaledb_catalog.hypertable h
+    JOIN _timescaledb_catalog.chunk c
+        ON c.hypertable_id = h.id
+    JOIN pg_catalog.pg_namespace pn
+        ON pn.nspname = h.schema_name
+    JOIN pg_catalog.pg_class pc
+        ON pc.relname = h.table_name AND pc.relnamespace = pn.oid
+    LEFT JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.compress_relid = $1
+    WHERE c.relid = COALESCE(cs.relid, $1)
+$$ LANGUAGE SQL STABLE STRICT PARALLEL SAFE SET search_path TO pg_catalog, pg_temp;
 
 -- Show the definition of a chunk.
 CREATE OR REPLACE FUNCTION _timescaledb_functions.show_chunk(chunk REGCLASS)

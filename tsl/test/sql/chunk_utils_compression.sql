@@ -41,7 +41,7 @@ FROM show_chunks('public.table_to_compress') as show,
 LATERAL _timescaledb_functions.hypertable_relid_from_chunk_relid(show);
 
 -- `hypertable_relid_from_chunk_relid()` should resolve the compressed chunks' main hypertable
--- (not the internal compressed hypertable) and return `is_compressed=true`
+-- and return `is_compressed=true`
 SELECT cs.compress_relid, get_ht.*
 FROM _timescaledb_catalog.compression_settings cs,
 LATERAL _timescaledb_functions.hypertable_relid_from_chunk_relid(cs.compress_relid) get_ht

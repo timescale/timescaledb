@@ -16,3 +16,4 @@ AS '@MODULE_PATHNAME@', 'ts_hypertable_status_text' LANGUAGE C STRICT IMMUTABLE 
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_status_text(hypertable regclass) RETURNS TEXT[]
 AS $$ SELECT _timescaledb_functions.hypertable_status_text(_timescaledb_functions.hypertable_status($1)); $$ LANGUAGE SQL STRICT STABLE PARALLEL SAFE SET search_path TO pg_catalog, pg_temp;
+
