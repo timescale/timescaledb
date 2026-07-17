@@ -321,6 +321,15 @@ if not pull_request:
             }
         )
     )
+    m["include"].append(
+        build_debug_config(
+            {
+                "pg": 19,
+                "snapshot": "snapshot",
+                "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DEXPERIMENTAL=ON",
+            }
+        )
+    )
 elif len(sys.argv) > 2:
     # Check if we need to check for the flaky tests. Determine which test files
     # have been changed in the PR. The sql files might include other files that
