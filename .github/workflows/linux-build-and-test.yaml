@@ -145,7 +145,9 @@ jobs:
         fi
         mkdir -p pg build-pg install
         tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
+
         cd build-pg
+
         ../pg/configure --prefix="$(readlink -f ../install)" --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
         make -j $(getconf _NPROCESSORS_ONLN)
@@ -153,11 +155,12 @@ jobs:
           make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
-        make -C build-pg install
+        make install
         for ext in ${{ matrix.pg_extensions }}; do
-          make -C build-pg/contrib/${ext} install
+          make -C contrib/${ext} install
         done
-        echo "$(readlink -f install/bin)" >> "${GITHUB_PATH}"
+
+        echo "$(readlink -f ../install/bin)" >> "${GITHUB_PATH}"
 
     - name: Save PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
       if: matrix.snapshot != 'snapshot' && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
