@@ -2521,7 +2521,8 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				}
 
 				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, chunk_slot);
-				estate->es_processed++;
+				if (node->canSetTag)
+					estate->es_processed++;
 				continue;
 			}
 
