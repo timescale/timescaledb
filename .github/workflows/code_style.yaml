@@ -55,6 +55,26 @@ jobs:
         run: |
           find . -type f \( -name "*.yaml" -or -name "*.yml" \) -print -exec yamllint {} \+
 
+  workflow_checks:
+    name: Check GitHub Actions workflows
+    runs-on: timescaledb-runner-arm64
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install actionlint
+        run: |
+          curl -sSL -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check
+          tar --extract --file actionlint.tar.gz actionlint
+      - name: Run actionlint
+        # The shellcheck integration is disabled for now because the existing
+        # workflows have many unfixed shellcheck warnings.
+        run: ./actionlint -shellcheck=
+
   spelling_checks:
     name: Check spelling
     runs-on: timescaledb-runner-arm64
