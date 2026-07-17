@@ -121,16 +121,16 @@ jobs:
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
     # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
-      id: cache-postgresql
+    - name: Restore PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
+      id: restore-postgresql-cache
       if: matrix.snapshot != 'snapshot'
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: install
         key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       run: |
         if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
           wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
@@ -152,12 +152,18 @@ jobs:
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
-        cd ~/$PG_SRC_DIR
         make -C build-pg install
         for ext in ${{ matrix.pg_extensions }}; do
           make -C build-pg/contrib/${ext} install
         done
         echo "$(readlink -e install/bin)" >> "${GITHUB_PATH}"
+
+    - name: Save PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
+      if: matrix.snapshot != 'snapshot' && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: install
+        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -314,7 +320,7 @@ jobs:
     - name: Stack trace macOS
       if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
       run: |
-        ~/$PG_SRC_DIR/src/tools/ci/cores_backtrace.sh macos /cores
+        pg/src/tools/ci/cores_backtrace.sh macos /cores
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
