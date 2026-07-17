@@ -160,8 +160,6 @@ jobs:
           make -C contrib/${ext} install
         done
 
-        echo "$(readlink -f ../install/bin)" >> "${GITHUB_PATH}"
-
     - name: Save PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
       if: matrix.snapshot != 'snapshot' && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -177,6 +175,12 @@ jobs:
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: build-pg/config.log
+
+    - name: Set up PATH
+      run: |
+        set -xeu
+
+        echo "$(readlink -f install/bin)" >> "${GITHUB_PATH}"
 
     - name: Test telemetry without OpenSSL
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
