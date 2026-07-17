@@ -66,7 +66,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install actionlint
         run: |
-          curl -sSL -o actionlint.tar.gz \
+          wget -q --tries=6 --waitretry=15 -O actionlint.tar.gz \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz"
           echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum --check
           tar --extract --file actionlint.tar.gz actionlint
