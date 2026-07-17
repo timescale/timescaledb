@@ -394,7 +394,7 @@ check_altertable_add_column_for_compressed(ParseState *parse_state, Hypertable *
 				case CONSTR_UNIQUE:
 					break;
 				/*
-				 * We can safelly ignore NULL constraints because it does nothing
+				 * We can safely ignore NULL constraints because it does nothing
 				 * and according to Postgres docs is useless and exist just for
 				 * compatibility with other database systems
 				 * https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6
