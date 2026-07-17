@@ -132,6 +132,8 @@ jobs:
     - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
       if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       run: |
+        set -xeu
+
         if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
           wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
@@ -139,9 +141,8 @@ jobs:
           wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         fi
-        mkdir -p pg
+        mkdir -p pg build-pg install
         tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
-        mkdir -p build-pg
         cd build-pg
         ../pg/configure --prefix="$(readlink -e ../install)" --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
