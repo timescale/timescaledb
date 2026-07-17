@@ -1294,9 +1294,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	};
 	Index first_chunk_index = 0;
 
-	/* double check our permissions are valid */
-	Assert(ht_relindex != (Index) parse->resultRelation);
-
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 	/* check join_level bookkeeping is balanced */
@@ -1379,14 +1376,19 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 										   newrelation,
 										   &childrte,
 										   &child_rtindex);
-		/*
-		 * For compatibility with the old planner code that didn't create
-		 * per-chunk aliases, use the parent aliases. These aliases have only a
-		 * cosmetic function, and changing them would lead to EXPLAIN changes in
-		 * basically every test.
-		 */
-		childrte->alias = copyObject(ht_rte->alias);
-		childrte->eref = copyObject(ht_rte->eref);
+
+		if (!bms_is_member(ht_relindex, root->all_result_relids))
+		{
+			/*
+			 * For compatibility with the old planner code that didn't create
+			 * per-chunk aliases, use the parent aliases. These aliases have only a
+			 * cosmetic function, and changing them would lead to EXPLAIN changes in
+			 * basically every test.
+			 */
+
+			childrte->alias = copyObject(ht_rte->alias);
+			childrte->eref = copyObject(ht_rte->eref);
+		}
 
 		childrte->ctename = NULL;
 		if (first_chunk_index == 0)
