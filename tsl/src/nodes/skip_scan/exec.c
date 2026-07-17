@@ -88,16 +88,19 @@
  */
 
 #include <postgres.h>
+
 #include <access/genam.h>
 #include <access/nbtree.h>
 #include <nodes/extensible.h>
 #include <nodes/pg_list.h>
 #include <utils/datum.h>
 
+#include "nodes/skip_scan/skip_scan.h"
+
 #include "guc.h"
 #include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 #include "nodes/columnar_scan/exec.h"
-#include "nodes/skip_scan/skip_scan.h"
 
 typedef enum SkipScanStage
 {

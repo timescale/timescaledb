@@ -90,7 +90,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_segmentwise' LANGUAGE C STRICT VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.compact_chunk(
-    uncompressed_chunk REGCLASS
+    uncompressed_chunk REGCLASS,
+    max_batches INTEGER DEFAULT 0
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compact_chunk' LANGUAGE C STRICT VOLATILE;
 
 -- find the index on the compressed chunk that can be used to recompress efficiently
@@ -128,9 +129,8 @@ BEGIN
     SELECT id FROM _timescaledb_catalog.chunk
     WHERE hypertable_id = _hypertable_id
     AND NOT EXISTS (
-        SELECT FROM information_schema.tables
-        WHERE tables.table_schema = chunk.schema_name
-        AND tables.table_name = chunk.table_name
+        SELECT FROM pg_catalog.pg_class
+        WHERE pg_class.oid = chunk.relid
     )
   LOOP
     _removed := _removed + 1;
@@ -147,8 +147,7 @@ BEGIN
     OR compression_chunk_size.compressed_chunk_id = _chunk_id;
 
     DELETE FROM _timescaledb_catalog.chunk
-    WHERE chunk.id = _chunk_id
-    OR chunk.compressed_chunk_id = _chunk_id;
+    WHERE chunk.id = _chunk_id;
   END LOOP;
 
   RETURN _removed;

@@ -245,15 +245,11 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	 * chunk.
 	 */
 	chunk = ts_chunk_get_by_id(chunk_id, false);
-	elog(DEBUG1,
-		 "reordering chunk %s.%s",
-		 NameStr(chunk->fd.schema_name),
-		 NameStr(chunk->fd.table_name));
-	reorder_chunk(chunk->table_id, policy.index_relid, false, InvalidOid, InvalidOid, InvalidOid);
-	elog(DEBUG1,
-		 "completed reordering chunk %s.%s",
-		 NameStr(chunk->fd.schema_name),
-		 NameStr(chunk->fd.table_name));
+	const char *schema_name = ts_chunk_get_schema_name(chunk);
+	const char *table_name = ts_chunk_get_table_name(chunk);
+	elog(DEBUG1, "reordering chunk %s.%s", schema_name, table_name);
+	reorder_chunk(chunk->fd.relid, policy.index_relid, false, InvalidOid, InvalidOid, InvalidOid);
+	elog(DEBUG1, "completed reordering chunk %s.%s", schema_name, table_name);
 
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
@@ -497,8 +493,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 
 				elog(DEBUG1,
 					 "compressed chunk \"%s.%s\" after continuous aggregate refresh",
-					 NameStr(chunk->fd.schema_name),
-					 NameStr(chunk->fd.table_name));
+					 ts_chunk_get_schema_name(chunk),
+					 ts_chunk_get_table_name(chunk));
 
 				PopActiveSnapshot();
 				CommitTransactionCommand();
@@ -695,8 +691,8 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 
 		elog(LOG,
 			 "completed recompressing chunk \"%s.%s\"",
-			 NameStr(chunk->fd.schema_name),
-			 NameStr(chunk->fd.table_name));
+			 ts_chunk_get_schema_name(chunk),
+			 ts_chunk_get_table_name(chunk));
 	}
 
 	elog(DEBUG1, "job %d completed recompressing chunk", job_id);

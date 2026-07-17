@@ -1,7 +1,10 @@
+/compression_dml-*.sql
 /continuous_aggs_compression-*.sql
+/decompress_tracking-*.sql
 /gapfill-*.sql
 /lateral_subquery-*.sql
 /ordered_append_join-*.sql
+/parameterized_chunkappend-*.sql
 /remote-copy-escapes.*sv
 /transparent_decompress_chunk-*.sql
 /constify_now-*.sql

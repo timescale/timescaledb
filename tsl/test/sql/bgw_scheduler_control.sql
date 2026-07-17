@@ -15,9 +15,40 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE FUNCTION ts_bgw_params_reset_time(set_time BIGINT, wait BOOLEAN) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
+-- The parameter that controls the background worker log level differs by
+-- PostgreSQL version: timescaledb.bgw_log_level before PG19, and the native
+-- per-backend-type log_min_messages from PG19 on. These helpers hide the
+-- difference so the rest of the test and its output stay version independent.
+CREATE FUNCTION bgw_log_param() RETURNS text LANGUAGE sql AS $$
+    SELECT CASE WHEN current_setting('server_version_num')::int >= 190000
+                THEN 'log_min_messages' ELSE 'timescaledb.bgw_log_level' END
+$$;
+
+CREATE FUNCTION bgw_log_value(level text) RETURNS text LANGUAGE sql AS $$
+    SELECT CASE WHEN current_setting('server_version_num')::int >= 190000
+                THEN 'warning, bgworker:' || lower(level) ELSE level END
+$$;
+
+CREATE FUNCTION set_bgw_log_level(dbname text, level text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    IF level IS NULL THEN
+        EXECUTE format('ALTER DATABASE %I RESET %s', dbname, bgw_log_param());
+    ELSE
+        EXECUTE format('ALTER DATABASE %I SET %s = %L', dbname, bgw_log_param(),
+                       bgw_log_value(level));
+    END IF;
+END
+$$;
+
+CREATE FUNCTION grant_bgw_log_param(rolename text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    EXECUTE format('GRANT ALTER SYSTEM, SET ON PARAMETER %s TO %I', bgw_log_param(), rolename);
+END
+$$;
+
 ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER;
 GRANT EXECUTE ON FUNCTION pg_reload_conf TO :ROLE_DEFAULT_PERM_USER;
-GRANT ALTER SYSTEM, SET ON PARAMETER timescaledb.bgw_log_level TO :ROLE_DEFAULT_PERM_USER;
+SELECT grant_bgw_log_param(:'ROLE_DEFAULT_PERM_USER');
 
 -- These are needed to set up the test scheduler
 CREATE TABLE public.bgw_dsm_handle_store(handle BIGINT);
@@ -50,7 +81,7 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 -- We change user to make sure that granting SET and ALTER SYSTEM
 -- privileges to the default user actually works.
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'DEBUG1';
+SELECT set_bgw_log_level(:'TEST_DBNAME', 'DEBUG1');
 SELECT pg_reload_conf();
 
 RESET ROLE;
@@ -84,7 +115,7 @@ SELECT * FROM cleaned_bgw_log;
 
 -- We test that we can set it to FATAL, which removed LOG level
 -- entries from the log.
-ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'FATAL';
+SELECT set_bgw_log_level(:'TEST_DBNAME', 'FATAL');
 SELECT pg_reload_conf();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -94,7 +125,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
 SELECT * FROM cleaned_bgw_log;
 
 -- We test that we can set it to ERROR.
-ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'ERROR';
+SELECT set_bgw_log_level(:'TEST_DBNAME', 'ERROR');
 SELECT pg_reload_conf();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -105,7 +136,7 @@ SELECT * FROM cleaned_bgw_log;
 
 -- Reset the log level and check that normal entries are showing up
 -- again.
-ALTER DATABASE :TEST_DBNAME RESET timescaledb.bgw_log_level;
+SELECT set_bgw_log_level(:'TEST_DBNAME', NULL);
 SELECT pg_reload_conf();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -121,5 +152,10 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Make sure we can set the variable using ALTER SYSTEM using the
 -- previous grants. We don't bother about checking that it has an
 -- effect here since we already knows it works from the above code.
-ALTER SYSTEM SET timescaledb.bgw_log_level TO 'DEBUG2';
-ALTER SYSTEM RESET timescaledb.bgw_log_level;
+-- ALTER SYSTEM cannot run inside a function, so build the version specific
+-- command and run it with \gexec. Silence the echo so the generated command
+-- (which names the version specific parameter) does not appear in the output.
+\set ECHO none
+SELECT format('ALTER SYSTEM SET %s TO %L', bgw_log_param(), bgw_log_value('DEBUG2')) \gexec
+SELECT format('ALTER SYSTEM RESET %s', bgw_log_param()) \gexec
+\set ECHO all

@@ -32,7 +32,7 @@ SELECT show_tablespaces('tspace_2dim');
 --verify that the table chunk has the correct tablespace
 SELECT relname, spcname FROM pg_class c
 INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
-INNER JOIN _timescaledb_catalog.chunk ch ON (ch.table_name = c.relname);
+INNER JOIN _timescaledb_catalog.chunk ch ON (ch.relid = c.oid);
 
 --check some error conditions
 SELECT attach_tablespace(NULL,NULL);

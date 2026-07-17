@@ -139,7 +139,7 @@ typedef union UUIDBuffer
 #define PREDICATE_EXPRESSION(X, Y) (((X).i128) != ((Y).i128))
 #else
 #define PREDICATE_EXPRESSION(X, Y)                                                                 \
-	((X.components[0]) != (Y.components[0]) || (X.components[1]) != (Y.components[1]))
+	(((X).components[0] != (Y).components[0]) || ((X).components[1] != (Y).components[1]))
 #endif
 #include "pred_vector_const_arithmetic_single.c"
 
@@ -169,7 +169,7 @@ vector_uuidne(const ArrowArray *arrow, Datum arg, uint64 *restrict result)
 #define PREDICATE_EXPRESSION(X, Y) (((X).i128) == ((Y).i128))
 #else
 #define PREDICATE_EXPRESSION(X, Y)                                                                 \
-	((X.components[0]) == (Y.components[0]) && (X.components[1]) == (Y.components[1]))
+	(((X).components[0] == (Y).components[0]) && ((X).components[1] == (Y).components[1]))
 #endif
 #include "pred_vector_const_arithmetic_single.c"
 

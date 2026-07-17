@@ -70,7 +70,7 @@ create table t(ts int, c1 int);
 select create_hypertable('t','ts');
  create_hypertable 
 -------------------
- (3,public,t,t)
+ (2,public,t,t)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 alter table t add column a double precision default 7.1;
@@ -78,13 +78,13 @@ insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_2_chunk
+ _timescaledb_internal._hyper_2_2_chunk
 
 update t set a = null;
 select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_2_chunk
+ _timescaledb_internal._hyper_2_2_chunk
 
 select * from t;
  ts | c1 | a 
@@ -96,7 +96,7 @@ update t set a = null;
 select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_2_chunk
+ _timescaledb_internal._hyper_2_2_chunk
 
 select * from t;
  ts | c1 | a 
@@ -116,7 +116,7 @@ create table t(ts int, c1 int);
 select create_hypertable('t','ts');
  create_hypertable 
 -------------------
- (5,public,t,t)
+ (3,public,t,t)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 alter table t add column a double precision default 7.1;
@@ -126,7 +126,7 @@ insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_3_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 update t set a = null;
 select * from t;
@@ -137,10 +137,10 @@ select * from t;
   6 |  6 |  
 
 select compress_chunk(show_chunks('t'));
-NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_5_3_chunk"
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_3_3_chunk"
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_3_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 select * from t;
  ts | c1 | a 
@@ -161,7 +161,7 @@ create table t(ts int, c1 int);
 select create_hypertable('t','ts');
  create_hypertable 
 -------------------
- (7,public,t,t)
+ (4,public,t,t)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 alter table t add column a double precision default 7.1;
@@ -169,7 +169,7 @@ insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_4_chunk
+ _timescaledb_internal._hyper_4_4_chunk
 
 select * from t;
  ts | c1 |  a  
@@ -182,7 +182,7 @@ update t set a = null;
 select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_4_chunk
+ _timescaledb_internal._hyper_4_4_chunk
 
 select * from t;
  ts | c1 | a 
@@ -203,7 +203,7 @@ create table t (ts int);
 select create_hypertable('t', 'ts');
  create_hypertable 
 -------------------
- (9,public,t,t)
+ (5,public,t,t)
 
 alter table t set(timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 insert into t (ts) values (1);
@@ -217,7 +217,7 @@ select * from t;
 select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_9_5_chunk
+ _timescaledb_internal._hyper_5_5_chunk
 
 select * from t;
  ts | c1 
@@ -237,14 +237,14 @@ create table t(ts int);
 select create_hypertable('t', 'ts');
  create_hypertable 
 -------------------
- (11,public,t,t)
+ (6,public,t,t)
 
 insert into t values (1);
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_11_6_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_6_6_chunk
 
 alter table t add column a double precision default 7.987;
 insert into t values (2, null);
@@ -255,9 +255,9 @@ select * from t;
   2 |      
 
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_11_6_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_6_6_chunk
 
 select * from t;
  ts |   a   
@@ -278,14 +278,14 @@ create table t(ts int, c1 int);
 select create_hypertable('t','ts');
  create_hypertable 
 -------------------
- (13,public,t,t)
+ (7,public,t,t)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_13_7_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_7_7_chunk
 
 alter table t add column a double precision default 7.1;
 select * from t;
@@ -294,10 +294,10 @@ select * from t;
   6 |  6 | 7.1
 
 select compress_chunk(show_chunks('t'));
-NOTICE:  chunk "_hyper_13_7_chunk" is already converted to columnstore
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_13_7_chunk
+NOTICE:  chunk "_hyper_7_7_chunk" is already converted to columnstore
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_7_7_chunk
 
 select * from t;
  ts | c1 |  a  
@@ -307,10 +307,10 @@ select * from t;
 alter table t alter column a set default 7.2;
 insert into t (ts,c1) values (7,7);
 select compress_chunk(show_chunks('t'));
-NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_13_7_chunk"
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_13_7_chunk
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_7_7_chunk"
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_7_7_chunk
 
 select * from t;
  ts | c1 |  a  
@@ -331,14 +331,14 @@ create table t(ts int, c1 int);
 select create_hypertable('t','ts');
  create_hypertable 
 -------------------
- (15,public,t,t)
+ (8,public,t,t)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_15_8_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_8_8_chunk
 
 alter table t add column a double precision default 7.1;
 alter table t alter column a set default 8.2;
@@ -350,9 +350,9 @@ select * from t;
   7 |  7 | 8.2
 
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_15_8_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_8_8_chunk
 
 select * from t;
  ts | c1 |  a  
@@ -378,9 +378,9 @@ select * from t;
   7 |  7 |  
 
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_15_8_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_8_8_chunk
 
 select * from t;
  ts | c1 | a 
@@ -398,21 +398,21 @@ create table t(ts int, c1 int);
 select create_hypertable('t','ts');
  create_hypertable 
 -------------------
- (17,public,t,t)
+ (9,public,t,t)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_17_9_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_9_9_chunk
 
 alter table t add column a double precision default 7.1;
 select compress_chunk(show_chunks('t'));
-NOTICE:  chunk "_hyper_17_9_chunk" is already converted to columnstore
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_17_9_chunk
+NOTICE:  chunk "_hyper_9_9_chunk" is already converted to columnstore
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_9_9_chunk
 
 select * from t;
  ts | c1 |  a  
@@ -421,9 +421,9 @@ select * from t;
 
 update t set a = null;
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_17_9_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_9_9_chunk
 
 select * from t;
  ts | c1 | a 
@@ -437,9 +437,9 @@ select * from t;
   6 | 99 |  
 
 select compress_chunk(show_chunks('t'));
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_17_9_chunk
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_9_9_chunk
 
 select * from t;
  ts | c1 | a 
@@ -460,21 +460,21 @@ create table t(ts int, c1 int);
 select create_hypertable('t','ts');
  create_hypertable 
 -------------------
- (19,public,t,t)
+ (10,public,t,t)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into t (ts,c1) values (1,1);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_10_10_chunk
 
 alter table t add column a double precision default 3.3;
 insert into t (ts,c1) values (2,2);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_10_10_chunk
 
 select * from t;
  ts | c1 |  a  
@@ -487,7 +487,7 @@ insert into t (ts,c1) values (3,3);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_10_10_chunk
 
 select * from t;
  ts | c1 |  a  |  b  
@@ -500,7 +500,7 @@ update t set a = null;
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_10_10_chunk
 
 select * from t;
  ts | c1 | a |  b  
@@ -514,7 +514,7 @@ insert into t (ts,c1) values (4,4);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_10_10_chunk
 
 select * from t;
  ts | c1 |  a  |  b  | c 
@@ -528,7 +528,7 @@ update t set b = null;
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_10_10_chunk
 
 select * from t;
  ts | c1 |  a  | b | c 
@@ -543,7 +543,7 @@ update t set b = null;
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_10_10_chunk
 
 select * from t;
  ts | c1 | b | c 
@@ -558,7 +558,7 @@ update t set c = null;
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_10_10_chunk
 
 select * from t;
  ts | c1 | c 
@@ -576,14 +576,14 @@ create table codecov(ts int, c1 int);
 select create_hypertable('codecov','ts');
    create_hypertable   
 -----------------------
- (21,public,codecov,t)
+ (11,public,codecov,t)
 
 alter table codecov set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into codecov (ts,c1) values (1,NULL);
 select compress_chunk(show_chunks('codecov'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_21_11_chunk
+ _timescaledb_internal._hyper_11_11_chunk
 
 DO $$
 DECLARE
@@ -598,8 +598,8 @@ BEGIN
 			_timescaledb_catalog.compression_settings cs,
 			(SELECT show_chunks('codecov') as c) as x
 		WHERE
-			cs.relid = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass AND
-			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
+			cs.relid = uncomp.relid AND
+			x.c = uncomp.relid
 	LOOP
 		-- codecov to record coverage of 'tsl_compressed_data_info'
 		FOR rec IN

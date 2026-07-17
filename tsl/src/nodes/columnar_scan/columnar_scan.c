@@ -676,7 +676,7 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-	info->settings = ts_compression_settings_get(chunk->table_id);
+	info->settings = ts_compression_settings_get(chunk->fd.relid);
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
@@ -1311,36 +1311,28 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 		ts_columnar_estimate_compressed_batch_size(compression_info->compressed_rte->relid);
 
 	/*
-	 * Estimate the size of decompressed chunk based on the compressed chunk.
-	 *
-	 * The tuple estimates derived from pg_class will be empty, so we have to
-	 * compute that based on the compressed relation as well. Wrong estimates
-	 * there lead to wrong join order choice and wrong low cost for Sort over
-	 * Append, and also different MergeAppend costs on Postgres before 17 due to
-	 * a bug there.
+	 * Add the decompressed row estimate to the chunk rel. The chunk_rel->rows
+	 * already has the PG estimate for uncompressed chunk table, which is nonzero
+	 * for partial chunks.
 	 */
-	const double new_row_estimate = compressed_rel->rows * compression_info->compressed_batch_size;
-	const double new_tuples_estimate =
+	const double compressed_row_estimate =
+		compressed_rel->rows * compression_info->compressed_batch_size;
+	const double compressed_tuples_estimate =
 		compressed_rel->tuples * compression_info->compressed_batch_size;
 	if (!compression_info->single_chunk)
 	{
-		/*
-		 * Adjust the hypertable estimate by the diff of new and old chunk
-		 * estimate.
-		 */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		const double delta = new_row_estimate - chunk_rel->rows;
-		hypertable_rel->rows += delta;
+		hypertable_rel->rows += compressed_row_estimate;
 		/*
 		 * For appendrel, set tuples to the same value as rows,
 		 * like set_append_rel_size() does.
 		 */
-		hypertable_rel->tuples += delta;
+		hypertable_rel->tuples += compressed_row_estimate;
 	}
-	chunk_rel->rows = new_row_estimate;
-	chunk_rel->tuples = new_tuples_estimate;
+	chunk_rel->rows += compressed_row_estimate;
+	chunk_rel->tuples += compressed_tuples_estimate;
 
 	/*
 	 * Create the paths for the compressed chunk table.
@@ -2661,10 +2653,14 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 		 * out root->query_pathkeys to allow matching to pathkeys produces by
 		 * decompression
 		 */
-		List *orig_pathkeys = root->query_pathkeys;
+		List *orig_query_pathkeys = root->query_pathkeys;
+		List *orig_sort_pathkeys = root->sort_pathkeys;
+		List *orig_window_pathkeys = root->window_pathkeys;
 		List *orig_eq_classes = root->eq_classes;
 		Bitmapset *orig_eclass_indexes = compression_info->compressed_rel->eclass_indexes;
 		root->query_pathkeys = sort_info->required_compressed_pathkeys;
+		root->sort_pathkeys = sort_info->required_compressed_pathkeys;
+		root->window_pathkeys = sort_info->required_compressed_pathkeys;
 
 		/* We can optimize iterating over EquivalenceClasses by reducing them to
 		 * the subset which are from the compressed chunk. This only works if we don't
@@ -2688,7 +2684,9 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 
 		check_index_predicates(root, compressed_rel);
 		create_index_paths(root, compressed_rel);
-		root->query_pathkeys = orig_pathkeys;
+		root->query_pathkeys = orig_query_pathkeys;
+		root->sort_pathkeys = orig_sort_pathkeys;
+		root->window_pathkeys = orig_window_pathkeys;
 		root->eq_classes = orig_eq_classes;
 		compression_info->compressed_rel->eclass_indexes = orig_eclass_indexes;
 	}

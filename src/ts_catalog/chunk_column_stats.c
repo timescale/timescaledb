@@ -254,8 +254,7 @@ ts_chunk_column_stats_update_by_id(int32 chunk_column_stats_id,
 }
 
 static void
-ts_chunk_column_stats_validate(Form_chunk_column_stats info, const Oid hypertable_relid,
-							   bool if_not_exists)
+ts_chunk_column_stats_validate(Form_chunk_column_stats info, const Oid hypertable_relid)
 {
 	HeapTuple tuple;
 	Datum datum;
@@ -317,7 +316,7 @@ ts_chunk_column_stats_add_internal(FunctionCallInfo fcinfo, Oid table_relid, Nam
 	namestrcpy(&fd.column_name, NameStr(*colname));
 	LockRelationOid(table_relid, AccessShareLock);
 
-	ts_chunk_column_stats_validate(&fd, table_relid, if_not_exists);
+	ts_chunk_column_stats_validate(&fd, table_relid);
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
@@ -574,7 +573,7 @@ ts_chunk_column_stats_fill_dummy_dimension(FormData_chunk_column_stats *r, Oid m
  */
 static Constraint *
 create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_table_relid,
-								  Oid chunk_relid, const char *name)
+								  const char *name)
 {
 	Constraint *constr = NULL;
 	Node *rangedef;
@@ -829,13 +828,16 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 
+	const char *schema_name = ts_chunk_get_schema_name(chunk);
+	const char *table_name = ts_chunk_get_table_name(chunk);
+
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT pg_catalog.min(%s), pg_catalog.max(%s) FROM %s.%s",
 					 quote_identifier(col_name),
 					 quote_identifier(col_name),
-					 quote_identifier(NameStr(chunk->fd.schema_name)),
-					 quote_identifier(NameStr(chunk->fd.table_name)));
+					 quote_identifier(schema_name),
+					 quote_identifier(table_name));
 
 	/*
 	 * SPI_connect will switch MemoryContext so we need to keep track
@@ -856,8 +858,8 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the min/max values for column \"%s\" of chunk \"%s.%s\"",
 						 col_name,
-						 NameStr(chunk->fd.schema_name),
-						 NameStr(chunk->fd.table_name)))));
+						 schema_name,
+						 table_name))));
 	}
 
 	pfree(command.data);
@@ -933,8 +935,8 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 		Oid col_type;
 
 		attno = get_attnum(ht->main_table_relid, col_name);
-		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, attno);
-		col_type = get_atttype(chunk->table_id, attno);
+		attno = ts_map_attno(ht->main_table_relid, chunk->fd.relid, attno);
+		col_type = get_atttype(chunk->fd.relid, attno);
 
 		/* calculate the min/max range for this column on this chunk */
 		if (chunk_get_minmax(chunk, col_type, col_name, minmax))
@@ -1035,7 +1037,7 @@ ts_chunk_column_stats_insert(const Hypertable *ht, const Chunk *chunk)
 
 		/* Get the attribute number in the HT for this column, and map to the chunk */
 		attno = get_attnum(ht->main_table_relid, col_name);
-		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, attno);
+		attno = ts_map_attno(ht->main_table_relid, chunk->fd.relid, attno);
 
 		/* insert an entry for this ht_id, chunk_id for this col_name with -inf/+inf range */
 		fd.hypertable_id = ht->fd.id;
@@ -1499,7 +1501,6 @@ ts_chunk_column_stats_set_invalid(int32 hypertable_id, int32 chunk_id)
 
 typedef struct CheckList
 {
-	Oid chunk_relid;
 	Oid main_table_relid;
 	List *cclist;
 } CheckList;
@@ -1515,10 +1516,7 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
 
 	fill_form_from_slot(ti->slot, &fd);
 
-	constr = create_col_stats_check_constraint(&fd,
-											   checklist->main_table_relid,
-											   checklist->chunk_relid,
-											   NULL);
+	constr = create_col_stats_check_constraint(&fd, checklist->main_table_relid, NULL);
 
 	if (constr)
 	{
@@ -1553,7 +1551,6 @@ ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid,
 		return NIL;
 	}
 
-	clist.chunk_relid = reloid;
 	clist.main_table_relid = ts_hypertable_id_to_relid(fd.hypertable_id, false);
 
 	Assert(fd.id != INVALID_CHUNK_ID);

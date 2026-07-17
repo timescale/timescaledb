@@ -25,7 +25,7 @@ select location , min(temperature)
 from conditions
 group by time_bucket('1d', timec), location WITH NO DATA;
 ERROR:  unrecognized parameter "timescaledb.myfill"
-HINT:  Valid timescaledb parameters are: continuous, create_group_indexes, materialized_only, columnstore, chunk_interval, segmentby, orderby, compress_chunk_interval
+HINT:  Valid timescaledb parameters are: continuous, create_group_indexes, materialized_only, columnstore, chunk_interval, segmentby, orderby, compress_chunk_interval, enable_granular_refresh
 --valid PG option
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false, check_option = LOCAL )
 as
@@ -594,14 +594,6 @@ SELECT table_name FROM create_hypertable('comp_ht_test','time');
  comp_ht_test
 
 ALTER TABLE comp_ht_test SET (timescaledb.compress);
-SELECT
-  format('%I.%I', ht.schema_name, ht.table_name) AS "INTERNALTABLE"
-FROM
-  _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
-      AND uncompress.table_name = 'comp_ht_test') \gset
-CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',now()) FROM :INTERNALTABLE GROUP BY 1;
-ERROR:  hypertable is an internal compressed hypertable
 --TEST ht + cagg, do not enable compression on ht and try to compress chunk on ht.
 --Check error handling for this case
 SELECT compress_chunk(ch) FROM show_chunks('i2980') ch;
@@ -622,7 +614,7 @@ CREATE TABLE int_ht(timec bigint NOT NULL, val float);
 SELECT create_hypertable('int_ht', 'timec', chunk_time_interval => 1000000);
   create_hypertable   
 ----------------------
- (19,public,int_ht,t)
+ (16,public,int_ht,t)
 
 CREATE OR REPLACE FUNCTION int_ht_now() RETURNS bigint LANGUAGE SQL STABLE AS $$ SELECT 0::bigint $$;
 SELECT set_integer_now_func('int_ht', 'int_ht_now');

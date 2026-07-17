@@ -384,7 +384,7 @@ tablespace_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid)
+ts_tablespace_delete(int32 hypertable_id, const char *tspcname)
 
 {
 	ScanKeyData scankey[2];
@@ -400,7 +400,7 @@ ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid)
 				F_INT4EQ,
 				Int32GetDatum(hypertable_id));
 
-	if (NULL != tspcname)
+	if (tspcname)
 	{
 		ScanKeyInit(&scankey[nkeys++],
 					Anum_tablespace_hypertable_id_tablespace_name_idx_tablespace_name,
@@ -647,7 +647,7 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 
 	if (ts_hypertable_has_tablespace(ht, tspcoid))
 	{
-		ret = ts_tablespace_delete(ht->fd.id, tspcname, tspcoid);
+		ret = ts_tablespace_delete(ht->fd.id, tspcname);
 	}
 	else if (if_attached)
 	{
@@ -682,7 +682,7 @@ tablespace_detach_all(Oid hypertable_oid)
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
-	ret = ts_tablespace_delete(ht->fd.id, NULL, InvalidOid);
+	ret = ts_tablespace_delete(ht->fd.id, NULL);
 
 	ts_cache_release(&hcache);
 

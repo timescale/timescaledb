@@ -33,6 +33,7 @@ from ci_settings import (
     PG17_LATEST,
     PG18_EARLIEST,
     PG18_LATEST,
+    PG19_LATEST,
     PG_LATEST,
 )
 
@@ -51,7 +52,6 @@ default_ignored_tests = {
     "bgw_job_stat_history",
     "bgw_launcher",
     "telemetry",
-    "memoize",
     "net",
 }
 
@@ -190,6 +190,17 @@ m["include"].append(build_debug_config({"pg": PG17_LATEST}))
 
 m["include"].append(build_debug_config({"pg": PG18_LATEST, "coverage": True}))
 
+# test building against PG19
+m["include"].append(
+    build_debug_config(
+        {
+            "pg": PG19_LATEST,
+            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DEXPERIMENTAL=ON",
+            "pginstallcheck": True,
+        }
+    )
+)
+
 # Also test on ARM. The custom arm64 runner is only available in the
 # timescale/timescaledb repository.
 # See the available runners here:
@@ -222,15 +233,11 @@ m["include"].append(
     )
 )
 
-# Test latest postgres release without telemetry. Also run clang-tidy on it
-# because it's the fastest one.
+# Test latest postgres release without telemetry.
 m["include"].append(
     build_without_telemetry(
         {
             "pg": PG18_LATEST,
-            "cc": "clang",
-            "cxx": "clang++",
-            "tsdb_build_args": "-DLINTER=ON -DWARNINGS_AS_ERRORS=ON",
         }
     )
 )

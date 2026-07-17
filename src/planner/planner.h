@@ -40,6 +40,10 @@ typedef struct TimescaleDBPrivate
 
 	/* Cached equivalence members for compressed chunks. List of (EC, EM) Lists. */
 	List *compressed_ec_em_pairs;
+
+	/* Cached transformed pathkeys */
+	List *transformed_sort_pathkeys;
+	bool transformed_sort_pathkeys_valid;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte);

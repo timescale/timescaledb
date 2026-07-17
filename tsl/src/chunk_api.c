@@ -263,13 +263,16 @@ chunk_form_tuple(Chunk *chunk, Hypertable *ht, TupleDesc tupdesc, bool created)
 		return NULL;
 	}
 
+	NameData schema_name;
+	NameData table_name;
+	namestrcpy(&schema_name, ts_chunk_get_schema_name(chunk));
+	namestrcpy(&table_name, ts_chunk_get_table_name(chunk));
+
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_id)] = Int32GetDatum(chunk->fd.id);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_hypertable_id)] =
 		Int32GetDatum(chunk->fd.hypertable_id);
-	values[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)] =
-		NameGetDatum(&chunk->fd.schema_name);
-	values[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)] =
-		NameGetDatum(&chunk->fd.table_name);
+	values[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)] = NameGetDatum(&schema_name);
+	values[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)] = NameGetDatum(&table_name);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_relkind)] = CharGetDatum(chunk->relkind);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_slices)] =
 		JsonbPGetDatum(JsonbValueToJsonb(jv));
@@ -492,7 +495,7 @@ chunk_detach(PG_FUNCTION_ARGS)
 		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
 	};
 
-	ts_alter_table_with_event_trigger(chunk->table_id, (Node *) &stmt, list_make1(&cmd), false);
+	ts_alter_table_with_event_trigger(chunk->fd.relid, (Node *) &stmt, list_make1(&cmd), false);
 
 	ts_chunk_detach_by_relid(chunk_relid);
 

@@ -27,6 +27,7 @@ extern TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown;
 extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
+extern bool ts_guc_enable_hypertable_expansion_for_dml;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT bool ts_guc_skip_cagg_invalidation;
@@ -117,7 +118,9 @@ extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
+#if PG19_LT
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
+#endif
 
 /*
  * Exit code to use when scheduler exits.

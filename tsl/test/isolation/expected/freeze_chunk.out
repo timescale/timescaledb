@@ -290,7 +290,7 @@ step BeginLock:
 
 step LockChunk1: 
   SELECT
-    lock_chunktable(format('%I.%I',ch.schema_name, ch.table_name))
+    lock_chunktable(ch.relid::text)
   FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
   WHERE ch.hypertable_id = ht.id AND ht.table_name like 'measurements'
   ORDER BY ch.id LIMIT 1;
@@ -333,7 +333,7 @@ step BeginLock:
 
 step LockChunk1: 
   SELECT
-    lock_chunktable(format('%I.%I',ch.schema_name, ch.table_name))
+    lock_chunktable(ch.relid::text)
   FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
   WHERE ch.hypertable_id = ht.id AND ht.table_name like 'measurements'
   ORDER BY ch.id LIMIT 1;

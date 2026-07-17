@@ -131,7 +131,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 {
 	/* Only interested in queries on relations that are part of hypertables
 	 * with compression enabled, so quick exit if not this case. */
-	if (ht == NULL || !TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	if (ht == NULL || !TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
 		return;
 	}
@@ -161,7 +161,7 @@ void
 tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						 Hypertable *ht)
 {
-	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
 		if (!ts_guc_enable_compressed_merge && root->parse->commandType == CMD_MERGE)
 		{

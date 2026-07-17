@@ -260,7 +260,7 @@ inheritable_constraint_create(HeapTuple constraint_tuple, void *arg)
 
 	/* If the chunk already has an equivalent constraint, reuse it under its
 	 * existing name. */
-	chunk_rel = table_open(ctx->chunk->table_id, AccessShareLock);
+	chunk_rel = table_open(ctx->chunk->fd.relid, AccessShareLock);
 	matching_const = ts_constraint_find_matching(constraint_tuple, chunk_rel);
 	table_close(chunk_rel, NoLock);
 
@@ -275,7 +275,7 @@ inheritable_constraint_create(HeapTuple constraint_tuple, void *arg)
 	create_non_dimensional_constraint(ctx->chunk->fd.id,
 									  chunk_constraint_name,
 									  hypertable_constraint_name,
-									  ctx->chunk->table_id);
+									  ctx->chunk->fd.relid);
 	return CONSTR_PROCESSED;
 }
 
@@ -304,7 +304,7 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 		Assert(dim != NULL);
 		dimension_constraint_choose_name(name, slice->fd.id);
 
-		if (OidIsValid(get_relation_constraint_oid(chunk->table_id, name, true)))
+		if (OidIsValid(get_relation_constraint_oid(chunk->fd.relid, name, true)))
 		{
 			continue;
 		}
@@ -319,7 +319,7 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 	if (newconstrs != NIL)
 	{
 		List PG_USED_FOR_ASSERTS_ONLY *cookedconstrs = NIL;
-		Relation rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Relation rel = table_open(chunk->fd.relid, AccessExclusiveLock);
 		cookedconstrs = AddRelationNewConstraints(rel,
 												  NIL /* List *newColDefaults */,
 												  newconstrs,
@@ -411,7 +411,7 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 			create_non_dimensional_constraint(chunk->fd.id,
 											  chunk_constraint_name,
 											  NameStr(con->conname),
-											  chunk->table_id);
+											  chunk->fd.relid);
 		}
 	}
 
@@ -432,7 +432,7 @@ ts_chunk_constraints_recreate(const Hypertable *ht, const Chunk *chunk)
 		Oid constraint_oid;
 
 		dimension_constraint_choose_name(name, slice->fd.id);
-		constraint_oid = get_relation_constraint_oid(chunk->table_id, name, true);
+		constraint_oid = get_relation_constraint_oid(chunk->fd.relid, name, true);
 		if (OidIsValid(constraint_oid))
 		{
 			ObjectAddress addr = {
@@ -485,7 +485,7 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 
 	PushActiveSnapshot(GetLatestSnapshot());
 	rel = table_open(chunk_relid, AccessShareLock);
-	scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
+	scandesc = table_beginscan_compat(rel, GetActiveSnapshot(), 0, NULL, 0);
 	slot = table_slot_create(rel, NULL);
 
 	while (table_scan_getnextslot(scandesc, ForwardScanDirection, slot))
@@ -543,6 +543,6 @@ ts_chunk_constraint_check_violated(const Chunk *chunk, const Hyperspace *hs)
 		const Dimension *dim = ts_hyperspace_get_dimension_by_id(hs, slice->fd.dimension_id);
 
 		Assert(dim);
-		check_chunk_constraint_violated(chunk->table_id, dim, slice);
+		check_chunk_constraint_violated(chunk->fd.relid, dim, slice);
 	}
 }

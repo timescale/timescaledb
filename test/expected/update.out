@@ -88,9 +88,12 @@ WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_
          ->  Hash Join
                Hash Cond: ("one_Partition".series_1 = "one_Partition_1".series_1)
                ->  Append
-                     ->  Seq Scan on _hyper_1_1_chunk "one_Partition_2"
-                     ->  Seq Scan on _hyper_1_2_chunk "one_Partition_3"
-                     ->  Seq Scan on _hyper_1_3_chunk "one_Partition_4"
+                     ->  Index Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk "one_Partition_2"
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk "one_Partition_3"
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk "one_Partition_4"
+                           Index Cond: (series_1 > (series_val())::double precision)
                ->  Hash
                      ->  HashAggregate
                            Group Key: "one_Partition_1".series_1
@@ -209,4 +212,25 @@ SELECT count(*) FROM i6790_update WHERE value = 0.3;
  count 
 -------
      5
+
+-- Test using a ctid column directly on a hypertable that is a target of an
+-- UPDATE query.
+CREATE TABLE ht_update_join(time timestamptz NOT NULL, val int);
+SELECT create_hypertable('ht_update_join', 'time', chunk_time_interval => interval '1 month');
+      create_hypertable      
+-----------------------------
+ (4,public,ht_update_join,t)
+
+INSERT INTO ht_update_join VALUES ('2020-01-15', 1), ('2020-02-15', 2);
+UPDATE ht_update_join a SET val = 0
+FROM ht_update_join b
+WHERE a.time = b.time AND a.ctid = b.ctid;
+-- Test nesting.
+WITH updated AS (
+  UPDATE ht_update_join SET val = 99 WHERE time = '2020-01-15' RETURNING *
+)
+SELECT * FROM updated;
+             time             | val 
+------------------------------+-----
+ Wed Jan 15 00:00:00 2020 PST |  99
 

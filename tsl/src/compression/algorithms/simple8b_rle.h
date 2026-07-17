@@ -94,8 +94,7 @@ typedef struct Simple8bRleSerialized
 	uint64 slots[FLEXIBLE_ARRAY_MEMBER];
 } Simple8bRleSerialized;
 
-static void
-pg_attribute_unused() simple8brle_size_assertions(void)
+pg_attribute_unused() static void simple8brle_size_assertions(void)
 {
 	Simple8bRleSerialized test_val = { 0 };
 	/* ensure no padding bits make it to disk */

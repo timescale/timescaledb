@@ -9,12 +9,12 @@ SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed res
 \gset
 
 -- Store initial compressed chunk info before recompression
-SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+SELECT uncompressed.relid::text AS "OLD_CHUNK_NAME",
         cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
         cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  ON cs.relid = uncompressed.relid
 WHERE uncompressed.hypertable_id = (
           SELECT id
           FROM _timescaledb_catalog.hypertable
@@ -40,8 +40,8 @@ SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
   cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
-WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+  ON cs.relid = uncompressed.relid
+WHERE uncompressed.relid::text = :'OLD_CHUNK_NAME'
 LIMIT 1 \gset
 
 \set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME

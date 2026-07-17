@@ -54,7 +54,7 @@ BEGIN;
   SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
   SELECT cs.compress_relid::text AS "CHUNK"
     FROM _timescaledb_catalog.compression_settings cs
-    JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+    JOIN _timescaledb_catalog.chunk ch ON cs.relid=ch.relid
     JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test2'
     WHERE cs.compress_relid IS NOT NULL LIMIT 1 \gset
 
@@ -75,7 +75,7 @@ BEGIN;
   SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
   SELECT cs.compress_relid::text AS "CHUNK"
     FROM _timescaledb_catalog.compression_settings cs
-    JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+    JOIN _timescaledb_catalog.chunk ch ON cs.relid=ch.relid
     JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test2'
     WHERE cs.compress_relid IS NOT NULL LIMIT 1 \gset
 
@@ -159,7 +159,7 @@ SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
 
 SELECT cs.compress_relid::text AS "CHUNK"
   FROM _timescaledb_catalog.compression_settings cs
-  JOIN _timescaledb_catalog.chunk ch ON cs.relid=format('%I.%I',ch.schema_name,ch.table_name)::regclass
+  JOIN _timescaledb_catalog.chunk ch ON cs.relid=ch.relid
   JOIN _timescaledb_catalog.hypertable ht2 ON ch.hypertable_id=ht2.id AND ht2.table_name='test5'
   WHERE cs.compress_relid IS NOT NULL \gset
 

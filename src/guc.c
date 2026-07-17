@@ -50,6 +50,13 @@ static const struct config_enum_entry telemetry_level_options[] = {
 #endif
 
 /* Copied from contrib/auto_explain/auto_explain.c */
+#if PG19_LT
+/*
+ * PG19 lets log_min_messages be set per process type (e.g. "warning,
+ * bgworker:debug1"), which supersedes our timescaledb.bgw_log_level GUC, so we
+ * only define it on earlier versions.
+ * https://github.com/postgres/postgres/commit/38e0190ced
+ */
 static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
 	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
@@ -57,6 +64,7 @@ static const struct config_enum_entry loglevel_options[] = {
 	{ "log", LOG, false },		 { "error", ERROR, false },	  { "fatal", FATAL, false },
 	{ NULL, 0, false }
 };
+#endif
 
 static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
@@ -86,6 +94,7 @@ bool ts_guc_enable_chunk_append = true;
 bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
+bool ts_guc_enable_hypertable_expansion_for_dml = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
@@ -136,7 +145,9 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
+#if PG19_LT
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
+#endif
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
@@ -202,7 +213,7 @@ DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
 DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 #endif
 
-DebugRequireOption ts_guc_debug_require_batch_sorted_merge = false;
+DebugRequireOption ts_guc_debug_require_batch_sorted_merge = DRO_Allow;
 
 bool ts_guc_debug_compression_path_info = false;
 bool ts_guc_enable_rowlevel_compression_locking = false;
@@ -747,6 +758,19 @@ _guc_init(void)
 							 "Enable constraint exclusion",
 							 "Enable planner constraint exclusion",
 							 &ts_guc_enable_constraint_exclusion,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_hypertable_expansion_for_dml"),
+							 "Enable TimescaleDB hypertable expansion for DML",
+							 "Allow using the TimescaleDB hypertable expansion code for "
+							 "UPDATE/DELETE queries, instead of the slower Postgres inheritance "
+							 "hierarchy expansion code.",
+							 &ts_guc_enable_hypertable_expansion_for_dml,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1510,6 +1534,7 @@ _guc_init(void)
 							   /* assign_hook= */ ts_license_guc_assign_hook,
 							   /* show_hook= */ NULL);
 
+#if PG19_LT
 	DefineCustomEnumVariable(MAKE_EXTOPTION("bgw_log_level"),
 							 "Log level for the background worker subsystem",
 							 "Log level for the scheduler and workers of the background worker "
@@ -1522,6 +1547,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	/* this information is useful in general on customer deployments */
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_compression_path_info"),

@@ -54,12 +54,12 @@ SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST
 SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
 \gset
 -- Store initial compressed chunk info before recompression
-SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+SELECT uncompressed.relid::text AS "OLD_CHUNK_NAME",
         cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
         cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  ON cs.relid = uncompressed.relid
 WHERE uncompressed.hypertable_id = (
           SELECT id
           FROM _timescaledb_catalog.hypertable
@@ -93,8 +93,8 @@ SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
   cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
-WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+  ON cs.relid = uncompressed.relid
+WHERE uncompressed.relid::text = :'OLD_CHUNK_NAME'
 LIMIT 1 \gset
 \set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
 :BATCH_METADATA_QUERY
@@ -163,7 +163,7 @@ END $$;
 SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_unordered_segmentby') chunk;
                  chunk                  |   chunk_status_text    
 ----------------------------------------+------------------------
- _timescaledb_internal._hyper_3_2_chunk | {COMPRESSED,UNORDERED}
+ _timescaledb_internal._hyper_2_2_chunk | {COMPRESSED,UNORDERED}
 
 \set TEST_TABLE_NAME 'recomp_unordered_segmentby'
 \set ORDER_BY_CLAUSE ' ORDER BY device, time'
@@ -177,12 +177,12 @@ SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST
 SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
 \gset
 -- Store initial compressed chunk info before recompression
-SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+SELECT uncompressed.relid::text AS "OLD_CHUNK_NAME",
         cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
         cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  ON cs.relid = uncompressed.relid
 WHERE uncompressed.hypertable_id = (
           SELECT id
           FROM _timescaledb_catalog.hypertable
@@ -209,15 +209,15 @@ LIMIT 1 \gset
 SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_2_chunk
+ _timescaledb_internal._hyper_2_2_chunk
 
 -- Get info for the new compressed chunk
 SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
   cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
-WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+  ON cs.relid = uncompressed.relid
+WHERE uncompressed.relid::text = :'OLD_CHUNK_NAME'
 LIMIT 1 \gset
 \set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
 :BATCH_METADATA_QUERY
@@ -248,13 +248,13 @@ SELECT
 SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_unordered_segmentby') chunk;
                  chunk                  | chunk_status_text 
 ----------------------------------------+-------------------
- _timescaledb_internal._hyper_3_2_chunk | {COMPRESSED}
+ _timescaledb_internal._hyper_2_2_chunk | {COMPRESSED}
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------
  recomp_unordered_segmentby             |                                                   | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_2_chunk | _timescaledb_internal._hyper_3_2_chunk_compressed | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_2_chunk | _timescaledb_internal._hyper_2_2_chunk_compressed | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE IF EXISTS recomp_unordered_segmentby CASCADE;
 -- Test Case 3: Unordered chunk with segmentby and multiple orderbys
@@ -290,7 +290,7 @@ END $$;
 SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_unordered_multi_orderby') chunk;
                  chunk                  |   chunk_status_text    
 ----------------------------------------+------------------------
- _timescaledb_internal._hyper_5_3_chunk | {COMPRESSED,UNORDERED}
+ _timescaledb_internal._hyper_3_3_chunk | {COMPRESSED,UNORDERED}
 
 \set TEST_TABLE_NAME 'recomp_unordered_multi_orderby'
 \set ORDER_BY_CLAUSE ' ORDER BY device, time, sensor_id'
@@ -304,12 +304,12 @@ SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST
 SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
 \gset
 -- Store initial compressed chunk info before recompression
-SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+SELECT uncompressed.relid::text AS "OLD_CHUNK_NAME",
         cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
         cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  ON cs.relid = uncompressed.relid
 WHERE uncompressed.hypertable_id = (
           SELECT id
           FROM _timescaledb_catalog.hypertable
@@ -336,15 +336,15 @@ LIMIT 1 \gset
 SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_3_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 -- Get info for the new compressed chunk
 SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
   cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
-WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+  ON cs.relid = uncompressed.relid
+WHERE uncompressed.relid::text = :'OLD_CHUNK_NAME'
 LIMIT 1 \gset
 \set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
 :BATCH_METADATA_QUERY
@@ -375,13 +375,13 @@ SELECT
 SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_unordered_multi_orderby') chunk;
                  chunk                  | chunk_status_text 
 ----------------------------------------+-------------------
- _timescaledb_internal._hyper_5_3_chunk | {COMPRESSED}
+ _timescaledb_internal._hyper_3_3_chunk | {COMPRESSED}
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                  relid                  |                  compress_relid                   | segmentby |     orderby      | orderby_desc | orderby_nullsfirst |                                                                                                                            index                                                                                                                             
 ----------------------------------------+---------------------------------------------------+-----------+------------------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  recomp_unordered_multi_orderby         |                                                   | {device}  | {time,sensor_id} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "sensor_id", "source": "orderby"}, {"type": "firstlast", "column": "sensor_id", "source": "orderby"}]
- _timescaledb_internal._hyper_5_3_chunk | _timescaledb_internal._hyper_5_3_chunk_compressed | {device}  | {time,sensor_id} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "sensor_id", "source": "orderby"}, {"type": "firstlast", "column": "sensor_id", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {device}  | {time,sensor_id} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "sensor_id", "source": "orderby"}, {"type": "firstlast", "column": "sensor_id", "source": "orderby"}]
 
 DROP TABLE IF EXISTS recomp_unordered_multi_orderby CASCADE;
 -- Test Case 4: Orderby is not necessarily increasing every insert
@@ -399,7 +399,7 @@ INSERT INTO recomp_truly_unordered SELECT '2025-01-01'::timestamptz + (i || ' mi
 SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_truly_unordered') chunk;
                  chunk                  |   chunk_status_text    
 ----------------------------------------+------------------------
- _timescaledb_internal._hyper_7_4_chunk | {COMPRESSED,UNORDERED}
+ _timescaledb_internal._hyper_4_4_chunk | {COMPRESSED,UNORDERED}
 
 \set TEST_TABLE_NAME 'recomp_truly_unordered'
 \set ORDER_BY_CLAUSE ' ORDER BY device, time'
@@ -413,12 +413,12 @@ SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST
 SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
 \gset
 -- Store initial compressed chunk info before recompression
-SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+SELECT uncompressed.relid::text AS "OLD_CHUNK_NAME",
         cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
         cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  ON cs.relid = uncompressed.relid
 WHERE uncompressed.hypertable_id = (
           SELECT id
           FROM _timescaledb_catalog.hypertable
@@ -446,15 +446,15 @@ LIMIT 1 \gset
 SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_7_4_chunk
+ _timescaledb_internal._hyper_4_4_chunk
 
 -- Get info for the new compressed chunk
 SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
   cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
-WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+  ON cs.relid = uncompressed.relid
+WHERE uncompressed.relid::text = :'OLD_CHUNK_NAME'
 LIMIT 1 \gset
 \set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
 :BATCH_METADATA_QUERY
@@ -484,13 +484,13 @@ SELECT
 SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_truly_unordered') chunk;
                  chunk                  | chunk_status_text 
 ----------------------------------------+-------------------
- _timescaledb_internal._hyper_7_4_chunk | {COMPRESSED}
+ _timescaledb_internal._hyper_4_4_chunk | {COMPRESSED}
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------
  recomp_truly_unordered                 |                                                   | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_7_4_chunk | _timescaledb_internal._hyper_7_4_chunk_compressed | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_4_4_chunk | _timescaledb_internal._hyper_4_4_chunk_compressed | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE IF EXISTS recomp_truly_unordered CASCADE;
 -- Test Case 5: Different compression settings
@@ -515,12 +515,12 @@ SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST
 SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
 \gset
 -- Store initial compressed chunk info before recompression
-SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+SELECT uncompressed.relid::text AS "OLD_CHUNK_NAME",
         cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
         cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  ON cs.relid = uncompressed.relid
 WHERE uncompressed.hypertable_id = (
           SELECT id
           FROM _timescaledb_catalog.hypertable
@@ -546,15 +546,15 @@ LIMIT 1 \gset
 SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_9_5_chunk
+ _timescaledb_internal._hyper_5_5_chunk
 
 -- Get info for the new compressed chunk
 SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
   cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
-WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+  ON cs.relid = uncompressed.relid
+WHERE uncompressed.relid::text = :'OLD_CHUNK_NAME'
 LIMIT 1 \gset
 \set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
 :BATCH_METADATA_QUERY
@@ -585,7 +585,7 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                  relid                  |                  compress_relid                   | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                                                                                        index                                                                                                                         
 ----------------------------------------+---------------------------------------------------+-----------+--------------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  recomp_comp_settings                   |                                                   | {device}  | {time2,time} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "time2", "source": "orderby"}, {"type": "firstlast", "column": "time2", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_9_5_chunk | _timescaledb_internal._hyper_9_5_chunk_compressed | {device}  | {time2,time} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "time2", "source": "orderby"}, {"type": "firstlast", "column": "time2", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_compressed | {device}  | {time2,time} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "time2", "source": "orderby"}, {"type": "firstlast", "column": "time2", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- change sparse index setting
 ALTER TABLE recomp_comp_settings SET (tsdb.orderby='time', tsdb.index='bloom("time2")');
@@ -600,12 +600,12 @@ SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST
 SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
 \gset
 -- Store initial compressed chunk info before recompression
-SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+SELECT uncompressed.relid::text AS "OLD_CHUNK_NAME",
         cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
         cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  ON cs.relid = uncompressed.relid
 WHERE uncompressed.hypertable_id = (
           SELECT id
           FROM _timescaledb_catalog.hypertable
@@ -630,15 +630,15 @@ LIMIT 1 \gset
 SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_9_5_chunk
+ _timescaledb_internal._hyper_5_5_chunk
 
 -- Get info for the new compressed chunk
 SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
   cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
-WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+  ON cs.relid = uncompressed.relid
+WHERE uncompressed.relid::text = :'OLD_CHUNK_NAME'
 LIMIT 1 \gset
 \set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
 :BATCH_METADATA_QUERY
@@ -669,7 +669,7 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                        index                                                                                        
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  recomp_comp_settings                   |                                                   | {device}  | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_9_5_chunk | _timescaledb_internal._hyper_9_5_chunk_compressed | {device}  | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_compressed | {device}  | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- change segmentby setting, will fallback to decompress/compress
 ALTER TABLE recomp_comp_settings SET (tsdb.segmentby='');
@@ -684,12 +684,12 @@ SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST
 SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
 \gset
 -- Store initial compressed chunk info before recompression
-SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+SELECT uncompressed.relid::text AS "OLD_CHUNK_NAME",
         cs.compress_relid::regclass::text AS "OLD_COMPRESSED_CHUNK_NAME",
         cs.compress_relid::oid AS "OLD_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+  ON cs.relid = uncompressed.relid
 WHERE uncompressed.hypertable_id = (
           SELECT id
           FROM _timescaledb_catalog.hypertable
@@ -714,15 +714,15 @@ LIMIT 1 \gset
 SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_9_5_chunk
+ _timescaledb_internal._hyper_5_5_chunk
 
 -- Get info for the new compressed chunk
 SELECT cs.compress_relid::regclass::text AS "NEW_COMPRESSED_CHUNK_NAME",
   cs.compress_relid::oid AS "NEW_COMPRESSED_CHUNK_OID"
 FROM _timescaledb_catalog.chunk uncompressed
 JOIN _timescaledb_catalog.compression_settings cs
-  ON cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
-WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+  ON cs.relid = uncompressed.relid
+WHERE uncompressed.relid::text = :'OLD_CHUNK_NAME'
 LIMIT 1 \gset
 \set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
 :BATCH_METADATA_QUERY
@@ -753,7 +753,7 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                        index                                                                                        
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  recomp_comp_settings                   |                                                   | {}        | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_9_5_chunk | _timescaledb_internal._hyper_9_5_chunk_compressed | {}        | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_5_chunk | _timescaledb_internal._hyper_5_5_chunk_compressed | {}        | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE IF EXISTS recomp_comp_settings CASCADE;
 RESET timescaledb.enable_direct_compress_insert;

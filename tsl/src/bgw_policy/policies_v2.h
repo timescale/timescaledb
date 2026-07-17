@@ -39,6 +39,12 @@
 #define POL_RETENTION_CONF_KEY_DROP_AFTER "drop_after"
 #define POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE "drop_created_before"
 
+#define POLICY_COMPACTION_PROC_NAME "policy_compaction"
+#define POLICY_COMPACTION_CHECK_NAME "policy_compaction_check"
+#define POL_COMPACTION_CONF_KEY_MAX_CHUNKS "max_chunks"
+#define POL_COMPACTION_CONF_KEY_MAX_BATCHES "max_batches"
+#define POL_COMPACTION_CONF_KEY_INACTIVE_FOR "inactive_for"
+
 #define SHOW_POLICY_KEY_POLICY_NAME "policy_name"
 #define SHOW_POLICY_KEY_REFRESH_INTERVAL "refresh_interval"
 #define SHOW_POLICY_KEY_REFRESH_START_OFFSET "refresh_start_offset"

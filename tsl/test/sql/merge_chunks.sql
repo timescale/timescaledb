@@ -16,7 +16,7 @@ set timescaledb.enable_merge_multidim_chunks = true;
 -- Helper views --
 -------------------
 create view partitions as
-select c.table_name, d.column_name, ds.range_start, ds.range_end
+select c.relid::text AS table_name, d.column_name, ds.range_start, ds.range_end
 from _timescaledb_catalog.hypertable h
 join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
 join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
@@ -265,12 +265,12 @@ alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
 
 -- Merge OSM chunks
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = true where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = false where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 
 -- Merge frozen chunks
@@ -520,11 +520,11 @@ INSERT INTO compress_settings_merge VALUES
     ('2024-01-01 12:00', 1, 'one', 1.5, 100),
     ('2024-01-02 12:00', 2, 'two', 2.5, 200);
 
-SELECT format('%I.%I', schema_name, table_name) AS first_chunk
+SELECT relid::text AS first_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='compress_settings_merge')
 ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS second_chunk
+SELECT relid::text AS second_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='compress_settings_merge')
 ORDER BY id OFFSET 1 LIMIT 1 \gset
@@ -574,11 +574,11 @@ INSERT INTO concurrent_compressed_merge VALUES
     ('2024-01-02 12:00', 2, 2.5);
 SELECT compress_chunk(ch) FROM show_chunks('concurrent_compressed_merge') ch;
 
-SELECT format('%I.%I', schema_name, table_name) AS ccm_c1
+SELECT relid::text AS ccm_c1
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
  ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS ccm_c2
+SELECT relid::text AS ccm_c2
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
  ORDER BY id OFFSET 1 LIMIT 1 \gset
@@ -610,12 +610,12 @@ SELECT t, (i % 10) + 1, random() * 100, (i * 7) % 13
 FROM generate_series('2024-01-02 2:00'::timestamptz, '2024-01-02 23:59', '1 minute') t,
      generate_series(1, 5) i;
 
-SELECT format('%I.%I', schema_name, table_name) AS mso_c1
+SELECT relid::text AS mso_c1
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'merge_sparse_order')
  ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS mso_c2
+SELECT relid::text AS mso_c2
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'merge_sparse_order')

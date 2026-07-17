@@ -167,19 +167,19 @@ SELECT * FROM ht_settings;
 SELECT compress_chunk(show_chunks('metrics'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
+ _timescaledb_internal._hyper_2_3_chunk
 
 -- settings for compressed chunk should be present
 SELECT * FROM settings;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {d1}      |         |              |                    | 
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 SELECT * FROM chunk_settings;
  hypertable |                 chunk                  | segmentby |   orderby   |                                                           index                                                           
 ------------+----------------------------------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------
- metrics    | _timescaledb_internal._hyper_3_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- changing settings should update settings for hypertable but not existing compressed chunks
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d2');
@@ -188,7 +188,7 @@ SELECT * FROM settings;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {d2}      |         |              |                    | 
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 SELECT * FROM ht_settings;
  hypertable | segmentby | orderby | compress_interval_length | index 
@@ -198,7 +198,7 @@ SELECT * FROM ht_settings;
 SELECT * FROM chunk_settings;
  hypertable |                 chunk                  | segmentby |   orderby   |                                                           index                                                           
 ------------+----------------------------------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------
- metrics    | _timescaledb_internal._hyper_3_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- changing settings should update settings for hypertable but not existing compressed chunks
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
@@ -207,7 +207,7 @@ SELECT * FROM settings;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {}        |         |              |                    | 
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 SELECT * FROM ht_settings;
  hypertable | segmentby | orderby | compress_interval_length | index 
@@ -217,23 +217,23 @@ SELECT * FROM ht_settings;
 SELECT * FROM chunk_settings;
  hypertable |                 chunk                  | segmentby |   orderby   |                                                           index                                                           
 ------------+----------------------------------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------
- metrics    | _timescaledb_internal._hyper_3_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- create another chunk
 INSERT INTO metrics VALUES ('2000-02-01');
 SELECT compress_chunk(show_chunks('metrics'), true);
-NOTICE:  chunk "_hyper_3_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_2_3_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_2_3_chunk
+ _timescaledb_internal._hyper_2_4_chunk
 
 SELECT * FROM settings;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                           
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {}        |         |              |                    | 
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_4_chunk | _timescaledb_internal._hyper_3_4_chunk_compressed | {}        | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_compressed | {}        | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 SELECT * FROM ht_settings;
  hypertable | segmentby | orderby | compress_interval_length | index 
@@ -243,51 +243,51 @@ SELECT * FROM ht_settings;
 SELECT * FROM chunk_settings;
  hypertable |                 chunk                  | segmentby |   orderby   |                                                           index                                                           
 ------------+----------------------------------------+-----------+-------------+---------------------------------------------------------------------------------------------------------------------------
- metrics    | _timescaledb_internal._hyper_3_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- metrics    | _timescaledb_internal._hyper_3_4_chunk |           | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_4_chunk |           | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='bloom(value)');
 NOTICE:  updated compression settings will only apply to future compressions
-SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE format('%I.%I', schema_name, table_name)::regclass IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) ORDER BY id LIMIT 1 OFFSET 1\gset
+SELECT relid::text AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) ORDER BY id LIMIT 1 OFFSET 1\gset
 -- recompressing chunks should apply current hypertable settings
 SELECT compress_chunk(:'CHUNK', recompress:=true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_2_4_chunk
 
 SELECT * FROM settings;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                        index                                                                                        
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {d2}      | {time}  | {t}          | {t}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_4_chunk | _timescaledb_internal._hyper_3_4_chunk_compressed | {d2}      | {time}  | {t}          | {t}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_compressed | {d2}      | {time}  | {t}          | {t}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 SELECT compress_chunk(:'CHUNK', recompress:=true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_2_4_chunk
 
 SELECT * FROM settings;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                        index                                                                                        
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {d2}      | {time}  | {t}          | {t}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_4_chunk | _timescaledb_internal._hyper_3_4_chunk_compressed | {d2}      | {time}  | {t}          | {t}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_compressed | {d2}      | {time}  | {t}          | {t}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='');
 NOTICE:  updated compression settings will only apply to future compressions
-SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE format('%I.%I', schema_name, table_name)::regclass IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) ORDER BY id LIMIT 1 OFFSET 1\gset
+SELECT relid::text AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL) ORDER BY id LIMIT 1 OFFSET 1\gset
 SELECT compress_chunk(:'CHUNK', recompress:=true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_2_4_chunk
 
 SELECT * FROM settings;
                  relid                  |                  compress_relid                   | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                      index                                                                      
 ----------------------------------------+---------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {d2}      | {time}  | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_4_chunk | _timescaledb_internal._hyper_3_4_chunk_compressed | {d2}      | {time}  | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_compressed | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_compressed | {d2}      | {time}  | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 SELECT * FROM ht_settings;
  hypertable | segmentby |   orderby   | compress_interval_length |                                                                      index                                                                      
@@ -297,15 +297,15 @@ SELECT * FROM ht_settings;
 SELECT * FROM chunk_settings;
  hypertable |                 chunk                  | segmentby |   orderby   |                                                                      index                                                                      
 ------------+----------------------------------------+-----------+-------------+-------------------------------------------------------------------------------------------------------------------------------------------------
- metrics    | _timescaledb_internal._hyper_3_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- metrics    | _timescaledb_internal._hyper_3_4_chunk | d2        | "time" DESC | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_3_chunk | d1        | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_4_chunk | d2        | "time" DESC | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- test different order by flags with compression settings view
 CREATE TABLE metrics2(time timestamptz not null, d1 text, d2 text, value float);
 SELECT create_hypertable('metrics2','time');
    create_hypertable   
 -----------------------
- (5,public,metrics2,t)
+ (3,public,metrics2,t)
 
 SELECT * FROM ht_settings;
  hypertable | segmentby |   orderby   | compress_interval_length |                                                                      index                                                                      
@@ -334,16 +334,16 @@ NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(show_chunks('metrics'), recompress:=true);
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_2_3_chunk
+ _timescaledb_internal._hyper_2_4_chunk
 
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d1,d2');
 NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM chunk_settings;
  hypertable |                 chunk                  | segmentby |   orderby   |                                                                      index                                                                      
 ------------+----------------------------------------+-----------+-------------+-------------------------------------------------------------------------------------------------------------------------------------------------
- metrics    | _timescaledb_internal._hyper_3_3_chunk |           | "time" DESC | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- metrics    | _timescaledb_internal._hyper_3_4_chunk |           | "time" DESC | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_3_chunk |           | "time" DESC | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ metrics    | _timescaledb_internal._hyper_2_4_chunk |           | "time" DESC | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 SELECT * FROM metrics WHERE d1 = 'foo';
  time | d1 | d2 | value 
@@ -354,8 +354,8 @@ SELECT * FROM settings;
 ----------------------------------------+---------------------------------------------------+-----------+--------------------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
  metrics2                               |                                                   |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "firstlast", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "firstlast", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "firstlast", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_3_chunk | _timescaledb_internal._hyper_3_3_chunk_compressed | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_4_chunk | _timescaledb_internal._hyper_3_4_chunk_compressed | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_3_chunk | _timescaledb_internal._hyper_2_3_chunk_compressed | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_compressed | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- Check that TRUNCATE <hypertable> also cleans up compression
 -- settings for chunks that are dropped when truncating.
@@ -375,16 +375,16 @@ INSERT INTO metrics VALUES ('2000-01-01'), ('2001-01-01');
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_5_chunk
- _timescaledb_internal._hyper_3_6_chunk
+ _timescaledb_internal._hyper_2_5_chunk
+ _timescaledb_internal._hyper_2_6_chunk
 
 SELECT * FROM settings;
                  relid                  |                  compress_relid                   | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                                                                                                                                                                                                                             index                                                                                                                                                                                                                                              
 ----------------------------------------+---------------------------------------------------+-----------+--------------------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                   | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
  metrics2                               |                                                   |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "firstlast", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "firstlast", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "firstlast", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal._hyper_3_5_chunk_compressed | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal._hyper_3_6_chunk_compressed | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_5_chunk | _timescaledb_internal._hyper_2_5_chunk_compressed | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_2_6_chunk | _timescaledb_internal._hyper_2_6_chunk_compressed | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- DROP TABLE with CASCADE uses a different code path for dropping
 -- hypertable so needs to be tested separately.
@@ -449,7 +449,7 @@ CREATE TABLE test_column_limit_alter (
 SELECT create_hypertable('test_column_limit_alter', 'time');
           create_hypertable           
 --------------------------------------
- (8,public,test_column_limit_alter,t)
+ (5,public,test_column_limit_alter,t)
 
 -- Enable compression with 1 segmentby and 20 orderby columns (1 + 40 = 41 keys)
 ALTER TABLE test_column_limit_alter SET (
@@ -482,10 +482,10 @@ SELECT * FROM settings;
 -----------------------------------------+----------------------------------------------------+-----------+--------------------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics2                                |                                                    |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "firstlast", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "firstlast", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "firstlast", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
  notice_test                             |                                                    | {}        | {created_at,time}  | {f,t}        | {f,t}              | [{"type": "bloom", "column": "temp", "source": "config"}, {"type": "minmax", "column": "created_at", "source": "orderby"}, {"type": "firstlast", "column": "created_at", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_9_10_chunk | _timescaledb_internal._hyper_9_10_chunk_compressed | {}        | {created_at,time}  | {f,t}        | {f,t}              | [{"type": "bloom", "column": "temp", "source": "config"}, {"type": "minmax", "column": "created_at", "source": "orderby"}, {"type": "firstlast", "column": "created_at", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_9_7_chunk  | _timescaledb_internal._hyper_9_7_chunk_compressed  | {device}  | {time}             | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_9_8_chunk  | _timescaledb_internal._hyper_9_8_chunk_compressed  | {}        | {time}             | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_9_9_chunk  | _timescaledb_internal._hyper_9_9_chunk_compressed  | {}        | {created_at,time}  | {f,t}        | {f,t}              | [{"type": "minmax", "column": "created_at", "source": "orderby"}, {"type": "firstlast", "column": "created_at", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_6_10_chunk | _timescaledb_internal._hyper_6_10_chunk_compressed | {}        | {created_at,time}  | {f,t}        | {f,t}              | [{"type": "bloom", "column": "temp", "source": "config"}, {"type": "minmax", "column": "created_at", "source": "orderby"}, {"type": "firstlast", "column": "created_at", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_6_7_chunk  | _timescaledb_internal._hyper_6_7_chunk_compressed  | {device}  | {time}             | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_6_8_chunk  | _timescaledb_internal._hyper_6_8_chunk_compressed  | {}        | {time}             | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_6_9_chunk  | _timescaledb_internal._hyper_6_9_chunk_compressed  | {}        | {created_at,time}  | {f,t}        | {f,t}              | [{"type": "minmax", "column": "created_at", "source": "orderby"}, {"type": "firstlast", "column": "created_at", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 RESET timescaledb.enable_direct_compress_insert;
 DROP TABLE notice_test;

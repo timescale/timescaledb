@@ -256,6 +256,16 @@ jobs:
 
         find db/corpus -mindepth 1 -maxdepth 1 | wc -l
 
+        # Check that the server is still alive.
+        psql -c "select 1"
+
+        # End the background fuzzing processes before we inspect the resulting
+        # fuzzing corpus, otherwise there can be errors because of concurrent
+        # modifications.
+        pg_ctl stop
+        pg_ctl start
+        wait ||:
+
         fn="ts_read_compressed_data_directory('${{ matrix.case.algo }}',
                 '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')"
 
@@ -280,9 +290,6 @@ jobs:
 
         # Shouldn't have any WARNINGS in the log.
         if grep -F "] WARNING: " postmaster.log; then exit 1; fi
-
-        # Check that the server is still alive.
-        psql -c "select 1"
 
     - name: Collect the logs
       if: always()
