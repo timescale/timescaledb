@@ -56,9 +56,8 @@ endforeach(IGNORE_TEST)
 # Write the final test schedule
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/schedule ${PG_TEST_SCHEDULE})
 
-set(PG_REGRESS_OPTS_PGTEST
-    --schedule=${CMAKE_CURRENT_BINARY_DIR}/schedule
-    --load-extension=timescaledb)
+set(PG_REGRESS_OPTS_PGTEST --schedule=${CMAKE_CURRENT_BINARY_DIR}/schedule
+                           --load-extension=timescaledb)
 
 add_custom_target(
   pginstallcheck
