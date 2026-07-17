@@ -6,10 +6,16 @@ set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in reorder_vs_select.spec.in
     decompression_chunk_and_parallel_query.in)
 
-# This one must go first because it is very dependent on chunk IDs in EXPLAIN.
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  set(TEST_FILES cagg_watermark_concurrent_update.spec)
+  set(TEST_TEMPLATES cagg_watermark_concurrent_update.spec.in)
 endif()
+
+foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
+  get_filename_component(TEMPLATE ${TEMPLATE_FILE} NAME_WE)
+  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.spec)
+  configure_file(${TEMPLATE_FILE} ${TEST_FILE} COPYONLY)
+  list(APPEND TEST_FILES "${TEST_FILE}")
+endforeach(TEMPLATE_FILE)
 
 list(
   APPEND
@@ -72,14 +78,6 @@ foreach(TEMP_FILE ${TEST_TEMPLATES_MODULE})
   configure_file(${TEMP_FILE} ${TEST_FILE})
   list(APPEND TEST_FILES "${TEST_FILE}")
 endforeach(TEMP_FILE)
-
-# generate PG version specific .spec file
-foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
-  get_filename_component(TEMPLATE ${TEMPLATE_FILE} NAME_WE)
-  set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.spec)
-  configure_file(${TEMPLATE_FILE} ${TEST_FILE})
-  list(APPEND TEST_FILES "${TEST_FILE}")
-endforeach(TEMPLATE_FILE)
 
 file(REMOVE ${ISOLATION_TEST_SCHEDULE})
 

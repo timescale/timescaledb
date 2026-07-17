@@ -2,11 +2,11 @@ cmake_minimum_required(VERSION 3.15)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+include(CMakeDependentOption)
 include(CheckCCompilerFlag)
 include(CheckSymbolExists)
-include(GitCommands)
 include(GenerateScripts)
-include(CMakeDependentOption)
+include(GitCommands)
 
 option(APACHE_ONLY "only compile apache code" off)
 # This requires all tests to run. This defaults to OFF but can be enabled to
@@ -542,9 +542,10 @@ if(LINTER)
     CONCAT
       CMAKE_C_CLANG_TIDY
       "${CLANG_TIDY}"
-      ";--checks=clang-diagnostic-*,clang-analyzer-*"
+      ";--checks=clang-analyzer-*"
       ",-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling"
       ",-clang-analyzer-deadcode.DeadStores"
+      ",clang-diagnostic-*"
       ",bugprone-*"
       ",-bugprone-branch-clone"
       ",-bugprone-easily-swappable-parameters"
@@ -552,6 +553,7 @@ if(LINTER)
       ",-bugprone-narrowing-conversions"
       ",-bugprone-reserved-identifier"
       ",-bugprone-suspicious-include"
+      ",misc-header-include-cycle"
       ",readability-*"
       ",-readability-avoid-const-params-in-decls"
       ",-readability-braces-around-statements"
@@ -564,7 +566,6 @@ if(LINTER)
       ",-readability-math-missing-parentheses"
       ",-readability-non-const-parameter"
       ",-readability-redundant-casting"
-      ",misc-header-include-cycle"
       "${CLANG_TIDY_EXTRA_OPTS}")
   if(WARNINGS_AS_ERRORS)
     set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")

@@ -224,8 +224,8 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 SELECT * FROM _timescaledb_catalog.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Deleting a chunk that has nothing to do with the job should do nothing
-select c.table_name as other_chunk_name,c.schema_name as other_chunk_schema from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.id != :chunk_id \gset
-select concat(:'other_chunk_schema','.',:'other_chunk_name') as other_chunk \gset
+select c.relid::text as other_chunk_name from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.id != :chunk_id \gset
+select :'other_chunk_name' as other_chunk \gset
 
 DROP TABLE :other_chunk;
 

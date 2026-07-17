@@ -20,6 +20,7 @@
 #include "func_cache.h"
 #include "hypertable.h"
 #include "import/allpaths.h"
+#include "planner/planner.h"
 #include "sort_transform.h"
 
 /* This optimizations allows GROUP BY clauses that transform time in
@@ -133,6 +134,12 @@ transform_time_op_const_interval(OpExpr *op)
 static inline Expr *
 transform_int_op_const(OpExpr *op)
 {
+	/* We cannot be sure of behaviour of custom-defined operators for +/- etc. */
+	if (op->opno > FirstNormalObjectId)
+	{
+		return (Expr *) op;
+	}
+
 	/*
 	 * Optimize int op const (or const op int), whenever possible. e.g. sort
 	 * of  some_int + const fulfilled by sort of some_int same for the
@@ -144,51 +151,43 @@ transform_int_op_const(OpExpr *op)
 	if (list_length(op->args) == 2 &&
 		(IsA(lsecond(op->args), Const) || IsA(linitial(op->args), Const)))
 	{
-		Oid left = exprType((Node *) linitial(op->args));
-		Oid right = exprType((Node *) lsecond(op->args));
+		Node *left_arg = (Node *) linitial(op->args);
+		Node *right_arg = (Node *) lsecond(op->args);
+		Oid left = exprType(left_arg);
+		Oid right = exprType(right_arg);
+
+		Const *const_arg = NULL;
+		Expr *nonconst_arg = NULL;
+		char *name = get_opname(op->opno);
 
 		if ((left == INT8OID && right == INT8OID) || (left == INT4OID && right == INT4OID) ||
 			(left == INT2OID && right == INT2OID))
 		{
-			char *name = get_opname(op->opno);
-
 			if (name[1] == '\0')
 			{
 				switch (name[0])
 				{
-					case '-':
 					case '+':
 					case '*':
 						/* commutative cases */
-						if (IsA(linitial(op->args), Const))
+						if (IsA(left_arg, Const))
 						{
-							Expr *nonconst = ts_sort_transform_expr((Expr *) lsecond(op->args));
-
-							if (IsA(nonconst, Var))
-							{
-								return copyObject(nonconst);
-							}
+							const_arg = castNode(Const, left_arg);
+							nonconst_arg = ts_sort_transform_expr((Expr *) right_arg);
 						}
 						else
 						{
-							Expr *nonconst = ts_sort_transform_expr((Expr *) linitial(op->args));
-
-							if (IsA(nonconst, Var))
-							{
-								return copyObject(nonconst);
-							}
+							const_arg = castNode(Const, right_arg);
+							nonconst_arg = ts_sort_transform_expr((Expr *) left_arg);
 						}
 						break;
+					case '-':
 					case '/':
 						/* only if second arg is const */
-						if (IsA(lsecond(op->args), Const))
+						if (IsA(right_arg, Const))
 						{
-							Expr *nonconst = ts_sort_transform_expr((Expr *) linitial(op->args));
-
-							if (IsA(nonconst, Var))
-							{
-								return copyObject(nonconst);
-							}
+							const_arg = castNode(Const, right_arg);
+							nonconst_arg = ts_sort_transform_expr((Expr *) left_arg);
 						}
 						break;
 					default:
@@ -199,6 +198,31 @@ transform_int_op_const(OpExpr *op)
 						break;
 				}
 			}
+		}
+		if (!const_arg || !nonconst_arg)
+		{
+			return (Expr *) op;
+		}
+
+		/* Can't have sort key on built-in (v (arithmetic op) NULL) */
+		Assert(!const_arg->constisnull);
+
+		bool is_negative_const =
+			ts_time_value_to_internal(const_arg->constvalue, const_arg->consttype) < 0;
+		/* (v / -1) changes sort direction */
+		if (name[0] == '/' && is_negative_const)
+		{
+			return (Expr *) op;
+		}
+		/* (v * -1) and (-1 * v) changes sort direction */
+		if (name[0] == '*' && is_negative_const)
+		{
+			return (Expr *) op;
+		}
+		/* We have commutative operation on Var and Const, can sort on Var */
+		if (IsA(nonconst_arg, Var))
+		{
+			return copyObject(nonconst_arg);
 		}
 	}
 	return (Expr *) op;
@@ -439,9 +463,8 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
  *	For example: an ORDER BY date_trunc('minute', time) can be implemented by
  *	an ordering of time.
  */
-List *
-ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte,
-							   Hypertable *ht)
+static List *
+sort_transform_compute_pathkeys(PlannerInfo *root, RelOptInfo *rel)
 {
 	/*
 	 * We attack this problem in three steps:
@@ -550,6 +573,50 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	}
 
 	return transformed_query_pathkeys;
+}
+
+/*
+ * The transformed pathkeys are a function of the query's ORDER BY and the
+ * hypertable, not of the individual chunk (they reference query-global
+ * equivalence classes; the per-chunk expressions live in the eclass's child
+ * members). Computing them re-walks the whole ORDER BY eclass, whose membership
+ * grows with the chunk count, so doing it once per chunk is O(chunks^2). Cache
+ * the result on the parent hypertable rel and reuse it for every chunk.
+ */
+List *
+ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel)
+{
+	RelOptInfo *parent = NULL;
+
+	if (rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+	{
+		AppendRelInfo *appinfo = root->append_rel_array[rel->relid];
+		RelOptInfo *candidate = root->simple_rel_array[appinfo->parent_relid];
+
+		/*
+		 * A standalone chunk pulled up from a subquery (UNION ALL or a
+		 * flattened LATERAL subquery) is also an OTHER_MEMBER_REL, but its
+		 * append parent is not a hypertable.
+		 */
+		if (candidate->fdw_private)
+		{
+			parent = candidate;
+		}
+	}
+
+	/* Standalone chunk (no parent to cache on). */
+	if (!parent)
+	{
+		return sort_transform_compute_pathkeys(root, rel);
+	}
+
+	TimescaleDBPrivate *pp = ts_get_private_reloptinfo(parent);
+	if (!pp->transformed_sort_pathkeys_valid)
+	{
+		pp->transformed_sort_pathkeys = sort_transform_compute_pathkeys(root, rel);
+		pp->transformed_sort_pathkeys_valid = true;
+	}
+	return pp->transformed_sort_pathkeys;
 }
 
 /*

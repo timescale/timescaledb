@@ -996,7 +996,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 #endif
 	ExecInitResultRelation(estate, resultRelInfo, 1);
 
-	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT, ONCONFLICT_NONE, NIL);
+	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT, ONCONFLICT_NONE, NIL, NULL);
 
 	ExecOpenIndices(resultRelInfo, false);
 
@@ -1671,7 +1671,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 
 	copy_constraints_and_check(pstate, rel, attnums);
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
-	scandesc = table_beginscan(rel, snapshot, 0, NULL);
+	scandesc = table_beginscan_compat(rel, snapshot, 0, NULL, 0);
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, NULL, scandesc);
 	copyfrom(ccstate, pstate, ht, copycontext, copy_table_to_chunk_error_callback, scandesc);
 	copy_chunk_state_destroy(ccstate);

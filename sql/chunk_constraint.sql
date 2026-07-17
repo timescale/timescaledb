@@ -14,6 +14,8 @@ $BODY$
 DECLARE
     chunk_row _timescaledb_catalog.chunk;
     hypertable_row _timescaledb_catalog.hypertable;
+    chunk_schema NAME;
+    chunk_table NAME;
     constraint_oid OID;
     constraint_type CHAR;
     def TEXT;
@@ -21,6 +23,10 @@ DECLARE
 BEGIN
     SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_id;
     SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.id = chunk_row.hypertable_id;
+    -- schema_name and table_name are derived from the chunk relation
+    SELECT n.nspname, c.relname INTO STRICT chunk_schema, chunk_table
+    FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.oid = chunk_row.relid;
 
     SELECT oid, contype INTO STRICT constraint_oid, constraint_type FROM pg_constraint
     WHERE conname = hypertable_constraint_name AND
@@ -50,13 +56,13 @@ BEGIN
         SET LOCAL search_path TO @extschema@, pg_temp;
         EXECUTE pg_catalog.format(
             $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
-            chunk_row.schema_name, chunk_row.table_name, constraint_name, def
+            chunk_schema, chunk_table, constraint_name, def
         );
 
         IF indx_tablespace IS NOT NULL THEN
             EXECUTE pg_catalog.format(
                 $$ ALTER INDEX %I.%I SET TABLESPACE %I $$,
-                chunk_row.schema_name, constraint_name, indx_tablespace
+                chunk_schema, constraint_name, indx_tablespace
             );
         END IF;
     END IF;

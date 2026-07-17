@@ -536,7 +536,12 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 		return false;
 	}
 
-	int flags = is_array_op ? SK_SEARCHARRAY : 0;
+	if (is_array_op)
+	{
+		return false;
+	}
+
+	int flags = 0;
 
 	/*
 	 * In PG versions <= 14 NULL values are always considered distinct

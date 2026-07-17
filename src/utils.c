@@ -727,6 +727,9 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 	List *qualified_funcname =
 		list_make2(makeString(pstrdup(schema_name)), makeString(pstrdup(funcname)));
 	FuncCandidateList func_candidates;
+#if PG19_GE
+	int fgc_flags = 0; /* PG19 writes the result bitmask here; must not be NULL */
+#endif
 
 	func_candidates = FuncnameGetCandidates(qualified_funcname,
 											nargs,
@@ -734,7 +737,12 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 											false,
 											false, /* include_out_arguments */
 											false,
-											false);
+											false /* missing_ok */
+#if PG19_GE
+											,
+											&fgc_flags
+#endif
+	);
 	while (func_candidates != NULL)
 	{
 		if (func_candidates->nargs == nargs &&
@@ -1616,14 +1624,18 @@ ts_get_node_name(Node *node)
 		NODE_CASE(MergeAppendPath);
 		NODE_CASE(GroupResultPath);
 		NODE_CASE(MaterialPath);
+#if PG19_GE
 		NODE_CASE(UniquePath);
+#else
+		/* PG19 renamed UpperUniquePath to UniquePath; name it correctly per version */
+		NODE_CASE(UpperUniquePath);
+#endif
 		NODE_CASE(GatherPath);
 		NODE_CASE(GatherMergePath);
 		NODE_CASE(ProjectionPath);
 		NODE_CASE(ProjectSetPath);
 		NODE_CASE(SortPath);
 		NODE_CASE(GroupPath);
-		NODE_CASE(UpperUniquePath);
 		NODE_CASE(AggPath);
 		NODE_CASE(GroupingSetsPath);
 		NODE_CASE(MinMaxAggPath);
@@ -1812,7 +1824,7 @@ ts_map_attno(Oid src_rel, Oid dst_rel, AttrNumber attno)
 bool
 ts_relation_has_tuples(Relation rel)
 {
-	TableScanDesc scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
+	TableScanDesc scandesc = table_beginscan_compat(rel, GetActiveSnapshot(), 0, NULL, 0);
 	TupleTableSlot *slot =
 		MakeSingleTupleTableSlot(RelationGetDescr(rel), table_slot_callbacks(rel));
 	bool hastuples = table_scan_getnextslot(scandesc, ForwardScanDirection, slot);

@@ -1539,7 +1539,7 @@ EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direc
          ->  Function Scan on generate_series g (actual rows=1000.00 loops=1)
 
 -- should have 2 entries
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_insert' ORDER BY 1,2;
          start          |          end           
 ------------------------+------------------------
  2023-12-31 07:20:00+00 | 2023-12-31 23:59:00+00
@@ -1553,7 +1553,7 @@ EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direc
          ->  Function Scan on generate_series g (actual rows=2000.00 loops=1)
 
 -- should have 3 entries
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_insert' ORDER BY 1,2;
          start          |          end           
 ------------------------+------------------------
  2023-12-31 00:01:00+00 | 2024-01-01 09:20:00+00
@@ -1578,14 +1578,14 @@ NOTICE:  refreshing continuous aggregate "cagg_copy"
 SET timescaledb.enable_direct_compress_copy = true;
 COPY direct_compress_copy FROM STDIN;
 -- should have 1 entries now
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_copy' ORDER BY 1,2;
          start          |          end           
 ------------------------+------------------------
  2023-01-01 00:00:00+00 | 2023-01-03 00:00:00+00
 
 COPY direct_compress_copy FROM STDIN;
 -- should have 2 entries now
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_copy' ORDER BY 1,2;
          start          |          end           
 ------------------------+------------------------
  2022-12-31 00:00:00+00 | 2023-01-03 00:00:00+00
@@ -1594,7 +1594,7 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 -- range spanning multiple chunks
 COPY direct_compress_copy FROM STDIN;
 -- should have 3 entries now
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_copy' ORDER BY 1,2;
          start          |          end           
 ------------------------+------------------------
  2022-01-01 00:00:00+00 | 2022-01-01 00:00:00+00
@@ -1606,13 +1606,13 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_copy;
 --- QUERY PLAN ---
  Append
-   ->  Seq Scan on _hyper_21_63_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_21_65_chunk
-         ->  Seq Scan on _hyper_21_65_chunk_compressed
-   ->  Custom Scan (ColumnarScan) on _hyper_21_66_chunk
-         ->  Seq Scan on _hyper_21_66_chunk_compressed
-   ->  Custom Scan (ColumnarScan) on _hyper_21_67_chunk
-         ->  Seq Scan on _hyper_21_67_chunk_compressed
+   ->  Seq Scan on _hyper_20_63_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_20_65_chunk
+         ->  Seq Scan on _hyper_20_65_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_20_66_chunk
+         ->  Seq Scan on _hyper_20_66_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_20_67_chunk
+         ->  Seq Scan on _hyper_20_67_chunk_compressed
 
 RESET timescaledb.enable_direct_compress_copy;
 -- test direct compress invalidation with custom partitioning function (not supported atm)
@@ -1621,7 +1621,7 @@ CREATE TABLE part_cagg (time timestamptz);
 SELECT create_hypertable('part_cagg', 'time', time_partitioning_func => 'f_month', chunk_time_interval => 1);
     create_hypertable    
 -------------------------
- (24,public,part_cagg,t)
+ (22,public,part_cagg,t)
 
 \set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW part_cagg1 WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM part_cagg GROUP BY 1;
@@ -1636,11 +1636,11 @@ NOTICE:  refreshing continuous aggregate "cagg_inval_update"
 -- check setting to NULL is handled gracefully
 \set ON_ERROR_STOP 0
 UPDATE inval_update SET time = NULL WHERE time = '2025-01-01';
-ERROR:  null value in column "time" of relation "_hyper_25_68_chunk" violates not-null constraint
+ERROR:  null value in column "time" of relation "_hyper_23_68_chunk" violates not-null constraint
 \set ON_ERROR_STOP 1
 UPDATE inval_update SET time = '2025-01-01 00:00:23' WHERE time = '2025-01-01';
 -- should have 1 entries now
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 25 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'inval_update' ORDER BY 1,2;
          start          |          end           
 ------------------------+------------------------
  2025-01-01 00:00:00+00 | 2025-01-01 00:00:23+00
@@ -1659,7 +1659,7 @@ SELECT public.create_hypertable(
 );
     create_hypertable    
 -------------------------
- (28,public,test_data,t)
+ (25,public,test_data,t)
 
 -- Insert initial data
 INSERT INTO test_data
@@ -1704,8 +1704,8 @@ WHERE materialization_id IN
 ORDER BY low;
  materialization_id |          low           |             high              
 --------------------+------------------------+-------------------------------
-                 29 | -infinity              | 2023-12-31 23:59:59.999999+00
-                 29 | 2025-09-01 00:00:00+00 | infinity
+                 26 | -infinity              | 2023-12-31 23:59:59.999999+00
+                 26 | 2025-09-01 00:00:00+00 | infinity
 
 SELECT
     CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
@@ -1752,9 +1752,9 @@ WHERE materialization_id IN
 ORDER BY low;
  materialization_id |          low           |             high              
 --------------------+------------------------+-------------------------------
-                 29 | -infinity              | 2023-12-31 23:59:59.999999+00
-                 29 | 2024-03-01 00:00:00+00 | 2024-12-31 23:59:59.999999+00
-                 29 | 2026-01-01 00:00:00+00 | infinity
+                 26 | -infinity              | 2023-12-31 23:59:59.999999+00
+                 26 | 2024-03-01 00:00:00+00 | 2024-12-31 23:59:59.999999+00
+                 26 | 2026-01-01 00:00:00+00 | infinity
 
 --should see the invalidation ranges with offset (i.e,boundary at the 18hour)
 SELECT
@@ -1836,7 +1836,7 @@ CREATE TABLE test_data  (ts TIMESTAMPTZ, val INT);
 SELECT create_hypertable('test_data', 'ts');
     create_hypertable    
 -------------------------
- (31,public,test_data,t)
+ (28,public,test_data,t)
 
 CREATE MATERIALIZED VIEW cagg_4hrs
 WITH (timescaledb.continuous) AS
@@ -1874,12 +1874,12 @@ SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 LOG:  statement: CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 DEBUG:  refreshing continuous aggregate "cagg_4hrs" from 4714-11-24 00:00:00+00 BC to infinity
-DEBUG:  hypertable 31 existing watermark >= new invalidation threshold 1577858400000000 1577851200000000
+DEBUG:  hypertable 28 existing watermark >= new invalidation threshold 1577858400000000 1577851200000000
 DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4hrs" in window [ 4714-11-24 00:00:00+00 BC, 2020-01-01 04:00:00+00 ]
-LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_32"
-DEBUG:  building index "_hyper_32_91_chunk__materialized_hypertable_32_bucket_idx" on table "_hyper_32_91_chunk" serially
-DEBUG:  index "_hyper_32_91_chunk__materialized_hypertable_32_bucket_idx" can safely use deduplication
-LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_32"
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_29"
+DEBUG:  building index "_hyper_29_91_chunk__materialized_hypertable_29_bucket_idx" on table "_hyper_29_91_chunk" serially
+DEBUG:  index "_hyper_29_91_chunk__materialized_hypertable_29_bucket_idx" can safely use deduplication
+LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_29"
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Show invalidations left in cagg_4hrs's invalidation log,
@@ -1913,6 +1913,6 @@ ORDER BY 1,2;
 
 DROP TABLE test_data CASCADE;
 NOTICE:  drop cascades to 4 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_91_chunk
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_90_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_91_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_30_90_chunk
 RESET timezone;

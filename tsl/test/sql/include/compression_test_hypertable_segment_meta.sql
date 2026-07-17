@@ -14,7 +14,7 @@ SELECT
     cl.relname AS "COMP_TABLE_NAME"
 FROM _timescaledb_catalog.hypertable ht
 INNER JOIN _timescaledb_catalog.chunk ch ON (ch.hypertable_id = ht.id)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass)
+INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = ch.relid)
 INNER JOIN pg_class cl ON (cl.oid = cs.compress_relid)
 INNER JOIN pg_namespace ns ON (ns.oid = cl.relnamespace)
 WHERE ht.table_name like :'HYPERTABLE_NAME' ORDER BY ch.id LIMIT 1\gset

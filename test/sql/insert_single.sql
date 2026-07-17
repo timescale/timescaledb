@@ -55,7 +55,7 @@ INSERT INTO "1dim_neg" VALUES (19, 21.2);
 INSERT INTO "1dim_neg" VALUES (20, 21.2);
 SELECT * FROM "1dim_pre1970";
 SELECT * FROM "1dim_neg";
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.dimension_slice;
 
 

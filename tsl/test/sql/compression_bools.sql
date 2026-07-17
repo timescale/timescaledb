@@ -92,9 +92,9 @@ SELECT
 FROM
 	show_chunks('t') c
 	INNER JOIN _timescaledb_catalog.chunk cat
-		ON (c = format('%I.%I', cat.schema_name, cat.table_name)::regclass)
+		ON (c = cat.relid)
 	INNER JOIN _timescaledb_catalog.compression_settings cs
-		ON (cs.relid = format('%I.%I', cat.schema_name, cat.table_name)::regclass)
+		ON (cs.relid = cat.relid)
 	INNER JOIN _timescaledb_catalog.compression_chunk_size ccs
 		ON (ccs.chunk_id = cat.id);
 

@@ -16,7 +16,7 @@ setup
   INSERT INTO metrics SELECT '2000-01-01', 'device1', random() FROM generate_series(1,20000);
   INSERT INTO metrics SELECT '2001-01-01', 'device2', random() FROM generate_series(1,20000);
 
-  CREATE VIEW chunks_to_compress AS SELECT ch.id, format('%I.%I',ch.schema_name,ch.table_name) AS name from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id AND ht.table_name='metrics' ORDER BY ch.id;
+  CREATE VIEW chunks_to_compress AS SELECT ch.id, ch.relid AS name from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id AND ht.table_name='metrics' ORDER BY ch.id;
 
 }
 

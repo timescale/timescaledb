@@ -49,17 +49,15 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   chunk_sizing_func_schema name NOT NULL, -- unused
   chunk_sizing_func_name name NOT NULL, -- unused
   chunk_target_size bigint NOT NULL, -- unused
-  compression_state smallint NOT NULL DEFAULT 0,
-  compressed_hypertable_id integer,
+  compression_state smallint NOT NULL DEFAULT 0, --unused
+  compressed_hypertable_id integer, -- unused
   status int NOT NULL DEFAULT 0,
   -- table constraints
   CONSTRAINT hypertable_pkey PRIMARY KEY (id),
   CONSTRAINT hypertable_associated_schema_name_associated_table_prefix_key UNIQUE (associated_schema_name, associated_table_prefix),
   CONSTRAINT hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
   CONSTRAINT hypertable_schema_name_check CHECK (schema_name != '_timescaledb_catalog'),
-  -- internal compressed hypertables have compression state = 2
-  CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
-  CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL))
+  CONSTRAINT hypertable_num_dimensions_check CHECK (num_dimensions > 0)
 ) WITH (user_catalog_table = true);
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
@@ -122,16 +120,14 @@ CREATE SEQUENCE _timescaledb_catalog.chunk_id_seq MINVALUE 1;
 
 CREATE TABLE _timescaledb_catalog.chunk (
   id integer NOT NULL DEFAULT nextval('_timescaledb_catalog.chunk_id_seq'),
+  relid regclass NOT NULL,
   hypertable_id int NOT NULL,
-  schema_name name NOT NULL,
-  table_name name NOT NULL,
-  compressed_chunk_id integer ,
   status integer NOT NULL DEFAULT 0,
   osm_chunk boolean NOT NULL DEFAULT FALSE,
   creation_time timestamptz NOT NULL,
   -- table constraints
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
-  CONSTRAINT chunk_schema_name_table_name_key UNIQUE (schema_name, table_name),
+  CONSTRAINT chunk_relid_key UNIQUE (relid),
   CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
 ) WITH (user_catalog_table = true);
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;

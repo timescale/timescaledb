@@ -954,8 +954,8 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 static int
 chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 {
-	Oid lhs = (*(Chunk **) c1)->table_id;
-	Oid rhs = (*(Chunk **) c2)->table_id;
+	Oid lhs = (*(Chunk **) c1)->fd.relid;
+	Oid rhs = (*(Chunk **) c2)->fd.relid;
 
 	if (lhs < rhs)
 	{
@@ -1088,7 +1088,7 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	bool reverse;
 	int order_attno;
 
-	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
+	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(ht);
 
 	/*
 	 * This is where the magic happens: use our HypertableRestrictInfo
@@ -1294,9 +1294,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	};
 	Index first_chunk_index = 0;
 
-	/* double check our permissions are valid */
-	Assert(ht_relindex != (Index) parse->resultRelation);
-
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 	/* check join_level bookkeeping is balanced */
@@ -1343,7 +1340,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * Add the information about chunks to the baserel info cache for
 		 * classify_relation().
 		 */
-		ts_add_baserel_cache_entry_for_chunk(chunks[i]->table_id, ht);
+		ts_add_baserel_cache_entry_for_chunk(chunks[i]->fd.relid, ht);
 	}
 
 	oldrelation = table_open(parent_oid, NoLock);
@@ -1357,7 +1354,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
 		Chunk *chunk = chunks[i];
-		Oid child_oid = chunk->table_id;
+		Oid child_oid = chunk->fd.relid;
 		Relation newrelation;
 		RangeTblEntry *childrte;
 		Index child_rtindex;
@@ -1379,14 +1376,19 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 										   newrelation,
 										   &childrte,
 										   &child_rtindex);
-		/*
-		 * For compatibility with the old planner code that didn't create
-		 * per-chunk aliases, use the parent aliases. These aliases have only a
-		 * cosmetic function, and changing them would lead to EXPLAIN changes in
-		 * basically every test.
-		 */
-		childrte->alias = copyObject(ht_rte->alias);
-		childrte->eref = copyObject(ht_rte->eref);
+
+		if (!bms_is_member(ht_relindex, root->all_result_relids))
+		{
+			/*
+			 * For compatibility with the old planner code that didn't create
+			 * per-chunk aliases, use the parent aliases. These aliases have only a
+			 * cosmetic function, and changing them would lead to EXPLAIN changes in
+			 * basically every test.
+			 */
+
+			childrte->alias = copyObject(ht_rte->alias);
+			childrte->eref = copyObject(ht_rte->eref);
+		}
 
 		childrte->ctename = NULL;
 		if (first_chunk_index == 0)
@@ -1522,7 +1524,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 */
 		if (!IS_OSM_CHUNK(chunk))
 		{
-			Assert(chunk->table_id == root->simple_rte_array[child_rtindex]->relid);
+			Assert(chunk->fd.relid == root->simple_rte_array[child_rtindex]->relid);
 			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunk;
 		}
 	}

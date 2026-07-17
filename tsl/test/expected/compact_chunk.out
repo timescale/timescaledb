@@ -25,7 +25,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT cs.compress_relid::regclass::text AS "CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics'
 ORDER BY ch.id LIMIT 1 \gset
@@ -203,7 +203,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT cs.compress_relid::regclass::text AS "SEG_CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_seg'
 ORDER BY ch.id LIMIT 1 \gset
@@ -222,7 +222,7 @@ ORDER BY device, _ts_meta_min_1;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_seg') chunk;
              compact_chunk              
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_2_4_chunk
 
 -- Same ctids: nothing was rewritten
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -273,7 +273,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_seg') chunk;
              compact_chunk              
 ----------------------------------------
- _timescaledb_internal._hyper_3_4_chunk
+ _timescaledb_internal._hyper_2_4_chunk
 
 -- New ctids: overlapping batches merged and re-sorted
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -314,13 +314,13 @@ FROM generate_series(1,1000) i;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_nullable') chunk;
              compact_chunk              
 ----------------------------------------
- _timescaledb_internal._hyper_5_5_chunk
+ _timescaledb_internal._hyper_3_5_chunk
 
 -- Get the compressed chunk for metrics_nullable
 SELECT cs.compress_relid::regclass::text AS "NULLABLE_CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_nullable'
 ORDER BY ch.id LIMIT 1 \gset
@@ -354,7 +354,7 @@ ORDER BY _ts_meta_min_1;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_nullable') chunk;
              compact_chunk              
 ----------------------------------------
- _timescaledb_internal._hyper_5_5_chunk
+ _timescaledb_internal._hyper_3_5_chunk
 
 -- After compaction: batches merged and re-sorted
 SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time, _ts_meta_min_2, _ts_meta_max_2, _ts_meta_v2_first_value, _ts_meta_v2_last_value
@@ -410,7 +410,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT cs.compress_relid::regclass::text AS "DESC_CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_desc'
 ORDER BY ch.id LIMIT 1 \gset
@@ -429,7 +429,7 @@ ORDER BY device, _ts_meta_max_1 DESC;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_desc') chunk;
              compact_chunk              
 ----------------------------------------
- _timescaledb_internal._hyper_7_6_chunk
+ _timescaledb_internal._hyper_4_6_chunk
 
 -- Same ctids: nothing was rewritten
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -479,7 +479,7 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_desc') chunk;
              compact_chunk              
 ----------------------------------------
- _timescaledb_internal._hyper_7_6_chunk
+ _timescaledb_internal._hyper_4_6_chunk
 
 -- New ctids: overlapping batches merged
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -543,7 +543,7 @@ FROM generate_series(1,500) i;
 SELECT cs.compress_relid::regclass::text AS "MULTI_CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_multi'
 ORDER BY ch.id LIMIT 1 \gset
@@ -560,7 +560,7 @@ ORDER BY _ts_meta_min_1, _ts_meta_min_2;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_multi') chunk;
              compact_chunk              
 ----------------------------------------
- _timescaledb_internal._hyper_9_7_chunk
+ _timescaledb_internal._hyper_5_7_chunk
 
 -- Same ctids: nothing was rewritten
 SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_device, _ts_meta_v2_last_device, _ts_meta_min_2, _ts_meta_max_2, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -590,7 +590,7 @@ ORDER BY _ts_meta_min_1, _ts_meta_min_2;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_multi') chunk;
              compact_chunk              
 ----------------------------------------
- _timescaledb_internal._hyper_9_7_chunk
+ _timescaledb_internal._hyper_5_7_chunk
 
 -- New ctids: overlapping batches merged
 SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_device, _ts_meta_v2_last_device, _ts_meta_min_2, _ts_meta_max_2, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -638,7 +638,7 @@ FROM generate_series(1,500) i;
 SELECT cs.compress_relid::regclass::text AS "MULTI_DESC_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_multi_desc'
 ORDER BY ch.id LIMIT 1 \gset
@@ -653,9 +653,9 @@ ORDER BY _ts_meta_min_1, _ts_meta_max_2 DESC;
 
 -- compact_chunk: boundary tie on col1, no overlap on col2 (DESC) — should be a no-op
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_multi_desc') chunk;
-              compact_chunk              
------------------------------------------
- _timescaledb_internal._hyper_11_8_chunk
+             compact_chunk              
+----------------------------------------
+ _timescaledb_internal._hyper_6_8_chunk
 
 -- Same ctids: nothing was rewritten
 SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_device, _ts_meta_v2_last_device, _ts_meta_min_2, _ts_meta_max_2, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -680,9 +680,9 @@ ORDER BY _ts_meta_min_1, _ts_meta_max_2 DESC;
 
 -- compact_chunk: boundary tie on col1, actual overlap on col2 (DESC) — must merge
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_multi_desc') chunk;
-              compact_chunk              
------------------------------------------
- _timescaledb_internal._hyper_11_8_chunk
+             compact_chunk              
+----------------------------------------
+ _timescaledb_internal._hyper_6_8_chunk
 
 -- New ctids: overlapping batches merged
 SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_device, _ts_meta_v2_last_device, _ts_meta_min_2, _ts_meta_max_2, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -722,7 +722,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "COMBINED_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_combined'
 ORDER BY ch.id LIMIT 1 \gset
@@ -737,9 +737,9 @@ ORDER BY device, _ts_meta_min_1;
 
 -- No overlaps, no nulls: compact_chunk is a no-op
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_combined') chunk;
-              compact_chunk              
------------------------------------------
- _timescaledb_internal._hyper_13_9_chunk
+             compact_chunk              
+----------------------------------------
+ _timescaledb_internal._hyper_7_9_chunk
 
 -- Same ctids as before: nothing was rewritten
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time, _ts_meta_min_2, _ts_meta_max_2, _ts_meta_v2_first_value, _ts_meta_v2_last_value
@@ -789,9 +789,9 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 -- 1. Detect overlaps per segment via multi-column boundary-tie logic
 -- 2. Recompress overlapping rows into ordered batches
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_combined') chunk;
-              compact_chunk              
------------------------------------------
- _timescaledb_internal._hyper_13_9_chunk
+             compact_chunk              
+----------------------------------------
+ _timescaledb_internal._hyper_7_9_chunk
 
 -- After compaction: new ctids, overlapping batches merged and re-sorted
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time, _ts_meta_min_2, _ts_meta_max_2, _ts_meta_v2_first_value, _ts_meta_v2_last_value
@@ -875,7 +875,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "NULLS_LAST_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_nulls_last'
 ORDER BY ch.id LIMIT 1 \gset
@@ -911,9 +911,9 @@ ORDER BY device, _ts_meta_min_1;
  (0,4) | d2     |           1000 |           3001 |           3999 |                    3001 |                       
 
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_nulls_last') chunk;
-              compact_chunk               
-------------------------------------------
- _timescaledb_internal._hyper_15_10_chunk
+              compact_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_10_chunk
 
 -- After compaction: the mixed-null batch does not overlap its neighbor, so it
 -- stays as-is (nulls already sort to the end of the batch with NULLS LAST)
@@ -972,9 +972,9 @@ ORDER BY _ts_meta_min_1 NULLS LAST;
 
 -- This overlaps with existing d1 data (value 501..900 overlaps with 1..1000 and 2001..2999)
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_nulls_last') chunk;
-              compact_chunk               
-------------------------------------------
- _timescaledb_internal._hyper_15_10_chunk
+              compact_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_10_chunk
 
 -- After overlap merge: NULLs from overlapping batches preserved
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_value, _ts_meta_v2_last_value
@@ -1018,7 +1018,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "NULLS_FIRST_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_nulls_first'
 ORDER BY ch.id LIMIT 1 \gset
@@ -1054,9 +1054,9 @@ ORDER BY device, _ts_meta_min_1;
  (0,4) | d2     |           1000 |           3001 |           3999 |                         |                   3999
 
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_nulls_first') chunk;
-              compact_chunk               
-------------------------------------------
- _timescaledb_internal._hyper_17_11_chunk
+              compact_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_11_chunk
 
 -- After compaction: with NULLS FIRST, null batches at segment start are fine
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_value, _ts_meta_v2_last_value
@@ -1110,9 +1110,9 @@ ORDER BY _ts_meta_min_1 NULLS FIRST;
  (0,6) | d1     |           1000 |            801 |           2999 |                     801 |                   2999
 
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_nulls_first') chunk;
-              compact_chunk               
-------------------------------------------
- _timescaledb_internal._hyper_17_11_chunk
+              compact_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_11_chunk
 
 -- After overlap merge: NULLs from overlapping batches preserved
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_value, _ts_meta_v2_last_value
@@ -1171,7 +1171,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "MIXED_NULLS_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_mixed_nulls'
 ORDER BY ch.id LIMIT 1 \gset
@@ -1189,7 +1189,7 @@ ORDER BY device, _ts_meta_min_1;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_mixed_nulls') chunk;
               compact_chunk               
 ------------------------------------------
- _timescaledb_internal._hyper_19_12_chunk
+ _timescaledb_internal._hyper_10_12_chunk
 
 -- After compaction: Batch 2 and Batch 3 merged, NULLs folded into the trailing
 -- batch at the end (NULLS LAST).
@@ -1266,7 +1266,7 @@ FROM generate_series(1,500) i;
 SELECT cs.compress_relid::regclass::text AS "SEC_NULL_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_secondary_null'
 ORDER BY ch.id LIMIT 1 \gset
@@ -1283,7 +1283,7 @@ ORDER BY device, _ts_meta_min_1;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_secondary_null') chunk;
               compact_chunk               
 ------------------------------------------
- _timescaledb_internal._hyper_21_13_chunk
+ _timescaledb_internal._hyper_11_13_chunk
 
 -- After compaction: batches should be merged and re-sorted
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -1350,7 +1350,7 @@ FROM generate_series(1,500) i;
 SELECT cs.compress_relid::regclass::text AS "SEC_NF_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_secondary_null_first'
 ORDER BY ch.id LIMIT 1 \gset
@@ -1367,7 +1367,7 @@ ORDER BY device, _ts_meta_min_1;
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_secondary_null_first') chunk;
               compact_chunk               
 ------------------------------------------
- _timescaledb_internal._hyper_23_14_chunk
+ _timescaledb_internal._hyper_12_14_chunk
 
 -- After compaction: batches should be merged and re-sorted
 SELECT ctid, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
@@ -1427,7 +1427,7 @@ FROM generate_series(1,1000) i;
 SELECT cs.compress_relid::regclass::text AS "NO_FL_CHUNK"
 FROM _timescaledb_catalog.chunk ch
     JOIN _timescaledb_catalog.compression_settings cs
-        ON cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        ON cs.relid = ch.relid
     JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
 WHERE ht.table_name = 'metrics_no_firstlast'
 ORDER BY ch.id LIMIT 1 \gset
@@ -1457,12 +1457,12 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 -- no firstlast metadata to read batch boundaries from.
 \set VERBOSITY default
 SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_no_firstlast') chunk;
-WARNING:  skipping compaction on chunk _timescaledb_internal._hyper_25_15_chunk
+WARNING:  skipping compaction on chunk _timescaledb_internal._hyper_13_15_chunk
 DETAIL:  Orderby column "time" has no firstlast sparse index.
 HINT:  Recompress the chunk to add firstlast sparse index metadata for its orderby columns.
               compact_chunk               
 ------------------------------------------
- _timescaledb_internal._hyper_25_15_chunk
+ _timescaledb_internal._hyper_13_15_chunk
 
 \set VERBOSITY terse
 -- Batches unchanged (same ctids) and UNORDERED is still set.
@@ -1479,3 +1479,145 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
  {COMPRESSED,UNORDERED}
 
 DROP TABLE metrics_no_firstlast;
+-- Test max batches limit
+SET timescaledb.enable_direct_compress_insert = true;
+CREATE TABLE metrics_max_batches (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.segmentby='device');
+NOTICE:  using column "time" as partitioning column
+-- inserts are in a pattern to test compaction
+-- two overlapping batches (d1 and d3)
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(1,100) i, (VALUES ('d1'), ('d3')) AS v(d);
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(50,150) i, (VALUES ('d1'), ('d3')) AS v(d);
+-- non overlapping batch (d1 and d3)
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(250, 350) i, (VALUES ('d1'), ('d3')) AS v(d);
+-- three overlapping batches (d1 and d3)
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(400, 500) i, (VALUES ('d1'), ('d3')) AS v(d);
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(450, 550) i, (VALUES ('d1'), ('d3')) AS v(d);
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, d, i::float
+FROM generate_series(500, 600) i, (VALUES ('d1'), ('d3')) AS v(d);
+-- two overlapping batches with segment change
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(700, 800) i;
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(750, 850) i;
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd2', i::float
+FROM generate_series(700, 800) i;
+INSERT INTO metrics_max_batches
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd2', i::float
+FROM generate_series(750, 850) i;
+SELECT cs.compress_relid::regclass::text AS "MB_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_max_batches'
+ORDER BY ch.id LIMIT 1 \gset
+-- only showing device = 'd1' to reduce noise
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK WHERE device = 'd1' ORDER BY _ts_meta_min_1;
+ _ts_meta_count | device |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+--------+------------------------------+------------------------------
+            100 | d1     | Thu Jan 02 00:01:00 2025 PST | Thu Jan 02 01:40:00 2025 PST
+            101 | d1     | Thu Jan 02 00:50:00 2025 PST | Thu Jan 02 02:30:00 2025 PST
+            101 | d1     | Thu Jan 02 04:10:00 2025 PST | Thu Jan 02 05:50:00 2025 PST
+            101 | d1     | Thu Jan 02 06:40:00 2025 PST | Thu Jan 02 08:20:00 2025 PST
+            101 | d1     | Thu Jan 02 07:30:00 2025 PST | Thu Jan 02 09:10:00 2025 PST
+            101 | d1     | Thu Jan 02 08:20:00 2025 PST | Thu Jan 02 10:00:00 2025 PST
+            101 | d1     | Thu Jan 02 11:40:00 2025 PST | Thu Jan 02 13:20:00 2025 PST
+            101 | d1     | Thu Jan 02 12:30:00 2025 PST | Thu Jan 02 14:10:00 2025 PST
+
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_max_batches') chunk;
+                  chunk                   |   chunk_status_text    
+------------------------------------------+------------------------
+ _timescaledb_internal._hyper_14_16_chunk | {COMPRESSED,UNORDERED}
+
+-- first compact (compacts two batches)
+SELECT _timescaledb_functions.compact_chunk(chunk, 2) FROM show_chunks('metrics_max_batches') chunk;
+              compact_chunk               
+------------------------------------------
+ _timescaledb_internal._hyper_14_16_chunk
+
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK WHERE device = 'd1' ORDER BY _ts_meta_min_1;
+ _ts_meta_count | device |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+--------+------------------------------+------------------------------
+            201 | d1     | Thu Jan 02 00:01:00 2025 PST | Thu Jan 02 02:30:00 2025 PST
+            101 | d1     | Thu Jan 02 04:10:00 2025 PST | Thu Jan 02 05:50:00 2025 PST
+            101 | d1     | Thu Jan 02 06:40:00 2025 PST | Thu Jan 02 08:20:00 2025 PST
+            101 | d1     | Thu Jan 02 07:30:00 2025 PST | Thu Jan 02 09:10:00 2025 PST
+            101 | d1     | Thu Jan 02 08:20:00 2025 PST | Thu Jan 02 10:00:00 2025 PST
+            101 | d1     | Thu Jan 02 11:40:00 2025 PST | Thu Jan 02 13:20:00 2025 PST
+            101 | d1     | Thu Jan 02 12:30:00 2025 PST | Thu Jan 02 14:10:00 2025 PST
+
+-- second compact (compacts three batches even though max_batches = 2)
+SELECT _timescaledb_functions.compact_chunk(chunk, 2) FROM show_chunks('metrics_max_batches') chunk;
+              compact_chunk               
+------------------------------------------
+ _timescaledb_internal._hyper_14_16_chunk
+
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK WHERE device = 'd1' ORDER BY _ts_meta_min_1;
+ _ts_meta_count | device |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+--------+------------------------------+------------------------------
+            201 | d1     | Thu Jan 02 00:01:00 2025 PST | Thu Jan 02 02:30:00 2025 PST
+            101 | d1     | Thu Jan 02 04:10:00 2025 PST | Thu Jan 02 05:50:00 2025 PST
+            303 | d1     | Thu Jan 02 06:40:00 2025 PST | Thu Jan 02 10:00:00 2025 PST
+            101 | d1     | Thu Jan 02 11:40:00 2025 PST | Thu Jan 02 13:20:00 2025 PST
+            101 | d1     | Thu Jan 02 12:30:00 2025 PST | Thu Jan 02 14:10:00 2025 PST
+
+-- third compact (compacts with segment change)
+SELECT _timescaledb_functions.compact_chunk(chunk, 3) FROM show_chunks('metrics_max_batches') chunk;
+              compact_chunk               
+------------------------------------------
+ _timescaledb_internal._hyper_14_16_chunk
+
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK WHERE device IN ('d1', 'd2') ORDER BY device, _ts_meta_min_1;
+ _ts_meta_count | device |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+--------+------------------------------+------------------------------
+            201 | d1     | Thu Jan 02 00:01:00 2025 PST | Thu Jan 02 02:30:00 2025 PST
+            101 | d1     | Thu Jan 02 04:10:00 2025 PST | Thu Jan 02 05:50:00 2025 PST
+            303 | d1     | Thu Jan 02 06:40:00 2025 PST | Thu Jan 02 10:00:00 2025 PST
+            202 | d1     | Thu Jan 02 11:40:00 2025 PST | Thu Jan 02 14:10:00 2025 PST
+            202 | d2     | Thu Jan 02 11:40:00 2025 PST | Thu Jan 02 14:10:00 2025 PST
+
+-- should be compressed, unordered
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_max_batches') chunk;
+                  chunk                   |   chunk_status_text    
+------------------------------------------+------------------------
+ _timescaledb_internal._hyper_14_16_chunk | {COMPRESSED,UNORDERED}
+
+-- compact_chunk with max_batches=0 (unlimited): resolves all remaining overlaps.
+SELECT _timescaledb_functions.compact_chunk(chunk, 0) FROM show_chunks('metrics_max_batches') chunk;
+              compact_chunk               
+------------------------------------------
+ _timescaledb_internal._hyper_14_16_chunk
+
+SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK ORDER BY device, _ts_meta_min_1;
+ _ts_meta_count | device |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+--------+------------------------------+------------------------------
+            201 | d1     | Thu Jan 02 00:01:00 2025 PST | Thu Jan 02 02:30:00 2025 PST
+            101 | d1     | Thu Jan 02 04:10:00 2025 PST | Thu Jan 02 05:50:00 2025 PST
+            303 | d1     | Thu Jan 02 06:40:00 2025 PST | Thu Jan 02 10:00:00 2025 PST
+            202 | d1     | Thu Jan 02 11:40:00 2025 PST | Thu Jan 02 14:10:00 2025 PST
+            202 | d2     | Thu Jan 02 11:40:00 2025 PST | Thu Jan 02 14:10:00 2025 PST
+            201 | d3     | Thu Jan 02 00:01:00 2025 PST | Thu Jan 02 02:30:00 2025 PST
+            101 | d3     | Thu Jan 02 04:10:00 2025 PST | Thu Jan 02 05:50:00 2025 PST
+            303 | d3     | Thu Jan 02 06:40:00 2025 PST | Thu Jan 02 10:00:00 2025 PST
+
+-- should be compressed
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_max_batches') chunk;
+                  chunk                   | chunk_status_text 
+------------------------------------------+-------------------
+ _timescaledb_internal._hyper_14_16_chunk | {COMPRESSED}
+
+DROP TABLE metrics_max_batches;

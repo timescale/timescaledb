@@ -72,14 +72,8 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 		bool isnull;
 
 		/* We found a chunk. First, try to lock it. */
-		Name schema_name = DatumGetName(slot_getattr(ti->slot, Anum_chunk_schema_name, &isnull));
+		Oid chunk_reloid = DatumGetObjectId(slot_getattr(ti->slot, Anum_chunk_relid, &isnull));
 		Assert(!isnull);
-		Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_chunk_table_name, &isnull));
-		Assert(!isnull);
-
-		Oid chunk_reloid = ts_get_relation_relid(NameStr(*schema_name),
-												 NameStr(*table_name),
-												 /* return_invalid = */ false);
 		Assert(OidIsValid(chunk_reloid));
 
 		/* Only one chunk should match */
@@ -106,7 +100,6 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 
 		chunk->cube = NULL;
 		chunk->hypertable_relid = hs->main_table_relid;
-		chunk->table_id = chunk_reloid;
 
 		locked_chunks[locked_chunk_count] = chunk;
 		locked_chunk_count++;
@@ -124,7 +117,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	for (int i = 0; i < locked_chunk_count; i++)
 	{
 		Chunk *chunk = locked_chunks[i];
-		chunk->relkind = get_rel_relkind(chunk->table_id);
+		chunk->relkind = get_rel_relkind(chunk->fd.relid);
 	}
 
 	/*
@@ -155,7 +148,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_DATA_CORRUPTED),
-					 errmsg("chunk %s has no dimension slices", get_rel_name(chunk->table_id))));
+					 errmsg("chunk %s has no dimension slices", get_rel_name(chunk->fd.relid))));
 		}
 
 		ts_hypercube_slice_sort(cube);

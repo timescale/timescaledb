@@ -102,10 +102,9 @@ TS_FUNCTION_INFO_V1(ts_chunk_status);
 static bool ts_chunk_add_status(Chunk *chunk, int32 status);
 
 static const char *
-DatumGetNameString(Datum datum)
+DatumGetRegClassString(Datum datum)
 {
-	Name name = DatumGetName(datum);
-	return pstrdup(NameStr(*name));
+	return DatumGetCString(DirectFunctionCall1(regclassout, datum));
 }
 
 /* Used when processing scanned chunks */
@@ -141,8 +140,7 @@ static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_fu
 											 uint64 limit);
 static Datum show_chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
-static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
-											  const char *table_name);
+static void init_scan_by_relid(ScanIterator *iterator, Oid relid);
 static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 									   MemoryContext mctx, uint64 *num_chunks_returned,
 									   ScanTupLock *tuplock);
@@ -156,16 +154,16 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 	Datum values[Natts_chunk];
 	bool nulls[Natts_chunk] = { false };
 
+	Assert(OidIsValid(fd->relid));
+
 	memset(values, 0, sizeof(Datum) * Natts_chunk);
 
 	values[AttrNumberGetAttrOffset(Anum_chunk_id)] = Int32GetDatum(fd->id);
 	values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)] = Int32GetDatum(fd->hypertable_id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)] = NameGetDatum(&fd->schema_name);
-	values[AttrNumberGetAttrOffset(Anum_chunk_table_name)] = NameGetDatum(&fd->table_name);
-	nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
 	values[AttrNumberGetAttrOffset(Anum_chunk_status)] = Int32GetDatum(fd->status);
 	values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)] = BoolGetDatum(fd->osm_chunk);
 	values[AttrNumberGetAttrOffset(Anum_chunk_creation_time)] = Int64GetDatum(fd->creation_time);
+	values[AttrNumberGetAttrOffset(Anum_chunk_relid)] = ObjectIdGetDatum(fd->relid);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -175,36 +173,35 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 {
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	bool nulls[Natts_chunk];
-	Datum values[Natts_chunk];
 
-	memset(fd, 0, sizeof(FormData_chunk));
-	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
-
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_id)]);
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]);
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_table_name)]);
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_status)]);
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_creation_time)]);
-
-	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
-	fd->hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
-	namestrcpy(&fd->schema_name,
-			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]));
-	namestrcpy(&fd->table_name,
-			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_chunk_table_name)]));
-
-	fd->compressed_chunk_id = INVALID_CHUNK_ID;
-	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_status)]);
-	fd->osm_chunk = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
-	fd->creation_time = DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_chunk_creation_time)]);
+	/*
+	 * Every chunk column is fixed-length and NOT NULL, and the catalog table is
+	 * rebuilt rather than altered on upgrade, so a stored tuple always holds all
+	 * of its attributes. We can therefore copy the form directly.
+	 */
+	Assert(HeapTupleHeaderGetNatts(tuple->t_data) == Natts_chunk);
+	*fd = *(Form_chunk) GETSTRUCT(tuple);
 
 	if (should_free)
 	{
 		heap_freetuple(tuple);
 	}
+}
+
+/*
+ * A chunk's schema and table name are not stored in the catalog; they are
+ * looked up from the chunk relation on demand.
+ */
+char *
+ts_chunk_get_schema_name(const Chunk *chunk)
+{
+	return get_namespace_name(get_rel_namespace(chunk->fd.relid));
+}
+
+char *
+ts_chunk_get_table_name(const Chunk *chunk)
+{
+	return get_rel_name(chunk->fd.relid);
 }
 
 int64
@@ -224,8 +221,9 @@ chunk_insert_relation(Relation rel, const Chunk *chunk)
 {
 	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
+	FormData_chunk fd = chunk->fd;
 
-	new_tuple = chunk_formdata_make_tuple(&chunk->fd, RelationGetDescr(rel));
+	new_tuple = chunk_formdata_make_tuple(&fd, RelationGetDescr(rel));
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert(rel, new_tuple);
@@ -647,7 +645,8 @@ copy_hypertable_acl_to_relid(const Hypertable *ht, const Oid owner_id, const Oid
  * instead needs the proper permissions on the database to create the schema.
  */
 Oid
-ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tablespacename)
+ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *schema_name,
+					  const char *table_name, const char *tablespacename)
 {
 	Relation rel;
 	ObjectAddress address;
@@ -661,9 +660,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	 */
 	CreateStmt stmt = {
 		.type = T_CreateStmt,
-		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
-								 (char *) NameStr(chunk->fd.table_name),
-								 0),
+		.relation = makeRangeVar((char *) schema_name, (char *) table_name, 0),
 		.tablespacename = tablespacename ? (char *) tablespacename : NULL,
 		.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
@@ -703,7 +700,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	 * If the chunk is created in the internal schema, become the catalog
 	 * owner, otherwise become the hypertable owner
 	 */
-	if (namestrcmp((Name) &chunk->fd.schema_name, INTERNAL_SCHEMA_NAME) == 0)
+	if (strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
 	{
 		uid = ts_catalog_database_info_get()->owner_uid;
 	}
@@ -808,62 +805,46 @@ prepare_cube_slices_for_chunk(Hypercube *cube, int32 chunk_id)
 }
 
 /*
+ * Pick a table name for a new chunk. The table name can be given explicitly, or
+ * generated from the hypertable's associated table prefix and the chunk id if
+ * table_name is NULL.
+ */
+static char *
+chunk_choose_table_name(const Hypertable *ht, int32 chunk_id, const char *table_name)
+{
+	if (NULL == table_name || table_name[0] == '\0')
+	{
+		const char *prefix = NameStr(ht->fd.associated_table_prefix);
+		char *name = psprintf("%s_%d_chunk", prefix, chunk_id);
+
+		if (strlen(name) >= NAMEDATALEN)
+		{
+			ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk table name too long")));
+		}
+
+		return name;
+	}
+
+	return pstrdup(table_name);
+}
+
+/*
  * Create a chunk object from the dimensional constraints in the given hypercube.
  *
  * The chunk object is then used to create the actual chunk table and update the
  * metadata separately.
- *
- * The table name for the chunk can be given explicitly, or generated if
- * table_name is NULL. If the table name is generated, it will use the given
- * prefix or, if NULL, use the hypertable's associated table prefix. Similarly,
- * if schema_name is NULL it will use the hypertable's associated schema for
- * the chunk.
  */
 static Chunk *
-chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_name,
-					const char *table_name, const char *prefix, int32 chunk_id)
+chunk_create_object(const Hypertable *ht, Hypercube *cube, int32 chunk_id)
 {
 	const Hyperspace *hs = ht->space;
-	Chunk *chunk;
-	const char relkind = RELKIND_RELATION;
-
-	if (NULL == schema_name || schema_name[0] == '\0')
-	{
-		schema_name = NameStr(ht->fd.associated_schema_name);
-	}
 
 	/* Create a new chunk based on the hypercube */
-	chunk = ts_chunk_create_base(chunk_id, hs->num_dimensions, relkind);
+	Chunk *chunk = ts_chunk_create_base(chunk_id);
 
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = cube;
 	chunk->hypertable_relid = ht->main_table_relid;
-	namestrcpy(&chunk->fd.schema_name, schema_name);
-
-	if (NULL == table_name || table_name[0] == '\0')
-	{
-		int len;
-
-		if (NULL == prefix)
-		{
-			prefix = NameStr(ht->fd.associated_table_prefix);
-		}
-
-		len = snprintf(NameStr(chunk->fd.table_name),
-					   NAMEDATALEN,
-					   "%s_%d_chunk",
-					   prefix,
-					   chunk->fd.id);
-
-		if (len >= NAMEDATALEN)
-		{
-			ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk table name too long")));
-		}
-	}
-	else
-	{
-		namestrcpy(&chunk->fd.table_name, table_name);
-	}
 
 	return chunk;
 }
@@ -876,7 +857,7 @@ static void
 chunk_set_replica_identity(const Chunk *chunk)
 {
 	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
-	Relation ch_rel = relation_open(chunk->table_id, AccessShareLock);
+	Relation ch_rel = relation_open(chunk->fd.relid, AccessShareLock);
 
 	/* Do nothing if REPLICA IDENTITY of hypertable and chunk are equal */
 	if (ht_rel->rd_rel->relreplident == ch_rel->rd_rel->relreplident)
@@ -921,7 +902,7 @@ chunk_set_replica_identity(const Chunk *chunk)
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&cmd), false);
+	ts_alter_table_with_event_trigger(chunk->fd.relid, NULL, list_make1(&cmd), false);
 	ts_catalog_restore_user(&sec_ctx);
 	table_close(ch_rel, NoLock);
 	table_close(ht_rel, NoLock);
@@ -945,7 +926,7 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 		ts_chunk_index_create_all(chunk->fd.hypertable_id,
 								  chunk->hypertable_relid,
 								  chunk->fd.id,
-								  chunk->table_id,
+								  chunk->fd.relid,
 								  InvalidOid);
 
 		chunk_set_replica_identity(chunk);
@@ -958,16 +939,17 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 }
 
 static Oid
-chunk_create_table(Chunk *chunk, const Hypertable *ht)
+chunk_create_table(Chunk *chunk, const Hypertable *ht, const char *schema_name,
+				   const char *table_name)
 {
 	/* Create the actual table relation for the chunk */
 	const char *tablespace = ts_hypertable_select_tablespace_name(ht, chunk);
 
-	chunk->table_id = ts_chunk_create_table(chunk, ht, tablespace);
+	chunk->fd.relid = ts_chunk_create_table(chunk, ht, schema_name, table_name, tablespace);
 
-	Assert(OidIsValid(chunk->table_id));
+	Assert(OidIsValid(chunk->fd.relid));
 
-	return chunk->table_id;
+	return chunk->fd.relid;
 }
 
 /*
@@ -976,16 +958,19 @@ chunk_create_table(Chunk *chunk, const Hypertable *ht)
  */
 static Chunk *
 chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const char *schema_name,
-								   const char *table_name, const char *prefix, int32 chunk_id)
+								   const char *table_name, int32 chunk_id)
 {
-	Chunk *chunk;
-
 	Assert(table_name != NULL || chunk_id != INVALID_CHUNK_ID);
 
-	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, chunk_id);
-	Assert(chunk != NULL);
+	if (!schema_name || schema_name[0] == '\0')
+	{
+		schema_name = NameStr(ht->fd.associated_schema_name);
+	}
 
-	chunk_create_table(chunk, ht);
+	Chunk *chunk = chunk_create_object(ht, cube, chunk_id);
+	char *chunk_table_name = chunk_choose_table_name(ht, chunk_id, table_name);
+
+	chunk_create_table(chunk, ht, schema_name, chunk_table_name);
 
 	return chunk;
 }
@@ -1045,7 +1030,7 @@ chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 
 	get_hypertable_publication_filters(puboid, chunk, &columns, &whereClause);
 
-	chunk_rel = table_open(chunk->table_id, AccessShareLock);
+	chunk_rel = table_open(chunk->fd.relid, AccessShareLock);
 
 	pri.relation = chunk_rel;
 	pri.columns = columns;
@@ -1076,8 +1061,7 @@ chunk_add_to_publications(const Chunk *chunk)
 
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
-									   const char *schema_name, const char *table_name,
-									   const char *prefix)
+									   const char *schema_name, const char *table_name)
 {
 	chunk_insert_check_hook_type osm_chunk_insert_hook = ts_get_osm_chunk_insert_hook();
 
@@ -1112,8 +1096,7 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 	}
 	int32 chunk_id = get_next_chunk_id();
 
-	Chunk *chunk =
-		chunk_create_only_table_after_lock(ht, cube, schema_name, table_name, prefix, chunk_id);
+	Chunk *chunk = chunk_create_only_table_after_lock(ht, cube, schema_name, table_name, chunk_id);
 
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
 	prepare_cube_slices_for_chunk(cube, chunk_id);
@@ -1156,8 +1139,8 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 		.cmds = list_make1(&altercmd),
 		.missing_ok = false,
 		.objtype = OBJECT_TABLE,
-		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
-								 (char *) NameStr(chunk->fd.table_name),
+		.relation = makeRangeVar((char *) ts_chunk_get_schema_name(chunk),
+								 (char *) ts_chunk_get_table_name(chunk),
 								 0),
 	};
 	LOCKMODE lockmode = AlterTableGetLockLevel(alterstmt.cmds);
@@ -1171,7 +1154,7 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 static Chunk *
 chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube *cube,
 												 Oid chunk_table_relid, const char *schema_name,
-												 const char *table_name, const char *prefix)
+												 const char *table_name)
 {
 	Oid current_chunk_schemaid = get_rel_namespace(chunk_table_relid);
 	Oid new_chunk_schemaid = InvalidOid;
@@ -1229,11 +1212,16 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 
 	int32 chunk_id = get_next_chunk_id();
 
-	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, chunk_id);
-	chunk->table_id = chunk_table_relid;
-	chunk->hypertable_relid = ht->main_table_relid;
+	if (!schema_name || schema_name[0] == '\0')
+	{
+		schema_name = NameStr(ht->fd.associated_schema_name);
+	}
 
-	new_chunk_schemaid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
+	chunk = chunk_create_object(ht, cube, chunk_id);
+	char *chunk_table_name = chunk_choose_table_name(ht, chunk_id, table_name);
+	chunk->fd.relid = chunk_table_relid;
+
+	new_chunk_schemaid = get_namespace_oid(schema_name, false);
 
 	if (current_chunk_schemaid != new_chunk_schemaid)
 	{
@@ -1248,11 +1236,11 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	}
 	table_close(chunk_rel, NoLock);
 
-	if (namestrcmp(&chunk->fd.table_name, get_rel_name(chunk_table_relid)) != 0)
+	if (strcmp(chunk_table_name, get_rel_name(chunk_table_relid)) != 0)
 	{
 		/* Renaming will acquire and keep an AccessExclusivelock on the chunk
 		 * table */
-		RenameRelationInternal(chunk_table_relid, NameStr(chunk->fd.table_name), true, false);
+		RenameRelationInternal(chunk_table_relid, chunk_table_name, true, false);
 		/* Make changes visible */
 		CommandCounterIncrement();
 	}
@@ -1286,8 +1274,7 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 }
 
 static Chunk *
-chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const char *schema_name,
-								   const char *table_name, const char *prefix)
+chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p)
 {
 	Hyperspace *hs = ht->space;
 	Hypercube *cube;
@@ -1302,7 +1289,7 @@ chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const c
 	/* Resolve collisions with other chunks by cutting the new hypercube */
 	chunk_collision_resolve(ht, cube, p);
 
-	return chunk_create_from_hypercube_after_lock(ht, cube, schema_name, table_name, prefix);
+	return chunk_create_from_hypercube_after_lock(ht, cube, NULL, NULL);
 }
 
 Chunk *
@@ -1332,13 +1319,11 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 																		 hc,
 																		 chunk_table_relid,
 																		 schema_name,
-																		 table_name,
-																		 NULL);
+																		 table_name);
 			}
 			else
 			{
-				chunk =
-					chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name, NULL);
+				chunk = chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name);
 			}
 
 			if (NULL != created)
@@ -1418,8 +1403,7 @@ ts_chunk_find_for_point(const Hypertable *ht, const Point *p, LOCKMODE lockmode)
  * chunk is locked with "chunk_lockmode".
  */
 Chunk *
-ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *schema,
-						  const char *prefix, LOCKMODE chunk_lockmode)
+ts_chunk_create_for_point(const Hypertable *ht, const Point *p, LOCKMODE chunk_lockmode)
 {
 	/*
 	 * Serialize chunk creation around a lock on the "main table" to avoid
@@ -1462,7 +1446,7 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *sche
 	}
 
 	/* Create the chunk normally. */
-	Chunk *chunk = chunk_create_from_point_after_lock(ht, p, schema, NULL, prefix);
+	Chunk *chunk = chunk_create_from_point_after_lock(ht, p);
 
 	ASSERT_IS_VALID_CHUNK(chunk);
 
@@ -1556,47 +1540,36 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 }
 
 ChunkStub *
-ts_chunk_stub_create(int32 id, int16 num_constraints)
+ts_chunk_stub_create(int32 id)
 {
-	ChunkStub *stub;
+	ChunkStub *stub = palloc0(sizeof(*stub));
 
-	(void) num_constraints;
-	stub = palloc0(sizeof(*stub));
 	stub->id = id;
 
 	return stub;
 }
 
 Chunk *
-ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind)
+ts_chunk_create_base(int32 id)
 {
-	Chunk *chunk;
+	Chunk *chunk = palloc0(sizeof(Chunk));
 
-	(void) num_constraints;
-	chunk = palloc0(sizeof(Chunk));
 	chunk->fd.id = id;
-	chunk->fd.compressed_chunk_id = INVALID_CHUNK_ID;
-	chunk->relkind = relkind;
+	chunk->relkind = RELKIND_RELATION;
 	chunk->fd.creation_time = GetCurrentTimestamp();
 
 	return chunk;
 }
 
 /*
- * Build a chunk from a chunk tuple and a stub.
+ * Build a chunk from a chunk tuple.
  *
- * The stub allows the chunk to be constructed more efficiently. But if the stub
- * is not "valid", dimension slices and constraints are fully
- * rescanned/recreated.
+ * The dimension slices are scanned from the catalog to build the chunk's cube.
  */
 Chunk *
-ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub *stub,
-								   const ScanTupLock *slice_lock)
+ts_chunk_build_from_tuple(Chunk **chunkptr, TupleInfo *ti)
 {
 	Chunk *chunk = NULL;
-
-	(void) stub;
-	(void) slice_lock;
 
 	if (chunkptr == NULL)
 	{
@@ -1627,15 +1600,12 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 	}
 
 	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id, false);
-	ts_get_rel_info_by_name(NameStr(chunk->fd.schema_name),
-							NameStr(chunk->fd.table_name),
-							&chunk->table_id,
-							&chunk->relkind);
+	chunk->relkind = get_rel_relkind(chunk->fd.relid);
 
 	Ensure(chunk->relkind > 0,
 		   "relkind for chunk \"%s\".\"%s\" is invalid",
-		   NameStr(chunk->fd.schema_name),
-		   NameStr(chunk->fd.table_name));
+		   ts_chunk_get_schema_name(chunk),
+		   ts_chunk_get_table_name(chunk));
 
 	return chunk;
 }
@@ -1652,30 +1622,17 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 */
 	if (stubctx->chunk_lockmode != NoLock)
 	{
-		Datum schema_name;
-		Datum table_name;
-		const RangeVar *rv;
 		bool isnull;
-
-		schema_name = slot_getattr(ti->slot, Anum_chunk_schema_name, &isnull);
-		Assert(!isnull);
-		table_name = slot_getattr(ti->slot, Anum_chunk_table_name, &isnull);
+		Oid relid = DatumGetObjectId(slot_getattr(ti->slot, Anum_chunk_relid, &isnull));
 		Assert(!isnull);
 
-		rv = makeRangeVar(NameStr(*DatumGetName(schema_name)),
-						  NameStr(*DatumGetName(table_name)),
-						  -1);
-		Relation rel = table_openrv_extended(rv, stubctx->chunk_lockmode, true);
-
-		if (!rel)
+		if (!ts_chunk_lock_if_exists(relid, stubctx->chunk_lockmode))
 		{
 			return SCAN_DONE;
 		}
-
-		table_close(rel, NoLock);
 	}
 
-	ts_chunk_build_from_tuple_and_stub(&stubctx->chunk, ti, stubctx->stub, stubctx->slice_lock);
+	ts_chunk_build_from_tuple(&stubctx->chunk, ti);
 
 	return SCAN_DONE;
 }
@@ -1770,7 +1727,7 @@ dimension_slice_join_chunks(ChunkScanCtx *scanctx, const DimensionVec *vec)
 
 		if (!found)
 		{
-			stub = ts_chunk_stub_create(chunk_id, hs->num_dimensions);
+			stub = ts_chunk_stub_create(chunk_id);
 			stub->cube = ts_hypercube_alloc(hs->num_dimensions);
 			entry->stub = stub;
 		}
@@ -2268,13 +2225,6 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 				 errhint("The start of the time range must be before the end.")));
 	}
 
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
-				 errmsg("invalid operation on compressed hypertable")));
-	}
-
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
@@ -2443,12 +2393,9 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 										 LOCKMODE chunk_lockmode, const ScanTupLock *slice_lock,
 										 MemoryContext mctx, bool fail_if_not_found)
 {
-	NameData schema, table;
-	ScanKeyData scankey[2];
-	static const DisplayKeyData displaykey[2] = {
-		[0] = { .name = "schema_name", .as_string = DatumGetNameString },
-		[1] = { .name = "table_name", .as_string = DatumGetNameString },
-	};
+	Oid relid;
+	Chunk *chunk;
+	MemoryContext oldctx;
 
 	/* Early check for rogue input */
 	if (schema_name == NULL || table_name == NULL)
@@ -2468,63 +2415,36 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 		}
 	}
 
-	namestrcpy(&schema, schema_name);
-	namestrcpy(&table, table_name);
+	relid = ts_get_relation_relid(schema_name, table_name, /* return_invalid = */ true);
 
-	/*
-	 * Check that the table actually exists and get a lock, unless no lock
-	 * requested.
-	 */
-	if (chunk_lockmode != NoLock)
+	if (!OidIsValid(relid))
 	{
-		RangeVar *rv = makeRangeVar(NameStr(schema), NameStr(table), -1);
-		Relation rel = table_openrv_extended(rv, chunk_lockmode, true);
-
-		if (!rel)
+		if (fail_if_not_found)
 		{
-			if (fail_if_not_found)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_OBJECT),
-						 errmsg("chunk not found"),
-						 errdetail("schema_name: %s, table_name: %s", schema_name, table_name)));
-			}
-			return NULL;
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("chunk not found"),
+					 errdetail("schema_name: %s, table_name: %s", schema_name, table_name)));
 		}
-
-		table_close(rel, NoLock);
+		return NULL;
 	}
 
-	/*
-	 * Perform an index scan on chunk name.
-	 */
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_schema_name_idx_schema_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				NameGetDatum(&schema));
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_schema_name_idx_table_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				NameGetDatum(&table));
+	/* The chunk is identified by its relation; look it up by relid. */
+	oldctx = MemoryContextSwitchTo(mctx);
+	chunk = ts_chunk_get_by_relid_locked(relid, chunk_lockmode, slice_lock, fail_if_not_found);
+	MemoryContextSwitchTo(oldctx);
 
-	return chunk_scan_find(CHUNK_SCHEMA_NAME_INDEX,
-						   scankey,
-						   2,
-						   mctx,
-						   chunk_lockmode,
-						   slice_lock,
-						   fail_if_not_found,
-						   displaykey);
+	return chunk;
 }
 
 Chunk *
 ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE chunk_lockmode, const ScanTupLock *slice_lock,
 							 bool fail_if_not_found)
 {
-	char *schema;
-	char *table;
+	ScanKeyData scankey[1];
+	static const DisplayKeyData displaykey[1] = {
+		[0] = { .name = "relid", .as_string = DatumGetRegClassString },
+	};
 
 	if (!OidIsValid(relid))
 	{
@@ -2538,9 +2458,37 @@ ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE chunk_lockmode, const ScanTupLo
 		}
 	}
 
-	schema = get_namespace_name(get_rel_namespace(relid));
-	table = get_rel_name(relid);
-	return chunk_get_by_name(schema, table, chunk_lockmode, slice_lock, fail_if_not_found);
+	/*
+	 * Check that the relation actually exists and get a lock, unless no lock
+	 * requested. If it was dropped the catalog row is gone too and the scan
+	 * below finds nothing.
+	 */
+	if (chunk_lockmode != NoLock && !ts_chunk_lock_if_exists(relid, chunk_lockmode))
+	{
+		if (fail_if_not_found)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("chunk not found"),
+					 errdetail("relid: %u", relid)));
+		}
+		return NULL;
+	}
+
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_relid_idx_relid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(relid));
+
+	return chunk_scan_find(CHUNK_RELID_INDEX,
+						   scankey,
+						   1,
+						   CurrentMemoryContext,
+						   chunk_lockmode,
+						   slice_lock,
+						   fail_if_not_found,
+						   displaykey);
 }
 
 Chunk *
@@ -2656,43 +2604,40 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok,
 }
 
 static bool
-chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk *form,
-						  bool missing_ok)
+chunk_simple_scan_by_relid(Oid relid, FormData_chunk *form, bool missing_ok)
 {
 	ScanIterator iterator;
 	static const DisplayKeyData displaykey[] = {
-		[0] = { .name = "schema_name", .as_string = DatumGetNameString },
-		[1] = { .name = "table_name", .as_string = DatumGetNameString },
+		[0] = { .name = "relid", .as_string = DatumGetRegClassString },
 	};
 
-	if (schema == NULL || table == NULL)
+	if (!OidIsValid(relid))
 	{
 		return false;
 	}
 
 	iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	init_scan_by_qualified_table_name(&iterator, schema, table);
+	init_scan_by_relid(&iterator, relid);
 
 	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
+}
+
+static bool
+chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk *form,
+						  bool missing_ok)
+{
+	if (schema == NULL || table == NULL)
+	{
+		return false;
+	}
+
+	return chunk_simple_scan_by_relid(ts_get_relation_relid(schema, table, true), form, missing_ok);
 }
 
 bool
 ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok)
 {
-	bool found = false;
-
-	if (OidIsValid(reloid))
-	{
-		const char *table = get_rel_name(reloid);
-
-		if (table != NULL)
-		{
-			Oid nspid = get_rel_namespace(reloid);
-			const char *schema = get_namespace_name(nspid);
-
-			found = chunk_simple_scan_by_name(schema, table, form, missing_ok);
-		}
-	}
+	bool found = chunk_simple_scan_by_relid(reloid, form, missing_ok);
 
 	if (!found && !missing_ok)
 	{
@@ -2785,7 +2730,7 @@ ts_chunk_get_relid(int32 chunk_id, bool missing_ok)
 
 	if (chunk_simple_scan_by_id(chunk_id, &form, missing_ok))
 	{
-		relid = ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), true);
+		relid = form.relid;
 	}
 
 	if (!OidIsValid(relid) && !missing_ok)
@@ -2814,7 +2759,7 @@ ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok)
 		return InvalidOid;
 	}
 
-	return get_namespace_oid(NameStr(form.schema_name), missing_ok);
+	return get_rel_namespace(form.relid);
 }
 
 bool
@@ -2944,7 +2889,10 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		 * in pg_catalog. But that's OK, because compression settings will be
 		 * cleaned up when processing the eventtrigger.
 		 */
-		relid = ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), true);
+		if (OidIsValid(form.relid) && SearchSysCacheExists1(RELOID, ObjectIdGetDatum(form.relid)))
+		{
+			relid = form.relid;
+		}
 	}
 
 	/*
@@ -2988,20 +2936,14 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 }
 
 static void
-init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
-								  const char *table_name)
+init_scan_by_relid(ScanIterator *iterator, Oid relid)
 {
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_SCHEMA_NAME_INDEX);
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_RELID_INDEX);
 	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_chunk_schema_name_idx_schema_name,
+								   Anum_chunk_relid_idx_relid,
 								   BTEqualStrategyNumber,
-								   F_NAMEEQ,
-								   CStringGetDatum(schema_name));
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_chunk_schema_name_idx_table_name,
-								   BTEqualStrategyNumber,
-								   F_NAMEEQ,
-								   CStringGetDatum(table_name));
+								   F_OIDEQ,
+								   ObjectIdGetDatum(relid));
 }
 
 static int
@@ -3037,17 +2979,15 @@ chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior, bool deta
 }
 
 static int
-ts_chunk_delete_by_name_internal(const char *schema, const char *table, Oid relid,
-								 DropBehavior behavior)
+ts_chunk_delete_by_relid_internal(Oid relid, DropBehavior behavior)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 	int count;
 
-	init_scan_by_qualified_table_name(&iterator, schema, table);
+	init_scan_by_relid(&iterator, relid);
 	count = chunk_delete(&iterator, relid, behavior, false);
 
-	/* (schema,table) names and (hypertable_id) are unique so should only have
-	 * dropped one chunk or none (if not found) */
+	/* relid is unique so should only have dropped one chunk or none (if not found) */
 	Assert(count == 1 || count == 0);
 
 	return count;
@@ -3057,19 +2997,18 @@ int
 ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior)
 {
 	Oid relid = ts_get_relation_relid(schema, table, false);
-	return ts_chunk_delete_by_name_internal(schema, table, relid, behavior);
+	return ts_chunk_delete_by_relid_internal(relid, behavior);
 }
 
 int
-ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname, const char *tablename,
-									 DropBehavior behavior)
+ts_chunk_delete_by_relid(Oid relid, DropBehavior behavior)
 {
 	if (!OidIsValid(relid))
 	{
 		return 0;
 	}
 
-	return ts_chunk_delete_by_name_internal(schemaname, tablename, relid, behavior);
+	return ts_chunk_delete_by_relid_internal(relid, behavior);
 }
 
 static void
@@ -3157,10 +3096,6 @@ ts_chunk_get_by_hypertable_id(int32 hypertable_id)
 		ts_chunk_formdata_fill(&chunk->fd, ti);
 
 		chunk->hypertable_relid = hypertable_relid;
-
-		chunk->table_id = ts_get_relation_relid(NameStr(chunk->fd.schema_name),
-												NameStr(chunk->fd.table_name),
-												false);
 
 		chunks = lappend(chunks, chunk);
 	}
@@ -3354,38 +3289,6 @@ lock_chunk_for_drop(int32 chunk_id)
 }
 
 bool
-ts_chunk_set_name(Chunk *chunk, const char *newname)
-{
-	FormData_chunk form;
-	ItemPointerData tid;
-	bool PG_USED_FOR_ASSERTS_ONLY found;
-
-	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
-	Assert(found);
-
-	namestrcpy(&form.table_name, newname);
-
-	chunk_update_catalog_tuple(&tid, &form);
-	return true;
-}
-
-bool
-ts_chunk_set_schema(Chunk *chunk, const char *newschema)
-{
-	FormData_chunk form;
-	ItemPointerData tid;
-	bool PG_USED_FOR_ASSERTS_ONLY found;
-
-	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
-	Assert(found);
-
-	namestrcpy(&form.schema_name, newschema);
-
-	chunk_update_catalog_tuple(&tid, &form);
-	return true;
-}
-
-bool
 ts_chunk_set_unordered(Chunk *chunk)
 {
 	Assert(ts_chunk_is_compressed(chunk));
@@ -3409,7 +3312,7 @@ ts_chunk_set_partial(Chunk *chunk)
 		ts_chunk_column_stats_set_invalid(chunk->fd.hypertable_id, chunk->fd.id);
 
 		/* changed chunk status, so invalidate plans involving this chunk */
-		CacheInvalidateRelcacheByRelid(chunk->table_id);
+		CacheInvalidateRelcacheByRelid(chunk->fd.relid);
 	}
 	return set_status;
 }
@@ -3614,59 +3517,9 @@ ts_chunk_clear_compressed(Chunk *chunk)
 	/* re-applying the flags after locking the metadata tuple */
 	form.status = ts_clear_flags_32(form.status, flags);
 	chunk->fd.status = form.status;
-	chunk->fd.compressed_chunk_id = INVALID_CHUNK_ID;
 
 	chunk_update_catalog_tuple(&tid, &form);
 	return true;
-}
-
-/* Used as a tuple found function */
-static ScanTupleResult
-chunk_rename_schema_name(TupleInfo *ti, void *data)
-{
-	FormData_chunk form;
-	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
-
-	ts_chunk_formdata_fill(&form, ti);
-	/* Rename schema name */
-	namestrcpy(&form.schema_name, (char *) data);
-	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(new_tuple);
-	return SCAN_CONTINUE;
-}
-
-/* Go through the internal chunk table and rename all matching schemas */
-void
-ts_chunks_rename_schema_name(char *old_schema, char *new_schema)
-{
-	NameData old_schema_name;
-	ScanKeyData scankey[1];
-	Catalog *catalog = ts_catalog_get();
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, CHUNK),
-		.index = catalog_get_index(catalog, CHUNK, CHUNK_SCHEMA_NAME_INDEX),
-		.nkeys = 1,
-		.scankey = scankey,
-		.tuple_found = chunk_rename_schema_name,
-		.data = new_schema,
-		.lockmode = RowExclusiveLock,
-		.scandirection = ForwardScanDirection,
-	};
-
-	namestrcpy(&old_schema_name, old_schema);
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_schema_name_idx_schema_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				NameGetDatum(&old_schema_name));
-
-	ts_scanner_scan(&scanctx);
 }
 
 static int
@@ -3683,11 +3536,11 @@ chunk_cmp(const void *ch1, const void *ch2)
 	{
 		return 1;
 	}
-	if (v1->table_id < v2->table_id)
+	if (v1->fd.relid < v2->fd.relid)
 	{
 		return -1;
 	}
-	if (v1->table_id > v2->table_id)
+	if (v1->fd.relid > v2->fd.relid)
 	{
 		return 1;
 	}
@@ -3750,7 +3603,7 @@ show_chunks_return_srf(FunctionCallInfo fcinfo)
 	/* do when there is more left to send */
 	if (call_cntr < funcctx->max_calls)
 	{
-		SRF_RETURN_NEXT(funcctx, result_set[call_cntr].table_id);
+		SRF_RETURN_NEXT(funcctx, result_set[call_cntr].fd.relid);
 	}
 	else /* do when there is no more left */
 	{
@@ -3763,28 +3616,25 @@ ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
 	ObjectAddress objaddr = {
 		.classId = RelationRelationId,
-		.objectId = chunk->table_id,
+		.objectId = chunk->fd.relid,
 	};
 
 	if (log_level >= 0)
 	{
-		elog(log_level,
-			 "dropping chunk %s.%s",
-			 NameStr(chunk->fd.schema_name),
-			 NameStr(chunk->fd.table_name));
+		const char *schema_name = ts_chunk_get_schema_name(chunk);
+		const char *table_name = ts_chunk_get_table_name(chunk);
+
+		elog(log_level, "dropping chunk %s.%s", schema_name, table_name);
 	}
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid_and_relname(chunk->table_id,
-										 NameStr(chunk->fd.schema_name),
-										 NameStr(chunk->fd.table_name),
-										 behavior);
+	ts_chunk_delete_by_relid(chunk->fd.relid, behavior);
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
 
 	/* Evict the chunk stats from the shared memory */
-	ts_stats_chunk_evict(chunk->table_id);
+	ts_stats_chunk_evict(chunk->fd.relid);
 }
 
 void
@@ -3795,16 +3645,16 @@ ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level)
 		.objectId = relid,
 	};
 
-	const char *schema_name = get_namespace_name(get_rel_namespace(relid));
-	const char *table_name = get_rel_name(relid);
-
 	if (log_level >= 0)
 	{
+		const char *schema_name = get_namespace_name(get_rel_namespace(relid));
+		const char *table_name = get_rel_name(relid);
+
 		elog(log_level, "dropping chunk %s.%s", schema_name, table_name);
 	}
 
 	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid_and_relname(relid, schema_name, table_name, behavior);
+	ts_chunk_delete_by_relid(relid, behavior);
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
@@ -3964,7 +3814,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		 * refreshing. */
 		for (uint64 i = 0; i < num_chunks; i++)
 		{
-			LockRelationOid(chunks[i].table_id, ExclusiveLock);
+			LockRelationOid(chunks[i].fd.relid, ExclusiveLock);
 
 			Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 				   chunks[i].cube->slices[0]->fd.dimension_id);
@@ -4011,8 +3861,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		}
 
 		/* store chunk name for output */
-		schema_name = quote_identifier(NameStr(chunks[i].fd.schema_name));
-		table_name = quote_identifier(NameStr(chunks[i].fd.table_name));
+		schema_name = quote_identifier(ts_chunk_get_schema_name(&chunks[i]));
+		table_name = quote_identifier(ts_chunk_get_table_name(&chunks[i]));
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
@@ -4032,7 +3882,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		 * (e.g. from a retention policy). We call `GetFdwRoutineByRelId` to
 		 * ensure the library is loaded.
 		 */
-		if (!osm_drop_chunks_hook && GetFdwRoutineByRelId(osm_chunk->table_id))
+		if (!osm_drop_chunks_hook && GetFdwRoutineByRelId(osm_chunk->fd.relid))
 		{
 			osm_drop_chunks_hook = ts_get_osm_hypertable_drop_chunks_hook();
 		}
@@ -4044,7 +3894,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			/* convert to PG timestamp from timescaledb internal format */
 			int64 range_start = ts_internal_to_time_int64(newer_than, dim->fd.column_type);
 			int64 range_end = ts_internal_to_time_int64(older_than, dim->fd.column_type);
-			List *osm_dropped_names = osm_drop_chunks_hook(osm_chunk->table_id,
+			List *osm_dropped_names = osm_drop_chunks_hook(osm_chunk->fd.relid,
 														   NameStr(ht->fd.schema_name),
 														   NameStr(ht->fd.table_name),
 														   range_start,
@@ -4488,7 +4338,7 @@ bool
 ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation cmd,
 											 bool throw_error)
 {
-	Oid chunk_relid = chunk->table_id;
+	Oid chunk_relid = chunk->fd.relid;
 	int32 chunk_status = chunk->fd.status;
 
 	/*
@@ -4769,8 +4619,6 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
-	char *relschema = get_namespace_name(get_rel_namespace(relid));
-	char *relname = get_rel_name(relid);
 
 	Oid ht_ownerid = ts_rel_get_owner(parent_ht->main_table_relid);
 
@@ -4790,9 +4638,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	}
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
-								 hs->num_dimensions,
-								 RELKIND_RELATION);
+	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK));
 	ts_catalog_restore_user(&sec_ctx);
 
 	/* fill in the correct table_name for the chunk*/
@@ -4800,11 +4646,8 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	chunk->fd.osm_chunk = true; /* this is an OSM chunk */
 	chunk->cube = fill_hypercube_for_osm_chunk(hs);
 	chunk->hypertable_relid = parent_ht->main_table_relid;
-	chunk->table_id = relid;
+	chunk->fd.relid = relid;
 	chunk->relkind = RELKIND_FOREIGN_TABLE;
-
-	namestrcpy(&chunk->fd.schema_name, relschema);
-	namestrcpy(&chunk->fd.table_name, relname);
 
 	/* Insert chunk */
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
@@ -4829,10 +4672,8 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	 * Once the data is moved into the OSM chunk, then our catalog should be
 	 * updated with proper API calls from the OSM extension.
 	 */
-	parent_ht->fd.status =
-		ts_set_flags_32(parent_ht->fd.status,
-						HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update_status_osm(parent_ht);
+	ts_hypertable_add_status(parent_ht,
+							 HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 }
 
 void
@@ -4848,8 +4689,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot merge chunks from different hypertables"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\"",
-						 get_rel_name(chunk->table_id),
-						 get_rel_name(merge_chunk->table_id))));
+						 get_rel_name(chunk->fd.relid),
+						 get_rel_name(merge_chunk->fd.relid))));
 	}
 
 	for (int i = 0; i < chunk->cube->num_slices; i++)
@@ -4867,8 +4708,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 					 errmsg("cannot merge chunks with different partitioning schemas"),
 					 errhint("chunk 1: \"%s\", chunk 2: \"%s\" have different slices on "
 							 "dimension ID %d",
-							 get_rel_name(chunk->table_id),
-							 get_rel_name(merge_chunk->table_id),
+							 get_rel_name(chunk->fd.relid),
+							 get_rel_name(merge_chunk->fd.relid),
 							 chunk->cube->slices[i]->fd.dimension_id)));
 		}
 	}
@@ -4879,8 +4720,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot find slice for merging dimension"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\", dimension ID %d",
-						 get_rel_name(chunk->table_id),
-						 get_rel_name(merge_chunk->table_id),
+						 get_rel_name(chunk->fd.relid),
+						 get_rel_name(merge_chunk->fd.relid),
 						 dimension_id)));
 	}
 
@@ -4890,8 +4731,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot merge non-adjacent chunks over supplied dimension"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\", dimension ID %d",
-						 get_rel_name(chunk->table_id),
-						 get_rel_name(merge_chunk->table_id),
+						 get_rel_name(chunk->fd.relid),
+						 get_rel_name(merge_chunk->fd.relid),
 						 dimension_id)));
 	}
 
@@ -4919,7 +4760,7 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	 * is derived from the slice id. */
 	char old_check_name[NAMEDATALEN];
 	snprintf(old_check_name, NAMEDATALEN, "constraint_%d", old_slice_id);
-	Oid old_check_oid = get_relation_constraint_oid(chunk->table_id, old_check_name, true);
+	Oid old_check_oid = get_relation_constraint_oid(chunk->fd.relid, old_check_name, true);
 	if (OidIsValid(old_check_oid))
 	{
 		ObjectAddress constrobj = {
@@ -5133,11 +4974,8 @@ ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti)
 		ts_hypercube_slice_sort(chunkptr->cube);
 	}
 
-	chunkptr->table_id = ts_get_relation_relid(NameStr(chunkptr->fd.schema_name),
-											   NameStr(chunkptr->fd.table_name),
-											   true);
 	chunkptr->hypertable_relid = ts_hypertable_id_to_relid(chunkptr->fd.hypertable_id, false);
-	chunkptr->relkind = get_rel_relkind(chunkptr->table_id);
+	chunkptr->relkind = get_rel_relkind(chunkptr->fd.relid);
 
 	return vec;
 }
@@ -5300,10 +5138,8 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	ts_chunk_drop(osm_chunk, DROP_RESTRICT, LOG);
 
 	/* reset hypertable OSM status */
-	ht->fd.status =
-		ts_clear_flags_32(ht->fd.status,
-						  HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update_status_osm(ht);
+	ts_hypertable_clear_status(ht,
+							   HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 	ts_cache_release(&hcache);
 	PG_RETURN_BOOL(true);
 }
@@ -5336,21 +5172,13 @@ void
 ts_chunk_detach_by_relid(Oid relid)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
-	char *schema;
-	char *table;
 	int PG_USED_FOR_ASSERTS_ONLY count;
 
 	Assert(OidIsValid(relid));
 
-	schema = get_namespace_name(get_rel_namespace(relid));
-	table = get_rel_name(relid);
-
-	init_scan_by_qualified_table_name(&iterator, schema, table);
+	init_scan_by_relid(&iterator, relid);
 	count = chunk_delete(&iterator, relid, DROP_RESTRICT, true);
 
-	/*
-	 * (schema,table) names and (hypertable_id) are unique so should only have
-	 * dropped one chunk
-	 */
+	/* relid is unique so should only have dropped one chunk */
 	Assert(count == 1);
 }

@@ -23,20 +23,35 @@ typedef struct Chunk Chunk;
 typedef struct Hypercube Hypercube;
 typedef struct ChunkRangeSpace ChunkRangeSpace;
 
-enum
-{
-	HypertableCompressionOff = 0,
-	HypertableCompressionEnabled = 1,
-	HypertableInternalCompressionTable = 2,
-};
-
-#define TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ts_hypertable_has_compression_table(ht)
+/*
+ * Remember to update ts_hypertable_status functions when adding new status flags
+ */
+#define HYPERTABLE_STATUS_DEFAULT 0
+/* flag set when hypertable has an attached OSM chunk */
+#define HYPERTABLE_STATUS_OSM 1
+/*
+ * Currently, the time slice range metadata is updated in
+ * the timescaledb catalog with the min and max of the range managed by OSM.
+ * However, this range has to be contiguous in order to
+ * update our catalog with its min and max value. If it is not contiguous,
+ * then we cannot store the min and max in our catalog because tuple routing
+ * will not work properly with gaps in the range.
+ * When attempting to insert into one of the gaps, which do not in fact contain
+ * tiered data, we error out because this is perceived as an attempt to insert
+ * into tiered chunks, which are immutable.
+ * When the range is noncontiguous, we store [INT64_MAX - 1, INT64_MAX) and set
+ * this flag.
+ * This flag also serves to allow or block the ordered append optimization. When
+ * the range covered by OSM is contiguous, then it is possible to do ordered
+ * append.
+ */
+#define HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS 2
+/* compression enabled on hypertable */
+#define HYPERTABLE_STATUS_COMPRESSION 4
 
 #define TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht)                                                  \
-	((ht)->fd.compression_state == HypertableCompressionEnabled)
+	(((ht)->fd.status & HYPERTABLE_STATUS_COMPRESSION) != 0)
 
-#define TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht)                                            \
-	((ht)->fd.compression_state == HypertableInternalCompressionTable)
 typedef struct Hypertable
 {
 	FormData_hypertable fd;
@@ -82,7 +97,6 @@ extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hy
 													   DimensionInfo *closed_dim_info,
 													   Name associated_schema_name,
 													   Name associated_table_prefix);
-extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id);
 
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
 extern Hypertable *ts_hypertable_get_by_name(const char *schema, const char *name);
@@ -98,7 +112,8 @@ extern Hypertable *ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid r
 extern int ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 												  tuple_found_func tuple_found, void *data,
 												  LOCKMODE lockmode, MemoryContext mctx);
-extern bool ts_hypertable_update_status_osm(Hypertable *ht);
+extern bool ts_hypertable_add_status(Hypertable *ht, int32 status);
+extern bool ts_hypertable_clear_status(Hypertable *ht, int32 status);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
@@ -131,15 +146,13 @@ extern TSDLLEXPORT bool ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockm
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
 extern bool ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno);
 extern bool ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name);
-extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
-													 int32 compressed_hypertable_id);
-extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_set_compression(Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_unset_compression(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
 															int64 compress_interval);
 extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
-extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_has_continuous_aggregates(int32 hypertable_id);
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
 

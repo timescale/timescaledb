@@ -403,18 +403,16 @@ CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
    h.table_name AS hypertable_name,
-   c.schema_name as chunk_schema,
-   c.table_name as chunk_name,
+   c.relid::text as chunk_name,
    c.status as chunk_status,
-   comp.schema_name as compressed_chunk_schema,
-   comp.table_name as compressed_chunk_name
+   comp.relid::text as compressed_chunk_name
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
    LEFT JOIN _timescaledb_catalog.compression_settings cs
-ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
+ON cs.relid = c.relid
    LEFT JOIN _timescaledb_catalog.chunk comp
-ON cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass;
+ON cs.compress_relid = comp.relid;
 
 CREATE TABLE compressed_ht (
        time TIMESTAMP WITH TIME ZONE NOT NULL,

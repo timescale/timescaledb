@@ -44,7 +44,7 @@ SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relnam
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
@@ -70,7 +70,7 @@ SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relnam
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id OFFSET 2 LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
@@ -135,7 +135,7 @@ SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relnam
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 
@@ -155,7 +155,7 @@ SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relnam
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id OFFSET 3 LIMIT 1 \gset
 
@@ -205,7 +205,7 @@ SELECT comp_cl.relname AS "CHUNK_NAME", comp_ns.nspname || '.' || comp_cl.relnam
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht, _timescaledb_catalog.compression_settings cs,
      pg_class comp_cl, pg_namespace comp_ns
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
-AND cs.relid = format('%I.%I', ch1.schema_name, ch1.table_name)::regclass
+AND cs.relid = ch1.relid
 AND cs.compress_relid = comp_cl.oid AND comp_cl.relnamespace = comp_ns.oid
 ORDER BY ch1.id LIMIT 1 \gset
 

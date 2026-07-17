@@ -1,1 +1,0 @@
-Fixes: #10182 Fix columnstore sort pushdown to check for different query sortkey collation

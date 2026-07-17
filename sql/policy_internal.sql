@@ -18,6 +18,100 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_reorder_check(config JS
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_reorder_check'
 LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_compaction_check(config JSONB)
+RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_compaction_check'
+LANGUAGE C;
+
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.policy_compaction(job_id INTEGER, config JSONB)
+AS $$
+DECLARE
+  htid               INTEGER;
+  max_chunks         INTEGER := 0;
+  max_batches        INTEGER := 0;
+  numchunks          INTEGER := 0;
+  processed          INTEGER := 0;
+  chunk_rec          RECORD;
+  verbose_log        BOOL;
+  inactive_for       INTERVAL;
+  chunks_failure     INTEGER := 0;
+  _message     text;
+  _detail      text;
+  _sqlstate    text;
+BEGIN
+
+  -- procedures with SET clause cannot execute transaction
+  -- control so we adjust search_path in procedure body
+  SET LOCAL search_path TO pg_catalog, pg_temp;
+
+  IF config IS NULL THEN
+    RAISE EXCEPTION 'job % has null config', job_id;
+  END IF;
+
+  htid := jsonb_object_field_text(config, 'hypertable_id')::INTEGER;
+  IF htid IS NULL THEN
+    RAISE EXCEPTION 'job % config must have hypertable_id', job_id;
+  END IF;
+
+  verbose_log := COALESCE(jsonb_object_field_text(config, 'verbose_log')::BOOLEAN, FALSE);
+  max_chunks  := COALESCE(jsonb_object_field_text(config, 'max_chunks')::INTEGER, 0);
+  max_batches := COALESCE(jsonb_object_field_text(config, 'max_batches')::INTEGER, 0);
+  -- when set, skip chunks written within this window; NULL disables the gate
+  inactive_for := jsonb_object_field_text(config, 'inactive_for')::INTERVAL;
+
+  FOR chunk_rec IN
+    SELECT ch.relid
+    FROM _timescaledb_catalog.chunk ch
+    WHERE ch.hypertable_id = htid
+      AND NOT ch.osm_chunk
+      -- compact_chunk only works on fully compressed, unordered chunks.
+      -- Partial chunks are restored by the columnstore policy; frozen chunks
+      -- are left alone.
+      AND _timescaledb_functions.chunk_status_text(ch.status) @> ARRAY['UNORDERED']
+      AND NOT _timescaledb_functions.chunk_status_text(ch.status) && ARRAY['PARTIAL', 'FROZEN']
+      -- only compact chunks that have been inactive for the configured window,
+      -- so we don't keep recompacting chunks still receiving out-of-order data
+      AND (inactive_for IS NULL OR NOT EXISTS (
+        SELECT 1 FROM _timescaledb_functions.chunk_statistics(
+          uncompressed_relid => ch.relid) s
+        WHERE s.last_update >= now() - inactive_for))
+  LOOP
+    BEGIN
+      PERFORM _timescaledb_functions.compact_chunk(chunk_rec.relid, max_batches);
+      numchunks := numchunks + 1;
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS
+          _message = MESSAGE_TEXT,
+          _detail = PG_EXCEPTION_DETAIL,
+          _sqlstate = RETURNED_SQLSTATE;
+      RAISE WARNING 'compaction policy failed to compact chunk "%"',
+          chunk_rec.relid
+          USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
+                ERRCODE = _sqlstate;
+      chunks_failure := chunks_failure + 1;
+    END;
+    processed := processed + 1;
+    COMMIT;
+
+    -- SET LOCAL is only active until end of transaction. While we could use
+    -- SET at the start of the function we do not want to bleed out
+    -- search_path to caller, so we do SET LOCAL again after COMMIT
+    SET LOCAL search_path TO pg_catalog, pg_temp;
+    IF verbose_log THEN
+      RAISE LOG 'job % completed compacting chunk %', job_id, chunk_rec.relid;
+    END IF;
+    -- max_chunks bounds the chunks processed per run, including ones that failed
+    IF max_chunks > 0 AND processed >= max_chunks THEN
+      EXIT;
+    END IF;
+  END LOOP;
+
+  IF chunks_failure > 0 THEN
+    RAISE WARNING 'compaction policy completed with some failures'
+      USING DETAIL = format('Failed to compact %L chunks. Successfully compacted %L chunks.', chunks_failure, numchunks);
+  END IF;
+END;
+$$ LANGUAGE PLPGSQL;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.policy_recompression(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_recompression_proc'
 LANGUAGE C;
@@ -43,7 +137,8 @@ _timescaledb_functions.policy_compression_execute(
   verbose_log         BOOLEAN,
   recompress_enabled  BOOLEAN,
   reindex_enabled     BOOLEAN,
-  use_creation_time   BOOLEAN
+  use_creation_time   BOOLEAN,
+  recompress_unordered BOOLEAN
 )
 AS $$
 DECLARE
@@ -58,6 +153,7 @@ DECLARE
   status_fully_compressed int := 1;
   -- chunk status bits:
   bit_uncompressed int := 0;
+  bit_unordered int := 2;
   bit_frozen int := 4;
   bit_compressed_partial int := 8;
   creation_lag INTERVAL := NULL;
@@ -92,16 +188,23 @@ BEGIN
 
   FOR chunk_rec IN
     SELECT
-      show.oid, ch.schema_name, ch.table_name, ch.status
+      show.oid, pgns.nspname AS schema_name, pgc.relname AS table_name, ch.status
     FROM
       @extschema@.show_chunks(htoid, older_than => lag, created_before => creation_lag) AS show(oid)
       INNER JOIN pg_class pgc ON pgc.oid = show.oid
       INNER JOIN pg_namespace pgns ON pgc.relnamespace = pgns.oid
-      INNER JOIN _timescaledb_catalog.chunk ch ON ch.table_name = pgc.relname AND ch.schema_name = pgns.nspname AND ch.hypertable_id = htid
+      INNER JOIN _timescaledb_catalog.chunk ch ON ch.relid = show.oid AND ch.hypertable_id = htid
     WHERE NOT ch.osm_chunk
     -- Checking for chunks which are not fully compressed and not frozen
     AND ch.status != status_fully_compressed
     AND ch.status & bit_frozen = 0
+    -- When recompress_unordered is off, skip unordered chunks unless they
+    -- are also partial, since partial chunks always need recompression.
+    AND (
+      recompress_unordered
+      OR ch.status & bit_unordered = 0
+      OR ch.status & bit_compressed_partial = bit_compressed_partial
+    )
   LOOP
     BEGIN
       IF chunk_rec.status = bit_uncompressed OR recompress_enabled IS TRUE THEN
@@ -125,7 +228,7 @@ BEGIN
       FOR idx_rec IN
         SELECT idx.schemaname, idx.indexname
         FROM pg_indexes idx
-        JOIN _timescaledb_catalog.chunk ch ON ch.schema_name = idx.schemaname AND ch.table_name = idx.tablename
+        JOIN _timescaledb_catalog.chunk ch ON ch.relid = chunk_rec.oid
         WHERE idx.schemaname = chunk_rec.schema_name
           AND idx.tablename = chunk_rec.table_name
           AND ch.status = status_fully_compressed
@@ -190,6 +293,7 @@ DECLARE
   numchunks           INTEGER := 1;
   recompress_enabled  BOOL;
   reindex_enabled     BOOL;
+  recompress_unordered BOOL;
   use_creation_time   BOOL := FALSE;
 BEGIN
 
@@ -210,6 +314,7 @@ BEGIN
   maxchunks           := COALESCE(jsonb_object_field_text(config, 'maxchunks_to_compress')::INTEGER, 0);
   recompress_enabled  := COALESCE(jsonb_object_field_text(config, 'recompress')::BOOLEAN, TRUE);
   reindex_enabled     := COALESCE(jsonb_object_field_text(config, 'reindex')::BOOLEAN, TRUE);
+  recompress_unordered := COALESCE(jsonb_object_field_text(config, 'recompress_unordered')::BOOLEAN, TRUE);
 
   -- find primary dimension type --
   SELECT dim.column_type INTO dimtype
@@ -235,13 +340,13 @@ BEGIN
   -- execute the properly type casts for the lag value
   CASE dimtype
     WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype, 'DATE'::regtype, 'INTERVAL' ::regtype, 'UUID'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, recompress_unordered);
     WHEN 'BIGINT'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::BIGINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::BIGINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, recompress_unordered);
     WHEN 'INTEGER'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTEGER, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTEGER, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, recompress_unordered);
     WHEN 'SMALLINT'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::SMALLINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::SMALLINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, recompress_unordered);
   END CASE;
   COMMIT;
 END;

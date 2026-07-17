@@ -62,15 +62,15 @@ jobs:
       fail-fast: false
       matrix:
         versions:
-          - { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
-          - { pg: 17, pg_version: "${{ needs.config.outputs.pg17_latest }}" }
-          - { pg: 18, pg_version: "${{ needs.config.outputs.pg18_latest }}" }
+          - { pg: 16, pg_version: "${{ fromJson(needs.config.outputs.pg16_latest) }}" }
+          - { pg: 17, pg_version: "${{ fromJson(needs.config.outputs.pg17_latest) }}" }
+          - { pg: 18, pg_version: "${{ fromJson(needs.config.outputs.pg18_latest) }}" }
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         pg_config: ["-cfsync=off -cstatement_timeout=60s -clisten_addresses=0.0.0.0"]
         event_name: ["${{ github.event_name }}"]
         run_installcheck: ["${{ needs.check_paths.outputs.run_installcheck }}"]
         exclude:
-          - versions: { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
+          - versions: { pg: 16, pg_version: "${{ fromJson(needs.config.outputs.pg16_latest) }}" }
             run_installcheck: false
     env:
       # PostgreSQL configuration
@@ -124,6 +124,7 @@ jobs:
             # to ensure no conflicts with the new installation.
             Remove-Item "C:\Program Files\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item "C:\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item "HKLM:\SOFTWARE\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
         } else {
             Write-Host "No registered PostgreSQL installation found. Skipping uninstall step."
         }
@@ -191,7 +192,7 @@ jobs:
     - name: Install PostgreSQL ${{ matrix.versions.pg }} (using ${{ matrix.versions.pg_version }})
       if: github.event_name != 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        $version = ${{ matrix.versions.pg_version }}
+        $version = "${{ matrix.versions.pg_version }}"
         $version = $version.Replace('"', '') + "-1"
         winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} `
           --force --accept-source-agreements --accept-package-agreements --disable-interactivity `

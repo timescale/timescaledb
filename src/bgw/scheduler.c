@@ -855,7 +855,9 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 	TimestampTz start = ts_timer_get_current_timestamp();
 	TimestampTz quit_time = DT_NOEND;
 
+#if PG19_LT
 	log_min_messages = ts_guc_bgw_log_level;
+#endif
 
 	pgstat_report_activity(STATE_RUNNING, NULL);
 
@@ -916,7 +918,9 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		{
 			got_SIGHUP = false;
 			ProcessConfigFile(PGC_SIGHUP);
+#if PG19_LT
 			log_min_messages = ts_guc_bgw_log_level;
+#endif
 		}
 
 		/*
@@ -1015,7 +1019,9 @@ ts_bgw_scheduler_register_signal_handlers(void)
 	/* Some SIGHUPS may already have been dropped, so we must load the file here */
 	got_SIGHUP = false;
 	ProcessConfigFile(PGC_SIGHUP);
+#if PG19_LT
 	log_min_messages = ts_guc_bgw_log_level;
+#endif
 }
 
 Datum

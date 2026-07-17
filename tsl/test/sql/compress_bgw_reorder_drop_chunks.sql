@@ -71,7 +71,7 @@ WHERE hypertable.table_name like 'test_retention_table';
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = chunk.relid AND cs.compress_relid IS NOT NULL
 WHERE hypertable.table_name like 'test_retention_table';
 
 SELECT show_chunks('test_retention_table');
@@ -89,7 +89,7 @@ WHERE hypertable.table_name like 'test_retention_table';
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = chunk.relid AND cs.compress_relid IS NOT NULL
 WHERE hypertable.table_name like 'test_retention_table';
 
 ------------------------------
@@ -126,7 +126,7 @@ WHERE hypertable.table_name like 'test_reorder_chunks_table';
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = to_regclass(format('%I.%I', chunk.schema_name, chunk.table_name)) AND cs.compress_relid IS NOT NULL
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = chunk.relid AND cs.compress_relid IS NOT NULL
 WHERE hypertable.table_name like 'test_reorder_chunks_table';
 
 -- enable reorder policy

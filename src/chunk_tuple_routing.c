@@ -105,7 +105,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		 */
 		if (ctr->single_chunk_insert)
 		{
-			if (!chunk || chunk->table_id != RelationGetRelid(ctr->root_rri->ri_RelationDesc))
+			if (!chunk || chunk->fd.relid != RelationGetRelid(ctr->root_rri->ri_RelationDesc))
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_CHECK_VIOLATION),
@@ -119,7 +119,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot INSERT into frozen chunk \"%s\"",
-							get_rel_name(chunk->table_id))));
+							get_rel_name(chunk->fd.relid))));
 		}
 
 		if (chunk && IS_OSM_CHUNK(chunk))
@@ -152,7 +152,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 #ifdef USE_ASSERT_CHECKING
 		/* Ensure we always hold a lock on the chunk table at this point */
-		Relation chunk_rel = RelationIdGetRelation(chunk->table_id);
+		Relation chunk_rel = RelationIdGetRelation(chunk->fd.relid);
 		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
 		RelationClose(chunk_rel);
 #endif
@@ -204,7 +204,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 			}
 		}
 
-		cis = ts_chunk_insert_state_create(chunk->table_id, ctr);
+		cis = ts_chunk_insert_state_create(chunk->fd.relid, ctr);
 		cis->needs_partial = needs_partial;
 		cis->created_compressed_chunk = created_compressed_chunk;
 		ts_subspace_store_add(ctr->subspace,
