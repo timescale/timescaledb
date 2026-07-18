@@ -1,1 +1,1 @@
-Implements: #1524 Add external compression, letting a type supply its own compress/decompress functions
+Implements: #1524 Add external compression: configure columns with timescaledb.compress_column_codec

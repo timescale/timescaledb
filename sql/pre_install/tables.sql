@@ -460,10 +460,16 @@ CREATE TABLE _timescaledb_catalog.compression_settings (
   orderby_desc bool[],
   orderby_nullsfirst bool[],
   index jsonb,
+  -- parallel arrays: codec_column[i] is compressed with the EXTERNAL codec
+  -- registered by the ts_compression_codec operator class codec_opclass[i]
+  codec_column text[],
+  codec_opclass text[],
   CONSTRAINT compression_settings_pkey PRIMARY KEY (relid),
   CONSTRAINT compression_settings_check_segmentby CHECK (array_ndims(segmentby) = 1),
   CONSTRAINT compression_settings_check_orderby_null CHECK ((orderby IS NULL AND orderby_desc IS NULL AND orderby_nullsfirst IS NULL) OR (orderby IS NOT NULL AND orderby_desc IS NOT NULL AND orderby_nullsfirst IS NOT NULL)),
-  CONSTRAINT compression_settings_check_orderby_cardinality CHECK (array_ndims(orderby) = 1 AND array_ndims(orderby_desc) = 1 AND array_ndims(orderby_nullsfirst) = 1 AND cardinality(orderby) = cardinality(orderby_desc) AND cardinality(orderby) = cardinality(orderby_nullsfirst))
+  CONSTRAINT compression_settings_check_orderby_cardinality CHECK (array_ndims(orderby) = 1 AND array_ndims(orderby_desc) = 1 AND array_ndims(orderby_nullsfirst) = 1 AND cardinality(orderby) = cardinality(orderby_desc) AND cardinality(orderby) = cardinality(orderby_nullsfirst)),
+  CONSTRAINT compression_settings_check_codec_null CHECK ((codec_column IS NULL AND codec_opclass IS NULL) OR (codec_column IS NOT NULL AND codec_opclass IS NOT NULL)),
+  CONSTRAINT compression_settings_check_codec_cardinality CHECK (array_ndims(codec_column) = 1 AND array_ndims(codec_opclass) = 1 AND cardinality(codec_column) = cardinality(codec_opclass))
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');

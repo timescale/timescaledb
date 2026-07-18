@@ -18,10 +18,12 @@
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/lsyscache.h>
+#include <utils/regproc.h>
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
 #include "bmslist_utils.h"
+#include "compression_codec_am.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
 #include "guc.h"
@@ -55,6 +57,10 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 		},
 		[AlterTableFlagIndex] = {
 			.arg_names = {"compress_index", "compress_sparse_index", "index", "sparse_index", NULL},
+			 .type_id = TEXTOID,
+		},
+		[AlterTableFlagColumnCodec] = {
+			.arg_names = {"compress_column_codec", "column_codec", NULL},
 			 .type_id = TEXTOID,
 		},
 		[AlterTableFlagGranularRefreshColumn] = {
@@ -882,5 +888,109 @@ ts_compress_hypertable_parse_index(WithClauseResult index, Hypertable *hypertabl
 	else
 	{
 		return NULL;
+	}
+}
+
+/*
+ * Parse the timescaledb.compress_column_codec option into the
+ * codec_column:codec_opclass arrays:
+ *
+ *     compress_column_codec = 'col1:codec_ops, col2:schema.other_codec_ops'
+ *
+ * Column and operator class follow SQL identifier rules. The opclass must
+ * satisfy the codec contract for the column's type, including a compress
+ * and decompress function.
+ * An empty string clears all codec entries.
+ */
+void
+ts_compress_hypertable_parse_column_codec(WithClauseResult codec, Hypertable *hypertable,
+										  ArrayType **codec_column, ArrayType **codec_opclass)
+{
+	*codec_column = NULL;
+	*codec_opclass = NULL;
+
+	if (codec.is_default)
+	{
+		return;
+	}
+
+	char *inpstr = TextDatumGetCString(codec.parsed);
+	char *cur = inpstr;
+
+	while (*cur != '\0')
+	{
+		char *item = cur;
+		char *split = NULL;
+		bool in_quotes = false;
+
+		/* find the end of this comma-separated entry and the last ':' in it,
+		 * ignoring separators inside quoted identifiers */
+		for (; *cur != '\0'; cur++)
+		{
+			if (*cur == '"')
+			{
+				in_quotes = !in_quotes;
+			}
+			else if (!in_quotes && *cur == ':')
+			{
+				split = cur;
+			}
+			else if (!in_quotes && *cur == ',')
+			{
+				break;
+			}
+		}
+		if (*cur == ',')
+		{
+			*cur = '\0';
+			cur++;
+		}
+
+		if (split == NULL)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("unable to parse codec option \"%s\"", item),
+					 errhint("The option timescaledb.compress_column_codec must be a set of"
+							 " column:operator_class pairs separated by commas.")));
+		}
+		*split = '\0';
+		const char *column_part = item;
+		const char *opclass_part = split + 1;
+
+		List *colnames = stringToQualifiedNameList(column_part, NULL);
+		if (list_length(colnames) != 1)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("invalid codec column name \"%s\"", column_part)));
+		}
+		const char *colname = strVal(linitial(colnames));
+
+		AttrNumber attnum = get_attnum(hypertable->main_table_relid, colname);
+		if (attnum == InvalidAttrNumber || attnum <= 0)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" does not exist", colname)));
+		}
+
+		if (ts_array_is_member(*codec_column, colname))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("duplicate codec entry for column \"%s\"", colname)));
+		}
+
+		Oid atttype = get_atttype(hypertable->main_table_relid, attnum);
+		Oid opclass = ts_compression_codec_opclass_resolve(opclass_part,
+														   atttype,
+														   /* require_compress */ true,
+														   NULL,
+														   NULL);
+
+		*codec_column = ts_array_add_element_text(*codec_column, colname);
+		*codec_opclass = ts_array_add_element_text(*codec_opclass,
+												   ts_compression_codec_opclass_qualname(opclass));
 	}
 }

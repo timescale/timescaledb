@@ -5,12 +5,15 @@
  */
 
 /*
- * External compression delegates whole column batches to the data type's own
- * compress/decompress SQL functions (see external.h for the contract).
+ * External compression delegates whole column batches to codec functions
+ * registered by the data type (see external.h).
  *
  * On-disk layout of an ExternalCompressed varlena:
  *
- *   16-byte header (vl_len_, algorithm, has_nulls, padding, element_type)
+ *   16-byte header (vl_len_, algorithm, header_version, has_nulls, padding,
+ *                   element_type)
+ *   uint8 schema_len, char schema[schema_len]  \ operator class that wrote
+ *   uint8 name_len,   char name[name_len]      / the batch
  *   if has_nulls:
  *       uint32 n_rows
  *       uint8 null_bitmap[(n_rows + 7) / 8]    bit i set => row i is NULL
@@ -19,34 +22,41 @@
  * The payload length is implied by the varlena size. Only non-null values are
  * handed to the compress function. The header bitmap handles NULLs during
  * decompression.
+ *
+ * Each batch records the schema-qualified name of the operator class that
+ * compressed it, and decompression resolves the codec by that name. Writes
+ * are configured per-column via timescaledb.compress_column_codec.
+ * On decompress, the batch uses the decompress opclass it was compressed with.
  */
 
 #include <postgres.h>
 #include "guc.h"
+#include <access/htup_details.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_opclass.h>
 #include <catalog/pg_type.h>
+#include <commands/defrem.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
-#include <nodes/makefuncs.h>
-#include <parser/parse_func.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
-#include <utils/catcache.h>
 #include <utils/datum.h>
-#include <utils/hsearch.h>
-#include <utils/inval.h>
 #include <utils/lsyscache.h>
-#include <utils/memutils.h>
 #include <utils/syscache.h>
 
 #include "compression/compression.h"
+#include "compression_codec_am.h"
 #include "external.h"
+
+#define EXTERNAL_HEADER_VERSION 1
 
 typedef struct ExternalCompressed
 {
 	CompressedDataHeaderFields;
+	uint8 header_version;
 	uint8 has_nulls;
-	uint8 padding[6];
+	uint8 padding[5];
 	Oid element_type;
 	/* 8-byte alignment sentinel for the following data */
 	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
@@ -59,150 +69,85 @@ pg_attribute_unused() assertions(void)
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(ExternalCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +
-							 sizeof(test_val.has_nulls) + sizeof(test_val.padding) +
-							 sizeof(test_val.element_type),
+							 sizeof(test_val.header_version) + sizeof(test_val.has_nulls) +
+							 sizeof(test_val.padding) + sizeof(test_val.element_type),
 					 "ExternalCompressed wrong size");
 	StaticAssertStmt(sizeof(ExternalCompressed) == 16, "ExternalCompressed wrong size");
 }
 
 #define EXTERNAL_HEADER_SIZE offsetof(ExternalCompressed, alignment_sentinel)
 
-static bool
-external_codec_lookup_uncached(Oid type_oid, Oid *compress_fn, Oid *decompress_fn)
+/*
+ * Resolve the operator class a column is configured to use.
+ *
+ * Errors if the registration does not satisfy the codec contract
+ */
+static void
+external_codec_for_compression(const char *opclass_qualname, Oid element_type, Oid *compress_fn,
+							   NameData *opclass_schema, NameData *opclass_name)
 {
-	Oid array_type = get_array_type(type_oid);
-	if (!OidIsValid(array_type))
+	Oid opclass = ts_compression_codec_opclass_resolve(opclass_qualname,
+													   element_type,
+													   /* require_compress */ true,
+													   compress_fn,
+													   NULL);
+
+	HeapTuple opctup = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclass));
+	if (!HeapTupleIsValid(opctup))
 	{
-		return false;
+		elog(ERROR, "cache lookup failed for operator class %u", opclass);
 	}
-
-	HeapTuple type_tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
-	if (!HeapTupleIsValid(type_tuple))
-	{
-		return false;
-	}
-	Form_pg_type type_form = (Form_pg_type) GETSTRUCT(type_tuple);
-	char *type_name = pstrdup(NameStr(type_form->typname));
-	Oid type_namespace = type_form->typnamespace;
-	ReleaseSysCache(type_tuple);
-
-	char *schema_name = get_namespace_name(type_namespace);
-	if (schema_name == NULL)
-	{
-		return false;
-	}
-
-	List *compress_name =
-		list_make2(makeString(schema_name), makeString(psprintf("%s_compress", type_name)));
-	Oid compress_argtypes[1] = { array_type };
-	Oid compress_oid = LookupFuncName(compress_name, 1, compress_argtypes, /* missing_ok */ true);
-
-	List *decompress_name =
-		list_make2(makeString(schema_name), makeString(psprintf("%s_decompress", type_name)));
-	Oid decompress_argtypes[1] = { BYTEAOID };
-	Oid decompress_oid =
-		LookupFuncName(decompress_name, 1, decompress_argtypes, /* missing_ok */ true);
-
-	if (!OidIsValid(compress_oid) || !OidIsValid(decompress_oid))
-	{
-		return false;
-	}
-
-	*compress_fn = compress_oid;
-	*decompress_fn = decompress_oid;
-	return true;
+	Form_pg_opclass opcform = (Form_pg_opclass) GETSTRUCT(opctup);
+	namestrcpy(opclass_name, NameStr(opcform->opcname));
+	namestrcpy(opclass_schema, get_namespace_name(opcform->opcnamespace));
+	ReleaseSysCache(opctup);
 }
 
 /*
- * Backend-local cache over external_codec_lookup_uncached, which walks
- * pg_type, pg_namespace and pg_proc for every batch during
- * decompression. Algorithm selection probes every non-builtin column
- * type. All entries are flushed when any of those catalogs change, so
- * dropping or (re)creating codec functions is seen by the next lookup.
+ * Resolve the decompress function of the operator class a batch was stamped with.
  */
-typedef struct ExternalCodecCacheEntry
+static Oid
+external_codec_decompress_fn(const char *schema_name, const char *opclass_name, Oid element_type)
 {
-	Oid type_oid;
-	bool has_codec;
-	Oid compress_fn;
+	Oid am_oid = get_am_oid(COMPRESSION_CODEC_AM_NAME, /* missing_ok */ true);
+	Oid namespace_oid = InvalidOid;
+	Oid opclass = InvalidOid;
+	if (OidIsValid(am_oid))
+	{
+		namespace_oid = get_namespace_oid(schema_name, /* missing_ok */ true);
+	}
+	if (OidIsValid(namespace_oid))
+	{
+		opclass = GetSysCacheOid3(CLAAMNAMENSP,
+								  Anum_pg_opclass_oid,
+								  ObjectIdGetDatum(am_oid),
+								  PointerGetDatum(opclass_name),
+								  ObjectIdGetDatum(namespace_oid));
+	}
+	if (!OidIsValid(opclass))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("compression codec operator class %s for type \"%s\" does not exist",
+						quote_qualified_identifier(schema_name, opclass_name),
+						format_type_be(element_type)),
+				 errhint("Compressed batches record the operator class that wrote them; it must "
+						 "keep its name while such batches exist.")));
+	}
+
+	/*
+	 * A same-named opclass could have been recreated for an unrelated type
+	 * since the batch was written. The contract check rejects one whose
+	 * input type does not share the column type. Reading does not need the
+	 * compress function.
+	 */
 	Oid decompress_fn;
-} ExternalCodecCacheEntry;
-
-static HTAB *external_codec_cache = NULL;
-
-static void
-external_codec_cache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
-{
-	HASH_SEQ_STATUS status;
-	ExternalCodecCacheEntry *entry;
-
-	hash_seq_init(&status, external_codec_cache);
-	while ((entry = hash_seq_search(&status)) != NULL)
-	{
-		hash_search(external_codec_cache, &entry->type_oid, HASH_REMOVE, NULL);
-	}
-}
-
-static HTAB *
-external_codec_cache_get(void)
-{
-	if (external_codec_cache == NULL)
-	{
-		if (CacheMemoryContext == NULL)
-		{
-			CreateCacheMemoryContext();
-		}
-		HASHCTL ctl = {
-			.keysize = sizeof(Oid),
-			.entrysize = sizeof(ExternalCodecCacheEntry),
-			.hcxt = CacheMemoryContext,
-		};
-		external_codec_cache =
-			hash_create("external codec cache", 8, &ctl, HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-		CacheRegisterSyscacheCallback(PROCOID, external_codec_cache_invalidate, 0);
-		CacheRegisterSyscacheCallback(TYPEOID, external_codec_cache_invalidate, 0);
-		CacheRegisterSyscacheCallback(NAMESPACEOID, external_codec_cache_invalidate, 0);
-	}
-	return external_codec_cache;
-}
-
-bool
-external_codec_lookup(Oid type_oid, Oid *compress_fn, Oid *decompress_fn)
-{
-	HTAB *cache = external_codec_cache_get();
-	bool found;
-	ExternalCodecCacheEntry *entry = hash_search(cache, &type_oid, HASH_FIND, &found);
-	if (!found)
-	{
-		/*
-		 * Look up before entering into the cache: the catalog access can
-		 * accept invalidations and flush the cache mid-lookup, which would
-		 * invalidate the entry pointer.
-		 */
-		Oid compress_oid = InvalidOid;
-		Oid decompress_oid = InvalidOid;
-		bool has_codec =
-			external_codec_lookup_uncached(type_oid, &compress_oid, &decompress_oid);
-
-		entry = hash_search(cache, &type_oid, HASH_ENTER, NULL);
-		entry->has_codec = has_codec;
-		entry->compress_fn = compress_oid;
-		entry->decompress_fn = decompress_oid;
-	}
-
-	if (!entry->has_codec)
-	{
-		return false;
-	}
-	if (compress_fn != NULL)
-	{
-		*compress_fn = entry->compress_fn;
-	}
-	if (decompress_fn != NULL)
-	{
-		*decompress_fn = entry->decompress_fn;
-	}
-	return true;
+	ts_compression_codec_opclass_functions(opclass,
+										   element_type,
+										   /* require_compress */ false,
+										   NULL,
+										   &decompress_fn);
+	return decompress_fn;
 }
 
 typedef struct ExternalCompressor
@@ -210,6 +155,9 @@ typedef struct ExternalCompressor
 	Compressor base;
 	Oid element_type;
 	Oid compress_fn;
+	/* stamped into every batch for decompress-time codec resolution */
+	NameData codec_schema;
+	NameData codec_name;
 	int16 typlen;
 	bool typbyval;
 	char typalign;
@@ -254,7 +202,8 @@ external_compressor_append_datum(Compressor *pcompressor, Datum val)
 	}
 	else
 	{
-		compressor->values[compressor->nrows] = datumCopy(val, compressor->typbyval, compressor->typlen);
+		compressor->values[compressor->nrows] =
+			datumCopy(val, compressor->typbyval, compressor->typlen);
 	}
 	MemoryContextSwitchTo(previous_context);
 
@@ -307,16 +256,30 @@ external_compressor_finish_and_reset(Compressor *pcompressor)
 		DatumGetByteaP(OidFunctionCall1(compressor->compress_fn, PointerGetDatum(input)));
 	Size payload_len = VARSIZE_ANY_EXHDR(payload);
 
+	const char *codec_schema = NameStr(compressor->codec_schema);
+	const char *codec_name = NameStr(compressor->codec_name);
+	Size schema_len = strlen(codec_schema);
+	Size name_len = strlen(codec_name);
+	Size name_section_len = 2 + schema_len + name_len;
 	Size bitmap_len = compressor->has_nulls ? sizeof(uint32) + (compressor->nrows + 7) / 8 : 0;
-	Size total = EXTERNAL_HEADER_SIZE + bitmap_len + payload_len;
+	Size total = EXTERNAL_HEADER_SIZE + name_section_len + bitmap_len + payload_len;
 
 	ExternalCompressed *compressed = palloc0(total);
 	SET_VARSIZE(compressed, total);
 	compressed->compression_algorithm = COMPRESSION_ALGORITHM_EXTERNAL;
+	compressed->header_version = EXTERNAL_HEADER_VERSION;
 	compressed->has_nulls = compressor->has_nulls ? 1 : 0;
 	compressed->element_type = compressor->element_type;
 
 	char *data = (char *) compressed + EXTERNAL_HEADER_SIZE;
+	*(uint8 *) data = (uint8) schema_len;
+	data++;
+	memcpy(data, codec_schema, schema_len);
+	data += schema_len;
+	*(uint8 *) data = (uint8) name_len;
+	data++;
+	memcpy(data, codec_name, name_len);
+	data += name_len;
 	if (compressor->has_nulls)
 	{
 		uint32 n_rows = compressor->nrows;
@@ -362,21 +325,23 @@ const Compressor external_compressor = {
 };
 
 Compressor *
-external_compressor_for_type(Oid element_type)
+external_compressor_for_opclass(Oid element_type, const char *opclass_qualname)
 {
 	Oid compress_fn;
-	if (!external_codec_lookup(element_type, &compress_fn, NULL))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("no external compression functions for type \"%s\"",
-						format_type_be(element_type))));
-	}
+	NameData codec_schema;
+	NameData codec_name;
+	external_codec_for_compression(opclass_qualname,
+								   element_type,
+								   &compress_fn,
+								   &codec_schema,
+								   &codec_name);
 
 	ExternalCompressor *compressor = palloc0(sizeof(*compressor));
 	compressor->base = external_compressor;
 	compressor->element_type = element_type;
 	compressor->compress_fn = compress_fn;
+	compressor->codec_schema = codec_schema;
+	compressor->codec_name = codec_name;
 	compressor->mctx = CurrentMemoryContext;
 	get_typlenbyvalalign(element_type,
 						 &compressor->typlen,
@@ -410,11 +375,27 @@ external_decompression_iterator_try_next(DecompressionIterator *base_iter)
 	ExternalDecompressionIterator *iter = (ExternalDecompressionIterator *) base_iter;
 	if (iter->position < 0 || iter->position >= iter->num_results)
 	{
-		return (DecompressResult) { .is_done = true };
+		return (DecompressResult){ .is_done = true };
 	}
 	DecompressResult result = iter->results[iter->position];
 	iter->position += iter->step;
 	return result;
+}
+
+/*
+ * Read one length-prefixed name from the batch's codec name section into
+ * name_out (at least NAMEDATALEN bytes), returning the advanced cursor.
+ */
+static char *
+external_read_name(char *data, const char *end, char *name_out)
+{
+	CheckCompressedData(data < end);
+	uint8 len = *(const uint8 *) data;
+	data++;
+	CheckCompressedData(len > 0 && len < NAMEDATALEN && data + len <= end);
+	memcpy(name_out, data, len);
+	name_out[len] = '\0';
+	return data + len;
 }
 
 static DecompressionIterator *
@@ -422,14 +403,22 @@ external_decompression_iterator_alloc(Datum compressed, Oid element_type, bool f
 {
 	ExternalCompressed *header = (ExternalCompressed *) PG_DETOAST_DATUM(compressed);
 	CheckCompressedData(header->compression_algorithm == COMPRESSION_ALGORITHM_EXTERNAL);
+	CheckCompressedData(header->header_version == EXTERNAL_HEADER_VERSION);
 	CheckCompressedData(header->element_type == element_type);
 
 	char *data = (char *) header + EXTERNAL_HEADER_SIZE;
+	const char *end = (const char *) header + VARSIZE(header);
+
+	char codec_schema[NAMEDATALEN];
+	char codec_name[NAMEDATALEN];
+	data = external_read_name(data, end, codec_schema);
+	data = external_read_name(data, end, codec_name);
+
 	uint32 n_rows = 0;
 	const uint8 *bitmap = NULL;
 	if (header->has_nulls)
 	{
-		CheckCompressedData(VARSIZE(header) >= EXTERNAL_HEADER_SIZE + sizeof(uint32));
+		CheckCompressedData(data + sizeof(uint32) <= end);
 		memcpy(&n_rows, data, sizeof(uint32));
 		/* Bound n_rows before it feeds bitmap pointer arithmetic or data pointer */
 		CheckCompressedData(n_rows <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
@@ -438,20 +427,13 @@ external_decompression_iterator_alloc(Datum compressed, Oid element_type, bool f
 		data += (n_rows + 7) / 8;
 	}
 
-	CheckCompressedData(data <= (char *) header + VARSIZE(header));
-	Size payload_len = VARSIZE(header) - (data - (char *) header);
+	CheckCompressedData(data <= end);
+	Size payload_len = end - data;
 	bytea *payload = palloc(VARHDRSZ + payload_len);
 	SET_VARSIZE(payload, VARHDRSZ + payload_len);
 	memcpy(VARDATA(payload), data, payload_len);
 
-	Oid decompress_fn;
-	if (!external_codec_lookup(element_type, NULL, &decompress_fn))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("no external decompression functions for type \"%s\"",
-						format_type_be(element_type))));
-	}
+	Oid decompress_fn = external_codec_decompress_fn(codec_schema, codec_name, element_type);
 
 	ArrayType *values_array =
 		DatumGetArrayTypeP(OidFunctionCall1(decompress_fn, PointerGetDatum(payload)));
@@ -481,12 +463,12 @@ external_decompression_iterator_alloc(Datum compressed, Oid element_type, bool f
 		bool is_null = bitmap != NULL && (bitmap[row / 8] & (1 << (row % 8))) != 0;
 		if (is_null)
 		{
-			results[row] = (DecompressResult) { .is_null = true };
+			results[row] = (DecompressResult){ .is_null = true };
 		}
 		else
 		{
 			CheckCompressedData(next_value < num_values);
-			results[row] = (DecompressResult) { .val = values[next_value++] };
+			results[row] = (DecompressResult){ .val = values[next_value++] };
 		}
 	}
 	/* every decompressed value must map to exactly one row */
@@ -525,6 +507,7 @@ external_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 {
 	ExternalCompressed *compressed = (ExternalCompressed *) header;
 	uint32 body_len = VARSIZE(compressed) - EXTERNAL_HEADER_SIZE;
+	pq_sendbyte(buffer, compressed->header_version);
 	pq_sendint32(buffer, compressed->element_type);
 	pq_sendbyte(buffer, compressed->has_nulls);
 	pq_sendint32(buffer, body_len);
@@ -534,6 +517,8 @@ external_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 Datum
 external_compressed_recv(StringInfo buffer)
 {
+	uint8 header_version = pq_getmsgbyte(buffer);
+	CheckCompressedData(header_version == EXTERNAL_HEADER_VERSION);
 	Oid element_type = pq_getmsgint(buffer, 4);
 	uint8 has_nulls = pq_getmsgbyte(buffer);
 	uint32 body_len = pq_getmsgint(buffer, 4);
@@ -543,6 +528,7 @@ external_compressed_recv(StringInfo buffer)
 	ExternalCompressed *compressed = palloc0(total);
 	SET_VARSIZE(compressed, total);
 	compressed->compression_algorithm = COMPRESSION_ALGORITHM_EXTERNAL;
+	compressed->header_version = header_version;
 	compressed->has_nulls = has_nulls;
 	compressed->element_type = element_type;
 	memcpy((char *) compressed + EXTERNAL_HEADER_SIZE, pq_getmsgbytes(buffer, body_len), body_len);

@@ -21,6 +21,7 @@ typedef enum AlterTableFlags
 	AlterTableFlagOrderBy,
 	AlterTableFlagCompressChunkTimeInterval,
 	AlterTableFlagIndex,
+	AlterTableFlagColumnCodec,
 	AlterTableFlagGranularRefreshColumn,
 	AlterTableFlagGranularRefreshStartOffset,
 	AlterTableFlagGranularRefreshEndOffset,
@@ -54,3 +55,7 @@ extern TSDLLEXPORT OrderBySettings ts_compress_parse_order_collist(char *inpstr,
 																   Hypertable *hypertable);
 extern TSDLLEXPORT Jsonb *ts_compress_hypertable_parse_index(WithClauseResult index,
 															 Hypertable *hypertable);
+extern TSDLLEXPORT void ts_compress_hypertable_parse_column_codec(WithClauseResult codec,
+																  Hypertable *hypertable,
+																  ArrayType **codec_column,
+																  ArrayType **codec_opclass);

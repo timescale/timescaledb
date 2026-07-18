@@ -140,7 +140,10 @@ TSDLLEXPORT int ts_qsort_attrnumber_cmp(const void *a, const void *b);
 TSDLLEXPORT CompressionSettings *
 ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segmentby,
 							   ArrayType *orderby, ArrayType *orderby_desc,
-							   ArrayType *orderby_nullsfirst, Jsonb *sparse_index);
+							   ArrayType *orderby_nullsfirst, Jsonb *sparse_index,
+							   ArrayType *codec_column, ArrayType *codec_opclass);
+TSDLLEXPORT const char *ts_compression_settings_codec_opclass(const CompressionSettings *settings,
+															  const char *attname);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get(Oid relid);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get_by_compress_relid(Oid relid);
 TSDLLEXPORT void ts_compression_settings_free(CompressionSettings *settings);

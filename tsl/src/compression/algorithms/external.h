@@ -6,17 +6,31 @@
 #pragma once
 
 /*
- * The `external` compression method delegates batches to a pair of functions
- * supplied by the column's data type:
- *     <schema>.<typename>_compress(<type>[]) RETURNS bytea
- *     <schema>.<typename>_decompress(bytea)  RETURNS <type>[]
+ * The `external` compression algorithm delegates batches to a pair of
+ * support functions registered to an operator class for the
+ * ts_compression_codec access method (see compression_codec_am.h):
  *
- * Both functions must exist in the type's schema for the type to be routed to
- * this compression method (see compression_get_default_algorithm).
+ *     CREATE OPERATOR CLASS <name> FOR TYPE <type>
+ *         USING ts_compression_codec AS
+ *         FUNCTION 1 <compress>(<type>[]),   -- RETURNS bytea
+ *         FUNCTION 2 <decompress>(bytea);    -- RETURNS <type>[]
+ *
+ * A column is routed to this compression method only when it is configured
+ * through the timescaledb.compress_column_codec setting. This setting holds
+ * the operator class to use (see compression_get_column_algorithm) for
+ * compression.
  * NULLs are stripped into a bitmap before the compress call and re-added
  * after decompression, so the functions only receive non-null values. The
- * returned bytea is stored as-is in TOAST_STORAGE_EXTERNAL, and is not
+ * returned bytea is stored as-is in TOAST_STORAGE_EXTERNAL. It is not
  * re-compressed.
+ *
+ * Every batch records the schema-qualified name of the operator class that
+ * compressed it. Decompression resolves the codec by that recorded name.
+ * Several codecs can therefore coexist for one type. The setting decides
+ * new writes, while other (possibly decompress-only) opclasses keep the
+ * batches they previously wrote readable. Renaming or dropping an operator
+ * class while batches still use it makes those batches unreadable until
+ * the opclass is restored.
  */
 
 #include <postgres.h>
@@ -25,22 +39,16 @@
 
 #include "compression/compression.h"
 
-/*
- * Look up the compress/decompress function pair for a type by the naming
- * convention:
- *
- *     <schema>.<typename>_compress(<type>[]) RETURNS bytea
- *     <schema>.<typename>_decompress(bytea)  RETURNS <type>[]
- *
- * Returns false if either function is missing.
- * NULL out parameters will be filled if there is a function registered.
- */
-extern bool external_codec_lookup(Oid type_oid, Oid *compress_fn, Oid *decompress_fn);
-
 extern const Compressor external_compressor;
 
 extern bool external_compressed_has_nulls(const CompressedDataHeader *header);
-extern Compressor *external_compressor_for_type(Oid element_type);
+/*
+ * Compressor for batches with the codec for the column's
+ * timescaledb.compress_column_codec entry.
+ * Errors if the operator class does not satisfy the codec contract
+ * for element_type.
+ */
+extern Compressor *external_compressor_for_opclass(Oid element_type, const char *opclass_qualname);
 
 extern DecompressionIterator *
 tsl_external_decompression_iterator_from_datum_forward(Datum compressed, Oid element_type);
@@ -56,6 +64,5 @@ extern Datum external_compressed_recv(StringInfo buffer);
 		.iterator_init_reverse = tsl_external_decompression_iterator_from_datum_reverse,           \
 		.compressed_data_send = external_compressed_send,                                          \
 		.compressed_data_recv = external_compressed_recv,                                          \
-		.compressor_for_type = external_compressor_for_type,                                       \
 		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \
 	}

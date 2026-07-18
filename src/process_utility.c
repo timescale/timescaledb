@@ -5642,7 +5642,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagOrderBy].is_default ||
 		!parse_results[AlterTableFlagSegmentBy].is_default ||
 		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default ||
-		!parse_results[AlterTableFlagIndex].is_default)
+		!parse_results[AlterTableFlagIndex].is_default ||
+		!parse_results[AlterTableFlagColumnCodec].is_default)
 	{
 		ts_cm_functions->process_compress_table(ht, parse_results);
 	}
@@ -5676,11 +5677,13 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	parse_results = ts_alter_table_reset_with_clause_parse(tsdb_options);
 	if (parse_results[AlterTableFlagOrderBy].is_default &&
 		parse_results[AlterTableFlagSegmentBy].is_default &&
-		parse_results[AlterTableFlagIndex].is_default)
+		parse_results[AlterTableFlagIndex].is_default &&
+		parse_results[AlterTableFlagColumnCodec].is_default)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only columnstore options segmentby and orderby can be reset")));
+				 errmsg("only columnstore options segmentby, orderby and column_codec can be "
+						"reset")));
 	}
 
 	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
@@ -5706,6 +5709,12 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	{
 		settings->fd.index = NULL;
 		ts_add_orderby_sparse_index(settings);
+	}
+
+	if (!parse_results[AlterTableFlagColumnCodec].is_default)
+	{
+		settings->fd.codec_column = NULL;
+		settings->fd.codec_opclass = NULL;
 	}
 
 	ts_compression_settings_update(settings);

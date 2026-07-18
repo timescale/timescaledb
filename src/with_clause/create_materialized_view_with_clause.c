@@ -81,6 +81,7 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 		{
 			case AlterTableFlagChunkTimeInterval:
 			case AlterTableFlagIndex:
+			case AlterTableFlagColumnCodec:
 			case AlterTableFlagGranularRefreshColumn:
 			case AlterTableFlagGranularRefreshStartOffset:
 			case AlterTableFlagGranularRefreshEndOffset:

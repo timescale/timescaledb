@@ -99,12 +99,19 @@ compression_get_algorithm_name(CompressionAlgorithm alg)
 }
 
 static Compressor *
-compressor_for_type(Oid type)
+compressor_for_column(const CompressionSettings *settings, const char *attname, Oid type)
 {
-	CompressionAlgorithm algorithm = compression_get_default_algorithm(type);
+	CompressionAlgorithm algorithm = compression_get_column_algorithm(settings, attname, type);
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
+	}
+
+	if (algorithm == COMPRESSION_ALGORITHM_EXTERNAL)
+	{
+		return external_compressor_for_opclass(type,
+											   ts_compression_settings_codec_opclass(settings,
+																					 attname));
 	}
 
 	return definitions[algorithm].compressor_for_type(type);
@@ -991,7 +998,8 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 					   "orderby columns must have sparse index metadata");
 
 				*column = (PerColumn){
-					.compressor = compressor_for_type(attr->atttypid),
+					.compressor =
+						compressor_for_column(settings, NameStr(attr->attname), attr->atttypid),
 					.segmentby_column_index = -1,
 				};
 			}
@@ -3354,11 +3362,6 @@ compression_get_default_algorithm(Oid typeoid)
 
 		default:
 		{
-			/* Prefer the type's own registered compress/decompress function pair */
-			if (external_codec_lookup(typeoid, NULL, NULL))
-			{
-				return COMPRESSION_ALGORITHM_EXTERNAL;
-			}
 			/* use dictionary if possible, otherwise use array */
 			TypeCacheEntry *tentry =
 				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
@@ -3369,6 +3372,17 @@ compression_get_default_algorithm(Oid typeoid)
 			return COMPRESSION_ALGORITHM_DICTIONARY;
 		}
 	}
+}
+
+CompressionAlgorithm
+compression_get_column_algorithm(const CompressionSettings *settings, const char *attname,
+								 Oid typeoid)
+{
+	if (ts_compression_settings_codec_opclass(settings, attname) != NULL)
+	{
+		return COMPRESSION_ALGORITHM_EXTERNAL;
+	}
+	return compression_get_default_algorithm(typeoid);
 }
 
 const CompressionAlgorithmDefinition *

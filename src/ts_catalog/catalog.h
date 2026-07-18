@@ -1137,6 +1137,8 @@ typedef enum Anum_compression_settings
 	Anum_compression_settings_orderby_desc,
 	Anum_compression_settings_orderby_nullsfirst,
 	Anum_compression_settings_index,
+	Anum_compression_settings_codec_column,
+	Anum_compression_settings_codec_opclass,
 	_Anum_compression_settings_max,
 } Anum_compression_settings;
 
@@ -1151,6 +1153,13 @@ typedef struct FormData_compression_settings
 	ArrayType *orderby_desc;
 	ArrayType *orderby_nullsfirst;
 	Jsonb *index;
+	/*
+	 * Parallel arrays configuring the EXTERNAL compression algorithm.
+	 * codec_column[i] is compressed with the ts_compression_codec
+	 * operator class codec_opclass[i].
+	 */
+	ArrayType *codec_column;
+	ArrayType *codec_opclass;
 } FormData_compression_settings;
 
 typedef FormData_compression_settings *Form_compression_settings;

@@ -385,6 +385,12 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 extern Name compression_get_algorithm_name(CompressionAlgorithm alg);
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
 extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
+/*
+ * The algorithm for a specific column: EXTERNAL when the column has a
+ * timescaledb.compress_column_codec entry, the type default otherwise.
+ */
+extern CompressionAlgorithm compression_get_column_algorithm(const CompressionSettings *settings,
+															 const char *attname, Oid typeoid);
 
 extern CompressionStats compress_chunk(Oid in_table, Oid out_table, int insert_options);
 extern void decompress_chunk(Oid in_table, Oid out_table);

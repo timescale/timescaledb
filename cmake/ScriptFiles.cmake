@@ -17,11 +17,14 @@ set(PRE_INSTALL_SOURCE_FILES
     pre_install/types.post.sql # Must be before tables.sql
     pre_install/tables.sql
     pre_install/cache.sql
+    pre_install/compression_codec.functions.sql
+    pre_install/compression_codec.sql
     pre_install/insert_data.sql)
 
 # Source files that define functions and need to be rerun in update
 set(PRE_INSTALL_FUNCTION_FILES
     pre_install/types.functions.sql
+    pre_install/compression_codec.functions.sql
     )
 
 # The rest of the source files defining mostly functions

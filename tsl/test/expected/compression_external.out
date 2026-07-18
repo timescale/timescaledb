@@ -1,17 +1,46 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- Test the EXTERNAL compression algorithm. A codec is registered as an
+-- operator class for the ts_compression_codec access method with support
+-- function 1 compressing <type>[] to bytea and support function 2
+-- decompressing bytea to <type>[]. A column is compressed with a codec only
+-- when it is configured:
 --
--- Test the EXTERNAL compression algorithm. A type provides
--- <typename>_compress(<type>[]) RETURNS bytea and
--- <typename>_decompress(bytea) RETURNS <type>[] in its own schema.
+--     timescaledb.compress_column_codec = 'col:codec_ops, other_col:schema.ops'
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- the registry access method ships with the extension
+SELECT amname, amtype FROM pg_am WHERE amname = 'ts_compression_codec';
+        amname        | amtype 
+----------------------+--------
+ ts_compression_codec | i
+
+-- test helper: the distinct batch algorithms across a hypertable's
+-- compressed chunks
+CREATE FUNCTION batch_algorithms(hypertable regclass)
+RETURNS TABLE(algorithm text, has_nulls bool) AS
+$$
+DECLARE
+	compressed_chunk regclass;
+BEGIN
+	FOR compressed_chunk IN
+		SELECT cs.compress_relid FROM show_chunks(hypertable) c
+		INNER JOIN _timescaledb_catalog.chunk cat ON (c = cat.relid)
+		INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = cat.relid)
+	LOOP
+		RETURN QUERY EXECUTE format(
+			'SELECT DISTINCT (i).algorithm::text, (i).has_nulls
+			 FROM (SELECT _timescaledb_functions.compressed_data_info(v) AS i FROM %s) b',
+			compressed_chunk);
+	END LOOP;
+END;
+$$ LANGUAGE plpgsql;
 -- A toy int wrapper type whose "compression" just mirrors the bits of each value.
+-- NOTICE position detail differs across PostgreSQL versions.
+SET client_min_messages TO WARNING;
 CREATE TYPE mirrorint;
 CREATE FUNCTION mirrorint_in(cstring) RETURNS mirrorint AS 'int4in' LANGUAGE internal IMMUTABLE STRICT;
-NOTICE:  return type mirrorint is only a shell
 CREATE FUNCTION mirrorint_out(mirrorint) RETURNS cstring AS 'int4out' LANGUAGE internal IMMUTABLE STRICT;
-NOTICE:  argument type mirrorint is only a shell at character 31
 CREATE TYPE mirrorint (
 	INPUT = mirrorint_in,
 	OUTPUT = mirrorint_out,
@@ -19,17 +48,18 @@ CREATE TYPE mirrorint (
 	PASSEDBYVALUE,
 	ALIGNMENT = int4
 );
+RESET client_min_messages;
 CREATE CAST (mirrorint AS int4) WITHOUT FUNCTION AS IMPLICIT;
 CREATE CAST (int4 AS mirrorint) WITHOUT FUNCTION AS IMPLICIT;
 CREATE FUNCTION mirror_bits(x int4) RETURNS int4
 AS $$ SELECT reverse(x::bit(32)::text)::bit(32)::int4 $$
 LANGUAGE sql IMMUTABLE STRICT;
-CREATE FUNCTION mirrorint_compress(batch mirrorint[]) RETURNS bytea
+CREATE FUNCTION mirrorint_pack(batch mirrorint[]) RETURNS bytea
 AS $$
 	SELECT coalesce(string_agg(int4send(mirror_bits(v::int4)), ''::bytea ORDER BY ord), ''::bytea)
 	FROM unnest(batch) WITH ORDINALITY AS u(v, ord)
 $$ LANGUAGE sql IMMUTABLE STRICT;
-CREATE FUNCTION mirrorint_decompress(payload bytea) RETURNS mirrorint[]
+CREATE FUNCTION mirrorint_unpack(payload bytea) RETURNS mirrorint[]
 AS $$
 DECLARE
 	result mirrorint[] := '{}';
@@ -42,11 +72,30 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 -- the codec round-trips on its own, preserving order and extreme values
-SELECT mirrorint_decompress(mirrorint_compress('{1, -1, 0, 2147483647, -2147483648}'::mirrorint[]));
-      mirrorint_decompress       
+SELECT mirrorint_unpack(mirrorint_pack('{1, -1, 0, 2147483647, -2147483648}'::mirrorint[]));
+        mirrorint_unpack         
 ---------------------------------
  {1,-1,0,2147483647,-2147483648}
 
+-- register the codec; the function names carry no meaning, only the
+-- operator class does
+CREATE OPERATOR CLASS mirrorint_codec_ops
+FOR TYPE mirrorint USING ts_compression_codec AS
+	FUNCTION 1 mirrorint_pack(mirrorint[]),
+	FUNCTION 2 mirrorint_unpack(bytea);
+-- the registration satisfies the codec contract
+SELECT amvalidate(opc.oid) FROM pg_opclass opc WHERE opc.opcname = 'mirrorint_codec_ops';
+ amvalidate 
+------------
+ t
+
+-- the access method rejects being used as an actual index
+CREATE TABLE toy_indexed (v mirrorint);
+\set ON_ERROR_STOP 0
+CREATE INDEX ON toy_indexed USING ts_compression_codec (v mirrorint_codec_ops);
+ERROR:  "ts_compression_codec" is not a real index access method
+\set ON_ERROR_STOP 1
+DROP TABLE toy_indexed;
 -- a hypertable using the type; NULLs and > 1000 rows to span batches
 CREATE TABLE toy (ts int NOT NULL, v mirrorint);
 SELECT create_hypertable('toy', 'ts', chunk_time_interval => 10000);
@@ -59,24 +108,83 @@ INSERT INTO toy
 	FROM generate_series(1, 2500) g;
 INSERT INTO toy VALUES (2501, 2147483647), (2502, -2147483648), (2503, 0);
 CREATE TABLE toy_copy AS SELECT * FROM toy;
+-- registration alone does not change compression: without the per-column
+-- setting the column takes the built-in algorithm
 ALTER TABLE toy SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 SELECT compress_chunk(show_chunks('toy'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
 
--- the column was compressed with the EXTERNAL algorithm
-SELECT format('%s', cs.compress_relid) AS compressed_chunk
-FROM show_chunks('toy') c
-INNER JOIN _timescaledb_catalog.chunk cat ON (c = cat.relid)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = cat.relid) \gset
-SELECT DISTINCT (_timescaledb_functions.compressed_data_info(v)).algorithm,
-	(_timescaledb_functions.compressed_data_info(v)).has_nulls
-FROM :compressed_chunk;
+SELECT DISTINCT algorithm FROM batch_algorithms('toy');
+ algorithm 
+-----------
+ ARRAY
+
+SELECT decompress_chunk(show_chunks('toy'));
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+-- configuring the column routes it to the codec
+ALTER TABLE toy SET (timescaledb.compress_column_codec = 'v:mirrorint_codec_ops');
+NOTICE:  updated compression settings will only apply to future compressions
+SELECT compress_chunk(show_chunks('toy'));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+SELECT DISTINCT algorithm, has_nulls FROM batch_algorithms('toy');
  algorithm | has_nulls 
 -----------+-----------
  EXTERNAL  | t
 
+-- the setting records the resolved, schema-qualified operator class
+SELECT codec_column, codec_opclass
+FROM _timescaledb_catalog.compression_settings
+WHERE relid = 'toy'::regclass;
+ codec_column |        codec_opclass         
+--------------+------------------------------
+ {v}          | {public.mirrorint_codec_ops}
+
+-- the option can also be given at CREATE TABLE time
+CREATE TABLE toy_created (ts int NOT NULL, v mirrorint) WITH (
+	tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.chunk_interval = '10000',
+	tsdb.column_codec = 'v:mirrorint_codec_ops');
+INSERT INTO toy_created SELECT g, g::int4::mirrorint FROM generate_series(1, 50) g;
+SELECT count(compress_chunk(ch)) AS compressed FROM show_chunks('toy_created') ch;
+ compressed 
+------------
+          1
+
+SELECT DISTINCT algorithm FROM batch_algorithms('toy_created');
+ algorithm 
+-----------
+ EXTERNAL
+
+SELECT codec_column, codec_opclass
+FROM _timescaledb_catalog.compression_settings
+WHERE relid = 'toy_created'::regclass;
+ codec_column |        codec_opclass         
+--------------+------------------------------
+ {v}          | {public.mirrorint_codec_ops}
+
+DROP TABLE toy_created;
+-- it's also validated at create time
+\set ON_ERROR_STOP 0
+CREATE TABLE toy_errors (ts int NOT NULL, v mirrorint, s text) WITH (
+	tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.chunk_interval = '10000',
+	tsdb.column_codec = 's:mirrorint_codec_ops');
+ERROR:  compression codec operator class public.mirrorint_codec_ops is not for type "text"
+CREATE TABLE toy_errors (ts int NOT NULL, v mirrorint) WITH (
+	tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.chunk_interval = '10000',
+	tsdb.column_codec = 'this_does_not_exist:mirrorint_codec_ops');
+ERROR:  column "this_does_not_exist" does not exist
+CREATE TABLE toy_errors (ts int NOT NULL, v mirrorint) WITH (
+	tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.chunk_interval = '10000',
+	tsdb.column_codec = 'v:this_does_not_exist');
+ERROR:  operator class "this_does_not_exist" does not exist for access method "ts_compression_codec"
+\set ON_ERROR_STOP 1
 -- data round-trips losslessly through compression (both directions)
 SELECT count(*) AS missing FROM (
 	SELECT ts, v::int4 FROM toy_copy EXCEPT SELECT ts, v::int4 FROM toy) d;
@@ -136,40 +244,191 @@ SELECT count(*) AS mismatches FROM (
 ------------
           0
 
--- reads of compressed data fail loudly if the type's codec goes missing
+-- The setting is validated when it is set.
+\set ON_ERROR_STOP 0
+-- unparsable entry
+ALTER TABLE toy SET (timescaledb.compress_column_codec = 'v');
+ERROR:  unable to parse codec option "v"
+-- unknown column
+ALTER TABLE toy SET (timescaledb.compress_column_codec = 'nosuch:mirrorint_codec_ops');
+ERROR:  column "nosuch" does not exist
+-- duplicate column
+ALTER TABLE toy SET (timescaledb.compress_column_codec = 'v:mirrorint_codec_ops, v:mirrorint_codec_ops');
+ERROR:  duplicate codec entry for column "v"
+-- unknown operator class
+ALTER TABLE toy SET (timescaledb.compress_column_codec = 'v:no_such_ops');
+ERROR:  operator class "no_such_ops" does not exist for access method "ts_compression_codec"
+-- operator class of another access method
+ALTER TABLE toy SET (timescaledb.compress_column_codec = 'v:int4_ops');
+ERROR:  operator class "int4_ops" does not exist for access method "ts_compression_codec"
+-- codec on a segmentby column
+ALTER TABLE toy SET (timescaledb.compress_segmentby = 'v');
+ERROR:  cannot use column "v" for both segmenting and a compression codec
+\set ON_ERROR_STOP 1
+-- the registration pins the codec functions: they cannot be dropped from
+-- under compressed data
 SELECT compress_chunk(show_chunks('toy'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
 
-DROP FUNCTION mirrorint_decompress(bytea);
+\set ON_ERROR_STOP 0
+DROP FUNCTION mirrorint_unpack(bytea);
+ERROR:  cannot drop function mirrorint_unpack(bytea) because other objects depend on it
+\set ON_ERROR_STOP 1
+-- unregistering the codec makes reads of compressed data fail loudly
+DROP OPERATOR CLASS mirrorint_codec_ops USING ts_compression_codec;
 \set ON_ERROR_STOP 0
 SELECT sum(v::int4) FROM toy;
-ERROR:  no external decompression functions for type "mirrorint"
+ERROR:  compression codec operator class public.mirrorint_codec_ops for type "mirrorint" does not exist
 \set ON_ERROR_STOP 1
-CREATE FUNCTION mirrorint_decompress(payload bytea) RETURNS mirrorint[]
+-- re-registering restores access to the compressed data
+CREATE OPERATOR CLASS mirrorint_codec_ops
+FOR TYPE mirrorint USING ts_compression_codec AS
+	FUNCTION 1 mirrorint_pack(mirrorint[]),
+	FUNCTION 2 mirrorint_unpack(bytea);
+SELECT sum(v::int4) FROM toy;
+ sum 
+-----
+  41
+
+-- Codec migration: batches record the operator class that wrote them.
+-- Pointing the setting at a new codec takes over new writes while the old
+-- registered codec keeps the old batches readable. No rewrite is required
+-- to roll forward.
+CREATE FUNCTION mirrorint_pack2(batch mirrorint[]) RETURNS bytea
+AS $$
+	SELECT coalesce(string_agg(int4send(v::int4), ''::bytea ORDER BY ord), ''::bytea)
+	FROM unnest(batch) WITH ORDINALITY AS u(v, ord)
+$$ LANGUAGE sql IMMUTABLE STRICT;
+CREATE FUNCTION mirrorint_unpack2(payload bytea) RETURNS mirrorint[]
 AS $$
 DECLARE
 	result mirrorint[] := '{}';
 BEGIN
 	FOR i IN 0 .. octet_length(payload) / 4 - 1 LOOP
 		result := result ||
-			mirror_bits(('x' || encode(substring(payload FROM i * 4 + 1 FOR 4), 'hex'))::bit(32)::int4)::mirrorint;
+			(('x' || encode(substring(payload FROM i * 4 + 1 FOR 4), 'hex'))::bit(32)::int4)::mirrorint;
 	END LOOP;
 	RETURN result;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OPERATOR CLASS mirrorint_codec2_ops
+FOR TYPE mirrorint USING ts_compression_codec AS
+	FUNCTION 1 mirrorint_pack2(mirrorint[]),
+	FUNCTION 2 mirrorint_unpack2(bytea);
+ALTER TABLE toy SET (timescaledb.compress_column_codec = 'v:mirrorint_codec2_ops');
+NOTICE:  updated compression settings will only apply to future compressions
+-- old batches resolve through the old registration by name
 SELECT sum(v::int4) FROM toy;
  sum 
 -----
   41
 
--- a wrapper type without codec functions still falls back to ARRAY
+-- a new chunk compresses with the new codec; the codecs coexist
+INSERT INTO toy SELECT g, g::int4::mirrorint FROM generate_series(20001, 20100) g;
+SELECT count(*) AS newly_compressed FROM (
+	SELECT compress_chunk(show_chunks('toy', newer_than => 20000))) c;
+ newly_compressed 
+------------------
+                1
+
+SELECT sum(v::int4) FROM toy;
+   sum   
+---------
+ 2005091
+
+-- batches name their operator class, so renaming it breaks their reads —
+-- and renaming back restores them
+ALTER OPERATOR CLASS mirrorint_codec_ops USING ts_compression_codec RENAME TO mirrorint_codec_ops_hidden;
+\set ON_ERROR_STOP 0
+SELECT sum(v::int4) FROM toy;
+ERROR:  compression codec operator class public.mirrorint_codec_ops for type "mirrorint" does not exist
+\set ON_ERROR_STOP 1
+ALTER OPERATOR CLASS mirrorint_codec_ops_hidden USING ts_compression_codec RENAME TO mirrorint_codec_ops;
+SELECT sum(v::int4) FROM toy;
+   sum   
+---------
+ 2005091
+
+-- migration completes: rewrite the old chunk with the current codec, then
+-- the old registration can go away entirely
+SELECT decompress_chunk(show_chunks('toy', older_than => 10000));
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+SELECT compress_chunk(show_chunks('toy', older_than => 10000));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+DROP OPERATOR CLASS mirrorint_codec_ops USING ts_compression_codec;
+DROP FUNCTION mirrorint_pack(mirrorint[]);
+DROP FUNCTION mirrorint_unpack(bytea);
+SELECT sum(v::int4) FROM toy;
+   sum   
+---------
+ 2005091
+
+-- Decommission rehearsal: clearing the setting sends new compression back to
+-- the built-in algorithms while the registration keeps existing batches
+-- readable. This is the migration path off external compression entirely
+-- (and to a downgradable state).
+ALTER TABLE toy SET (timescaledb.compress_column_codec = '');
+NOTICE:  updated compression settings will only apply to future compressions
+SELECT codec_column, codec_opclass
+FROM _timescaledb_catalog.compression_settings
+WHERE relid = 'toy'::regclass;
+ codec_column | codec_opclass 
+--------------+---------------
+              | 
+
+-- the EXTERNAL batches written earlier are still readable
+SELECT sum(v::int4) FROM toy;
+   sum   
+---------
+ 2005091
+
+-- rewriting the chunks moves them to the built-in fallback algorithm
+SELECT decompress_chunk(show_chunks('toy'));
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+
+SELECT compress_chunk(show_chunks('toy'));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+
+SELECT DISTINCT algorithm FROM batch_algorithms('toy');
+ algorithm 
+-----------
+ ARRAY
+
+SELECT sum(v::int4) FROM toy;
+   sum   
+---------
+ 2005091
+
+-- with no EXTERNAL batches left, the codec can be dropped entirely
+DROP OPERATOR CLASS mirrorint_codec2_ops USING ts_compression_codec;
+DROP FUNCTION mirrorint_pack2(mirrorint[]);
+DROP FUNCTION mirrorint_unpack2(bytea);
+SELECT sum(v::int4) FROM toy;
+   sum   
+---------
+ 2005091
+
+-- a decompress-only registration is a legal read-only state. However,
+-- configuring a column with it is disallowed because column configuration
+-- is for writes.
+SET client_min_messages TO WARNING;
 CREATE TYPE plainint;
 CREATE FUNCTION plainint_in(cstring) RETURNS plainint AS 'int4in' LANGUAGE internal IMMUTABLE STRICT;
-NOTICE:  return type plainint is only a shell
 CREATE FUNCTION plainint_out(plainint) RETURNS cstring AS 'int4out' LANGUAGE internal IMMUTABLE STRICT;
-NOTICE:  argument type plainint is only a shell at character 30
 CREATE TYPE plainint (
 	INPUT = plainint_in,
 	OUTPUT = plainint_out,
@@ -177,26 +436,83 @@ CREATE TYPE plainint (
 	PASSEDBYVALUE,
 	ALIGNMENT = int4
 );
+RESET client_min_messages;
+CREATE FUNCTION plainint_compress(batch plainint[]) RETURNS bytea
+AS $$ SELECT ''::bytea $$ LANGUAGE sql IMMUTABLE STRICT;
+CREATE FUNCTION plainint_decompress(payload bytea) RETURNS plainint[]
+AS $$ SELECT '{}'::plainint[] $$ LANGUAGE sql IMMUTABLE STRICT;
+CREATE OPERATOR CLASS plainint_decompress_only_ops
+FOR TYPE plainint USING ts_compression_codec AS
+	FUNCTION 2 plainint_decompress(bytea);
+SELECT amvalidate(opc.oid) FROM pg_opclass opc WHERE opc.opcname = 'plainint_decompress_only_ops';
+ amvalidate 
+------------
+ t
+
 CREATE TABLE toy_plain (ts int NOT NULL, v plainint);
 SELECT create_hypertable('toy_plain', 'ts', chunk_time_interval => 10000);
    create_hypertable    
 ------------------------
- (2,public,toy_plain,t)
+ (6,public,toy_plain,t)
 
 INSERT INTO toy_plain SELECT g, '7'::plainint FROM generate_series(1, 100) g;
 ALTER TABLE toy_plain SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+\set ON_ERROR_STOP 0
+ALTER TABLE toy_plain SET (timescaledb.compress_column_codec = 'v:plainint_decompress_only_ops');
+ERROR:  compression codec operator class public.plainint_decompress_only_ops is decompress-only
+-- an operator class for an incompatible type is rejected: plainint has no
+-- cast to or from int4
+ALTER TABLE toy_plain SET (timescaledb.compress_column_codec = 'ts:plainint_decompress_only_ops');
+ERROR:  compression codec operator class public.plainint_decompress_only_ops is not for type "integer"
+\set ON_ERROR_STOP 1
+-- without a codec entry the column falls back to ARRAY, even with a codec
+-- registered for its type and plausibly named functions lying around
 SELECT compress_chunk(show_chunks('toy_plain'));
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_2_2_chunk
+ _timescaledb_internal._hyper_6_4_chunk
 
-SELECT format('%s', cs.compress_relid) AS plain_compressed_chunk
-FROM show_chunks('toy_plain') c
-INNER JOIN _timescaledb_catalog.chunk cat ON (c = cat.relid)
-INNER JOIN _timescaledb_catalog.compression_settings cs ON (cs.relid = cat.relid) \gset
-SELECT DISTINCT (_timescaledb_functions.compressed_data_info(v)).algorithm
-FROM :plain_compressed_chunk;
+SELECT DISTINCT algorithm FROM batch_algorithms('toy_plain');
  algorithm 
 -----------
  ARRAY
 
+-- amvalidate reports contract violations: wrong signature, bad support
+-- number, missing decompress function
+CREATE FUNCTION plainint_bogus(x int4) RETURNS int4
+AS $$ SELECT x $$ LANGUAGE sql IMMUTABLE STRICT;
+CREATE OPERATOR CLASS plainint_bad_ops
+FOR TYPE plainint USING ts_compression_codec AS
+	FUNCTION 1 plainint_bogus(int4);
+SELECT amvalidate(opc.oid) FROM pg_opclass opc WHERE opc.opcname = 'plainint_bad_ops';
+INFO:  compression codec operator class "plainint_bad_ops" contains function plainint_bogus(integer) with wrong signature for support number 1
+INFO:  compression codec operator class "plainint_bad_ops" is missing support function 2
+ amvalidate 
+------------
+ f
+
+DROP OPERATOR CLASS plainint_bad_ops USING ts_compression_codec;
+-- a compress-only registration cannot be opted in to either: it would write
+-- batches that nothing can read back
+CREATE OPERATOR CLASS plainint_compress_only_ops
+FOR TYPE plainint USING ts_compression_codec AS
+	FUNCTION 1 plainint_compress(plainint[]);
+SELECT amvalidate(opc.oid) FROM pg_opclass opc WHERE opc.opcname = 'plainint_compress_only_ops';
+INFO:  compression codec operator class "plainint_compress_only_ops" is missing support function 2
+ amvalidate 
+------------
+ f
+
+CREATE TABLE toy_compress_only (ts int NOT NULL, v plainint);
+SELECT create_hypertable('toy_compress_only', 'ts', chunk_time_interval => 10000);
+       create_hypertable        
+--------------------------------
+ (7,public,toy_compress_only,t)
+
+INSERT INTO toy_compress_only VALUES (1, '7');
+ALTER TABLE toy_compress_only SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+\set ON_ERROR_STOP 0
+ALTER TABLE toy_compress_only SET (timescaledb.compress_column_codec = 'v:plainint_compress_only_ops');
+ERROR:  compression codec operator class public.plainint_compress_only_ops is malformed
+\set ON_ERROR_STOP 1
+DROP OPERATOR CLASS plainint_compress_only_ops USING ts_compression_codec;
