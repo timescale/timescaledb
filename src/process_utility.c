@@ -3962,11 +3962,17 @@ process_cluster_start(ProcessUtilityArgs *args)
 	Hypertable *ht;
 	DDLResult result = DDL_CONTINUE;
 	RangeVar *cluster_rv = stmt->relation ? stmt->relation->relation : NULL;
+	/*
+	 * CLUSTER and REPACK ... USING INDEX reorder each chunk by an index; plain
+	 * REPACK rewrites each chunk without an index, like VACUUM FULL.
+	 */
+	bool index_based = (stmt->command == REPACK_COMMAND_CLUSTER) || stmt->usingindex;
+	const char *cmdname = (stmt->command == REPACK_COMMAND_CLUSTER) ? "CLUSTER" : "REPACK";
 
 	Assert(IsA(stmt, RepackStmt));
 
-	/* We only intercept CLUSTER; let REPACK and VACUUM FULL fall through */
-	if (stmt->command != REPACK_COMMAND_CLUSTER)
+	/* VACUUM FULL arrives as a VacuumStmt, so it never reaches this handler */
+	if (stmt->command == REPACK_COMMAND_VACUUMFULL)
 	{
 		return DDL_CONTINUE;
 	}
@@ -3976,6 +3982,8 @@ process_cluster_start(ProcessUtilityArgs *args)
 	Hypertable *ht;
 	DDLResult result = DDL_CONTINUE;
 	RangeVar *cluster_rv = stmt->relation;
+	bool index_based = true;
+	const char *cmdname = "CLUSTER";
 
 	Assert(IsA(stmt, ClusterStmt));
 #endif
@@ -3992,68 +4000,84 @@ process_cluster_start(ProcessUtilityArgs *args)
 	if (NULL != ht)
 	{
 		bool is_top_level = (args->context == PROCESS_UTILITY_TOPLEVEL);
-		Oid index_relid;
-		Relation index_rel;
+		Oid index_relid = InvalidOid;
 		List *chunk_indexes;
 		ListCell *lc;
 		MemoryContext old, mcxt;
-		LockRelId cluster_index_lockid;
+		LockRelId cluster_index_lockid = { 0 };
+		bool have_index_lock = false;
 		ChunkIndexMapping **mappings = NULL;
 		int i;
 
 		ts_hypertable_permissions_check_by_id(ht->fd.id);
 
 		/*
-		 * If CLUSTER is run inside a user transaction block; we bail out or
-		 * otherwise we'd be holding locks way too long.
+		 * If run inside a user transaction block we bail out or otherwise we'd
+		 * be holding locks way too long.
 		 */
-		PreventInTransactionBlock(is_top_level, "CLUSTER");
+		PreventInTransactionBlock(is_top_level, cmdname);
 
-		if (NULL == stmt->indexname)
+#if PG19_GE
+		/*
+		 * CONCURRENTLY and ANALYZE would each need per-chunk handling we don't
+		 * do yet, so reject them clearly instead of silently ignoring them.
+		 */
+		foreach (lc, stmt->params)
 		{
-			index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
-			if (!OidIsValid(index_relid))
+			DefElem *opt = (DefElem *) lfirst(lc);
+
+			if ((strcmp(opt->defname, "concurrently") == 0 ||
+				 strcmp(opt->defname, "analyze") == 0) &&
+				defGetBoolean(opt))
 			{
 				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_OBJECT),
-						 errmsg("there is no previously clustered index for table \"%s\"",
-								get_rel_name(ht->main_table_relid))));
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("REPACK option \"%s\" is not supported on hypertables",
+								opt->defname)));
 			}
 		}
-		else
+#endif
+
+		if (index_based)
 		{
-			index_relid =
-				get_relname_relid(stmt->indexname, get_rel_namespace(ht->main_table_relid));
+			Relation index_rel;
+
+			if (NULL == stmt->indexname)
+			{
+				index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
+				if (!OidIsValid(index_relid))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_UNDEFINED_OBJECT),
+							 errmsg("there is no previously clustered index for table \"%s\"",
+									get_rel_name(ht->main_table_relid))));
+				}
+			}
+			else
+			{
+				index_relid =
+					get_relname_relid(stmt->indexname, get_rel_namespace(ht->main_table_relid));
+			}
+
+			if (!OidIsValid(index_relid))
+			{
+				/* Let regular process utility handle */
+				ts_cache_release(&hcache);
+				return DDL_CONTINUE;
+			}
+
+			LockRelationOid(ht->main_table_relid, AccessShareLock);
+			index_rel = index_open(index_relid, AccessShareLock);
+			cluster_index_lockid = index_rel->rd_lockInfo.lockRelId;
+			index_close(index_rel, NoLock);
+
+			/* mark main table as clustered, so future calls to CLUSTER don't need to pass index */
+			ts_chunk_index_mark_clustered(ht->main_table_relid, index_relid);
+
+			/* keep index lock throughout CLUSTER */
+			LockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
+			have_index_lock = true;
 		}
-
-		if (!OidIsValid(index_relid))
-		{
-			/* Let regular process utility handle */
-			ts_cache_release(&hcache);
-			return DDL_CONTINUE;
-		}
-
-		/*
-		 * DROP INDEX locks the table then the index, to prevent deadlocks we
-		 * lock them in the same order. The main table lock will be released
-		 * when the current transaction commits, and never taken again. We
-		 * will use the index relation to grab a session lock on the index,
-		 * which we will hold throughout CLUSTER
-		 */
-		LockRelationOid(ht->main_table_relid, AccessShareLock);
-		index_rel = index_open(index_relid, AccessShareLock);
-		cluster_index_lockid = index_rel->rd_lockInfo.lockRelId;
-
-		index_close(index_rel, NoLock);
-
-		/*
-		 * mark the main table as clustered, even though it has no data, so
-		 * future calls to CLUSTER don't need to pass in the index
-		 */
-		ts_chunk_index_mark_clustered(ht->main_table_relid, index_relid);
-
-		/* we will keep holding this lock throughout CLUSTER */
-		LockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
 
 		/*
 		 * The list of chunks and their indexes need to be on a memory context
@@ -4062,11 +4086,26 @@ process_cluster_start(ProcessUtilityArgs *args)
 		mcxt = AllocSetContextCreate(PortalContext, "Hypertable cluster", ALLOCSET_DEFAULT_SIZES);
 
 		/*
-		 * Get a list of chunks and indexes that correspond to the
-		 * hypertable's index
+		 * Get a list of chunks to process. For an index-based rewrite we pair
+		 * each chunk with its matching index; a plain REPACK has no index.
 		 */
 		old = MemoryContextSwitchTo(mcxt);
-		chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
+		if (index_based)
+		{
+			chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
+		}
+		else
+		{
+			chunk_indexes = NIL;
+			foreach (lc, find_inheritance_children(ht->main_table_relid, NoLock))
+			{
+				ChunkIndexMapping *cim = palloc0(sizeof(ChunkIndexMapping));
+
+				cim->chunkoid = lfirst_oid(lc);
+				cim->indexoid = InvalidOid;
+				chunk_indexes = lappend(chunk_indexes, cim);
+			}
+		}
 
 		if (list_length(chunk_indexes) > 0)
 		{
@@ -4092,6 +4131,9 @@ process_cluster_start(ProcessUtilityArgs *args)
 
 		MemoryContextSwitchTo(old);
 
+		/* The options are the same for every chunk, so parse them once. */
+		ClusterParams *cluster_params = get_cluster_options(stmt->params);
+
 		hcache->release_on_commit = false;
 
 		/* Commit to get out of starting transaction */
@@ -4113,7 +4155,10 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * rechecked (due to new transaction) to already have that mark
 			 * set
 			 */
-			ts_chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
+			if (OidIsValid(cim->indexoid))
+			{
+				ts_chunk_index_mark_clustered(cim->chunkoid, cim->indexoid);
+			}
 
 			/* Do the job. */
 
@@ -4123,16 +4168,12 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 */
 #if PG19_GE
 			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
-			cluster_rel(REPACK_COMMAND_CLUSTER,
-						rel,
-						cim->indexoid,
-						get_cluster_options(stmt->params),
-						is_top_level);
+			cluster_rel(stmt->command, rel, cim->indexoid, cluster_params, is_top_level);
 #elif PG18_GE
 			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
-			cluster_rel(rel, cim->indexoid, get_cluster_options(stmt->params));
+			cluster_rel(rel, cim->indexoid, cluster_params);
 #else
-			cluster_rel(cim->chunkoid, cim->indexoid, get_cluster_options(stmt->params));
+			cluster_rel(cim->chunkoid, cim->indexoid, cluster_params);
 #endif
 			PopActiveSnapshot();
 			CommitTransactionCommand();
@@ -4145,7 +4186,10 @@ process_cluster_start(ProcessUtilityArgs *args)
 		/* Clean up working storage */
 		MemoryContextDelete(mcxt);
 
-		UnlockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
+		if (have_index_lock)
+		{
+			UnlockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
+		}
 		result = DDL_DONE;
 	}
 
