@@ -109,7 +109,7 @@ then
     exit 0
 fi
 
-if ! diff -u result_plain.txt result_synonym.txt \
+if ! diff -u result_plain.txt result_plain_synonym.txt \
     || ! diff -u result_hyper.txt result_hyper_noseq.txt \
     || ! diff -u result_hyper.txt result_hyper_noindex.txt \
     || ! diff -u result_hyper.txt result_hyper_nohashagg.txt \
