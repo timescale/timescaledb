@@ -247,6 +247,34 @@ FROM (SELECT device FROM metrics_rls LIMIT 100) x;
        5 |      0
 
 RESET timescaledb.debug_require_hypertable_scan;
+-- Column privileges: the node scans chunks directly, so per-column SELECT grants
+-- on the hypertable must still be enforced.
+CREATE TABLE metrics_colpriv (time timestamptz NOT NULL, device int, value float8)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day',
+        tsdb.columnstore = false);
+INSERT INTO metrics_colpriv
+SELECT '2020-01-01'::timestamptz + d * interval '1 day', s, s * 10
+FROM generate_series(0, 4) d, generate_series(0, 3) s;
+GRANT SELECT (time, device) ON metrics_colpriv TO :ROLE_DEFAULT_PERM_USER_2;
+-- reconnect as the grantee (resets session GUCs, so set them again)
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SET timescaledb.enable_hypertablescan TO on;
+-- granted columns: the node is used and returns rows
+SET timescaledb.debug_require_hypertable_scan TO 'require';
+SELECT count(x) >= 0 AS ok FROM (SELECT device FROM metrics_colpriv ORDER BY time LIMIT 5) x;
+ ok 
+----
+ t
+
+RESET timescaledb.debug_require_hypertable_scan;
+-- ungranted column: denied at the hypertable before the node runs
+\set ON_ERROR_STOP 0
+SELECT value FROM metrics_colpriv ORDER BY time LIMIT 1;
+ERROR:  permission denied for table metrics_colpriv
+\set ON_ERROR_STOP 1
+-- back to the owning user for the remaining queries
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET timescaledb.enable_hypertablescan TO on;
 -- Feature off: node is never chosen, even for an accepted shape.
 SET timescaledb.enable_hypertablescan TO off;
 SET timescaledb.debug_require_hypertable_scan TO 'forbid';
