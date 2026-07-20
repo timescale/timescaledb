@@ -87,8 +87,8 @@ jobs:
       timeout-minutes: 15
       run: |
         sudo apt-get update
-        sudo apt-get install ccache cmake flex bison systemd-coredump gdb \
-          jq postgresql-client ${{ env.extra_packages }}
+        sudo apt-get install ccache cmake flex bison icu-devtools systemd-coredump \
+          gdb jq postgresql-client ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
