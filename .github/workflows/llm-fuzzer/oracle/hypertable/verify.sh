@@ -33,55 +33,52 @@
 # sequence.
 set -eu
 
-PGOPTIONS='-c client_min_messages=error'
-export PGOPTIONS
+psql <<<'alter database :"DBNAME" set client_min_messages to error'
 
-psql -q <<<'alter database :"DBNAME" set client_min_messages to error'
-
-if ! psql -q -v hyper=false -f "$1" > result_plain.txt
+if ! psql -v hyper=false -f "$1" > result_plain.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if psql -q -v hyper=maybe -f "$1" > result_probe.txt
+if psql -v hyper=maybe -f "$1" > result_probe.txt
 then
     echo "Repro does not use :hyper for tsdb.hypertable, not admissible"
     exit 0
 fi
 
-if ! psql -q -v hyper=off -f "$1" > result_plain_synonym.txt
+if ! psql -v hyper=off -f "$1" > result_plain_synonym.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
 
-if ! psql -q -v hyper=true -f "$1" > result_hyper.txt
+if ! psql -v hyper=true -f "$1" > result_hyper.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -v hyper=true -c "set enable_seqscan to off;" -f "$1" > result_hyper_noseq.txt
+if ! psql -v hyper=true -c "set enable_seqscan to off;" -f "$1" > result_hyper_noseq.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -v hyper=true -c "set enable_indexscan to off;" -f "$1" > result_hyper_noindex.txt
+if ! psql -v hyper=true -c "set enable_indexscan to off;" -f "$1" > result_hyper_noindex.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -v hyper=true -c "set enable_hashagg to off;" -f "$1" > result_hyper_nohashagg.txt
+if ! psql -v hyper=true -c "set enable_hashagg to off;" -f "$1" > result_hyper_nohashagg.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -q -v hyper=true -c "
+if ! psql -v hyper=true -c "
         set max_parallel_workers_per_gather = 8;
         set parallel_setup_cost = 0;
         set parallel_tuple_cost = 0;
@@ -93,13 +90,13 @@ then
     exit 0
 fi
 
-if ! psql -q -v hyper=true -c "set work_mem = '4GB'" -f "$1" > result_hyper_mem.txt
+if ! psql -v hyper=true -c "set work_mem = '4GB'" -f "$1" > result_hyper_mem.txt
 then
     echo "Repro errors out, not admissible"
     exit 0
 fi
 
-if ! psql -qXAt -v ON_ERROR_STOP=1 -v hyper=true -c "
+if ! psql -v hyper=true -c "
         set enable_hashagg to off;
         set enable_sort to off;
         set timescaledb.enable_chunkwise_aggregation to off;

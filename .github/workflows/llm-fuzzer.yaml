@@ -316,6 +316,14 @@ jobs:
         printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
         cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
 
+        PSQLRC=oracle-psqlrc
+        export PSQLRC
+        echo "
+          \set QUIET on
+          \set ON_ERROR_STOP on
+          set client_min_messages = error;
+        " > "${PSQLRC}"
+
         .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh restricted-repro.sql &> repro_result.txt
 
         psql -c "select 1;"
