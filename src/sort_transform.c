@@ -431,7 +431,6 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
 	/* if any transforms were found return new ec */
 	if (newec != NULL)
 	{
-		/* LOOK HERE */
 		root->eq_classes = lappend(root->eq_classes, newec);
 		if (propagate_to_children)
 		{

@@ -3018,6 +3018,8 @@ validate_check_constraint(Chunk *chunk, const char *conname, const char *deparse
 		/* Restore search_path */
 		AtEOXact_GUC(false, save_nestlevel);
 
+		/* LOOK HERE */
+
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
 		{
