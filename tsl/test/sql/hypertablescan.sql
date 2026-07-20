@@ -53,6 +53,7 @@ SELECT count(x) >= 0 AS ok FROM (SELECT metrics FROM metrics LIMIT 1) x;  -- who
 SELECT count(x) >= 0 AS ok FROM (SELECT 1 FROM metrics LIMIT 1) x;  -- no column reference
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics ORDER BY time OFFSET 2 LIMIT 3) x;  -- offset
 SELECT count(x) >= 0 AS ok FROM (SELECT time FROM metrics ORDER BY time DESC LIMIT 3) x;  -- descending
+SELECT count(*) = 20 AS ok FROM (SELECT * FROM metrics ORDER BY time LIMIT 2000000000) x;  -- large limit batches, no oversized alloc
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_compressed ORDER BY time LIMIT 1) x;  -- compressed
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_space LIMIT 1) x;  -- space-partitioned, unordered
 RESET timescaledb.debug_require_hypertable_scan;

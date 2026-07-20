@@ -549,7 +549,13 @@ hypertable_scan_begin(CustomScanState *node, EState *estate, int eflags)
 		state->primary_dimension_id = hyperspace_get_open_dimension(ht->space, 0)->fd.id;
 	}
 
-	state->batch_size = state->push_limit > 0 ? state->push_limit : HS_FETCH_BATCH_SIZE;
+	/*
+	 * Cap the batch at HS_FETCH_BATCH_SIZE: the per-chunk query already carries
+	 * the LIMIT, and the fetch loop refills across batches, so a large pushed
+	 * LIMIT must not turn into one oversized cur_tuples allocation.
+	 */
+	state->batch_size =
+		state->push_limit > 0 ? Min(state->push_limit, HS_FETCH_BATCH_SIZE) : HS_FETCH_BATCH_SIZE;
 }
 
 /*

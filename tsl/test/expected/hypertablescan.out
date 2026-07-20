@@ -82,6 +82,11 @@ SELECT count(x) >= 0 AS ok FROM (SELECT time FROM metrics ORDER BY time DESC LIM
 ----
  t
 
+SELECT count(*) = 20 AS ok FROM (SELECT * FROM metrics ORDER BY time LIMIT 2000000000) x;  -- large limit batches, no oversized alloc
+ ok 
+----
+ t
+
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_compressed ORDER BY time LIMIT 1) x;  -- compressed
  ok 
 ----
