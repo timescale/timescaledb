@@ -41,7 +41,7 @@ then
     exit 0
 fi
 
-if psql -v hyper=maybe -f "$1" > result_probe.txt
+if psql -v hyper=maybe -f "$1" &> result_probe.txt
 then
     echo "Repro does not use :hyper for tsdb.hypertable, not admissible"
     exit 0

@@ -146,7 +146,6 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 			elog(ERROR, "no operator found for type \"%s\"", format_type_be(atttypid));
 		}
 
-		/* LOOK HERE */
 		ScanKeyEntryInitialize(&scankeys[key_index++],
 							   isnull ? SK_ISNULL : 0,
 							   attno,
