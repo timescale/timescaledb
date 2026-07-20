@@ -10,7 +10,6 @@
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
 #include <utils/builtins.h>
-#include <utils/typcache.h>
 
 #include "compat/compat.h"
 #include "func_cache.h"
@@ -20,6 +19,7 @@
 #include "utils.h"
 
 static Var *find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions);
+static Var *ordered_append_join_var_from_pathkey(PlannerInfo *root, RelOptInfo *rel, PathKey *pk);
 
 static CustomPathMethods chunk_append_path_methods = {
 	.CustomName = "ChunkAppend",
@@ -500,14 +500,9 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 								  int *order_attno, bool *reverse)
 {
 	RangeTblEntry *rte = root->simple_rte_array[rel->relid];
-	SortGroupClause *sort;
-	TargetEntry *tle;
-	TypeCacheEntry *tce;
-	char *column;
-	Index ht_relid = rel->relid;
-	Index sort_relid;
+	PathKey *pk;
 	Var *ht_var;
-	Var *sort_var;
+	char *column;
 
 	/* these are checked in caller so we only Assert */
 	Assert(ts_guc_enable_optimizations && ts_guc_enable_ordered_append &&
@@ -517,161 +512,39 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	 * caller only calls us when the query requires some input ordering,
 	 * so only asserting
 	 */
-	Assert(root->query_pathkeys != NIL || root->parse->sortClause != NIL);
+	Assert(root->query_pathkeys != NIL);
 	Assert(order_attno != NULL && reverse != NULL);
 
-	if (root->query_pathkeys != NIL)
-	{
-		PathKey *pk = linitial_node(PathKey, root->query_pathkeys);
-		Var *pk_var = ts_ordered_append_var_from_pathkey(rel, root->query_pathkeys);
-
-		if (pk_var != NULL && pk_var->varattno > 0)
-		{
-			char *pk_column =
-				strVal(list_nth(rte->eref->colnames, AttrNumberGetAttrOffset(pk_var->varattno)));
-
-			if (namestrcmp(&ht->space->dimensions[0].fd.column_name, pk_column) == 0)
-			{
-				*order_attno = pk_var->varattno;
-				*reverse = (pk->pk_cmptype == COMPARE_GT);
-				return true;
-			}
-		}
-	}
+	pk = linitial_node(PathKey, root->query_pathkeys);
 
 	/*
-	 * We get here when query_pathkeys is empty because the order column is fixed
-	 * by an equality condition, or its leading pathkey is not our first dimension
-	 * (mainly an outer join, whose condition is kept out of the equivalence
-	 * classes so the order only reaches us through joininfo). The ORDER BY path
-	 * below handles both. Without an ORDER BY there is nothing left to try.
+	 * The leading pathkey is the ordering the plan needs at this point, whether
+	 * it comes from ORDER BY, a window function, GROUP BY or DISTINCT.
+	 *
+	 * First try the case where the pathkey references a column of our
+	 * hypertable directly, either a plain column or a bucketing function. This
+	 * also covers inner joins, whose equality condition merges the joined
+	 * columns into a single equivalence class so the hypertable column is part
+	 * of the leading pathkey.
 	 */
-	if (root->parse->sortClause == NIL)
+	ht_var = ts_ordered_append_var_from_pathkey(rel, root->query_pathkeys);
+
+	/*
+	 * Outer joins keep their join condition out of the equivalence classes, so
+	 * the leading pathkey only references the outer relation. Recover the
+	 * matching hypertable column through the join clauses. Doing an ordered
+	 * append is still beneficial here because it lets the MergeJoin skip
+	 * sorting our input.
+	 */
+	if (ht_var == NULL)
 	{
-		return false;
-	}
-
-	sort = linitial(root->parse->sortClause);
-	tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
-
-	if (IsA(tle->expr, Var))
-	{
-		/* direct column reference */
-		sort_var = castNode(Var, tle->expr);
-	}
-	else if (IsA(tle->expr, FuncExpr) && list_length(root->parse->sortClause) == 1)
-	{
-		/*
-		 * check for bucketing functions
-		 *
-		 * If ORDER BY clause only has 1 expression and the expression is a
-		 * bucketing function we can still do Ordered Append, the 1 expression
-		 * limit could only be safely removed if we ensure chunk boundaries
-		 * are not crossed.
-		 *
-		 * The following example demonstrates this requirement:
-		 *
-		 * Chunk 1 has (time, device_id)
-		 * 0 1
-		 * 0 2
-		 *
-		 * Chunk 2 has (time, device_id)
-		 * 10 1
-		 * 10 2
-		 *
-		 * The ORDER BY clause is time_bucket(100,time), device_id
-		 * The result when transforming to an ordered append would be the following:
-		 * (time_bucket(100, time), device_id)
-		 * 0 1
-		 * 0 2
-		 * 0 1
-		 * 0 2
-		 *
-		 * The order of the device_ids is wrong so we cannot safely remove the MergeAppend
-		 * unless we eliminate the possibility that a bucket spans multiple chunks.
-		 */
-		FuncInfo *info = ts_func_cache_get_bucketing_func(castNode(FuncExpr, tle->expr)->funcid);
-		Expr *transformed;
-
-		if (!info || !info->sort_transform)
-		{
-			return false;
-		}
-
-		transformed = info->sort_transform(castNode(FuncExpr, tle->expr));
-
-		if (!IsA(transformed, Var))
-		{
-			return false;
-		}
-
-		sort_var = castNode(Var, transformed);
-	}
-	else
-	{
-		return false;
+		ht_var = ordered_append_join_var_from_pathkey(root, rel, pk);
 	}
 
 	/* ordered append won't work for system columns / whole row orderings */
-	if (sort_var->varattno <= 0)
+	if (ht_var == NULL || ht_var->varattno <= 0)
 	{
 		return false;
-	}
-
-	sort_relid = sort_var->varno;
-	tce = lookup_type_cache(sort_var->vartype,
-							TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
-
-	/* check sort operation is either less than or greater than */
-	if (sort->sortop != tce->lt_opr && sort->sortop != tce->gt_opr)
-	{
-		return false;
-	}
-
-	/*
-	 * check the ORDER BY column actually belongs to our hypertable
-	 */
-	if (sort_relid == ht_relid)
-	{
-		/* ORDER BY column belongs to our hypertable */
-		ht_var = sort_var;
-	}
-	else
-	{
-		/*
-		 * If the ORDER BY does not match our hypertable, but we are joining
-		 * against another hypertable on the time column, then doing an ordered
-		 * append here is still beneficial, because we can skip the sort
-		 * step for the MergeJoin.
-		 */
-		Bitmapset *outer_relids = root->simple_rel_array[sort_relid]->relids;
-		Bitmapset *inner_relids = root->simple_rel_array[ht_relid]->relids;
-		List *join_conditions =
-			generate_join_implied_equalities(root,
-											 bms_union(outer_relids, inner_relids),
-											 outer_relids,
-											 rel,
-											 /* sjinfo = */ NULL);
-
-		/*
-		 * The outer join clauses don't form ECs and stay in joininfo, and we
-		 * want to check them too.
-		 * There are also non-equality join conditions in joininfo, but they're
-		 * not relevant for MergeJoin anyway and will be skipped.
-		 */
-		join_conditions = list_concat(join_conditions, rel->joininfo);
-
-		if (join_conditions == NIL)
-		{
-			return false;
-		}
-
-		ht_var = find_equality_join_var(sort_var, ht_relid, join_conditions);
-
-		if (ht_var == NULL)
-		{
-			return false;
-		}
 	}
 
 	/* Check hypertable column is the first dimension of the hypertable */
@@ -682,9 +555,72 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	}
 
 	*order_attno = ht_var->varattno;
-	*reverse = sort->sortop == tce->lt_opr ? false : true;
+	*reverse = (pk->pk_cmptype == COMPARE_GT);
 
 	return true;
+}
+
+/*
+ * For an outer join the join condition is not part of the equivalence classes,
+ * so the leading pathkey only mentions the outer relation. Walk the members of
+ * the pathkey's equivalence class and try to map each one to a column of our
+ * hypertable through the join clauses.
+ */
+static Var *
+ordered_append_join_var_from_pathkey(PlannerInfo *root, RelOptInfo *rel, PathKey *pk)
+{
+	Index ht_relid = rel->relid;
+	ListCell *lc;
+
+	foreach (lc, pk->pk_eclass->ec_members)
+	{
+		EquivalenceMember *em = lfirst(lc);
+		Var *sort_var;
+		Index sort_relid;
+		Bitmapset *outer_relids;
+		Bitmapset *inner_relids;
+		List *join_conditions;
+		Var *ht_var;
+
+		if (em->em_is_child || em->em_is_const || !IsA(em->em_expr, Var))
+		{
+			continue;
+		}
+
+		sort_var = castNode(Var, em->em_expr);
+		sort_relid = sort_var->varno;
+
+		/* members on our own hypertable are handled by the direct lookup */
+		if (sort_relid == ht_relid || sort_relid >= (Index) root->simple_rel_array_size ||
+			root->simple_rel_array[sort_relid] == NULL)
+		{
+			continue;
+		}
+
+		outer_relids = root->simple_rel_array[sort_relid]->relids;
+		inner_relids = root->simple_rel_array[ht_relid]->relids;
+		join_conditions = generate_join_implied_equalities(root,
+														   bms_union(outer_relids, inner_relids),
+														   outer_relids,
+														   rel,
+														   /* sjinfo = */ NULL);
+
+		/*
+		 * The outer join clauses don't form ECs and stay in joininfo, and we
+		 * want to check them too. There are also non-equality join conditions
+		 * in joininfo, but they're not relevant for MergeJoin anyway and will
+		 * be skipped by find_equality_join_var.
+		 */
+		join_conditions = list_concat(join_conditions, rel->joininfo);
+
+		ht_var = find_equality_join_var(sort_var, ht_relid, join_conditions);
+		if (ht_var != NULL)
+		{
+			return ht_var;
+		}
+	}
+
+	return NULL;
 }
 
 /*

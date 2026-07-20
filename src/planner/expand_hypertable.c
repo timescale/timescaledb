@@ -996,11 +996,13 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *ord
 
 	/*
 	 * Only do this optimization for queries that need some input ordering.
-	 * query_pathkeys covers the ordering a window function, GROUP BY or DISTINCT
-	 * needs. We also keep the ORDER BY check because query_pathkeys is empty when
-	 * the order column is fixed by an equality condition, which we still optimize.
+	 * query_pathkeys is the ordering the plan needs, whether it comes from
+	 * ORDER BY, a window function, GROUP BY or DISTINCT. When the leading order
+	 * column is fixed by an equality condition it is dropped from query_pathkeys
+	 * as redundant, but then the ordering is satisfied anyway so there is
+	 * nothing to optimize.
 	 */
-	if (root->query_pathkeys == NIL && root->parse->sortClause == NIL)
+	if (root->query_pathkeys == NIL)
 	{
 		return false;
 	}

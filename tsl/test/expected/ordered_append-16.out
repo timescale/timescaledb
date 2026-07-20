@@ -1706,6 +1706,7 @@ WHERE time = (
 ORDER BY time;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=20.00 loops=1)
+   Chunks excluded during runtime: 6
    InitPlan 2 (returns $1)
      ->  Result (actual rows=1.00 loops=1)
            InitPlan 1 (returns $0)
@@ -1736,27 +1737,24 @@ ORDER BY time;
                                      Index Cond: ("time" IS NOT NULL)
                                ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk _hyper_2_4_chunk_1 (never executed)
                                      Index Cond: ("time" IS NOT NULL)
-   ->  Merge Append (actual rows=0.00 loops=1)
-         ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" = $1)
-         ->  Index Only Scan using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" = $1)
-         ->  Index Only Scan using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" = $1)
-   ->  Merge Append (actual rows=0.00 loops=1)
-         ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" = $1)
-         ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" = $1)
-         ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" = $1)
-   ->  Merge Append (actual rows=20.00 loops=1)
-         ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=6.00 loops=1)
-               Index Cond: ("time" = $1)
-         ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=8.00 loops=1)
-               Index Cond: ("time" = $1)
-         ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=6.00 loops=1)
-               Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (never executed)
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=6.00 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=8.00 loops=1)
+         Index Cond: ("time" = $1)
+   ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=6.00 loops=1)
+         Index Cond: ("time" = $1)
 
 -- test ordered append with limit expression
 :PREFIX
@@ -4639,6 +4637,7 @@ WHERE time = (
 ORDER BY time;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=20.00 loops=1)
+   Chunks excluded during runtime: 6
    InitPlan 2 (returns $1)
      ->  Result (actual rows=1.00 loops=1)
            InitPlan 1 (returns $0)
@@ -4699,57 +4698,48 @@ ORDER BY time;
                                      ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk _hyper_5_19_chunk_1 (never executed)
                                            Vectorized Filter: ("time" IS NOT NULL)
                                            ->  Seq Scan on compress_hyper_6_28_chunk compress_hyper_6_28_chunk_1 (never executed)
-   ->  Merge Append (actual rows=0.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=0.00 loops=1)
-               Filter: ("time" = $1)
-               ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 24
-         ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=0.00 loops=1)
-               Filter: ("time" = $1)
-               ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 32
-         ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=0.00 loops=1)
-               Filter: ("time" = $1)
-               ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 24
-   ->  Merge Append (actual rows=0.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=0.00 loops=1)
-               Filter: ("time" = $1)
-               ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 36
-         ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (actual rows=0.00 loops=1)
-               Filter: ("time" = $1)
-               ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 48
-         ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (actual rows=0.00 loops=1)
-               Filter: ("time" = $1)
-               ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 36
-   ->  Merge Append (actual rows=20.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=6.00 loops=1)
-               Filter: ("time" = $1)
-               Rows Removed by Filter: 5994
-               ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 30
-         ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=8.00 loops=1)
-               Filter: ("time" = $1)
-               Rows Removed by Filter: 7992
-               ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=8.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 40
-         ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=6.00 loops=1)
-               Filter: ("time" = $1)
-               Rows Removed by Filter: 5994
-               ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6.00 loops=1)
-                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
-                     Rows Removed by Filter: 30
+   ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+   ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+   ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+   ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_6_31_chunk (never executed)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+   ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+   ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (never executed)
+         Filter: ("time" = $1)
+         ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+   ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=6.00 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 5994
+         ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+               Rows Removed by Filter: 30
+   ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=8.00 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 7992
+         ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=8.00 loops=1)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+               Rows Removed by Filter: 40
+   ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=6.00 loops=1)
+         Filter: ("time" = $1)
+         Rows Removed by Filter: 5994
+         ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6.00 loops=1)
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
+               Rows Removed by Filter: 30
 
 -- test ordered append with limit expression
 :PREFIX
