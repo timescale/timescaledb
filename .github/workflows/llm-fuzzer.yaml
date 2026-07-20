@@ -79,6 +79,8 @@ jobs:
             display_name: "Internal Program Errors"
           - oracle: "optimizations"
             display_name: "Optimizations ON-OFF"
+          - oracle: "hypertable"
+            display_name: "Hypertable ON-OFF"
 
     steps:
     - name: Install Linux Dependencies
