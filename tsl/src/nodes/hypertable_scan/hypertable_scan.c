@@ -262,6 +262,16 @@ hypertable_scan_is_candidate(const Query *query, const Hypertable *ht)
 	}
 
 	/*
+	 * RLS policies attach to the hypertable, not its chunks. Scanning chunks
+	 * directly would bypass them, so fall back to the expanded plan when the
+	 * hypertable has row security or policies already applied to this query.
+	 */
+	if (rte->securityQuals != NIL || ts_has_row_security(ht->main_table_relid))
+	{
+		return false;
+	}
+
+	/*
 	 * Reject system-column references (ctid, tableoid, ...) for now
 	 */
 	Bitmapset *attrs = NULL;

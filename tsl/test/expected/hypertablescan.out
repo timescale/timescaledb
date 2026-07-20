@@ -226,6 +226,27 @@ SELECT time FROM metrics ORDER BY time LIMIT 1;  -- modifying CTE
  Wed Jan 01 00:00:00 2020 PST
 
 RESET timescaledb.debug_require_hypertable_scan;
+-- RLS attaches to the hypertable, not its chunks, so the node must stay off to
+-- avoid bypassing the policy with a direct chunk scan. RLS is not allowed on a
+-- columnstore hypertable, so build a plain one.
+CREATE TABLE metrics_rls (time timestamptz NOT NULL, device int, value float8)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day',
+        tsdb.columnstore = false);
+INSERT INTO metrics_rls
+SELECT '2020-01-01'::timestamptz + d * interval '1 day', s, s * 10
+FROM generate_series(0, 4) d, generate_series(0, 3) s;
+ALTER TABLE metrics_rls ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metrics_rls FORCE ROW LEVEL SECURITY; -- apply the policy to the owner too
+CREATE POLICY device_one ON metrics_rls FOR SELECT USING (device = 1);
+SET timescaledb.debug_require_hypertable_scan TO 'forbid';
+-- the node must stay off; the policy must filter to device = 1 (no leaked rows)
+SELECT count(*) AS visible, count(*) FILTER (WHERE device <> 1) AS leaked
+FROM (SELECT device FROM metrics_rls LIMIT 100) x;
+ visible | leaked 
+---------+--------
+       5 |      0
+
+RESET timescaledb.debug_require_hypertable_scan;
 -- Feature off: node is never chosen, even for an accepted shape.
 SET timescaledb.enable_hypertablescan TO off;
 SET timescaledb.debug_require_hypertable_scan TO 'forbid';
