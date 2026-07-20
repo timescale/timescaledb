@@ -35,6 +35,7 @@
 #include "algorithms/bool_compress.h"
 #include "algorithms/deltadelta.h"
 #include "algorithms/dictionary.h"
+#include "algorithms/external.h"
 #include "algorithms/gorilla.h"
 #include "algorithms/null.h"
 #include "algorithms/uuid_compress.h"
@@ -76,6 +77,7 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_NULL] = NULL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_UUID] = UUID_COMPRESS_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_EXTERNAL] = EXTERNAL_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -87,6 +89,7 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
 	[COMPRESSION_ALGORITHM_NULL] = { "NULL" },
 	[COMPRESSION_ALGORITHM_UUID] = { "UUID" },
+	[COMPRESSION_ALGORITHM_EXTERNAL] = { "EXTERNAL" },
 };
 
 Name
@@ -96,12 +99,19 @@ compression_get_algorithm_name(CompressionAlgorithm alg)
 }
 
 static Compressor *
-compressor_for_type(Oid type)
+compressor_for_column(const CompressionSettings *settings, const char *attname, Oid type)
 {
-	CompressionAlgorithm algorithm = compression_get_default_algorithm(type);
+	CompressionAlgorithm algorithm = compression_get_column_algorithm(settings, attname, type);
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
+	}
+
+	if (algorithm == COMPRESSION_ALGORITHM_EXTERNAL)
+	{
+		return external_compressor_for_opclass(type,
+											   ts_compression_settings_codec_opclass(settings,
+																					 attname));
 	}
 
 	return definitions[algorithm].compressor_for_type(type);
@@ -988,7 +998,8 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 					   "orderby columns must have sparse index metadata");
 
 				*column = (PerColumn){
-					.compressor = compressor_for_type(attr->atttypid),
+					.compressor =
+						compressor_for_column(settings, NameStr(attr->attname), attr->atttypid),
 					.segmentby_column_index = -1,
 				};
 			}
@@ -3224,6 +3235,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_UUID:
 			has_nulls = uuid_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_EXTERNAL:
+			has_nulls = external_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -3270,6 +3284,9 @@ compressed_data_has_nulls(Datum compressed_data)
 			break;
 		case COMPRESSION_ALGORITHM_UUID:
 			has_nulls = uuid_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_EXTERNAL:
+			has_nulls = external_compressed_has_nulls(header);
 			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
@@ -3355,6 +3372,17 @@ compression_get_default_algorithm(Oid typeoid)
 			return COMPRESSION_ALGORITHM_DICTIONARY;
 		}
 	}
+}
+
+CompressionAlgorithm
+compression_get_column_algorithm(const CompressionSettings *settings, const char *attname,
+								 Oid typeoid)
+{
+	if (ts_compression_settings_codec_opclass(settings, attname) != NULL)
+	{
+		return COMPRESSION_ALGORITHM_EXTERNAL;
+	}
+	return compression_get_default_algorithm(typeoid);
 }
 
 const CompressionAlgorithmDefinition *

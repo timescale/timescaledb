@@ -90,6 +90,75 @@ The algorithm checks the cardinality of the values in the compressed batch and b
 the cardinality it decides wether it is worth to recompress the batch using the dictionary
 compression algorithm. In that case it recompresses and stores the UUIDs as a dictionary.
 
+### External
+
+The external method delegates compression to a codec supplied for the column. It can be
+any function pair that turns an array of a type that would otherwise be array/dictionary
+compressed into a bytea and vice-versa.
+
+A codec is registered as an operator class for the `ts_compression_codec` access method,
+with two support functions:
+
+```sql
+CREATE OPERATOR CLASS mytype_codec_ops FOR TYPE mytype
+    USING ts_compression_codec AS
+    FUNCTION 1 mytype_pack(mytype[]),   -- RETURNS bytea
+    FUNCTION 2 mytype_unpack(bytea);    -- RETURNS mytype[]
+```
+
+After registering an external codec opclass, a column is compressed with the codec
+by the per-column setting.
+
+```sql
+ALTER TABLE metrics SET (
+    timescaledb.compress_column_codec = 'mycol:mytype_codec_ops, other_column:schema.other_ops'
+);
+```
+
+Columns without this configuration keep the built-in algorithm selection. The named
+operator class must be for the column's type or a binary-coercible type, and must
+include both support functions. Clearing an entry (or resetting the option to `''`)
+sets new compression back to the built-in algorithms. Sort of how the
+`chunk_time_interval` applies to new chunks.
+
+`amvalidate()` on the operator class checks the codec contract.
+
+NULLs are stripped into a bitmap before the `compress()` call and re-inserted after
+`decompress()`, so these functions only see non-null values. The returned bytea is
+stored without TOAST compression. This lets extension types with internal structure
+compress across rows in their own preferred ways.
+
+Each batch records the schema-qualified name of the operator class that compressed
+it. Decompression resolves the codec by that recorded name, not through the setting.
+Several codecs can thereby coexist for one type. The setting decides new writes,
+while other old opclass registrations keep the batches they wrote readable.
+
+A registration with only `FUNCTION 2` is legal. It can't be set as a column
+compression codec, but it allows any leftover compressed data to still be read.
+Compress-only (`FUNCTION 1`-only) registrations are invalid.
+
+Renaming or dropping an operator class while existing compressed batches still use
+it makes those batches unreadable until the operator class is restored.
+
+To switch a column to a new (or old) codec, point its setting entry at the new
+operator class (or clear the setting). Old batches keep deserializing through opclass
+that serialized them. You can decompress and recompress old chunks whenever, and drop
+the old opclass registration once no chunks hold batches that used it.
+
+To migrate off external compression entirely (required before downgrading
+to a TimescaleDB version without external algorithm support):
+
+1. Remove the column's entry from `timescaledb.compress_column_codec` so
+   new compression uses the built-in algorithms.
+2. Rewrite each chunk of hypertables using the type with
+   `decompress_chunk()` followed by `compress_chunk()`. In-place
+   recompression is not enough: it can leave untouched batches in the old
+   format.
+3. `DROP OPERATOR CLASS mytype_codec_ops`.
+
+The downgrade script declines to run while codec operator classes exist,
+and its error hint generates a sequence that should enable downgrade.
+
 # Merging chunks while compressing #
 
 ## Setup ##

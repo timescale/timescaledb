@@ -11,6 +11,7 @@ set(SOURCES
     chunk_insert_state.c
     chunk_scan.c
     chunk_tuple_routing.c
+    compression_codec_am.c
     constraint.c
     cross_module_fn.c
     copy.c

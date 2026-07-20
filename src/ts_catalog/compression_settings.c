@@ -39,7 +39,9 @@ ts_compression_settings_equal(const CompressionSettings *left, const Compression
 		   ts_array_equal(left->fd.orderby, right->fd.orderby) &&
 		   ts_array_equal(left->fd.orderby_desc, right->fd.orderby_desc) &&
 		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst) &&
-		   ts_sparse_index_equal(left->fd.index, right->fd.index);
+		   ts_sparse_index_equal(left->fd.index, right->fd.index) &&
+		   ts_array_equal(left->fd.codec_column, right->fd.codec_column) &&
+		   ts_array_equal(left->fd.codec_opclass, right->fd.codec_opclass);
 }
 
 /*
@@ -63,7 +65,10 @@ ts_compression_settings_equal_with_defaults(const CompressionSettings *ht,
 			ts_array_equal(ht->fd.orderby_desc, chunk->fd.orderby_desc)) &&
 		   (ht->fd.orderby_nullsfirst == NULL ||
 			ts_array_equal(ht->fd.orderby_nullsfirst, chunk->fd.orderby_nullsfirst)) &&
-		   (ht->fd.index == NULL || ts_sparse_index_equal(ht->fd.index, chunk->fd.index));
+		   (ht->fd.index == NULL || ts_sparse_index_equal(ht->fd.index, chunk->fd.index)) &&
+		   (ht->fd.codec_column == NULL ||
+			(ts_array_equal(ht->fd.codec_column, chunk->fd.codec_column) &&
+			 ts_array_equal(ht->fd.codec_opclass, chunk->fd.codec_opclass)));
 }
 
 /*
@@ -237,7 +242,9 @@ ts_compression_settings_materialize(const CompressionSettings *src, Oid relid, O
 															  src->fd.orderby,
 															  src->fd.orderby_desc,
 															  src->fd.orderby_nullsfirst,
-															  src->fd.index);
+															  src->fd.index,
+															  src->fd.codec_column,
+															  src->fd.codec_opclass);
 
 	return dst;
 }
@@ -245,7 +252,8 @@ ts_compression_settings_materialize(const CompressionSettings *src, Oid relid, O
 CompressionSettings *
 ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segmentby,
 							   ArrayType *orderby, ArrayType *orderby_desc,
-							   ArrayType *orderby_nullsfirst, Jsonb *sparse_index)
+							   ArrayType *orderby_nullsfirst, Jsonb *sparse_index,
+							   ArrayType *codec_column, ArrayType *codec_opclass)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -262,6 +270,9 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 	Assert((orderby && orderby_desc && orderby_nullsfirst) ||
 		   (!orderby && !orderby_desc && !orderby_nullsfirst));
 
+	/* the codec arrays must both be present or both absent */
+	Assert((codec_column && codec_opclass) || (!codec_column && !codec_opclass));
+
 	fd.relid = relid;
 	fd.compress_relid = compress_relid;
 	fd.segmentby = segmentby;
@@ -269,6 +280,8 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 	fd.orderby_desc = orderby_desc;
 	fd.orderby_nullsfirst = orderby_nullsfirst;
 	fd.index = sparse_index;
+	fd.codec_column = codec_column;
+	fd.codec_opclass = codec_opclass;
 
 	rel = table_open(catalog_get_table_id(catalog, COMPRESSION_SETTINGS), RowExclusiveLock);
 
@@ -359,6 +372,26 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 			DatumGetJsonbPCopy(values[AttrNumberGetAttrOffset(Anum_compression_settings_index)]);
 	}
 
+	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_codec_column)])
+	{
+		fd->codec_column = NULL;
+	}
+	else
+	{
+		fd->codec_column = DatumGetArrayTypePCopy(
+			values[AttrNumberGetAttrOffset(Anum_compression_settings_codec_column)]);
+	}
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_codec_opclass)])
+	{
+		fd->codec_opclass = NULL;
+	}
+	else
+	{
+		fd->codec_opclass = DatumGetArrayTypePCopy(
+			values[AttrNumberGetAttrOffset(Anum_compression_settings_codec_opclass)]);
+	}
+
 	MemoryContextSwitchTo(old);
 
 	if (should_free)
@@ -416,6 +449,25 @@ ts_compression_settings_get(Oid relid)
 	return settings;
 }
 
+/*
+ * The configured compression codec operator class for the column, or
+ * NULL when not configured.
+ */
+TSDLLEXPORT const char *
+ts_compression_settings_codec_opclass(const CompressionSettings *settings, const char *attname)
+{
+	if (settings == NULL || settings->fd.codec_column == NULL)
+	{
+		return NULL;
+	}
+	int position = ts_array_position(settings->fd.codec_column, attname);
+	if (position == 0)
+	{
+		return NULL;
+	}
+	return ts_array_get_element_text(settings->fd.codec_opclass, position);
+}
+
 TSDLLEXPORT void
 ts_compression_settings_free(CompressionSettings *settings)
 {
@@ -442,6 +494,14 @@ ts_compression_settings_free(CompressionSettings *settings)
 	if (settings->fd.index)
 	{
 		pfree(settings->fd.index);
+	}
+	if (settings->fd.codec_column)
+	{
+		pfree(settings->fd.codec_column);
+	}
+	if (settings->fd.codec_opclass)
+	{
+		pfree(settings->fd.codec_opclass);
 	}
 	pfree(settings);
 }
@@ -640,6 +700,7 @@ compression_settings_rename_column(CompressionSettings *settings, const char *ol
 
 	settings->fd.segmentby = ts_array_replace_text(settings->fd.segmentby, old, new);
 	settings->fd.orderby = ts_array_replace_text(settings->fd.orderby, old, new);
+	settings->fd.codec_column = ts_array_replace_text(settings->fd.codec_column, old, new);
 
 	replacejsonb = settings->fd.index;
 	if (replacejsonb)
@@ -771,6 +832,26 @@ ts_compression_settings_update(CompressionSettings *settings)
 		}
 	}
 
+	if (settings->fd.codec_column && settings->fd.segmentby)
+	{
+		Datum datum;
+		bool isnull;
+
+		ArrayIterator it = array_create_iterator(settings->fd.codec_column, 0, NULL);
+		while (array_iterate(it, &datum, &isnull))
+		{
+			if (ts_array_is_member(settings->fd.segmentby, TextDatumGetCString(datum)))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("cannot use column \"%s\" for both segmenting and a compression "
+								"codec",
+								TextDatumGetCString(datum)),
+						 errdetail("Segmentby columns are stored uncompressed.")));
+			}
+		}
+	}
+
 	if (settings->fd.index && settings->fd.segmentby)
 	{
 		Datum datum;
@@ -893,6 +974,26 @@ compression_settings_formdata_make_tuple(const FormData_compression_settings *fd
 	else
 	{
 		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_index)] = true;
+	}
+
+	if (fd->codec_column)
+	{
+		values[AttrNumberGetAttrOffset(Anum_compression_settings_codec_column)] =
+			PointerGetDatum(fd->codec_column);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_codec_column)] = true;
+	}
+
+	if (fd->codec_opclass)
+	{
+		values[AttrNumberGetAttrOffset(Anum_compression_settings_codec_opclass)] =
+			PointerGetDatum(fd->codec_opclass);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_codec_opclass)] = true;
 	}
 
 	return heap_form_tuple(desc, values, nulls);

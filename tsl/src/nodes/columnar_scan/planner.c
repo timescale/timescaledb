@@ -395,8 +395,10 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 		Oid typoid = get_atttype(info->chunk_rte->relid, uncompressed_chunk_attno);
 		const bool bulk_decompression_possible =
 			!is_segment && destination_attno > 0 &&
-			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
-				NULL;
+			tsl_get_decompress_all_function(compression_get_column_algorithm(info->settings,
+																			 column_name,
+																			 typoid),
+											typoid) != NULL;
 		bulk_decompression_possible_for_some_columns |= bulk_decompression_possible;
 
 		/*

@@ -226,8 +226,8 @@ modify_compressed_toast_table_storage(CompressionSettings *settings, List *colde
 			attno = get_attnum(settings->fd.relid, cd->colname);
 			Assert(attno != InvalidAttrNumber);
 			Oid typid = get_atttype(settings->fd.relid, attno);
-			CompressionStorage stor =
-				compression_get_toast_storage(compression_get_default_algorithm(typid));
+			CompressionStorage stor = compression_get_toast_storage(
+				compression_get_column_algorithm(settings, cd->colname, typid));
 			if (stor != TOAST_STORAGE_EXTERNAL)
 			/* external is default storage for toast columns */
 			{

@@ -55,6 +55,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.compressed_data_recv(internal)
  _timescaledb_functions.compressed_data_send(_timescaledb_internal.compressed_data)
  _timescaledb_functions.compressed_data_to_array(_timescaledb_internal.compressed_data,anyelement)
+ _timescaledb_functions.compression_codec_handler(internal)
  _timescaledb_functions.constraint_clone(oid,regclass)
  _timescaledb_functions.create_chunk(regclass,jsonb,name,name,regclass)
  _timescaledb_functions.create_compressed_chunk(regclass,regclass,bigint,bigint,bigint,bigint,bigint,bigint,bigint,bigint)

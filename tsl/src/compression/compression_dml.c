@@ -2779,8 +2779,10 @@ can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 		get_atttypetypmodcoll(chunk_rel->rd_id, chunk_attno, &typoid, &typmod, &collid);
 
 		/* No bulk decompression function, no vectorized filtering */
-		if (tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) ==
-			NULL)
+		if (tsl_get_decompress_all_function(compression_get_column_algorithm(settings,
+																			 attname,
+																			 typoid),
+											typoid) == NULL)
 		{
 			return false;
 		}

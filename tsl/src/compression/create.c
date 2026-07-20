@@ -949,6 +949,8 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 													  NULL,
 													  NULL,
 													  NULL,
+													  NULL,
+													  NULL,
 													  NULL);
 		}
 
@@ -1408,6 +1410,8 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 												  NULL,
 												  NULL,
 												  NULL,
+												  NULL,
+												  NULL,
 												  NULL);
 	}
 
@@ -1417,7 +1421,8 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 	{
 		bool settings_changed = !with_clause_options[AlterTableFlagSegmentBy].is_default ||
 								!with_clause_options[AlterTableFlagOrderBy].is_default ||
-								!with_clause_options[AlterTableFlagIndex].is_default;
+								!with_clause_options[AlterTableFlagIndex].is_default ||
+								!with_clause_options[AlterTableFlagColumnCodec].is_default;
 		if (settings_changed)
 		{
 			ereport(NOTICE,
@@ -2088,7 +2093,8 @@ compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings 
 
 	if (with_clause_options[AlterTableFlagSegmentBy].is_default &&
 		with_clause_options[AlterTableFlagOrderBy].is_default &&
-		with_clause_options[AlterTableFlagIndex].is_default)
+		with_clause_options[AlterTableFlagIndex].is_default &&
+		with_clause_options[AlterTableFlagColumnCodec].is_default)
 	{
 		return;
 	}
@@ -2099,6 +2105,14 @@ compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings 
 		settings->fd.segmentby =
 			ts_compress_hypertable_parse_segment_by(with_clause_options[AlterTableFlagSegmentBy],
 													ht);
+	}
+
+	if (!with_clause_options[AlterTableFlagColumnCodec].is_default)
+	{
+		ts_compress_hypertable_parse_column_codec(with_clause_options[AlterTableFlagColumnCodec],
+												  ht,
+												  &settings->fd.codec_column,
+												  &settings->fd.codec_opclass);
 	}
 
 	if (!with_clause_options[AlterTableFlagOrderBy].is_default)
@@ -2144,7 +2158,8 @@ compression_settings_set_manually_for_create(Hypertable *ht, CompressionSettings
 {
 	if (with_clause_options[CreateTableFlagSegmentBy].is_default &&
 		with_clause_options[CreateTableFlagOrderBy].is_default &&
-		with_clause_options[CreateTableFlagIndex].is_default)
+		with_clause_options[CreateTableFlagIndex].is_default &&
+		with_clause_options[CreateTableFlagColumnCodec].is_default)
 	{
 		return;
 	}
@@ -2155,6 +2170,14 @@ compression_settings_set_manually_for_create(Hypertable *ht, CompressionSettings
 		settings->fd.segmentby =
 			ts_compress_hypertable_parse_segment_by(with_clause_options[CreateTableFlagSegmentBy],
 													ht);
+	}
+
+	if (!with_clause_options[CreateTableFlagColumnCodec].is_default)
+	{
+		ts_compress_hypertable_parse_column_codec(with_clause_options[CreateTableFlagColumnCodec],
+												  ht,
+												  &settings->fd.codec_column,
+												  &settings->fd.codec_opclass);
 	}
 
 	if (!with_clause_options[CreateTableFlagOrderBy].is_default)
@@ -2551,6 +2574,8 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 	CompressionSettings *settings = ts_compression_settings_create(ht->main_table_relid,
 																   InvalidOid,
+																   NULL,
+																   NULL,
 																   NULL,
 																   NULL,
 																   NULL,

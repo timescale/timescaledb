@@ -147,3 +147,24 @@ GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- END add chunk.relid
 --
 
+
+INSERT INTO _timescaledb_catalog.compression_algorithm( id, version, name, description) values
+( 8, 1, 'COMPRESSION_ALGORITHM_EXTERNAL', 'external');
+
+-- Registry access method for EXTERNAL compression codec operator classes.
+-- Placeholder is replaced when the function definitions run later in the update.
+CREATE FUNCTION _timescaledb_functions.compression_codec_handler(internal) RETURNS index_am_handler
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C;
+CREATE ACCESS METHOD ts_compression_codec TYPE INDEX HANDLER _timescaledb_functions.compression_codec_handler;
+COMMENT ON ACCESS METHOD ts_compression_codec IS 'Registry for compression codec operator classes';
+
+-- Per-column setting for EXTERNAL compression algorithm. Set via the
+-- timescaledb.compress_column_codec option. codec_column[i] is compressed
+-- with the codec operator class named by codec_opclass[i].
+ALTER TABLE _timescaledb_catalog.compression_settings
+  ADD COLUMN codec_column text[],
+  ADD COLUMN codec_opclass text[],
+  ADD CONSTRAINT compression_settings_check_codec_null
+    CHECK ((codec_column IS NULL AND codec_opclass IS NULL) OR (codec_column IS NOT NULL AND codec_opclass IS NOT NULL)),
+  ADD CONSTRAINT compression_settings_check_codec_cardinality
+    CHECK (array_ndims(codec_column) = 1 AND array_ndims(codec_opclass) = 1 AND cardinality(codec_column) = cardinality(codec_opclass));

@@ -23,6 +23,7 @@ static const WithClauseDefinition create_table_with_clauses_def[] = {
 	[CreateTableFlagSegmentBy] = { .arg_names = {"segmentby", "segment_by", "compress_segmentby", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagOrderBy] = { .arg_names = {"orderby", "order_by", "compress_orderby", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagIndex] = { .arg_names = {"compress_index", "compress_sparse_index", "index", "sparse_index", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagColumnCodec] = { .arg_names = {"compress_column_codec", "column_codec", NULL}, .type_id = TEXTOID,},
 };
 
 WithClauseResult *

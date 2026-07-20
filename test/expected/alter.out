@@ -24,10 +24,10 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 \set VERBOSITY default
 ALTER TABLE alter_before SET (tsdb.invalid_option = true);
 ERROR:  unrecognized parameter "tsdb.invalid_option"
-HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset
+HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, compress_column_codec, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset
 ALTER TABLE alter_before SET (timescaledb.nonexistent = false);
 ERROR:  unrecognized parameter "timescaledb.nonexistent"
-HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset
+HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index, compress_column_codec, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
 INSERT INTO alter_before VALUES ('2017-03-22T09:18:22', 23.5, 1);
