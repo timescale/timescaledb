@@ -1508,11 +1508,11 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			}
 		}
 
-		/* Advance past invalidations that end at or before cur.
+		/* Advance past invalidations that end before cur.
 		 * This is correct because we are reading invalidation entries already ordered by
 		 * lowest_modified_value.
 		 */
-		while (inval_idx < inval_count && inval_high <= cur)
+		while (inval_idx < inval_count && inval_high < cur)
 		{
 			inval_idx++;
 			if (inval_idx < inval_count)
