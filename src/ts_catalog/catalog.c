@@ -93,6 +93,14 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_TABLE_NAME,
 	},
+	[CONTINUOUS_AGGS_TENANT_TRACKING] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_TENANT_TRACKING_TABLE_NAME,
+	},
+	[HYPERTABLE_CAGG_SETTINGS] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = HYPERTABLE_CAGG_SETTINGS_TABLE_NAME,
+	},
 	[COMPRESSION_SETTINGS] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = COMPRESSION_SETTINGS_TABLE_NAME,
@@ -240,6 +248,18 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_INDEX,
 		.names = (char *[]) {
 			[CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_IDX] = "continuous_aggs_jobs_refresh_ranges_idx",
+		},
+	},
+	[CONTINUOUS_AGGS_TENANT_TRACKING] = {
+		.length = _MAX_CONTINUOUS_AGGS_TENANT_TRACKING_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_TENANT_TRACKING_IDX] = "continuous_aggs_tenant_tracking_idx",
+		},
+	},
+	[HYPERTABLE_CAGG_SETTINGS] = {
+		.length = _MAX_HYPERTABLE_CAGG_SETTINGS_INDEX,
+		.names = (char *[]) {
+			[HYPERTABLE_CAGG_SETTINGS_PKEY] = "hypertable_cagg_settings_pkey",
 		},
 	},
 	[CONTINUOUS_AGGS_WATERMARK] = {
