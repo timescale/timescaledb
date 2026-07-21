@@ -13,7 +13,7 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 * [#10041](https://github.com/timescale/timescaledb/pull/10041) Remove support for PostgreSQL 15
 
 **Features**
-* [#10010](https://github.com/timescale/timescaledb/pull/10100) Skip classifying compressed relations to speed up planning
+* [#10100](https://github.com/timescale/timescaledb/pull/10100) Skip classifying compressed relations to speed up planning
 * [#10048](https://github.com/timescale/timescaledb/pull/10048) Support concurrent refresh policies on hierarchical continuous aggregates
 * [#10081](https://github.com/timescale/timescaledb/pull/10081) Add `samplerate` argument to `_timescaledb_functions.estimate_uncompressed_size()`
 * [#10118](https://github.com/timescale/timescaledb/pull/10118) Don't track compressed relations as separate chunk
