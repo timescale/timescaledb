@@ -6,50 +6,48 @@
 
 This release contains performance improvements and bug fixes since the 2.28.3 release. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.29.0**
-* 
-
 **Backward-Incompatible Changes**
+* [#10041](https://github.com/timescale/timescaledb/pull/10041) Remove support for PostgreSQL 15
 
 **Features**
 * [#10010](https://github.com/timescale/timescaledb/pull/10010) Skip classifying compressed relations to speed up planning
-* [#10041](https://github.com/timescale/timescaledb/pull/10041) Remove support for PG15
 * [#10048](https://github.com/timescale/timescaledb/pull/10048) Support concurrent refresh policies on hierarchical continuous aggregates
-* [#10081](https://github.com/timescale/timescaledb/pull/10081) Add samplerate argument to _timescaledb_functions.estimate_uncompressed_size
+* [#10081](https://github.com/timescale/timescaledb/pull/10081) Add `samplerate` argument to `_timescaledb_functions.estimate_uncompressed_size()`
 * [#10118](https://github.com/timescale/timescaledb/pull/10118) Don't track compressed relations as separate chunk
-* [#10119](https://github.com/timescale/timescaledb/pull/10119) Reduce memory usage of INSERT queries using Direct Compress and spanning multiple chunks
+* [#10119](https://github.com/timescale/timescaledb/pull/10119) Reduce memory usage of `INSERT` queries using direct compress and spanning multiple chunks
 * [#10163](https://github.com/timescale/timescaledb/pull/10163) Add a compaction policy for unordered chunks
 * [#10204](https://github.com/timescale/timescaledb/pull/10204) Don't create separate hypertable catalog entry for hypertables with compression
 * [#10217](https://github.com/timescale/timescaledb/pull/10217) Initial placeholder version of granular refresh API
-* [#10225](https://github.com/timescale/timescaledb/pull/10225) Add config_merge parameter to alter_job for merging JSONB into the existing job configuration
-* [#10226](https://github.com/timescale/timescaledb/pull/10226) Add recompress_unordered columnstore policy option
-* [#10231](https://github.com/timescale/timescaledb/pull/10231) Use regclass for storing relation reference in chunk table
+* [#10225](https://github.com/timescale/timescaledb/pull/10225) Add `config_merge` parameter to `alter_job()` for merging `jsonb` into the existing job configuration
+* [#10226](https://github.com/timescale/timescaledb/pull/10226) Add `recompress_unordered` columnstore policy option
+* [#10231](https://github.com/timescale/timescaledb/pull/10231) Use `regclass` for storing relation reference in chunk table
 * [#10237](https://github.com/timescale/timescaledb/pull/10237) Add helper functions for decoding hypertable status
-* [#10240](https://github.com/timescale/timescaledb/pull/10240) Add the `tsdb.direct_compress` storage parameter that allows enabling direct compress for a given hypertable independent of global settings.
-* [#10266](https://github.com/timescale/timescaledb/pull/10266) Add max_batches to compact_chunk
-* [#9315](https://github.com/timescale/timescaledb/pull/9315) Speed up the DML operations on hypertables by using the optimized TimescaleDB hypertable expansion code instead of the generic Postgres inheritance hierarchy expansion.
+* [#10240](https://github.com/timescale/timescaledb/pull/10240) Add the `tsdb.direct_compress` storage parameter that allows enabling direct compress for a given hypertable independent of global settings
+* [#10266](https://github.com/timescale/timescaledb/pull/10266) Add `max_batches` to `compact_chunk()`
+* [#9315](https://github.com/timescale/timescaledb/pull/9315) Speed up `DML` operations on hypertables by using the optimized TimescaleDB hypertable expansion code instead of the generic PostgreSQL inheritance hierarchy expansion
 * [#9534](https://github.com/timescale/timescaledb/pull/9534) Speed up expression evaluation in the columnar pipeline by caching common subexpressions
-* [#9684](https://github.com/timescale/timescaledb/pull/9684) Add `decompress_batch` SQL function
-* [#9732](https://github.com/timescale/timescaledb/pull/9732) Speed up some queries with small LIMIT by switching to row-by-row query execution pipeline
-* [#9917](https://github.com/timescale/timescaledb/pull/9917) Decompress less data in DML on compressed hypertable by accounting for the prepared statement parameters
-* [#9957](https://github.com/timescale/timescaledb/pull/9957) Add compact_chunk function
+* [#9684](https://github.com/timescale/timescaledb/pull/9684) Add `_timescaledb_functions.decompress_batch()` SQL function
+* [#9732](https://github.com/timescale/timescaledb/pull/9732) Speed up some queries with small `LIMIT` by switching to row-by-row query execution pipeline
+* [#9917](https://github.com/timescale/timescaledb/pull/9917) Decompress less data in `DML` on compressed hypertables by accounting for prepared statement parameters
+* [#9957](https://github.com/timescale/timescaledb/pull/9957) Add `compact_chunk()` function
 
 **Bugfixes**
-* [#10013](https://github.com/timescale/timescaledb/pull/10013) Make ownership error messages on CAggs consistent
-* [#10052](https://github.com/timescale/timescaledb/pull/10052) Result of min/max aggregate functions in columnar aggregation pipeline possibly inconsistent with plain Postgres result
-* [#10143](https://github.com/timescale/timescaledb/pull/10143) Fix division by zero when planning time_bucket with zero width
-* [#10199](https://github.com/timescale/timescaledb/pull/10199) Fix initial_start handling in build_job_info
+* [#10013](https://github.com/timescale/timescaledb/pull/10013) Make ownership error messages on continuous aggregates consistent
+* [#10052](https://github.com/timescale/timescaledb/pull/10052) Result of min/max aggregate functions in columnar aggregation pipeline possibly inconsistent with plain PostgreSQL result
+* [#10143](https://github.com/timescale/timescaledb/pull/10143) Fix division by zero when planning `time_bucket` with zero width
+* [#10199](https://github.com/timescale/timescaledb/pull/10199) Fix `initial_start` handling in `build_job_info`
 * [#10213](https://github.com/timescale/timescaledb/pull/10213) Cache sort pathkeys per hypertable
 * [#10221](https://github.com/timescale/timescaledb/pull/10221) Fix incremental refresh skipping the last bucket
-* [#10278](https://github.com/timescale/timescaledb/pull/10278) Drop job_errors view in bgw_job_stat_history migration
-* [#10280](https://github.com/timescale/timescaledb/pull/10280) RETURNING clause returned no rows for INSERT using Direct Compress
-* [#10281](https://github.com/timescale/timescaledb/pull/10281) Disable Direct Compress when the destination table has an exclusion constraint so the constraint is still enforced
-* [#10282](https://github.com/timescale/timescaledb/pull/10282) Only count directly compressed rows toward the command tag when the insert sets it
+* [#10278](https://github.com/timescale/timescaledb/pull/10278) Drop `job_errors` view in `bgw_job_stat_history` migration
+* [#10280](https://github.com/timescale/timescaledb/pull/10280) `RETURNING` clause returned no rows for `INSERT` using direct compress
+* [#10281](https://github.com/timescale/timescaledb/pull/10281) Disable direct compress when the destination table has an exclusion constraint so the constraint is still enforced
+* [#10282](https://github.com/timescale/timescaledb/pull/10282) Only count directly compressed rows toward the command tag when the `INSERT` sets it
 
 **New Settings**
-* `timescaledb.enable_hypertable_expansion_for_dml`: allow using the optimized TimescaleDB hypertable expansion code instead of the generic Postgres inheritance hierarchy expansion. 
+* `timescaledb.enable_hypertable_expansion_for_dml`: allow using the optimized TimescaleDB hypertable expansion code for `UPDATE` and `DELETE` instead of the generic PostgreSQL inheritance hierarchy expansion. On by default.
 
 **GUCs**
+* `timescaledb.enable_hypertable_expansion_for_dml`: enable TimescaleDB hypertable expansion for `DML`. Default: `true`
 
 **Thanks**
 * @FrancescEthon and @ManuelEthon for reporting the issue
