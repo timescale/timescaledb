@@ -1,2 +1,0 @@
-Fixes: #10278 Drop job_errors view in bgw_job_stat_history migration
-Thanks: @proddata for reporting a problem when upgrading from 2.15.3 to 2.28.2

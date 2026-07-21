@@ -1,1 +1,0 @@
-Implements: #10240 Add the `tsdb.direct_compress` storage parameter that allows enabling direct compress for a given hypertable independent of global settings.

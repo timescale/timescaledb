@@ -1,2 +1,0 @@
-Fixes: #10221 Fix incremental refresh skipping the last bucket
-Thanks: @FrancescEthon and @ManuelEthon for reporting the issue
