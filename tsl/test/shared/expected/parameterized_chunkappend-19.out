@@ -30,7 +30,7 @@ ORDER BY devices.device_id, win.id
          Sort Key: devices.device_id, "*VALUES*".column1
          Sort Method: quicksort 
          ->  Nested Loop (actual rows=9.00 loops=1)
-               Join Filter: (devices.device_id = metrics.device_id)
+               Join Filter: (metrics.device_id = devices.device_id)
                Rows Removed by Join Filter: 36
                ->  Partial HashAggregate (actual rows=15.00 loops=1)
                      Group Key: "*VALUES*".column1, metrics.device_id

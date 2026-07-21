@@ -172,4 +172,44 @@ INSERT INTO metrics_space SELECT '2000-01-01'::timestamptz + format('%s day',i):
 -- no contraints removed due to space partitioning
 :PREFIX SELECT * FROM metrics_space WHERE time >= '2000-01-02';
 
+-- test that a useless LEFT JOIN to a hypertable is eliminated when none of
+-- its columns are selected and the join clause matches a unique index
+CREATE TABLE join_removal_main(time timestamptz NOT NULL, device int, val float);
+SELECT create_hypertable('join_removal_main', 'time');
+
+CREATE TABLE join_removal_aux(time timestamptz NOT NULL, device int NOT NULL, extra float);
+SELECT create_hypertable('join_removal_aux', 'time');
+CREATE UNIQUE INDEX join_removal_aux_uq ON join_removal_aux (device, time);
+
+INSERT INTO join_removal_main VALUES ('2021-01-01', 1, 1.0), ('2021-01-02', 2, 2.0);
+INSERT INTO join_removal_aux VALUES ('2021-01-01', 1, 10.0), ('2021-01-02', 2, 20.0);
+ANALYZE join_removal_main, join_removal_aux;
+
+:PREFIX SELECT m.time, m.device, m.val
+FROM join_removal_main m
+LEFT JOIN join_removal_aux a ON a.device = m.device AND a.time = m.time;
+
+-- test that a self-join on a hypertable is eliminated when the join clause
+-- matches a unique index (PG18+ only)
+CREATE TABLE self_join_test(time timestamptz NOT NULL, device int NOT NULL, val float);
+SELECT create_hypertable('self_join_test', 'time');
+CREATE UNIQUE INDEX self_join_test_uq ON self_join_test (device, time);
+
+INSERT INTO self_join_test VALUES ('2021-01-01', 1, 1.0), ('2021-01-02', 2, 2.0);
+ANALYZE self_join_test;
+
+:PREFIX SELECT t1.val
+FROM self_join_test t1, self_join_test t2
+WHERE t1.device = t2.device AND t1.time = t2.time;
+
+-- test that the same useless-join elimination still fires when the
+-- hypertable is only reached through an inlined view, not referenced
+-- directly in the outer query's FROM clause
+CREATE VIEW join_removal_view AS
+SELECT m.time, m.device, m.val, a.extra
+FROM join_removal_main m
+LEFT JOIN join_removal_aux a ON a.device = m.device AND a.time = m.time;
+
+:PREFIX SELECT time, device, val FROM join_removal_view;
+
 \qecho '--TEST END--'
