@@ -6,6 +6,9 @@
 
 This release contains performance improvements and bug fixes since the 2.28.3 release. We recommend that you upgrade at the next available opportunity.
 
+**Important: PostgreSQL 15 Support Removed**
+TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports PostgreSQL 16, 17, and 18. If you are still running PostgreSQL 15, upgrade PostgreSQL before upgrading to TimescaleDB 2.29.0.
+
 **Backward-Incompatible Changes**
 * [#10041](https://github.com/timescale/timescaledb/pull/10041) Remove support for PostgreSQL 15
 
