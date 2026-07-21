@@ -758,6 +758,7 @@ make_bloom1_check(Var *bloom_var, Node *hash_array)
 static void *
 pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_opexpr)
 {
+	/* LOOK HERE */
 	/*
 	 * This always requires rechecking the decompressed data.
 	 */
