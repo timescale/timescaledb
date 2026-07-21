@@ -204,7 +204,13 @@ jobs:
             build/compile_commands.json
 
     - name: Check exported symbols
+      background: true
       run: ./build/scripts/export_prefix_check.sh
+
+    - name: pginstallcheck
+      background: true
+      if: matrix.pginstallcheck
+      run: make -C build pginstallcheck
 
     - name: make installcheck
       if: matrix.installcheck
@@ -214,9 +220,8 @@ jobs:
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
             | tee installcheck.log
 
-    - name: pginstallcheck
-      if: matrix.pginstallcheck
-      run: make -C build pginstallcheck
+    - name: Wait for checks to finish
+      wait-all:
 
     - name: coverage
       if: matrix.coverage
