@@ -50,6 +50,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
+#include "import/plancat.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
@@ -1615,6 +1616,17 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * for dummy tables, but only at later stages.
 			 */
 			Assert(!IS_DUMMY_REL(rel));
+
+			/*
+			 * Postgres skips building rel->indexlist for a relation it
+			 * considers an inheritance parent. But useless-join and self-join
+			 * elimination need a populated indexlist to prove this relation is
+			 * unique.
+			 */
+			if (ts_guc_enable_optimizations && inhparent)
+			{
+				ts_build_indexlist(root, rel);
+			}
 
 			/*
 			 * Mark hypertable RTEs we'd like to expand ourselves. We do this

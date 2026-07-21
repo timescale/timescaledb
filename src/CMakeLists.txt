@@ -135,6 +135,7 @@ set(IMPORTED_SOURCES
     import/createplan.c
     import/heapswap.c
     import/list.c
+    import/plancat.c
     import/planner.c
     import/setrefs.c
     import/ts_explain.c
