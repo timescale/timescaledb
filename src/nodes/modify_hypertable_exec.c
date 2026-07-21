@@ -2342,8 +2342,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		if (pstate->ps_ExprContext)
 			ResetExprContext(pstate->ps_ExprContext);
 
-		/* LOOK HERE */
-
 #if PG17_GE
 		/*
 		 * If there is a pending MERGE ... WHEN NOT MATCHED [BY TARGET] action
