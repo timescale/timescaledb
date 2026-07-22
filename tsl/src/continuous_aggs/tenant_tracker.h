@@ -33,7 +33,7 @@ typedef struct TenantTrackerInfo
 
 extern TenantTracking *ts_tenant_tracker_get_or_attach(int32 hypertable_id,
 													   int64 late_threshold_start,
-													   int64 late_threshold_end);
+													   int64 late_threshold_end, int32 init_seqnum);
 
 extern bool ts_tenant_tracker_update(TenantTracking *tracking, const char *key, uint16 key_len,
 									 TimestampTz min_ts, TimestampTz max_ts);

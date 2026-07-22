@@ -744,15 +744,16 @@ tenant_tracker_attach(void)
  * (from config + now); both generations are seeded with it so drains before the
  * first flush gate consistently.
  *
- * TODO (recovery on restart, design doc 5.4.4 #1): seqnum is seeded to 0 here,
- * but after a restart the tracker is re-created fresh while catalog rows for
- * older seqnums may still exist.  Seed seqnum from max(invalidation-log seqnum)
- * at this same creation point (where we already bootstrap the threshold) so a
- * fresh tracker never reuses a pre-restart seqnum that still has tracking rows.
+ * Recovery on restart: shared memory is lost on a (re)start, so the tracker is
+ * re-created fresh while catalog rows for older seqnums may still exist. The
+ * caller passes init_seqnum already set to (max durable seqnum + 1) so new
+ * seqnums stay above all pre-restart ones and cannot collide. Both generations
+ * are seeded with it; gen 1's value is a placeholder that the first flush
+ * overwrites before it activates.
  */
 static void
 init_tracker(TenantTracking *tracker, int32 hypertable_id, int64 late_threshold_start,
-			 int64 late_threshold_end)
+			 int64 late_threshold_end, int32 init_seqnum)
 {
 	tracker->hypertable_id = hypertable_id;
 	pg_atomic_init_u32(&tracker->active_gen, 0);
@@ -764,9 +765,7 @@ init_tracker(TenantTracking *tracker, int32 hypertable_id, int64 late_threshold_
 		pg_atomic_init_u32(&generation->num_writers, 0);
 		pg_atomic_init_u32(&generation->nentries, 0);
 		pg_atomic_init_u32(&generation->status, TENANT_TRACKER_VALID);
-		/* Gen 0 is initially active -> epoch 1 (seqnum 0 means "untracked");
-		 * gen 1's epoch is assigned by the first flush before it activates. */
-		pg_atomic_init_u32(&generation->seqnum, gen == 0 ? 1 : 0);
+		pg_atomic_init_u32(&generation->seqnum, init_seqnum);
 		pg_atomic_init_u64(&generation->late_threshold_start, (uint64) late_threshold_start);
 		pg_atomic_init_u64(&generation->late_threshold_end, (uint64) late_threshold_end);
 
@@ -802,11 +801,13 @@ ts_tenant_tracker_lookup(int32 hypertable_id)
 	/* Hold the dshash lock only to read the dsa_pointer; the tracker itself is
 	 * never moved/freed, so it stays valid after we release. */
 	entry = dshash_find(tracker_map, &key, false /* shared */);
+
 	if (entry == NULL)
 	{
 		return NULL;
 	}
 	dp = entry->tracker;
+
 	dshash_release_lock(tracker_map, entry);
 
 	/* InvalidDsaPointer is the negative-cache marker set by get_or_attach when a
@@ -822,7 +823,7 @@ ts_tenant_tracker_lookup(int32 hypertable_id)
 
 TenantTracking *
 ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
-								int64 late_threshold_end)
+								int64 late_threshold_end, int32 init_seqnum)
 {
 	TenantMapEntry *entry;
 	bool found;
@@ -914,7 +915,8 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
 	init_tracker((TenantTracking *) dsa_get_address(tracker_area, dp),
 				 hypertable_id,
 				 late_threshold_start,
-				 late_threshold_end);
+				 late_threshold_end,
+				 init_seqnum);
 	entry->tracker = dp;
 	dshash_release_lock(tracker_map, entry);
 

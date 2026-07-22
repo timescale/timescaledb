@@ -1591,3 +1591,112 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 
 	return found;
 }
+
+/*
+ * Max non-NULL seqnum among rows of `table` whose index-key column `id_attno`
+ * equals `id_value`, read via `index`.
+ */
+static int32
+scan_max_seqnum(CatalogTable table, int index, AttrNumber id_attno, int32 id_value,
+				AttrNumber seqnum_attno)
+{
+	int32 max_seqnum = 0;
+	ScanIterator iterator = ts_scan_iterator_create(table, AccessShareLock, CurrentMemoryContext);
+
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), table, index);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   id_attno,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(id_value));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		Datum datum = slot_getattr(ti->slot, seqnum_attno, &isnull);
+
+		if (!isnull)
+		{
+			int32 seqnum = DatumGetInt32(datum);
+
+			if (seqnum > max_seqnum)
+			{
+				max_seqnum = seqnum;
+			}
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return max_seqnum;
+}
+
+/*
+ * Highest seqnum durably recorded for a hypertable's granular tracking, used to
+ * seed the in-memory tracker's seqnum on first touch after a (re)start so new
+ * seqnums do not collide with pre-restart ones.
+ *
+ * Scans all three durable sources -- the hypertable invalidation log, the
+ * materialization invalidation log of each granular-refresh-enabled cagg, and the
+ * tenant-tracking catalog -- and takes the max.
+ *
+ * Note that because we cannot assume any relative ordering of seqnums across the
+ * three souces. An invalidations of seqnum X can be processed and stored in the cagg
+ * invalidation log before an invalidation of seqnum X-1 is persisted in the hypertable
+ * invalidation log. This is because the flusher, which increases seqnum, only waits for
+ * tracking writers to finish writting, rather than wait for the DML txn to finish.
+ * Similarly, trackings of seqnum X can be flushed either before or
+ * after its association validation (of the same seqnum X) is persisted in the hypertable
+ * invalidation log.
+ */
+int32
+invalidation_max_seqnum_for_hypertable(int32 hypertable_id)
+{
+	int32 max_seqnum;
+	int32 tenant_max;
+	ListCell *lc;
+	List *caggs;
+
+	max_seqnum = scan_max_seqnum(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
+								 CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_IDX,
+								 Anum_continuous_aggs_hypertable_invalidation_log_idx_hypertable_id,
+								 hypertable_id,
+								 Anum_continuous_aggs_hypertable_invalidation_log_seqnum);
+
+	caggs = ts_continuous_aggs_find_by_raw_table_id(hypertable_id);
+	foreach (lc, caggs)
+	{
+		ContinuousAgg *cagg = lfirst(lc);
+
+		/* TODO: Revisit this after we decided on how we handle seqnums for caggs that opt out of
+		   granular refresh while its hypertable has a tracking column. Also related to this is how
+		   we handle seqnums in cagg invalidation logs when we disable and re-enable granular
+		   refresh for a cagg. */
+
+		if (!cagg->data.granular_refresh_enabled)
+		{
+			continue;
+		}
+
+		int32 mat_max = scan_max_seqnum(
+			CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+			CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX,
+			Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id,
+			cagg->data.mat_hypertable_id,
+			Anum_continuous_aggs_materialization_invalidation_log_seqnum);
+
+		if (mat_max > max_seqnum)
+		{
+			max_seqnum = mat_max;
+		}
+	}
+	list_free(caggs);
+
+	tenant_max = ts_cagg_tenant_tracking_max_seqnum(hypertable_id);
+	if (tenant_max > max_seqnum)
+	{
+		max_seqnum = tenant_max;
+	}
+
+	return max_seqnum;
+}
