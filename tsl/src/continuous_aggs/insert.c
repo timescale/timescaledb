@@ -220,7 +220,8 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	 * lacks the column; otherwise cache the type facts used to encode the key. */
 	MemSet(&cache_entry->tenant_col, 0, sizeof(cache_entry->tenant_col));
 	const char *tracking_column_name;
-	if (ts_hypertable_cagg_settings_get_tenant_tracking_column(hypertable_id, &tracking_column_name) &&
+	if (ts_hypertable_cagg_settings_get_tenant_tracking_column(hypertable_id,
+															   &tracking_column_name) &&
 		(cache_entry->tenant_col.attno = get_attnum(chunk_relid, tracking_column_name)) !=
 			InvalidAttrNumber)
 	{
@@ -375,8 +376,14 @@ record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Rel
 		 * text is canonical.  Skipped when already ISO (the common case). */
 		int save_nestlevel = NewGUCNestLevel();
 
-		(void) set_config_option("datestyle", "ISO, YMD", PGC_USERSET, PGC_S_SESSION,
-								 GUC_ACTION_SAVE, true, 0, false);
+		(void) set_config_option("datestyle",
+								 "ISO, YMD",
+								 PGC_USERSET,
+								 PGC_S_SESSION,
+								 GUC_ACTION_SAVE,
+								 true,
+								 0,
+								 false);
 		key = OidOutputFunctionCall(cache_entry->tenant_col.outfunc, tenant_datum);
 		AtEOXact_GUC(false, save_nestlevel);
 	}
@@ -400,7 +407,7 @@ record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Rel
 	lookup.hypertable_id = cache_entry->hypertable_id;
 	lookup.key_len = (uint16) key_len;
 	memcpy(lookup.key, key, key_len);
-	//TODO: try to see if there's a way to avoid allocate and free memory for every key.
+	// TODO: try to see if there's a way to avoid allocate and free memory for every key.
 	pfree(key);
 
 	entry = (TenantLocalEntry *) hash_search(get_tenant_local_htab(), &lookup, HASH_ENTER, &found);
@@ -463,7 +470,9 @@ tenant_local_htab_write(void)
 
 		/* Window to seed a brand-new tracker (ignored if one already exists; an
 		 * existing tracker's window is owned by the last flush). */
-		ts_hypertable_cagg_settings_get_tenant_tracking_window(hypertable_id, &seed_start, &seed_end);
+		ts_hypertable_cagg_settings_get_tenant_tracking_window(hypertable_id,
+															   &seed_start,
+															   &seed_end);
 
 		/*
 		 * Record this hypertable's seqnum entry up front, defaulting to 0
@@ -498,7 +507,24 @@ tenant_local_htab_write(void)
 		 */
 		PG_TRY();
 		{
-			tracking = ts_tenant_tracker_get_or_attach(hypertable_id, seed_start, seed_end);
+			/* Peek first: only on a genuine first touch (no tracker yet) do we pay
+			 * for the seqnum-seed scan and the tracker allocation.  Computing
+			 * max_seqnum here keeps the catalog scan out of the dshash lock that
+			 * get_or_attach's insert path holds. */
+			tracking = ts_tenant_tracker_lookup(hypertable_id);
+			if (tracking == NULL)
+			{
+				int32 max_seqnum = invalidation_max_seqnum_for_hypertable(hypertable_id);
+
+				/*
+				 * Seed to max_seqnum + 1 so the first generation created has a
+				 * seqnum above any pre-restart one
+				 */
+				tracking = ts_tenant_tracker_get_or_attach(hypertable_id,
+														   seed_start,
+														   seed_end,
+														   max_seqnum + 1);
+			}
 		}
 		PG_CATCH();
 		{
