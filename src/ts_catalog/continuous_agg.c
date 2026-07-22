@@ -592,6 +592,7 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 
 	all_caggs_info.mat_hypertable_ids = NIL;
 	all_caggs_info.bucket_functions = NIL;
+	all_caggs_info.granular_refresh_enabled = NIL;
 
 	Assert(list_length(caggs) > 0);
 
@@ -604,6 +605,10 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 
 		all_caggs_info.mat_hypertable_ids =
 			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
+
+		all_caggs_info.granular_refresh_enabled =
+			lappend_int(all_caggs_info.granular_refresh_enabled,
+						cagg->data.granular_refresh_enabled);
 	}
 	return all_caggs_info;
 }

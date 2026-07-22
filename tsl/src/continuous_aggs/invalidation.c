@@ -137,8 +137,10 @@ invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleI
 static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
 											  const ContinuousAggBucketFunction *bucket_function);
-static bool invalidations_can_be_merged(const Invalidation *a, const Invalidation *b);
-static bool invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry);
+static bool invalidations_can_be_merged(const Invalidation *a, const Invalidation *b,
+										bool seqnum_aware);
+static bool invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry,
+										 bool seqnum_aware);
 static void move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *state);
 static void cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hyper_id,
 													   LOCKMODE lockmode, int64 window_end);
@@ -690,14 +692,19 @@ invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleIn
  * can be merged.
  */
 static bool
-invalidations_can_be_merged(const Invalidation *a, const Invalidation *b)
+invalidations_can_be_merged(const Invalidation *a, const Invalidation *b, bool seqnum_aware)
 {
 	/*
 	 * Only merge invalidations carrying the same granular-tracking seqnum, so a
 	 * merged entry still maps to a single tenant-tracking seqnum. (seqnum 0 means
 	 * "no associated trackings")
+	 *
+	 * Non-tracking caggs have their entries stamped seqnum 0 on the hyper->mat move,
+	 * so this check is currently redundant for them -- but keep it explicit while cases
+	 * like disabling granular refresh on a cagg that still has tracked entries are
+	 * being worked out.  It can be removed once those are settled.
 	 */
-	if (a->seqnum != b->seqnum)
+	if (seqnum_aware && a->seqnum != b->seqnum)
 	{
 		return false;
 	}
@@ -732,7 +739,7 @@ invalidations_can_be_merged(const Invalidation *a, const Invalidation *b)
  *
  */
 static bool
-invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
+invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry, bool seqnum_aware)
 {
 	if (!IsValidInvalidation(newentry))
 	{
@@ -740,7 +747,7 @@ invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 	}
 
 	/* Quick exit if no overlap */
-	if (!invalidations_can_be_merged(entry, newentry))
+	if (!invalidations_can_be_merged(entry, newentry, seqnum_aware))
 	{
 		return false;
 	}
@@ -774,7 +781,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 	const ContinuousAggInfo *all_caggs = state->all_caggs;
 	int32 hyper_id = state->hypertable_id;
 	int32 last_cagg_hyper_id;
-	ListCell *lc1, *lc2;
+	ListCell *lc1, *lc2, *lc3;
 
 	last_cagg_hyper_id = llast_int(all_caggs->mat_hypertable_ids);
 
@@ -789,10 +796,16 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 	 * the cagg invalidation log. This creates better locality for scanning
 	 * the invalidations later.
 	 */
-	forboth (lc1, all_caggs->mat_hypertable_ids, lc2, all_caggs->bucket_functions)
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_functions,
+			  lc3,
+			  all_caggs->granular_refresh_enabled)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
 		const ContinuousAggBucketFunction *bucket_function = lfirst(lc2);
+		bool granular_refresh_enabled = lfirst_int(lc3);
 
 		Invalidation mergedentry;
 		ScanIterator iterator;
@@ -817,12 +830,22 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 														   state->dimtype,
 														   bucket_function);
 
+			/* A cagg that does not do granular refresh carries no granular
+			 * seqnum: stamp its copies untracked (0) so its mat log never gates
+			 * on a seqnum. */
+			if (!granular_refresh_enabled)
+			{
+				logentry.seqnum = 0;
+			}
+
 			if (!IsValidInvalidation(&mergedentry))
 			{
 				mergedentry = logentry;
 				mergedentry.hyper_id = cagg_hyper_id;
 			}
-			else if (!invalidation_entry_try_merge(&mergedentry, &logentry))
+			else if (!invalidation_entry_try_merge(&mergedentry,
+												   &logentry,
+												   granular_refresh_enabled))
 			{
 				insert_cagg_invalidation_entry(state->cagg_log_rel, &mergedentry);
 				mergedentry = logentry;
@@ -937,7 +960,9 @@ cut_cagg_invalidation_and_compute_inner_range(const ContinuousAggInvalidationSta
 		inner_range = new_inner_range;
 	}
 	else if (IsValidInvalidation(&new_inner_range) &&
-			 !invalidation_entry_try_merge(&inner_range, &new_inner_range))
+			 !invalidation_entry_try_merge(&inner_range,
+										   &new_inner_range,
+										   state->cagg->data.granular_refresh_enabled))
 	{
 		insert_cagg_invalidation_entry(state->cagg_log_rel, &inner_range);
 		inner_range = new_inner_range;
@@ -1044,7 +1069,9 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 		{
 			mergedentry = logentry;
 		}
-		else if (invalidation_entry_try_merge(&mergedentry, &logentry))
+		else if (invalidation_entry_try_merge(&mergedentry,
+											  &logentry,
+											  state->cagg->data.granular_refresh_enabled))
 		{
 			/*
 			 * The previous and current invalidation were merged into
