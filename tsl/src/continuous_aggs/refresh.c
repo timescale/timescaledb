@@ -73,7 +73,7 @@ compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh
 static void continuous_agg_refresh_init(ContinuousAggRefreshState *refresh,
 										const ContinuousAgg *cagg,
 										const InternalTimeRange *refresh_window,
-										bool bucketing_refresh_window, const char *tenant_column);
+										bool bucketing_refresh_window);
 static void continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 										   const InternalTimeRange *bucketed_refresh_window,
 										   int32 seqnum);
@@ -88,8 +88,7 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
 											   const ContinuousAggRefreshContext context,
-											   bool bucketing_refresh_window,
-											   const char *tenant_column);
+											   bool bucketing_refresh_window);
 static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
 												   const ContinuousAggRefreshContext context,
@@ -447,8 +446,7 @@ compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const ref
  */
 static void
 continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const ContinuousAgg *cagg,
-							const InternalTimeRange *refresh_window, bool bucketing_refresh_window,
-							const char *tenant_column)
+							const InternalTimeRange *refresh_window, bool bucketing_refresh_window)
 {
 	MemSet(refresh, 0, sizeof(*refresh));
 	refresh->cagg = *cagg;
@@ -460,11 +458,17 @@ continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const Continuous
 	refresh->raw_hypertable_id = cagg->data.raw_hypertable_id;
 
 	/*
-	 * When granular tracking is in effect (tenant_column resolved by the caller),
-	 * capture the column's attno and type for the tenant-scoped materialization
-	 * predicate. Bail out if the column does not exist.
-	 * TODO: more comprehensive validation once the config API lands.
+	 * When the cagg has granular refresh enabled, resolve its tenant-tracking
+	 * column and capture the column's attno and type for the tenant-scoped
+	 * materialization predicate. Bail out if the configured column does not
+	 * exist. TODO: more comprehensive validation once the config API lands.
 	 */
+	const char *tenant_column = NULL;
+	if (cagg->data.granular_refresh_enabled)
+	{
+		ts_hypertable_cagg_settings_get_tenant_tracking_column(cagg->data.raw_hypertable_id,
+															   &tenant_column);
+	}
 	if (tenant_column != NULL)
 	{
 		AttrNumber attno = get_attnum(refresh->cagg_ht->main_table_relid, tenant_column);
@@ -699,15 +703,11 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations,
 								   const ContinuousAggRefreshContext context,
-								   bool bucketing_refresh_window, const char *tenant_column)
+								   bool bucketing_refresh_window)
 {
 	ContinuousAggRefreshState refresh;
 
-	continuous_agg_refresh_init(&refresh,
-								cagg,
-								refresh_window,
-								bucketing_refresh_window,
-								tenant_column);
+	continuous_agg_refresh_init(&refresh, cagg, refresh_window, bucketing_refresh_window);
 
 	long count pg_attribute_unused();
 	count = continuous_agg_scan_refresh_window_ranges(cagg,
@@ -1011,16 +1011,19 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * locking. Not safe for 2 different caggs to attempt to flush entries for the SAME
 	 * hypertable.
 	 */
-	flush_tenant_tracking(cagg);
-
 	/*
-	 * Resolve the granular-tracking tenant column
+	 * Only a cagg that has opted into granular refresh drains/flushes the shared
+	 * per-hypertable tracker and takes the seqnum-aware invalidation path. For
+	 * every other cagg the whole refresh runs the plain (full) path: no flush,
+	 * seqnum-agnostic invalidation processing, and no tenant-tracking cleanup
+	 * below.
 	 */
-	const char *tenant_column = NULL;
-	ts_hypertable_cagg_settings_get_tenant_tracking_column(cagg->data.raw_hypertable_id,
-														   &tenant_column);
+	if (cagg->data.granular_refresh_enabled)
+	{
+		flush_tenant_tracking(cagg);
+	}
 
-	invalidation_process_cagg_log(cagg, refresh_window, tenant_column != NULL);
+	invalidation_process_cagg_log(cagg, refresh_window, cagg->data.granular_refresh_enabled);
 
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn2");
 	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
@@ -1048,8 +1051,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   refresh_window,
 										   invalidations,
 										   context,
-										   bucketing_refresh_window,
-										   tenant_column);
+										   bucketing_refresh_window);
 		invalidation_store_free(invalidations);
 	}
 
@@ -1058,7 +1060,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * materialized: delete the consumed in-window pieces. Only relevant for caggs
 	 * configured for granular tracking.
 	 */
-	if (tenant_column != NULL)
+	if (cagg->data.granular_refresh_enabled)
 	{
 		invalidation_cleanup_tenant_tracking(cagg, refresh_window);
 	}

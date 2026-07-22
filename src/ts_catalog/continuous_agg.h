@@ -135,6 +135,8 @@ typedef struct ContinuousAggInfo
 	List *mat_hypertable_ids;
 	/* (const ContinuousAggBucketFunction *) elements; stores NULL for fixed buckets */
 	List *bucket_functions;
+	/* (bool as int) elements; whether each cagg has granular refresh enabled */
+	List *granular_refresh_enabled;
 } ContinuousAggInfo;
 
 typedef struct ContinuousAggPolicyOffset
