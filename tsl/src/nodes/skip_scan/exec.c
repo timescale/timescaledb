@@ -280,13 +280,6 @@ skip_scan_rescan_index(SkipScanState *state)
 	 * any ScanKey changes we did */
 	if (*state->scan_desc)
 	{
-		/*
-		 * The skip quals were updated in place in the scan keys of the index
-		 * scan node, so the standard rescan of the child picks them up. For a
-		 * ColumnarScan child this also resets its batch queue, discarding the
-		 * remaining decompressed tuples of the current batch, and rescans the
-		 * compressed index scan below it.
-		 */
 		ScanState *child = linitial(state->cscan_state.custom_ps);
 		ExecReScan(&child->ps);
 	}
