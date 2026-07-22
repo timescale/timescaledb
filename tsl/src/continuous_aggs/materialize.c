@@ -461,6 +461,12 @@ has_direct_compress_on_cagg_refresh_enabled(MaterializationContext *context)
  * key, so it is cast back to the column type; the column (alias.<col>) is left
  * bare so an index on it can be used. Params: $1/$2 are the time range (outer),
  * $3 = raw hypertable id, $4 = seqnum, $5/$6 = the internal (int8) range.
+ *
+ * The tenant list is wrapped in ARRAY() to keep the predicate a qual on the
+ * tenant column. The planner can then push it into the aggregating partial view,
+ * since the tenant column is a grouping key there, and use it as an index
+ * condition. IN (subquery) instead becomes a semi-join, and a join cannot cross
+ * an aggregate, so every tenant in the window would be aggregated first.
  */
 static char *
 build_tenant_predicate(MaterializationContext *context, const char *alias)
@@ -474,10 +480,10 @@ build_tenant_predicate(MaterializationContext *context, const char *alias)
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf,
-					 " AND %s.%s IN (SELECT tt.tenant_id::%s "
+					 " AND %s.%s = ANY (ARRAY(SELECT tt.tenant_id::%s "
 					 "FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt "
 					 "WHERE tt.hypertable_id = $3 AND tt.seqnum = $4 "
-					 "AND tt.min_timestamp < $6 AND tt.max_timestamp >= $5)",
+					 "AND tt.min_timestamp < $6 AND tt.max_timestamp >= $5))",
 					 alias,
 					 quote_identifier(context->tenant_column),
 					 context->tenant_coltype);
