@@ -1,0 +1,2 @@
+Fixes: #10071 Prune the real-time branch of hierarchical continuous aggregates at any nesting depth
+Thanks: @viniciusrsouza for reporting the issue

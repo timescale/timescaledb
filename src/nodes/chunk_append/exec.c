@@ -1001,7 +1001,7 @@ ts_constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 			 * transformations again. This might allow us to exclude chunks
 			 * based on a parameterized time_bucket expression.
 			 */
-			Expr *additional_clause = ts_transform_time_bucket_comparison(constified);
+			Expr *additional_clause = ts_transform_nested_time_bucket_comparison(constified);
 			if (additional_clause != NULL)
 			{
 				/*
