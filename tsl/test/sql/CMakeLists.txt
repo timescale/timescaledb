@@ -95,6 +95,7 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_hierarchical_realtime.sql.in
     cagg_permissions.sql.in
     cagg_planning.sql.in
     cagg_rewrites.sql.in
