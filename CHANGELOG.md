@@ -2,9 +2,13 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
-## 2.29.0 (2026-07-21)
+## 2.29.0 (2026-07-28)
 
 This release contains performance improvements and bug fixes since the 2.28.3 release. We recommend that you upgrade at the next available opportunity.
+
+**Release Highlights**
+* Chunk exclusion for DML operations: drastically improving the performance of `UPDATE` and `DELETE` statements on hypertables. By acquiring exclusive locks only on the specific chunks being modified rather than the entire hypertable, this enhancement eliminates massive lock contention and keeps high-concurrency workloads running smoothly without unnecessary slowdowns.
+* Intelligent **row-by-row decompression**: allowing the query planner to decompress data row-by-row rather than in large batches when an operation prioritizes a fast initial response (such as queries with `LIMIT` clauses). This dramatically reduces memory overhead and query latency, ensuring lightning-fast performance when you only need to retrieve a small subset of records from your compressed hypertables.
 
 **Important: PostgreSQL 15 Support Removed**
 TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports PostgreSQL 16, 17, and 18. If you are still running PostgreSQL 15, upgrade PostgreSQL before upgrading to TimescaleDB 2.29.0.
@@ -36,7 +40,7 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 
 **Bugfixes**
 * [#10013](https://github.com/timescale/timescaledb/pull/10013) Make ownership error messages on continuous aggregates consistent
-* [#10052](https://github.com/timescale/timescaledb/pull/10052) Result of min/max aggregate functions in columnar aggregation pipeline possibly inconsistent with plain PostgreSQL result
+* [#10052](https://github.com/timescale/timescaledb/pull/10052) Result of `MIN` / `MAX` aggregate functions in columnar aggregation pipeline possibly inconsistent with plain PostgreSQL result
 * [#10143](https://github.com/timescale/timescaledb/pull/10143) Fix division by zero when planning `time_bucket` with zero width
 * [#10199](https://github.com/timescale/timescaledb/pull/10199) Fix `initial_start` handling in `build_job_info`
 * [#10213](https://github.com/timescale/timescaledb/pull/10213) Cache sort pathkeys per hypertable
@@ -48,9 +52,6 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 
 **New Settings**
 * `timescaledb.enable_hypertable_expansion_for_dml`: allow using the optimized TimescaleDB hypertable expansion code for `UPDATE` and `DELETE` instead of the generic PostgreSQL inheritance hierarchy expansion. On by default.
-
-**GUCs**
-* `timescaledb.enable_hypertable_expansion_for_dml`: enable TimescaleDB hypertable expansion for `DML`. Default: `true`
 
 **Thanks**
 * @FrancescEthon and @ManuelEthon for reporting the issue
