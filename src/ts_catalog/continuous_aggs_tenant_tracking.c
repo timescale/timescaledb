@@ -244,3 +244,36 @@ ts_cagg_tenant_tracking_delete_by_hypertable_id(int32 hypertable_id)
 	}
 	ts_scan_iterator_close(&iterator);
 }
+
+/*
+ * Highest seqnum among a hypertable's tenant-tracking rows, or 0 if it has none.
+ *
+ * The index is (hypertable_id, seqnum), so a backward scan on the hypertable_id
+ * equality returns the largest seqnum first -- take it and stop (limit 1).
+ * seqnum is NOT NULL here, so the first row is the true max.
+ */
+TSDLLEXPORT int32
+ts_cagg_tenant_tracking_max_seqnum(int32 hypertable_id)
+{
+	int32 max_seqnum = 0;
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_TENANT_TRACKING,
+													AccessShareLock,
+													CurrentMemoryContext);
+	/*init_scan_by_hypertable_id specifies the index used, which is (hypertable_id, seqnum) */
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	iterator.ctx.scandirection = BackwardScanDirection;
+	iterator.ctx.limit = 1;
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		Datum datum = slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_seqnum, &isnull);
+
+		Assert(!isnull); /* seqnum is NOT NULL in this catalog */
+		max_seqnum = DatumGetInt32(datum);
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return max_seqnum;
+}

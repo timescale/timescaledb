@@ -54,3 +54,9 @@ extern TSDLLEXPORT void ts_cagg_tenant_tracking_delete_by_hypertable_id(int32 hy
  * refresh.
  */
 extern TSDLLEXPORT bool ts_cagg_tenant_tracking_exists(int32 hypertable_id, int32 seqnum);
+
+/*
+ * Highest seqnum among a hypertable's tenant-tracking rows, or 0 if it has none.
+ * Uses the (hypertable_id, seqnum) index for a backward limit-1 seek.
+ */
+extern TSDLLEXPORT int32 ts_cagg_tenant_tracking_max_seqnum(int32 hypertable_id);
