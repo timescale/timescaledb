@@ -32,6 +32,25 @@ SELECT show_chunks('public.table_to_compress', older_than=>'1 day'::interval);
 SELECT show_chunks('public.table_to_compress', newer_than=>'1 day'::interval);
 -- compress all chunks of the table:
 SELECT compress_chunk(show_chunks('public.table_to_compress'));
+
+-- `hypertable_relid_from_chunk_relid()` should resolve the uncompressed chunks's hypertable
+-- and return `is_compressed=false` (even when they have their respective
+-- compressed chunks)
+SELECT *
+FROM show_chunks('public.table_to_compress') as show,
+LATERAL _timescaledb_functions.hypertable_relid_from_chunk_relid(show);
+
+-- `hypertable_relid_from_chunk_relid()` should resolve the compressed chunks' main hypertable
+-- and return `is_compressed=true`
+SELECT cs.compress_relid, get_ht.*
+FROM _timescaledb_catalog.compression_settings cs,
+LATERAL _timescaledb_functions.hypertable_relid_from_chunk_relid(cs.compress_relid) get_ht
+WHERE compress_relid IS NOT NULL;
+
+-- returns NULL on non-chunk tables
+SELECT * FROM _timescaledb_functions.hypertable_relid_from_chunk_relid('public.table_to_compress');
+SELECT * FROM _timescaledb_functions.hypertable_relid_from_chunk_relid('pg_class');
+
 -- check that approx size function works. We call VACUUM to ensure all forks exist
 VACUUM public.table_to_compress;
 SELECT * FROM hypertable_approximate_size('public.table_to_compress');
