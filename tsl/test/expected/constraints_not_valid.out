@@ -87,7 +87,7 @@ INFO:  SkipScan used on _hyper_2_7_chunk_sk_dev_idx(dev NULLS LAST)
 --- QUERY PLAN ---
  Unique (actual rows=5.00 loops=1)
    ->  Custom Scan (SkipScan) on _hyper_2_7_chunk (actual rows=5.00 loops=1)
-         ->  Index Only Scan using _hyper_2_7_chunk_sk_dev_idx on _hyper_2_7_chunk (actual rows=5.00 loops=1)
+         ->  Index Only Scan using _hyper_2_7_chunk_sk_dev_idx on _hyper_2_7_chunk (actual rows=0.83 loops=6)
                Index Cond: (dev > NULL::integer)
 
 select distinct dev from sk order by dev;

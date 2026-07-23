@@ -72,7 +72,6 @@ set(TEST_FILES
     direct_compress_insert.sql
     direct_compress_policy.sql
     move.sql
-    plan_skip_scan_notnull.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
@@ -112,6 +111,7 @@ set(TEST_TEMPLATES
     ordered_append.sql.in
     plan_skip_scan.sql.in
     plan_skip_scan_dagg.sql.in
+    plan_skip_scan_notnull.sql.in
     vector_agg_planning.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
