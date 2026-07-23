@@ -393,6 +393,27 @@ should_load_on_create_extension(Node const *const utility_stmt, TsExtension cons
 }
 
 static bool
+should_load_on_transaction(Node const *const utility_stmt, TsExtension const *const /*ext*/)
+{
+	TransactionStmt *stmt = (TransactionStmt *) utility_stmt;
+
+	/*
+	 * Do not load the extension just to open a transaction. This lets ALTER
+	 * EXTENSION ... UPDATE run as the first extension-touching command inside
+	 * a transaction block instead of failing because BEGIN already loaded the
+	 * old version.
+	 */
+	switch (stmt->kind)
+	{
+		case TRANS_STMT_BEGIN:
+		case TRANS_STMT_START:
+			return false;
+		default:
+			return true;
+	}
+}
+
+static bool
 load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 {
 	switch (nodeTag(utility_stmt))
@@ -403,6 +424,8 @@ load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 			return should_load_on_alter_extension(utility_stmt, ext);
 		case T_CreateExtensionStmt:
 			return should_load_on_create_extension(utility_stmt, ext);
+		case T_TransactionStmt:
+			return should_load_on_transaction(utility_stmt, ext);
 		case T_DropStmt:
 			return !drop_statement_drops_extension((DropStmt *) utility_stmt, ext);
 		default:

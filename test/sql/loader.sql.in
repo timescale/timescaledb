@@ -93,6 +93,18 @@ ALTER EXTENSION timescaledb UPDATE TO 'mock-2';
 SELECT 1;
 SELECT * FROM test.extension;
 
+--ALTER EXTENSION UPDATE works inside a transaction block; BEGIN must not
+--load the old version before UPDATE runs as the first command.
+DROP EXTENSION timescaledb;
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+CREATE EXTENSION timescaledb VERSION 'mock-1';
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+BEGIN;
+ALTER EXTENSION timescaledb UPDATE TO 'mock-2';
+COMMIT;
+SELECT 1;
+SELECT * FROM test.extension;
+
 --drop extension
 DROP EXTENSION timescaledb;
 SELECT 1;
