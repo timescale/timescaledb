@@ -1327,6 +1327,23 @@ process_vacuum(ProcessUtilityArgs *args)
 					ctx.ht_vacuum_rel = vacuum_rel;
 					foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
 				}
+				else
+				{
+					/* VACUUM targets a chunk directly. */
+					Chunk *chunk = ts_chunk_get_by_relid(table_relid, false);
+					if (chunk && ts_chunk_is_compressed(chunk))
+					{
+						Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
+						/* Compressed chunk might be missing due to concurrent operations */
+						if (OidIsValid(compressed_relid))
+						{
+							ctx.chunk_rels =
+								lappend(ctx.chunk_rels,
+										makeVacuumRelation(NULL, compressed_relid, NIL));
+						}
+					}
+					register_chunk_for_rebuild_if_needed(table_relid, &ctx);
+				}
 			}
 			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
 		}
