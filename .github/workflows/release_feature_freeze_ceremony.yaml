@@ -147,14 +147,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          if git ls-remote --heads origin "${{ env.RELEASE_BRANCH }}" | grep -q "${{ env.RELEASE_BRANCH }}"; then
-            echo "* ✓ the \`${{ env.RELEASE_BRANCH }}\` release branch exists" >> $GITHUB_STEP_SUMMARY
+          RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
+          NEXT_VERSION="${{ env.NEXT_VERSION }}"
+
+          if git ls-remote --heads origin "$RELEASE_BRANCH" | grep -q "$RELEASE_BRANCH"; then
+            echo "* ✓ the \`$RELEASE_BRANCH\` release branch exists" >> $GITHUB_STEP_SUMMARY
           else
-            gh api repos/${{ github.repository }}/git/refs \
-              --method POST \
-              --field ref="refs/heads/${{ env.RELEASE_BRANCH }}" \
-              --field sha="${{ github.sha }}"
-            echo "* ✅ the \`${{ env.RELEASE_BRANCH }}\` release branch created" >> $GITHUB_STEP_SUMMARY
+            git checkout -B "$RELEASE_BRANCH" "${{ github.sha }}"
+            sed -i "s/^version = .*/version = $NEXT_VERSION/" version.config
+            git add version.config
+            if git diff --cached --quiet -- version.config; then
+              echo "* ✓ version.config already set to \`$NEXT_VERSION\`" >> $GITHUB_STEP_SUMMARY
+            else
+              git commit -m "Initialize $RELEASE_BRANCH with version $NEXT_VERSION"
+            fi
+            git push origin "$RELEASE_BRANCH:$RELEASE_BRANCH"
+            echo "* ✅ the \`$RELEASE_BRANCH\` release branch created with version \`$NEXT_VERSION\`" >> $GITHUB_STEP_SUMMARY
           fi
 
       # -------------------------------------------------------
