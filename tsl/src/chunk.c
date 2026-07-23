@@ -34,8 +34,6 @@
 #include "chunk.h"
 #include "compression/compression.h"
 #include "debug_point.h"
-#include "extension.h"
-#include "hypertable.h"
 #include "utils.h"
 
 /* Data in a frozen chunk cannot be modified. So any operation
@@ -93,105 +91,4 @@ chunk_unfreeze_chunk(PG_FUNCTION_ARGS)
 	 */
 	bool ret = ts_chunk_unset_frozen(chunk);
 	PG_RETURN_BOOL(ret);
-}
-
-/*
- * Invoke drop_chunks via fmgr so that the call can be deparsed and sent to
- * remote data nodes.
- *
- * Given that drop_chunks is an SRF, and has pseudo parameter types, we need
- * to provide a FuncExpr with type information for the deparser.
- *
- * Returns the number of dropped chunks.
- */
-int
-chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type, bool use_creation_time)
-{
-	EState *estate;
-	ExprContext *econtext;
-	FuncExpr *fexpr;
-	List *args = NIL;
-	int num_results = 0;
-	SetExprState *state;
-	Oid restype;
-	Oid func_oid;
-	Const *TypeNullCons = makeNullConst(older_than_type, -1, InvalidOid);
-	Const *IntervalVal = makeConst(older_than_type,
-								   -1,
-								   InvalidOid,
-								   get_typlen(older_than_type),
-								   older_than,
-								   false,
-								   get_typbyval(older_than_type));
-	Const *argarr[DROP_CHUNKS_NARGS] = { makeConst(REGCLASSOID,
-												   -1,
-												   InvalidOid,
-												   sizeof(relid),
-												   ObjectIdGetDatum(relid),
-												   false,
-												   false),
-										 TypeNullCons,
-										 TypeNullCons,
-										 castNode(Const, makeBoolConst(false, true)),
-										 TypeNullCons,
-										 TypeNullCons };
-	Oid type_id[DROP_CHUNKS_NARGS] = { REGCLASSOID, ANYOID, ANYOID, BOOLOID, ANYOID, ANYOID };
-	char *const schema_name = ts_extension_schema_name();
-	List *const fqn = list_make2(makeString(schema_name), makeString(DROP_CHUNKS_FUNCNAME));
-
-	StaticAssertStmt(lengthof(type_id) == lengthof(argarr),
-					 "argarr and type_id should have matching lengths");
-
-	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
-	Assert(func_oid); /* LookupFuncName should not return an invalid OID */
-
-	/* decide whether to use "older_than" or "drop_created_before" */
-	if (use_creation_time)
-	{
-		argarr[4] = IntervalVal;
-	}
-	else
-	{
-		argarr[1] = IntervalVal;
-	}
-
-	/* Prepare the function expr with argument list */
-	get_func_result_type(func_oid, &restype, NULL);
-
-	for (size_t i = 0; i < lengthof(argarr); i++)
-	{
-		args = lappend(args, argarr[i]);
-	}
-
-	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
-	fexpr->funcretset = true;
-
-	/* Execute the SRF */
-	estate = CreateExecutorState();
-	econtext = CreateExprContext(estate);
-	state = ExecInitFunctionResultSet(&fexpr->xpr, econtext, NULL);
-
-	while (true)
-	{
-		ExprDoneCond isdone;
-		bool isnull;
-
-		ExecMakeFunctionResultSet(state, econtext, estate->es_query_cxt, &isnull, &isdone);
-
-		if (isdone == ExprEndResult)
-		{
-			break;
-		}
-
-		if (!isnull)
-		{
-			num_results++;
-		}
-	}
-
-	/* Cleanup */
-	FreeExprContext(econtext, false);
-	FreeExecutorState(estate);
-
-	return num_results;
 }
