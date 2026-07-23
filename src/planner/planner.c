@@ -824,7 +824,7 @@ get_parent_rte(const PlannerInfo *root, Index rti)
  * related metadata: like chunk_status and pointer to hypertable entry.
  * It is okay to cache a pointer to the hypertable, since this cache is
  * confined to the lifetime of the query and not used across queries.
- * If the parent reolid is known, the caller can specify it to avoid the costly
+ * If the parent relid is known, the caller can specify it to avoid the costly
  * lookup. Otherwise pass InvalidOid.
  */
 static BaserelInfoEntry *
