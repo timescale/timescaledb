@@ -1,0 +1,1 @@
+Fixes: #XXXX Allow running ALTER EXTENSION timescaledb UPDATE inside a transaction block
