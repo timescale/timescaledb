@@ -143,6 +143,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_policy_incremental.sql
     cagg_refresh_cleanup.sql
     cagg_refresh_incremental.sql
+    cagg_refresh_tiered.sql
     chunk_column_stats.sql
     compress_bgw_reorder_drop_chunks.sql
     compress_bloom_legacy_v1.sql
