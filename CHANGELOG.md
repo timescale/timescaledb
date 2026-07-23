@@ -17,6 +17,12 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 * [#10041](https://github.com/timescale/timescaledb/pull/10041) Remove support for PostgreSQL 15
 
 **Features**
+* [#9315](https://github.com/timescale/timescaledb/pull/9315) Speed up `DML` operations on hypertables by using the optimized TimescaleDB hypertable expansion code instead of the generic PostgreSQL inheritance hierarchy expansion
+* [#9534](https://github.com/timescale/timescaledb/pull/9534) Speed up expression evaluation in the columnar pipeline by caching common subexpressions
+* [#9684](https://github.com/timescale/timescaledb/pull/9684) Add `_timescaledb_functions.decompress_batch()` SQL function
+* [#9732](https://github.com/timescale/timescaledb/pull/9732) Speed up some queries with small `LIMIT` by switching to row-by-row query execution pipeline
+* [#9917](https://github.com/timescale/timescaledb/pull/9917) Decompress less data in `DML` on compressed hypertables by accounting for prepared statement parameters
+* [#9957](https://github.com/timescale/timescaledb/pull/9957) Add `compact_chunk()` function
 * [#10100](https://github.com/timescale/timescaledb/pull/10100) Skip classifying compressed relations to speed up planning
 * [#10048](https://github.com/timescale/timescaledb/pull/10048) Support concurrent refresh policies on hierarchical continuous aggregates
 * [#10081](https://github.com/timescale/timescaledb/pull/10081) Add `samplerate` argument to `_timescaledb_functions.estimate_uncompressed_size()`
@@ -31,12 +37,6 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 * [#10237](https://github.com/timescale/timescaledb/pull/10237) Add helper functions for decoding hypertable status
 * [#10240](https://github.com/timescale/timescaledb/pull/10240) Add the `tsdb.direct_compress` storage parameter that allows enabling direct compress for a given hypertable independent of global settings
 * [#10266](https://github.com/timescale/timescaledb/pull/10266) Add `max_batches` to `compact_chunk()`
-* [#9315](https://github.com/timescale/timescaledb/pull/9315) Speed up `DML` operations on hypertables by using the optimized TimescaleDB hypertable expansion code instead of the generic PostgreSQL inheritance hierarchy expansion
-* [#9534](https://github.com/timescale/timescaledb/pull/9534) Speed up expression evaluation in the columnar pipeline by caching common subexpressions
-* [#9684](https://github.com/timescale/timescaledb/pull/9684) Add `_timescaledb_functions.decompress_batch()` SQL function
-* [#9732](https://github.com/timescale/timescaledb/pull/9732) Speed up some queries with small `LIMIT` by switching to row-by-row query execution pipeline
-* [#9917](https://github.com/timescale/timescaledb/pull/9917) Decompress less data in `DML` on compressed hypertables by accounting for prepared statement parameters
-* [#9957](https://github.com/timescale/timescaledb/pull/9957) Add `compact_chunk()` function
 
 **Bugfixes**
 * [#10013](https://github.com/timescale/timescaledb/pull/10013) Make ownership error messages on continuous aggregates consistent
