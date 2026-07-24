@@ -139,6 +139,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
   list(APPEND TEST_FILES insert_returning_old_new.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
+  list(APPEND TEST_FILES repack.sql)
+endif()
+
 # only test custom type if we are in 64-bit architecture
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
   list(APPEND TEST_FILES custom_type.sql)
