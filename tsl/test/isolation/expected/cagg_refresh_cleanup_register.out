@@ -7,7 +7,7 @@ debug_waitpoint_enable
                       
 
 step R2_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step L1_lock: 
     BEGIN;
@@ -20,10 +20,10 @@ debug_waitpoint_release
                        
 
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step R4_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step check_locks: 
     SELECT l.mode, l.granted
@@ -50,7 +50,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Sun Feb 08 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
+cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
 step L1_unlock: 
     COMMIT;
@@ -89,7 +89,7 @@ debug_waitpoint_enable
                       
 
 step R2_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step L1_lock: 
     BEGIN;
@@ -102,10 +102,10 @@ debug_waitpoint_release
                        
 
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step R4_overlapping_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step check_locks: 
     SELECT l.mode, l.granted
@@ -132,7 +132,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Sun Feb 08 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
+cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
 
 step L1_unlock: 
     COMMIT;
@@ -172,7 +172,7 @@ debug_waitpoint_enable
                       
 
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step check_jobs: 
     SELECT ca.user_view_name,
@@ -185,7 +185,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Sat Mar 07 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Sun Feb 15 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
 
 step A1_revoke_perm: 
   REVOKE SELECT on conditions FROM cagg_user;
@@ -217,7 +217,7 @@ debug_waitpoint_enable
                       
 
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step check_jobs: 
     SELECT ca.user_view_name,
@@ -230,7 +230,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Sat Mar 07 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Sun Feb 15 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
 
 step A1_revoke_mat_perm: 
   DO $$
@@ -273,7 +273,7 @@ debug_waitpoint_enable
                       
 
 step R2_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step check_jobs_metadata_manual: 
     SELECT ca.user_view_name,
@@ -352,7 +352,7 @@ debug_waitpoint_enable
                       
 
 step R1_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step check_jobs: 
     SELECT ca.user_view_name,
@@ -365,7 +365,7 @@ step check_jobs:
 
 user_view_name|start_time                  |end_time                    
 --------------+----------------------------+----------------------------
-cond_daily    |Tue Mar 10 17:00:00 2026 PDT|Sat Mar 14 17:00:00 2026 PDT
+cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
 
 step K1_terminate: 
     DO $$
@@ -400,10 +400,10 @@ step L1_lock:
         IN ACCESS EXCLUSIVE MODE;
 
 step R2_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
  <waiting ...>
 step L1_unlock: 
     COMMIT;

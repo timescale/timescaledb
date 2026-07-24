@@ -57,7 +57,7 @@ setup
 # Materialize L1 so the hierarchical L2 CAgg has source data
 setup
 {
-  CALL refresh_continuous_aggregate('mat_3pol_m1', NULL, NULL);
+  CALL refresh_continuous_aggregate('mat_3pol_m1', NULL, NULL, options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 # Create the hierarchical L2 CAgg with two adjacent refresh policies of its own

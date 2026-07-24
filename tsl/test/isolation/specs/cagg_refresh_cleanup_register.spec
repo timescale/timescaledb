@@ -59,7 +59,7 @@ setup {
     INSERT INTO cancelpid SELECT pg_backend_pid();
 }
 step "R1_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 # Session WP: enables / disables waitpoints
@@ -102,7 +102,7 @@ setup {
     SET SESSION lock_timeout = '2s';
 }
 step "R2_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15', options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 session "R3"
@@ -111,7 +111,7 @@ setup {
     SET SESSION lock_timeout = '2s';
 }
 step "R3_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 session "R4"
@@ -120,10 +120,10 @@ setup {
     SET SESSION lock_timeout = '2s';
 }
 step "R4_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30', options => jsonb_build_object('buckets_per_batch', 0));
 }
 step "R4_overlapping_refresh" {
-    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15');
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-01', '2026-03-15', options => jsonb_build_object('buckets_per_batch', 0));
 }
 
 session "A1"
