@@ -162,8 +162,6 @@ static void initialize_constraints(ChunkAppendState *state, List *initial_rt_ind
 static LWLock *chunk_append_get_lock_pointer(void);
 
 static void show_sort_group_keys(ChunkAppendState *planstate, List *ancestors, ExplainState *es);
-static void show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
-								   bool nullsFirst);
 
 static void init_subplanstates(ChunkAppendState *state, EState *estate, int eflags);
 
@@ -1411,11 +1409,11 @@ show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
 		/* Append sort order information, if relevant */
 		if (sort_ops != NIL)
 		{
-			show_sortorder_options(&sortkeybuf,
-								   (Node *) target->expr,
-								   list_nth_oid(sort_ops, keyno),
-								   list_nth_oid(sort_collations, keyno),
-								   list_nth_oid(sort_nulls, keyno));
+			ts_show_sortorder_options(&sortkeybuf,
+									  (Node *) target->expr,
+									  list_nth_oid(sort_ops, keyno),
+									  list_nth_oid(sort_collations, keyno),
+									  list_nth_oid(sort_nulls, keyno));
 		}
 		/* Emit one property-list item per sort key */
 		result = lappend(result, pstrdup(sortkeybuf.data));
@@ -1425,9 +1423,9 @@ show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
 }
 
 /* copied verbatim from postgresql explain.c */
-static void
-show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
-					   bool nullsFirst)
+void
+ts_show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
+						  bool nullsFirst)
 {
 	Oid sortcoltype = exprType(sortexpr);
 	bool reverse = false;
