@@ -80,9 +80,6 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
 
-	bool (*should_deferred_chunk_scan)(const Query *query, const Hypertable *ht);
-	void (*deferred_chunk_scan_add_path)(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht);
-
 	/* gapfill */
 	PGFunction gapfill_marker;
 	PGFunction gapfill_int16_time_bucket;

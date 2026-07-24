@@ -57,6 +57,7 @@ extern void _conn_mock_fini();
 #endif
 
 extern void _chunk_append_init();
+extern void _deferred_chunk_scan_init(void);
 
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
@@ -111,6 +112,7 @@ _PG_init(void)
 	_planner_init();
 	_constraint_aware_append_init();
 	_chunk_append_init();
+	_deferred_chunk_scan_init();
 	_event_trigger_init();
 	_process_utility_init();
 	_guc_init();
