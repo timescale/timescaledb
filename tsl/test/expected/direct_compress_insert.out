@@ -997,11 +997,111 @@ SELECT count(*), min(label), max(label) FROM inserted;
 -------+-------+------
     20 | d0:10 | d1:9
 
+-- RETURNING a system column falls back to the normal insert path, except
+-- tableoid which the returning projection sets explicitly.
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING ctid;
+WARNING:  disabling direct compress because the RETURNING clause references system columns
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   Direct Compress: false
+   ->  Insert on dc_ret
+         ->  Function Scan on generate_series i
+
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING xmin;
+WARNING:  disabling direct compress because the RETURNING clause references system columns
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   Direct Compress: false
+   ->  Insert on dc_ret
+         ->  Function Scan on generate_series i
+
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING cmin;
+WARNING:  disabling direct compress because the RETURNING clause references system columns
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   Direct Compress: false
+   ->  Insert on dc_ret
+         ->  Function Scan on generate_series i
+
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING xmax;
+WARNING:  disabling direct compress because the RETURNING clause references system columns
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   Direct Compress: false
+   ->  Insert on dc_ret
+         ->  Function Scan on generate_series i
+
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING cmax;
+WARNING:  disabling direct compress because the RETURNING clause references system columns
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   Direct Compress: false
+   ->  Insert on dc_ret
+         ->  Function Scan on generate_series i
+
+-- tableoid stays on the direct compress path
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING tableoid;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   Direct Compress: true
+   ->  Insert on dc_ret
+         ->  Function Scan on generate_series i
+
+-- ctid falls back and returns real tuple ids
+WITH inserted AS (
+    INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 day'), 'd' || (i % 2)::text, i
+        FROM generate_series(1, 20) i RETURNING ctid IS NOT NULL AS has_ctid, val
+)
+SELECT count(*), bool_and(has_ctid), min(val), max(val) FROM inserted;
+WARNING:  disabling direct compress because the RETURNING clause references system columns
+ count | bool_and | min | max 
+-------+----------+-----+-----
+    20 | t        |   1 |  20
+
+-- tableoid on the direct compress path holds the target chunk (all 20 rows
+-- land in one chunk, so every RETURNING row reports the same chunk)
+INSERT INTO dc_ret SELECT '2025-06-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING tableoid::regclass AS chunk;
+                  chunk                   
+------------------------------------------
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+ _timescaledb_internal._hyper_16_67_chunk
+
 -- rows were actually inserted
 SELECT count(*) FROM dc_ret;
  count 
 -------
-    40
+    80
 
 RESET timescaledb.enable_direct_compress_insert;
 DROP TABLE dc_ret;

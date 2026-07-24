@@ -5,9 +5,11 @@
  */
 
 #include <postgres.h>
+#include <access/sysattr.h>
 #include <nodes/execnodes.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <utils/snapmgr.h>
 
@@ -67,6 +69,34 @@ should_use_direct_compress(ModifyHypertableState *state)
 				(errmsg("disabling direct compress because the destination table has exclusion "
 						"constraints")));
 		return false;
+	}
+
+	/*
+	 * Direct compress stores the tuple in compressed form instead of a
+	 * regular heap tuple, so system columns like ctid or xmin never get a
+	 * meaningful value. Fall back to the normal insert path when RETURNING
+	 * references them. tableoid is fine because the returning projection
+	 * sets it explicitly.
+	 */
+	ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
+	if (mt->returningLists)
+	{
+		Bitmapset *attnos = NULL;
+		pull_varattnos((Node *) linitial(mt->returningLists),
+					   resultRelInfo->ri_RangeTableIndex,
+					   &attnos);
+		int attno = -1;
+		while ((attno = bms_next_member(attnos, attno)) >= 0)
+		{
+			AttrNumber sysattno = attno + FirstLowInvalidHeapAttributeNumber;
+			if (sysattno < 0 && sysattno != TableOidAttributeNumber)
+			{
+				ereport(WARNING,
+						(errmsg("disabling direct compress because the RETURNING clause "
+								"references system columns")));
+				return false;
+			}
+		}
 	}
 
 	Plan *subplan = mtstate->ps.plan->lefttree;
