@@ -590,6 +590,37 @@ WITH inserted AS (
         FROM generate_series(1, 20) i RETURNING device || ':' || val AS label
 )
 SELECT count(*), min(label), max(label) FROM inserted;
+-- RETURNING a system column falls back to the normal insert path, except
+-- tableoid which the returning projection sets explicitly.
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING ctid;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING xmin;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING cmin;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING xmax;
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING cmax;
+-- tableoid stays on the direct compress path
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING tableoid;
+-- ctid falls back and returns real tuple ids
+WITH inserted AS (
+    INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 day'), 'd' || (i % 2)::text, i
+        FROM generate_series(1, 20) i RETURNING ctid IS NOT NULL AS has_ctid, val
+)
+SELECT count(*), bool_and(has_ctid), min(val), max(val) FROM inserted;
+-- tableoid on the direct compress path holds the target chunk (all 20 rows
+-- land in one chunk, so every RETURNING row reports the same chunk)
+INSERT INTO dc_ret SELECT '2025-06-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING tableoid::regclass AS chunk;
 -- rows were actually inserted
 SELECT count(*) FROM dc_ret;
 RESET timescaledb.enable_direct_compress_insert;
