@@ -43,7 +43,7 @@
 #include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/gapfill/gapfill_functions.h"
-#include "nodes/hypertable_scan/hypertable_scan.h"
+#include "nodes/deferred_chunk_scan/deferred_chunk_scan.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
 #include "planner.h"
@@ -71,8 +71,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
-	.should_hypertable_scan = ts_should_hypertable_scan,
-	.hypertable_scan_add_path = ts_hypertable_scan_add_path,
+	.should_deferred_chunk_scan = ts_should_deferred_chunk_scan,
+	.deferred_chunk_scan_add_path = ts_deferred_chunk_scan_add_path,
 
 	/* bgw policies */
 	.policy_compression_add = policy_compression_add,
@@ -221,7 +221,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_continuous_aggs_cache_inval_init();
 	_columnar_index_scan_init();
 	_columnar_scan_init();
-	_hypertable_scan_init();
+	_deferred_chunk_scan_init();
 	_skip_scan_init();
 	_vector_agg_init();
 

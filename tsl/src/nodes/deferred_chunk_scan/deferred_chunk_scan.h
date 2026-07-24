@@ -11,6 +11,6 @@
 
 #include "hypertable.h"
 
-extern bool ts_should_hypertable_scan(const Query *query, const Hypertable *ht);
-extern void ts_hypertable_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht);
-extern void _hypertable_scan_init(void);
+extern bool ts_should_deferred_chunk_scan(const Query *query, const Hypertable *ht);
+extern void ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht);
+extern void _deferred_chunk_scan_init(void);

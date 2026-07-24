@@ -45,8 +45,8 @@ typedef struct TimescaleDBPrivate
 	List *transformed_sort_pathkeys;
 	bool transformed_sort_pathkeys_valid;
 
-	/* Use HypertableScan for this relation */
-	bool hypertable_scan;
+	/* Use DeferredChunkScan for this relation */
+	bool deferred_chunk_scan;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte);

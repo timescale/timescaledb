@@ -182,7 +182,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     detach_chunk.sql
     direct_compress_memory.sql
     hypertable_generalization.sql
-    hypertablescan.sql
+    deferredchunkscan.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
     read_only.sql

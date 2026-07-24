@@ -95,7 +95,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_hypertable_expansion_for_dml = true;
-TSDLLEXPORT bool ts_guc_enable_hypertablescan = false;
+TSDLLEXPORT bool ts_guc_enable_deferredchunkscan = false;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
@@ -213,7 +213,7 @@ DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
 
 DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 
-DebugRequireOption ts_guc_debug_require_hypertable_scan = DRO_Allow;
+DebugRequireOption ts_guc_debug_require_deferred_chunk_scan = DRO_Allow;
 #endif
 
 DebugRequireOption ts_guc_debug_require_batch_sorted_merge = DRO_Allow;
@@ -781,11 +781,11 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_hypertablescan"),
-							 "Enable HypertableScan for LIMIT queries",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deferredchunkscan"),
+							 "Enable DeferredChunkScan for LIMIT queries",
 							 "Custom scan node for hypertables that iterates chunks at"
 							 "execution instead of expanding every chunk at plan time.",
-							 &ts_guc_enable_hypertablescan,
+							 &ts_guc_enable_deferredchunkscan,
 							 false,
 							 PGC_USERSET,
 							 0,
@@ -1726,14 +1726,14 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_hypertable_scan"),
+	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_deferred_chunk_scan"),
 							 /* short_desc= */
-							 "ensure that HypertableScan is used or not",
+							 "ensure that DeferredChunkScan is used or not",
 							 /* long_desc= */
 							 "this is for debugging purposes, to check whether a query uses the "
-							 "HypertableScan node without depending on version-specific EXPLAIN "
+							 "DeferredChunkScan node without depending on version-specific EXPLAIN "
 							 "output",
-							 /* valueAddr= */ (int *) &ts_guc_debug_require_hypertable_scan,
+							 /* valueAddr= */ (int *) &ts_guc_debug_require_deferred_chunk_scan,
 							 /* bootValue= */ DRO_Allow,
 							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,

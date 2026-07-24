@@ -15,6 +15,8 @@
 #include <access/htup_details.h>
 #include <access/stratnum.h>
 #include <access/sysattr.h>
+#include <access/table.h>
+#include <access/xact.h>
 #include <catalog/pg_type.h>
 #include <commands/explain.h>
 #include <commands/explain_format.h>
@@ -46,7 +48,7 @@
 #include "guc.h"
 #include "hypertable.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/hypertable_scan/hypertable_scan.h"
+#include "nodes/deferred_chunk_scan/deferred_chunk_scan.h"
 #include "scan_iterator.h"
 #include "ts_catalog/catalog.h"
 #include "utils.h"
@@ -66,9 +68,9 @@ typedef enum
 	HS_PRIV_DESCENDING,	 /* 1 if the ordered sort is descending */
 	HS_PRIV_NULLS_FIRST, /* 1 if the ordered sort is NULLS FIRST */
 	HS_PRIV_COUNT
-} HypertableScanPrivIndex;
+} DeferredChunkScanPrivIndex;
 
-typedef struct HypertableScanState
+typedef struct DeferredChunkScanState
 {
 	CustomScanState css;
 
@@ -103,19 +105,19 @@ typedef struct HypertableScanState
 	uint64 cur_nrows;
 	uint64 cur_row;
 	TupleTableSlot *scan_slot; /* virtual tuple in hypertable row type, before projection */
-} HypertableScanState;
+} DeferredChunkScanState;
 
 /* DestReceiver that copies each fetched row into the scan's chunk_mcxt. */
-typedef struct HypertableScanDest
+typedef struct DeferredChunkScanDest
 {
 	DestReceiver pub;
-	HypertableScanState *state;
-} HypertableScanDest;
+	DeferredChunkScanState *state;
+} DeferredChunkScanDest;
 
 static bool
 hs_receive_slot(TupleTableSlot *slot, DestReceiver *self)
 {
-	HypertableScanState *state = ((HypertableScanDest *) self)->state;
+	DeferredChunkScanState *state = ((DeferredChunkScanDest *) self)->state;
 	MemoryContext old = MemoryContextSwitchTo(state->chunk_mcxt);
 	state->cur_tuples[state->cur_nrows++] = ExecCopySlotHeapTuple(slot);
 	MemoryContextSwitchTo(old);
@@ -132,9 +134,9 @@ hs_dest_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 }
 
 static DestReceiver *
-hs_create_dest(HypertableScanState *state)
+hs_create_dest(DeferredChunkScanState *state)
 {
-	HypertableScanDest *dest = palloc0(sizeof(HypertableScanDest));
+	DeferredChunkScanDest *dest = palloc0(sizeof(DeferredChunkScanDest));
 	dest->pub.receiveSlot = hs_receive_slot;
 	dest->pub.rStartup = hs_dest_startup;
 	dest->pub.rShutdown = hs_dest_noop;
@@ -144,32 +146,32 @@ hs_create_dest(HypertableScanState *state)
 	return (DestReceiver *) dest;
 }
 
-static Plan *hypertable_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
+static Plan *deferred_chunk_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
 										 List *tlist, List *clauses, List *custom_plans);
-static Node *hypertable_scan_state_create(CustomScan *cscan);
-static void hypertable_scan_begin(CustomScanState *node, EState *estate, int eflags);
-static TupleTableSlot *hypertable_scan_exec(CustomScanState *node);
-static void hypertable_scan_end(CustomScanState *node);
-static void hypertable_scan_rescan(CustomScanState *node);
-static void hypertable_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es);
+static Node *deferred_chunk_scan_state_create(CustomScan *cscan);
+static void deferred_chunk_scan_begin(CustomScanState *node, EState *estate, int eflags);
+static TupleTableSlot *deferred_chunk_scan_exec(CustomScanState *node);
+static void deferred_chunk_scan_end(CustomScanState *node);
+static void deferred_chunk_scan_rescan(CustomScanState *node);
+static void deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es);
 
-static CustomPathMethods hypertable_scan_path_methods = {
-	.CustomName = "HypertableScan",
-	.PlanCustomPath = hypertable_scan_plan_create,
+static CustomPathMethods deferred_chunk_scan_path_methods = {
+	.CustomName = "DeferredChunkScan",
+	.PlanCustomPath = deferred_chunk_scan_plan_create,
 };
 
-static CustomScanMethods hypertable_scan_plan_methods = {
-	.CustomName = "HypertableScan",
-	.CreateCustomScanState = hypertable_scan_state_create,
+static CustomScanMethods deferred_chunk_scan_plan_methods = {
+	.CustomName = "DeferredChunkScan",
+	.CreateCustomScanState = deferred_chunk_scan_state_create,
 };
 
-static CustomExecMethods hypertable_scan_exec_methods = {
-	.CustomName = "HypertableScan",
-	.BeginCustomScan = hypertable_scan_begin,
-	.ExecCustomScan = hypertable_scan_exec,
-	.EndCustomScan = hypertable_scan_end,
-	.ReScanCustomScan = hypertable_scan_rescan,
-	.ExplainCustomScan = hypertable_scan_explain,
+static CustomExecMethods deferred_chunk_scan_exec_methods = {
+	.CustomName = "DeferredChunkScan",
+	.BeginCustomScan = deferred_chunk_scan_begin,
+	.ExecCustomScan = deferred_chunk_scan_exec,
+	.EndCustomScan = deferred_chunk_scan_end,
+	.ReScanCustomScan = deferred_chunk_scan_rescan,
+	.ExplainCustomScan = deferred_chunk_scan_explain,
 };
 
 /* The single ORDER BY key, if any, that we can satisfy for this hypertable. */
@@ -215,9 +217,21 @@ primary_dimension_sort_key(const Query *query, const Hypertable *ht)
 }
 
 static bool
-hypertable_scan_is_candidate(const Query *query, const Hypertable *ht)
+deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
 {
-	if (!ts_guc_enable_hypertablescan || ht == NULL)
+	if (!ts_guc_enable_deferredchunkscan || ht == NULL)
+	{
+		return false;
+	}
+
+	/*
+	 * Under REPEATABLE READ / SERIALIZABLE a query must see a stable chunk set for
+	 * its whole lifetime. The normal expanded plan locks every chunk at plan time
+	 * and gives that guarantee; the deferred scan locks chunks lazily as it opens
+	 * them, so a concurrent drop could remove a chunk the snapshot still needs.
+	 * Fall back to the expanded plan under snapshot isolation.
+	 */
+	if (IsolationUsesXactSnapshot())
 	{
 		return false;
 	}
@@ -294,30 +308,30 @@ hypertable_scan_is_candidate(const Query *query, const Hypertable *ht)
 }
 
 /*
- * Whether the query can be served by the HypertableScan node. In debug builds
- * this also enforces debug_require_hypertable_scan so tests can assert the node
+ * Whether the query can be served by the DeferredChunkScan node. In debug builds
+ * this also enforces debug_require_deferred_chunk_scan so tests can assert the node
  * choice without depending on version-specific EXPLAIN output; the sole caller
  * invokes this only at the hypertable's own planning decision.
  */
 bool
-ts_should_hypertable_scan(const Query *query, const Hypertable *ht)
+ts_should_deferred_chunk_scan(const Query *query, const Hypertable *ht)
 {
-	bool used = hypertable_scan_is_candidate(query, ht);
+	bool used = deferred_chunk_scan_is_candidate(query, ht);
 
 #ifdef TS_DEBUG
-	if (!used && ts_guc_debug_require_hypertable_scan == DRO_Require)
+	if (!used && ts_guc_debug_require_deferred_chunk_scan == DRO_Require)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("HypertableScan not used when required by the "
-						"debug_require_hypertable_scan GUC")));
+				 errmsg("DeferredChunkScan not used when required by the "
+						"debug_require_deferred_chunk_scan GUC")));
 	}
-	if (used && ts_guc_debug_require_hypertable_scan == DRO_Forbid)
+	if (used && ts_guc_debug_require_deferred_chunk_scan == DRO_Forbid)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("HypertableScan used when forbidden by the "
-						"debug_require_hypertable_scan GUC")));
+				 errmsg("DeferredChunkScan used when forbidden by the "
+						"debug_require_deferred_chunk_scan GUC")));
 	}
 #endif
 
@@ -329,7 +343,7 @@ ts_should_hypertable_scan(const Query *query, const Hypertable *ht)
  * into each per-chunk query.
  */
 static int64
-hypertable_scan_push_limit(const Query *query)
+deferred_chunk_scan_push_limit(const Query *query)
 {
 	Node *lc = query->limitCount;
 	Node *lo = query->limitOffset;
@@ -365,14 +379,14 @@ hypertable_scan_push_limit(const Query *query)
 }
 
 void
-ts_hypertable_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht)
+ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht)
 {
 	CustomPath *cpath = makeNode(CustomPath);
 	AttrNumber sort_attno = 0;
 	bool descending = false;
 	Oid sortop = InvalidOid;
 	bool nulls_first = false;
-	int64 push_limit = hypertable_scan_push_limit(root->parse);
+	int64 push_limit = deferred_chunk_scan_push_limit(root->parse);
 
 	cpath->path.pathtype = T_CustomScan;
 	cpath->path.parent = rel;
@@ -382,7 +396,7 @@ ts_hypertable_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypertable
 	cpath->path.startup_cost = random_page_cost;
 	/* total_cost grows with rows so an enclosing Limit scales it */
 	cpath->path.total_cost = cpath->path.startup_cost + cpath->path.rows * 2 * cpu_tuple_cost;
-	cpath->methods = &hypertable_scan_path_methods;
+	cpath->methods = &deferred_chunk_scan_path_methods;
 
 	SortGroupClause *sgc = primary_dimension_sort_key(root->parse, ht);
 	if (sgc != NULL)
@@ -420,7 +434,7 @@ ts_hypertable_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypertable
 }
 
 static Plan *
-hypertable_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path, List *tlist,
+deferred_chunk_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path, List *tlist,
 							List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);
@@ -432,18 +446,18 @@ hypertable_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best
 	cscan->custom_plans = custom_plans;
 	cscan->custom_private = best_path->custom_private;
 	cscan->custom_scan_tlist = NIL;
-	cscan->methods = &hypertable_scan_plan_methods;
+	cscan->methods = &deferred_chunk_scan_plan_methods;
 
 	return &cscan->scan.plan;
 }
 
 static Node *
-hypertable_scan_state_create(CustomScan *cscan)
+deferred_chunk_scan_state_create(CustomScan *cscan)
 {
-	HypertableScanState *state =
-		(HypertableScanState *) newNode(sizeof(HypertableScanState), T_CustomScanState);
+	DeferredChunkScanState *state =
+		(DeferredChunkScanState *) newNode(sizeof(DeferredChunkScanState), T_CustomScanState);
 
-	state->css.methods = &hypertable_scan_exec_methods;
+	state->css.methods = &deferred_chunk_scan_exec_methods;
 
 	List *ints = linitial(cscan->custom_private);
 	Assert(list_length(ints) == HS_PRIV_COUNT);
@@ -461,7 +475,7 @@ hypertable_scan_state_create(CustomScan *cscan)
  * Determine which columns to fetch from this scan's output targetlist
  */
 static void
-compute_fetch_columns(HypertableScanState *state, CustomScanState *node)
+compute_fetch_columns(DeferredChunkScanState *state, CustomScanState *node)
 {
 	Scan *scan = (Scan *) node->ss.ps.plan;
 	TupleDesc desc = RelationGetDescr(node->ss.ss_currentRelation);
@@ -471,7 +485,7 @@ compute_fetch_columns(HypertableScanState *state, CustomScanState *node)
 	/*
 	 * A whole-row reference (attno 0) needs every column; expand it to all live
 	 * columns so it goes through the same by-attno assignment as any other column
-	 * set. (System columns, attno < 0, are rejected in ts_should_hypertable_scan.)
+	 * set. (System columns, attno < 0, are rejected in ts_should_deferred_chunk_scan.)
 	 */
 	bool whole_row = bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, attrs);
 
@@ -500,7 +514,7 @@ compute_fetch_columns(HypertableScanState *state, CustomScanState *node)
 
 /* Reset the scan position to the start */
 static void
-hypertable_scan_reset(HypertableScanState *state)
+deferred_chunk_scan_reset(DeferredChunkScanState *state)
 {
 	if (state->cur_portal != NULL)
 	{
@@ -518,16 +532,16 @@ hypertable_scan_reset(HypertableScanState *state)
 }
 
 static void
-hypertable_scan_begin(CustomScanState *node, EState *estate, int eflags)
+deferred_chunk_scan_begin(CustomScanState *node, EState *estate, int eflags)
 {
-	HypertableScanState *state = (HypertableScanState *) node;
+	DeferredChunkScanState *state = (DeferredChunkScanState *) node;
 	Oid ht_relid = RelationGetRelid(node->ss.ss_currentRelation);
 
 	compute_fetch_columns(state, node);
 	state->chunk_mcxt =
-		AllocSetContextCreate(estate->es_query_cxt, "HypertableScan chunk", ALLOCSET_DEFAULT_SIZES);
+		AllocSetContextCreate(estate->es_query_cxt, "DeferredChunkScan chunk", ALLOCSET_DEFAULT_SIZES);
 	state->dest = hs_create_dest(state);
-	hypertable_scan_reset(state);
+	deferred_chunk_scan_reset(state);
 
 	state->scan_slot =
 		MakeSingleTupleTableSlot(RelationGetDescr(node->ss.ss_currentRelation), &TTSOpsVirtual);
@@ -562,7 +576,7 @@ hypertable_scan_begin(CustomScanState *node, EState *estate, int eflags)
  * Build the per-chunk query.
  */
 static char *
-hypertable_scan_chunk_sql(HypertableScanState *state, Oid reloid)
+deferred_chunk_scan_chunk_sql(DeferredChunkScanState *state, Oid reloid)
 {
 	TupleDesc desc = RelationGetDescr(state->css.ss.ss_currentRelation);
 	char *qualified = quote_qualified_identifier(get_namespace_name(get_rel_namespace(reloid)),
@@ -596,7 +610,7 @@ hypertable_scan_chunk_sql(HypertableScanState *state, Oid reloid)
  * In ordered mode we scan dimension slices ordered by range_start.
  */
 static Oid
-next_chunk_reloid_ordered(HypertableScanState *state)
+next_chunk_reloid_ordered(DeferredChunkScanState *state)
 {
 	StrategyNumber start_strategy = InvalidStrategy;
 	int64 start_value = 0;
@@ -630,7 +644,9 @@ next_chunk_reloid_ordered(HypertableScanState *state)
 	state->have_last = true;
 	ts_scan_iterator_close(&it);
 
-	return ts_chunk_get_relid(chunk_id, /* missing_ok = */ false);
+	/* The chunk may have been dropped since the slice was read; open_next_chunk
+	 * skips an InvalidOid. */
+	return ts_chunk_get_relid(chunk_id, /* missing_ok = */ true);
 }
 
 /*
@@ -639,7 +655,7 @@ next_chunk_reloid_ordered(HypertableScanState *state)
  * for that.
  */
 static Oid
-next_chunk_reloid_unordered(HypertableScanState *state)
+next_chunk_reloid_unordered(DeferredChunkScanState *state)
 {
 	ScanIterator it = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	it.ctx.index =
@@ -711,7 +727,7 @@ next_chunk_reloid_unordered(HypertableScanState *state)
 
 /* Next chunk relation to scan, or InvalidOid when exhausted. */
 static Oid
-next_chunk_reloid(HypertableScanState *state)
+next_chunk_reloid(DeferredChunkScanState *state)
 {
 	return state->ordered ? next_chunk_reloid_ordered(state) : next_chunk_reloid_unordered(state);
 }
@@ -721,16 +737,34 @@ next_chunk_reloid(HypertableScanState *state)
  * are no more chunks.
  */
 static bool
-open_next_chunk(HypertableScanState *state)
+open_next_chunk(DeferredChunkScanState *state)
 {
-	Oid reloid = next_chunk_reloid(state);
-	if (!OidIsValid(reloid))
+	Oid reloid;
+
+	/*
+	 * Chunks are enumerated from the catalog but only locked here. A concurrent
+	 * drop_chunks/retention could have removed one in the meantime, so lock it
+	 * with try_table_open and skip to the next chunk when it is already gone.
+	 * The AccessShareLock is kept for the transaction and blocks a drop while we
+	 * scan the chunk.
+	 */
+	for (;;)
 	{
-		return false;
+		reloid = next_chunk_reloid(state);
+		if (!OidIsValid(reloid))
+		{
+			return false;
+		}
+		Relation rel = try_table_open(reloid, AccessShareLock);
+		if (rel != NULL)
+		{
+			table_close(rel, NoLock);
+			break;
+		}
 	}
 	state->chunks_scanned++;
 
-	char *sql = hypertable_scan_chunk_sql(state, reloid);
+	char *sql = deferred_chunk_scan_chunk_sql(state, reloid);
 	List *parsetree = pg_parse_query(sql);
 	RawStmt *raw = linitial_node(RawStmt, parsetree);
 	List *querytree = pg_analyze_and_rewrite_fixedparams(raw, sql, NULL, 0, NULL);
@@ -759,7 +793,7 @@ open_next_chunk(HypertableScanState *state)
 /* Make the next row of the current chunk available in fetch_slot, refilling the
  * batch and advancing to the next chunk as needed. False when fully exhausted. */
 static bool
-next_chunk_row(HypertableScanState *state)
+next_chunk_row(DeferredChunkScanState *state)
 {
 	for (;;)
 	{
@@ -788,9 +822,9 @@ next_chunk_row(HypertableScanState *state)
 }
 
 static TupleTableSlot *
-hypertable_scan_next(ScanState *ss)
+deferred_chunk_scan_next(ScanState *ss)
 {
-	HypertableScanState *state = (HypertableScanState *) ss;
+	DeferredChunkScanState *state = (DeferredChunkScanState *) ss;
 
 	if (!next_chunk_row(state))
 	{
@@ -822,23 +856,23 @@ hypertable_scan_next(ScanState *ss)
 }
 
 static bool
-hypertable_scan_recheck(ScanState *ss, TupleTableSlot *slot)
+deferred_chunk_scan_recheck(ScanState *ss, TupleTableSlot *slot)
 {
 	return true;
 }
 
 static TupleTableSlot *
-hypertable_scan_exec(CustomScanState *node)
+deferred_chunk_scan_exec(CustomScanState *node)
 {
 	return ExecScan(&node->ss,
-					(ExecScanAccessMtd) hypertable_scan_next,
-					(ExecScanRecheckMtd) hypertable_scan_recheck);
+					(ExecScanAccessMtd) deferred_chunk_scan_next,
+					(ExecScanRecheckMtd) deferred_chunk_scan_recheck);
 }
 
 static void
-hypertable_scan_end(CustomScanState *node)
+deferred_chunk_scan_end(CustomScanState *node)
 {
-	HypertableScanState *state = (HypertableScanState *) node;
+	DeferredChunkScanState *state = (DeferredChunkScanState *) node;
 
 	if (state->cur_portal != NULL)
 	{
@@ -858,17 +892,17 @@ hypertable_scan_end(CustomScanState *node)
 }
 
 static void
-hypertable_scan_rescan(CustomScanState *node)
+deferred_chunk_scan_rescan(CustomScanState *node)
 {
-	hypertable_scan_reset((HypertableScanState *) node);
+	deferred_chunk_scan_reset((DeferredChunkScanState *) node);
 }
 
 /* Show the ORDER BY key (ordered mode) and, under ANALYZE, how many chunks the
  * LIMIT visited. */
 static void
-hypertable_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	HypertableScanState *state = (HypertableScanState *) node;
+	DeferredChunkScanState *state = (DeferredChunkScanState *) node;
 
 	if (state->ordered)
 	{
@@ -902,7 +936,7 @@ hypertable_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es
 }
 
 void
-_hypertable_scan_init(void)
+_deferred_chunk_scan_init(void)
 {
-	TryRegisterCustomScanMethods(&hypertable_scan_plan_methods);
+	TryRegisterCustomScanMethods(&deferred_chunk_scan_plan_methods);
 }

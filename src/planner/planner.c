@@ -1497,11 +1497,11 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	reltype = ts_classify_relation(root, rel, &ht);
 
 	/*
-	 * Attach HypertableScan path for the (unexpanded) hypertable.
+	 * Attach DeferredChunkScan path for the (unexpanded) hypertable.
 	 */
-	if (reltype == TS_REL_HYPERTABLE && ht && ts_get_private_reloptinfo(rel)->hypertable_scan)
+	if (reltype == TS_REL_HYPERTABLE && ht && ts_get_private_reloptinfo(rel)->deferred_chunk_scan)
 	{
-		ts_cm_functions->hypertable_scan_add_path(root, rel, ht);
+		ts_cm_functions->deferred_chunk_scan_add_path(root, rel, ht);
 		if (prev_set_rel_pathlist_hook != NULL)
 		{
 			(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
@@ -1635,7 +1635,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * including the target relation. The support for expanding target
 			 * relation of MERGE is not implemented at the moment.
 			 *
-			 * For HypertableScan we don't expand during planning.
+			 * For DeferredChunkScan we don't expand during planning.
 			 *
 			 * The hypertables that are not expanded by our custom code here
 			 * fall back to the standard Postgres inheritance hierarchy
@@ -1644,9 +1644,9 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * `inhparent` goes to false in two cases: a hypertable without
 			 * chunks or a SELECT FROM ONLY hypertable.
 			 */
-			bool use_hypertable_scan = inhparent && ts_cm_functions->should_hypertable_scan &&
-									   ts_cm_functions->should_hypertable_scan(query, ht);
-			if (use_hypertable_scan)
+			bool use_deferred_chunk_scan = inhparent && ts_cm_functions->should_deferred_chunk_scan &&
+									   ts_cm_functions->should_deferred_chunk_scan(query, ht);
+			if (use_deferred_chunk_scan)
 			{
 				rte->inh = false;
 			}
@@ -1663,7 +1663,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 				}
 			}
 
-			ts_create_private_reloptinfo(rel)->hypertable_scan = use_hypertable_scan;
+			ts_create_private_reloptinfo(rel)->deferred_chunk_scan = use_deferred_chunk_scan;
 
 			if (ts_guc_enable_optimizations)
 			{
