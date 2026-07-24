@@ -1136,3 +1136,60 @@ SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :MB_CHUNK ORD
 SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_max_batches') chunk;
 
 DROP TABLE metrics_max_batches;
+
+-- Test Small intermediate batches must not hide overlaps with later batches.
+CREATE TABLE metrics_running_max (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time');
+
+INSERT INTO metrics_running_max SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,1000) i;
+INSERT INTO metrics_running_max SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(500,1500) i;
+INSERT INTO metrics_running_max SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1000,2000) i;
+INSERT INTO metrics_running_max SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1500,2500) i;
+
+-- Should resolve all overlaps in one pass.
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_running_max') chunk;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_running_max') chunk;
+DROP TABLE metrics_running_max;
+
+-- Test NULL last with NULLS LAST must stay as the running max.
+CREATE TABLE metrics_null_boundary (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='value NULLS LAST');
+
+-- insert in a pattern to trigger NULL value overlap
+INSERT INTO metrics_null_boundary
+SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval,
+       CASE WHEN i = 1000 THEN NULL ELSE i::float END
+FROM generate_series(1,1000) i;
+
+INSERT INTO metrics_null_boundary
+SELECT '2025-01-02'::timestamptz + ((999 + i) || ' minute')::interval, (499 + i)::float
+FROM generate_series(1,11) i;
+
+INSERT INTO metrics_null_boundary
+SELECT '2025-01-02'::timestamptz + ((1010 + i) || ' minute')::interval, (799 + i)::float
+FROM generate_series(1,101) i;
+
+INSERT INTO metrics_null_boundary
+SELECT '2025-01-02'::timestamptz + ((1200 + i) || ' minute')::interval, (950 + i)::float
+FROM generate_series(1,50) i;
+
+SELECT cs.compress_relid::regclass::text AS "MIXED_NULLS_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_null_boundary'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_value, _ts_meta_v2_last_value
+FROM :MIXED_NULLS_CHUNK
+ORDER BY _ts_meta_min_1;
+
+-- Should resolve all overlaps in one pass.
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_null_boundary') chunk;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_null_boundary') chunk;
+
+SELECT ctid, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_value, _ts_meta_v2_last_value
+FROM :MIXED_NULLS_CHUNK
+ORDER BY _ts_meta_min_1;
+DROP TABLE metrics_null_boundary;
