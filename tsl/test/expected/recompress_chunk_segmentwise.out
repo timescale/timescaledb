@@ -774,10 +774,8 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
 EXPLAIN (COSTS OFF) SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_13_13_chunk
-   ->  Sort
-         Sort Key: _hyper_13_13_chunk_compressed._ts_meta_v2_first_time
-         ->  Index Scan using _hyper_13_13_chunk_compressed_a__ts_meta_v2_first_time__ts__idx on _hyper_13_13_chunk_compressed
-               Index Cond: (a = 2)
+   ->  Index Scan using _hyper_13_13_chunk_compressed_a__ts_meta_v2_first_time__ts__idx on _hyper_13_13_chunk_compressed
+         Index Cond: (a = 2)
 
 RESET timescaledb.debug_require_batch_sorted_merge;
 DROP TABLE segwise_unordered;

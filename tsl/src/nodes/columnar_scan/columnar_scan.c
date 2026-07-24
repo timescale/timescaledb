@@ -241,7 +241,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 	 * If pathkeys contains non-segmentby columns the rest of the ordering
 	 * requirements will be satisfied by ordering by sequence_num.
 	 */
-	if (sort_info->needs_sequence_num)
+	if (sort_info->needs_sequence_num || sort_info->use_batch_sorted_merge)
 	{
 		/* TODO: split up legacy sequence number path and non-sequence number path into dedicated
 		 * functions. */
@@ -317,60 +317,10 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 				column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 				int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
 				Assert(orderby_index != 0);
-				AttrNumber leading_attno;
-				AttrNumber trailing_attno;
-				orderby_sparse_metadata_attnos(info->settings,
-											   info->compressed_rte->relid,
-											   orderby_index,
-											   &leading_attno,
-											   &trailing_attno);
+
 				bool orderby_desc =
 					ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
 
-				/*
-				 * Compressed chunk indexes based on firstlast sparse indexes can have two
-				 * orderings. New chunks index them as (first, last); chunks compressed before that
-				 * change index a DESC column as (last, first). Only DESC columns can differ, so for
-				 * those we check the chunk's index and follow whichever order it has.
-				 */
-				if (orderby_desc &&
-					orderby_sparse_kind(info->settings, orderby_index) == ORDERBY_SPARSE_FIRSTLAST)
-				{
-					orderby_firstlast_metadata_attnos(info->settings,
-													  info->compressed_rte->relid,
-													  orderby_index,
-													  &leading_attno,
-													  &trailing_attno);
-
-					ListCell *index_lc;
-					foreach (index_lc, info->compressed_rel->indexlist)
-					{
-						IndexOptInfo *index = lfirst(index_lc);
-						int leading_pos = -1;
-						int trailing_pos = -1;
-						for (int k = 0; k < index->nkeycolumns; k++)
-						{
-							if (index->indexkeys[k] == leading_attno)
-							{
-								leading_pos = k;
-							}
-							else if (index->indexkeys[k] == trailing_attno)
-							{
-								trailing_pos = k;
-							}
-						}
-						if (leading_pos >= 0 && trailing_pos >= 0)
-						{
-							if (trailing_pos < leading_pos)
-							{
-								AttrNumber tmp = leading_attno;
-								leading_attno = trailing_attno;
-								trailing_attno = tmp;
-							}
-							break;
-						}
-					}
-				}
 				bool orderby_nullsfirst =
 					ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
 
@@ -388,43 +338,151 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 					nulls_first = orderby_nullsfirst;
 				}
 
-				Var *metadata_var = makeVar(info->compressed_rel->relid,
-											leading_attno,
-											var->vartype,
-											var->vartypmod,
-											var->varcollid,
-											var->varlevelsup);
-				Expr *leading_expr =
-					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *leading_ec =
-					append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
-				PathKey *leading_pk = make_canonical_pathkey(root,
-															 leading_ec,
-															 pk->pk_opfamily,
-															 strategy,
-															 nulls_first);
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, leading_pk);
+				/* For Batch sorted merge we need to sort on specially chosen leading attribute for
+				 * each pathkey */
+				if (sort_info->use_batch_sorted_merge)
+				{
+					Oid sortop =
+						get_opfamily_member(pk->pk_opfamily, opcintype, opcintype, pk->pk_cmptype);
+					Oid opfamily, optype;
+					CompareType bsm_strategy;
+					if (!get_ordering_op_properties(sortop, &opfamily, &optype, &bsm_strategy))
+					{
+						elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+					}
+					Assert(bsm_strategy == BTLessStrategyNumber ||
+						   bsm_strategy == BTGreaterStrategyNumber);
+					char *leading_name;
+					char *trailing_name;
+					orderby_sparse_metadata_names(info->settings,
+												  orderby_index,
+												  &leading_name,
+												  &trailing_name);
+					char *meta_col_name =
+						strategy == BTLessStrategyNumber ? leading_name : trailing_name;
 
-				metadata_var = makeVar(info->compressed_rel->relid,
-									   trailing_attno,
-									   var->vartype,
-									   var->vartypmod,
-									   var->varcollid,
-									   var->varlevelsup);
-				Expr *trailing_expr =
-					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *trailing_ec =
-					append_ec_for_metadata_col(root, info, trailing_expr, pk, opcintype);
-				PathKey *trailing_pk = make_canonical_pathkey(root,
-															  trailing_ec,
-															  pk->pk_opfamily,
-															  strategy,
-															  nulls_first);
+					AttrNumber attr_position =
+						get_attnum(info->compressed_rte->relid, meta_col_name);
 
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, trailing_pk);
+					if (attr_position == InvalidAttrNumber)
+					{
+						elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
+					}
+					Var *metadata_var = makeVar(info->compressed_rel->relid,
+												attr_position,
+												var->vartype,
+												var->vartypmod,
+												var->varcollid,
+												var->varlevelsup);
+					Expr *leading_expr =
+						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+					EquivalenceClass *leading_ec =
+						append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
+					PathKey *leading_pk = make_canonical_pathkey(root,
+																 leading_ec,
+																 pk->pk_opfamily,
+																 strategy,
+																 nulls_first);
+					required_compressed_pathkeys =
+						lappend(required_compressed_pathkeys, leading_pk);
+				}
+				/* Need to sort on compressed pathkeys matching compressed indexscan order */
+				else
+				{
+					AttrNumber leading_attno;
+					AttrNumber trailing_attno;
+					orderby_sparse_metadata_attnos(info->settings,
+												   info->compressed_rte->relid,
+												   orderby_index,
+												   &leading_attno,
+												   &trailing_attno);
+					/*
+					 * Compressed chunk indexes based on firstlast sparse indexes can have two
+					 * orderings. New chunks index them as (first, last); chunks compressed before
+					 * that change index a DESC column as (last, first). Only DESC columns can
+					 * differ, so for those we check the chunk's index and follow whichever order it
+					 * has.
+					 */
+					if (orderby_desc && orderby_sparse_kind(info->settings, orderby_index) ==
+											ORDERBY_SPARSE_FIRSTLAST)
+					{
+						orderby_firstlast_metadata_attnos(info->settings,
+														  info->compressed_rte->relid,
+														  orderby_index,
+														  &leading_attno,
+														  &trailing_attno);
+
+						ListCell *index_lc;
+						foreach (index_lc, info->compressed_rel->indexlist)
+						{
+							IndexOptInfo *index = lfirst(index_lc);
+							int leading_pos = -1;
+							int trailing_pos = -1;
+							for (int k = 0; k < index->nkeycolumns; k++)
+							{
+								if (index->indexkeys[k] == leading_attno)
+								{
+									leading_pos = k;
+								}
+								else if (index->indexkeys[k] == trailing_attno)
+								{
+									trailing_pos = k;
+								}
+							}
+							if (leading_pos >= 0 && trailing_pos >= 0)
+							{
+								if (trailing_pos < leading_pos)
+								{
+									AttrNumber tmp = leading_attno;
+									leading_attno = trailing_attno;
+									trailing_attno = tmp;
+								}
+								break;
+							}
+						}
+					}
+					Var *metadata_var;
+					metadata_var = makeVar(info->compressed_rel->relid,
+										   leading_attno,
+										   var->vartype,
+										   var->vartypmod,
+										   var->varcollid,
+										   var->varlevelsup);
+					Expr *leading_expr =
+						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+					EquivalenceClass *leading_ec =
+						append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
+					PathKey *leading_pk = make_canonical_pathkey(root,
+																 leading_ec,
+																 pk->pk_opfamily,
+																 strategy,
+																 nulls_first);
+					required_compressed_pathkeys =
+						lappend(required_compressed_pathkeys, leading_pk);
+
+					metadata_var = makeVar(info->compressed_rel->relid,
+										   trailing_attno,
+										   var->vartype,
+										   var->vartypmod,
+										   var->varcollid,
+										   var->varlevelsup);
+					Expr *trailing_expr =
+						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+					EquivalenceClass *trailing_ec =
+						append_ec_for_metadata_col(root, info, trailing_expr, pk, opcintype);
+					PathKey *trailing_pk = make_canonical_pathkey(root,
+																  trailing_ec,
+																  pk->pk_opfamily,
+																  strategy,
+																  nulls_first);
+
+					required_compressed_pathkeys =
+						lappend(required_compressed_pathkeys, trailing_pk);
+				}
 			}
 		}
 	}
+
 	return required_compressed_pathkeys;
 }
 
@@ -978,27 +1036,45 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
-	/*
-	 * Don't disable the compressed batch sorted merge plan with the enable_sort
-	 * GUC. We have a separate GUC for it, and this way you can try to force the
-	 * batch sorted merge plan by disabling sort.
-	 */
-	const bool old_enable_sort = enable_sort;
-	enable_sort = true;
-	cost_sort(&sort_path,
-			  root,
-			  dcpath->required_compressed_pathkeys,
+	/* We are utilizing compressed sort for batch sorted merge: do not need extra sort */
+	if (dcpath->required_compressed_pathkeys &&
+		pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
+	{
+		sort_path.rows = compressed_path->rows;
+		sort_path.startup_cost = compressed_path->startup_cost;
+		sort_path.total_cost = compressed_path->total_cost;
 #if PG18_GE
-			  compressed_path->disabled_nodes,
+		/* PG18 changes the way we handle disabled nodes so we
+		 * need to take those into account as well.
+		 *
+		 * https://github.com/postgres/postgres/commit/e2225346
+		 */
+		sort_path.disabled_nodes = compressed_path->disabled_nodes;
 #endif
-			  compressed_path->total_cost,
-			  compressed_path->rows,
-			  compressed_path->pathtarget->width,
-			  0.0,
-			  work_mem,
-			  -1);
-	enable_sort = old_enable_sort;
-
+	}
+	else
+	{
+		/*
+		 * Don't disable the compressed batch sorted merge plan with the enable_sort
+		 * GUC. We have a separate GUC for it, and this way you can try to force the
+		 * batch sorted merge plan by disabling sort.
+		 */
+		const bool old_enable_sort = enable_sort;
+		enable_sort = true;
+		cost_sort(&sort_path,
+				  root,
+				  dcpath->required_compressed_pathkeys,
+#if PG18_GE
+				  compressed_path->disabled_nodes,
+#endif
+				  compressed_path->total_cost,
+				  compressed_path->rows,
+				  compressed_path->pathtarget->width,
+				  0.0,
+				  work_mem,
+				  -1);
+		enable_sort = old_enable_sort;
+	}
 	/*
 	 * In compressed batch sorted merge, for each distinct segmentby value we
 	 * have to keep the corresponding latest batch open. Estimate the number of
@@ -1277,7 +1353,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 								  chunk_rel,
 								  sort_info.needs_sequence_num);
 
-	if (sort_info.use_compressed_sort)
+	if (sort_info.use_compressed_sort || sort_info.use_batch_sorted_merge)
 	{
 		sort_info.required_compressed_pathkeys =
 			build_compressed_scan_pathkeys(&sort_info,
@@ -1478,7 +1554,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	if (sort_info->use_batch_sorted_merge && ts_guc_enable_decompression_sorted_merge)
 	{
 		Assert(!sort_info->use_compressed_sort);
-
 		ColumnarScanPath *path_copy =
 			copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
 
@@ -1492,6 +1567,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		 * query here.
 		 */
 		path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+		path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
+
 		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
 
 		if (ts_guc_debug_require_batch_sorted_merge == DRO_Force)
@@ -2646,7 +2723,8 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 		}
 	}
 
-	if (sort_info->use_compressed_sort)
+	/* We can use sorted input before decompression in both cases */
+	if (sort_info->use_compressed_sort || sort_info->use_batch_sorted_merge)
 	{
 		/*
 		 * If we can push down sort below decompression we temporarily switch
@@ -2911,10 +2989,19 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 									  const CompressionInfo *compression_info,
 									  bool for_batch_sorted_merge, bool *out_reverse)
 {
+	/* If there are pathkeys before orderby pathkeys in Batch sorted merge,
+	 * they are segmentby pathkeys and we will need to match their sort/null direction same as for
+	 * orderby. If it's not for Batch sorted merge, we can ignore pathkeys before
+	 * orderby.*/
+	int start_index = (for_batch_sorted_merge ? 0 : starting_pathkey_offset);
+
 	int compressed_pk_index = 0;
-	for (int i = starting_pathkey_offset; i < list_length(pathkeys); i++)
+	for (int i = start_index; i < list_length(pathkeys); i++)
 	{
 		compressed_pk_index++;
+		/* Adjust orderby pathkey index by offset if needed */
+		int compressed_pk_orderby_index =
+			compressed_pk_index - (starting_pathkey_offset - start_index);
 		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
 		Node *node = strip_implicit_coercions((Node *) list_nth(chunk_em_exprs, i));
 
@@ -2937,15 +3024,24 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		}
 
 		char *column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
-		int orderby_index = ts_array_position(compression_info->settings->fd.orderby, column_name);
-
-		if (orderby_index != compressed_pk_index)
+		int orderby_index = 0;
+		if (i >= starting_pathkey_offset)
 		{
-			return false;
+			orderby_index = ts_array_position(compression_info->settings->fd.orderby, column_name);
+
+			if (orderby_index != compressed_pk_orderby_index)
+			{
+				return false;
+			}
+		}
+		else
+		{
+			Assert(for_batch_sorted_merge);
+			Assert(ts_array_position(compression_info->settings->fd.segmentby, column_name));
 		}
 
 		/* Special handling for Batch Sorted Merge with minmax-only index */
-		if (for_batch_sorted_merge &&
+		if (for_batch_sorted_merge && orderby_index &&
 			orderby_sparse_kind(compression_info->settings, orderby_index) !=
 				ORDERBY_SPARSE_FIRSTLAST)
 		{
@@ -2965,17 +3061,22 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			 * will be sorted before  [(1,1) ..  (1,19)] with min(1),(1)
 			 * but it should be sorted after as (1,20) > (1,1): correct with firstlast index.
 			 */
-			if (compressed_pk_index > 1)
+			if (compressed_pk_orderby_index > 1)
 			{
 				return false;
 			}
 		}
-
+		/* Internal compressed index is always ordered on segmentby ASC, so below is always false
+		 * for segmentby_index */
 		bool orderby_desc =
-			ts_array_get_element_bool(compression_info->settings->fd.orderby_desc, orderby_index);
+			(orderby_index ? ts_array_get_element_bool(compression_info->settings->fd.orderby_desc,
+													   orderby_index) :
+							 false);
 		bool orderby_nullsfirst =
-			ts_array_get_element_bool(compression_info->settings->fd.orderby_nullsfirst,
-									  orderby_index);
+			(orderby_index ?
+				 ts_array_get_element_bool(compression_info->settings->fd.orderby_nullsfirst,
+										   orderby_index) :
+				 false);
 		/*
 		 * In PG18+: pk_cmptype is either COMPARE_LT (for ASC) or COMPARE_GT (for DESC)
 		 * For previous PG versions we have compatibility macros to make these new names available.
@@ -3185,19 +3286,16 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		if (bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
 		{
 			/*
-			 * If we didn't have any segmentby columns in pathkeys, try batch sorted merge
+			 * If we didn't have all segmentby columns in pathkeys, try batch sorted merge
 			 * instead.
 			 */
-			if (i == 0)
-			{
-				sort_info.use_batch_sorted_merge =
-					match_pathkeys_to_compression_orderby(pathkeys,
-														  chunk_em_exprs,
-														  /* starting_pathkey_offset = */ 0,
-														  compression_info,
-														  /* for_batch_sorted_merge = */ true,
-														  &sort_info.reverse);
-			}
+			sort_info.use_batch_sorted_merge =
+				match_pathkeys_to_compression_orderby(pathkeys,
+													  chunk_em_exprs,
+													  i, /* starting_pathkey_offset = */
+													  compression_info,
+													  /* for_batch_sorted_merge = */ true,
+													  &sort_info.reverse);
 			return sort_info;
 		}
 	}
@@ -3215,21 +3313,15 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	if (ts_chunk_is_unordered(chunk))
 	{
 		/*
-		 * If compression has no segmentby columns or all segmentby columns in a query are pinned to
-		 * a Const, try batch sorted merge instead.
+		 * try batch sorted merge instead.
 		 */
-		if (compression_info->num_segmentby_columns == 0 ||
-			bms_num_members(compression_info->chunk_const_segmentby) ==
-				compression_info->num_segmentby_columns)
-		{
-			sort_info.use_batch_sorted_merge =
-				match_pathkeys_to_compression_orderby(pathkeys,
-													  chunk_em_exprs,
-													  /* starting_pathkey_offset = */ 0,
-													  compression_info,
-													  /* for_batch_sorted_merge = */ true,
-													  &sort_info.reverse);
-		}
+		sort_info.use_batch_sorted_merge =
+			match_pathkeys_to_compression_orderby(pathkeys,
+												  chunk_em_exprs,
+												  i, /* starting_pathkey_offset = */
+												  compression_info,
+												  /* for_batch_sorted_merge = */ true,
+												  &sort_info.reverse);
 		return sort_info;
 	}
 
