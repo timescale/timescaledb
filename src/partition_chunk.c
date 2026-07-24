@@ -417,6 +417,8 @@ ts_executor_end_hook(QueryDesc *queryDesc)
 		standard_ExecutorEnd(queryDesc);
 	}
 
+	/* LOOK HERE */
+
 	/*
 	 * Chunks cannot be created as a partition or attached as partition until
 	 * this point since Postgres does not allow such operations when there is
