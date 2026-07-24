@@ -299,5 +299,73 @@ CALL refresh_continuous_aggregate('mat_drop',NULL,NULL);
 
 SELECT drop_chunks('drop_test', NOW() - INTERVAL '7 days');
 
+-- Test that pending rows in the invalidation log catalogs survive the
+-- update/downgrade. Two continuous aggregates on one hypertable:
+-- refreshing only the first one moves hypertable-log entries into BOTH
+-- caggs' materialization logs but drains only the refreshed one,
+-- leaving a finite pending row for the second cagg; a final insert
+-- with no refresh afterwards leaves a pending row in the hypertable
+-- invalidation log.
+CREATE TABLE inval_log_test (time TIMESTAMPTZ NOT NULL, device TEXT NOT NULL, value INTEGER);
+SELECT create_hypertable('inval_log_test', 'time', chunk_time_interval => INTERVAL '1 week');
+
+INSERT INTO inval_log_test
+SELECT ts, 'dev1', 1
+FROM generate_series('2020-01-01 00:00:00+00'::timestamptz,
+                     '2020-01-10 00:00:00+00'::timestamptz, '30 minutes') ts;
+
+CREATE MATERIALIZED VIEW mat_invallog_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+  SELECT time_bucket('1 hour', time) AS bucket, device,
+    count(*) AS cnt
+  FROM inval_log_test
+  GROUP BY bucket, device WITH NO DATA;
+
+CREATE MATERIALIZED VIEW mat_invallog_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+  SELECT time_bucket('1 day', time) AS bucket, device,
+    count(*) AS cnt
+  FROM inval_log_test
+  GROUP BY bucket, device WITH NO DATA;
+
+CALL refresh_continuous_aggregate('mat_invallog_1', NULL, NULL);
+CALL refresh_continuous_aggregate('mat_invallog_2', NULL, NULL);
+
+-- Below-threshold insert
+INSERT INTO inval_log_test
+SELECT ts, 'dev2', 42
+FROM generate_series('2020-01-05 10:00:00+00'::timestamptz,
+                     '2020-01-05 12:00:00+00'::timestamptz, '30 minutes') ts;
+
+-- Refresh only the first cagg: moves ht invalidation log entries int
+-- materialization logs for both caggs, but drains only the refreshed one,
+-- leaving pending row for the second cagg.
+CALL refresh_continuous_aggregate('mat_invallog_1', NULL, NULL);
+
+-- Below-threshold insert with no refresh afterwards, leaves ht invalidation
+-- log entry pending for both caggs.
+INSERT INTO inval_log_test
+SELECT ts, 'dev3', 5
+FROM generate_series('2020-01-07 07:00:00+00'::timestamptz,
+                     '2020-01-07 09:00:00+00'::timestamptz, '30 minutes') ts;
+
+-- Snapshot invalidation log rows into a plain table so the post script can
+-- verify the live logs still hold the same content after the update rebuilt
+-- the catalogs.
+CREATE TABLE inval_log_snapshot AS
+SELECT 'hypertable'::text AS log, h.table_name AS name,
+       l.lowest_modified_value, l.greatest_modified_value
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+WHERE h.table_name = 'inval_log_test'
+UNION ALL
+SELECT 'materialization', ca.user_view_name,
+       l.lowest_modified_value, l.greatest_modified_value
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+WHERE ca.user_view_name IN ('mat_invallog_1', 'mat_invallog_2');
+
 RESET timescaledb.enable_chunkwise_aggregation;
 RESET enable_hashagg;

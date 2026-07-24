@@ -103,3 +103,66 @@ BEGIN
     END LOOP;
 END
 $$ LANGUAGE PLPGSQL;
+
+-- Dump the invalidation log rows of the inval_log_test fixture so they
+-- are part of the baseline/updated/restored comparison.
+SELECT h.table_name AS hypertable,
+       l.lowest_modified_value, l.greatest_modified_value
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+WHERE h.table_name = 'inval_log_test'
+ORDER BY 1, 2, 3;
+
+SELECT ca.user_view_name AS cagg,
+       l.lowest_modified_value, l.greatest_modified_value
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+WHERE ca.user_view_name IN ('mat_invallog_1', 'mat_invallog_2')
+ORDER BY 1, 2, 3;
+
+-- Verify the live invalidation logs still hold exactly the rows
+-- snapshotted at the end of setup, i.e. an update script that rebuilds
+-- the log catalogs neither lost nor invented rows.
+DO $$
+DECLARE
+    difference TEXT;
+BEGIN
+    WITH live (log, name, lowest_modified_value, greatest_modified_value) AS (
+        SELECT 'hypertable'::text, h.table_name,
+               l.lowest_modified_value, l.greatest_modified_value
+        FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+        JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+        WHERE h.table_name = 'inval_log_test'
+        UNION ALL
+        SELECT 'materialization', ca.user_view_name,
+               l.lowest_modified_value, l.greatest_modified_value
+        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+        JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+        WHERE ca.user_view_name IN ('mat_invallog_1', 'mat_invallog_2')
+    )
+    SELECT string_agg(format('%s [%s]: (%s, %s, %s)', src, diff.log, diff.name,
+                             diff.lowest_modified_value, diff.greatest_modified_value), E'\n')
+    INTO difference
+    FROM (
+        SELECT 'missing after update' AS src, *
+        FROM (SELECT * FROM inval_log_snapshot
+              EXCEPT ALL
+              SELECT * FROM live) missing
+        UNION ALL
+        SELECT 'unexpected after update', *
+        FROM (SELECT * FROM live
+              EXCEPT ALL
+              SELECT * FROM inval_log_snapshot) unexpected
+    ) diff (src, log, name, lowest_modified_value, greatest_modified_value);
+
+    IF difference IS NOT NULL THEN
+        RAISE EXCEPTION 'invalidation log content changed across the update'
+              USING DETAIL = difference;
+    END IF;
+
+    IF NOT EXISTS (SELECT FROM inval_log_snapshot WHERE log = 'hypertable') OR
+       NOT EXISTS (SELECT FROM inval_log_snapshot WHERE log = 'materialization') THEN
+        RAISE EXCEPTION 'invalidation log snapshot is missing the expected pending rows';
+    END IF;
+END
+$$ LANGUAGE PLPGSQL;
