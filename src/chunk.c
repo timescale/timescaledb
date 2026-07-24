@@ -4001,6 +4001,81 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(true);
 }
 
+/*
+ * Drop chunks from a hypertable, dropping everything older than the given boundary.
+ *
+ * The boundary is either an "older_than" value (matched against the chunk
+ * ranges) or, when use_creation_time is set, a "drop_created_before" value
+ * (matched against the chunk creation time).
+ *
+ * Returns the number of dropped chunks.
+ */
+int
+ts_chunk_drop_chunks_by_boundary(Oid relid, Datum older_than, Oid older_than_type,
+								 bool use_creation_time)
+{
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, false);
+	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Oid time_type = ts_dimension_get_partition_type(time_dim);
+	int64 older_than_internal;
+	bool older_newer;
+	List *dropped_chunks;
+
+	/* UUID (v7) partitioning is treated as TIMESTAMPTZ, matching the boundary. */
+	if (IS_UUID_TYPE(time_type))
+	{
+		time_type = TIMESTAMPTZOID;
+	}
+
+	if (use_creation_time)
+	{
+		/* drop_created_before compares against the chunk creation time. */
+		int64 created_before =
+			ts_time_value_from_arg(older_than, older_than_type, TIMESTAMPTZOID, false);
+		older_than_internal = ts_internal_to_time_int64(created_before, TIMESTAMPTZOID);
+		older_newer = false;
+	}
+	else
+	{
+		older_than_internal = ts_time_value_from_arg(older_than, older_than_type, time_type, true);
+		older_newer = true;
+	}
+
+	PG_TRY();
+	{
+		dropped_chunks = ts_chunk_do_drop_chunks(ht,
+												 older_than_internal,
+												 PG_INT64_MIN,
+												 DEBUG2,
+												 time_type,
+												 older_than_type,
+												 older_newer);
+	}
+	PG_CATCH();
+	{
+		/* Replace the generic dependent objects hint with an accurate one since
+		 * we don't support CASCADE here. */
+		ErrorData *edata;
+
+		edata = CopyErrorData();
+		FlushErrorState();
+
+		if (edata->sqlerrcode == ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST)
+		{
+			edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
+		}
+
+		ts_cache_release(&hcache);
+		ReThrowError(edata);
+	}
+	PG_END_TRY();
+
+	ts_cache_release(&hcache);
+
+	return list_length(dropped_chunks);
+}
+
 Datum
 ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 {
