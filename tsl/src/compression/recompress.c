@@ -77,10 +77,11 @@ typedef struct CompactChunkScanState
 	Datum *curr_last;
 	bool *curr_last_isnull;
 
-	/* Last-row orderby tuple of the batch processed just before the current
+	/* Max last-row orderby tuple from the batches processed before the current
 	 * one. Holds copies so it survives advancing the index scan. */
-	Datum *prev_last;
-	bool *prev_last_isnull;
+	Datum *max_last;
+	bool *max_last_isnull;
+	bool max_last_set; /* false until the first batch is recorded */
 } CompactChunkScanState;
 
 static CompactChunkScanState *
@@ -95,12 +96,13 @@ compact_chunk_scan_state_init(RecompressContext *recompress_ctx)
 	state->curr_first_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
 	state->curr_last = palloc(sizeof(Datum) * recompress_ctx->num_orderby);
 	state->curr_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
-	state->prev_last = palloc0(sizeof(Datum) * recompress_ctx->num_orderby);
-	state->prev_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
+	state->max_last = palloc0(sizeof(Datum) * recompress_ctx->num_orderby);
+	state->max_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
 	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
-		state->prev_last_isnull[i] = true;
+		state->max_last_isnull[i] = true;
 	}
+	state->max_last_set = false;
 	return state;
 }
 
@@ -112,14 +114,15 @@ compact_chunk_scan_state_reset(CompactChunkScanState *state, RecompressContext *
 	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
 		int key = recompress_ctx->num_segmentby + i;
-		if (!state->prev_last_isnull[i] && !recompress_ctx->key_byval[key] &&
-			PointerIsValid(DatumGetPointer(state->prev_last[i])))
+		if (!state->max_last_isnull[i] && !recompress_ctx->key_byval[key] &&
+			PointerIsValid(DatumGetPointer(state->max_last[i])))
 		{
-			pfree(DatumGetPointer(state->prev_last[i]));
+			pfree(DatumGetPointer(state->max_last[i]));
 		}
-		state->prev_last[i] = (Datum) 0;
-		state->prev_last_isnull[i] = true;
+		state->max_last[i] = (Datum) 0;
+		state->max_last_isnull[i] = true;
 	}
+	state->max_last_set = false;
 }
 
 static bool fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
@@ -148,9 +151,9 @@ static IndexScanDesc compact_chunk_begin_index_scan(Relation compressed_chunk_re
 													Relation index_rel, Snapshot snapshot);
 static void read_batch_firstlast(IndexScanDesc index_scan, RecompressContext *recompress_ctx,
 								 CompactChunkScanState *state);
-static void save_prev_last(CompactChunkScanState *state, RecompressContext *recompress_ctx);
+static void save_new_last(CompactChunkScanState *state, RecompressContext *recompress_ctx);
 static bool batches_overlap_firstlast(RecompressContext *recompress_ctx, Datum *prev_last,
-									  bool *prev_last_isnull, Datum *curr_first,
+									  bool *max_last_isnull, Datum *curr_first,
 									  bool *curr_first_isnull);
 static void decompress_batch_to_tuplesort(TupleTableSlot *slot, TupleDesc tupdesc,
 										  RowDecompressor *decompressor,
@@ -990,28 +993,41 @@ read_batch_firstlast(IndexScanDesc index_scan, RecompressContext *recompress_ctx
 
 /*
  * Remember the current batch's last-row orderby tuple as the predecessor for
- * the next batch. The index tuple is only valid for the current scan position,
+ * the next batch only if it is greater than the saved last-row orderby value.
+ * The index tuple is only valid for the current scan position,
  * so pass-by-reference values are deep-copied to survive advancing the scan.
  */
 static void
-save_prev_last(CompactChunkScanState *state, RecompressContext *recompress_ctx)
+save_new_last(CompactChunkScanState *state, RecompressContext *recompress_ctx)
 {
+	/* Skip if max_last is already set and curr_last does not exceed its value. */
+	if (state->max_last_set && !batches_overlap_firstlast(recompress_ctx,
+														  state->curr_last,
+														  state->curr_last_isnull,
+														  state->max_last,
+														  state->max_last_isnull))
+	{
+		return;
+	}
+
+	state->max_last_set = true;
+
 	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
 		int key = recompress_ctx->num_segmentby + i;
 
-		if (!state->prev_last_isnull[i] && !recompress_ctx->key_byval[key] &&
-			PointerIsValid(DatumGetPointer(state->prev_last[i])))
+		if (!state->max_last_isnull[i] && !recompress_ctx->key_byval[key] &&
+			PointerIsValid(DatumGetPointer(state->max_last[i])))
 		{
-			pfree(DatumGetPointer(state->prev_last[i]));
+			pfree(DatumGetPointer(state->max_last[i]));
 		}
 
-		state->prev_last_isnull[i] = state->curr_last_isnull[i];
-		state->prev_last[i] = state->curr_last_isnull[i] ?
-								  (Datum) 0 :
-								  datumCopy(state->curr_last[i],
-											recompress_ctx->key_byval[key],
-											recompress_ctx->key_typlen[key]);
+		state->max_last_isnull[i] = state->curr_last_isnull[i];
+		state->max_last[i] = state->curr_last_isnull[i] ?
+								 (Datum) 0 :
+								 datumCopy(state->curr_last[i],
+										   recompress_ctx->key_byval[key],
+										   recompress_ctx->key_typlen[key]);
 	}
 }
 
@@ -1137,13 +1153,15 @@ compact_chunk_find_overlapping_batches(Relation compressed_chunk_rel, IndexScanD
 								   state->seg_values,
 								   state->seg_isnull,
 								   recompress_ctx->num_segmentby);
-			save_prev_last(state, recompress_ctx);
+			/* Reset running max for the new segment group. */
+			state->max_last_set = false;
+			save_new_last(state, recompress_ctx);
 			continue;
 		}
 
 		if (batches_overlap_firstlast(recompress_ctx,
-									  state->prev_last,
-									  state->prev_last_isnull,
+									  state->max_last,
+									  state->max_last_isnull,
 									  state->curr_first,
 									  state->curr_first_isnull))
 		{
@@ -1154,7 +1172,7 @@ compact_chunk_find_overlapping_batches(Relation compressed_chunk_rel, IndexScanD
 
 		/* No overlap: this batch becomes the predecessor for the next one. */
 		ItemPointerCopy(&index_scan->xs_heaptid, &state->previous_tid);
-		save_prev_last(state, recompress_ctx);
+		save_new_last(state, recompress_ctx);
 	}
 
 	ExecDropSingleTupleTableSlot(compressed_slot);
@@ -1242,7 +1260,7 @@ compact_chunk_recompress_overlapping_batches(
 							   state->seg_values,
 							   state->seg_isnull,
 							   recompress_ctx->num_segmentby);
-		save_prev_last(state, recompress_ctx);
+		save_new_last(state, recompress_ctx);
 	}
 
 	while (index_getnext_slot(index_scan, ForwardScanDirection, compressed_slot))
@@ -1277,15 +1295,17 @@ compact_chunk_recompress_overlapping_batches(
 								   state->seg_values,
 								   state->seg_isnull,
 								   recompress_ctx->num_segmentby);
-			save_prev_last(state, recompress_ctx);
+			/* Reset running max for the new segment group. */
+			state->max_last_set = false;
+			save_new_last(state, recompress_ctx);
 			continue;
 		}
 
 		/* A batch joins the current group when it overlaps its predecessor; the
 		 * first batch that no longer overlaps closes the group. */
 		bool batch_overlaps = batches_overlap_firstlast(recompress_ctx,
-														state->prev_last,
-														state->prev_last_isnull,
+														state->max_last,
+														state->max_last_isnull,
 														state->curr_first,
 														state->curr_first_isnull);
 
@@ -1340,7 +1360,7 @@ compact_chunk_recompress_overlapping_batches(
 		}
 
 		ItemPointerCopy(&index_scan->xs_heaptid, &state->previous_tid);
-		save_prev_last(state, recompress_ctx);
+		save_new_last(state, recompress_ctx);
 	}
 
 	if (overlapping)
@@ -1350,6 +1370,11 @@ compact_chunk_recompress_overlapping_batches(
 
 	ExecDropSingleTupleTableSlot(previous_compressed_slot);
 	ExecDropSingleTupleTableSlot(compressed_slot);
+
+	ereport(DEBUG1,
+			(errmsg("compaction processed %d batches (max_batches %d)",
+					processed_batches,
+					max_batches)));
 
 	return found_overlaps;
 }
