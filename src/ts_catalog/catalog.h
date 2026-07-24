@@ -49,6 +49,8 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
 	CONTINUOUS_AGGS_JOBS_REFRESH_RANGES,
+	CONTINUOUS_AGGS_TENANT_TRACKING,
+	HYPERTABLE_CAGG_SETTINGS,
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
@@ -1079,6 +1081,84 @@ enum
 	CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_IDX = 0,
 	_MAX_CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_INDEX,
 };
+
+/****** CONTINUOUS_AGGS_TENANT_TRACKING definitions */
+#define CONTINUOUS_AGGS_TENANT_TRACKING_TABLE_NAME "continuous_aggs_tenant_tracking"
+
+typedef enum Anum_continuous_aggs_tenant_tracking
+{
+	Anum_continuous_aggs_tenant_tracking_hypertable_id = 1,
+	Anum_continuous_aggs_tenant_tracking_tenant_id,
+	Anum_continuous_aggs_tenant_tracking_min_timestamp,
+	Anum_continuous_aggs_tenant_tracking_max_timestamp,
+	Anum_continuous_aggs_tenant_tracking_seqnum,
+	_Anum_continuous_aggs_tenant_tracking_max,
+} Anum_continuous_aggs_tenant_tracking;
+
+#define Natts_continuous_aggs_tenant_tracking (_Anum_continuous_aggs_tenant_tracking_max - 1)
+
+typedef struct FormData_continuous_aggs_tenant_tracking
+{
+	int32 hypertable_id;
+	text *tenant_id;
+	int64 min_timestamp;
+	int64 max_timestamp;
+	int32 seqnum;
+} FormData_continuous_aggs_tenant_tracking;
+
+typedef FormData_continuous_aggs_tenant_tracking *Form_continuous_aggs_tenant_tracking;
+
+enum
+{
+	CONTINUOUS_AGGS_TENANT_TRACKING_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_TENANT_TRACKING_INDEX,
+};
+typedef enum Anum_continuous_aggs_tenant_tracking_idx
+{
+	Anum_continuous_aggs_tenant_tracking_idx_hypertable_id = 1,
+	Anum_continuous_aggs_tenant_tracking_idx_seqnum,
+	_Anum_continuous_aggs_tenant_tracking_idx_max,
+} Anum_continuous_aggs_tenant_tracking_idx;
+
+#define Natts_continuous_aggs_tenant_tracking_idx                                                  \
+	(_Anum_continuous_aggs_tenant_tracking_idx_max - 1)
+
+/****** HYPERTABLE_CAGG_SETTINGS definitions */
+#define HYPERTABLE_CAGG_SETTINGS_TABLE_NAME "hypertable_cagg_settings"
+
+typedef enum Anum_hypertable_cagg_settings
+{
+	Anum_hypertable_cagg_settings_hypertable_id = 1,
+	Anum_hypertable_cagg_settings_granular_refresh_column,
+	Anum_hypertable_cagg_settings_granular_refresh_start_offset,
+	Anum_hypertable_cagg_settings_granular_refresh_end_offset,
+	_Anum_hypertable_cagg_settings_max,
+} Anum_hypertable_cagg_settings;
+
+#define Natts_hypertable_cagg_settings (_Anum_hypertable_cagg_settings_max - 1)
+
+typedef struct FormData_hypertable_cagg_settings
+{
+	int32 hypertable_id;
+	NameData granular_refresh_column;
+	text *granular_refresh_start_offset;
+	text *granular_refresh_end_offset;
+} FormData_hypertable_cagg_settings;
+
+typedef FormData_hypertable_cagg_settings *Form_hypertable_cagg_settings;
+
+enum
+{
+	HYPERTABLE_CAGG_SETTINGS_PKEY = 0,
+	_MAX_HYPERTABLE_CAGG_SETTINGS_INDEX,
+};
+typedef enum Anum_hypertable_cagg_settings_pkey
+{
+	Anum_hypertable_cagg_settings_pkey_hypertable_id = 1,
+	_Anum_hypertable_cagg_settings_pkey_max,
+} Anum_hypertable_cagg_settings_pkey;
+
+#define Natts_hypertable_cagg_settings_pkey (_Anum_hypertable_cagg_settings_pkey_max - 1)
 
 typedef enum Anum_continuous_aggs_jobs_refresh_ranges_idx
 {

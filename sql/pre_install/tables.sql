@@ -440,6 +440,35 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 
 CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
 
+-- Per-tenant invalidation tracking, used in granular refresh of contiuous aggregates.
+CREATE TABLE _timescaledb_catalog.continuous_aggs_tenant_tracking (
+  hypertable_id integer NOT NULL,
+  tenant_id text,
+  min_timestamp bigint,
+  max_timestamp bigint,
+  seqnum integer NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_tenant_tracking_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_tenant_tracking', '');
+
+CREATE INDEX continuous_aggs_tenant_tracking_idx ON _timescaledb_catalog.continuous_aggs_tenant_tracking (hypertable_id, seqnum);
+
+-- Per-hypertable settings for granular refresh of continuous aggregates.
+-- Row existence means granular refresh is configured for the hypertable.
+CREATE TABLE _timescaledb_catalog.hypertable_cagg_settings (
+  hypertable_id integer NOT NULL,
+  granular_refresh_column name NOT NULL,
+  granular_refresh_start_offset text,
+  granular_refresh_end_offset text,
+  -- table constraints
+  CONSTRAINT hypertable_cagg_settings_pkey PRIMARY KEY (hypertable_id),
+  CONSTRAINT hypertable_cagg_settings_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_cagg_settings', '');
+
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.
  */
