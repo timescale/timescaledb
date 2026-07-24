@@ -196,8 +196,7 @@ m["include"].append(
         {
             "pg": PG19_LATEST,
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DEXPERIMENTAL=ON",
-            "installcheck": False,
-            "pginstallcheck": False,
+            "pginstallcheck": True,
         }
     )
 )
@@ -319,6 +318,15 @@ if not pull_request:
             {
                 "pg": 18,
                 "snapshot": "snapshot",
+            }
+        )
+    )
+    m["include"].append(
+        build_debug_config(
+            {
+                "pg": 19,
+                "snapshot": "snapshot",
+                "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DEXPERIMENTAL=ON",
             }
         )
     )

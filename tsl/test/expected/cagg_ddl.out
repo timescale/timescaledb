@@ -1724,19 +1724,15 @@ View definition:
    FROM transactions
   GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
-\d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
-                          Table "_timescaledb_internal._materialized_hypertable_44"
-  Column   |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
------------+--------------------------+-----------+----------+---------+---------+--------------+-------------
- bucket    | timestamp with time zone |           | not null |         | plain   |              | 
- amount    | integer                  |           |          |         | plain   |              | 
- cashflow  | bigint                   |           |          |         | plain   |              | 
- cashflow2 | bigint                   |           |          |         | plain   |              | 
-Indexes:
-    "_materialized_hypertable_44_amount_bucket_idx" btree (amount, bucket DESC)
-    "_materialized_hypertable_44_bucket_idx" btree (bucket DESC)
-Child tables: _timescaledb_internal._hyper_44_55_chunk,
-              _timescaledb_internal._hyper_44_56_chunk
+-- Show the materialized hypertable columns via a helper since the \d child
+-- table listing format changed in PG19.
+SELECT * FROM test.show_columns(('_timescaledb_internal.' || :'MAT_TABLE_NAME')::regclass);
+  Column   |           Type           | NotNull 
+-----------+--------------------------+---------
+ bucket    | timestamp with time zone | t
+ amount    | integer                  | f
+ cashflow  | bigint                   | f
+ cashflow2 | bigint                   | f
 
 \d+ 'cashflows'
                                     View "public.cashflows"

@@ -1,3 +1,13 @@
+-- Restore the builtin RI check triggers before dropping our function
+UPDATE pg_catalog.pg_trigger SET tgfoid = 'pg_catalog."RI_FKey_check_ins"'::regproc
+    WHERE tgfoid = '_timescaledb_functions.fk_referenced_check'::regproc
+      AND (tgtype & 4) <> 0;
+UPDATE pg_catalog.pg_trigger SET tgfoid = 'pg_catalog."RI_FKey_check_upd"'::regproc
+    WHERE tgfoid = '_timescaledb_functions.fk_referenced_check'::regproc
+      AND (tgtype & 16) <> 0;
+DROP FUNCTION IF EXISTS _timescaledb_functions.restore_fk_check_triggers();
+DROP FUNCTION IF EXISTS _timescaledb_functions.fk_referenced_check();
+
 DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_status(regclass);
 DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_status_text(int);
 DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_status_text(regclass);

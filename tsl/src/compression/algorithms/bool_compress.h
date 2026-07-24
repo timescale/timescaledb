@@ -9,7 +9,7 @@
  * bool_compress is used to encode boolean values using the simple8b_rle algorithm.
  *
  * The bool compressor differs from the other compressors in that it does store a value
- * even for nulls, which is the last value seen befere the null. With this the bool
+ * even for nulls, which is the last value seen before the null. With this the bool
  * compressor always creates a compressed block even for nulls only.
  *
  * The boolean compressor represents the boolean values in a batch with two parallel

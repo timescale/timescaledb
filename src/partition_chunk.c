@@ -400,7 +400,7 @@ partition_chunk_attach(const Hypertable *ht, const Chunk *chunk)
 }
 
 /*
- * ExecutoreEnd hook to attach cached partition chunks to their hypertables.
+ * ExecutorEnd hook to attach cached partition chunks to their hypertables.
  */
 
 static void

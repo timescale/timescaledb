@@ -590,7 +590,7 @@ continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
  * #buckets_in_window/2 (i.e., every other bucket is invalid).
  *
  * Since it might not be efficient to materialize a lot buckets separately
- * when there are many invalid (non-adjecent) buckets/ranges, we put a limit
+ * when there are many invalid (non-adjacent) buckets/ranges, we put a limit
  * on the number of individual materializations we do. This limit is
  * determined by the MATERIALIZATIONS_PER_REFRESH_WINDOW setting.
  *
@@ -1508,11 +1508,11 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			}
 		}
 
-		/* Advance past invalidations that end at or before cur.
+		/* Advance past invalidations that end before cur.
 		 * This is correct because we are reading invalidation entries already ordered by
 		 * lowest_modified_value.
 		 */
-		while (inval_idx < inval_count && inval_high <= cur)
+		while (inval_idx < inval_count && inval_high < cur)
 		{
 			inval_idx++;
 			if (inval_idx < inval_count)

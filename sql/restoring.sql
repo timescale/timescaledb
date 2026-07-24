@@ -38,6 +38,9 @@ BEGIN
     SET timescaledb.restoring TO off;
     PERFORM _timescaledb_functions.restart_background_workers();
 
+    -- re-point foreign key check triggers recreated by restore at ours
+    PERFORM _timescaledb_functions.restore_fk_check_triggers();
+
     RETURN true;
 END
 $BODY$

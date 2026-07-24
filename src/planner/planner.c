@@ -50,6 +50,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
+#include "import/plancat.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
@@ -824,7 +825,7 @@ get_parent_rte(const PlannerInfo *root, Index rti)
  * related metadata: like chunk_status and pointer to hypertable entry.
  * It is okay to cache a pointer to the hypertable, since this cache is
  * confined to the lifetime of the query and not used across queries.
- * If the parent reolid is known, the caller can specify it to avoid the costly
+ * If the parent relid is known, the caller can specify it to avoid the costly
  * lookup. Otherwise pass InvalidOid.
  */
 static BaserelInfoEntry *
@@ -1217,13 +1218,35 @@ expand_all_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
 		{
 			RelOptInfo *in_rel = root->simple_rel_array[i];
-			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
+			Assert(in_rel != NULL);
 
-			Assert(ht != NULL && in_rel != NULL);
-			ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
+			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
+			Assert(ht != NULL);
+
+			if (!IS_DUMMY_REL(in_rel))
+			{
+				ts_plan_expand_hypertable_chunks(ht, root, in_rel, in_rte->ctename != TS_FK_EXPAND);
+			}
 
 			in_rte->inh = true;
 			expanded_some_hypertables = true;
+
+			/*
+			 * For DML target that is an inheritance parent, we need to properly
+			 * create the row identity variables. Postgres didn't do this for us
+			 * because we wanted to expand the inheritance hierarchy ourselves,
+			 * and marked the table as inh = false to prevent expansion. Now just
+			 * call the standard Postgres function to do this.
+			 */
+			if (bms_is_member(i, root->all_result_relids))
+			{
+				distribute_row_identity_vars(root);
+			}
+
+			if (IS_DUMMY_REL(in_rel))
+			{
+				continue;
+			}
 
 			/*
 			 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
@@ -1463,8 +1486,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 * the relation rte->relid (e.g., a transition table for a trigger), but
 	 * not the relation itself.
 	 */
-	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid) ||
-		IS_DUMMY_REL(rel))
+	if (!valid_hook_call() || rte->rtekind == RTE_NAMEDTUPLESTORE || !OidIsValid(rte->relid))
 	{
 		if (prev_set_rel_pathlist_hook != NULL)
 		{
@@ -1514,6 +1536,10 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
+			if (IS_DUMMY_REL(rel))
+			{
+				break;
+			}
 			/* Check for UPDATE/DELETE/MERGE (DML) on compressed chunks */
 			if ((IS_UPDL_CMD(root->parse) || root->parse->commandType == CMD_MERGE) &&
 				dml_involves_hypertable(root, ht, rti))
@@ -1585,24 +1611,47 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 		case TS_REL_HYPERTABLE:
 		{
 			/*
-			 * Mark hypertable RTEs we'd like to expand ourselves.
-			 * We always do this for SELECTs from hypertables.
+			 * The tables are not yet marked as dummy at this point, it happens
+			 * after this hook is called. We have to have some special handling
+			 * for dummy tables, but only at later stages.
+			 */
+			Assert(!IS_DUMMY_REL(rel));
+
+			/*
+			 * Postgres skips building rel->indexlist for a relation it
+			 * considers an inheritance parent. But useless-join and self-join
+			 * elimination need a populated indexlist to prove this relation is
+			 * unique.
+			 */
+			if (ts_guc_enable_optimizations && inhparent)
+			{
+				ts_build_indexlist(root, rel);
+			}
+
+			/*
+			 * Mark hypertable RTEs we'd like to expand ourselves. We do this
+			 * for hypertables participating SELECT, UPDATE and DELETE,
+			 * including the target relation. The support for expanding target
+			 * relation of MERGE is not implemented at the moment.
 			 *
-			 * For DML, we also always expand the non-target relations.
-			 *
-			 * The hypertables that are not expanded by our custom code
-			 * here fall back to the standard Postgres inheritance
-			 * hierarchy expansion.
+			 * The hypertables that are not expanded by our custom code here
+			 * fall back to the standard Postgres inheritance hierarchy
+			 * expansion.
 			 *
 			 * `inhparent` goes to false in two cases: a hypertable without
-			 * chunks or a SELECT FROM ONLY hypertable. We still want to run our
-			 * hypertable expansion code for hypertables w/o chunks.
+			 * chunks or a SELECT FROM ONLY hypertable.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL &&
-				rel->relid != (Index) query->resultRelation)
+			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
+				rte->ctename == NULL)
 			{
-				rte_mark_for_expansion(rte);
+				if (rel->relid != (Index) query->resultRelation)
+				{
+					rte_mark_for_expansion(rte);
+				}
+				else if (IS_UPDL_CMD(query) && ts_guc_enable_hypertable_expansion_for_dml)
+				{
+					rte_mark_for_expansion(rte);
+				}
 			}
 
 			ts_create_private_reloptinfo(rel);

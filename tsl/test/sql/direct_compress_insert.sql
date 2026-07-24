@@ -551,3 +551,47 @@ RESET timescaledb.enable_direct_compress_insert;
 DROP VIEW metrics_view_pos;
 DROP TABLE metrics_view;
 
+-- Direct compress must be disabled when the table has an exclusion constraint
+CREATE TABLE dc_excl(time timestamptz NOT NULL, device text NOT NULL, value float,
+    EXCLUDE USING btree (time WITH =, device WITH =))
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+ALTER TABLE dc_excl SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SET timescaledb.enable_direct_compress_insert = true;
+-- insert warns, disables direct compress and falls back to a normal insert
+INSERT INTO dc_excl SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(1,100) i;
+-- chunk stays uncompressed since direct compress was disabled
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('dc_excl') chunk;
+-- exclusion constraint is still enforced
+\set ON_ERROR_STOP 0
+INSERT INTO dc_excl VALUES ('2025-01-01'::timestamptz + INTERVAL '1 minute', 'd1', 99);
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM dc_excl;
+RESET timescaledb.enable_direct_compress_insert;
+DROP TABLE dc_excl;
+
+-- Direct compress must return rows for a RETURNING clause
+CREATE TABLE dc_ret(time timestamptz NOT NULL, device text NOT NULL, val int NOT NULL)
+    WITH (tsdb.hypertable, tsdb.partition_column='time');
+ALTER TABLE dc_ret SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SET timescaledb.enable_direct_compress_insert = true;
+-- confirm the direct compress path is used for this insert
+EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)
+INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+    FROM generate_series(1, 20) i RETURNING val;
+-- RETURNING should return one row per inserted tuple
+WITH inserted AS (
+    INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 minute'), 'd' || (i % 2)::text, i
+        FROM generate_series(1, 20) i RETURNING val, device
+)
+SELECT count(*), min(val), max(val), sum(val), count(DISTINCT device) FROM inserted;
+-- RETURNING with an expression referencing multiple columns
+WITH inserted AS (
+    INSERT INTO dc_ret SELECT '2025-01-01'::timestamptz + (i * INTERVAL '1 hour'), 'd' || (i % 2)::text, i
+        FROM generate_series(1, 20) i RETURNING device || ':' || val AS label
+)
+SELECT count(*), min(label), max(label) FROM inserted;
+-- rows were actually inserted
+SELECT count(*) FROM dc_ret;
+RESET timescaledb.enable_direct_compress_insert;
+DROP TABLE dc_ret;
+

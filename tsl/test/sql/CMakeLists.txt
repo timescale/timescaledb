@@ -14,19 +14,15 @@ set(TEST_FILES
     cagg_granular_refresh_api.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
-    cagg_planning.sql
     cagg_policy.sql
     cagg_query.sql
     cagg_query_using_merge.sql
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
-    cagg_rewrites.sql
     cagg_skip_invalidation.sql
     cagg_union_view.sql
     cagg_utils.sql
-    cagg_watermark.sql
     chunk_publication_compression.sql
-    columnar_scan_cost.sql
     columnstore_aliases.sql
     compact_chunk.sql
     compaction_policy.sql
@@ -44,7 +40,6 @@ set(TEST_FILES
     compress_float8_corrupt.sql
     compress_qualpushdown_complex.sql
     compress_qualpushdown_saop.sql
-    compress_sort_transform.sql
     compress_sparse_config.sql
     compress_stats.sql
     compress_unordered_sort.sql
@@ -75,8 +70,8 @@ set(TEST_FILES
     decompress_index.sql
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
+    direct_compress_policy.sql
     move.sql
-    plan_skip_scan_notnull.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
@@ -99,8 +94,14 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_hierarchical_realtime.sql.in
     cagg_permissions.sql.in
+    cagg_planning.sql.in
+    cagg_rewrites.sql.in
+    cagg_watermark.sql.in
     columnar_index_scan.sql.in
+    columnar_scan_cost.sql.in
+    compress_sort_transform.sql.in
     compress_bloom_sparse.sql.in
     compress_observ.sql.in
     compression_permissions.sql.in
@@ -110,6 +111,7 @@ set(TEST_TEMPLATES
     ordered_append.sql.in
     plan_skip_scan.sql.in
     plan_skip_scan_dagg.sql.in
+    plan_skip_scan_notnull.sql.in
     vector_agg_planning.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
@@ -215,21 +217,23 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES privilege_maintain.sql
-       merge_append_partially_compressed.sql)
+  list(APPEND TEST_FILES privilege_maintain.sql)
+  list(APPEND TEST_TEMPLATES merge_append_partially_compressed.sql.in)
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES vector_agg_expr_debug.sql)
   endif(CMAKE_BUILD_TYPE MATCHES Debug)
 endif()
 
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
-  list(APPEND TEST_FILES constraints_not_valid.sql)
-
-  # WAL numbers will differ on 32-bit platform so we only run on 64-bit only run
-  # on PG17+ since the test can be flaky at times
+if((${PG_VERSION_MAJOR} EQUAL "18"))
+  # WAL numbers will differ on 32-bit platform / PG versions so we only run on
+  # 64-bit PG18
   if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
     list(APPEND TEST_FILES explain_wal.sql)
   endif()
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
+  list(APPEND TEST_FILES constraints_not_valid.sql)
 endif()
 
 set(SOLO_TESTS

@@ -466,7 +466,8 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 		CheckValidResultRelCompat(relinfo,
 								  ctr->mht_state->mt->operation,
 								  ctr->mht_state->mt->onConflictAction,
-								  NIL);
+								  NIL,
+								  ctr->mht_state->mt);
 	}
 
 	state = palloc0(sizeof(ChunkInsertState));

@@ -100,45 +100,29 @@ policy_compaction_check(PG_FUNCTION_ARGS)
 }
 
 Datum
-policy_compaction_add(PG_FUNCTION_ARGS)
+policy_compaction_add_internal(Oid ht_oid, bool if_not_exists, Interval *user_schedule_interval,
+							   TimestampTz initial_start, bool fixed_schedule, text *timezone,
+							   int32 max_chunks, int32 max_batches, Interval *inactive_for)
 {
-	/* behave like a strict function for the required arguments */
-	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
-	{
-		PG_RETURN_NULL();
-	}
-
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
 	int32 job_id;
 	Interval schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
-	Oid ht_oid = PG_GETARG_OID(0);
-	bool if_not_exists = PG_GETARG_BOOL(1);
-	bool user_defined_schedule_interval = !PG_ARGISNULL(2);
-	int32 max_chunks = PG_ARGISNULL(5) ? 0 : PG_GETARG_INT32(5);
-	int32 max_batches = PG_ARGISNULL(6) ? 0 : PG_GETARG_INT32(6);
-	Interval *inactive_for = PG_ARGISNULL(7) ? NULL : PG_GETARG_INTERVAL_P(7);
 	Cache *hcache;
 	Hypertable *ht;
 	int32 hypertable_id;
 	Oid owner_id;
 	List *jobs;
-	TimestampTz initial_start = PG_ARGISNULL(3) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(3);
-	bool fixed_schedule = !PG_ARGISNULL(3);
-	text *timezone = PG_ARGISNULL(4) ? NULL : PG_GETARG_TEXT_PP(4);
 	char *valid_timezone = NULL;
 
-	ts_feature_flag_check(FEATURE_POLICY);
-	TS_PREVENT_FUNC_IF_READ_ONLY();
-
-	if (user_defined_schedule_interval)
+	if (user_schedule_interval != NULL)
 	{
-		schedule_interval = *PG_GETARG_INTERVAL_P(2);
+		schedule_interval = *user_schedule_interval;
 	}
 
 	if (timezone != NULL)
 	{
-		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(4));
+		valid_timezone = ts_bgw_job_validate_timezone(PointerGetDatum(timezone));
 	}
 
 	if (max_chunks < 0)
@@ -261,15 +245,44 @@ policy_compaction_add(PG_FUNCTION_ARGS)
 }
 
 Datum
-policy_compaction_remove(PG_FUNCTION_ARGS)
+policy_compaction_add(PG_FUNCTION_ARGS)
 {
-	Oid hypertable_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
-	Hypertable *ht;
-	Cache *hcache;
+	/* behave like a strict function for the required arguments */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
+	{
+		ts_feature_flag_check(FEATURE_POLICY);
+		PG_RETURN_NULL();
+	}
+
+	Oid ht_oid = PG_GETARG_OID(0);
+	bool if_not_exists = PG_GETARG_BOOL(1);
+	Interval *user_schedule_interval = PG_ARGISNULL(2) ? NULL : PG_GETARG_INTERVAL_P(2);
+	TimestampTz initial_start = PG_ARGISNULL(3) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(3);
+	bool fixed_schedule = !PG_ARGISNULL(3);
+	text *timezone = PG_ARGISNULL(4) ? NULL : PG_GETARG_TEXT_PP(4);
+	int32 max_chunks = PG_ARGISNULL(5) ? 0 : PG_GETARG_INT32(5);
+	int32 max_batches = PG_ARGISNULL(6) ? 0 : PG_GETARG_INT32(6);
+	Interval *inactive_for = PG_ARGISNULL(7) ? NULL : PG_GETARG_INTERVAL_P(7);
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	return policy_compaction_add_internal(ht_oid,
+										  if_not_exists,
+										  user_schedule_interval,
+										  initial_start,
+										  fixed_schedule,
+										  timezone,
+										  max_chunks,
+										  max_batches,
+										  inactive_for);
+}
+
+bool
+policy_compaction_remove_internal(Oid hypertable_oid, bool if_exists)
+{
+	Hypertable *ht;
+	Cache *hcache;
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 	int32 ht_id = ht->fd.id;
@@ -294,12 +307,26 @@ policy_compaction_remove(PG_FUNCTION_ARGS)
 		ereport(NOTICE,
 				(errmsg("compaction policy not found for hypertable \"%s\", skipping",
 						get_rel_name(hypertable_oid))));
-		PG_RETURN_NULL();
+		return false;
 	}
 	Assert(list_length(jobs) == 1);
 	BgwJob *job = linitial(jobs);
 
 	ts_bgw_job_delete_by_id(job->fd.id);
+
+	return true;
+}
+
+Datum
+policy_compaction_remove(PG_FUNCTION_ARGS)
+{
+	Oid hypertable_oid = PG_GETARG_OID(0);
+	bool if_exists = PG_GETARG_BOOL(1);
+
+	ts_feature_flag_check(FEATURE_POLICY);
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	policy_compaction_remove_internal(hypertable_oid, if_exists);
 
 	PG_RETURN_NULL();
 }

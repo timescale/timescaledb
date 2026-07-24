@@ -732,6 +732,32 @@ ts_transform_time_bucket_comparison(Expr *node)
 }
 
 /*
+ * Fully unwrap a (possibly nested) time_bucket() comparison by applying the
+ * single-level transform repeatedly until the bound reaches the raw column.
+ *
+ * ts_transform_time_bucket_comparison() only strips the outermost time_bucket().
+ * In hierarchical continuous aggregates the time_bucket() input column can be
+ * itself another time_bucket() call.
+ *
+ * Used both during hypertable expansion and from the chunk-append executor's
+ * runtime constification.
+ */
+Expr *
+ts_transform_nested_time_bucket_comparison(Expr *qual)
+{
+	Expr *nested = ts_transform_time_bucket_comparison(qual);
+	Expr *transformed = NULL;
+
+	while (nested != NULL)
+	{
+		transformed = nested;
+		nested = ts_transform_time_bucket_comparison(transformed);
+	}
+
+	return transformed;
+}
+
+/*
  * Since baserestrictinfo is not yet set by the planner, we have to derive
  * it ourselves. It's safe for us to miss some restrict info clauses (this
  * will just result in more chunks being included) so this does not need
@@ -784,7 +810,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 				 * check for time_bucket comparisons
 				 * time_bucket(Const, time_colum) > Const
 				 */
-				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 				if (transformed != NULL)
 				{
 					/*
@@ -835,7 +861,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 		 * check for time_bucket comparisons
 		 * time_bucket(Const, time_colum) > Const
 		 */
-		Expr *transformed = ts_transform_time_bucket_comparison(qual);
+		Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 		if (transformed != NULL)
 		{
 			/*
@@ -1054,7 +1080,7 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
 				 * check for time_bucket comparisons
 				 * time_bucket(Const, time_colum) > Const
 				 */
-				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				Expr *transformed = ts_transform_nested_time_bucket_comparison(qual);
 				if (transformed != NULL)
 				{
 					/*
@@ -1221,7 +1247,7 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk const *chunk)
 	}
 
 	/*
-	 * DimensionRetrictInfo strategy should only be one BTGreaterStrategyNumber
+	 * DimensionRestrictInfo strategy should only be one BTGreaterStrategyNumber
 	 * or BTGreaterEqualStrategyNumber on the lower boundary and
 	 * BTLessStrategyNumber or BTLessEqualStrategyNumber on the upper boundary.
 	 *
@@ -1293,9 +1319,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		.join_level = 0,
 	};
 	Index first_chunk_index = 0;
-
-	/* double check our permissions are valid */
-	Assert(ht_relindex != (Index) parse->resultRelation);
 
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
@@ -1379,14 +1402,19 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 										   newrelation,
 										   &childrte,
 										   &child_rtindex);
-		/*
-		 * For compatibility with the old planner code that didn't create
-		 * per-chunk aliases, use the parent aliases. These aliases have only a
-		 * cosmetic function, and changing them would lead to EXPLAIN changes in
-		 * basically every test.
-		 */
-		childrte->alias = copyObject(ht_rte->alias);
-		childrte->eref = copyObject(ht_rte->eref);
+
+		if (!bms_is_member(ht_relindex, root->all_result_relids))
+		{
+			/*
+			 * For compatibility with the old planner code that didn't create
+			 * per-chunk aliases, use the parent aliases. These aliases have only a
+			 * cosmetic function, and changing them would lead to EXPLAIN changes in
+			 * basically every test.
+			 */
+
+			childrte->alias = copyObject(ht_rte->alias);
+			childrte->eref = copyObject(ht_rte->eref);
+		}
 
 		childrte->ctename = NULL;
 		if (first_chunk_index == 0)

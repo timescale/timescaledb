@@ -1006,7 +1006,7 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	 * filter.
 	 */
 	List *clauses_needing_scan = NULL;
-	/* If a filter is not pushed down into compessed indexed data, it's a filter for which we will
+	/* If a filter is not pushed down into compressed indexed data, it's a filter for which we will
 	 * need to scan and decompress until filter is passed */
 	if ((Path *) index_path != child_path)
 	{

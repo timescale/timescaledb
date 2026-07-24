@@ -2521,7 +2521,22 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				}
 
 				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, chunk_slot);
-				estate->es_processed++;
+				if (node->canSetTag)
+					estate->es_processed++;
+
+				/*
+				 * Project the RETURNING result. Direct compress skips
+				 * ExecInsert, which normally handles this.
+				 */
+				if (chunk_rri->ri_projectReturning)
+				{
+					chunk_slot->tts_tableOid = RelationGetRelid(ctr->cis->rel);
+					return ExecProcessReturning(chunk_rri,
+												CMD_INSERT,
+												NULL,
+												chunk_slot,
+												context.planSlot);
+				}
 				continue;
 			}
 
