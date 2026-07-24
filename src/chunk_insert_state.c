@@ -230,6 +230,9 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 	Relation hyper_rel = ht_rri->ri_RelationDesc;
 	ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
 
+	/* DO UPDATE has a SET clause; DO SELECT only fetches the conflicting row. */
+	bool do_update = mt->onConflictAction == ONCONFLICT_UPDATE;
+
 	OnConflictActionState *onconfl = makeNode(OnConflictActionState);
 	memcpy(onconfl, ht_rri->ri_onConflict, sizeof(OnConflictActionState));
 	chunk_rri->ri_onConflict = onconfl;
@@ -237,7 +240,7 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 	chunk_rri->ri_RootToChildMap = map;
 	chunk_rri->ri_RootToChildMapValid = true;
 
-	Assert(mt->onConflictSet);
+	Assert(!do_update || mt->onConflictSet);
 	Assert(ht_rri->ri_onConflict != NULL);
 
 	/*
@@ -271,18 +274,6 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 	}
 	else
 	{
-		List *onconflset;
-		List *onconflcols;
-
-		/*
-		 * Translate expressions in onConflictSet to account for
-		 * different attribute numbers.  For that, map partition
-		 * varattnos twice: first to catch the EXCLUDED
-		 * pseudo-relation (INNER_VAR), and second to handle the main
-		 * target relation (firstVarno).
-		 */
-		onconflset = copyObject(mt->onConflictSet);
-
 		Assert(map->outdesc == RelationGetDescr(chunk_rel));
 
 		if (!chunk_map)
@@ -291,33 +282,41 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 				convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(hyper_rel));
 		}
 
-		onconflset = translate_clause(onconflset, chunk_map, ht_rri->ri_RangeTableIndex, chunk_rel);
-
 		chunk_rri->ri_ChildToRootMap = chunk_map;
 		chunk_rri->ri_ChildToRootMapValid = true;
 
-		/* Finally, adjust the target colnos to match the chunk. */
-		if (chunk_map)
+		if (do_update)
 		{
+			List *onconflset;
+			List *onconflcols;
+
+			/*
+			 * Translate expressions in onConflictSet to account for
+			 * different attribute numbers.  For that, map partition
+			 * varattnos twice: first to catch the EXCLUDED
+			 * pseudo-relation (INNER_VAR), and second to handle the main
+			 * target relation (firstVarno).
+			 */
+			onconflset = copyObject(mt->onConflictSet);
+			onconflset =
+				translate_clause(onconflset, chunk_map, ht_rri->ri_RangeTableIndex, chunk_rel);
+
+			/* Finally, adjust the target colnos to match the chunk. */
 			onconflcols = adjust_chunk_colnos(mt->onConflictCols, chunk_rri);
-		}
-		else
-		{
-			onconflcols = mt->onConflictCols;
-		}
 
-		/* create the tuple slot for the UPDATE SET projection */
-		onconfl->oc_ProjSlot = table_slot_create(chunk_rel, NULL);
-		state->conflproj_slot = onconfl->oc_ProjSlot;
+			/* create the tuple slot for the UPDATE SET projection */
+			onconfl->oc_ProjSlot = table_slot_create(chunk_rel, NULL);
+			state->conflproj_slot = onconfl->oc_ProjSlot;
 
-		/* build UPDATE SET projection state */
-		onconfl->oc_ProjInfo = ExecBuildUpdateProjection(onconflset,
-														 true,
-														 onconflcols,
-														 RelationGetDescr(chunk_rel),
-														 mtstate->ps.ps_ExprContext,
-														 onconfl->oc_ProjSlot,
-														 &mtstate->ps);
+			/* build UPDATE SET projection state */
+			onconfl->oc_ProjInfo = ExecBuildUpdateProjection(onconflset,
+															 true,
+															 onconflcols,
+															 RelationGetDescr(chunk_rel),
+															 mtstate->ps.ps_ExprContext,
+															 onconfl->oc_ProjSlot,
+															 &mtstate->ps);
+		}
 
 		Node *onconflict_where = mt->onConflictWhere;
 
@@ -406,7 +405,11 @@ adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsert
 	{
 		set_arbiter_indexes(cis, ht_rri->ri_onConflictArbiterIndexes);
 
-		if (onConflictAction == ONCONFLICT_UPDATE)
+		if (onConflictAction == ONCONFLICT_UPDATE
+#if PG19_GE
+			|| onConflictAction == ONCONFLICT_SELECT
+#endif
+		)
 		{
 			setup_on_conflict_state(ht_rri, mtstate, cis, chunk_map);
 		}
