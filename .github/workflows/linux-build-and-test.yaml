@@ -158,6 +158,7 @@ jobs:
         for ext in ${{ matrix.pg_extensions }}; do
           make -C contrib/${ext} install
         done
+        make install-tests
         echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
     - name: Upload config.log
