@@ -149,6 +149,12 @@ extern TSDLLEXPORT bool ts_lock_continuous_agg_tuple(int32 mat_hypertable_id);
 
 extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
 
+extern TSDLLEXPORT void ts_continuous_agg_lock_relations(ContinuousAgg *cagg, LOCKMODE user_view,
+														 LOCKMODE mat_hypertable,
+														 LOCKMODE partial_view,
+														 LOCKMODE direct_view,
+														 const char *waitpoint_prefix);
+
 extern TSDLLEXPORT ContinuousAggInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id, bool missing_ok);

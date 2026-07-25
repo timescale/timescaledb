@@ -174,20 +174,21 @@ debug_waitpoint_release
 step s1_add_a: <... completed>
 ERROR:  continuous aggregate does not exist
 
-starting permutation: wp_before_uv_enable alt_matonly s1_add_a wp_before_uv_release v_cols_a v_matonly_a
-step wp_before_uv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_uv_lock');
+starting permutation: wp_before_pv_enable s1_add_a alt_matonly wp_before_pv_release v_cols_a v_matonly_a
+step wp_before_pv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock');
 debug_waitpoint_enable
 ----------------------
                       
 
-step alt_matonly: ALTER MATERIALIZED VIEW cagg_a SET (timescaledb.materialized_only = false);
 step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
-step wp_before_uv_release: SELECT debug_waitpoint_release('cagg_add_column_before_uv_lock');
+step alt_matonly: ALTER MATERIALIZED VIEW cagg_a SET (timescaledb.materialized_only = false); <waiting ...>
+step wp_before_pv_release: SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock');
 debug_waitpoint_release
 -----------------------
                        
 
 step s1_add_a: <... completed>
+step alt_matonly: <... completed>
 step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
 column_name
 -----------
@@ -201,15 +202,15 @@ materialized_only
 f                
 
 
-starting permutation: wp_after_enable s1_add_a alt_chunk wp_after_release v_cols_a
-step wp_after_enable: SELECT debug_waitpoint_enable('cagg_add_column_after_locks');
+starting permutation: wp_before_pv_enable s1_add_a alt_chunk wp_before_pv_release v_cols_a
+step wp_before_pv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock');
 debug_waitpoint_enable
 ----------------------
                       
 
 step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
 step alt_chunk: ALTER MATERIALIZED VIEW cagg_a SET (timescaledb.chunk_interval = '2 days'); <waiting ...>
-step wp_after_release: SELECT debug_waitpoint_release('cagg_add_column_after_locks');
+step wp_before_pv_release: SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock');
 debug_waitpoint_release
 -----------------------
                        
@@ -224,20 +225,21 @@ avg_val
 min_temp   
 
 
-starting permutation: wp_before_uv_enable alt_owner s1_add_a wp_before_uv_release v_cols_a v_owner_a
-step wp_before_uv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_uv_lock');
+starting permutation: wp_before_pv_enable s1_add_a alt_owner wp_before_pv_release v_cols_a v_owner_a
+step wp_before_pv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock');
 debug_waitpoint_enable
 ----------------------
                       
 
-step alt_owner: ALTER MATERIALIZED VIEW cagg_a OWNER TO cagg_role;
 step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
-step wp_before_uv_release: SELECT debug_waitpoint_release('cagg_add_column_before_uv_lock');
+step alt_owner: ALTER MATERIALIZED VIEW cagg_a OWNER TO cagg_role; <waiting ...>
+step wp_before_pv_release: SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock');
 debug_waitpoint_release
 -----------------------
                        
 
 step s1_add_a: <... completed>
+step alt_owner: <... completed>
 step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
 column_name
 -----------
@@ -249,4 +251,56 @@ step v_owner_a: SELECT pg_get_userbyid(relowner) AS owner FROM pg_class WHERE re
 owner    
 ---------
 cagg_role
+
+
+starting permutation: wp_before_pv_enable s1_add_a alt_rename wp_before_pv_release v_cols_a
+step wp_before_pv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step alt_rename: ALTER MATERIALIZED VIEW cagg_a RENAME COLUMN avg_val TO mean_val; <waiting ...>
+step wp_before_pv_release: SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_add_a: <... completed>
+step alt_rename: <... completed>
+step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
+column_name
+-----------
+bucket     
+mean_val   
+min_temp   
+
+
+starting permutation: wp_before_pv_enable s1_add_a alt_compress wp_before_pv_release v_cols_a v_compress_a
+step wp_before_pv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_pv_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step alt_compress: ALTER MATERIALIZED VIEW cagg_a SET (timescaledb.compress = true); <waiting ...>
+step wp_before_pv_release: SELECT debug_waitpoint_release('cagg_add_column_before_pv_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_add_a: <... completed>
+alt: NOTICE:  defaulting compress_orderby to bucket
+step alt_compress: <... completed>
+step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
+column_name
+-----------
+bucket     
+avg_val    
+min_temp   
+
+step v_compress_a: SELECT compression_enabled FROM timescaledb_information.continuous_aggregates WHERE view_name='cagg_a';
+compression_enabled
+-------------------
+t                  
 
