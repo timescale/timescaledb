@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include "debug_point.h"
 #include <access/tableam.h>
+#include <catalog/indexing.h>
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
@@ -36,6 +37,7 @@
 #include "recompress.h"
 #include "sparse_index_bloom1.h"
 #include "ts_catalog/array_utils.h"
+#include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
@@ -2557,7 +2559,7 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
 	TableScanDesc scan = table_beginscan_compat(compressed_rel, GetActiveSnapshot(), 0, NULL, 0);
 	TupleTableSlot *scan_slot = table_slot_create(compressed_rel, NULL);
-	TupleTableSlot *update_slot = MakeSingleTupleTableSlot(compressed_desc, &TTSOpsHeapTuple);
+	CatalogIndexState indstate = CatalogOpenIndexes(compressed_rel);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, scan_slot))
 	{
@@ -2597,20 +2599,22 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 												decompressor->compressed_datums,
 												decompressor->compressed_is_nulls,
 												repl);
-		ExecStoreHeapTuple(new_tuple, update_slot, false);
 
 		/*
-		 * Sparse index metadata columns are not covered by any index.
-		 * If indexes on metadata columns are added in the future,
-		 * this will need to handle index updates via update_indexes.
+		 * Sparse index metadata columns are covered by a btree index
+		 * (segmentby, first/last time, and any minmax/bloom columns). If
+		 * this update isn't HOT-eligible, the old index entries are left
+		 * pointing at the superseded tuple, so we must insert new entries
+		 * ourselves -- mirroring what CatalogTupleUpdate() does for
+		 * catalog tuples. We use simple_heap_update() rather than
+		 * simple_table_tuple_update() so that heap_update() writes the new
+		 * tuple's location and HOT status directly into new_tuple, which
+		 * ts_catalog_index_insert() (a no-op when the update was HOT)
+		 * relies on below.
 		 */
 		TU_UpdateIndexes update_indexes;
-		simple_table_tuple_update(compressed_rel,
-								  &tid,
-								  update_slot,
-								  GetActiveSnapshot(),
-								  &update_indexes);
-		ExecClearTuple(update_slot);
+		simple_heap_update(compressed_rel, &tid, new_tuple, &update_indexes);
+		ts_catalog_index_insert(indstate, new_tuple);
 
 		/* Reset */
 		foreach_ptr(BatchMetadataBuilder, builder, builders)
@@ -2628,9 +2632,9 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 		}
 	}
 
-	ExecDropSingleTupleTableSlot(update_slot);
 	ExecDropSingleTupleTableSlot(scan_slot);
 	table_endscan(scan);
+	CatalogCloseIndexes(indstate);
 }
 
 void

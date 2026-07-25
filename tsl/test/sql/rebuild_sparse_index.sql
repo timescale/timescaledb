@@ -355,6 +355,21 @@ SELECT _timescaledb_functions.bloom1_contains(:"bloom_label", 'nonexistent'::tex
        _timescaledb_functions.bloom1_contains(:"bloom_label", 'NOPE'::text) AS nope3
 FROM :ic_schema1.:ic_table1 WHERE device = 'd2' LIMIT 1;
 
+-- Sparse index integrity: the (device, first_time, last_time) btree must be
+-- able to find every batch for every device after rebuild_sparse_index, not
+-- just the ones whose metadata rewrite happened to be a HOT update. Forced
+-- index/bitmap scans must return the same per-device batch counts as an
+-- unindexed scan.
+SET enable_indexscan = off;
+SET enable_bitmapscan = off;
+SELECT device, count(*) FROM :ic_schema1.:ic_table1 GROUP BY device ORDER BY device;
+RESET enable_indexscan;
+RESET enable_bitmapscan;
+
+SET enable_seqscan = off;
+SELECT device, count(*) FROM :ic_schema1.:ic_table1 GROUP BY device ORDER BY device;
+RESET enable_seqscan;
+
 SELECT decompress_chunk(:'ichunk1');
 
 -- Test 11: composite bloom integrity (drop, rebuild, verify via explain)
