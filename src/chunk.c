@@ -11,6 +11,7 @@
 #include <access/tableam.h>
 #include <access/tupdesc.h>
 #include <access/xact.h>
+#include <catalog/dependency.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_class.h>
@@ -1048,15 +1049,90 @@ chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 static void
 chunk_add_to_publications(const Chunk *chunk)
 {
-	List *puboids;
+	Oid ht_nspid = get_rel_namespace(chunk->hypertable_relid);
+	List *puboids = list_concat_unique_oid(GetRelationIncludedPublications(chunk->hypertable_relid),
+										   GetSchemaPublications(ht_nspid));
 	ListCell *lc;
-
-	puboids = GetRelationIncludedPublications(chunk->hypertable_relid);
 	foreach (lc, puboids)
 	{
-		Oid puboid = lfirst_oid(lc);
-		chunk_add_to_publication(puboid, chunk);
+		chunk_add_to_publication(lfirst_oid(lc), chunk);
 	}
+}
+
+static void
+chunk_remove_from_publication(Oid puboid, const Chunk *chunk)
+{
+	ObjectAddress obj;
+	Oid prid = GetSysCacheOid2(PUBLICATIONRELMAP,
+							   Anum_pg_publication_rel_oid,
+							   ObjectIdGetDatum(chunk->table_id),
+							   ObjectIdGetDatum(puboid));
+	if (!OidIsValid(prid))
+	{
+		return;
+	}
+
+	/* No core PG object depends on a pg_publication_rel row, so RESTRICT is
+	 * sufficient and matches PG's own AlterPublication convention. */
+	ObjectAddressSet(obj, PublicationRelRelationId, prid);
+	performDeletion(&obj, DROP_RESTRICT, 0);
+}
+
+/*
+ * Add or remove the chunks of every hypertable in the given schemas to/from a
+ * publication. Schema publications miss chunks (chunks live in
+ * _timescaledb_internal, not the hypertable's schema); FOR TABLE / FOR ALL
+ * TABLES are handled by PG.
+ *
+ * Honors enable_chunk_auto_publication: when off, the whole reconciliation is
+ * skipped. This is consistent with the opt-in design of the feature - if the
+ * user disables the GUC after chunks were auto-published, they own any cleanup
+ * (a subsequent ALTER PUBLICATION ... DROP TABLES IN SCHEMA will not remove
+ * the previously backfilled chunk rows in that case). Drop the publication or
+ * re-enable the GUC before such an ALTER to have the rows removed here.
+ */
+void
+ts_chunk_publication_sync_schema_chunks(Oid pubid, List *schema_oids, bool add)
+{
+	if (!ts_guc_enable_chunk_auto_publication)
+	{
+		return;
+	}
+
+	Cache *hcache = ts_hypertable_cache_pin();
+	ListCell *sc;
+	foreach (sc, schema_oids)
+	{
+		ListCell *rc;
+		foreach (rc, GetSchemaPublicationRelations(lfirst_oid(sc), PUBLICATION_PART_ROOT))
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, lfirst_oid(rc), CACHE_FLAG_MISSING_OK);
+			if (ht == NULL)
+			{
+				continue;
+			}
+			ListCell *cc;
+			foreach (cc, ts_chunk_get_by_hypertable_id(ht->fd.id))
+			{
+				Chunk *chunk = lfirst(cc);
+				/* OSM chunks are foreign tables; publication_add_relation would fail. */
+				if (IS_OSM_CHUNK(chunk))
+				{
+					continue;
+				}
+				if (add)
+				{
+					chunk_add_to_publication(pubid, chunk);
+				}
+				else
+				{
+					chunk_remove_from_publication(pubid, chunk);
+				}
+			}
+		}
+	}
+	ts_cache_release(&hcache);
 }
 
 static Chunk *
