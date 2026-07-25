@@ -70,3 +70,13 @@ BEGIN
     RETURN ret;
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
+
+-- Raise an error if a logical replication slot still has pending changes
+-- against the given relation. Intended to be called before recreating a
+-- TimescaleDB user catalog table during an extension upgrade: once the old
+-- relation is dropped, a slot that still needs to decode changes to it can no
+-- longer be decoded ("could not find pg_class entry"), so the slot must be
+-- advanced or dropped first.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.ensure_catalog_replication(
+    rel REGCLASS
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_ensure_catalog_replication' LANGUAGE C VOLATILE STRICT;
