@@ -1256,6 +1256,8 @@ compact_chunk_recompress_overlapping_batches(
 		found_overlaps = true;
 		CommandCounterIncrement();
 
+		DEBUG_WAITPOINT("compact_chunk_after_batch_delete");
+
 		/* The overlapping batch becomes the predecessor for the scan loop. */
 		ItemPointerCopy(&state->first_overlap_tid, &state->previous_tid);
 		update_current_segment(recompress_ctx->current_segment,
@@ -1514,6 +1516,8 @@ compact_chunk_impl(Chunk *uncompressed_chunk, int max_batches)
 																 index_scan,
 																 recompress_ctx,
 																 state);
+
+	DEBUG_WAITPOINT("compact_chunk_after_find_overlaps");
 
 	if (found_overlaps)
 	{

@@ -1,4 +1,4 @@
-Parsed test spec with 2 sessions
+Parsed test spec with 3 sessions
 
 starting permutation: s2_begin s2_select s1_compact s2_commit s1_show_status s1_count
 step s2_begin: 
@@ -243,4 +243,276 @@ step s1_count:
 count
 -----
  4100
+
+
+starting permutation: s3_wp_enable s1_compact s2_update s3_wp_release s1_show_status s1_count
+step s3_wp_enable: 
+    SELECT debug_waitpoint_enable('compact_chunk_after_find_overlaps');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_update: 
+    UPDATE metrics SET value = -1.0 WHERE value = 1.0;
+
+step s3_wp_release: 
+    SELECT debug_waitpoint_release('compact_chunk_after_find_overlaps');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compact: <... completed>
+ERROR:  aborting compaction due to concurrent updates on compressed data, retrying with next policy run
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
+
+
+starting permutation: s3_wp_enable s1_compact s2_delete s3_wp_release s1_show_status s1_count
+step s3_wp_enable: 
+    SELECT debug_waitpoint_enable('compact_chunk_after_find_overlaps');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_delete: 
+    DELETE FROM metrics WHERE value = 1.0;
+
+step s3_wp_release: 
+    SELECT debug_waitpoint_release('compact_chunk_after_find_overlaps');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compact: <... completed>
+ERROR:  aborting compaction due to concurrent updates on compressed data, retrying with next policy run
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 3999
+
+
+starting permutation: s3_wp_enable_after_delete s1_compact s2_update s3_wp_release_after_delete s1_show_status s1_count
+step s3_wp_enable_after_delete: 
+    SELECT debug_waitpoint_enable('compact_chunk_after_batch_delete');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_update: 
+    UPDATE metrics SET value = -1.0 WHERE value = 1.0;
+ <waiting ...>
+step s3_wp_release_after_delete: 
+    SELECT debug_waitpoint_release('compact_chunk_after_batch_delete');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compact: <... completed>
+compact
+-------
+      1
+
+step s2_update: <... completed>
+ERROR:  could not update/delete compressed data due to concurrent modification
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                
+----------------------
+{COMPRESSED,UNORDERED}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
+
+
+starting permutation: s3_wp_enable_after_delete s1_compact s2_delete s3_wp_release_after_delete s1_show_status s1_count
+step s3_wp_enable_after_delete: 
+    SELECT debug_waitpoint_enable('compact_chunk_after_batch_delete');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_delete: 
+    DELETE FROM metrics WHERE value = 1.0;
+ <waiting ...>
+step s3_wp_release_after_delete: 
+    SELECT debug_waitpoint_release('compact_chunk_after_batch_delete');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compact: <... completed>
+compact
+-------
+      1
+
+step s2_delete: <... completed>
+ERROR:  could not update/delete compressed data due to concurrent modification
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                
+----------------------
+{COMPRESSED,UNORDERED}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
+
+
+starting permutation: s3_wp_enable_after_delete s1_compact s2_begin_rr s2_update s3_wp_release_after_delete s2_commit s1_show_status s1_count
+step s3_wp_enable_after_delete: 
+    SELECT debug_waitpoint_enable('compact_chunk_after_batch_delete');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_begin_rr: 
+    BEGIN ISOLATION LEVEL REPEATABLE READ;
+
+step s2_update: 
+    UPDATE metrics SET value = -1.0 WHERE value = 1.0;
+ <waiting ...>
+step s3_wp_release_after_delete: 
+    SELECT debug_waitpoint_release('compact_chunk_after_batch_delete');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compact: <... completed>
+compact
+-------
+      1
+
+step s2_update: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step s2_commit: 
+    COMMIT;
+
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                
+----------------------
+{COMPRESSED,UNORDERED}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
+
+
+starting permutation: s3_wp_enable_after_delete s1_compact s2_begin_rr s2_delete s3_wp_release_after_delete s2_commit s1_show_status s1_count
+step s3_wp_enable_after_delete: 
+    SELECT debug_waitpoint_enable('compact_chunk_after_batch_delete');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+ <waiting ...>
+step s2_begin_rr: 
+    BEGIN ISOLATION LEVEL REPEATABLE READ;
+
+step s2_delete: 
+    DELETE FROM metrics WHERE value = 1.0;
+ <waiting ...>
+step s3_wp_release_after_delete: 
+    SELECT debug_waitpoint_release('compact_chunk_after_batch_delete');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compact: <... completed>
+compact
+-------
+      1
+
+step s2_delete: <... completed>
+ERROR:  could not serialize access due to concurrent update
+step s2_commit: 
+    COMMIT;
+
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                
+----------------------
+{COMPRESSED,UNORDERED}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
 
