@@ -136,6 +136,13 @@ SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics') c
 
 SET default_transaction_read_only TO off;
 
+-- compact_chunk in REPEATABLE READ must fail
+\set ON_ERROR_STOP 0
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics') chunk;
+COMMIT;
+\set ON_ERROR_STOP 1
+
 -- Create a hypertable with a segmentby column.
 -- Each segment ('d1', 'd2') will have its own set of batches, and
 -- compact_chunk should handle overlaps per segment independently.
