@@ -115,6 +115,11 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 -------------------
  {COMPRESSED}
 
+-- compact_chunk with negative max_batches must fail
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.compact_chunk(chunk, -1) FROM show_chunks('metrics') chunk;
+ERROR:  max_batches must be greater than or equal to 0
+\set ON_ERROR_STOP 1
 -- compact an uncompressed chunk
 -- Create a new uncompressed chunk for a different time range by
 -- inserting with direct compress insert disabled.

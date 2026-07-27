@@ -76,6 +76,11 @@ ORDER BY _ts_meta_min_1;
 -- Status should not contain UNORDERED flag
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
 
+-- compact_chunk with negative max_batches must fail
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.compact_chunk(chunk, -1) FROM show_chunks('metrics') chunk;
+\set ON_ERROR_STOP 1
+
 -- compact an uncompressed chunk
 -- Create a new uncompressed chunk for a different time range by
 -- inserting with direct compress insert disabled.

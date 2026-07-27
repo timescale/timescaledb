@@ -1,0 +1,1 @@
+Fixes: #10340 Validate max_batches in compact_chunk
