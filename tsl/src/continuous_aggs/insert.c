@@ -104,6 +104,25 @@ typedef struct ContinuousAggsCacheHyperInvalThresholdEntry
 	int64 watermark;
 } ContinuousAggsCacheHyperInvalThresholdEntry;
 
+/*
+ * Backend-local cache of this backend's resolved handle to hypertable's
+ * shared tracker.  Tracking entries are held in shared mem. Each backend
+ * has to attach to that address and resolve the pointer. Once that is done
+ * we cache it here for the lifetime of the backend. This is helpful for
+ * the DML path and avoids any additional lookups.
+ * tracking == NULL means DISABLED, tracking = non NULL means we have a valid
+ * entry in shared mem.
+ * Both outcomes are stable for the backend's life: a tracker is
+ * never moved or freed and its mapping is pinned, and a DISABLED marker persists
+ * until restart . So entries never need invalidation.  MyDatabaseId is fixed
+ * per backend, so hypertable_id alone is a sufficient key.
+ */
+typedef struct TenantTrackerCacheEntry
+{
+	int32 hypertable_id;
+	TenantTracking *tracking;
+} TenantTrackerCacheEntry;
+
 static int64 get_lowest_invalidated_time_for_hypertable(int32 hypertable_id);
 static inline int64 cache_get_lowest_invalidated_time_for_hypertable(int32 hypertable_id);
 
@@ -116,6 +135,9 @@ static HTAB *continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
 static HTAB *tenant_local_htab = NULL;
 static bool tenant_buffer_unencodable = false;
 
+/* Backend-lifetime resolved-tracker cache (see TenantTrackerCacheEntry). */
+static HTAB *tenant_tracker_resolved_htab = NULL;
+
 static MemoryContext continuous_aggs_invalidation_mctx = NULL;
 
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
@@ -125,6 +147,7 @@ static inline ContinuousAggsCacheInvalEntry *get_cache_inval_entry(int32 hyperta
 static void cache_inval_cleanup(void);
 static void cache_inval_htab_write(List *hypertable_seqnums);
 static HTAB *get_tenant_local_htab(void);
+static TenantTracking *resolve_tenant_tracker(int32 hypertable_id);
 static List *tenant_local_htab_write(void);
 static void continuous_agg_xact_invalidation_callback(XactEvent event, void *arg);
 static ScanTupleResult invalidation_tuple_found(TupleInfo *ti, void *min);
@@ -221,22 +244,23 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	MemSet(&cache_entry->tenant_col, 0, sizeof(cache_entry->tenant_col));
 	const char *tracking_column_name;
 	if (ts_hypertable_cagg_settings_get_tenant_tracking_column(hypertable_id,
-															   &tracking_column_name) &&
-		(cache_entry->tenant_col.attno = get_attnum(chunk_relid, tracking_column_name)) !=
-			InvalidAttrNumber)
+															   &tracking_column_name))
 	{
-		/* Resolve through domains so a domain over a supported type is accepted;
-		 * domains share their base type's I/O and on-disk representation. */
-		cache_entry->tenant_col.typid =
-			getBaseType(get_atttype(chunk_relid, cache_entry->tenant_col.attno));
-		Ensure(ts_tenant_type_is_supported(cache_entry->tenant_col.typid),
-			   "tenant tracking column \"%s\" has an unsupported type",
-			   tracking_column_name);
-		getTypeOutputInfo(cache_entry->tenant_col.typid,
-						  &cache_entry->tenant_col.outfunc,
-						  &cache_entry->tenant_col.typisvarlena);
+		cache_entry->tenant_col.attno = get_attnum(chunk_relid, tracking_column_name);
+		if (cache_entry->tenant_col.attno != InvalidAttrNumber)
+		{
+			/* Resolve through domains so a domain over a supported type is accepted;
+			 * domains share their base type's I/O and on-disk representation. */
+			cache_entry->tenant_col.typid =
+				getBaseType(get_atttype(chunk_relid, cache_entry->tenant_col.attno));
+			Ensure(ts_tenant_type_is_supported(cache_entry->tenant_col.typid),
+				   "tenant tracking column \"%s\" has an unsupported type",
+				   tracking_column_name);
+			getTypeOutputInfo(cache_entry->tenant_col.typid,
+							  &cache_entry->tenant_col.outfunc,
+							  &cache_entry->tenant_col.typisvarlena);
+		}
 	}
-
 	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = INVAL_POS_INFINITY;
 	cache_entry->greatest_modified_value = INVAL_NEG_INFINITY;
@@ -304,6 +328,121 @@ get_tenant_local_htab(void)
 										HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 	}
 	return tenant_local_htab;
+}
+
+/*
+ * Resolve (and cache) this backend's handle to a hypertable's shared tracker.
+ *
+ * Called from the DML path
+ *
+ * Returns the tracker, or NULL when tracking is disabled for this hypertable
+ * (negative-cache marker, loader absent, or a contained OOM).  Both outcomes are
+ * cached and stable for the backend's life.
+ */
+static TenantTracking *
+resolve_tenant_tracker(int32 hypertable_id)
+{
+	TenantTrackerCacheEntry *ce;
+	TenantTracking *volatile tracking = NULL;
+	MemoryContext oldcxt = CurrentMemoryContext;
+	ResourceOwner oldowner = CurrentResourceOwner;
+
+	if (tenant_tracker_resolved_htab == NULL)
+	{
+		HASHCTL ctl;
+
+		memset(&ctl, 0, sizeof(ctl));
+		ctl.keysize = sizeof(int32);
+		ctl.entrysize = sizeof(TenantTrackerCacheEntry);
+		ctl.hcxt = TopMemoryContext; /* backend lifetime: entries never expire */
+		tenant_tracker_resolved_htab = hash_create("TS Tenant Tracker Resolved",
+												   CA_CACHE_INVAL_INIT_HTAB_SIZE,
+												   &ctl,
+												   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+	}
+
+	ce = hash_search(tenant_tracker_resolved_htab, &hypertable_id, HASH_FIND, NULL);
+	if (ce != NULL)
+	{
+		return ce->tracking; /* cached FOUND (ptr) or DISABLED (NULL) */
+	}
+
+	/*
+	 * First time this backend touches this hypertable.  Park here so the
+	 * first-touch race isolation test can line up two backends before the
+	 * get_or_attach below (which serializes on the dshash partition lock).
+	 */
+	DEBUG_WAITPOINT("tenant_tracker_drain_before_attach");
+
+	/*
+	 * Contain the resolution in an internal subtransaction.  get_or_attach can
+	 * throw OOM with a dshash partition lock held, and the seqnum-seed catalog
+	 * scan opens relations / pins buffers; rolling the subtransaction back
+	 * releases all resources cleanly
+	 * The cached attach (TopMemoryContext + dsa_pin_mapping) survives the rollback.
+	 */
+	PG_TRY();
+	{
+		TenantLookupState state;
+
+		BeginInternalSubTransaction(NULL);
+
+		tracking = ts_tenant_tracker_lookup_wstate(hypertable_id, &state);
+
+		if (state == TENANT_TRACKER_LOOKUP_ABSENT)
+		{
+			int64 seed_start, seed_end;
+			int32 max_seqnum;
+
+			/* Window to seed a brand-new tracker; ignored if a racer created it
+			 * first (get_or_attach then returns the existing one). */
+			ts_hypertable_cagg_settings_get_tenant_tracking_window(hypertable_id,
+																   &seed_start,
+																   &seed_end);
+			/* Seed to max_seqnum + 1 so the first generation created has a seqnum
+			 * above any pre-restart one. */
+			max_seqnum = invalidation_max_seqnum_for_hypertable(hypertable_id);
+
+			tracking = ts_tenant_tracker_get_or_attach(hypertable_id,
+													   seed_start,
+													   seed_end,
+													   max_seqnum + 1);
+		}
+
+		ReleaseCurrentSubTransaction();
+		MemoryContextSwitchTo(oldcxt);
+		CurrentResourceOwner = oldowner;
+	}
+	PG_CATCH();
+	{
+		ErrorData *edata;
+
+		/* CopyErrorData() must run outside ErrorContext and before FlushErrorState() */
+		MemoryContextSwitchTo(oldcxt);
+		edata = CopyErrorData();
+		RollbackAndReleaseCurrentSubTransaction();
+		MemoryContextSwitchTo(oldcxt);
+		CurrentResourceOwner = oldowner;
+		FlushErrorState();
+		tracking = NULL; /* tracking disabled for server's lifetime */
+
+		ereport(LOG,
+				(errmsg("per-tenant invalidation tracker unavailable for hypertable %d: %s",
+						hypertable_id,
+						edata->message),
+				 errdetail("Disabling per-tenant tracking for this hypertable; the continuous "
+						   "aggregate refresh will fall back to the full invalidation log.")));
+		ereport(NOTICE,
+				(errmsg("per-tenant invalidation tracker unavailable for hypertable %d, "
+						"falling back to full invalidation log",
+						hypertable_id)));
+		FreeErrorData(edata);
+	}
+	PG_END_TRY();
+
+	ce = hash_search(tenant_tracker_resolved_htab, &hypertable_id, HASH_ENTER, NULL);
+	ce->tracking = tracking;
+	return tracking;
 }
 
 /*
@@ -410,6 +549,8 @@ record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Rel
 	// TODO: try to see if there's a way to avoid allocate and free memory for every key.
 	pfree(key);
 
+	resolve_tenant_tracker(cache_entry->hypertable_id);
+
 	entry = (TenantLocalEntry *) hash_search(get_tenant_local_htab(), &lookup, HASH_ENTER, &found);
 	if (!found)
 	{
@@ -439,8 +580,8 @@ tenant_local_htab_write(void)
 {
 	HASH_SEQ_STATUS hash_seq;
 	TenantLocalEntry *entry;
-	List *volatile hypertable_ids = NIL;
-	List *volatile hypertable_seqnums = NIL;
+	List *hypertable_ids = NIL;
+	List *hypertable_seqnums = NIL;
 	ListCell *lc;
 
 	if (tenant_local_htab == NULL)
@@ -460,19 +601,12 @@ tenant_local_htab_write(void)
 	foreach (lc, hypertable_ids)
 	{
 		int32 hypertable_id = lfirst_int(lc);
-		TenantTracking *tracking = NULL;
+		TenantTracking *tracking;
 		TenantGeneration *generation;
 		int32 seqnum = 0;
 		HypertableSeqnumEntry *seq_entry;
-		MemoryContext drain_cxt = CurrentMemoryContext;
-		int64 seed_start, seed_end;
 		int64 window_start, window_end;
-
-		/* Window to seed a brand-new tracker (ignored if one already exists; an
-		 * existing tracker's window is owned by the last flush). */
-		ts_hypertable_cagg_settings_get_tenant_tracking_window(hypertable_id,
-															   &seed_start,
-															   &seed_end);
+		TenantTrackerCacheEntry *ce;
 
 		/*
 		 * Record this hypertable's seqnum entry up front, defaulting to 0
@@ -487,77 +621,20 @@ tenant_local_htab_write(void)
 		hypertable_seqnums = lappend(hypertable_seqnums, seq_entry);
 
 		/*
-		 * Add debug waitpoint to park here before attaching/find-or-inserting
-		 * so that isolation test can verify race between 2 backends
+		 * The tracker was resolved (and cached) in the DML path by
+		 * resolve_tenant_tracker, so the drain only reads the backend-local cache
+		 * here -- no attach, lookup, allocation, catalog scan, or PG_TRY, and thus
+		 * nothing that can throw at pre-commit.  A NULL entry means tracking is
+		 * disabled for this hypertable; a missing entry means nothing was buffered
+		 * for it (shouldn't happen), both -> skip (untracked, seqnum 0).
 		 */
-		DEBUG_WAITPOINT("tenant_tracker_drain_before_attach");
-
-		/*
-		 * get_or_attach attaches this backend to the tracker DSA/dshash and, on
-		 * the first INSERT into a new hypertable, allocates the tracker.  The
-		 * tracker allocation itself is no-throw (it degrades to a negative-cache
-		 * marker), but the dshash bucket allocation that publishes a brand-new
-		 * hypertable -- and the one-time DSA/dshash attach -- can still throw on a
-		 * fully exhausted DSA.  We are in the user's INSERT pre-commit drain, so
-		 * letting that error escape would fail an otherwise valid commit even
-		 * though tracking is only an optimization.  Contain it and skip tracking;
-		 * the refresh falls back to the full invalidation log.  This is only
-		 * reachable on the first touch of a hypertable -- once a tracker or a
-		 * marker exists, the lookup path allocates nothing and cannot throw.
-		 */
-		PG_TRY();
-		{
-			/* Peek first: only on a genuine first touch (no tracker yet) do we pay
-			 * for the seqnum-seed scan and the tracker allocation.  Computing
-			 * max_seqnum here keeps the catalog scan out of the dshash lock that
-			 * get_or_attach's insert path holds. */
-			tracking = ts_tenant_tracker_lookup(hypertable_id);
-			if (tracking == NULL)
-			{
-				int32 max_seqnum = invalidation_max_seqnum_for_hypertable(hypertable_id);
-
-				/*
-				 * Seed to max_seqnum + 1 so the first generation created has a
-				 * seqnum above any pre-restart one
-				 */
-				tracking = ts_tenant_tracker_get_or_attach(hypertable_id,
-														   seed_start,
-														   seed_end,
-														   max_seqnum + 1);
-			}
-		}
-		PG_CATCH();
-		{
-			/*
-			 * A throw from inside dshash may have left partition LWLocks held;
-			 * the normal LWLock cleanup only runs on transaction abort, which we
-			 * are deliberately avoiding here.  Release any held LWLocks, discard
-			 * the error, and continue the commit untracked.  No generation is
-			 * pinned yet (begin_batch runs only below, after a non-NULL tracker),
-			 * so nothing else needs unwinding.
-			 */
-			MemoryContextSwitchTo(drain_cxt);
-			LWLockReleaseAll();
-			FlushErrorState();
-			ereport(LOG,
-					(errmsg("per-tenant invalidation tracker unavailable (out of "
-							"shared memory) for hypertable %d",
-							hypertable_id),
-					 errdetail("Skipping per-tenant tracking for this transaction; the "
-							   "continuous aggregate refresh will fall back to the full "
-							   "invalidation log.")));
-			ereport(NOTICE,
-					(errmsg("per-tenant invalidation tracker unavailable for hypertable "
-							"%d, falling back to full invalidation log",
-							hypertable_id)));
-			tracking = NULL;
-		}
-		PG_END_TRY();
+		ce = (tenant_tracker_resolved_htab != NULL) ?
+				 hash_search(tenant_tracker_resolved_htab, &hypertable_id, HASH_FIND, NULL) :
+				 NULL;
+		tracking = (ce != NULL) ? ce->tracking : NULL;
 
 		if (tracking == NULL)
 		{
-			/* No tracker available -> untracked (seqnum 0); refresh falls back
-			 * to the full log. */
 			continue;
 		}
 
