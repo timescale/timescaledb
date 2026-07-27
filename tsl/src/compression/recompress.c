@@ -257,6 +257,15 @@ tsl_compact_chunk(PG_FUNCTION_ARGS)
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (IsolationUsesXactSnapshot())
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("compact_chunk is not supported in REPEATABLE READ or SERIALIZABLE "
+						"isolation level")));
+	}
+
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
 
 	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
