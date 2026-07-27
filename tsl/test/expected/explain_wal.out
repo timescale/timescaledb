@@ -26,9 +26,9 @@ INSERT INTO metrics SELECT '2025-01-01', 'd1', i::float FROM generate_series(0,1
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Direct Compress: true
-   WAL: records=3 bytes=487
+   WAL: records=2 bytes=401
    ->  Insert on metrics (actual rows=0.00 loops=1)
-         WAL: records=3 bytes=487
+         WAL: records=2 bytes=401
          ->  Function Scan on generate_series i (actual rows=11.00 loops=1)
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF, WAL ON)
