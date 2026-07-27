@@ -33,6 +33,7 @@
 #include "cache.h"
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
+#include "debug_point.h"
 #include "guc.h"
 #include "invalidation.h"
 #include "refresh.h"
@@ -1641,7 +1642,14 @@ scan_max_seqnum(CatalogTable table, int index, AttrNumber id_attno, int32 id_val
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		bool isnull;
-		Datum datum = slot_getattr(ti->slot, seqnum_attno, &isnull);
+		Datum datum;
+
+		/* Debug-only: throw mid-scan (relation ref + buffer pin + snapshot held) to
+		 * exercise the tenant-tracker resolver's subtransaction cleanup of
+		 * resource-owner resources on a catalog-scan OOM. */
+		DEBUG_ERROR_INJECTION("tenant_tracker_seqnum_scan_oom");
+
+		datum = slot_getattr(ti->slot, seqnum_attno, &isnull);
 
 		if (!isnull)
 		{
@@ -1653,6 +1661,7 @@ scan_max_seqnum(CatalogTable table, int index, AttrNumber id_attno, int32 id_val
 			}
 		}
 	}
+
 	ts_scan_iterator_close(&iterator);
 
 	return max_seqnum;
