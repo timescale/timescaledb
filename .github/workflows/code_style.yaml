@@ -73,7 +73,14 @@ jobs:
       - name: Run actionlint
         # The shellcheck integration is disabled for now because the existing
         # workflows have many unfixed shellcheck warnings.
-        run: ./actionlint -shellcheck=
+		# 
+  		# actionlint doesn't recognize parallel steps yet:
+		# https://github.com/rhysd/actionlint/issues/693
+        run: >-
+          ./actionlint -shellcheck=
+          -ignore 'unexpected key "background" for step'
+          -ignore 'step must run script with "run" section or run action with
+          "uses" section'
 
   spelling_checks:
     name: Check spelling
