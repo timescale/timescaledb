@@ -912,6 +912,14 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 												 settings->fd.compress_relid,
 												 "max");
 		}
+		if (!AttributeNumberIsValid(invalidation_ctx.min_time_attno) ||
+			!AttributeNumberIsValid(invalidation_ctx.max_time_attno))
+		{
+			ereport(ERROR,
+					errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					errmsg("cannot perform direct batch delete on hypertable with continuous "
+						   "aggregates when time column is not segmentby or orderby"));
+		}
 	}
 
 	chunk_rel = table_open(chunk->fd.relid, RowExclusiveLock);
