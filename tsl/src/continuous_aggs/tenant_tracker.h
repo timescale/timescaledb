@@ -74,7 +74,25 @@ extern void ts_tenant_tracker_end_batch(TenantGeneration *generation);
  */
 extern void ts_tenant_tracker_mark_invalid(TenantTracking *tracking);
 
+/*
+ * Result of a tracker map lookup.  Distinguishes the three states that a plain
+ * "NULL means not tracked" return cannot tell apart:
+ *   FOUND    -- a live tracker exists (returned);
+ *   ABSENT   -- no entry yet: a genuine first touch, so the caller should alloc
+ *   DISABLED -- a negative-cache marker is present. Caller should skip tracking
+ *               state persists until restart
+ */
+typedef enum
+{
+	TENANT_TRACKER_LOOKUP_FOUND,
+	TENANT_TRACKER_LOOKUP_ABSENT,
+	TENANT_TRACKER_LOOKUP_DISABLED,
+} TenantLookupState;
+
 extern TenantTracking *ts_tenant_tracker_lookup(int32 hypertable_id);
+
+extern TenantTracking *ts_tenant_tracker_lookup_wstate(int32 hypertable_id,
+													   TenantLookupState *state);
 
 extern void ts_tenant_tracker_get_info(TenantTracking *tracking, TenantTrackerInfo *info);
 
