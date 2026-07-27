@@ -147,3 +147,6 @@ GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- END add chunk.relid
 --
 
+-- Allow consistent view of the compression_settings catalog table in a historical snapshot
+-- during logical replication
+ALTER TABLE _timescaledb_catalog.compression_settings SET (user_catalog_table = true);

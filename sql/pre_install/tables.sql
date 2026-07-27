@@ -464,7 +464,7 @@ CREATE TABLE _timescaledb_catalog.compression_settings (
   CONSTRAINT compression_settings_check_segmentby CHECK (array_ndims(segmentby) = 1),
   CONSTRAINT compression_settings_check_orderby_null CHECK ((orderby IS NULL AND orderby_desc IS NULL AND orderby_nullsfirst IS NULL) OR (orderby IS NOT NULL AND orderby_desc IS NOT NULL AND orderby_nullsfirst IS NOT NULL)),
   CONSTRAINT compression_settings_check_orderby_cardinality CHECK (array_ndims(orderby) = 1 AND array_ndims(orderby_desc) = 1 AND array_ndims(orderby_nullsfirst) = 1 AND cardinality(orderby) = cardinality(orderby_desc) AND cardinality(orderby) = cardinality(orderby_nullsfirst))
-);
+) WITH (user_catalog_table = true);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
 CREATE INDEX compression_settings_compress_relid_idx ON _timescaledb_catalog.compression_settings (compress_relid);
