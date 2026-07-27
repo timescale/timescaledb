@@ -786,13 +786,14 @@ init_tracker(TenantTracking *tracker, int32 hypertable_id, int64 late_threshold_
 }
 
 TenantTracking *
-ts_tenant_tracker_lookup(int32 hypertable_id)
+ts_tenant_tracker_lookup_wstate(int32 hypertable_id, TenantLookupState *state)
 {
 	TenantMapEntry *entry;
 	dsa_pointer dp;
 
 	if (!tenant_tracker_attach())
 	{
+		*state = TENANT_TRACKER_LOOKUP_DISABLED;
 		return NULL;
 	}
 
@@ -804,6 +805,7 @@ ts_tenant_tracker_lookup(int32 hypertable_id)
 
 	if (entry == NULL)
 	{
+		*state = TENANT_TRACKER_LOOKUP_ABSENT;
 		return NULL;
 	}
 	dp = entry->tracker;
@@ -811,14 +813,23 @@ ts_tenant_tracker_lookup(int32 hypertable_id)
 	dshash_release_lock(tracker_map, entry);
 
 	/* InvalidDsaPointer is the negative-cache marker set by get_or_attach when a
-	 * tracker allocation failed; treat it as "not tracked" (dsa_get_address would
-	 * also map it to NULL, but be explicit). */
+	 * tracker allocation failed; it persists until restart. */
 	if (dp == InvalidDsaPointer)
 	{
+		*state = TENANT_TRACKER_LOOKUP_DISABLED;
 		return NULL;
 	}
 
+	*state = TENANT_TRACKER_LOOKUP_FOUND;
 	return (TenantTracking *) dsa_get_address(tracker_area, dp);
+}
+
+TenantTracking *
+ts_tenant_tracker_lookup(int32 hypertable_id)
+{
+	TenantLookupState state;
+
+	return ts_tenant_tracker_lookup_wstate(hypertable_id, &state);
 }
 
 TenantTracking *
@@ -837,6 +848,11 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
 	TenantMapKey key = { .database_id = MyDatabaseId, .hypertable_id = hypertable_id };
 
 	entry = dshash_find_or_insert(tracker_map, &key, &found);
+	if (!found)
+	{
+		/* init here so that a throw following this does not leave an uninitialized entry*/
+		entry->tracker = InvalidDsaPointer;
+	}
 
 	/* Debug-only: simulate the OOM ERROR that dshash_find_or_insert can throw
 	 * (its bucket-item dsa_allocate).  dshash_find_or_insert returns with its
@@ -845,7 +861,6 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
 	 * that releases locks.
 	 */
 	DEBUG_ERROR_INJECTION("tenant_tracker_map_dshash_insert_oom");
-
 	if (found)
 	{
 		/* InvalidDsaPointer is the negative-cache marker we
@@ -868,11 +883,7 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
 	 * published.
 	 *
 	 * Allocate with DSA_ALLOC_NO_OOM so a depleted DSA returns InvalidDsaPointer
-	 * instead of throwing.  Throwing here would be doubly bad: this runs in the
-	 * pre-commit drain of a user's INSERT, so it would fail an otherwise valid
-	 * commit; and we would leave behind a half-built dshash entry (entry->tracker
-	 * still unset) that a later lookup would dereference as a garbage
-	 * dsa_pointer. */
+	 */
 	if (DEBUG_INJECTION_ENABLED("tenant_tracker_area_oom"))
 	{
 		dp = InvalidDsaPointer;
