@@ -57,11 +57,8 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 * [#10315](https://github.com/timescale/timescaledb/pull/10315) Fix overlap detection with running max
 * [#10324](https://github.com/timescale/timescaledb/pull/10324) Fix stale index entries after `rebuild_sparse_index()` on compressed chunks
 
-**New Settings**
-* `timescaledb.enable_hypertable_expansion_for_dml`: allow using the optimized TimescaleDB hypertable expansion code for `UPDATE` and `DELETE` instead of the generic PostgreSQL inheritance hierarchy expansion. On by default.
-
 **GUCs**
-* `timescaledb.enable_hypertable_expansion_for_dml`: Enable TimescaleDB hypertable expansion for `UPDATE` and `DELETE` queries. Default: `on`
+* `timescaledb.enable_hypertable_expansion_for_dml`: allow using the optimized TimescaleDB hypertable expansion code for `UPDATE` and `DELETE` instead of the generic PostgreSQL inheritance hierarchy expansion. On by default.
 
 **Thanks**
 * @FrancescEthon and @ManuelEthon for reporting the issue
