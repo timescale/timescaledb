@@ -23,9 +23,9 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 * [#9732](https://github.com/timescale/timescaledb/pull/9732) Speed up some queries with small `LIMIT` by switching to row-by-row query execution pipeline
 * [#9917](https://github.com/timescale/timescaledb/pull/9917) Decompress less data in `DML` on compressed hypertables by accounting for prepared statement parameters
 * [#9957](https://github.com/timescale/timescaledb/pull/9957) Add `compact_chunk()` function
-* [#10100](https://github.com/timescale/timescaledb/pull/10100) Skip classifying compressed relations to speed up planning
 * [#10048](https://github.com/timescale/timescaledb/pull/10048) Support concurrent refresh policies on hierarchical continuous aggregates
 * [#10081](https://github.com/timescale/timescaledb/pull/10081) Add `samplerate` argument to `_timescaledb_functions.estimate_uncompressed_size()`
+* [#10100](https://github.com/timescale/timescaledb/pull/10100) Skip classifying compressed relations to speed up planning
 * [#10118](https://github.com/timescale/timescaledb/pull/10118) Don't track compressed relations as separate chunk
 * [#10119](https://github.com/timescale/timescaledb/pull/10119) Reduce memory usage of `INSERT` queries using direct compress and spanning multiple chunks
 * [#10163](https://github.com/timescale/timescaledb/pull/10163) Add a compaction policy for unordered chunks
@@ -37,10 +37,12 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 * [#10237](https://github.com/timescale/timescaledb/pull/10237) Add helper functions for decoding hypertable status
 * [#10240](https://github.com/timescale/timescaledb/pull/10240) Add the `tsdb.direct_compress` storage parameter that allows enabling direct compress for a given hypertable independent of global settings
 * [#10266](https://github.com/timescale/timescaledb/pull/10266) Add `max_batches` to `compact_chunk()`
+* [#10299](https://github.com/timescale/timescaledb/pull/10299) Add `continuous_aggs_tenant_tracking` and `hypertable_cagg_settings` catalogs
 
 **Bugfixes**
 * [#10013](https://github.com/timescale/timescaledb/pull/10013) Make ownership error messages on continuous aggregates consistent
 * [#10052](https://github.com/timescale/timescaledb/pull/10052) Result of `MIN` / `MAX` aggregate functions in columnar aggregation pipeline possibly inconsistent with plain PostgreSQL result
+* [#10071](https://github.com/timescale/timescaledb/pull/10071) Prune the real-time branch of hierarchical continuous aggregates at any nesting depth
 * [#10143](https://github.com/timescale/timescaledb/pull/10143) Fix division by zero when planning `time_bucket` with zero width
 * [#10199](https://github.com/timescale/timescaledb/pull/10199) Fix `initial_start` handling in `build_job_info`
 * [#10213](https://github.com/timescale/timescaledb/pull/10213) Cache sort pathkeys per hypertable
@@ -49,14 +51,25 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 * [#10280](https://github.com/timescale/timescaledb/pull/10280) `RETURNING` clause returned no rows for `INSERT` using direct compress
 * [#10281](https://github.com/timescale/timescaledb/pull/10281) Disable direct compress when the destination table has an exclusion constraint so the constraint is still enforced
 * [#10282](https://github.com/timescale/timescaledb/pull/10282) Only count directly compressed rows toward the command tag when the `INSERT` sets it
+* [#10286](https://github.com/timescale/timescaledb/pull/10286) Propagate `VACUUM` on a chunk to the compressed relation when running on the chunk directly
+* [#10302](https://github.com/timescale/timescaledb/pull/10302) Fix useless-join removal and self-join elimination for hypertables
+* [#10313](https://github.com/timescale/timescaledb/pull/10313) Allow running `ALTER EXTENSION timescaledb UPDATE` inside a transaction block
+* [#10315](https://github.com/timescale/timescaledb/pull/10315) Fix overlap detection with running max
+* [#10324](https://github.com/timescale/timescaledb/pull/10324) Fix stale index entries after `rebuild_sparse_index()` on compressed chunks
 
 **New Settings**
 * `timescaledb.enable_hypertable_expansion_for_dml`: allow using the optimized TimescaleDB hypertable expansion code for `UPDATE` and `DELETE` instead of the generic PostgreSQL inheritance hierarchy expansion. On by default.
 
+**GUCs**
+* `timescaledb.enable_hypertable_expansion_for_dml`: Enable TimescaleDB hypertable expansion for `UPDATE` and `DELETE` queries. Default: `on`
+
 **Thanks**
 * @FrancescEthon and @ManuelEthon for reporting the issue
+* @h0rn3t for reporting a problem with `VACUUM` not propagating to the compressed relation
 * @MaximeEthon for reporting an issue with prepared statement parameters in DML decompression
 * @proddata for reporting a problem when upgrading from 2.15.3 to 2.28.2
+* @tureba for reporting and fixing stale sparse-index entries after rebuild
+* @viniciusrsouza for reporting an issue with hierarchical continuous aggregates
 
 ## 2.28.3 (2026-07-16)
 
