@@ -128,7 +128,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
-    attach_chunk.sql
     bgw_custom.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
@@ -208,7 +207,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_qual_default.sql
     vacuum.sql)
 
-  list(APPEND TEST_TEMPLATES compression_update_delete.sql.in
+  list(APPEND TEST_TEMPLATES attach_chunk.sql.in
+       compression_update_delete.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
