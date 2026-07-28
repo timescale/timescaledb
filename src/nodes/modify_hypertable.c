@@ -5,9 +5,11 @@
  */
 
 #include <postgres.h>
+#include <access/sysattr.h>
 #include <nodes/execnodes.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <utils/snapmgr.h>
 
@@ -32,14 +34,14 @@ should_use_direct_compress(ModifyHypertableState *state)
 		return false;
 	}
 
-	if (!ts_guc_enable_direct_compress_insert)
-	{
-		return false;
-	}
-
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, state->cscan_state.custom_ps);
 	ResultRelInfo *resultRelInfo = mtstate->resultRelInfo;
 	Hypertable *ht = state->ctr->hypertable;
+
+	if (!ts_guc_enable_direct_compress_insert && !TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
+	{
+		return false;
+	}
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
@@ -59,6 +61,42 @@ should_use_direct_compress(ModifyHypertableState *state)
 				(errmsg("disabling direct compress because the destination table has unique "
 						"constraints")));
 		return false;
+	}
+
+	if (ts_indexing_relation_has_exclusion_constraint(state->ctr->root_rel))
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has exclusion "
+						"constraints")));
+		return false;
+	}
+
+	/*
+	 * Direct compress stores the tuple in compressed form instead of a
+	 * regular heap tuple, so system columns like ctid or xmin never get a
+	 * meaningful value. Fall back to the normal insert path when RETURNING
+	 * references them. tableoid is fine because the returning projection
+	 * sets it explicitly.
+	 */
+	ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
+	if (mt->returningLists)
+	{
+		Bitmapset *attnos = NULL;
+		pull_varattnos((Node *) linitial(mt->returningLists),
+					   resultRelInfo->ri_RangeTableIndex,
+					   &attnos);
+		int attno = -1;
+		while ((attno = bms_next_member(attnos, attno)) >= 0)
+		{
+			AttrNumber sysattno = attno + FirstLowInvalidHeapAttributeNumber;
+			if (sysattno < 0 && sysattno != TableOidAttributeNumber)
+			{
+				ereport(WARNING,
+						(errmsg("disabling direct compress because the RETURNING clause "
+								"references system columns")));
+				return false;
+			}
+		}
 	}
 
 	Plan *subplan = mtstate->ps.plan->lefttree;

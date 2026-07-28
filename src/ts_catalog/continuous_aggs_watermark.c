@@ -97,7 +97,7 @@ TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark);
  * materialized data and real-time data in the UNION query.
  *
  * The watermark is stored into `_timescaledb_catalog.continuous_aggs_watermark`
- * catalog table by the `refresh_continuous_agregate` procedure. It is defined
+ * catalog table by the `refresh_continuous_aggregate` procedure. It is defined
  * as the end of the last (highest) bucket in the materialized hypertable of a
  * continuous aggregate.
  *

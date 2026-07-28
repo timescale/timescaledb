@@ -519,8 +519,8 @@ ts_stats_chunk_segment_prepare_upsert(TsStatsChunkSegment *seg, TsStatsRelids re
 	}
 
 	/* at this point we haven't found the chunk so we first check the empty slots.
-	 * they may be taken conncurrently by another process, so they need to be checked
-	 * again. the order of the empty slots are somwewhat ordered as we gathered them
+	 * they may be taken concurrently by another process, so they need to be checked
+	 * again. the order of the empty slots are somewhat ordered as we gathered them
 	 * in the bucket recency order. best to traverse them in this recency order so
 	 * the buckets keep the recency property as much as possible.
 	 */

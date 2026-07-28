@@ -30,12 +30,17 @@
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
+#include <utils/fmgrprotos.h>
 #include <utils/guc.h>
+#include <utils/jsonb.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
+#include <utils/timestamp.h>
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#include "bgw/job.h"
+#include "bgw_policy/compaction_api.h"
 #include "bgw_policy/policies_v2.h"
 #include "chunk.h"
 #include "chunk_index.h"
@@ -45,6 +50,7 @@
 #include "create.h"
 #include "custom_type_cache.h"
 #include "dimension.h"
+#include "extension_constants.h"
 #include "foreach_ptr.h"
 #include "guc.h"
 #include "hypertable_cache.h"
@@ -100,6 +106,10 @@ static void compression_settings_set_manually_for_alter(Hypertable *ht,
 static void create_default_composite_bloom(IndexInfo *index_info, Hypertable *ht,
 										   CompressionSettings *settings, JsonbInState *parse_state,
 										   TsBmsList *sparse_index_columns, bool *has_object);
+static Interval *direct_compress_default_schedule_interval(void);
+static void enable_direct_compress_policies(Hypertable *ht, Interval *schedule_interval,
+											Datum compress_after_datum, Oid compress_after_type);
+static void disable_direct_compress_policies(Hypertable *ht);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -1193,7 +1203,13 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 				 errmsg("cannot disable columnstore on hypertable with columnstore chunks")));
 	}
 
+	if (TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
+	{
+		disable_direct_compress_policies(ht);
+	}
+
 	ts_hypertable_unset_compression(ht);
+	ts_hypertable_unset_direct_compress(ht);
 	ts_compression_settings_delete(ht->main_table_relid);
 
 	return true;
@@ -1348,6 +1364,112 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
 	return ts_hypertable_set_compress_interval(ht, compress_interval_usec);
 }
 
+static Interval *
+direct_compress_default_schedule_interval(void)
+{
+	return DatumGetIntervalP(
+		DirectFunctionCall3(interval_in, CStringGetDatum("1 minute"), InvalidOid, -1));
+}
+
+/*
+ * Creates the compaction and compression policies that back direct compress:
+ * compaction to defragment the small batches direct compress writes, and
+ * compression as a backstop for handling any uncompressed tuples.
+ * Both run on the same schedule, and the compression policy is set
+ * to skip unordered chunks so it doesn't fight the compaction policy for the
+ * same chunk. If either policy already exists it is updated to the required
+ * schedule and config instead of being left alone.
+ */
+static void
+enable_direct_compress_policies(Hypertable *ht, Interval *schedule_interval,
+								Datum compress_after_datum, Oid compress_after_type)
+{
+	policy_compaction_add_internal(ht->main_table_relid,
+								   true /* if_not_exists */,
+								   schedule_interval,
+								   DT_NOBEGIN,
+								   false /* fixed_schedule */,
+								   NULL /* timezone */,
+								   0 /* max_chunks */,
+								   0 /* max_batches */,
+								   NULL /* inactive_for */);
+
+	List *compaction_jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPACTION_PROC_NAME,
+																	  FUNCTIONS_SCHEMA_NAME,
+																	  ht->fd.id);
+	Assert(list_length(compaction_jobs) == 1);
+	BgwJob *compaction_job = linitial(compaction_jobs);
+	compaction_job->fd.schedule_interval = *schedule_interval;
+	ts_bgw_job_update_by_id(compaction_job->fd.id, compaction_job);
+
+	policy_compression_add_internal(ht->main_table_relid,
+									compress_after_datum,
+									compress_after_type,
+									NULL /* created_before */,
+									schedule_interval,
+									true /* user_defined_schedule_interval */,
+									true /* if_not_exists */,
+									false /* fixed_schedule */,
+									DT_NOBEGIN,
+									NULL /* timezone */);
+
+	List *compression_jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,
+																	   FUNCTIONS_SCHEMA_NAME,
+																	   ht->fd.id);
+	Assert(list_length(compression_jobs) == 1);
+	BgwJob *compression_job = linitial(compression_jobs);
+
+	JsonbInState merge_state = { 0 };
+	pushJsonbValueCompat(&merge_state, WJB_BEGIN_OBJECT, NULL);
+	switch (compress_after_type)
+	{
+		case INTERVALOID:
+			ts_jsonb_add_interval(&merge_state,
+								  POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+								  DatumGetIntervalP(compress_after_datum));
+			break;
+		case INT2OID:
+			ts_jsonb_add_int64(&merge_state,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+							   DatumGetInt16(compress_after_datum));
+			break;
+		case INT4OID:
+			ts_jsonb_add_int64(&merge_state,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+							   DatumGetInt32(compress_after_datum));
+			break;
+		case INT8OID:
+			ts_jsonb_add_int64(&merge_state,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+							   DatumGetInt64(compress_after_datum));
+			break;
+		default:
+			elog(ERROR, "unsupported compress_after type for direct compress");
+	}
+	ts_jsonb_add_bool(&merge_state, "recompress_unordered", false);
+	pushJsonbValueCompat(&merge_state, WJB_END_OBJECT, NULL);
+	Jsonb *config_merge = JsonbValueToJsonb(merge_state.result);
+
+	compression_job->fd.schedule_interval = *schedule_interval;
+	compression_job->fd.config =
+		DatumGetJsonbP(DirectFunctionCall2(jsonb_concat,
+										   JsonbPGetDatum(compression_job->fd.config),
+										   JsonbPGetDatum(config_merge)));
+	ts_bgw_job_update_by_id(compression_job->fd.id, compression_job);
+}
+
+/*
+ * Removes the compaction and compression policies that direct compress
+ * created. Called whenever direct compress is turned off, since the
+ * policies exist to support it and shouldn't keep running once it's gone.
+ */
+static void
+disable_direct_compress_policies(Hypertable *ht)
+{
+	policy_compaction_remove_internal(ht->main_table_relid, true /* if_exists */);
+	policy_compression_remove_internal(ht->main_table_relid, true /* if_exists */);
+}
+
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
@@ -1438,6 +1560,56 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		validate_existing_indexes(ht, settings);
 
 		ts_hypertable_set_compression(ht);
+	}
+
+	if (!with_clause_options[AlterTableFlagDirectCompressScheduleInterval].is_default &&
+		with_clause_options[AlterTableFlagDirectCompress].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"direct_compress_schedule_interval\" requires \"direct_compress\" to be "
+						"set in the same clause")));
+	}
+
+	if (!with_clause_options[AlterTableFlagDirectCompress].is_default)
+	{
+		bool enable_direct_compress =
+			DatumGetBool(with_clause_options[AlterTableFlagDirectCompress].parsed);
+
+		if (enable_direct_compress)
+		{
+			/* columnstore is enabled unconditionally above if it wasn't already, so this always
+			 * holds by this point */
+			Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+
+			Interval *schedule_interval =
+				!with_clause_options[AlterTableFlagDirectCompressScheduleInterval].is_default ?
+					DatumGetIntervalP(
+						with_clause_options[AlterTableFlagDirectCompressScheduleInterval].parsed) :
+					direct_compress_default_schedule_interval();
+
+			/* Use the chunk interval as the compression interval, same as the
+			 * default compression policy added by CREATE TABLE ... WITH */
+			const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+			Oid compress_after_type = ts_dimension_get_partition_type(time_dim);
+			if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
+			{
+				compress_after_type = INTERVALOID;
+			}
+			Datum compress_after_datum =
+				ts_internal_to_interval_value(time_dim->fd.interval_length, compress_after_type);
+
+			ts_hypertable_set_direct_compress(ht);
+			enable_direct_compress_policies(ht,
+											schedule_interval,
+											compress_after_datum,
+											compress_after_type);
+		}
+		else if (TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
+		{
+			disable_direct_compress_policies(ht);
+			ts_hypertable_unset_direct_compress(ht);
+		}
 	}
 
 	/*
@@ -2563,10 +2735,11 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 	/* Add default compression policy when compression is enabled via CREATE TABLE WITH */
 	/* Use the chunk interval as the compression interval */
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Datum compress_after_datum = 0;
+	Oid compress_after_type = InvalidOid;
 	if (time_dim != NULL)
 	{
-		Oid compress_after_type = ts_dimension_get_partition_type(time_dim);
-		Datum compress_after_datum;
+		compress_after_type = ts_dimension_get_partition_type(time_dim);
 		if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
 		{
 			compress_after_type = INTERVALOID;
@@ -2587,5 +2760,30 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 			false,								   /* fixed_schedule */
 			GetCurrentTimestamp() + USECS_PER_DAY, /* initial_start */
 			NULL /* timezone */);
+	}
+
+	if (!with_clause_options[CreateTableFlagDirectCompressScheduleInterval].is_default &&
+		with_clause_options[CreateTableFlagDirectCompress].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"direct_compress_schedule_interval\" requires \"direct_compress\" to be "
+						"set in the same clause")));
+	}
+
+	if (!with_clause_options[CreateTableFlagDirectCompress].is_default &&
+		DatumGetBool(with_clause_options[CreateTableFlagDirectCompress].parsed))
+	{
+		Interval *schedule_interval =
+			!with_clause_options[CreateTableFlagDirectCompressScheduleInterval].is_default ?
+				DatumGetIntervalP(
+					with_clause_options[CreateTableFlagDirectCompressScheduleInterval].parsed) :
+				direct_compress_default_schedule_interval();
+
+		ts_hypertable_set_direct_compress(ht);
+		enable_direct_compress_policies(ht,
+										schedule_interval,
+										compress_after_datum,
+										compress_after_type);
 	}
 }

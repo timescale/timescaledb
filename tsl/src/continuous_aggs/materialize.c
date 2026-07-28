@@ -420,7 +420,8 @@ build_order_by_clause(MaterializationContext *context)
 static inline bool
 has_direct_compress_on_cagg_refresh_enabled(MaterializationContext *context)
 {
-	return ts_guc_enable_direct_compress_on_cagg_refresh &&
+	return (ts_guc_enable_direct_compress_on_cagg_refresh ||
+			TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(context->mat_ht)) &&
 		   TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht);
 }
 

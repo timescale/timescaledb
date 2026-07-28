@@ -528,7 +528,7 @@ merge_chunks_multidim_allowed(void)
  *
  * https://github.com/postgres/postgres/commit/9695835538c2c8e9cd0048028b8c85e1bbf5c79c
  *
- * The fix is part of PG 17.3. Howevever, this still leaves PG 17.0 - 17.2
+ * The fix is part of PG 17.3. However, this still leaves PG 17.0 - 17.2
  * with different behavior.
  *
  * To make the merge chunks code work for the "broken" versions we make PG

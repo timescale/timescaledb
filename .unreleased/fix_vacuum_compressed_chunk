@@ -1,0 +1,2 @@
+Fixes: #10286 Propagate VACUUM on a chunk to the compressed relation when running on chunk directly
+Thanks: @h0rn3t for reporting a problem with VACUUM not propagating to the compressed relation

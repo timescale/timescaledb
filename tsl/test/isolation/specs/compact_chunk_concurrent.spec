@@ -46,6 +46,10 @@ step "s2_begin" {
     BEGIN;
 }
 
+step "s2_begin_rr" {
+    BEGIN ISOLATION LEVEL REPEATABLE READ;
+}
+
 step "s2_insert" {
     INSERT INTO metrics VALUES ('2025-01-02 12:00', 'd1', -1.0);
 }
@@ -77,6 +81,24 @@ step "s2_rollback" {
     ROLLBACK;
 }
 
+session "s3"
+step "s3_wp_enable" {
+    SELECT debug_waitpoint_enable('compact_chunk_after_find_overlaps');
+}
+
+step "s3_wp_release" {
+    SELECT debug_waitpoint_release('compact_chunk_after_find_overlaps');
+}
+
+step "s3_wp_enable_after_delete" {
+    SELECT debug_waitpoint_enable('compact_chunk_after_batch_delete');
+}
+
+step "s3_wp_release_after_delete" {
+    SELECT debug_waitpoint_release('compact_chunk_after_batch_delete');
+}
+
+
 # compact_chunk should not block concurrent reads
 permutation "s2_begin" "s2_select" "s1_compact" "s2_commit" "s1_show_status" "s1_count"
 
@@ -97,3 +119,22 @@ permutation "s2_begin" "s2_insert" "s2_rollback" "s1_compact" "s1_show_status" "
 
 # compact_chunk should succeed after committed direct compress insert (chunk stays fully compressed)
 permutation "s2_begin" "s2_direct_insert" "s2_commit" "s1_compact" "s1_show_status" "s1_count"
+
+# concurrent update triggers serialization error:
+permutation "s3_wp_enable" "s1_compact" "s2_update" "s3_wp_release" "s1_show_status" "s1_count"
+
+# concurrent delete triggers serialization error
+permutation "s3_wp_enable" "s1_compact" "s2_delete" "s3_wp_release" "s1_show_status" "s1_count"
+
+# concurrent update after batch delete triggers serialization error
+permutation "s3_wp_enable_after_delete" "s1_compact" "s2_update" "s3_wp_release_after_delete" "s1_show_status" "s1_count"
+
+# concurrent delete after batch delete triggers serialization error
+permutation "s3_wp_enable_after_delete" "s1_compact" "s2_delete" "s3_wp_release_after_delete" "s1_show_status" "s1_count"
+
+# Repeatable Read DML: concurrent update after batch delete.
+# s2 runs in Repeatable Read and should get a serialization error.
+permutation "s3_wp_enable_after_delete" "s1_compact" "s2_begin_rr" "s2_update" "s3_wp_release_after_delete" "s2_commit" "s1_show_status" "s1_count"
+
+# Repeatable Read DML: concurrent delete after batch delete.
+permutation "s3_wp_enable_after_delete" "s1_compact" "s2_begin_rr" "s2_delete" "s3_wp_release_after_delete" "s2_commit" "s1_show_status" "s1_count"

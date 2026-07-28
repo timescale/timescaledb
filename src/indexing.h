@@ -24,6 +24,7 @@ extern TSDLLEXPORT Oid ts_indexing_find_clustered_index(Oid table_relid);
 extern void ts_indexing_mark_as_valid(Oid index_id);
 extern bool ts_indexing_mark_as_invalid(Oid index_id);
 extern bool TSDLLEXPORT ts_indexing_relation_has_primary_or_unique_index(Relation htrel);
+extern bool TSDLLEXPORT ts_indexing_relation_has_exclusion_constraint(Relation htrel);
 extern TSDLLEXPORT Bitmapset *ts_indexing_relation_get_unique_columns(Relation rel);
 extern TSDLLEXPORT bool ts_indexing_compare(Oid index1, Oid index2);
 extern TSDLLEXPORT Datum ts_index_matches(PG_FUNCTION_ARGS);

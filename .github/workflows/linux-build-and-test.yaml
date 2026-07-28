@@ -158,6 +158,7 @@ jobs:
         for ext in ${{ matrix.pg_extensions }}; do
           make -C contrib/${ext} install
         done
+        make install-tests
         echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
     - name: Upload config.log
@@ -204,7 +205,13 @@ jobs:
             build/compile_commands.json
 
     - name: Check exported symbols
+      background: true
       run: ./build/scripts/export_prefix_check.sh
+
+    - name: pginstallcheck
+      background: true
+      if: matrix.pginstallcheck
+      run: make -C build pginstallcheck
 
     - name: make installcheck
       if: matrix.installcheck
@@ -214,9 +221,8 @@ jobs:
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
             | tee installcheck.log
 
-    - name: pginstallcheck
-      if: matrix.pginstallcheck
-      run: make -C build pginstallcheck
+    - name: Wait for checks to finish
+      wait-all:
 
     - name: coverage
       if: matrix.coverage

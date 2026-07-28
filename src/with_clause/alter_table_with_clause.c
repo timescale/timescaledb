@@ -69,6 +69,15 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 			.arg_names = {"granular_refresh_end_offset", NULL},
 			 .type_id = TEXTOID,
 		},
+		[AlterTableFlagDirectCompress] = {
+			.arg_names = {"direct_compress", NULL},
+			.type_id = BOOLOID,
+			.default_val = (Datum)false,
+		},
+		[AlterTableFlagDirectCompressScheduleInterval] = {
+			.arg_names = {"direct_compress_schedule_interval", NULL},
+			 .type_id = INTERVALOID,
+		},
 };
 
 static const WithClauseDefinition sparse_index_with_clause_def[] = {

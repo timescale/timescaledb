@@ -680,7 +680,7 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	/*
 	 * At this point I combined the uncompressed data in the rand_b_and_variant array
-	 * and the freshly decompressed data from the delta delta bulk decompressison.
+	 * and the freshly decompressed data from the delta delta bulk decompression.
 	 * I now free the temp data. Note that `timestamp_values` is the same pointer
 	 * as timestamp_array->buffers[1] , the second buffer in the ArrowArray.
 	 * This will be replaced with the uuid array.

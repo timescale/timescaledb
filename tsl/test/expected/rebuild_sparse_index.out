@@ -518,6 +518,35 @@ FROM :ic_schema1.:ic_table1 WHERE device = 'd2' LIMIT 1;
 -------+-------+-------
  f     | f     | f
 
+-- Sparse index integrity: the (device, first_time, last_time) btree must be
+-- able to find every batch for every device after rebuild_sparse_index, not
+-- just the ones whose metadata rewrite happened to be a HOT update. Forced
+-- index/bitmap scans must return the same per-device batch counts as an
+-- unindexed scan.
+SET enable_indexscan = off;
+SET enable_bitmapscan = off;
+SELECT device, count(*) FROM :ic_schema1.:ic_table1 GROUP BY device ORDER BY device;
+ device | count 
+--------+-------
+ d1     |     2
+ d2     |     2
+ d3     |     2
+ d4     |     2
+ d5     |     2
+
+RESET enable_indexscan;
+RESET enable_bitmapscan;
+SET enable_seqscan = off;
+SELECT device, count(*) FROM :ic_schema1.:ic_table1 GROUP BY device ORDER BY device;
+ device | count 
+--------+-------
+ d1     |     2
+ d2     |     2
+ d3     |     2
+ d4     |     2
+ d5     |     2
+
+RESET enable_seqscan;
 SELECT decompress_chunk(:'ichunk1');
             decompress_chunk            
 ----------------------------------------
@@ -594,6 +623,7 @@ SELECT * FROM rsi_integrity WHERE device = 'd1' AND humidity = 42 AND label = 'l
          ->  Index Scan using _hyper_2_3_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_2_3_chunk_compressed (actual rows=0.00 loops=1)
                Index Cond: (device = 'd1'::text)
                Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_577c_humidity_label, TEST-HASHES::bigint[])
+               Rows Removed by Filter: 2
    ->  Seq Scan on _hyper_2_4_chunk (actual rows=0.00 loops=1)
          Filter: ((device = 'd1'::text) AND (humidity = 42) AND (label = 'label_0'::text))
          Rows Removed by Filter: 8640

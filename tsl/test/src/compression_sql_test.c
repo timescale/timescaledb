@@ -198,7 +198,7 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_directory);
 
 /*
- * Read and decomrpess all compressed data files from directory. Useful for
+ * Read and decompress all compressed data files from directory. Useful for
  * checking the fuzzing corpuses in the regression tests.
  */
 Datum
