@@ -1,1 +1,0 @@
-Fixes: #10302 Fix useless-join removal and self-join elimination for hypertables
