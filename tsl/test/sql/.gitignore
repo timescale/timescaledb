@@ -1,4 +1,5 @@
 /*.pgbinary
+/attach_chunk-*.sql
 /cagg*-1[3-9].sql
 /chunk_utils_internal-*.sql
 /columnar_index_scan-*.sql
