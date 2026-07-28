@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/genam.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/reloptions.h>
@@ -13,6 +14,7 @@
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_attribute.h>
 #include <catalog/pg_class.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
@@ -46,6 +48,7 @@
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/elog.h>
+#include <utils/fmgroids.h>
 #include <utils/hsearch.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
@@ -1117,6 +1120,80 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 }
 
 /*
+ * A chunk should have all columns and constraints inherited and none marked as
+ * local, so clear the attislocal/conislocal flags that ALTER TABLE ... INHERIT
+ * leaves set when attaching a pre-existing table. Otherwise a later DROP COLUMN
+ * or DROP CONSTRAINT on the hypertable would not propagate to the chunk.
+ * Locally-defined objects (inhcount == 0), such as the chunk's dimension
+ * constraints, are left untouched.
+ */
+static void
+chunk_reset_inherited_flags(Oid chunk_relid)
+{
+	/* Columns */
+	Relation attrel = table_open(AttributeRelationId, RowExclusiveLock);
+	Relation chunkrel = table_open(chunk_relid, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(chunkrel);
+
+	for (int i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, i);
+
+		if (att->attisdropped || !att->attislocal || att->attinhcount == 0)
+		{
+			continue;
+		}
+
+		HeapTuple tuple = SearchSysCacheCopyAttNum(chunk_relid, att->attnum);
+		if (!HeapTupleIsValid(tuple))
+		{
+			elog(ERROR,
+				 "cache lookup failed for attribute %d of relation %u",
+				 att->attnum,
+				 chunk_relid);
+		}
+
+		((Form_pg_attribute) GETSTRUCT(tuple))->attislocal = false;
+		CatalogTupleUpdate(attrel, &tuple->t_self, tuple);
+		heap_freetuple(tuple);
+	}
+
+	table_close(chunkrel, NoLock);
+	table_close(attrel, RowExclusiveLock);
+
+	/* Constraints (CHECK and NOT NULL) */
+	ScanKeyData skey;
+	ScanKeyInit(&skey,
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(chunk_relid));
+
+	Relation conrel = table_open(ConstraintRelationId, RowExclusiveLock);
+	SysScanDesc scan =
+		systable_beginscan(conrel, ConstraintRelidTypidNameIndexId, true, NULL, 1, &skey);
+	HeapTuple contup;
+
+	while (HeapTupleIsValid(contup = systable_getnext(scan)))
+	{
+		Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(contup);
+
+		if (con->coninhcount == 0 || !con->conislocal)
+		{
+			continue;
+		}
+
+		HeapTuple newtup = heap_copytuple(contup);
+		((Form_pg_constraint) GETSTRUCT(newtup))->conislocal = false;
+		CatalogTupleUpdate(conrel, &newtup->t_self, newtup);
+		heap_freetuple(newtup);
+	}
+
+	systable_endscan(scan);
+	table_close(conrel, RowExclusiveLock);
+}
+
+/*
  * Make a chunk table inherit a hypertable.
  *
  * Execution happens via high-level ALTER TABLE statement. This includes
@@ -1149,6 +1226,8 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 	};
 
 	AlterTable(&alterstmt, lockmode, &atcontext);
+
+	chunk_reset_inherited_flags(atcontext.relid);
 }
 
 static Chunk *
