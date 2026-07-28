@@ -55,6 +55,17 @@ DROP VIEW mat_inval;
 DROP TABLE inval_test;
 
 \if :has_create_mat_view
+DROP MATERIALIZED VIEW mat_invallog_1;
+DROP MATERIALIZED VIEW mat_invallog_2;
+\else
+DROP VIEW mat_invallog_1;
+DROP VIEW mat_invallog_2;
+\endif
+
+DROP TABLE inval_log_test;
+DROP TABLE inval_log_snapshot;
+
+\if :has_create_mat_view
 DROP MATERIALIZED VIEW mat_ignoreinval;
 \else
 DROP VIEW mat_ignoreinval;
