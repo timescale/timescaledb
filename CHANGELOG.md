@@ -61,8 +61,9 @@ TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports Post
 * `timescaledb.enable_hypertable_expansion_for_dml`: allow using the optimized TimescaleDB hypertable expansion code for `UPDATE` and `DELETE` instead of the generic PostgreSQL inheritance hierarchy expansion. On by default.
 
 **Thanks**
-* @FrancescEthon and @ManuelEthon for reporting the issue
+* @FrancescEthon and @ManuelEthon for reporting an issue with incremental refresh skipping the last bucket
 * @h0rn3t for reporting a problem with `VACUUM` not propagating to the compressed relation
+* @igor2x for reporting an issue with locking during DML statements on hypertables
 * @MaximeEthon for reporting an issue with prepared statement parameters in DML decompression
 * @proddata for reporting a problem when upgrading from 2.15.3 to 2.28.2
 * @tureba for reporting and fixing stale sparse-index entries after rebuild
