@@ -235,3 +235,122 @@ DROP TABLE regular_table_to_attach;
 DROP TABLE attach_test_ref;
 DROP TABLE attach_test;
 DROP TABLE devices CASCADE;
+-- Test dropping columns after detach/attach
+CREATE TABLE drop_after_attach(time timestamptz NOT NULL, x int);
+SELECT create_hypertable('drop_after_attach', 'time', chunk_time_interval => interval '1 day');
+       create_hypertable        
+--------------------------------
+ (3,public,drop_after_attach,t)
+
+INSERT INTO drop_after_attach VALUES ('2026-01-01', 1), ('2026-01-05', 1);
+SELECT schema_name || '.' || table_name AS "ROUNDTRIP_CHUNK", slices AS "ROUNDTRIP_SLICES"
+FROM _timescaledb_functions.show_chunk((SELECT show_chunks('drop_after_attach', older_than => '2026-01-02') LIMIT 1)); \gset
+             ROUNDTRIP_CHUNK             |                ROUNDTRIP_SLICES                
+-----------------------------------------+------------------------------------------------
+ _timescaledb_internal._hyper_3_15_chunk | {"time": [1767225600000000, 1767312000000000]}
+
+CALL detach_chunk(:'ROUNDTRIP_CHUNK');
+CALL attach_chunk('drop_after_attach', :'ROUNDTRIP_CHUNK', :'ROUNDTRIP_SLICES');
+-- The re-attached chunk inherits without any locally-defined columns.
+SELECT attname, attislocal, attinhcount
+FROM pg_attribute
+WHERE attrelid = :'ROUNDTRIP_CHUNK'::regclass AND attnum > 0 AND NOT attisdropped
+ORDER BY attnum;
+ attname | attislocal | attinhcount 
+---------+------------+-------------
+ time    | f          |           1
+ x       | f          |           1
+
+ALTER TABLE drop_after_attach DROP COLUMN x;
+-- The column is gone from the round-tripped chunk, not left orphaned.
+SELECT attname, attislocal, attinhcount
+FROM pg_attribute
+WHERE attrelid = :'ROUNDTRIP_CHUNK'::regclass AND attname = 'x' AND NOT attisdropped;
+ attname | attislocal | attinhcount 
+---------+------------+-------------
+
+DROP TABLE drop_after_attach;
+-- Test dropping a constraint after detach/attach
+CREATE TABLE drop_con_after_attach(time timestamptz NOT NULL, x int CHECK (x > 0));
+SELECT create_hypertable('drop_con_after_attach', 'time', chunk_time_interval => interval '1 day');
+         create_hypertable          
+------------------------------------
+ (4,public,drop_con_after_attach,t)
+
+INSERT INTO drop_con_after_attach VALUES ('2026-01-01', 1);
+SELECT schema_name || '.' || table_name AS "CON_CHUNK", slices AS "CON_SLICES"
+FROM _timescaledb_functions.show_chunk((SELECT show_chunks('drop_con_after_attach') LIMIT 1)); \gset
+                CON_CHUNK                |                   CON_SLICES                   
+-----------------------------------------+------------------------------------------------
+ _timescaledb_internal._hyper_4_18_chunk | {"time": [1767225600000000, 1767312000000000]}
+
+CALL detach_chunk(:'CON_CHUNK');
+CALL attach_chunk('drop_con_after_attach', :'CON_CHUNK', :'CON_SLICES');
+-- The inherited constraint is not marked local; the dimension constraint stays local.
+SELECT conname, contype, conislocal, coninhcount
+FROM pg_constraint
+WHERE conrelid = :'CON_CHUNK'::regclass
+ORDER BY conname;
+            conname            | contype | conislocal | coninhcount 
+-------------------------------+---------+------------+-------------
+ constraint_30                 | c       | t          |           0
+ drop_con_after_attach_x_check | c       | f          |           1
+
+ALTER TABLE drop_con_after_attach DROP CONSTRAINT drop_con_after_attach_x_check;
+-- The dropped constraint is gone from the round-tripped chunk.
+SELECT count(*) AS leftover_check
+FROM pg_constraint
+WHERE conrelid = :'CON_CHUNK'::regclass AND conname = 'drop_con_after_attach_x_check';
+ leftover_check 
+----------------
+              0
+
+DROP TABLE drop_con_after_attach;
+-- Test attaching a foreign table as an OSM chunk
+-- A dummy server is enough; the foreign table is never queried by attach.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE EXTENSION postgres_fdw;
+CREATE SERVER attach_chunk_fdw FOREIGN DATA WRAPPER postgres_fdw;
+CREATE TABLE osm_ht(time timestamptz NOT NULL, x int CHECK (x > 0));
+SELECT create_hypertable('osm_ht', 'time', chunk_time_interval => interval '1 day');
+  create_hypertable  
+---------------------
+ (5,public,osm_ht,t)
+
+CREATE FOREIGN TABLE osm_ft(time timestamptz NOT NULL, x int) SERVER attach_chunk_fdw;
+SELECT _timescaledb_functions.attach_osm_table_chunk('osm_ht', 'osm_ft');
+ attach_osm_table_chunk 
+------------------------
+ t
+
+-- The foreign chunk inherits its columns without any left marked local.
+SELECT attname, attislocal, attinhcount
+FROM pg_attribute
+WHERE attrelid = 'osm_ft'::regclass AND attnum > 0 AND NOT attisdropped
+ORDER BY attnum;
+ attname | attislocal | attinhcount 
+---------+------------+-------------
+ time    | f          |           1
+ x       | f          |           1
+
+-- The CHECK constraint cloned from the hypertable is inherited, not local.
+SELECT conname, contype, conislocal, coninhcount
+FROM pg_constraint
+WHERE conrelid = 'osm_ft'::regclass AND contype = 'c'
+ORDER BY conname;
+    conname     | contype | conislocal | coninhcount 
+----------------+---------+------------+-------------
+ osm_ht_x_check | c       | f          |           1
+
+ALTER TABLE osm_ht DROP COLUMN x;
+-- Dropping the column on the hypertable propagates to the foreign chunk.
+SELECT attname
+FROM pg_attribute
+WHERE attrelid = 'osm_ft'::regclass AND attname = 'x' AND NOT attisdropped;
+ attname 
+---------
+
+-- Dropping the hypertable also drops the attached foreign chunk.
+DROP TABLE osm_ht;
+DROP SERVER attach_chunk_fdw;
+DROP EXTENSION postgres_fdw;
