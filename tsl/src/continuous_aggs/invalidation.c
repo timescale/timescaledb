@@ -965,7 +965,7 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 	 *     this will read all the logs starting from the beginning
 	 *      and < 80 so that it can process overlaps.
 	 * S1: locks row for tuple 45
-	 *                              S2 : acquires ShareUpdateExlcusiveLock
+	 *                              S2 : acquires ShareUpdateExclusiveLock
 	 *                              S2:  waits for lock for tuple 45
 	 * S1: needs to create a new chunk in mat hypertable
 	 *     blocks on S2's ShareUpdateExclusiveLock

@@ -1310,7 +1310,7 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 		 * (Entry is typically marked "invalid" when a compressed chunk becomes partial
 		 * due to DML in it.)
 		 *
-		 * Also, if we have a valid chunnk with -inf/+inf entries then it matches all
+		 * Also, if we have a valid chunk with -inf/+inf entries then it matches all
 		 * queries
 		 */
 		if (!fd.valid || (fd.range_start == PG_INT64_MIN && fd.range_end == PG_INT64_MAX))

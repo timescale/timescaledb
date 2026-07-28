@@ -195,10 +195,12 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | continuous_aggs_jobs_refresh_ranges
  _timescaledb_catalog  | continuous_aggs_materialization_invalidation_log
  _timescaledb_catalog  | continuous_aggs_materialization_ranges
+ _timescaledb_catalog  | continuous_aggs_tenant_tracking
  _timescaledb_catalog  | continuous_aggs_watermark
  _timescaledb_catalog  | dimension
  _timescaledb_catalog  | dimension_slice
  _timescaledb_catalog  | hypertable
+ _timescaledb_catalog  | hypertable_cagg_settings
  _timescaledb_catalog  | metadata
  _timescaledb_catalog  | tablespace
  _timescaledb_internal | bgw_job_stat

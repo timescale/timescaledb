@@ -1,0 +1,1 @@
+Fixes: #10280 RETURNING clause returned no rows for INSERT using Direct Compress

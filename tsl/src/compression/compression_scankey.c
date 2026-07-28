@@ -545,7 +545,7 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 
 	/*
 	 * In PG versions <= 14 NULL values are always considered distinct
-	 * from other NULL values and therefore NULLABLE multi-columnn
+	 * from other NULL values and therefore NULLABLE multi-column
 	 * unique constraints might expose unexpected behaviour in the
 	 * presence of NULL values.
 	 * Since SK_SEARCHNULL is not supported by heap scans we cannot

@@ -394,7 +394,7 @@ check_altertable_add_column_for_compressed(ParseState *parse_state, Hypertable *
 				case CONSTR_UNIQUE:
 					break;
 				/*
-				 * We can safelly ignore NULL constraints because it does nothing
+				 * We can safely ignore NULL constraints because it does nothing
 				 * and according to Postgres docs is useless and exist just for
 				 * compatibility with other database systems
 				 * https://www.postgresql.org/docs/current/ddl-constraints.html#id-1.5.4.6.6
@@ -1281,6 +1281,23 @@ process_vacuum(ProcessUtilityArgs *args)
 				{
 					ctx.ht_vacuum_rel = vacuum_rel;
 					foreach_chunk(ht, add_chunk_to_vacuum, &ctx, false);
+				}
+				else
+				{
+					/* VACUUM targets a chunk directly. */
+					Chunk *chunk = ts_chunk_get_by_relid(table_relid, false);
+					if (chunk && ts_chunk_is_compressed(chunk))
+					{
+						Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
+						/* Compressed chunk might be missing due to concurrent operations */
+						if (OidIsValid(compressed_relid))
+						{
+							ctx.chunk_rels =
+								lappend(ctx.chunk_rels,
+										makeVacuumRelation(NULL, compressed_relid, NIL));
+						}
+					}
+					register_chunk_for_rebuild_if_needed(table_relid, &ctx);
 				}
 			}
 			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
@@ -5639,7 +5656,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagOrderBy].is_default ||
 		!parse_results[AlterTableFlagSegmentBy].is_default ||
 		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default ||
-		!parse_results[AlterTableFlagIndex].is_default)
+		!parse_results[AlterTableFlagIndex].is_default ||
+		!parse_results[AlterTableFlagDirectCompress].is_default ||
+		!parse_results[AlterTableFlagDirectCompressScheduleInterval].is_default)
 	{
 		ts_cm_functions->process_compress_table(ht, parse_results);
 	}
@@ -5865,10 +5884,21 @@ process_create_stmt(ProcessUtilityArgs *args)
 
 		if (!create_table_info.hypertable)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_COLUMN),
-					 errmsg("timescaledb options requires hypertable option"),
-					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+			if (create_table_info.with_clauses[CreateTableFlagHypertable].is_default)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("timescaledb options requires hypertable option"),
+						 errhint(
+							 "Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+			}
+
+			/*
+			 * Allow specifying with (tsdb.hypertable = false) for ease of testing.
+			 * This creates a plain Postgres table.
+			 */
+			create_table_info.with_clauses = NULL;
+			return DDL_CONTINUE;
 		}
 
 		if (ts_guc_enable_partitioned_hypertables)

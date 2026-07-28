@@ -3671,4 +3671,50 @@ EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM
    ->  Index Scan using _hyper_21_203_chunk_metrics_space_time_idx on _hyper_21_203_chunk (actual rows=1.00 loops=1)
          Index Cond: ("time" >= 'Sun Jan 02 00:00:00 2000 UTC'::timestamp with time zone)
 
+CREATE TABLE join_removal_main(time timestamptz NOT NULL, device int, val float);
+SELECT create_hypertable('join_removal_main', 'time');
+        create_hypertable        
+---------------------------------
+ (22,public,join_removal_main,t)
+
+CREATE TABLE join_removal_aux(time timestamptz NOT NULL, device int NOT NULL, extra float);
+SELECT create_hypertable('join_removal_aux', 'time');
+       create_hypertable        
+--------------------------------
+ (23,public,join_removal_aux,t)
+
+CREATE UNIQUE INDEX join_removal_aux_uq ON join_removal_aux (device, time);
+INSERT INTO join_removal_main VALUES ('2021-01-01', 1, 1.0), ('2021-01-02', 2, 2.0);
+INSERT INTO join_removal_aux VALUES ('2021-01-01', 1, 10.0), ('2021-01-02', 2, 20.0);
+ANALYZE join_removal_main, join_removal_aux;
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT m.time, m.device, m.val
+FROM join_removal_main m
+LEFT JOIN join_removal_aux a ON a.device = m.device AND a.time = m.time;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_22_204_chunk m (actual rows=2.00 loops=1)
+
+CREATE TABLE self_join_test(time timestamptz NOT NULL, device int NOT NULL, val float);
+SELECT create_hypertable('self_join_test', 'time');
+      create_hypertable       
+------------------------------
+ (24,public,self_join_test,t)
+
+CREATE UNIQUE INDEX self_join_test_uq ON self_join_test (device, time);
+INSERT INTO self_join_test VALUES ('2021-01-01', 1, 1.0), ('2021-01-02', 2, 2.0);
+ANALYZE self_join_test;
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT t1.val
+FROM self_join_test t1, self_join_test t2
+WHERE t1.device = t2.device AND t1.time = t2.time;
+--- QUERY PLAN ---
+ Result (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_24_206_chunk t2 (actual rows=2.00 loops=1)
+
+CREATE VIEW join_removal_view AS
+SELECT m.time, m.device, m.val, a.extra
+FROM join_removal_main m
+LEFT JOIN join_removal_aux a ON a.device = m.device AND a.time = m.time;
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT time, device, val FROM join_removal_view;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_22_204_chunk m (actual rows=2.00 loops=1)
+
 --TEST END--

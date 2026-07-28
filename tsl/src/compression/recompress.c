@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include "debug_point.h"
 #include <access/tableam.h>
+#include <catalog/indexing.h>
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
@@ -36,6 +37,7 @@
 #include "recompress.h"
 #include "sparse_index_bloom1.h"
 #include "ts_catalog/array_utils.h"
+#include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
@@ -77,10 +79,11 @@ typedef struct CompactChunkScanState
 	Datum *curr_last;
 	bool *curr_last_isnull;
 
-	/* Last-row orderby tuple of the batch processed just before the current
+	/* Max last-row orderby tuple from the batches processed before the current
 	 * one. Holds copies so it survives advancing the index scan. */
-	Datum *prev_last;
-	bool *prev_last_isnull;
+	Datum *max_last;
+	bool *max_last_isnull;
+	bool max_last_set; /* false until the first batch is recorded */
 } CompactChunkScanState;
 
 static CompactChunkScanState *
@@ -95,12 +98,13 @@ compact_chunk_scan_state_init(RecompressContext *recompress_ctx)
 	state->curr_first_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
 	state->curr_last = palloc(sizeof(Datum) * recompress_ctx->num_orderby);
 	state->curr_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
-	state->prev_last = palloc0(sizeof(Datum) * recompress_ctx->num_orderby);
-	state->prev_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
+	state->max_last = palloc0(sizeof(Datum) * recompress_ctx->num_orderby);
+	state->max_last_isnull = palloc(sizeof(bool) * recompress_ctx->num_orderby);
 	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
-		state->prev_last_isnull[i] = true;
+		state->max_last_isnull[i] = true;
 	}
+	state->max_last_set = false;
 	return state;
 }
 
@@ -112,14 +116,15 @@ compact_chunk_scan_state_reset(CompactChunkScanState *state, RecompressContext *
 	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
 		int key = recompress_ctx->num_segmentby + i;
-		if (!state->prev_last_isnull[i] && !recompress_ctx->key_byval[key] &&
-			PointerIsValid(DatumGetPointer(state->prev_last[i])))
+		if (!state->max_last_isnull[i] && !recompress_ctx->key_byval[key] &&
+			PointerIsValid(DatumGetPointer(state->max_last[i])))
 		{
-			pfree(DatumGetPointer(state->prev_last[i]));
+			pfree(DatumGetPointer(state->max_last[i]));
 		}
-		state->prev_last[i] = (Datum) 0;
-		state->prev_last_isnull[i] = true;
+		state->max_last[i] = (Datum) 0;
+		state->max_last_isnull[i] = true;
 	}
+	state->max_last_set = false;
 }
 
 static bool fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
@@ -148,7 +153,7 @@ static IndexScanDesc compact_chunk_begin_index_scan(Relation compressed_chunk_re
 													Relation index_rel, Snapshot snapshot);
 static void read_batch_firstlast(IndexScanDesc index_scan, RecompressContext *recompress_ctx,
 								 CompactChunkScanState *state);
-static void save_prev_last(CompactChunkScanState *state, RecompressContext *recompress_ctx);
+static void save_new_last(CompactChunkScanState *state, RecompressContext *recompress_ctx);
 static bool batches_overlap_firstlast(RecompressContext *recompress_ctx, Datum *prev_last,
 									  bool *prev_last_isnull, Datum *curr_first,
 									  bool *curr_first_isnull);
@@ -252,6 +257,15 @@ tsl_compact_chunk(PG_FUNCTION_ARGS)
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (IsolationUsesXactSnapshot())
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("compact_chunk is not supported in REPEATABLE READ or SERIALIZABLE "
+						"isolation level")));
+	}
+
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
 
 	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
@@ -990,28 +1004,41 @@ read_batch_firstlast(IndexScanDesc index_scan, RecompressContext *recompress_ctx
 
 /*
  * Remember the current batch's last-row orderby tuple as the predecessor for
- * the next batch. The index tuple is only valid for the current scan position,
+ * the next batch only if it is greater than the saved last-row orderby value.
+ * The index tuple is only valid for the current scan position,
  * so pass-by-reference values are deep-copied to survive advancing the scan.
  */
 static void
-save_prev_last(CompactChunkScanState *state, RecompressContext *recompress_ctx)
+save_new_last(CompactChunkScanState *state, RecompressContext *recompress_ctx)
 {
+	/* Skip if max_last is already set and curr_last does not exceed its value. */
+	if (state->max_last_set && !batches_overlap_firstlast(recompress_ctx,
+														  state->curr_last,
+														  state->curr_last_isnull,
+														  state->max_last,
+														  state->max_last_isnull))
+	{
+		return;
+	}
+
+	state->max_last_set = true;
+
 	for (int i = 0; i < recompress_ctx->num_orderby; i++)
 	{
 		int key = recompress_ctx->num_segmentby + i;
 
-		if (!state->prev_last_isnull[i] && !recompress_ctx->key_byval[key] &&
-			PointerIsValid(DatumGetPointer(state->prev_last[i])))
+		if (!state->max_last_isnull[i] && !recompress_ctx->key_byval[key] &&
+			PointerIsValid(DatumGetPointer(state->max_last[i])))
 		{
-			pfree(DatumGetPointer(state->prev_last[i]));
+			pfree(DatumGetPointer(state->max_last[i]));
 		}
 
-		state->prev_last_isnull[i] = state->curr_last_isnull[i];
-		state->prev_last[i] = state->curr_last_isnull[i] ?
-								  (Datum) 0 :
-								  datumCopy(state->curr_last[i],
-											recompress_ctx->key_byval[key],
-											recompress_ctx->key_typlen[key]);
+		state->max_last_isnull[i] = state->curr_last_isnull[i];
+		state->max_last[i] = state->curr_last_isnull[i] ?
+								 (Datum) 0 :
+								 datumCopy(state->curr_last[i],
+										   recompress_ctx->key_byval[key],
+										   recompress_ctx->key_typlen[key]);
 	}
 }
 
@@ -1137,13 +1164,15 @@ compact_chunk_find_overlapping_batches(Relation compressed_chunk_rel, IndexScanD
 								   state->seg_values,
 								   state->seg_isnull,
 								   recompress_ctx->num_segmentby);
-			save_prev_last(state, recompress_ctx);
+			/* Reset running max for the new segment group. */
+			state->max_last_set = false;
+			save_new_last(state, recompress_ctx);
 			continue;
 		}
 
 		if (batches_overlap_firstlast(recompress_ctx,
-									  state->prev_last,
-									  state->prev_last_isnull,
+									  state->max_last,
+									  state->max_last_isnull,
 									  state->curr_first,
 									  state->curr_first_isnull))
 		{
@@ -1154,7 +1183,7 @@ compact_chunk_find_overlapping_batches(Relation compressed_chunk_rel, IndexScanD
 
 		/* No overlap: this batch becomes the predecessor for the next one. */
 		ItemPointerCopy(&index_scan->xs_heaptid, &state->previous_tid);
-		save_prev_last(state, recompress_ctx);
+		save_new_last(state, recompress_ctx);
 	}
 
 	ExecDropSingleTupleTableSlot(compressed_slot);
@@ -1236,13 +1265,15 @@ compact_chunk_recompress_overlapping_batches(
 		found_overlaps = true;
 		CommandCounterIncrement();
 
+		DEBUG_WAITPOINT("compact_chunk_after_batch_delete");
+
 		/* The overlapping batch becomes the predecessor for the scan loop. */
 		ItemPointerCopy(&state->first_overlap_tid, &state->previous_tid);
 		update_current_segment(recompress_ctx->current_segment,
 							   state->seg_values,
 							   state->seg_isnull,
 							   recompress_ctx->num_segmentby);
-		save_prev_last(state, recompress_ctx);
+		save_new_last(state, recompress_ctx);
 	}
 
 	while (index_getnext_slot(index_scan, ForwardScanDirection, compressed_slot))
@@ -1277,15 +1308,17 @@ compact_chunk_recompress_overlapping_batches(
 								   state->seg_values,
 								   state->seg_isnull,
 								   recompress_ctx->num_segmentby);
-			save_prev_last(state, recompress_ctx);
+			/* Reset running max for the new segment group. */
+			state->max_last_set = false;
+			save_new_last(state, recompress_ctx);
 			continue;
 		}
 
 		/* A batch joins the current group when it overlaps its predecessor; the
 		 * first batch that no longer overlaps closes the group. */
 		bool batch_overlaps = batches_overlap_firstlast(recompress_ctx,
-														state->prev_last,
-														state->prev_last_isnull,
+														state->max_last,
+														state->max_last_isnull,
 														state->curr_first,
 														state->curr_first_isnull);
 
@@ -1340,7 +1373,7 @@ compact_chunk_recompress_overlapping_batches(
 		}
 
 		ItemPointerCopy(&index_scan->xs_heaptid, &state->previous_tid);
-		save_prev_last(state, recompress_ctx);
+		save_new_last(state, recompress_ctx);
 	}
 
 	if (overlapping)
@@ -1350,6 +1383,11 @@ compact_chunk_recompress_overlapping_batches(
 
 	ExecDropSingleTupleTableSlot(previous_compressed_slot);
 	ExecDropSingleTupleTableSlot(compressed_slot);
+
+	ereport(DEBUG1,
+			(errmsg("compaction processed %d batches (max_batches %d)",
+					processed_batches,
+					max_batches)));
 
 	return found_overlaps;
 }
@@ -1487,6 +1525,8 @@ compact_chunk_impl(Chunk *uncompressed_chunk, int max_batches)
 																 index_scan,
 																 recompress_ctx,
 																 state);
+
+	DEBUG_WAITPOINT("compact_chunk_after_find_overlaps");
 
 	if (found_overlaps)
 	{
@@ -2532,7 +2572,7 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
 	TableScanDesc scan = table_beginscan_compat(compressed_rel, GetActiveSnapshot(), 0, NULL, 0);
 	TupleTableSlot *scan_slot = table_slot_create(compressed_rel, NULL);
-	TupleTableSlot *update_slot = MakeSingleTupleTableSlot(compressed_desc, &TTSOpsHeapTuple);
+	CatalogIndexState indstate = CatalogOpenIndexes(compressed_rel);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, scan_slot))
 	{
@@ -2572,20 +2612,22 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 												decompressor->compressed_datums,
 												decompressor->compressed_is_nulls,
 												repl);
-		ExecStoreHeapTuple(new_tuple, update_slot, false);
 
 		/*
-		 * Sparse index metadata columns are not covered by any index.
-		 * If indexes on metadata columns are added in the future,
-		 * this will need to handle index updates via update_indexes.
+		 * Sparse index metadata columns are covered by a btree index
+		 * (segmentby, first/last time, and any minmax/bloom columns). If
+		 * this update isn't HOT-eligible, the old index entries are left
+		 * pointing at the superseded tuple, so we must insert new entries
+		 * ourselves -- mirroring what CatalogTupleUpdate() does for
+		 * catalog tuples. We use simple_heap_update() rather than
+		 * simple_table_tuple_update() so that heap_update() writes the new
+		 * tuple's location and HOT status directly into new_tuple, which
+		 * ts_catalog_index_insert() (a no-op when the update was HOT)
+		 * relies on below.
 		 */
 		TU_UpdateIndexes update_indexes;
-		simple_table_tuple_update(compressed_rel,
-								  &tid,
-								  update_slot,
-								  GetActiveSnapshot(),
-								  &update_indexes);
-		ExecClearTuple(update_slot);
+		simple_heap_update(compressed_rel, &tid, new_tuple, &update_indexes);
+		ts_catalog_index_insert(indstate, new_tuple);
 
 		/* Reset */
 		foreach_ptr(BatchMetadataBuilder, builder, builders)
@@ -2603,9 +2645,9 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 		}
 	}
 
-	ExecDropSingleTupleTableSlot(update_slot);
 	ExecDropSingleTupleTableSlot(scan_slot);
 	table_endscan(scan);
+	CatalogCloseIndexes(indstate);
 }
 
 void
