@@ -1,1 +1,0 @@
-Fixes: #10282 Only count directly compressed rows toward the command tag when the insert sets it

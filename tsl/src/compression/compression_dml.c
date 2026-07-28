@@ -2615,7 +2615,20 @@ report_error(TM_Result result)
 		 */
 		case TM_Updated:
 		{
-			elog(ERROR, "tuple concurrently updated");
+			if (IsolationUsesXactSnapshot())
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			}
+			/*
+			 * TODO: Gracefully handle these scenarios.
+			 * Can happen with compaction or recompress segmentwise.
+			 */
+			ereport(ERROR,
+					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+					 errmsg("could not update/delete compressed data due to "
+							"concurrent modification")));
 		}
 		break;
 		case TM_Invisible:

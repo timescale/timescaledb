@@ -91,6 +91,7 @@
 
 #include <access/genam.h>
 #include <access/nbtree.h>
+#include <executor/executor.h>
 #include <nodes/extensible.h>
 #include <nodes/pg_list.h>
 #include <utils/datum.h>
@@ -99,8 +100,6 @@
 
 #include "guc.h"
 #include "nodes/columnar_scan/columnar_scan.h"
-#include "nodes/columnar_scan/compressed_batch.h"
-#include "nodes/columnar_scan/exec.h"
 
 typedef enum SkipScanStage
 {
@@ -281,24 +280,8 @@ skip_scan_rescan_index(SkipScanState *state)
 	 * any ScanKey changes we did */
 	if (*state->scan_desc)
 	{
-		index_rescan(*state->scan_desc,
-					 *state->scan_keys,
-					 *state->num_scan_keys,
-					 NULL /*orderbys*/,
-					 0 /*norderbys*/);
-
-		/* Discard current compressed index tuple as we are ready to move to the next compressed
-		 * tuple via SkipScan */
 		ScanState *child = linitial(state->cscan_state.custom_ps);
-		if (ts_is_columnar_scan_plan(state->child_plan))
-		{
-			ColumnarScanState *ds = (ColumnarScanState *) child;
-			TupleTableSlot *slot = ds->batch_queue->funcs->top_tuple(ds->batch_queue);
-			if (slot)
-			{
-				compressed_batch_discard_tuples((DecompressBatchState *) slot);
-			}
-		}
+		ExecReScan(&child->ps);
 	}
 	state->needs_rescan = false;
 }

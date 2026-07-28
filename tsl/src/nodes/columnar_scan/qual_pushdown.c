@@ -1599,7 +1599,7 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			 * we can have false positives there, and combining false positives
 			 * with the original operator could lead to false negatives, which
 			 * would be a bug. Consider for example (x = 1) = (y = 1) in case
-			 * where both sides are false, but there's a false posistive for the
+			 * where both sides are false, but there's a false positive for the
 			 * pushed down version of the left side but not the right side.
 			 */
 			QualPushdownContext tmp_context = copy_context(context);

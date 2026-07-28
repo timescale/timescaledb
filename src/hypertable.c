@@ -2408,8 +2408,17 @@ ts_hypertable_status_text(PG_FUNCTION_ARGS)
 								  CurrentMemoryContext);
 	}
 
+	if (status & HYPERTABLE_STATUS_DIRECT_COMPRESS)
+	{
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("DIRECT_COMPRESS"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+	}
+
 	if (status < 0 || status > (HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS |
-								HYPERTABLE_STATUS_COMPRESSION))
+								HYPERTABLE_STATUS_COMPRESSION | HYPERTABLE_STATUS_DIRECT_COMPRESS))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -2417,6 +2426,20 @@ ts_hypertable_status_text(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
+}
+
+/* Mark the hypertable as having opted into direct compress. */
+bool
+ts_hypertable_set_direct_compress(Hypertable *ht)
+{
+	return ts_hypertable_add_status(ht, HYPERTABLE_STATUS_DIRECT_COMPRESS);
+}
+
+/* Clear the direct compress status flag on the hypertable. */
+bool
+ts_hypertable_unset_direct_compress(Hypertable *ht)
+{
+	return ts_hypertable_clear_status(ht, HYPERTABLE_STATUS_DIRECT_COMPRESS);
 }
 
 DimensionSlice *

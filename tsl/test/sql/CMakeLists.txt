@@ -70,8 +70,8 @@ set(TEST_FILES
     decompress_index.sql
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
+    direct_compress_policy.sql
     move.sql
-    plan_skip_scan_notnull.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
@@ -94,6 +94,7 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_hierarchical_realtime.sql.in
     cagg_permissions.sql.in
     cagg_planning.sql.in
     cagg_rewrites.sql.in
@@ -110,6 +111,7 @@ set(TEST_TEMPLATES
     ordered_append.sql.in
     plan_skip_scan.sql.in
     plan_skip_scan_dagg.sql.in
+    plan_skip_scan_notnull.sql.in
     vector_agg_planning.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
