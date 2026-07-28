@@ -1,1 +1,0 @@
-Implements: #10119 Reduce memory usage of INSERT queries using Direct Compress and spanning multiple chunks
