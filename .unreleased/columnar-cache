@@ -1,1 +1,0 @@
-Implements: #9534 Speed up expression evaluation in the columnar pipeline by caching common subexpressions
