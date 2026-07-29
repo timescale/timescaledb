@@ -662,12 +662,15 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 		{
 			if (arrow_row_is_valid(validity_bitmap, i))
 			{
-				Assert(value_position < num_values);
+				CheckCompressedData(value_position < num_values);
 				uuid_buffer[i].components[0] = pg_ntoh64(timestamp_values[i]);
 				uuid_buffer[i].components[1] = rand_b_and_variant[value_position];
 				++value_position;
 			}
 		}
+
+		/* check that we returned all values */
+		CheckCompressedData(value_position == num_values);
 	}
 	else
 	{

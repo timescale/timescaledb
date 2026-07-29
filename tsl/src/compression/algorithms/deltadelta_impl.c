@@ -90,6 +90,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 #undef INNER_LOOP_SIZE
 
 	uint64 *restrict validity_bitmap = NULL;
+	ELEMENT_TYPE last_value = decompressed_values[n_total - 1];
 	if (has_nulls)
 	{
 		/* Now move the data to account for nulls, and fill the validity bitmap. */
@@ -117,6 +118,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
 
 		int current_notnull_element = n_notnull - 1;
+		last_value = decompressed_values[current_notnull_element];
 		for (int i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
@@ -135,6 +137,9 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 
 		Assert(current_notnull_element == -1);
 	}
+
+	/* the last value in the header must match with the last that we returned */
+	CheckCompressedData(last_value == (ELEMENT_TYPE) header->last_value);
 
 	/* Return the result. */
 	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
