@@ -23,6 +23,7 @@
 #include <utils/typcache.h>
 
 #include <compat/compat.h>
+#include "debug_point.h"
 #include "foreach_ptr.h"
 #include "ts_stats/ts_stats_record.h"
 #include <chunk_insert_state.h>
@@ -1360,6 +1361,42 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			stats.batches_decompressed++;
 			continue;
 		}
+		/*
+		 * Handle TM_Updated from concurrent compaction or recompress.
+		 * Restart the scan with a fresh snapshot so the DML finds the rows
+		 * in the new recompressed batches.
+		 */
+		if (result == TM_Updated && !IsolationUsesXactSnapshot())
+		{
+			write_logical_replication_msg_decompression_end();
+			row_decompressor_reset(&decompressor);
+
+			/* Reset stats before restarting — only the final pass counts. */
+			memset(&stats, 0, sizeof(stats));
+
+			/* Restart scan with a fresh snapshot. */
+			decompress_batch_endscan(scan);
+			UnregisterSnapshot(snapshot);
+			snapshot = RegisterSnapshot(GetTransactionSnapshot());
+			if (index_rel)
+			{
+				scan = decompress_batch_beginscan(in_rel,
+												  index_rel,
+												  snapshot,
+												  num_index_scankeys,
+												  index_scankeys); // Poro: check what happens to
+																   // previously deleted batches
+			}
+			else
+			{
+				scan = decompress_batch_beginscan(in_rel,
+												  NULL,
+												  snapshot,
+												  num_heap_scankeys,
+												  heap_scankeys);
+			}
+			continue;
+		}
 		if (result != TM_Ok)
 		{
 			write_logical_replication_msg_decompression_end();
@@ -1402,6 +1439,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 				row_decompressor_decompress_row_to_table(&decompressor, &writer);
 			stats.batches_decompressed++;
 			write_logical_replication_msg_decompression_end();
+
+			DEBUG_WAITPOINT("decompress_batches_after_batch");
 		}
 	}
 	ExecDropSingleTupleTableSlot(slot);
