@@ -230,6 +230,21 @@ jobs:
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
 
+        # TAP tests do not produce regression.diffs. Append prove's failure
+        # summary from installcheck.log plus, for each failing test, the failed
+        # assertions
+        sed -n '/^Test Summary Report/,/^Result:/p' installcheck.log >> regression.log 2>/dev/null || true
+        for t in $(grep -hoE 't/[^ ]+\.pl[[:space:]]+\(Wstat' installcheck.log 2>/dev/null | sed -E 's#t/(.+)\.pl.*#\1#'); do
+          echo "=== regress_log_$t ===" >> regression.log
+          find . -name "regress_log_$t" -exec awk '
+            FNR==1 { blk=0 }
+            { sub(/^\[[0-9:.]+\]\([0-9.]+s\) /, "") }
+            /^ok |^not ok |^# Looks like|^# Running:|^1\.\.|^Bail out/ { blk=0 }
+            /^#   Failed test/ { blk=1 }
+            blk { print }
+          ' {} + >> regression.log || true
+        done
+
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
