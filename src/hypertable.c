@@ -2561,6 +2561,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 					   quote_identifier(NameStr(ht->fd.schema_name)),
 					   quote_identifier(NameStr(ht->fd.table_name))));
 	}
+
+	/* Only the hypertable owner may update the OSM chunk range */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 	/*
 	 * range_start, range_end arguments must be converted to internal representation
 	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
@@ -2724,6 +2727,9 @@ ts_lock_osm_chunk_dimension_slice(PG_FUNCTION_ARGS)
 					   quote_identifier(NameStr(ht->fd.schema_name)),
 					   quote_identifier(NameStr(ht->fd.table_name))));
 	}
+
+	/* Only the hypertable owner may lock the OSM chunk dimension slice */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
 	/*
 	 * Lock the OSM chunk's dimension slice tuple FOR UPDATE. The row lock is

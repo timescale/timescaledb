@@ -1,0 +1,1 @@
+Fixes: #10386 Add missing permission checks to internal chunk functions
