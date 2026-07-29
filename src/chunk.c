@@ -4073,6 +4073,10 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   CurrentMemoryContext,
 															   true);
 	Assert(ch != NULL);
+
+	/* Only the hypertable owner may drop a chunk */
+	ts_hypertable_permissions_check(ch->hypertable_relid, GetUserId());
+
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 
 	/* do not drop any chunk dependencies */
@@ -5288,6 +5292,9 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, hypertable_relid, true);
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+
+	/* Only the hypertable owner may drop the OSM chunk */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
 	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
 

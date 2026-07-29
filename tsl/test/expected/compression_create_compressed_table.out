@@ -63,3 +63,20 @@ SELECT count(*) FROM "_timescaledb_internal"."_hyper_1_1_chunk";
 -------
      2
 
+-- A non-owner must not be able to attach a compressed chunk
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    '"_timescaledb_internal"."_hyper_1_1_chunk"'::TEXT::REGCLASS,
+    '"_timescaledb_internal"."custom_compressed_chunk"'::TEXT::REGCLASS,
+    8192,
+    8192,
+    16384,
+    8192,
+    8192,
+    16384,
+    1,
+    1
+);
+ERROR:  must be owner of hypertable "metrics"
+\set ON_ERROR_STOP 1

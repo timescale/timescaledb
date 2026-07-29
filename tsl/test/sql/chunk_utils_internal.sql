@@ -535,6 +535,15 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table'
 CREATE TABLE non_ht (time bigint, temp float);
 SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table');
 
+-- TEST error have to be hypertable owner to drop the OSM chunk
+SELECT _timescaledb_functions.drop_osm_chunk('ht_try');
+
+-- TEST error have to be hypertable owner to update the OSM chunk range
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', NULL::timestamptz, NULL::timestamptz);
+
+-- TEST error have to be hypertable owner to lock the OSM chunk dimension slice
+SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('ht_try');
+
 -- TEST drop OSM chunk
 \c :TEST_DBNAME :ROLE_4
 -- We need the OSM chunk for other tests so we run the test in a single
@@ -1037,3 +1046,17 @@ SELECT _timescaledb_functions.freeze_chunk(chunk) FROM show_chunks('metrics') ch
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
 ROLLBACK;
 \set ON_ERROR_STOP 1
+
+-- A non-owner must not be able to freeze or unfreeze a chunk
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE freeze_perm(time timestamptz NOT NULL);
+SELECT create_hypertable('freeze_perm', 'time');
+INSERT INTO freeze_perm VALUES ('2025-01-01');
+SELECT ch AS "FREEZECHUNK" FROM show_chunks('freeze_perm') ch \gset
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.freeze_chunk(:'FREEZECHUNK');
+SELECT _timescaledb_functions.unfreeze_chunk(:'FREEZECHUNK');
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE freeze_perm;

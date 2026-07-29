@@ -47,6 +47,7 @@ chunk_freeze_chunk(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	Assert(chunk != NULL);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 		ereport(ERROR,
@@ -75,6 +76,7 @@ chunk_unfreeze_chunk(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	Assert(chunk != NULL);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 		ereport(ERROR,
