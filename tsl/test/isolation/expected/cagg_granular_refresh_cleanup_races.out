@@ -1,0 +1,575 @@
+Parsed test spec with 8 sessions
+WP_before_tracking_cleanup: NOTICE:  identifier "isolation/cagg_granular_refresh_cleanup_races/WP_before_tracking_cleanup" will be truncated to "isolation/cagg_granular_refresh_cleanup_races/WP_before_trackin"
+
+starting permutation: p_prime_insert p_prime_refresh s1_insert_a wp_after_txn1_enable wp_before_tracking_cleanup_enable r_refresh i_insert_t2 i_insert_t3_jan i_insert_t3_mar v_invalidations wp_after_txn1_release v_tracking wp_before_tracking_cleanup_release v_tracking v_invalidations v_refresh v_check_cagg v_check_truth v_force v_check_cagg
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step s1_insert_a: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+
+step wp_after_txn1_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step wp_before_tracking_cleanup_enable: 
+    SELECT debug_waitpoint_enable('cagg_refresh_before_tenant_tracking_cleanup');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step i_insert_t2: 
+    INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 'sensor_t2', 2);
+
+step i_insert_t3_jan: 
+    INSERT INTO conditions VALUES ('2020-01-08 00:00+00', 'sensor_t3', 3);
+
+step i_insert_t3_mar: 
+    INSERT INTO conditions VALUES ('2020-03-01 00:00+00', 'sensor_t3', 4);
+
+step v_invalidations: 
+    SELECT * FROM invlog_view ORDER BY log_name, range_start, range_end, seqnum;
+
+log_name       |range_start                 |range_end                          |seqnum
+---------------+----------------------------+-----------------------------------+------
+hypertable     |Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 00:00:00 2020 UTC       |     2
+hypertable     |Wed Jan 08 00:00:00 2020 UTC|Wed Jan 08 00:00:00 2020 UTC       |     2
+hypertable     |Sun Mar 01 00:00:00 2020 UTC|Sun Mar 01 00:00:00 2020 UTC       |     2
+materialization|-infinity                   |Mon Dec 31 23:59:59.999999 2018 UTC|      
+materialization|Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 23:59:59.999999 2020 UTC|     2
+materialization|Fri Jan 01 00:00:00 2021 UTC|infinity                           |      
+
+step wp_after_txn1_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step v_tracking: 
+    SELECT tenant_id,
+           _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+           _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, min_timestamp;
+
+tenant_id   |min_timestamp               |max_timestamp               |seqnum
+------------+----------------------------+----------------------------+------
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 00:00:00 2020 UTC|     2
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|Mon Jun 01 00:00:00 2020 UTC|     1
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 00:00:00 2020 UTC|     2
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|Sun Mar 01 00:00:00 2020 UTC|     2
+
+step wp_before_tracking_cleanup_release: 
+    SELECT debug_waitpoint_release('cagg_refresh_before_tenant_tracking_cleanup');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: <... completed>
+step v_tracking: 
+    SELECT tenant_id,
+           _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+           _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, min_timestamp;
+
+tenant_id   |min_timestamp               |max_timestamp               |seqnum
+------------+----------------------------+----------------------------+------
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 00:00:00 2020 UTC|     2
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|Mon Jun 01 00:00:00 2020 UTC|     1
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 00:00:00 2020 UTC|     2
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|Sun Mar 01 00:00:00 2020 UTC|     2
+
+step v_invalidations: 
+    SELECT * FROM invlog_view ORDER BY log_name, range_start, range_end, seqnum;
+
+log_name       |range_start                 |range_end                          |seqnum
+---------------+----------------------------+-----------------------------------+------
+hypertable     |Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 00:00:00 2020 UTC       |     2
+hypertable     |Wed Jan 08 00:00:00 2020 UTC|Wed Jan 08 00:00:00 2020 UTC       |     2
+hypertable     |Sun Mar 01 00:00:00 2020 UTC|Sun Mar 01 00:00:00 2020 UTC       |     2
+materialization|-infinity                   |Mon Dec 31 23:59:59.999999 2018 UTC|      
+materialization|Fri Jan 01 00:00:00 2021 UTC|infinity                           |      
+
+step v_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-04-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
+step v_check_truth: 
+    SELECT sensor_id, time_bucket('1 day', time) AS bucket, avg(value)
+    FROM conditions GROUP BY sensor_id, bucket ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
+step v_force: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-04-01', force => true, options => jsonb_build_object('buckets_per_batch', 0));
+
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
+
+starting permutation: p_prime_insert p_prime_refresh s1_insert_a wp_after_txn1_enable r_refresh i_insert_wide_txn v_invalidations wp_after_txn1_release v_tracking v_invalidations v_refresh v_check_cagg v_check_truth v_force v_check_cagg
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step s1_insert_a: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+
+step wp_after_txn1_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step i_insert_wide_txn: 
+    INSERT INTO conditions VALUES ('2020-01-09 00:00+00', 'sensor_w1', 6);
+    INSERT INTO conditions VALUES ('2020-01-14 00:00+00', 'sensor_w2', 7);
+
+step v_invalidations: 
+    SELECT * FROM invlog_view ORDER BY log_name, range_start, range_end, seqnum;
+
+log_name       |range_start                 |range_end                          |seqnum
+---------------+----------------------------+-----------------------------------+------
+hypertable     |Thu Jan 09 00:00:00 2020 UTC|Tue Jan 14 00:00:00 2020 UTC       |     2
+materialization|-infinity                   |Mon Dec 31 23:59:59.999999 2018 UTC|      
+materialization|Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 23:59:59.999999 2020 UTC|     2
+materialization|Fri Jan 01 00:00:00 2021 UTC|infinity                           |      
+
+step wp_after_txn1_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: <... completed>
+step v_tracking: 
+    SELECT tenant_id,
+           _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+           _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, min_timestamp;
+
+tenant_id   |min_timestamp               |max_timestamp               |seqnum
+------------+----------------------------+----------------------------+------
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 00:00:00 2020 UTC|     2
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|Mon Jun 01 00:00:00 2020 UTC|     1
+sensor_w1   |Thu Jan 09 00:00:00 2020 UTC|Thu Jan 09 00:00:00 2020 UTC|     2
+sensor_w2   |Tue Jan 14 00:00:00 2020 UTC|Tue Jan 14 00:00:00 2020 UTC|     2
+
+step v_invalidations: 
+    SELECT * FROM invlog_view ORDER BY log_name, range_start, range_end, seqnum;
+
+log_name       |range_start                 |range_end                          |seqnum
+---------------+----------------------------+-----------------------------------+------
+hypertable     |Thu Jan 09 00:00:00 2020 UTC|Tue Jan 14 00:00:00 2020 UTC       |     2
+materialization|-infinity                   |Mon Dec 31 23:59:59.999999 2018 UTC|      
+materialization|Fri Jan 01 00:00:00 2021 UTC|infinity                           |      
+
+step v_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-04-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_w1   |Thu Jan 09 00:00:00 2020 UTC|  6
+sensor_w2   |Tue Jan 14 00:00:00 2020 UTC|  7
+
+step v_check_truth: 
+    SELECT sensor_id, time_bucket('1 day', time) AS bucket, avg(value)
+    FROM conditions GROUP BY sensor_id, bucket ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_w1   |Thu Jan 09 00:00:00 2020 UTC|  6
+sensor_w2   |Tue Jan 14 00:00:00 2020 UTC|  7
+
+step v_force: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-04-01', force => true, options => jsonb_build_object('buckets_per_batch', 0));
+
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_w1   |Thu Jan 09 00:00:00 2020 UTC|  6
+sensor_w2   |Tue Jan 14 00:00:00 2020 UTC|  7
+
+
+starting permutation: p_prime_insert p_prime_refresh s1_insert_a wp_before_tracking_cleanup_enable r_refresh v_tracking i_insert_t2 i_insert_t3_jan i_insert_t3_mar wp_after_txn1_enable r2_refresh v_tracking v_invalidations wp_after_txn1_release v_tracking wp_before_tracking_cleanup_release v_tracking v_invalidations v_refresh v_check_cagg v_check_truth v_force v_check_cagg
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step s1_insert_a: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+
+step wp_before_tracking_cleanup_enable: 
+    SELECT debug_waitpoint_enable('cagg_refresh_before_tenant_tracking_cleanup');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step v_tracking: 
+    SELECT tenant_id,
+           _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+           _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, min_timestamp;
+
+tenant_id   |min_timestamp               |max_timestamp               |seqnum
+------------+----------------------------+----------------------------+------
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 00:00:00 2020 UTC|     2
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|Mon Jun 01 00:00:00 2020 UTC|     1
+
+step i_insert_t2: 
+    INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 'sensor_t2', 2);
+
+step i_insert_t3_jan: 
+    INSERT INTO conditions VALUES ('2020-01-08 00:00+00', 'sensor_t3', 3);
+
+step i_insert_t3_mar: 
+    INSERT INTO conditions VALUES ('2020-03-01 00:00+00', 'sensor_t3', 4);
+
+step wp_after_txn1_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r2_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-02-01', '2020-02-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step v_tracking: 
+    SELECT tenant_id,
+           _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+           _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, min_timestamp;
+
+tenant_id|min_timestamp               |max_timestamp               |seqnum
+---------+----------------------------+----------------------------+------
+sensor_a |Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 00:00:00 2020 UTC|     2
+
+step v_invalidations: 
+    SELECT * FROM invlog_view ORDER BY log_name, range_start, range_end, seqnum;
+
+log_name       |range_start                 |range_end                          |seqnum
+---------------+----------------------------+-----------------------------------+------
+materialization|-infinity                   |Mon Dec 31 23:59:59.999999 2018 UTC|      
+materialization|Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 23:59:59.999999 2020 UTC|     2
+materialization|Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 23:59:59.999999 2020 UTC|     3
+materialization|Wed Jan 08 00:00:00 2020 UTC|Wed Jan 08 23:59:59.999999 2020 UTC|     3
+materialization|Sun Mar 01 00:00:00 2020 UTC|Sun Mar 01 23:59:59.999999 2020 UTC|     3
+materialization|Fri Jan 01 00:00:00 2021 UTC|infinity                           |      
+
+step wp_after_txn1_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step r2_refresh: <... completed>
+step v_tracking: 
+    SELECT tenant_id,
+           _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+           _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, min_timestamp;
+
+tenant_id|min_timestamp               |max_timestamp               |seqnum
+---------+----------------------------+----------------------------+------
+sensor_a |Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 00:00:00 2020 UTC|     2
+sensor_t2|Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 00:00:00 2020 UTC|     3
+sensor_t3|Wed Jan 08 00:00:00 2020 UTC|Sun Mar 01 00:00:00 2020 UTC|     3
+
+step wp_before_tracking_cleanup_release: 
+    SELECT debug_waitpoint_release('cagg_refresh_before_tenant_tracking_cleanup');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: <... completed>
+step v_tracking: 
+    SELECT tenant_id,
+           _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+           _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, min_timestamp;
+
+tenant_id|min_timestamp               |max_timestamp               |seqnum
+---------+----------------------------+----------------------------+------
+sensor_a |Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 00:00:00 2020 UTC|     2
+sensor_t2|Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 00:00:00 2020 UTC|     3
+sensor_t3|Wed Jan 08 00:00:00 2020 UTC|Sun Mar 01 00:00:00 2020 UTC|     3
+
+step v_invalidations: 
+    SELECT * FROM invlog_view ORDER BY log_name, range_start, range_end, seqnum;
+
+log_name       |range_start                 |range_end                          |seqnum
+---------------+----------------------------+-----------------------------------+------
+materialization|-infinity                   |Mon Dec 31 23:59:59.999999 2018 UTC|      
+materialization|Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 23:59:59.999999 2020 UTC|     3
+materialization|Wed Jan 08 00:00:00 2020 UTC|Wed Jan 08 23:59:59.999999 2020 UTC|     3
+materialization|Sun Mar 01 00:00:00 2020 UTC|Sun Mar 01 23:59:59.999999 2020 UTC|     3
+materialization|Fri Jan 01 00:00:00 2021 UTC|infinity                           |      
+
+step v_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-04-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
+step v_check_truth: 
+    SELECT sensor_id, time_bucket('1 day', time) AS bucket, avg(value)
+    FROM conditions GROUP BY sensor_id, bucket ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
+step v_force: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-04-01', force => true, options => jsonb_build_object('buckets_per_batch', 0));
+
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
+
+starting permutation: p_prime_insert p_prime_refresh s1_insert_a wp_before_tracking_cleanup_enable r_refresh i_insert_t3_early i_insert_t2 i_insert_t3_jan i_insert_t3_mar wp_after_txn1_enable r2_refresh wp_after_txn1_release wp_before_tracking_cleanup_release v_tracking v_invalidations v_refresh v_check_cagg v_check_truth v_force v_check_cagg
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step s1_insert_a: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+
+step wp_before_tracking_cleanup_enable: 
+    SELECT debug_waitpoint_enable('cagg_refresh_before_tenant_tracking_cleanup');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step i_insert_t3_early: 
+    INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_t3', 5);
+
+step i_insert_t2: 
+    INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 'sensor_t2', 2);
+
+step i_insert_t3_jan: 
+    INSERT INTO conditions VALUES ('2020-01-08 00:00+00', 'sensor_t3', 3);
+
+step i_insert_t3_mar: 
+    INSERT INTO conditions VALUES ('2020-03-01 00:00+00', 'sensor_t3', 4);
+
+step wp_after_txn1_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r2_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-02-01', '2020-02-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step wp_after_txn1_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step r2_refresh: <... completed>
+step wp_before_tracking_cleanup_release: 
+    SELECT debug_waitpoint_release('cagg_refresh_before_tenant_tracking_cleanup');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: <... completed>
+step v_tracking: 
+    SELECT tenant_id,
+           _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+           _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, min_timestamp;
+
+tenant_id|min_timestamp               |max_timestamp               |seqnum
+---------+----------------------------+----------------------------+------
+sensor_a |Thu Jan 02 00:00:00 2020 UTC|Thu Jan 02 00:00:00 2020 UTC|     2
+sensor_t2|Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 00:00:00 2020 UTC|     3
+sensor_t3|Fri Jan 03 00:00:00 2020 UTC|Sun Mar 01 00:00:00 2020 UTC|     3
+
+step v_invalidations: 
+    SELECT * FROM invlog_view ORDER BY log_name, range_start, range_end, seqnum;
+
+log_name       |range_start                 |range_end                          |seqnum
+---------------+----------------------------+-----------------------------------+------
+materialization|-infinity                   |Mon Dec 31 23:59:59.999999 2018 UTC|      
+materialization|Fri Jan 03 00:00:00 2020 UTC|Fri Jan 03 23:59:59.999999 2020 UTC|     3
+materialization|Sun Jan 05 00:00:00 2020 UTC|Sun Jan 05 23:59:59.999999 2020 UTC|     3
+materialization|Wed Jan 08 00:00:00 2020 UTC|Wed Jan 08 23:59:59.999999 2020 UTC|     3
+materialization|Sun Mar 01 00:00:00 2020 UTC|Sun Mar 01 23:59:59.999999 2020 UTC|     3
+materialization|Fri Jan 01 00:00:00 2021 UTC|infinity                           |      
+
+step v_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-04-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Fri Jan 03 00:00:00 2020 UTC|  5
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
+step v_check_truth: 
+    SELECT sensor_id, time_bucket('1 day', time) AS bucket, avg(value)
+    FROM conditions GROUP BY sensor_id, bucket ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Fri Jan 03 00:00:00 2020 UTC|  5
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
+step v_force: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-04-01', force => true, options => jsonb_build_object('buckets_per_batch', 0));
+
+step v_check_cagg: 
+    SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+
+sensor_id   |bucket                      |avg
+------------+----------------------------+---
+sensor_a    |Thu Jan 02 00:00:00 2020 UTC|  1
+sensor_prime|Mon Jun 01 00:00:00 2020 UTC|  9
+sensor_t2   |Sun Jan 05 00:00:00 2020 UTC|  2
+sensor_t3   |Fri Jan 03 00:00:00 2020 UTC|  5
+sensor_t3   |Wed Jan 08 00:00:00 2020 UTC|  3
+sensor_t3   |Sun Mar 01 00:00:00 2020 UTC|  4
+
