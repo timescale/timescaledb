@@ -1053,6 +1053,16 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   context,
 										   bucketing_refresh_window);
 		invalidation_store_free(invalidations);
+
+		/*
+		 * We used to clean up tenant trackings here, which caused a race
+		 * demonstrated in cagg_granular_refresh_cleanup_races. This waitpoint
+		 * allows a refresh to park here while another refresh flush a new batch
+		 * of trackings into the tenant_trackings table, causing the race.
+		 * With the garbage collector approach we no longer
+		 * clean up trackings here, so the races are fixed.
+		 */
+		DEBUG_WAITPOINT("cagg_refresh_before_tenant_tracking_cleanup");
 	}
 
 	return (invalidations != NULL);
