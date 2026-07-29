@@ -122,9 +122,9 @@ typedef enum ContinuousAggTableType
 static Relation open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
-static bool insert_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation);
-static bool write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
-									 ItemPointer update_tid);
+static bool insert_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation);
+static bool write_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
+										  ItemPointer update_tid);
 static void invalidation_entry_set(Invalidation *inner_range, int32 hyper_id,
 								   int64 lowest_modified_value, int64 greatest_modified_value);
 static void invalidation_entry_reset(Invalidation *entry);
@@ -137,8 +137,6 @@ invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleIn
 											  const ContinuousAggBucketFunction *bucket_function);
 static bool invalidations_can_be_merged(const Invalidation *a, const Invalidation *b);
 static bool invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry);
-static void insert_new_cagg_invalidation(const HypertableInvalidationState *state,
-										 const Invalidation *entry, int32 cagg_hyper_id);
 static void move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *state);
 static void cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hyper_id,
 													   LOCKMODE lockmode, int64 window_end);
@@ -186,7 +184,8 @@ hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id, LOCKMO
 }
 
 HeapTuple
-create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
+create_cagg_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end,
+							 int32 seqnum)
 {
 	Datum values[Natts_continuous_aggs_materialization_invalidation_log] = { 0 };
 	bool isnull[Natts_continuous_aggs_materialization_invalidation_log] = { false };
@@ -200,6 +199,17 @@ create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 star
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value)] =
 		Int64GetDatum(end);
+	/* seqnum 0 means "no associated granular tracking" and is stored as SQL NULL. */
+	if (seqnum == 0)
+	{
+		isnull[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_materialization_invalidation_log_seqnum)] = true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_materialization_invalidation_log_seqnum)] = Int32GetDatum(seqnum);
+	}
 
 	return heap_form_tuple(tupdesc, values, isnull);
 }
@@ -215,7 +225,7 @@ invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end)
 	HeapTuple tuple;
 
 	Assert(start <= end);
-	tuple = create_invalidation_tup(RelationGetDescr(rel), cagg_hyper_id, start, end);
+	tuple = create_cagg_invalidation_tup(RelationGetDescr(rel), cagg_hyper_id, start, end, 0);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(rel, tuple);
 	ts_catalog_restore_user(&sec_ctx);
@@ -240,6 +250,8 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value)] =
 		Int64GetDatum(end);
+	/* seqnum is stamped only when tenant tracking applies; leave it NULL here. */
+	nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_hypertable_invalidation_log_seqnum)] = true;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
@@ -298,8 +310,8 @@ IsValidInvalidation(const Invalidation *invalidation)
 }
 
 static bool
-write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
-						 ItemPointer update_tid)
+write_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
+							  ItemPointer update_tid)
 {
 	CatalogSecurityContext sec_ctx;
 	HeapTuple tup;
@@ -309,10 +321,11 @@ write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation
 		return false;
 	}
 
-	tup = create_invalidation_tup(RelationGetDescr(cagg_log_rel),
-								  invalidation->hyper_id,
-								  invalidation->lowest_modified_value,
-								  invalidation->greatest_modified_value);
+	tup = create_cagg_invalidation_tup(RelationGetDescr(cagg_log_rel),
+									   invalidation->hyper_id,
+									   invalidation->lowest_modified_value,
+									   invalidation->greatest_modified_value,
+									   invalidation->seqnum);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	if (ItemPointerIsValid(update_tid))
 	{
@@ -329,9 +342,9 @@ write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation
 }
 
 static bool
-insert_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation)
+insert_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation)
 {
-	return write_invalidation_entry(cagg_log_rel, invalidation, NULL);
+	return write_cagg_invalidation_entry(cagg_log_rel, invalidation, NULL);
 }
 
 static void
@@ -453,17 +466,17 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 
 		if (IsValidInvalidation(&lower_range))
 		{
-			write_invalidation_entry(state->cagg_log_rel,
-									 &lower_range,
-									 ItemPointerIsValid(&tid) ? &tid : NULL);
+			write_cagg_invalidation_entry(state->cagg_log_rel,
+										  &lower_range,
+										  ItemPointerIsValid(&tid) ? &tid : NULL);
 			ItemPointerSetInvalid(&tid); /* TID consumed — upper must be a fresh insert */
 		}
 
 		if (IsValidInvalidation(&upper_range))
 		{
-			write_invalidation_entry(state->cagg_log_rel,
-									 &upper_range,
-									 ItemPointerIsValid(&tid) ? &tid : NULL);
+			write_cagg_invalidation_entry(state->cagg_log_rel,
+										  &upper_range,
+										  ItemPointerIsValid(&tid) ? &tid : NULL);
 		}
 	}
 
@@ -577,36 +590,56 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 }
 
 /*
- * Macro to set an Invalidation from a tuple. The tuple can either have the
- * format of the hypertable invalidation log or the continuous aggregate
- * invalidation log (as determined by the type parameter).
+ * Set an Invalidation from a tuple of either the hypertable invalidation log or
+ * the continuous aggregate invalidation log.
+ *
+ * Both logs share the same physical column layout -- (id, lowest_modified_value,
+ * greatest_modified_value, seqnum) -- so the same attribute offsets apply to
+ * both; we use the hypertable-log Anums here for both. The tuple is read with
+ * heap_deform_tuple() rather than GETSTRUCT() because seqnum is nullable. seqnum
+ * is mapped to 0 (untracked) when SQL NULL.
  */
-#define INVALIDATION_ENTRY_SET(entry, ti, hypertable_id, type)                                     \
-	do                                                                                             \
-	{                                                                                              \
-		bool should_free;                                                                          \
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);                    \
-		type form;                                                                                 \
-		form = (type) GETSTRUCT(tuple);                                                            \
-		(entry)->hyper_id = form->hypertable_id;                                                   \
-		(entry)->lowest_modified_value = form->lowest_modified_value;                              \
-		(entry)->greatest_modified_value = form->greatest_modified_value;                          \
-		(entry)->is_modified = false;                                                              \
-		ItemPointerCopy(&tuple->t_self, &(entry)->tid);                                            \
-                                                                                                   \
-		if (should_free)                                                                           \
-			heap_freetuple(tuple);                                                                 \
-	} while (0);
+static void
+invalidation_entry_set_from_tuple(Invalidation *entry, const TupleInfo *ti)
+{
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	Datum values[Natts_continuous_aggs_hypertable_invalidation_log];
+	bool nulls[Natts_continuous_aggs_hypertable_invalidation_log] = { false };
+
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
+
+	entry->hyper_id = DatumGetInt32(values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id)]);
+	entry->lowest_modified_value = DatumGetInt64(values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value)]);
+	entry->greatest_modified_value = DatumGetInt64(values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value)]);
+	/* seqnum is nullable: SQL NULL means untracked, mapped to 0. */
+	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_hypertable_invalidation_log_seqnum)])
+	{
+		entry->seqnum = 0;
+	}
+	else
+	{
+		entry->seqnum = DatumGetInt32(values[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_hypertable_invalidation_log_seqnum)]);
+	}
+	entry->is_modified = false;
+	ItemPointerCopy(&tuple->t_self, &entry->tid);
+
+	if (should_free)
+	{
+		heap_freetuple(tuple);
+	}
+}
 
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 											   int32 hyper_id, Oid dimtype,
 											   const ContinuousAggBucketFunction *bucket_function)
 {
-	INVALIDATION_ENTRY_SET(entry,
-						   ti,
-						   hypertable_id,
-						   Form_continuous_aggs_hypertable_invalidation_log);
+	invalidation_entry_set_from_tuple(entry, ti);
 	/* Since hypertable invalidations are moved to the continuous aggregate
 	 * invalidation log, a different hypertable ID must be set (the ID of the
 	 * materialized hypertable). */
@@ -618,10 +651,7 @@ static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
 											  const ContinuousAggBucketFunction *bucket_function)
 {
-	INVALIDATION_ENTRY_SET(entry,
-						   ti,
-						   materialization_id,
-						   Form_continuous_aggs_materialization_invalidation_log);
+	invalidation_entry_set_from_tuple(entry, ti);
 
 	/* It isn't strictly necessary to expand the invalidation to bucket
 	 * boundaries here since all invalidations were already expanded when
@@ -696,23 +726,6 @@ invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 	return true;
 }
 
-static void
-insert_new_cagg_invalidation(const HypertableInvalidationState *state, const Invalidation *entry,
-							 int32 cagg_hyper_id)
-{
-	CatalogSecurityContext sec_ctx;
-	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
-	HeapTuple tuple = create_invalidation_tup(tupdesc,
-											  cagg_hyper_id,
-											  entry->lowest_modified_value,
-											  entry->greatest_modified_value);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_only(state->cagg_log_rel, tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(tuple);
-}
-
 /*
  * Process invalidations in the hypertable invalidation log.
  *
@@ -782,7 +795,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 			}
 			else if (!invalidation_entry_try_merge(&mergedentry, &logentry))
 			{
-				insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
+				insert_cagg_invalidation_entry(state->cagg_log_rel, &mergedentry);
 				mergedentry = logentry;
 			}
 
@@ -807,7 +820,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 		/* Handle the last merged invalidation */
 		if (IsValidInvalidation(&mergedentry))
 		{
-			insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
+			insert_cagg_invalidation_entry(state->cagg_log_rel, &mergedentry);
 		}
 	}
 }
@@ -864,7 +877,7 @@ cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 			 * entry, update it to reflect the expanded range. */
 			if (entry->is_modified)
 			{
-				write_invalidation_entry(state->cagg_log_rel, entry, &tid);
+				write_cagg_invalidation_entry(state->cagg_log_rel, entry, &tid);
 			}
 			break;
 		case INVAL_CUT:
@@ -897,7 +910,7 @@ cut_cagg_invalidation_and_compute_inner_range(const ContinuousAggInvalidationSta
 	else if (IsValidInvalidation(&new_inner_range) &&
 			 !invalidation_entry_try_merge(&inner_range, &new_inner_range))
 	{
-		insert_invalidation_entry(state->cagg_log_rel, &inner_range);
+		insert_cagg_invalidation_entry(state->cagg_log_rel, &inner_range);
 		inner_range = new_inner_range;
 	}
 
@@ -1035,7 +1048,7 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 	}
 
 	/* Write the last (merged) inner range back to the cagg invalidation log */
-	insert_invalidation_entry(state->cagg_log_rel, &inner_range);
+	insert_cagg_invalidation_entry(state->cagg_log_rel, &inner_range);
 }
 
 static void
@@ -1171,10 +1184,12 @@ collect_and_delete_cagg_invalidations_in_window(const ContinuousAgg *cagg,
 		table_close(rel, AccessShareLock);
 
 		int64 inclusive_end = ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
-		HeapTuple forced_tuple = create_invalidation_tup(tupdesc,
-														 cagg->data.mat_hypertable_id,
-														 refresh_window->start,
-														 inclusive_end);
+		/* Forced refresh is not tenant-tracked: seqnum 0 -> NULL. */
+		HeapTuple forced_tuple = create_cagg_invalidation_tup(tupdesc,
+															  cagg->data.mat_hypertable_id,
+															  refresh_window->start,
+															  inclusive_end,
+															  0);
 		tupstore = tuplestore_begin_heap(false, false, work_mem);
 		tuplestore_puttuple(tupstore, forced_tuple);
 		heap_freetuple(forced_tuple);

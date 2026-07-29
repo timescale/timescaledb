@@ -353,16 +353,34 @@ FROM generate_series('2020-01-07 07:00:00+00'::timestamptz,
 
 -- Snapshot invalidation log rows into a plain table so the post script can
 -- verify the live logs still hold the same content after the update rebuilt
--- the catalogs.
+-- the catalogs. The seqnum column only exists from 2.30; on older versions
+-- record NULL, which is also what the 2.30 migration must leave in migrated
+-- rows and what the trigger writes when no granular tracking applies.
+SELECT EXISTS (
+    SELECT FROM information_schema.columns
+    WHERE table_schema = '_timescaledb_catalog'
+      AND table_name = 'continuous_aggs_hypertable_invalidation_log'
+      AND column_name = 'seqnum') AS has_inval_log_seqnum \gset
+
 CREATE TABLE inval_log_snapshot AS
 SELECT 'hypertable'::text AS log, h.table_name AS name,
-       l.lowest_modified_value, l.greatest_modified_value
+       l.lowest_modified_value, l.greatest_modified_value,
+\if :has_inval_log_seqnum
+       l.seqnum
+\else
+       NULL::integer AS seqnum
+\endif
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
 JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
 WHERE h.table_name = 'inval_log_test'
 UNION ALL
 SELECT 'materialization', ca.user_view_name,
-       l.lowest_modified_value, l.greatest_modified_value
+       l.lowest_modified_value, l.greatest_modified_value,
+\if :has_inval_log_seqnum
+       l.seqnum
+\else
+       NULL::integer
+\endif
 FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
 JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
 WHERE ca.user_view_name IN ('mat_invallog_1', 'mat_invallog_2');

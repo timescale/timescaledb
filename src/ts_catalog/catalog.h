@@ -790,6 +790,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
 	Anum_continuous_agg_schema_change_timestamp,
+	Anum_continuous_agg_granular_refresh_enabled,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -808,6 +809,7 @@ typedef struct FormData_continuous_agg
 	NameData direct_view_name;
 	bool materialized_only;
 	int64 schema_change_timestamp;
+	bool granular_refresh_enabled;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
@@ -904,6 +906,7 @@ typedef enum Anum_continuous_aggs_hypertable_invalidation_log
 	Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id = 1,
 	Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value,
 	Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value,
+	Anum_continuous_aggs_hypertable_invalidation_log_seqnum,
 	_Anum_continuous_aggs_hypertable_invalidation_log_max,
 } Anum_continuous_aggs_hypertable_invalidation_log;
 
@@ -915,6 +918,7 @@ typedef struct FormData_continuous_aggs_hypertable_invalidation_log
 	int32 hypertable_id;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
+	int32 seqnum;
 } FormData_continuous_aggs_hypertable_invalidation_log;
 
 typedef FormData_continuous_aggs_hypertable_invalidation_log
@@ -978,6 +982,7 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log
 	Anum_continuous_aggs_materialization_invalidation_log_materialization_id = 1,
 	Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value,
 	Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
+	Anum_continuous_aggs_materialization_invalidation_log_seqnum,
 	_Anum_continuous_aggs_materialization_invalidation_log_max,
 } Anum_continuous_aggs_materialization_invalidation_log;
 
@@ -989,6 +994,7 @@ typedef struct FormData_continuous_aggs_materialization_invalidation_log
 	int32 materialization_id;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
+	int32 seqnum;
 } FormData_continuous_aggs_materialization_invalidation_log;
 
 typedef FormData_continuous_aggs_materialization_invalidation_log

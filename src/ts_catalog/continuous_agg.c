@@ -323,6 +323,9 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 			Int64GetDatum(fd->schema_change_timestamp);
 	}
 
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] =
+		BoolGetDatum(fd->granular_refresh_enabled);
+
 	return heap_form_tuple(desc, values, nulls);
 }
 
@@ -385,6 +388,9 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		fd->schema_change_timestamp = DatumGetInt64(
 			values[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)]);
 	}
+
+	fd->granular_refresh_enabled =
+		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)]);
 
 	if (should_free)
 	{
