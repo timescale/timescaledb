@@ -74,7 +74,7 @@ step "s1_compress_finish" {
 }
 
 step "s1_compress_single_chunk" {
-    select compress_chunk(c, true) from show_chunks('sensor_data') c limit 1;
+    select compress_chunk(c, true) is not null as compress from show_chunks('sensor_data') c limit 1;
 }
 
 
