@@ -60,6 +60,11 @@ typedef struct DeltaDeltaDecompressionIterator
 	Simple8bRleDecompressionIterator delta_deltas;
 	Simple8bRleDecompressionIterator nulls;
 	bool has_nulls;
+
+	/* for validating the last_value set in the header
+	 * and cross check with the iterator */
+	uint64 last_value_to_return;
+	uint64 last_returned_value;
 } DeltaDeltaDecompressionIterator;
 
 typedef struct DeltaDeltaCompressor
@@ -481,6 +486,44 @@ delta_delta_compressor_append_value(DeltaDeltaCompressor *compressor, int64 next
 /**********************************************************************************/
 /**********************************************************************************/
 
+static inline uint32
+decompression_iterator_items_seen(const DeltaDeltaDecompressionIterator *iter)
+{
+	if (iter->has_nulls)
+	{
+		return iter->nulls.num_elements_returned;
+	}
+	else
+	{
+		return iter->delta_deltas.num_elements_returned;
+	}
+}
+
+static inline uint32
+decompression_iterator_item_count(const DeltaDeltaDecompressionIterator *iter)
+{
+	if (iter->has_nulls)
+	{
+		return iter->nulls.num_elements;
+	}
+	else
+	{
+		return iter->delta_deltas.num_elements;
+	}
+}
+
+static inline uint32
+decompression_iterator_values_seen(const DeltaDeltaDecompressionIterator *iter)
+{
+	return iter->delta_deltas.num_elements_returned;
+}
+
+static inline uint32
+decompression_iterator_value_count(const DeltaDeltaDecompressionIterator *iter)
+{
+	return iter->delta_deltas.num_elements;
+}
+
 static void
 int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter, void *compressed,
 										  Oid element_type)
@@ -507,6 +550,8 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 		.prev_val = 0,
 		.prev_delta = 0,
 		.has_nulls = has_nulls,
+		.last_returned_value = 0,
+		.last_value_to_return = header->last_value,
 	};
 
 	simple8brle_decompression_iterator_init_forward(&iter->delta_deltas, deltas);
@@ -515,8 +560,12 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 	{
 		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&si);
 		simple8brle_decompression_iterator_init_forward(&iter->nulls, nulls);
+		CheckCompressedData(deltas->num_elements <= nulls->num_elements);
 	}
 }
+
+static DecompressResultInternal
+delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompressionIterator *iter);
 
 static void
 int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter, void *compressed,
@@ -529,7 +578,7 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
 	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&si);
 
-	Assert(header->has_nulls == 0 || header->has_nulls == 1);
+	CheckCompressedData(header->has_nulls == 0 || header->has_nulls == 1);
 
 	*iter = (DeltaDeltaDecompressionIterator){
 		.base = {
@@ -541,6 +590,8 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 		.prev_val = header->last_value,
 		.prev_delta = header->last_delta,
 		.has_nulls = header->has_nulls,
+		.last_returned_value = 0,
+		.last_value_to_return = 0,
 	};
 
 	simple8brle_decompression_iterator_init_reverse(&iter->delta_deltas, deltas);
@@ -549,6 +600,31 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 	{
 		Simple8bRleSerialized *nulls = bytes_deserialize_simple8b_and_advance(&si);
 		simple8brle_decompression_iterator_init_reverse(&iter->nulls, nulls);
+		CheckCompressedData(deltas->num_elements <= nulls->num_elements);
+	}
+
+	/* on reverse iteration the `last_value` in the header is critical for
+	 * the rest of the decoding. when we receive malformed data we can only
+	 * cross reference the result with the first value
+	 */
+	{
+		DeltaDeltaDecompressionIterator forward_iter;
+		forward_iter.base.compression_algorithm = COMPRESSION_ALGORITHM_DELTADELTA;
+		forward_iter.base.forward = true;
+		forward_iter.base.element_type = element_type;
+		forward_iter.base.try_next = delta_delta_decompression_iterator_try_next_forward;
+		int64_decompression_iterator_init_forward(&forward_iter, compressed, element_type);
+		/* find the first non-null value */
+		DecompressResultInternal first_val =
+			delta_delta_decompression_iterator_try_next_forward_internal(&forward_iter);
+		int32 n = 0;
+		while (first_val.is_done == false && first_val.is_null)
+		{
+			CheckCompressedData(n++ < GLOBAL_MAX_ROWS_PER_COMPRESSION);
+			first_val = delta_delta_decompression_iterator_try_next_forward_internal(&forward_iter);
+		}
+		CheckCompressedData(!first_val.is_done);
+		iter->last_value_to_return = first_val.val;
 	}
 }
 
@@ -615,6 +691,14 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
 		if (result.is_done)
 		{
+			/* make sure we exhausted all items before  */
+			CheckCompressedData(decompression_iterator_items_seen(iter) ==
+								decompression_iterator_item_count(iter));
+			/* and also that we returned all values */
+			CheckCompressedData(decompression_iterator_values_seen(iter) ==
+								decompression_iterator_value_count(iter));
+			/* the last element must match the expected value */
+			CheckCompressedData(iter->last_returned_value == iter->last_value_to_return);
 			return (DecompressResultInternal){
 				.is_done = true,
 			};
@@ -633,6 +717,14 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 
 	if (result.is_done)
 	{
+		/* make sure we exhausted all items before  */
+		CheckCompressedData(decompression_iterator_items_seen(iter) ==
+							decompression_iterator_item_count(iter));
+		/* and also that we returned all values */
+		CheckCompressedData(decompression_iterator_values_seen(iter) ==
+							decompression_iterator_value_count(iter));
+		/* the last element must match the expected value */
+		CheckCompressedData(iter->last_returned_value == iter->last_value_to_return);
 		return (DecompressResultInternal){
 			.is_done = true,
 		};
@@ -642,6 +734,7 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 
 	iter->prev_delta += delta_delta;
 	iter->prev_val += iter->prev_delta;
+	iter->last_returned_value = iter->prev_val;
 
 	return (DecompressResultInternal){
 		.val = iter->prev_val,
@@ -712,6 +805,14 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
 		if (result.is_done)
 		{
+			/* make sure we exhausted all items before  */
+			CheckCompressedData(decompression_iterator_items_seen(iter) ==
+								decompression_iterator_item_count(iter));
+			/* and also that we returned all values */
+			CheckCompressedData(decompression_iterator_values_seen(iter) ==
+								decompression_iterator_value_count(iter));
+			/* the last element must match the expected value */
+			CheckCompressedData(iter->last_returned_value == iter->last_value_to_return);
 			return (DecompressResultInternal){
 				.is_done = true,
 			};
@@ -719,7 +820,7 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 
 		if (result.val != 0)
 		{
-			Assert(result.val == 1);
+			CheckCompressedData(result.val == 1);
 			return (DecompressResultInternal){
 				.is_null = true,
 			};
@@ -730,6 +831,14 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 
 	if (result.is_done)
 	{
+		/* make sure we exhausted all items before  */
+		CheckCompressedData(decompression_iterator_items_seen(iter) ==
+							decompression_iterator_item_count(iter));
+		/* and also that we returned all values */
+		CheckCompressedData(decompression_iterator_values_seen(iter) ==
+							decompression_iterator_value_count(iter));
+		/* the last element must match the expected value */
+		CheckCompressedData(iter->last_returned_value == iter->last_value_to_return);
 		return (DecompressResultInternal){
 			.is_done = true,
 		};
@@ -740,6 +849,7 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 	delta_delta = zig_zag_decode(result.val);
 	iter->prev_val -= iter->prev_delta;
 	iter->prev_delta -= delta_delta;
+	iter->last_returned_value = val;
 
 	return (DecompressResultInternal){
 		.val = val,

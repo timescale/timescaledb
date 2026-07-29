@@ -1,0 +1,2 @@
+Fixes: #10360 Decompressor crashes with malformed compressed data
+Thanks: @mdisec for reporting the issues with the validation of the compressed data during decompression
