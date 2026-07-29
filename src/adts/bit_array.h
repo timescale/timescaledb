@@ -37,6 +37,7 @@ pg_attribute_always_inline static uint64 bit_array_iter_next(BitArrayIterator *i
 static void bit_array_iterator_init_rev(BitArrayIterator *iter, const BitArray *array);
 /* return last num_bits in forward-order (not reverse-order); must have been written as num_bits */
 static uint64 bit_array_iter_next_rev(BitArrayIterator *iter, uint8 num_bits);
+static inline uint64 bit_array_iter_position(const BitArrayIterator *iter);
 
 /* I/O */
 static inline void bit_array_send(StringInfo buffer, const BitArray *data);

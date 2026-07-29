@@ -2151,10 +2151,10 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   144 | XX001       | true
-    93 | XX001       | XX001
-    54 | true        | true
+   315 | XX001       | XX001
     24 | 08P01       | 08P01
+     1 | false       | false
+     1 | true        | true
 
 \set algo deltadelta
 \set type int8
@@ -2166,10 +2166,9 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   108 | XX001       | XX001
-    69 | true        | true
-    68 | XX001       | true
-    13 | 08P01       | 08P01
+   259 | XX001       | XX001
+    14 | 08P01       | 08P01
+     2 | true        | true
      1 | false       | false
 
 \set algo array
@@ -2199,13 +2198,14 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    84 | XX001       | XX001
-    13 | XX001       | true
-     5 | 08P01       | 08P01
+   106 | XX001       | XX001
+     6 | 08P01       | 08P01
+     6 | 22021       | 22021
      5 | true        | true
-     4 | 22021       | 22021
-     1 | 3F000       | 3F000
+     1 | XX001       | true
      1 | false       | false
+     1 | true        | XX001
+     1 | 3F000       | 3F000
 
 \set algo bool
 \set type bool
@@ -2231,8 +2231,7 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    49 | XX001       | XX001
+    50 | XX001       | XX001
      2 | 08P01       | 08P01
-     1 | true        | XX001
      1 | true        | true
 

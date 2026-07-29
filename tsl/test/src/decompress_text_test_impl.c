@@ -33,6 +33,53 @@ arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str)
 }
 
 static void
+decompress_generic_text_compare_results(const DecompressResult *fwd, const DecompressResult *rev,
+										int n)
+{
+	for (int i = 0; i < n; i++)
+	{
+		if (fwd[i].is_null != rev[i].is_null)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("the forward and reverse decompression results do not match"),
+					 errdetail("Forwards is_null %d, reverse is_null %d at row %d.",
+							   fwd[i].is_null,
+							   rev[i].is_null,
+							   i)));
+		}
+
+		if (!fwd[i].is_null)
+		{
+			const Datum rowbyrow_varlena = fwd[i].val;
+			const size_t rowbyrow_len = VARSIZE_ANY_EXHDR(DatumGetPointer(rowbyrow_varlena));
+			const char *rowbyrow_cstring = VARDATA_ANY(DatumGetPointer(rowbyrow_varlena));
+
+			const Datum rowbyrow_rev_varlena = rev[i].val;
+			const size_t rowbyrow_rev_len =
+				VARSIZE_ANY_EXHDR(DatumGetPointer(rowbyrow_rev_varlena));
+			const char *rowbyrow_rev_cstring = VARDATA_ANY(DatumGetPointer(rowbyrow_rev_varlena));
+
+			if (rowbyrow_len != rowbyrow_rev_len)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("the forward and reverse decompression results do not match"),
+						 errdetail("At row %d\n", i)));
+			}
+
+			if (strncmp(rowbyrow_cstring, rowbyrow_rev_cstring, rowbyrow_len) != 0)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("the forward and reverse decompression results do not match"),
+						 errdetail("At row %d\n", i)));
+			}
+		}
+	}
+}
+
+static void
 decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, DecompressResult *results,
 									int n)
 {
@@ -127,6 +174,8 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested
 	 */
 	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, TEXTOID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	memset(results, 0xFE, sizeof(results));
+
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
@@ -138,13 +187,33 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested
 		results[n++] = r;
 	}
 
+	/* Reverse iterator too */
+	DecompressionIterator *rev_iter = def->iterator_init_reverse(compressed_data, TEXTOID);
+	DecompressResult results_rev[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	memset(results_rev, 0xEF, sizeof(results_rev));
+
+	int rn = n - 1;
+	for (DecompressResult r = rev_iter->try_next(rev_iter); !r.is_done;
+		 r = rev_iter->try_next(rev_iter))
+	{
+		results_rev[rn--] = r;
+	}
+
 	if (bulk)
 	{
 		/*
 		 * Check that the arrow decompression result matches.
 		 */
 		decompress_generic_text_check_arrow(arrow, ERROR, results, n);
+		decompress_generic_text_check_arrow(arrow, ERROR, results_rev, n);
 		return n;
+	}
+	else
+	{
+		/*
+		 * Check that the forward and reverse row-by-row decompression results match.
+		 */
+		decompress_generic_text_compare_results(results, results_rev, n);
 	}
 
 	/*
