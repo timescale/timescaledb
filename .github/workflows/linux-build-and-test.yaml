@@ -145,7 +145,7 @@ jobs:
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
-          --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
+          --without-readline --without-zlib --without-libxml --with-icu ${{ matrix.pg_extra_args }}
         make -j $(getconf _NPROCESSORS_ONLN)
         for ext in ${{ matrix.pg_extensions }}; do
           make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
