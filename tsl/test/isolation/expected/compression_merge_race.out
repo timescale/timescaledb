@@ -98,11 +98,11 @@ count|expected
 
 starting permutation: s1_compress_single_chunk s1_compress_all_chunks_single_transaction s3_select_on_compressed_chunk s3_wait_for_finish s1_compress_finish
 step s1_compress_single_chunk: 
-    select compress_chunk(c, true) from show_chunks('sensor_data') c limit 1;
+    select compress_chunk(c, true) is not null as compress from show_chunks('sensor_data') c limit 1;
 
-compress_chunk                             
--------------------------------------------
-_timescaledb_internal._hyper_X_X_chunk
+compress
+--------
+t       
 
 step s1_compress_all_chunks_single_transaction: 
     BEGIN;
