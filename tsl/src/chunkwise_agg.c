@@ -490,28 +490,42 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		}
 	}
 
-	/* Create new append paths */
+	/*
+	 * Create new append paths.
+	 *
+	 * We make the cost-based choice of the plans already at the level of the
+	 * partially grouped relation, i.e. Append of individual chunk-wise Partial
+	 * Aggregate nodes. This is not entrely correct, because different kinds of
+	 * Append might require another plan node before final aggregation (e.g. Sort),
+	 * that can change the total cost significantly.
+	 *
+	 * We add the append over hashed partial aggregates first, and then the
+	 * append over grouped partial aggregation. If they have similar cost and
+	 * pathkeys, only the first of them survives. The hash aggregation can be
+	 * disabled with a GUC, but the group aggregation cannot, so adding them in
+	 * this order lets the user try both by changing the GUC.
+	 */
 	if (top_gather == NULL)
 	{
 		/*
 		 * The original aggregation plan was non-parallel, so we're creating a
 		 * non-parallel plan as well.
 		 */
-		if (sorted_subpaths != NIL)
-		{
-			add_path(partially_grouped_rel,
-					 copy_append_like_path(root,
-										   top_append,
-										   sorted_subpaths,
-										   partial_grouping_target));
-		}
-
 		if (hashed_subpaths != NIL)
 		{
 			add_path(partially_grouped_rel,
 					 copy_append_like_path(root,
 										   top_append,
 										   hashed_subpaths,
+										   partial_grouping_target));
+		}
+
+		if (sorted_subpaths != NIL)
+		{
+			add_path(partially_grouped_rel,
+					 copy_append_like_path(root,
+										   top_append,
+										   sorted_subpaths,
 										   partial_grouping_target));
 		}
 	}
@@ -521,80 +535,24 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		 * The cheapest aggregation plan was parallel, so we're creating a
 		 * parallel plan as well.
 		 */
-		if (sorted_subpaths != NIL)
-		{
-			add_partial_path(partially_grouped_rel,
-							 copy_append_like_path(root,
-												   top_append,
-												   sorted_subpaths,
-												   partial_grouping_target));
-		}
-
 		if (hashed_subpaths != NIL)
 		{
-			add_partial_path(partially_grouped_rel,
-							 copy_append_like_path(root,
-												   top_append,
-												   hashed_subpaths,
-												   partial_grouping_target));
+			Path *path = copy_append_like_path(root,
+											   top_append,
+											   hashed_subpaths,
+											   partial_grouping_target);
+			add_partial_path(partially_grouped_rel, path);
 		}
-	}
-}
 
-/*
- Is the provided path a agg path that uses a sorted or plain agg strategy?
-*/
-pg_nodiscard static bool
-is_path_sorted_or_plain_agg_path(Path *path)
-{
-	AggPath *agg_path = castNode(AggPath, path);
-	Assert(agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN ||
-		   agg_path->aggstrategy == AGG_HASHED);
-	return agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN;
-}
-
-/*
- * Check if this path belongs to a plain or sorted aggregation
- */
-static bool
-contains_path_plain_or_sorted_agg(Path *path)
-{
-	List *subpaths = NIL;
-	Path *append = NULL;
-	Path *gather = NULL;
-	get_subpaths_from_append_path(path, &subpaths, &append, &gather);
-
-	Ensure(subpaths != NIL, "Unable to determine aggregation type");
-
-	ListCell *lc;
-	foreach (lc, subpaths)
-	{
-		Path *subpath = lfirst(lc);
-
-		if (IsA(subpath, AggPath))
+		if (sorted_subpaths != NIL)
 		{
-			return is_path_sorted_or_plain_agg_path(subpath);
+			Path *path = copy_append_like_path(root,
+											   top_append,
+											   sorted_subpaths,
+											   partial_grouping_target);
+			add_partial_path(partially_grouped_rel, path);
 		}
 	}
-
-	/*
-	 * No dedicated aggregation nodes found directly underneath the append node. This could be
-	 * due to two reasons.
-	 *
-	 * (1) Only vectorized aggregation is used and we don't have dedicated Aggregation nods.
-	 * (2) The query plan uses multi-level appends to keep a certain sorting
-	 *     - ChunkAppend
-	 *          - Merge Append
-	 *             - Agg Chunk 1
-	 *             - Agg Chunk 2
-	 *          - Merge Append
-	 *             - Agg Chunk 3
-	 *             - Agg Chunk 4
-	 *
-	 * in both cases, we use a sorted aggregation node to finalize the partial aggregation and
-	 * produce a proper sorting.
-	 */
-	return true;
 }
 
 /*
@@ -742,21 +700,24 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	foreach (lc, partially_grouped_paths)
 	{
 		Path *partially_aggregated_path = lfirst(lc);
+		const bool is_sorted =
+			pathkeys_contained_in(root->group_pathkeys, partially_aggregated_path->pathkeys);
 		AggStrategy final_strategy;
-		if (contains_path_plain_or_sorted_agg(partially_aggregated_path))
+		if (parse->groupClause == NULL)
 		{
-			const bool is_sorted =
-				pathkeys_contained_in(root->group_pathkeys, partially_aggregated_path->pathkeys);
-			if (!is_sorted)
-			{
-				partially_aggregated_path = (Path *) create_sort_path(root,
-																	  output_rel,
-																	  partially_aggregated_path,
-																	  root->group_pathkeys,
-																	  -1.0);
-			}
-
-			final_strategy = parse->groupClause ? AGG_SORTED : AGG_PLAIN;
+			final_strategy = AGG_PLAIN;
+		}
+		else if (is_sorted)
+		{
+			/*
+			 * Only try the final Group Aggregate if the append over the partial
+			 * aggregation results produces the output that is appropriately
+			 * sorted for this aggregation. Otherwise, it needs a costly Sort
+			 * node. Group Aggregate mostly makes sense if the input is already
+			 * cheaply sorted, and if we have to re-sort all input, it's normally
+			 * inferior to Hash Aggregate.
+			 */
+			final_strategy = AGG_SORTED;
 		}
 		else
 		{
