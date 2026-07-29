@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#include "compression/algorithms/uuid_compress.h"
 #define FUNCTION_NAME_HELPER3(X, Y, Z) X##_##Y##_##Z
 #define FUNCTION_NAME3(X, Y, Z) FUNCTION_NAME_HELPER3(X, Y, Z)
 #define FUNCTION_NAME_HELPER2(X, Y) X##_##Y
@@ -24,6 +25,32 @@
 #ifndef ARROW_GET_VALUE
 #define ARROW_GET_VALUE(A, I) ((CTYPE *) (A)->buffers[1])[I]
 #endif
+
+static void
+FUNCTION_NAME3(compare_results, CTYPE, ALGO)(DecompressResult *fwd, DecompressResult *rev, int n)
+{
+	for (int i = 0; i < n; i++)
+	{
+		if (fwd[i].is_null != rev[i].is_null)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("the forward and reverse decompression results do not match"),
+					 errdetail("Forwards is_null %d, reverse is_null %d at row %d.",
+							   fwd[i].is_null,
+							   rev[i].is_null,
+							   i)));
+		}
+
+		if (!fwd[i].is_null && IS_NOT_EQUAL(DATUM_TO_CTYPE(fwd[i].val), DATUM_TO_CTYPE(rev[i].val)))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("the forward and reverse decompression results do not match"),
+					 errdetail("At row %d\n", i)));
+		}
+	}
+}
 
 static void
 FUNCTION_NAME3(check_arrow, CTYPE, ALGO)(ArrowArray *arrow, int error_type,
@@ -80,10 +107,9 @@ FUNCTION_NAME3(check_arrow, CTYPE, ALGO)(ArrowArray *arrow, int error_type,
 }
 
 /*
- * Try to decompress the given compressed data. Used for fuzzing and for checking
- * the examples found by fuzzing. For fuzzing we do less checks to keep it
- * faster and the coverage space smaller. This is a generic implementation
- * for arithmetic types.
+ * Try to decompress the given compressed data and compare the results
+ * between the bulk, forward and reverse iterator. This is a generic
+ * implementation for arithmetic types.
  */
 static int
 FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size, bool bulk)
@@ -106,7 +132,6 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 
 	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
 	Datum compressed_data = def->compressed_data_recv(&si);
-
 	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, PG_TYPE_OID);
 
 	ArrowArray *arrow = NULL;
@@ -124,6 +149,8 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	 */
 	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, PG_TYPE_OID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	memset(results, 0xFE, sizeof(results));
+
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
@@ -135,11 +162,30 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 		results[n++] = r;
 	}
 
-	/* Check that both ways of decompression match. */
+	/*
+	 * Check that the reverse iterator also works and gives the same result
+	 */
+	DecompressionIterator *rev_iter = def->iterator_init_reverse(compressed_data, PG_TYPE_OID);
+	DecompressResult results_rev[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	memset(results_rev, 0xEF, sizeof(results_rev));
+	int rn = n - 1;
+
+	for (DecompressResult r = rev_iter->try_next(rev_iter); !r.is_done;
+		 r = rev_iter->try_next(rev_iter))
+	{
+		results_rev[rn--] = r;
+	}
+
+	/* Check that the iterator based decompression matches both ways. */
 	if (bulk)
 	{
 		FUNCTION_NAME3(check_arrow, CTYPE, ALGO)(arrow, ERROR, results, n);
+		FUNCTION_NAME3(check_arrow, CTYPE, ALGO)(arrow, ERROR, results_rev, n);
 		return n;
+	}
+	else
+	{
+		FUNCTION_NAME3(compare_results, CTYPE, ALGO)(results, results_rev, n);
 	}
 
 	/*

@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include "compression/compression.h"
 #include <c.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
@@ -1007,12 +1008,12 @@ simple8brle_decompression_iterator_max_elements(Simple8bRleDecompressionIterator
 
 		if (simple8brle_selector_is_rle(selector) && iter->compressed_data)
 		{
-			Assert(simple8brle_rledata_repeatcount(iter->compressed_data[i]) > 0);
+			CheckCompressedData(simple8brle_rledata_repeatcount(iter->compressed_data[i]) > 0);
 			max_stored += simple8brle_rledata_repeatcount(iter->compressed_data[i]);
 		}
 		else
 		{
-			Assert(selector < SIMPLE8B_MAXCODE);
+			CheckCompressedData(selector < SIMPLE8B_MAXCODE);
 			max_stored += SIMPLE8B_NUM_ELEMENTS[selector];
 		}
 	}
@@ -1029,6 +1030,7 @@ simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator
 	skipped_in_last = simple8brle_decompression_iterator_max_elements(iter, compressed) -
 					  compressed->num_elements;
 
+	CheckCompressedData(skipped_in_last >= 0);
 	Assert(NULL != iter->compressed_data);
 
 	iter->current_block =
@@ -1051,6 +1053,8 @@ simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIter
 	uint64 uncompressed;
 	if (iter->num_elements_returned >= iter->num_elements)
 	{
+		/* all compressed blocks have been processed */
+		CheckCompressedData(iter->num_blocks == iter->current_compressed_pos);
 		return (Simple8bRleDecompressResult){
 			.is_done = true,
 		};
@@ -1087,6 +1091,8 @@ simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIter
 	uint64 uncompressed;
 	if (iter->num_elements_returned >= iter->num_elements)
 	{
+		/* the posittion goes below zero once exhausted all elements */
+		CheckCompressedData(iter->current_in_compressed_pos == -1);
 		return (Simple8bRleDecompressResult){
 			.is_done = true,
 		};
@@ -1094,10 +1100,14 @@ simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIter
 
 	if (iter->current_in_compressed_pos < 0)
 	{
+		CheckCompressedData(iter->current_compressed_pos >= 0);
 		iter->current_block =
 			simple8brle_block_create(bit_array_iter_next_rev(&iter->selectors,
 															 SIMPLE8B_BITS_PER_SELECTOR),
 									 iter->compressed_data[iter->current_compressed_pos]);
+		CheckCompressedData(iter->current_block.selector != 0);
+		CheckCompressedData(iter->current_block.num_elements_compressed <=
+							GLOBAL_MAX_ROWS_PER_COMPRESSION);
 		iter->current_in_compressed_pos = iter->current_block.num_elements_compressed - 1;
 		iter->current_compressed_pos -= 1;
 	}

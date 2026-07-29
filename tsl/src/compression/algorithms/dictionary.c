@@ -416,6 +416,44 @@ dictionary_compressor_finish(DictionaryCompressor *compressor)
 /// Decompressor ///
 ////////////////////
 
+static inline uint32
+decompression_iterator_items_seen(const DictionaryDecompressionIterator *iter)
+{
+	if (iter->has_nulls)
+	{
+		return iter->nulls.num_elements_returned;
+	}
+	else
+	{
+		return iter->bitmap.num_elements_returned;
+	}
+}
+
+static inline uint32
+decompression_iterator_item_count(const DictionaryDecompressionIterator *iter)
+{
+	if (iter->has_nulls)
+	{
+		return iter->nulls.num_elements;
+	}
+	else
+	{
+		return iter->bitmap.num_elements;
+	}
+}
+
+static inline uint32
+decompression_iterator_values_seen(const DictionaryDecompressionIterator *iter)
+{
+	return iter->bitmap.num_elements_returned;
+}
+
+static inline uint32
+decompression_iterator_value_count(const DictionaryDecompressionIterator *iter)
+{
+	return iter->bitmap.num_elements;
+}
+
 static void
 dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, const char *_data,
 									   bool scan_forward, Oid element_type)
@@ -470,11 +508,11 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 	for (uint32 i = 0; i < bitmap->num_distinct; i++)
 	{
 		DecompressResult res = array_decompression_iterator_try_next_forward(dictionary_iterator);
-		Assert(!res.is_null);
-		Assert(!res.is_done);
+		CheckCompressedData(!res.is_null);
+		CheckCompressedData(!res.is_done);
 		iter->values[i] = res.val;
 	}
-	Assert(array_decompression_iterator_try_next_forward(dictionary_iterator).is_done);
+	CheckCompressedData(array_decompression_iterator_try_next_forward(dictionary_iterator).is_done);
 }
 
 static ArrowArray *tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type,
@@ -719,7 +757,8 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	bool have_incorrect_index = false;
 	for (uint32 i = 0; i < n_notnull; i++)
 	{
-		have_incorrect_index = have_incorrect_index || indices[i] >= (int16) header->num_distinct;
+		have_incorrect_index =
+			have_incorrect_index || indices[i] >= (int16) header->num_distinct || indices[i] < 0;
 	}
 	CheckCompressedData(!have_incorrect_index);
 
@@ -831,6 +870,12 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
 		if (null.is_done)
 		{
+			/* make sure we exhausted all items before  */
+			CheckCompressedData(decompression_iterator_items_seen(iter) ==
+								decompression_iterator_item_count(iter));
+			/* and also that we returned all values */
+			CheckCompressedData(decompression_iterator_values_seen(iter) ==
+								decompression_iterator_value_count(iter));
 			return (DecompressResult){
 				.is_done = true,
 			};
@@ -847,6 +892,12 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 	result = simple8brle_decompression_iterator_try_next_forward(&iter->bitmap);
 	if (result.is_done)
 	{
+		/* make sure we exhausted all items before  */
+		CheckCompressedData(decompression_iterator_items_seen(iter) ==
+							decompression_iterator_item_count(iter));
+		/* and also that we returned all values */
+		CheckCompressedData(decompression_iterator_values_seen(iter) ==
+							decompression_iterator_value_count(iter));
 		return (DecompressResult){
 			.is_done = true,
 		};
@@ -876,6 +927,12 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
 		if (null.is_done)
 		{
+			/* make sure we exhausted all items before  */
+			CheckCompressedData(decompression_iterator_items_seen(iter) ==
+								decompression_iterator_item_count(iter));
+			/* and also that we returned all values */
+			CheckCompressedData(decompression_iterator_values_seen(iter) ==
+								decompression_iterator_value_count(iter));
 			return (DecompressResult){
 				.is_done = true,
 			};
@@ -892,12 +949,18 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 	result = simple8brle_decompression_iterator_try_next_reverse(&iter->bitmap);
 	if (result.is_done)
 	{
+		/* make sure we exhausted all items before  */
+		CheckCompressedData(decompression_iterator_items_seen(iter) ==
+							decompression_iterator_item_count(iter));
+		/* and also that we returned all values */
+		CheckCompressedData(decompression_iterator_values_seen(iter) ==
+							decompression_iterator_value_count(iter));
 		return (DecompressResult){
 			.is_done = true,
 		};
 	}
 
-	Assert(result.val < iter->compressed->num_distinct);
+	CheckCompressedData(result.val < iter->compressed->num_distinct);
 	return (DecompressResult){
 		.val = iter->values[result.val],
 		.is_null = false,
