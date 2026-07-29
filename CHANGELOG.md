@@ -7,8 +7,8 @@
 This release contains performance improvements and bug fixes since the 2.28.3 release. We recommend that you upgrade at the next available opportunity.
 
 **Release Highlights**
-* **Chunk exclusion for DML operations** drastically improves the performance of `UPDATE` and `DELETE` statements on hypertables. By acquiring exclusive locks only on the specific chunks being modified rather than the entire hypertable, this enhancement eliminates massive lock contention and keeps high-concurrency workloads running smoothly without unnecessary slowdowns.
-* Intelligent **row-by-row decompression** enables the query planner to decompress data row-by-row rather than in large batches when an operation prioritizes a fast initial response (such as queries with `LIMIT` clauses). This dramatically reduces memory overhead and query latency, ensuring lightning-fast performance when you only need to retrieve a small subset of records from your compressed hypertables.
+* Chunk exclusion for DML operations improves the performance of `UPDATE` and `DELETE` statements on hypertables. By acquiring row exclusive locks only on the specific chunks being modified rather than the entire hypertable. This enhancement reduces lock contention in high-concurrency workloads involving DML, speeding up the planning of DML queries by using the optimized TimescaleDB chunk exclusion  instead of the baseline Postgres constraint exclusion.
+* The query planner can now choose an additional algorithm for retrieving a small number of rows, for reading the columnstore data, optimizing the default behavior. This optimization improves some last-point queries on columnstore (think `ORDER BY time DESC LIMIT 1`) run several times faster than in previous releases.
 
 **Important: PostgreSQL 15 Support Removed**
 TimescaleDB 2.29.0 removes support for PostgreSQL 15. This release supports PostgreSQL 16, 17, and 18. If you are still running PostgreSQL 15, upgrade PostgreSQL before upgrading to TimescaleDB 2.29.0.
