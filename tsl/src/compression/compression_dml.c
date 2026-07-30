@@ -23,6 +23,7 @@
 #include <utils/typcache.h>
 
 #include <compat/compat.h>
+#include "debug_point.h"
 #include "foreach_ptr.h"
 #include "ts_stats/ts_stats_record.h"
 #include <chunk_insert_state.h>
@@ -60,7 +61,7 @@ typedef BatchQualSummary(BatchMatcher)(RowDecompressor *decompressor, ScanKeyDat
 									   bool check_full_match, bool *skip_current_tuple);
 
 static struct decompress_batches_stats
-decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
+decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
 						TupleTableSlot *insert_slot, CmdType cmd_type);
@@ -516,16 +517,9 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 			 cdst->mem_scankeys.num_scankeys);
 	}
 
-	/*
-	 * Using latest snapshot to scan the heap since we are doing this to build
-	 * the index on the uncompressed chunks in order to do speculative insertion
-	 * which is always built from all tuples (even in higher levels of isolation).
-	 */
-	PushActiveSnapshot(GetLatestSnapshot());
 	stats = decompress_batches_scan(in_rel,
 									out_rel,
 									index_rel,
-									GetActiveSnapshot(),
 									&skip_current_tuple,
 									false,
 									NIL,
@@ -538,7 +532,6 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	{
 		index_close(index_rel, AccessShareLock);
 	}
-	PopActiveSnapshot();
 
 	if (skip_current_tuple)
 	{
@@ -956,11 +949,9 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	temp_cdst.columns_with_null_check = null_columns;
 	temp_cdst.bloom_filters = bloom_filters;
 
-	PushActiveSnapshot(GetTransactionSnapshot());
 	stats = decompress_batches_scan(comp_chunk_rel,
 									chunk_rel,
 									matching_index_rel,
-									GetActiveSnapshot(),
 									NULL,
 									delete_only,
 									is_null,
@@ -974,8 +965,6 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	{
 		index_close(matching_index_rel, AccessShareLock);
 	}
-
-	PopActiveSnapshot();
 
 	/*
 	 * tuples from compressed chunk has been decompressed and moved
@@ -1100,7 +1089,7 @@ decompress_batch_endscan(DecompressBatchScanDesc scan)
  *
  */
 static struct decompress_batches_stats
-decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
+decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
 						TupleTableSlot *insert_slot, CmdType cmd_type)
@@ -1136,6 +1125,13 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 								RelationGetRelid(in_rel),
 								RelationGetRelid(out_rel),
 								cmd_type);
+
+	/* CMD_INSERT uses GetLatestSnapshot to see all rows including from the
+	 * current transaction, needed for speculative insertion and index building.
+	 * All other commands use GetTransactionSnapshot for standard MVCC. */
+	Snapshot snapshot = (cmd_type == CMD_INSERT) ?
+		RegisterSnapshot(GetLatestSnapshot()) :
+		RegisterSnapshot(GetTransactionSnapshot());
 
 	/* TODO: Optimization by reusing the index scan while working on a single chunk */
 
@@ -1336,6 +1332,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
 			ExecDropSingleTupleTableSlot(slot);
+			UnregisterSnapshot(snapshot);
 			return stats;
 		}
 
@@ -1364,6 +1361,42 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			stats.batches_decompressed++;
 			continue;
 		}
+		/*
+		 * Handle TM_Updated from concurrent compaction or recompress.
+		 * Restart the scan with a fresh snapshot so the DML finds the rows
+		 * in the new recompressed batches.
+		 */
+		if (result == TM_Updated && !IsolationUsesXactSnapshot())
+		{
+			write_logical_replication_msg_decompression_end();
+			row_decompressor_reset(&decompressor);
+
+			/* Reset stats before restarting — only the final pass counts. */
+			memset(&stats, 0, sizeof(stats));
+
+			/* Restart scan with a fresh snapshot. */
+			decompress_batch_endscan(scan);
+			UnregisterSnapshot(snapshot);
+			snapshot = RegisterSnapshot(GetTransactionSnapshot());
+			if (index_rel)
+			{
+				scan = decompress_batch_beginscan(in_rel,
+												  index_rel,
+												  snapshot,
+												  num_index_scankeys,
+												  index_scankeys); // Poro: check what happens to
+																   // previously deleted batches
+			}
+			else
+			{
+				scan = decompress_batch_beginscan(in_rel,
+												  NULL,
+												  snapshot,
+												  num_heap_scankeys,
+												  heap_scankeys);
+			}
+			continue;
+		}
 		if (result != TM_Ok)
 		{
 			write_logical_replication_msg_decompression_end();
@@ -1371,6 +1404,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			row_decompressor_close(&decompressor);
 			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
+			UnregisterSnapshot(snapshot);
 			report_error(result);
 			return stats;
 		}
@@ -1405,6 +1439,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 				row_decompressor_decompress_row_to_table(&decompressor, &writer);
 			stats.batches_decompressed++;
 			write_logical_replication_msg_decompression_end();
+
+			DEBUG_WAITPOINT("decompress_batches_after_batch");
 		}
 	}
 	ExecDropSingleTupleTableSlot(slot);
@@ -1425,6 +1461,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		 */
 		row_decompressor_flush_stats(&decompressor);
 	}
+
+	UnregisterSnapshot(snapshot);
 
 	if (ts_guc_debug_compression_path_info)
 	{
