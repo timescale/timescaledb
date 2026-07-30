@@ -23,6 +23,13 @@ typedef struct Invalidation
 	int64 greatest_modified_value;
 	bool is_modified;
 	ItemPointerData tid;
+	/*
+	 * Per-hypertable granular-tracking sequence number, used to match up with granular
+	 * tracking in the continuous aggregate invalidation log.
+	 * Stored as a nullable column on disk but loaded as 0 here for null, meaning
+	 * "no associated granular tracking".
+	 */
+	int32 seqnum;
 } Invalidation;
 
 #define INVAL_NEG_INFINITY PG_INT64_MIN
@@ -53,8 +60,8 @@ extern void invalidation_store_free(InvalidationStore *store);
 extern void
 invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 										 const ContinuousAggBucketFunction *bucket_function);
-extern HeapTuple create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start,
-										 int64 end);
+extern HeapTuple create_cagg_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id,
+											  int64 start, int64 end, int32 seqnum);
 extern bool invalidation_hypertable_has_invalidations(int32 hyper_id);
 extern bool invalidation_cagg_has_invalidations(ContinuousAgg *cagg);
 extern bool invalidation_cagg_has_pending_mat_ranges(ContinuousAgg *cagg);
