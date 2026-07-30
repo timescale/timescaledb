@@ -1,0 +1,2 @@
+Fixes: #10369 Fix typo in error message about MERGE support on compressed hypertables
+Thanks: @igor2x for reporting a typo in a MERGE support error message
