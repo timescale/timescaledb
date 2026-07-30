@@ -4,7 +4,7 @@ name: "Build .deb artifacts (dev) and schedule tsbench run"
   push:
     branches:
       - main
-      - "benchmark_*"
+      - "**/*bench*"
     tags:
       - "*"
 
