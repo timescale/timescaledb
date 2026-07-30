@@ -19,12 +19,16 @@ diff --git a/src/include/utils/memdebug.h b/src/include/utils/memdebug.h
 index e88b4c6e8e..4ccbbf0146 100644
 --- a/src/include/utils/memdebug.h
 +++ b/src/include/utils/memdebug.h
-@@ -19,6 +19,31 @@
+@@ -19,6 +19,35 @@
  
  #ifdef USE_VALGRIND
  #include <valgrind/memcheck.h>
 +
 +#elif __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
++
++#ifndef CLOBBER_FREED_MEMORY
++#error "This patch requires CLOBBER_FREED_MEMORY (included by --cassert) to work properly"
++#endif
 +
 +#include <sanitizer/asan_interface.h>
 +

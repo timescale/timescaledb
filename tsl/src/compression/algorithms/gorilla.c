@@ -71,8 +71,7 @@ gorilla_compressed_has_nulls(const CompressedDataHeader *header)
 	return gc->has_nulls;
 }
 
-static void
-pg_attribute_unused() assertions(void)
+pg_attribute_unused() static void assertions(void)
 {
 	GorillaCompressed test_val = { .vl_len_ = { 0 } };
 	/* make sure no padding bytes make it to disk */

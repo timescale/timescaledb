@@ -5,15 +5,15 @@
  */
 
 #include <postgres.h>
+
+#include <fmgr.h>
+#include <funcapi.h>
+#include <utils/fmgrprotos.h>
+
 #include "jsonb_utils.h"
 #include "test_utils.h"
 #include "ts_catalog/compression_settings.h"
 #include "utils/jsonb.h"
-#include <fmgr.h>
-#include <funcapi.h>
-
-// Declare jsonb_in explicitly
-extern Datum jsonb_in(PG_FUNCTION_ARGS);
 
 const char *
 jsonb_to_cstring(Jsonb *jsonb)

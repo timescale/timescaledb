@@ -1,1 +1,0 @@
-Fixes: #9984 Fix handling of NOT VALID NOT NULL constraint for query optimization

@@ -84,7 +84,11 @@ set_tablesample_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *
 	if ((root->query_level > 1 || bms_membership(root->all_baserels) != BMS_SINGLETON) &&
 		!(GetTsmRoutine(rte->tablesample->tsmhandler)->repeatable_across_scans))
 	{
+#if PG19_GE
+		path = (Path *) create_material_path(rel, path, enable_material);
+#else
 		path = (Path *) create_material_path(rel, path);
+#endif
 	}
 
 	add_path(rel, path);
@@ -186,7 +190,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 */
 		Hypertable *ht;
 		TsRelType reltype = ts_classify_relation(root, child_rel, &ht);
-		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		if (reltype == TS_REL_CHUNK_CHILD)
 		{
 			const Chunk *chunk = ts_planner_chunk_fetch(root, child_rel);
 
@@ -224,37 +228,6 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		if (child_rel->consider_startup)
 			parent_rel->consider_startup = true;
 	}
-
-#if PG16_LT
-	/*
-	 * On PG15, create_append_path() calls get_appendrel_parampathinfo() instead
-	 * of the get_baserel_parampathinfo() like the later versions. The appendrel
-	 * parameterization info is not build for hypertable because of how we're
-	 * disabling the PG inheritance expansion, so here we have to compensate for
-	 * it. Fetch the parameterization info from the chunks here, following the
-	 * logic similar to add_paths_to_append_rel().
-	 */
-	if (parent_rel->reloptkind == RELOPT_BASEREL)
-	{
-		foreach (l, live_childrels)
-		{
-			RelOptInfo *child_rel = (RelOptInfo *) lfirst(l);
-			ListCell *lcp;
-
-			foreach (lcp, child_rel->pathlist)
-			{
-				Path *child_path = (Path *) lfirst(lcp);
-
-				if (child_path->param_info == NULL)
-					continue;
-
-				get_baserel_parampathinfo(root,
-										  parent_rel,
-										  child_path->param_info->ppi_req_outer);
-			}
-		}
-	}
-#endif
 
 	/* Add paths to the append relation. */
 	add_paths_to_append_rel(root, parent_rel, live_childrels);
@@ -356,8 +329,19 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 
 	/* Set up the dummy path */
 	add_path(rel,
-			 (Path *)
-				 create_append_path(NULL, rel, NIL, NIL, NIL, rel->lateral_relids, 0, false, -1));
+			 (Path *) create_append_path(/* root = */ NULL,
+										 rel,
+#if PG19_GE
+										 (AppendPathInput) { 0 },
+#else
+										 /* subpaths = */ NIL,
+										 /* partial_subpaths = */ NIL,
+#endif
+										 /* pathkeys = */ NIL,
+										 rel->lateral_relids,
+										 /* parallel_workers = */ 0,
+										 /* parallel_aware = */ false,
+										 /* rows = */ -1));
 
 	/*
 	 * We set the cheapest-path fields immediately, just in case they were
@@ -513,6 +497,16 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 		case RTE_RESULT:
 			/* RESULT RTEs, in themselves, are no problem. */
 			break;
+#if PG19_GE
+		case RTE_GRAPH_TABLE:
+
+			/*
+			 * Shouldn't happen since these are replaced by subquery RTEs when
+			 * rewriting queries.
+			 */
+			Assert(false);
+			return;
+#endif
 #if PG18_GE
 		case RTE_GROUP:
 			/* Shouldn't happen; we're only considering baserels here. */
@@ -570,11 +564,7 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 	if (enable_partitionwise_join &&
 		rel->reloptkind == RELOPT_BASEREL &&
 		rte->relkind == RELKIND_PARTITIONED_TABLE &&
-#if PG16_GE
 		bms_is_empty(rel->attr_needed[InvalidAttrNumber - rel->min_attr]))
-#else
-		rel->attr_needed[InvalidAttrNumber - rel->min_attr] == NULL)
-#endif
 		rel->consider_partitionwise_join = true;
 
 	/*
@@ -613,10 +603,8 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		int			childRTindex;
 		RangeTblEntry *childRTE;
 		RelOptInfo *childrel;
-#if PG16_GE
 		List *childrinfos;
 		ListCell   *lc;
-#endif
 		ListCell   *parentvars;
 		ListCell   *childvars;
 
@@ -665,7 +653,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 * rel, and it also avoids an implementation restriction in
 		 * adjust_appendrel_attrs (it can't apply nullingrels to a non-Var).
 		 */
-#if PG16_GE
 		childrinfos = NIL;
 		foreach(lc, rel->joininfo)
 		{
@@ -678,10 +665,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 															 1, &appinfo));
 		}
 		childrel->joininfo = childrinfos;
-#else
-		childrel->joininfo =
-			(List *) adjust_appendrel_attrs(root, (Node *) rel->joininfo, 1, &appinfo);
-#endif
 
 		/*
 		 * Now for the child's targetlist.

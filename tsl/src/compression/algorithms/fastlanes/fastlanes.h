@@ -39,8 +39,39 @@
  *   |  33..64  | FL64  | FL64   | FL64   | FL128  |
  *   |  65..128 | FL128 | FL128  | FL128  | FL128  |
  *   | 129..256 | FL256 | FL256  | FL256  | FL256  |
+ *
+ * T=64 routes straight to FL128/256 (better SIMD utilisation than
+ * FL64 for 64-bit values).
  */
-extern fl_tier_width_t fl_tier_select(uint32 n, fl_elem_width_t t);
+static inline fl_tier_width_t
+fl_tier_select(uint32 n, fl_elem_width_t t)
+{
+	if (t == FL_ELEM_W64)
+	{
+		return (n <= 128) ? FL_TIER_W128 : FL_TIER_W256;
+	}
+	if (n <= 8 && t == FL_ELEM_W8)
+	{
+		return FL_TIER_W8;
+	}
+	if (n <= 16 && (t == FL_ELEM_W8 || t == FL_ELEM_W16))
+	{
+		return FL_TIER_W16;
+	}
+	if (n <= 32)
+	{
+		return FL_TIER_W32;
+	}
+	if (n <= 64)
+	{
+		return FL_TIER_W64;
+	}
+	if (n <= 128)
+	{
+		return FL_TIER_W128;
+	}
+	return FL_TIER_W256;
+}
 
 /* Required size for the tier (selected by fl_tier_select(N, T)).
  * Determines the sizes of pack output and unpack input buffers exactly.
@@ -50,7 +81,25 @@ extern size_t fl_required_bytes(uint32 n, uint8 w, fl_elem_width_t t);
 /* Bytes the encoded output carries for N elements (<= fl_required_bytes).
  * Matches the return of fl_pack / fl_pack_ffor; useful for sizing the
  * truncated prefix without running the encoder. */
-extern size_t fl_result_bytes(uint32 n, uint8 w, fl_elem_width_t t);
+static inline size_t
+fl_result_bytes(uint32 n, uint8 w, fl_elem_width_t t)
+{
+	/* tier is defined as bitwidth */
+	uint32 tier = (uint32) fl_tier_select(n, t);
+
+	/* stride length (s) is the number of 't' elems fit in the tier */
+	uint32 s = (t == FL_ELEM_W64) ? (tier >> 6) :
+			   (t == FL_ELEM_W32) ? (tier >> 5) :
+			   (t == FL_ELEM_W16) ? (tier >> 4) :
+									(tier >> 3);
+
+	/* n_pad is 'n' rounded up to full strides */
+	uint32 n_pad = (n + s - 1) & ~(s - 1);
+
+	/* the size is n_pad elems of w bits, rounded up to
+	 * full tier widths, expressed in bytes */
+	return (size_t) ((n_pad * w + tier - 1) & ~(tier - 1)) >> 3;
+}
 
 /* Required alignment for the _packed_ input and output buffers.
  * Recommended alignment for the input and output _values_.
@@ -96,3 +145,5 @@ extern size_t fl_pack_ffor(const void *values, void *packed, uint32 n, uint8 w, 
 						   uint64 base);
 extern void fl_unpack_ffor(const void *packed, void *values, uint32 n, uint8 w, fl_elem_width_t t,
 						   uint64 base);
+
+/* the inline implementation of fl_tier_select */

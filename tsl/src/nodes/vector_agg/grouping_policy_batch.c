@@ -116,7 +116,7 @@ gp_batch_reset(GroupingPolicy *obj)
 static void
 compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontext,
 						 TupleTableSlot *vector_slot, VectorAggDef *agg_def, void *agg_state,
-						 MemoryContext agg_extra_mctx)
+						 MemoryContext agg_extra_mctx, struct expr_cache_hash *expr_cache)
 {
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -128,11 +128,20 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontex
 	bool arg_isnull = true;
 	if (agg_def->argument != NULL)
 	{
+		/*
+		 * FILTER aggregates can't participate in caching because their arguments
+		 * are evaluated under a different filter. They don't participate in the
+		 * interning, so shouldn't have cache entries, but theoretically you
+		 * could get a shared pointer between FILTER and non-FILTER expression
+		 * in some other way, so disable caching here explicitly.
+		 */
+		struct expr_cache_hash *agg_expr_cache = agg_def->filter_clauses == NIL ? expr_cache : NULL;
 		const CompressedColumnValues values =
 			vector_slot_evaluate_expression(dcontext,
 											vector_slot,
 											agg_def->effective_batch_filter,
-											agg_def->argument);
+											agg_def->argument,
+											agg_expr_cache);
 
 		Assert(values.decompression_type != DT_Invalid);
 		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
@@ -188,7 +197,8 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontex
 }
 
 static void
-gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot)
+gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot,
+				   struct expr_cache_hash *expr_cache)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
 	uint16 total_batch_rows = 0;
@@ -224,7 +234,8 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSl
 								 vector_slot,
 								 agg_def,
 								 agg_state,
-								 policy->agg_extra_mctx);
+								 policy->agg_extra_mctx,
+								 expr_cache);
 	}
 
 	/*
@@ -236,8 +247,11 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSl
 		GroupingColumn *col = &policy->grouping_columns[i];
 		Assert(col->output_offset >= 0);
 
-		const CompressedColumnValues values =
-			vector_slot_evaluate_expression(dcontext, vector_slot, vector_qual_result, col->expr);
+		const CompressedColumnValues values = vector_slot_evaluate_expression(dcontext,
+																			  vector_slot,
+																			  vector_qual_result,
+																			  col->expr,
+																			  expr_cache);
 		Assert(values.decompression_type == DT_Scalar);
 
 		/*
@@ -266,7 +280,7 @@ gp_batch_should_emit(GroupingPolicy *gp)
 }
 
 static bool
-gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
+gp_batch_do_emit(GroupingPolicy *gp, List *aggregated_tlist, TupleTableSlot *aggregated_slot)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
 
@@ -275,14 +289,26 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		return false;
 	}
 
-	const int naggs = policy->num_agg_defs;
-	for (int i = 0; i < naggs; i++)
+	/*
+	 * Multiple aggregates can share a single transition state, as given by the
+	 * Aggref.aggtransno. The partial aggregation node still has to output them
+	 * separately, so here we have to walk the aggregated targetlist.
+	 */
+	const int tlist_length = list_length(aggregated_tlist);
+	for (int i = 0; i < tlist_length; i++)
 	{
-		VectorAggDef *agg_def = &policy->agg_defs[i];
-		void *agg_state = policy->agg_states[i];
+		TargetEntry *tlentry = list_nth_node(TargetEntry, aggregated_tlist, i);
+		if (!IsA(tlentry->expr, Aggref))
+		{
+			continue;
+		}
+
+		Aggref *aggref = castNode(Aggref, tlentry->expr);
+		VectorAggDef *agg_def = &policy->agg_defs[aggref->aggtransno];
+		void *agg_state = policy->agg_states[aggref->aggtransno];
 		agg_def->func.agg_emit(agg_state,
-							   &aggregated_slot->tts_values[agg_def->output_offset],
-							   &aggregated_slot->tts_isnull[agg_def->output_offset]);
+							   &aggregated_slot->tts_values[i],
+							   &aggregated_slot->tts_isnull[i]);
 	}
 
 	const int ngrp = policy->num_grouping_columns;

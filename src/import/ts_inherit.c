@@ -20,6 +20,7 @@
 #include <catalog/pg_type.h>
 #include <nodes/makefuncs.h>
 #include <optimizer/appendinfo.h>
+#include <optimizer/plancat.h>
 #include <optimizer/planner.h>
 #include <parser/parsetree.h>
 #include <utils/rel.h>
@@ -75,17 +76,23 @@ ts_expand_single_inheritance_child(PlannerInfo *root, RangeTblEntry *parentrte,
 	childrte->securityQuals = NIL;
 
 	/* No permission checking for child RTEs. */
-	#if PG16_LT
-	childrte->requiredPerms = 0;
-	#else
 	childrte->perminfoindex = 0;
-	#endif
 
 	/* Link not-yet-fully-filled child RTE into data structures */
 	parse->rtable = lappend(parse->rtable, childrte);
 	childRTindex = list_length(parse->rtable);
 	*childrte_p = childrte;
 	*childRTindex_p = childRTindex;
+
+#if PG19_GE
+	/*
+	 * PG19 caches each relation's NOT NULL columns in a per query hash during
+	 * inheritance expansion, which we bypass for chunks, so record the chunk
+	 * here the same way core does for get_relation_info to find later.
+	 */
+	if (childOID != parentOID)
+		get_relation_notnullatts(root, childrel);
+#endif
 
 	/*
 	 * Build an AppendRelInfo struct for each parent/child pair.

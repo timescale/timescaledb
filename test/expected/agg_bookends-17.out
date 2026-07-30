@@ -410,6 +410,106 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
                ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 
+-- do index scan when using FIRST/LAST in HAVING
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+--- QUERY PLAN ---
+ Result (actual rows=1.00 loops=1)
+   One-Time Filter: ((InitPlan 1).col1 IS NOT NULL)
+   InitPlan 1
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(temp, time) > 0;
+--- QUERY PLAN ---
+ Result (actual rows=1.00 loops=1)
+   One-Time Filter: ((InitPlan 1).col1 > '0'::double precision)
+   InitPlan 1
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
+                 Order: btest."time"
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (never executed)
+
+-- HAVING references a FIRST/LAST aggregate not present in the target list
+:PREFIX SELECT first(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+--- QUERY PLAN ---
+ Result (actual rows=1.00 loops=1)
+   One-Time Filter: ((InitPlan 1).col1 IS NOT NULL)
+   InitPlan 1
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+   InitPlan 2
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1.00 loops=1)
+                 Order: btest_1."time"
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (never executed)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (never executed)
+
+-- DISTINCT in HAVING while the target list has the same aggregate without DISTINCT
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(DISTINCT temp, time) > 0;
+--- QUERY PLAN ---
+ Result (actual rows=1.00 loops=1)
+   One-Time Filter: ((InitPlan 1).col1 > '0'::double precision)
+   InitPlan 1
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
+                 Order: btest."time"
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (never executed)
+   InitPlan 2
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1.00 loops=1)
+                 Order: btest_1."time"
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (never executed)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (never executed)
+
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(DISTINCT temp, time) IS NOT NULL;
+--- QUERY PLAN ---
+ Result (actual rows=1.00 loops=1)
+   One-Time Filter: ((InitPlan 1).col1 IS NOT NULL)
+   InitPlan 1
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+   InitPlan 2
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1.00 loops=1)
+                 Order: btest_1."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (actual rows=1.00 loops=1)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (never executed)
+
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
 --- QUERY PLAN ---
@@ -537,6 +637,54 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
                ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 
 ROLLBACK;
+-- two FIRST/LAST sharing the value column but ordering on different columns
+BEGIN;
+CREATE TABLE bookend_two_orderings(time timestamptz NOT NULL, time_alt timestamptz NOT NULL, val int NOT NULL);
+SELECT schema_name, table_name, created FROM create_hypertable('bookend_two_orderings', 'time');
+ schema_name |      table_name       | created 
+-------------+-----------------------+---------
+ public      | bookend_two_orderings | t
+
+INSERT INTO bookend_two_orderings
+SELECT '2025-01-01'::timestamptz + g * interval '1 minute',
+       '2025-01-01'::timestamptz + (201 - g) * interval '1 minute',
+       g
+FROM generate_series(1, 200) g;
+CREATE INDEX ON bookend_two_orderings(time);
+CREATE INDEX ON bookend_two_orderings(time_alt);
+:PREFIX SELECT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+--- QUERY PLAN ---
+ Result (actual rows=1.00 loops=1)
+   InitPlan 1
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_3_8_chunk_bookend_two_orderings_time_alt_idx on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+   InitPlan 2
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_3_8_chunk_bookend_two_orderings_time_idx1 on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=1.00 loops=1)
+
+:PREFIX SELECT last(val, time), last(val, time_alt) FROM bookend_two_orderings;
+--- QUERY PLAN ---
+ Result (actual rows=1.00 loops=1)
+   InitPlan 1
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan Backward using _hyper_3_8_chunk_bookend_two_orderings_time_alt_idx on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+   InitPlan 2
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan Backward using _hyper_3_8_chunk_bookend_two_orderings_time_idx1 on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=1.00 loops=1)
+
+-- DISTINCT sorts on the first/last results, so the optimization must be skipped
+SET enable_hashagg = off;
+:PREFIX SELECT DISTINCT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Sort (actual rows=1.00 loops=1)
+         Sort Key: (first(_hyper_3_8_chunk.val, _hyper_3_8_chunk."time")), (first(_hyper_3_8_chunk.val, _hyper_3_8_chunk.time_alt))
+         Sort Method: quicksort 
+         ->  Aggregate (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_3_8_chunk (actual rows=200.00 loops=1)
+
+RESET enable_hashagg;
+ROLLBACK;
 -- Test with NULL numeric values
 BEGIN;
 TRUNCATE btest_numeric;
@@ -561,24 +709,24 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
  Result (actual rows=1.00 loops=1)
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
+           ->  Index Scan Backward using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (actual rows=1.00 loops=1)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
 --- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           ->  Index Scan using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (actual rows=1.00 loops=1)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
-   ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_2_9_chunk (actual rows=2.00 loops=1)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
-   ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_2_9_chunk (actual rows=2.00 loops=1)
 
 -- NULL values followed by non-NULL values
 INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 1);
@@ -590,8 +738,8 @@ INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 2);
      ->  Limit (actual rows=1.00 loops=1)
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time"
-                 ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
-                 ->  Index Scan Backward using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (never executed)
+                 ->  Index Scan Backward using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (never executed)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
 --- QUERY PLAN ---
@@ -600,22 +748,22 @@ INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 2);
      ->  Limit (actual rows=1.00 loops=1)
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time" DESC
-                 ->  Index Scan using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (actual rows=1.00 loops=1)
-                 ->  Index Scan using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (never executed)
+                 ->  Index Scan using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (never executed)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
    ->  Append (actual rows=4.00 loops=1)
-         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
          ->  Seq Scan on _hyper_2_9_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2.00 loops=1)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
    ->  Append (actual rows=4.00 loops=1)
-         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
          ->  Seq Scan on _hyper_2_9_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2.00 loops=1)
 
 TRUNCATE btest_numeric;
 -- non-NULL values followed by NULL values
@@ -630,8 +778,8 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
      ->  Limit (actual rows=1.00 loops=1)
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time"
-                 ->  Index Scan Backward using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (actual rows=1.00 loops=1)
-                 ->  Index Scan Backward using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (never executed)
+                 ->  Index Scan Backward using _hyper_2_12_chunk_btest_numeric_time_idx on _hyper_2_12_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (never executed)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
 --- QUERY PLAN ---
@@ -640,22 +788,22 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
      ->  Limit (actual rows=1.00 loops=1)
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time" DESC
-                 ->  Index Scan using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
-                 ->  Index Scan using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (never executed)
+                 ->  Index Scan using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan using _hyper_2_12_chunk_btest_numeric_time_idx on _hyper_2_12_chunk (never executed)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
    ->  Append (actual rows=4.00 loops=1)
-         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2.00 loops=1)
          ->  Seq Scan on _hyper_2_11_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_2_12_chunk (actual rows=2.00 loops=1)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
    ->  Append (actual rows=4.00 loops=1)
-         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2.00 loops=1)
          ->  Seq Scan on _hyper_2_11_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_2_12_chunk (actual rows=2.00 loops=1)
 
 ROLLBACK;
 -- we want test results as part of the output too to make sure we produce correct output
@@ -874,6 +1022,34 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 ------
  35.3
 
+-- do index scan when using FIRST/LAST in HAVING
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+ last 
+------
+ 35.3
+
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(temp, time) > 0;
+ first 
+-------
+  36.5
+
+-- HAVING references a FIRST/LAST aggregate not present in the target list
+:PREFIX SELECT first(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+ first 
+-------
+  36.5
+
+-- DISTINCT in HAVING while the target list has the same aggregate without DISTINCT
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(DISTINCT temp, time) > 0;
+ first 
+-------
+  36.5
+
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(DISTINCT temp, time) IS NOT NULL;
+ last 
+------
+ 35.3
+
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
  last 
@@ -939,6 +1115,40 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 ------
  35.3
 
+ROLLBACK;
+-- two FIRST/LAST sharing the value column but ordering on different columns
+BEGIN;
+CREATE TABLE bookend_two_orderings(time timestamptz NOT NULL, time_alt timestamptz NOT NULL, val int NOT NULL);
+SELECT schema_name, table_name, created FROM create_hypertable('bookend_two_orderings', 'time');
+ schema_name |      table_name       | created 
+-------------+-----------------------+---------
+ public      | bookend_two_orderings | t
+
+INSERT INTO bookend_two_orderings
+SELECT '2025-01-01'::timestamptz + g * interval '1 minute',
+       '2025-01-01'::timestamptz + (201 - g) * interval '1 minute',
+       g
+FROM generate_series(1, 200) g;
+CREATE INDEX ON bookend_two_orderings(time);
+CREATE INDEX ON bookend_two_orderings(time_alt);
+:PREFIX SELECT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+ first | first 
+-------+-------
+     1 |   200
+
+:PREFIX SELECT last(val, time), last(val, time_alt) FROM bookend_two_orderings;
+ last | last 
+------+------
+  200 |    1
+
+-- DISTINCT sorts on the first/last results, so the optimization must be skipped
+SET enable_hashagg = off;
+:PREFIX SELECT DISTINCT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+ first | first 
+-------+-------
+     1 |   200
+
+RESET enable_hashagg;
 ROLLBACK;
 -- Test with NULL numeric values
 BEGIN;
@@ -1099,6 +1309,14 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT max(time), last(temp, time) FROM btest;
 -- can't do index scan when using FIRST/LAST in ORDER BY
 :PREFIX SELECT last(temp, time) FROM btest ORDER BY last(temp, time);
+-- do index scan when using FIRST/LAST in HAVING
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(temp, time) > 0;
+-- HAVING references a FIRST/LAST aggregate not present in the target list
+:PREFIX SELECT first(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+-- DISTINCT in HAVING while the target list has the same aggregate without DISTINCT
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(DISTINCT temp, time) > 0;
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(DISTINCT temp, time) IS NOT NULL;
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
 -- SELECT first(temp, time) FROM btest WHERE time >= '2017-01-20 09:00:47';
@@ -1118,6 +1336,24 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 :PREFIX SELECT abs(last(temp, time)) FROM btest;
 -- test nested FIRST/LAST in ORDER BY - no optimization possible
 :PREFIX SELECT abs(last(temp, time)) FROM btest ORDER BY abs(last(temp,time));
+ROLLBACK;
+-- two FIRST/LAST sharing the value column but ordering on different columns
+BEGIN;
+CREATE TABLE bookend_two_orderings(time timestamptz NOT NULL, time_alt timestamptz NOT NULL, val int NOT NULL);
+SELECT schema_name, table_name, created FROM create_hypertable('bookend_two_orderings', 'time');
+INSERT INTO bookend_two_orderings
+SELECT '2025-01-01'::timestamptz + g * interval '1 minute',
+       '2025-01-01'::timestamptz + (201 - g) * interval '1 minute',
+       g
+FROM generate_series(1, 200) g;
+CREATE INDEX ON bookend_two_orderings(time);
+CREATE INDEX ON bookend_two_orderings(time_alt);
+:PREFIX SELECT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+:PREFIX SELECT last(val, time), last(val, time_alt) FROM bookend_two_orderings;
+-- DISTINCT sorts on the first/last results, so the optimization must be skipped
+SET enable_hashagg = off;
+:PREFIX SELECT DISTINCT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+RESET enable_hashagg;
 ROLLBACK;
 -- Test with NULL numeric values
 BEGIN;
@@ -1222,6 +1458,14 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT max(time), last(temp, time) FROM btest;
 -- can't do index scan when using FIRST/LAST in ORDER BY
 :PREFIX SELECT last(temp, time) FROM btest ORDER BY last(temp, time);
+-- do index scan when using FIRST/LAST in HAVING
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(temp, time) > 0;
+-- HAVING references a FIRST/LAST aggregate not present in the target list
+:PREFIX SELECT first(temp, time) FROM btest HAVING last(temp, time) IS NOT NULL;
+-- DISTINCT in HAVING while the target list has the same aggregate without DISTINCT
+:PREFIX SELECT first(temp, time) FROM btest HAVING first(DISTINCT temp, time) > 0;
+:PREFIX SELECT last(temp, time) FROM btest HAVING last(DISTINCT temp, time) IS NOT NULL;
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
 -- SELECT first(temp, time) FROM btest WHERE time >= '2017-01-20 09:00:47';
@@ -1241,6 +1485,24 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 :PREFIX SELECT abs(last(temp, time)) FROM btest;
 -- test nested FIRST/LAST in ORDER BY - no optimization possible
 :PREFIX SELECT abs(last(temp, time)) FROM btest ORDER BY abs(last(temp,time));
+ROLLBACK;
+-- two FIRST/LAST sharing the value column but ordering on different columns
+BEGIN;
+CREATE TABLE bookend_two_orderings(time timestamptz NOT NULL, time_alt timestamptz NOT NULL, val int NOT NULL);
+SELECT schema_name, table_name, created FROM create_hypertable('bookend_two_orderings', 'time');
+INSERT INTO bookend_two_orderings
+SELECT '2025-01-01'::timestamptz + g * interval '1 minute',
+       '2025-01-01'::timestamptz + (201 - g) * interval '1 minute',
+       g
+FROM generate_series(1, 200) g;
+CREATE INDEX ON bookend_two_orderings(time);
+CREATE INDEX ON bookend_two_orderings(time_alt);
+:PREFIX SELECT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+:PREFIX SELECT last(val, time), last(val, time_alt) FROM bookend_two_orderings;
+-- DISTINCT sorts on the first/last results, so the optimization must be skipped
+SET enable_hashagg = off;
+:PREFIX SELECT DISTINCT first(val, time), first(val, time_alt) FROM bookend_two_orderings;
+RESET enable_hashagg;
 ROLLBACK;
 -- Test with NULL numeric values
 BEGIN;
@@ -2284,3 +2546,24 @@ SELECT time_bucket('3 year', time), last(time, longvalue) FROM partial_aggregati
  Thu Dec 31 16:00:00 2020 PST | Fri Jan 20 09:00:44 2023 PST
 
 SET enable_partitionwise_aggregate = OFF;
+-- test error message for types without btree operator class
+CREATE TABLE weather_observations (ts timestamptz NOT NULL, location point);
+SELECT create_hypertable('weather_observations', 'ts');
+         create_hypertable         
+-----------------------------------
+ (8,public,weather_observations,t)
+
+INSERT INTO weather_observations VALUES ('2024-03-01', '(1,2)'), ('2024-03-02', '(3,4)');
+-- should work: sort key is timestamptz
+SELECT first(location, ts) FROM weather_observations;
+ first 
+-------
+ (1,2)
+
+-- should raise a proper user-facing error, not an internal error
+\set ON_ERROR_STOP 0
+SELECT first(location, location) FROM weather_observations;
+ERROR:  could not find a < operator for type point
+SELECT last(location, location) FROM weather_observations;
+ERROR:  could not find a > operator for type point
+\set ON_ERROR_STOP 1

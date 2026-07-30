@@ -340,7 +340,6 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 		 * SELECT dev, dev FROM t; SELECT 1, dev FROM t; SELECT dev, time FROM t WHERE time = 100;
 		 */
 		SortGroupClause *distinct_clause = NULL;
-#if PG16_GE
 		foreach (lc, root->processed_distinctClause)
 		{
 			distinct_clause = (SortGroupClause *) lfirst(lc);
@@ -354,71 +353,7 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 				return NULL;
 			}
 		}
-#else
-		if (root->distinct_pathkeys)
-		{
-			foreach (lc, root->distinct_pathkeys)
-			{
-				PathKey *pathkey = (PathKey *) lfirst(lc);
-				if (pathkey->pk_eclass->ec_sortref)
-				{
-					foreach (lc, root->parse->distinctClause)
-					{
-						SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
-						if (clause->tleSortGroupRef == pathkey->pk_eclass->ec_sortref)
-						{
-							distinct_clause = clause;
-							break;
-						}
-					}
-					if (!distinct_clause)
-					{
-						return NULL;
-					}
-				}
-				/* We can get PathKey with ec_sortref = 0 in PG15
-				 * when False filter is not pushed into a relation with distinct column (i.e. it's
-				 * on top of a join), so need to support this case in PG15
-				 */
-				else
-				{
-					return NULL;
-				}
-
-				tlexpr = get_distint_clause_expr(root, distinct_clause);
-				if (tlexpr)
-				{
-					result = lappend(result, tlexpr);
-				}
-				else
-				{
-					return NULL;
-				}
-			}
-		}
-		/* In PG16+ we use LIMIT instead of UpperUniquePath for (numkeys = 0),
-		 * but in PG15- we would still create UpperUniquePath for (numkeys = 0), so handle this case
-		 * here
-		 */
-		else
-		{
-			foreach (lc, root->parse->distinctClause)
-			{
-				distinct_clause = lfirst_node(SortGroupClause, lc);
-				tlexpr = get_distint_clause_expr(root, distinct_clause);
-				if (tlexpr)
-				{
-					result = lappend(result, tlexpr);
-				}
-				else
-				{
-					return NULL;
-				}
-			}
-		}
-#endif
 	}
-#if PG16_GE
 	else if (stage == UPPERREL_GROUP_AGG)
 	{
 		/* Find all non-nested Aggref in the query target list */
@@ -486,7 +421,6 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 			}
 		}
 	}
-#endif
 	return result;
 }
 
@@ -510,9 +444,9 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 
 		foreach (lc, output_rel->pathlist)
 		{
-			if (IsA(lfirst(lc), UpperUniquePath))
+			if (IsA(lfirst(lc), UniquePathCompat))
 			{
-				UpperUniquePath *unique = (UpperUniquePath *) lfirst_node(UpperUniquePath, lc);
+				UniquePathCompat *unique = (UniquePathCompat *) lfirst_node(UniquePathCompat, lc);
 
 				/* We can handle DISTINCT on more than one key if all keys are guaranteed not-nulls.
 				 * To do so, we break down the SkipScan into subproblems: first
@@ -526,19 +460,12 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 					return;
 				}
 
-#if PG16_GE
-				/* since PG16+ we no longer create UpperUniquePath with 0 numkeys,
-				 * we create LIMIT path instead, so shouldn't be here with 0 numkeys
-				 */
 				Assert(unique->numkeys >= 1);
-#endif
 				dpinfo->unique_path = (Path *) unique;
 				break;
 			}
 		}
 	}
-	/* Sorted inputs for Distinct aggs weren't supported until PG16 */
-#if PG16_GE
 	/* Look for Aggpath with eligible Distinct aggregates */
 	else if (dpinfo->stage == UPPERREL_GROUP_AGG)
 	{
@@ -573,7 +500,6 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 			}
 		}
 	}
-#endif
 	else
 	{
 		return;
@@ -600,8 +526,8 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 	 * shallow copy is enough. */
 	if (dpinfo->stage == UPPERREL_DISTINCT)
 	{
-		UpperUniquePath *unique = makeNode(UpperUniquePath);
-		memcpy(unique, lfirst_node(UpperUniquePath, lc), sizeof(UpperUniquePath));
+		UniquePathCompat *unique = makeNode(UniquePathCompat);
+		memcpy(unique, lfirst_node(UniquePathCompat, lc), sizeof(UniquePathCompat));
 		dpinfo->unique_path = (Path *) unique;
 	}
 	else if (dpinfo->stage == UPPERREL_GROUP_AGG)
@@ -662,7 +588,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		return;
 	}
 
-	Assert(IsA(dpinfo.unique_path, UpperUniquePath) || IsA(dpinfo.unique_path, AggPath));
+	Assert(IsA(dpinfo.unique_path, UniquePathCompat) || IsA(dpinfo.unique_path, AggPath));
 	ListCell *lc;
 	foreach (lc, input_rel->pathlist)
 	{
@@ -673,7 +599,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		List *top_pathkeys = NULL;
 
 		/* Unique path has to be sorted on at least DISTINCT ON key */
-		if (IsA(dpinfo.unique_path, UpperUniquePath))
+		if (IsA(dpinfo.unique_path, UniquePathCompat))
 		{
 			if (!pathkeys_contained_in(dpinfo.unique_path->pathkeys, subpath->pathkeys))
 			{
@@ -740,6 +666,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			subpath = (Path *) create_merge_append_path(root,
 														merge_path->path.parent,
 														new_paths,
+#if PG19_GE
+														merge_path->child_append_relid_sets,
+#endif
 														merge_path->path.pathkeys,
 														NULL);
 			subpath->pathtarget = copy_pathtarget(merge_path->path.pathtarget);
@@ -764,15 +693,23 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 				continue;
 			}
 
-			subpath = (Path *) create_append_path(root,
-												  append_path->path.parent,
-												  new_paths,
-												  NULL,
-												  append_path->path.pathkeys,
-												  NULL,
-												  append_path->path.parallel_workers,
-												  append_path->path.parallel_aware,
-												  -1);
+			subpath = (Path *)
+				create_append_path(/* root = */ root,
+								   /* rel = */ append_path->path.parent,
+#if PG19_GE
+								   /* input = */
+								   (AppendPathInput){ .subpaths = new_paths,
+													  .child_append_relid_sets =
+														  append_path->child_append_relid_sets },
+#else
+								   /* subpaths = */ new_paths,
+								   /* partial_subpaths = */ NULL,
+#endif
+								   /* pathkeys = */ append_path->path.pathkeys,
+								   /* required_outer = */ NULL,
+								   /* parallel_workers = */ append_path->path.parallel_workers,
+								   /* parallel_aware = */ append_path->path.parallel_aware,
+								   /* rows = */ -1);
 			subpath->pathtarget = copy_pathtarget(append_path->path.pathtarget);
 		}
 		else if (ts_is_chunk_append_path(subpath))
@@ -807,14 +744,11 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 		Path *new_unique = NULL;
 
-		if (IsA(dpinfo.unique_path, UpperUniquePath))
+		if (IsA(dpinfo.unique_path, UniquePathCompat))
 		{
-			UpperUniquePath *unique = (UpperUniquePath *) dpinfo.unique_path;
-			new_unique = (Path *) create_upper_unique_path(root,
-														   output_rel,
-														   subpath,
-														   unique->numkeys,
-														   unique->path.rows);
+			UniquePathCompat *unique = (UniquePathCompat *) dpinfo.unique_path;
+			new_unique = (Path *)
+				create_unique_path(root, output_rel, subpath, unique->numkeys, unique->path.rows);
 			new_unique->pathtarget = unique->path.pathtarget;
 
 			if (proj)
@@ -1072,7 +1006,7 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	 * filter.
 	 */
 	List *clauses_needing_scan = NULL;
-	/* If a filter is not pushed down into compessed indexed data, it's a filter for which we will
+	/* If a filter is not pushed down into compressed indexed data, it's a filter for which we will
 	 * need to scan and decompress until filter is passed */
 	if ((Path *) index_path != child_path)
 	{

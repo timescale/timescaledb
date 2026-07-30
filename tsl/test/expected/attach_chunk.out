@@ -59,7 +59,7 @@ SELECT count(*) > 0 FROM attach_test WHERE time >= '2025-07-5'::timestamptz;
 
 -- Check the chunk and related metadata are set up correctly
 SELECT id AS "ATTACHED_CHUNK" FROM _timescaledb_catalog.chunk
-WHERE hypertable_id = :'HYPERTABLE_ID' AND table_name = 'regular_table_to_attach'; \gset
+WHERE hypertable_id = :'HYPERTABLE_ID' AND relid = (SELECT oid FROM pg_class WHERE relname = 'regular_table_to_attach' LIMIT 1); \gset
  ATTACHED_CHUNK 
 ----------------
               4

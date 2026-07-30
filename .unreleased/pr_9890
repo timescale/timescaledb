@@ -1,1 +1,0 @@
-Fixes: #9890 Fix incremental refresh batch boundaries to align with variable-width buckets and start only where a chunk and an invalidation overlap

@@ -19,6 +19,7 @@
 #include <optimizer/restrictinfo.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
+#include <storage/lwlock.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/ruleutils.h>
@@ -1000,7 +1001,7 @@ ts_constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 			 * transformations again. This might allow us to exclude chunks
 			 * based on a parameterized time_bucket expression.
 			 */
-			Expr *additional_clause = ts_transform_time_bucket_comparison(constified);
+			Expr *additional_clause = ts_transform_nested_time_bucket_comparison(constified);
 			if (additional_clause != NULL)
 			{
 				/*

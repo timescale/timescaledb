@@ -2119,6 +2119,11 @@ CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, u as item FROM uuid
 DROP TABLE base_uuids;
 RESET timescaledb.enable_uuid_compression;
 DROP table uuid_set;
+-- Corrupt compressed data with zero header
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.compressed_data_in('AA=='::cstring);
+ERROR:  the compressed data is corrupt
+\set ON_ERROR_STOP 1
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --
 -----------------------------------------------
@@ -2147,9 +2152,9 @@ group by 2, 3 order by 1 desc
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
    144 | XX001       | true
-    89 | XX001       | XX001
+    93 | XX001       | XX001
     54 | true        | true
-    23 | 08P01       | 08P01
+    24 | 08P01       | 08P01
 
 \set algo deltadelta
 \set type int8
@@ -2161,7 +2166,7 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   107 | XX001       | XX001
+   108 | XX001       | XX001
     69 | true        | true
     68 | XX001       | true
     13 | 08P01       | 08P01
@@ -2194,7 +2199,7 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    83 | XX001       | XX001
+    84 | XX001       | XX001
     13 | XX001       | true
      5 | 08P01       | 08P01
      5 | true        | true
@@ -2226,7 +2231,7 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    37 | XX001       | XX001
+    49 | XX001       | XX001
      2 | 08P01       | 08P01
      1 | true        | XX001
      1 | true        | true

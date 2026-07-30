@@ -291,7 +291,7 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 }
 
 HypertableRestrictInfo *
-ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
+ts_hypertable_restrict_info_create(Hypertable *ht)
 {
 	/* If chunk skipping is disabled, we have to empty range_space
 	 * in case it was cached earlier.
@@ -1062,7 +1062,7 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 
 		if (NULL != nested_oids)
 		{
-			slot_chunk_oids = lappend_oid(slot_chunk_oids, chunk->table_id);
+			slot_chunk_oids = lappend_oid(slot_chunk_oids, chunk->fd.relid);
 		}
 
 		slice = chunk->cube->slices[0];

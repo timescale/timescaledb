@@ -1407,7 +1407,7 @@ select * from
 -- Take care to reference the correct RTE
 --
 
--- select atts.relid::regclass, s.* from pg_stats s join
+-- select atts.relid, s.* from pg_stats s join
 --     pg_attribute a on s.attname = a.attname and s.tablename =
 --     a.attrelid::regclass::text join (select unnest(indkey) attnum,
 --     indexrelid from pg_index i) atts on atts.attnum = a.attnum where

@@ -142,10 +142,10 @@ SELECT * FROM "newname";
  1257894000000000000 | dev2      |      1.5 |        1 |          | 
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
 
-SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
-  1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | compression_state | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------
+  1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |      0
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA "newschema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
@@ -167,15 +167,15 @@ SELECT * FROM "newschema"."newname";
  1257894000000000000 | dev2      |      1.5 |        1 |          | 
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
 
-SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
-  1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | compression_state | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+--------
+  1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |      0
 
 DROP TABLE "newschema"."newname";
-SELECT * FROM _timescaledb_catalog.hypertable;
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size | compression_state | compressed_hypertable_id | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | compression_state | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+--------
 
 SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_catalog', '_timescaledb_internal');
         schema         |                       name                       
@@ -195,10 +195,12 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | continuous_aggs_jobs_refresh_ranges
  _timescaledb_catalog  | continuous_aggs_materialization_invalidation_log
  _timescaledb_catalog  | continuous_aggs_materialization_ranges
+ _timescaledb_catalog  | continuous_aggs_tenant_tracking
  _timescaledb_catalog  | continuous_aggs_watermark
  _timescaledb_catalog  | dimension
  _timescaledb_catalog  | dimension_slice
  _timescaledb_catalog  | hypertable
+ _timescaledb_catalog  | hypertable_cagg_settings
  _timescaledb_catalog  | metadata
  _timescaledb_catalog  | tablespace
  _timescaledb_internal | bgw_job_stat

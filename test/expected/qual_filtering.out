@@ -124,6 +124,11 @@ SELECT count(*) FROM qual_filter_tb WHERE time_bucket('1 day', ts) < '2024-03-10
 -------
      9
 
+-- A zero width period is rejected
+\set ON_ERROR_STOP 0
+SELECT count(*) FROM qual_filter_tb WHERE time_bucket(INTERVAL '0', ts) < '2024-03-10'::timestamptz;
+ERROR:  period must be greater than 0
+\set ON_ERROR_STOP 1
 DROP TABLE qual_filter_tb;
 -- A timestamptz constant against a date time_bucket is not transformed.
 CREATE TABLE qual_filter_tb_date(d date NOT NULL);

@@ -40,13 +40,13 @@ WHERE c.relkind IN ('r','p','')
 ORDER BY 1,2;
 
 \echo 'List of hypertables'
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 
 \echo 'List of chunk indexes'
 SELECT ch.id AS chunk_id, ci.indexrelid::regclass::text AS index_name, h.id AS hypertable_id
 FROM _timescaledb_catalog.hypertable h
 JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = h.id
-JOIN pg_index ci ON ci.indrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+JOIN pg_index ci ON ci.indrelid = ch.relid
 ORDER BY h.id, ch.id, ci.indrelid::regclass::text;
 
 \echo 'Size of hypertables'
@@ -59,8 +59,8 @@ SELECT hypertable,
        SELECT *, total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes FROM (
               SELECT
               pgc.oid::regclass::text as hypertable,
-              sum(pg_total_relation_size('"' || c.schema_name || '"."' || c.table_name || '"'))::bigint as total_bytes,
-              sum(pg_indexes_size('"' || c.schema_name || '"."' || c.table_name || '"'))::bigint AS index_bytes,
+              sum(pg_total_relation_size(c.relid))::bigint as total_bytes,
+              sum(pg_indexes_size(c.relid))::bigint AS index_bytes,
               sum(pg_total_relation_size(reltoastrelid))::bigint AS toast_bytes
               FROM
               _timescaledb_catalog.hypertable h,
@@ -92,9 +92,9 @@ SELECT *,
       total_bytes-index_bytes-COALESCE(toast_bytes,0) AS table_bytes
       FROM (
        SELECT c.id as chunk_id,
-       '"' || c.schema_name || '"."' || c.table_name || '"' as chunk_table,
-       pg_total_relation_size('"' || c.schema_name || '"."' || c.table_name || '"') AS total_bytes,
-       pg_indexes_size('"' || c.schema_name || '"."' || c.table_name || '"') AS index_bytes,
+       c.relid::text as chunk_table,
+       pg_total_relation_size(c.relid) AS total_bytes,
+       pg_indexes_size(c.relid) AS index_bytes,
        pg_total_relation_size(reltoastrelid) AS toast_bytes,
        array_agg(d.column_name ORDER BY d.interval_length, d.column_name ASC) as partitioning_columns,
        array_agg(d.column_type ORDER BY d.interval_length, d.column_name ASC) as partitioning_column_types,

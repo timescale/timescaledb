@@ -5,6 +5,7 @@
  */
 #include "rewrite_with_caggs.h"
 
+#include <access/attmap.h>
 #include <optimizer/tlist.h>
 #include <parser/parse_relation.h>
 #include <rewrite/rewriteDefine.h>
@@ -16,8 +17,6 @@
 #include "import/setrefs.h"
 #include "invalidation.h"
 #include "utils.h"
-
-#if PG16_GE
 
 static bool match_lists(List *src, List *tgt);
 
@@ -999,5 +998,3 @@ continuous_agg_apply_rewrites(Query *parse)
 	}
 	return result;
 }
-
-#endif

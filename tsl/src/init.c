@@ -7,6 +7,7 @@
 #include <fmgr.h>
 #include <storage/ipc.h>
 
+#include "bgw_policy/compaction_api.h"
 #include "bgw_policy/compression_api.h"
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/job.h"
@@ -54,10 +55,6 @@ TS_MODULE_MAGIC("timescaledb-tsl");
 #error "cannot compile the TSL for ApacheOnly mode"
 #endif
 
-#if PG16_LT
-extern void PGDLLEXPORT _PG_init(void);
-#endif
-
 /*
  * Cross module function initialization.
  *
@@ -87,6 +84,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_check = policy_reorder_check,
 	.policy_reorder_remove = policy_reorder_remove,
+	.policy_compaction_add = policy_compaction_add,
+	.policy_compaction_check = policy_compaction_check,
+	.policy_compaction_remove = policy_compaction_remove,
 	.policy_retention_add = policy_retention_add,
 	.policy_retention_proc = policy_retention_proc,
 	.policy_retention_check = policy_retention_check,
@@ -129,9 +129,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_add_column = continuous_agg_add_column,
-#if PG16_GE
 	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
-#endif
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
@@ -142,6 +140,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
 	.compressed_data_column_size = tsl_compressed_data_column_size,
 	.compressed_data_to_array = tsl_compressed_data_to_array,
+	.decompress_batch = tsl_decompress_batch,
 	.compressed_data_send = tsl_compressed_data_send,
 	.compressed_data_recv = tsl_compressed_data_recv,
 	.compressed_data_in = tsl_compressed_data_in,
@@ -166,6 +165,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.bloom1_hash = bloom1_hash,
 	.bloom1_get_hash_function = bloom1_get_hash_function,
 	.process_compress_table = tsl_process_compress_table,
+	.process_granular_refresh_options = tsl_process_granular_refresh_options,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
 	.compress_chunk = tsl_compress_chunk,
@@ -188,6 +188,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
+	.compact_chunk = tsl_compact_chunk,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
 	.preprocess_query_tsl = tsl_preprocess_query,

@@ -1263,7 +1263,7 @@ DROP MATERIALIZED VIEW mat_m1;
 NOTICE:  drop cascades to 3 other objects
 DROP MATERIALIZED VIEW mat_m2;
 NOTICE:  drop cascades to 3 other objects
-/* Concurrent policies aren't allowed on hierarchical continuous aggs */
+/* Multiple refresh policies on hierarchical continuous aggs */
 CREATE MATERIALIZED VIEW mat_m1
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -1301,10 +1301,21 @@ SELECT alter_job(:JOB_ID, next_start => '2000-01-01'::timestamptz);
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1105,"@ 12 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 30 days"", ""start_offset"": null, ""mat_hypertable_id"": 11}","Sat Jan 01 00:00:00 2000 PST",_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1105]")
 
+-- Multiple non-overlapping policies on the same hierarchical cagg are allowed
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', '29 days'::interval, NULL, '12 h'::interval) AS "JOB_ID_HIER2" \gset
+SELECT config->>'start_offset' AS start_offset, config->>'end_offset' AS end_offset
+FROM _timescaledb_config.bgw_job
+WHERE id IN (:JOB_ID, :JOB_ID_HIER2)
+ORDER BY id;
+ start_offset | end_offset 
+--------------+------------
+              | @ 30 days
+ @ 29 days    | 
+
 \set ON_ERROR_STOP 0
--- Multiple policies on hierarchical cagg should not be allowed
-SELECT add_continuous_aggregate_policy('mat_m1_rollup', '29 days'::interval, NULL, '12 h'::interval);
-ERROR:  multiple refresh policies are not supported for hierarchical continuous aggregates
+-- Overlapping policies on a hierarchical cagg are still rejected
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', '40 days'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1_rollup"
 \set ON_ERROR_STOP 1
 -- Adding the exact same policy with if_not_exists should succeed (not error)
 SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval, if_not_exists => true);
@@ -1318,7 +1329,7 @@ SELECT add_continuous_aggregate_policy('mat_m1_rollup2', NULL, '30 days'::interv
 SELECT alter_job(:JOB_ID2, next_start => '2000-01-01'::timestamptz);
                                                                                                                                      alter_job                                                                                                                                     
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1106,"@ 12 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 30 days"", ""start_offset"": null, ""mat_hypertable_id"": 12}","Sat Jan 01 00:00:00 2000 PST",_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1106]")
+ (1107,"@ 12 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 30 days"", ""start_offset"": null, ""mat_hypertable_id"": 12}","Sat Jan 01 00:00:00 2000 PST",_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1107]")
 
 TRUNCATE mat_m1;
 TRUNCATE mat_m1_rollup;
@@ -1335,11 +1346,14 @@ SELECT remove_continuous_aggregate_policy('mat_m1_rollup');
 ------------------------------------
  
 
-SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, NULL, '12 h'::interval) AS m1_rollup_job \gset
+/* Create two policies on the hierarchical cagg mat_m1_rollup as well */
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval, buckets_per_batch => 0) AS m1_rollup_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', '30 days'::interval, NULL, '12 h'::interval, buckets_per_batch => 0) AS m1_rollup_job_2 \gset
 /* Refresh both continuous aggs */
 CALL run_job(:agg_m1_job_1);
 CALL run_job(:agg_m1_job_2);
-CALL run_job(:m1_rollup_job);
+CALL run_job(:m1_rollup_job_1);
+CALL run_job(:m1_rollup_job_2);
 /* Insert new data to generate invalidations */
 INSERT INTO overlap_test_timestamptz
 SELECT t, (i % 5), random() * 100
@@ -1373,8 +1387,9 @@ GROUP BY ht.schema_name, ht.table_name;
 -----------------------------+-------+------------------------------+------------------------------
  _materialized_hypertable_10 |    54 | Mon Jan 01 00:00:00 2024 UTC | Sun Jun 01 00:00:00 2025 UTC
 
-/* Run L2 policy */
-CALL run_job(:m1_rollup_job);
+/* Run both L2 policies */
+CALL run_job(:m1_rollup_job_1);
+CALL run_job(:m1_rollup_job_2);
 /* L2 must be consistent with L1 after both policies run */
 SELECT r.bucket,
        (r.counta = l.reagg_counta) AS counta_match,
@@ -1408,7 +1423,7 @@ ORDER BY 1;
  Thu May 01 00:00:00 2025 UTC | t            | t
  Sun Jun 01 00:00:00 2025 UTC | t            | t
 
-/* Restore timezone */
+/* Restore timezone and mock time */
 SET timezone TO PST8PDT;
 DROP MATERIALIZED VIEW mat_m1_rollup;
 NOTICE:  drop cascades to 18 other objects

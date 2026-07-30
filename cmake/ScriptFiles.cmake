@@ -32,6 +32,7 @@ set(SOURCE_FILES
     util_internal_table_ddl.sql
     chunk_constraint.sql
     partitioning.sql
+    foreign_key.sql
     ddl_api.sql
     ddl_triggers.sql
     bookend.sql

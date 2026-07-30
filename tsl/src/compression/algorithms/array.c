@@ -49,8 +49,7 @@ array_compressed_has_nulls(const CompressedDataHeader *header)
 	return ac->has_nulls;
 }
 
-static void
-pg_attribute_unused() assertions(void)
+pg_attribute_unused() static void assertions(void)
 {
 	ArrayCompressed test_val = { .vl_len_ = { 0 } };
 	Simple8bRleSerialized test_simple8b = { 0 };

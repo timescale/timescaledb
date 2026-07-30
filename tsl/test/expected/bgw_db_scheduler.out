@@ -1574,6 +1574,102 @@ FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :failover_job_id;
 ---------+----------------------+-----------------------+-----------------------
  t       | t                    | t                     | t
 
+--
+-- Test that jobs with the same fixed schedule start time are not starved when
+-- there is only one job worker available. All five jobs take 500ms and are due
+-- every second; after 5 seconds of scheduler time, each job should have run.
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
+
+CREATE OR REPLACE FUNCTION ts_bgw_worker_reserve() RETURNS BOOL
+AS '$libdir/timescaledb', 'ts_bgw_worker_reserve' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_bgw_worker_release() RETURNS VOID
+AS '$libdir/timescaledb', 'ts_bgw_worker_release' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_bgw_num_unreserved() RETURNS INT
+AS '$libdir/timescaledb', 'ts_bgw_num_unreserved' LANGUAGE C VOLATILE;
+CREATE TEMP TABLE starvation_reserved_workers(reserved_workers INTEGER);
+DO $$
+DECLARE
+  reserved_workers INTEGER := 0;
+BEGIN
+  WHILE ts_bgw_num_unreserved() > 1 LOOP
+    IF NOT ts_bgw_worker_reserve() THEN
+      RAISE EXCEPTION 'failed to reserve test background worker';
+    END IF;
+    reserved_workers := reserved_workers + 1;
+  END LOOP;
+
+  INSERT INTO starvation_reserved_workers VALUES (reserved_workers);
+END
+$$;
+CREATE OR REPLACE PROCEDURE starvation_sleep_job(job_id INT, config JSONB)
+LANGUAGE PLPGSQL AS $$
+BEGIN
+  PERFORM pg_sleep(0.5);
+END
+$$;
+INSERT INTO _timescaledb_catalog.bgw_job(
+  application_name, schedule_interval, max_runtime, max_retries, retry_period,
+  proc_name, proc_schema, owner, scheduled, fixed_schedule, initial_start)
+SELECT format('starvation_job_%s', job_no)::NAME,
+       INTERVAL '1 second',
+       INTERVAL '10 seconds',
+       5,
+       INTERVAL '1 second',
+       'starvation_sleep_job'::NAME,
+       'public'::NAME,
+       CURRENT_ROLE::regrole,
+       TRUE,
+       TRUE,
+       '2000-01-01 00:00:00+00'::timestamptz
+FROM generate_series(1, 5) job_no;
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(5000);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+
+SELECT count(*) FILTER (WHERE COALESCE(s.total_successes, 0) > 0) AS jobs_that_ran,
+       count(*) AS jobs_total
+FROM _timescaledb_catalog.bgw_job j
+LEFT JOIN _timescaledb_internal.bgw_job_stat s ON s.job_id = j.id
+WHERE j.application_name LIKE 'starvation_job_%';
+ jobs_that_ran | jobs_total 
+---------------+------------
+             5 |          5
+
+SELECT j.application_name,
+       COALESCE(s.total_successes, 0) > 0 AS ran
+FROM _timescaledb_catalog.bgw_job j
+LEFT JOIN _timescaledb_internal.bgw_job_stat s ON s.job_id = j.id
+WHERE j.application_name LIKE 'starvation_job_%'
+ORDER BY j.id;
+ application_name | ran 
+------------------+-----
+ starvation_job_1 | t
+ starvation_job_2 | t
+ starvation_job_3 | t
+ starvation_job_4 | t
+ starvation_job_5 | t
+
+DO $$
+BEGIN
+  FOR i IN 1..(SELECT reserved_workers FROM starvation_reserved_workers) LOOP
+    PERFORM ts_bgw_worker_release();
+  END LOOP;
+END
+$$;
 -- clean up jobs
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();

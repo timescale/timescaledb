@@ -209,8 +209,8 @@ store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 
 	const int total_bytes = value_bytes + VARHDRSZ;
 	Assert(DatumGetPointer(*column_values->output_value) != NULL);
-	SET_VARSIZE(*column_values->output_value, total_bytes);
-	memcpy(VARDATA(*column_values->output_value),
+	SET_VARSIZE(DatumGetPointer(*column_values->output_value), total_bytes);
+	memcpy(VARDATA(DatumGetPointer(*column_values->output_value)),
 		   &((uint8 *) column_values->buffers[2])[start],
 		   value_bytes);
 }

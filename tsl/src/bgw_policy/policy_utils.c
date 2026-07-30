@@ -21,11 +21,6 @@ get_open_dimension_for_hypertable(const Hypertable *ht, bool fail_if_not_found)
 {
 	int32 mat_id = ht->fd.id;
 
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		elog(ERROR, "invalid operation on compressed hypertable");
-	}
-
 	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);
 	if (IS_INTEGER_TYPE(partitioning_type))

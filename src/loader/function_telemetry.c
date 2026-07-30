@@ -12,6 +12,7 @@
 #include <storage/lwlock.h>
 #include <storage/shmem.h>
 
+#include "compat/compat.h"
 #include "loader/function_telemetry.h"
 
 // Function telemetry hash table size. Sized to be large enough that we're
@@ -49,7 +50,10 @@ ts_function_telemetry_shmem_startup()
 
 	function_telemetry_hash = ShmemInitHash("timescaledb function telemetry hash",
 											FN_TELEMETRY_HASH_SIZE,
+#if PG19_LT
+											/* pre-PG19 took separate initial and maximum sizes */
 											FN_TELEMETRY_HASH_SIZE,
+#endif
 											&hash_info,
 											HASH_ELEM | HASH_BLOBS);
 	LWLockRelease(AddinShmemInitLock);

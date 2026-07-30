@@ -16,12 +16,18 @@ TEST_TIMEOUT=${TEST_TIMEOUT:-120}
 
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
 # to get the name of the test
-CURRENT_TEST=${PGAPPNAME##pg_regress/}
+TEST_BASE_NAME=${PGAPPNAME##pg_regress/}
+
+# if this is a versioned test our name will have version as suffix
+# so we cut off suffix to get base name
+if [[ ${TEST_BASE_NAME} == *-1[0-9] ]]; then
+  TEST_BASE_NAME=${TEST_BASE_NAME%???}
+fi
 
 # Since different PG version tests cannot run in parallel in the same instance,
 # we remove the trailing version suffix to get a good symbol that can be
 # used as identifier as well.
-TEST_DBNAME="db_${CURRENT_TEST%%-[0-9][0-9]}"
+TEST_DBNAME="db_${TEST_BASE_NAME}"
 
 # Read the extension version from version.config
 read -r VERSION < ${CURRENT_DIR}/../version.config
@@ -133,6 +139,7 @@ ${TIMEOUT_CMD} ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \
      -v VERBOSITY=terse \
      -v ECHO=all \
+     -v TEST_BASE_NAME=${TEST_BASE_NAME} \
      -v TEST_DBNAME="${TEST_DBNAME}" \
      -v TEST_TABLESPACE1_PREFIX=${TEST_TABLESPACE1_PREFIX} \
      -v TEST_TABLESPACE2_PREFIX=${TEST_TABLESPACE2_PREFIX} \

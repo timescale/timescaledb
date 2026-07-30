@@ -15,7 +15,8 @@
 static ArrowArray *
 FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, MemoryContext dest_mctx)
 {
-	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
+	StringInfoData si = { .data = DatumGetPointer(compressed),
+						  .len = VARSIZE(DatumGetPointer(compressed)) };
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
 	Simple8bRleSerialized *deltas_compressed = bytes_deserialize_simple8b_and_advance(&si);
 

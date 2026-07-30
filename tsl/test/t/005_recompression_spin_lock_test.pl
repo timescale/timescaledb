@@ -150,6 +150,12 @@ $s2->query_safe("ABORT");
 $s3->query_safe(
 	"SELECT debug_waitpoint_release('chunk_recompress_after_latch');");
 
+# Session 1 re-acquires the lock asynchronously after the waitpoint is
+# released, so poll until it shows up before asserting.
+$node->poll_query_until('postgres',
+	"SELECT count(*) > 0 FROM pg_locks WHERE relation::regclass::text LIKE '%hyper_1_%chunk' AND granted AND mode = 'ExclusiveLock';"
+) or die "timed out waiting for ExclusiveLock on uncompressed chunk";
+
 # Verify ExclusiveLock on uncompressed chunk
 $result = $node->safe_psql('postgres',
 	"SELECT relation::regclass::text FROM pg_locks WHERE relation::regclass::text LIKE '%hyper_1_%chunk' AND granted AND mode = 'ExclusiveLock';"

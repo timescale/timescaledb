@@ -125,8 +125,8 @@ create_trigger_handler(const Trigger *trigger, void *arg)
 	if (trigger && TRIGGER_FOR_ROW(trigger->tgtype) && !trigger->tgisinternal)
 	{
 		ts_trigger_create_on_chunk(trigger->tgoid,
-								   NameStr(chunk->fd.schema_name),
-								   NameStr(chunk->fd.table_name));
+								   ts_chunk_get_schema_name(chunk),
+								   ts_chunk_get_table_name(chunk));
 	}
 
 	return true;

@@ -116,7 +116,7 @@ SELECT * FROM timescaledb_experimental.policies WHERE proc_name ~ 'refresh' ORDE
  relation_name | relation_schema | schedule_interval |      proc_schema       |              proc_name              |                            config                             |   hypertable_schema   |      hypertable_name       
 ---------------+-----------------+-------------------+------------------------+-------------------------------------+---------------------------------------------------------------+-----------------------+----------------------------
  mat_m1        | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 2} | _timescaledb_internal | _materialized_hypertable_2
- mat_m2        | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 4} | _timescaledb_internal | _materialized_hypertable_4
+ mat_m2        | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 3} | _timescaledb_internal | _materialized_hypertable_3
 
 SELECT timescaledb_experimental.remove_all_policies('mat_m2');
  remove_all_policies 
@@ -189,11 +189,11 @@ ERROR:  "int_tab" is not a continuous aggregate
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
 ERROR:  invalid parameter value for start_offset
 HINT:  Use time interval of type integer with the continuous aggregate.
+-- terse verbosity: the not-found message differs between PG versions
+\set VERBOSITY terse
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
-ERROR:  function add_continuous_aggregate_policy(unknown, interval, integer) does not exist
-LINE 1: SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::in...
-               ^
-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ERROR:  function add_continuous_aggregate_policy(unknown, interval, integer) does not exist at character 8
+\set VERBOSITY default
 SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
 ERROR:  invalid parameter value for end_offset
 HINT:  Use time interval of type integer with the continuous aggregate.
@@ -312,7 +312,7 @@ CREATE TABLE continuous_agg_max_mat_date(time DATE);
 SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
             create_hypertable             
 ------------------------------------------
- (5,public,continuous_agg_max_mat_date,t)
+ (4,public,continuous_agg_max_mat_date,t)
 
 CREATE MATERIALIZED VIEW max_mat_view_date
 	WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -568,8 +568,8 @@ SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
    relation_name   | relation_schema | schedule_interval |      proc_schema       |              proc_name              |                                     config                                     |   hypertable_schema   |      hypertable_name       
 -------------------+-----------------+-------------------+------------------------+-------------------------------------+--------------------------------------------------------------------------------+-----------------------+----------------------------
- max_mat_view_date | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 6} | _timescaledb_internal | _materialized_hypertable_6
- max_mat_view_date | public          | @ 1 day           | _timescaledb_functions | policy_retention                    | {"drop_after": "@ 25 days", "hypertable_id": 6}                                | _timescaledb_internal | _materialized_hypertable_6
+ max_mat_view_date | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 5} | _timescaledb_internal | _materialized_hypertable_5
+ max_mat_view_date | public          | @ 1 day           | _timescaledb_functions | policy_retention                    | {"drop_after": "@ 25 days", "hypertable_id": 5}                                | _timescaledb_internal | _materialized_hypertable_5
 
 SELECT timescaledb_experimental.remove_all_policies(NULL); -- should fail
  remove_all_policies 
@@ -667,7 +667,7 @@ SELECT config FROM _timescaledb_catalog.bgw_job
 WHERE id = :job_id;
                                      config                                     
 --------------------------------------------------------------------------------
- {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 6}
+ {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 5}
 
 INSERT INTO continuous_agg_max_mat_date
 	SELECT generate_series('2019-09-01'::date, '2019-09-10'::date, '1 day');
@@ -681,7 +681,7 @@ SELECT create_hypertable('continuous_agg_timestamp', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
            create_hypertable           
 ---------------------------------------
- (8,public,continuous_agg_timestamp,t)
+ (6,public,continuous_agg_timestamp,t)
 
 CREATE MATERIALIZED VIEW max_mat_view_timestamp
 	WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -721,7 +721,7 @@ SELECT config FROM _timescaledb_catalog.bgw_job
 WHERE id = :job_id;
                                      config                                      
 ---------------------------------------------------------------------------------
- {"end_offset": "@ 1 hour", "start_offset": "@ 15 days", "mat_hypertable_id": 9}
+ {"end_offset": "@ 1 hour", "start_offset": "@ 15 days", "mat_hypertable_id": 7}
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
@@ -1055,7 +1055,7 @@ CREATE TABLE metrics (
 SELECT create_hypertable('metrics', 'time');
    create_hypertable   
 -----------------------
- (18,public,metrics,t)
+ (12,public,metrics,t)
 
 INSERT INTO metrics (time, device_id, device_id_peer, v0, v1, v2, v3)
 SELECT time,
@@ -1071,7 +1071,7 @@ ALTER TABLE metrics SET ( timescaledb.compress );
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_18_19_chunk
+ _timescaledb_internal._hyper_12_19_chunk
 
 CREATE MATERIALIZED VIEW metrics_cagg WITH (timescaledb.continuous,
   timescaledb.materialized_only = true)
@@ -1182,7 +1182,7 @@ cpu DOUBLE PRECISION);
 SELECT create_hypertable('sensor_data','time');
      create_hypertable     
 ---------------------------
- (22,public,sensor_data,t)
+ (14,public,sensor_data,t)
 
 INSERT INTO sensor_data(time, sensor_id, cpu, temperature)
 SELECT
@@ -1241,7 +1241,7 @@ CREATE TABLE t(a integer NOT NULL, b integer);
 SELECT create_hypertable('t', 'a', chunk_time_interval=> 10);
  create_hypertable 
 -------------------
- (25,public,t,t)
+ (17,public,t,t)
 
 CREATE OR REPLACE FUNCTION unix_now() returns int LANGUAGE SQL IMMUTABLE as $$ SELECT extract(epoch from now())::INT $$;
 SELECT set_integer_now_func('t', 'unix_now');

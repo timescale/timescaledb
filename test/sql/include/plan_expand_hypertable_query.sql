@@ -173,6 +173,7 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time, m2.time;
 
 \qecho time_bucket exclusion
+
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 10::bigint ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 11::bigint ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) <= 10::bigint ORDER BY time;
@@ -184,6 +185,11 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time, 5) <= 10::bigint ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE 10::bigint > time_bucket(10, time, 5) ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE 11::bigint > time_bucket(10, time, 5) ORDER BY time;
+
+-- Must be disabled by the optimizations GUC.
+set timescaledb.enable_optimizations to off;
+:PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 10::bigint ORDER BY time;
+reset timescaledb.enable_optimizations;
 
 \qecho timestamp time_bucket exclusion
 SELECT count(DISTINCT tableoid) FROM metrics_timestamp;

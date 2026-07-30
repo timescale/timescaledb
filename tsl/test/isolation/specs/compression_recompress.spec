@@ -78,7 +78,7 @@ step "s1_decompress" {
 }
 
 step "s1_show_chunk_state" {
-   SELECT status FROM _timescaledb_catalog.chunk WHERE format('%I.%I', schema_name, table_name)::regclass IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
+   SELECT status FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
    SELECT count(*) FROM sensor_data;
 }
 

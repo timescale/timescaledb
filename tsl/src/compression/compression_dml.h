@@ -31,7 +31,7 @@ typedef struct tuple_filtering_constraints
 	bool vectorized_filtering;
 } tuple_filtering_constraints;
 
-bool slot_key_test(TupleTableSlot *slot, ScanKey skey);
+bool slot_key_test(TupleTableSlot *slot, ScanKey skey, bool nulls_first);
 
 ScanKeyData *build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings,
 										  Relation out_rel,

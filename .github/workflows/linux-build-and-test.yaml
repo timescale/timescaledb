@@ -21,7 +21,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
     - name: Build matrix
       id: set-matrix
@@ -42,7 +42,7 @@ jobs:
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
@@ -54,6 +54,8 @@ jobs:
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: [matrixbuilder, check_paths]
     runs-on: ${{ matrix.os }}
+    # The flaky check is advisory, so its failure must not fail the summary.
+    continue-on-error: ${{ contains(matrix.name, 'Flaky') }}
 
     env:
       PG_SRC_DIR: pgbuild
@@ -62,14 +64,8 @@ jobs:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
 
-      # For some reason, on PG <= 15 with faketime the client backends get the
-      # modified time, and the background workers the unmodified time, so it
-      # doesn't work.
       FAKETIME: |
-        ${{ (contains(matrix.os, 'ubuntu')
-               && !startsWith(matrix.pg, '14.')
-               && !startsWith(matrix.pg, '15.')
-            ) && 'faketime -f +379d' || '' }}
+        ${{ contains(matrix.os, 'ubuntu') && 'faketime -f +379d' || '' }}
 
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
@@ -108,7 +104,7 @@ jobs:
       run: sudo chmod 777 /cores
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -139,10 +135,10 @@ jobs:
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
-          wget -q -O postgresql.tar.bz2 \
+          wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
         else
-          wget -q -O postgresql.tar.bz2 \
+          wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         fi
         mkdir -p ~/$PG_SRC_DIR
@@ -162,6 +158,7 @@ jobs:
         for ext in ${{ matrix.pg_extensions }}; do
           make -C contrib/${ext} install
         done
+        make install-tests
         echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
     - name: Upload config.log
@@ -185,7 +182,7 @@ jobs:
     - name: Build TimescaleDB
       run: |
         # Show the actual architecture this CI runner has
-        "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
+        gcc -march=native -E -v - </dev/null 2>&1 | grep cc1
 
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
@@ -208,7 +205,13 @@ jobs:
             build/compile_commands.json
 
     - name: Check exported symbols
+      background: true
       run: ./build/scripts/export_prefix_check.sh
+
+    - name: pginstallcheck
+      background: true
+      if: matrix.pginstallcheck
+      run: make -C build pginstallcheck
 
     - name: make installcheck
       if: matrix.installcheck
@@ -218,17 +221,34 @@ jobs:
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
             | tee installcheck.log
 
-    - name: pginstallcheck
-      if: matrix.pginstallcheck
-      run: make -C build pginstallcheck
+    - name: Wait for checks to finish
+      wait-all:
 
     - name: coverage
       if: matrix.coverage
       run: make -j $(getconf _NPROCESSORS_ONLN) -k -C build coverage
 
+    # The below key is from the codecov website and I place it
+    # here because the network location returns 404
+    # (https://keybase.io/codecovsecurity/pgp_keys.asc)
+    - name: Import local Codecov GPG key
+      if: matrix.coverage
+      run: |
+        mkdir -p /home/runner/.gnupg
+        chmod 700 /home/runner/.gnupg
+        gpg --no-default-keyring \
+            --keyring /home/runner/.gnupg/trustedkeys.gpg \
+            --import "${GITHUB_WORKSPACE}/.github/codecov.asc"
+        # Verify the fingerprint matches before trusting it
+        gpg --no-default-keyring \
+            --keyring /home/runner/.gnupg/trustedkeys.gpg \
+            --list-keys --with-colons \
+            | grep -q '27034E7FDB850E0BBC2C62FF806BB28AED779869' \
+            || (echo "Codecov GPG fingerprint mismatch!" && exit 1)
+
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+      uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./build/coverage/timescaledb-coverage.info
@@ -246,6 +266,21 @@ jobs:
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
+
+        # TAP tests do not produce regression.diffs. Append prove's failure
+        # summary from installcheck.log plus, for each failing test, the failed
+        # assertions
+        sed -n '/^Test Summary Report/,/^Result:/p' installcheck.log >> regression.log 2>/dev/null || true
+        for t in $(grep -hoE 't/[^ ]+\.pl[[:space:]]+\(Wstat' installcheck.log 2>/dev/null | sed -E 's#t/(.+)\.pl.*#\1#'); do
+          echo "=== regress_log_$t ===" >> regression.log
+          find . -name "regress_log_$t" -exec awk '
+            FNR==1 { blk=0 }
+            { sub(/^\[[0-9:.]+\]\([0-9.]+s\) /, "") }
+            /^ok |^not ok |^# Looks like|^# Running:|^1\.\.|^Bail out/ { blk=0 }
+            /^#   Failed test/ { blk=1 }
+            blk { print }
+          ' {} + >> regression.log || true
+        done
 
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
@@ -373,7 +408,7 @@ jobs:
     name: Regression summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

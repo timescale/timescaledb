@@ -325,6 +325,19 @@ SELECT DISTINCT tgenabled FROM pg_trigger t
   JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
   WHERE tgname = 'create_vehicle_trigger';
 
+-- statement-level triggers exist only on the hypertable root, so disabling one
+-- by name applies to the root and does not error on chunks
+CREATE TRIGGER create_vehicle_stmt_trigger
+    AFTER INSERT ON location
+    FOR EACH STATEMENT EXECUTE FUNCTION create_vehicle_trigger_fn();
+ALTER TABLE location DISABLE TRIGGER create_vehicle_stmt_trigger;
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_stmt_trigger'
+  AND tgrelid = 'location'::regclass;
+ALTER TABLE location ENABLE TRIGGER create_vehicle_stmt_trigger;
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_stmt_trigger'
+  AND tgrelid = 'location'::regclass;
+DROP TRIGGER create_vehicle_stmt_trigger ON location;
+
 -- test that drop trigger works
 DROP TRIGGER create_color_trigger ON location;
 DROP TRIGGER create_vehicle_trigger ON location;

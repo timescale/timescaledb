@@ -10,7 +10,7 @@ SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
 
 CREATE VIEW hyper_inval_log AS
-SELECT ht.schema_name || '.' || ht.table_name AS hypertable,
+SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass::text AS hypertable,
        _timescaledb_functions.to_timestamp(lowest_modified_value) AS inval_start,
        _timescaledb_functions.to_timestamp(greatest_modified_value) AS inval_end
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log hil

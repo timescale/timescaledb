@@ -11,6 +11,7 @@
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
 #include <nodes/value.h>
+#include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -299,7 +300,11 @@ cmpproc_init(FunctionCallInfo fcinfo, FmgrInfo *cmp_proc, Oid type_oid, char *op
 	cmp_op = OpernameGetOprid(list_make1(makeString(opname)), type_oid, type_oid);
 	if (!OidIsValid(cmp_op))
 	{
-		elog(ERROR, "could not find a %s operator for type %d", opname, type_oid);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_FUNCTION),
+				 errmsg("could not find a %s operator for type %s",
+						opname,
+						format_type_be(type_oid))));
 	}
 	cmp_regproc = get_opcode(cmp_op);
 	if (!OidIsValid(cmp_regproc))

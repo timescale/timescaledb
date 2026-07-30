@@ -16,23 +16,6 @@
 #endif
 
 /*
- * PGDLLEXPORT is defined as en empty macro until PG15.
- * Since PG16, a macro HAVE_VISIBILITY_ATTRIBUTE is defined if the compiler has
- * support for visibility attribute and the PGDLLEXPORT macro is defined as the
- * same. So, skip redefining PGDLLEXPORT if HAVE_VISIBILITY_ATTRIBUTE is defined.
- * If not, undef the empty PGDLLEXPORT macro and redefine it properly.
- */
-#if !defined(WIN32) && !defined(__CYGWIN__) && !defined(HAVE_VISIBILITY_ATTRIBUTE)
-#if __GNUC__ >= 4
-/* PGDLLEXPORT is defined but will be empty. Redefine it. */
-#undef PGDLLEXPORT
-#define PGDLLEXPORT __attribute__((visibility("default")))
-#else
-#error "Unsupported GNUC version"
-#endif /* __GNUC__ */
-#endif
-
-/*
  * On windows, symbols shared across modules have to be marked "export" in the
  * main TimescaleDb module and "import" in the submodule. Since we want to use the
  * same headers, we TSDLLEXPORT functions as "export" in the main module and

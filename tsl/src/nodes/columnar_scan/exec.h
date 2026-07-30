@@ -42,6 +42,13 @@ typedef struct ColumnarScanState
 	 * evaluate to constant false, hence the flag.
 	 */
 	List *vectorized_quals_original;
+
+	/*
+	 * After the compressed scan has ended, we cannot continue scanning
+	 * it, otherwise some scan types will restart. This node can still have more tuples
+	 * to return, so it doesn't just stop when the input has ended.
+	 */
+	bool done_fetching_batches;
 } ColumnarScanState;
 
 extern Node *columnar_scan_state_create(CustomScan *cscan);

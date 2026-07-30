@@ -331,11 +331,13 @@ SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 
--- Test with null values: should not optimize
-set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+-- Test with null values: should optimize with firstlast index
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
 
+-- should not optimize (NULL order wrong)
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
@@ -685,7 +687,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('bsm_segby') c;
 
 select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'bsm_segby') limit 1
 \gset
@@ -705,7 +707,7 @@ where relid = 'bsm_segby'::regclass;
 
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]'
-where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+where relid = (select relid from _timescaledb_catalog.chunk
     where hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'bsm_segby') limit 1);
 
@@ -730,7 +732,7 @@ where relid = 'bsm_segby'::regclass;
 
 update _timescaledb_catalog.compression_settings
 set index = '[{"type": "minmax", "column": "name", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]'
-where relid = (select format('%I.%I', schema_name, table_name)::regclass from _timescaledb_catalog.chunk
+where relid = (select relid from _timescaledb_catalog.chunk
     where hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'bsm_segby') limit 1);
 

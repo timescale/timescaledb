@@ -5,13 +5,12 @@
  */
 
 #include <postgres.h>
-#include "chunk.h"
-#include "hypertable_cache.h"
 #include <catalog/pg_operator.h>
 #include <math.h>
 #include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
+#include <nodes/multibitmapset.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
@@ -20,28 +19,27 @@
 #include <optimizer/paths.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
-#include <planner/planner.h>
 #include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-#if PG16_GE
-#include <nodes/multibitmapset.h>
-#endif
-#include <planner.h>
 
 #include "compat/compat.h"
+#include "chunk.h"
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
+#include "hypertable_cache.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/qual_pushdown.h"
+#include "planner.h"
+#include "planner/planner.h"
 #include "ts_catalog/array_utils.h"
 #include "utils.h"
 
@@ -123,9 +121,6 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 
 	em->em_expr = (Expr *) var;
 	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
-#if PG16_LT
-	em->em_nullable_relids = NULL;
-#endif
 	em->em_is_const = false;
 	em->em_is_child = false;
 	em->em_datatype = INT4OID;
@@ -138,9 +133,6 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 	newec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
 	newec->ec_has_const = false;
 	newec->ec_has_volatile = false;
-#if PG16_LT
-	newec->ec_below_outer_join = false;
-#endif
 	newec->ec_broken = false;
 	newec->ec_sortref = 0;
 	newec->ec_min_security = UINT_MAX;
@@ -177,9 +169,6 @@ append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr 
 	ec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
 	ec->ec_has_const = pk->pk_eclass->ec_has_const;
 	ec->ec_has_volatile = pk->pk_eclass->ec_has_volatile;
-#if PG16_LT
-	ec->ec_below_outer_join = pk->pk_eclass->ec_below_outer_join;
-#endif
 	ec->ec_broken = pk->pk_eclass->ec_broken;
 	ec->ec_sortref = pk->pk_eclass->ec_sortref;
 	ec->ec_min_security = pk->pk_eclass->ec_min_security;
@@ -252,7 +241,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 	 * If pathkeys contains non-segmentby columns the rest of the ordering
 	 * requirements will be satisfied by ordering by sequence_num.
 	 */
-	if (sort_info->needs_sequence_num)
+	if (sort_info->needs_sequence_num || sort_info->use_batch_sorted_merge)
 	{
 		/* TODO: split up legacy sequence number path and non-sequence number path into dedicated
 		 * functions. */
@@ -328,15 +317,10 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 				column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 				int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
 				Assert(orderby_index != 0);
-				AttrNumber lower_attno;
-				AttrNumber upper_attno;
-				orderby_sparse_metadata_attnos(info->settings,
-											   info->compressed_rte->relid,
-											   orderby_index,
-											   &lower_attno,
-											   &upper_attno);
+
 				bool orderby_desc =
 					ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+
 				bool orderby_nullsfirst =
 					ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
 
@@ -354,37 +338,151 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 					nulls_first = orderby_nullsfirst;
 				}
 
-				Var *metadata_var = makeVar(info->compressed_rel->relid,
-											lower_attno,
-											var->vartype,
-											var->vartypmod,
-											var->varcollid,
-											var->varlevelsup);
-				Expr *lower_expr =
-					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *lower_ec =
-					append_ec_for_metadata_col(root, info, lower_expr, pk, opcintype);
-				PathKey *lower_pk =
-					make_canonical_pathkey(root, lower_ec, pk->pk_opfamily, strategy, nulls_first);
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, lower_pk);
+				/* For Batch sorted merge we need to sort on specially chosen leading attribute for
+				 * each pathkey */
+				if (sort_info->use_batch_sorted_merge)
+				{
+					Oid sortop =
+						get_opfamily_member(pk->pk_opfamily, opcintype, opcintype, pk->pk_cmptype);
+					Oid opfamily, optype;
+					CompareType bsm_strategy;
+					if (!get_ordering_op_properties(sortop, &opfamily, &optype, &bsm_strategy))
+					{
+						elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+					}
+					Assert(bsm_strategy == BTLessStrategyNumber ||
+						   bsm_strategy == BTGreaterStrategyNumber);
+					char *leading_name;
+					char *trailing_name;
+					orderby_sparse_metadata_names(info->settings,
+												  orderby_index,
+												  &leading_name,
+												  &trailing_name);
+					char *meta_col_name =
+						strategy == BTLessStrategyNumber ? leading_name : trailing_name;
 
-				metadata_var = makeVar(info->compressed_rel->relid,
-									   upper_attno,
-									   var->vartype,
-									   var->vartypmod,
-									   var->varcollid,
-									   var->varlevelsup);
-				Expr *upper_expr =
-					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *upper_ec =
-					append_ec_for_metadata_col(root, info, upper_expr, pk, opcintype);
-				PathKey *upper_pk =
-					make_canonical_pathkey(root, upper_ec, pk->pk_opfamily, strategy, nulls_first);
+					AttrNumber attr_position =
+						get_attnum(info->compressed_rte->relid, meta_col_name);
 
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, upper_pk);
+					if (attr_position == InvalidAttrNumber)
+					{
+						elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
+					}
+					Var *metadata_var = makeVar(info->compressed_rel->relid,
+												attr_position,
+												var->vartype,
+												var->vartypmod,
+												var->varcollid,
+												var->varlevelsup);
+					Expr *leading_expr =
+						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+					EquivalenceClass *leading_ec =
+						append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
+					PathKey *leading_pk = make_canonical_pathkey(root,
+																 leading_ec,
+																 pk->pk_opfamily,
+																 strategy,
+																 nulls_first);
+					required_compressed_pathkeys =
+						lappend(required_compressed_pathkeys, leading_pk);
+				}
+				/* Need to sort on compressed pathkeys matching compressed indexscan order */
+				else
+				{
+					AttrNumber leading_attno;
+					AttrNumber trailing_attno;
+					orderby_sparse_metadata_attnos(info->settings,
+												   info->compressed_rte->relid,
+												   orderby_index,
+												   &leading_attno,
+												   &trailing_attno);
+					/*
+					 * Compressed chunk indexes based on firstlast sparse indexes can have two
+					 * orderings. New chunks index them as (first, last); chunks compressed before
+					 * that change index a DESC column as (last, first). Only DESC columns can
+					 * differ, so for those we check the chunk's index and follow whichever order it
+					 * has.
+					 */
+					if (orderby_desc && orderby_sparse_kind(info->settings, orderby_index) ==
+											ORDERBY_SPARSE_FIRSTLAST)
+					{
+						orderby_firstlast_metadata_attnos(info->settings,
+														  info->compressed_rte->relid,
+														  orderby_index,
+														  &leading_attno,
+														  &trailing_attno);
+
+						ListCell *index_lc;
+						foreach (index_lc, info->compressed_rel->indexlist)
+						{
+							IndexOptInfo *index = lfirst(index_lc);
+							int leading_pos = -1;
+							int trailing_pos = -1;
+							for (int k = 0; k < index->nkeycolumns; k++)
+							{
+								if (index->indexkeys[k] == leading_attno)
+								{
+									leading_pos = k;
+								}
+								else if (index->indexkeys[k] == trailing_attno)
+								{
+									trailing_pos = k;
+								}
+							}
+							if (leading_pos >= 0 && trailing_pos >= 0)
+							{
+								if (trailing_pos < leading_pos)
+								{
+									AttrNumber tmp = leading_attno;
+									leading_attno = trailing_attno;
+									trailing_attno = tmp;
+								}
+								break;
+							}
+						}
+					}
+					Var *metadata_var;
+					metadata_var = makeVar(info->compressed_rel->relid,
+										   leading_attno,
+										   var->vartype,
+										   var->vartypmod,
+										   var->varcollid,
+										   var->varlevelsup);
+					Expr *leading_expr =
+						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+					EquivalenceClass *leading_ec =
+						append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
+					PathKey *leading_pk = make_canonical_pathkey(root,
+																 leading_ec,
+																 pk->pk_opfamily,
+																 strategy,
+																 nulls_first);
+					required_compressed_pathkeys =
+						lappend(required_compressed_pathkeys, leading_pk);
+
+					metadata_var = makeVar(info->compressed_rel->relid,
+										   trailing_attno,
+										   var->vartype,
+										   var->vartypmod,
+										   var->varcollid,
+										   var->varlevelsup);
+					Expr *trailing_expr =
+						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+					EquivalenceClass *trailing_ec =
+						append_ec_for_metadata_col(root, info, trailing_expr, pk, opcintype);
+					PathKey *trailing_pk = make_canonical_pathkey(root,
+																  trailing_ec,
+																  pk->pk_opfamily,
+																  strategy,
+																  nulls_first);
+
+					required_compressed_pathkeys =
+						lappend(required_compressed_pathkeys, trailing_pk);
+				}
 			}
 		}
 	}
+
 	return required_compressed_pathkeys;
 }
 
@@ -636,7 +734,7 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-	info->settings = ts_compression_settings_get(chunk->table_id);
+	info->settings = ts_compression_settings_get(chunk->fd.relid);
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
@@ -938,27 +1036,45 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
-	/*
-	 * Don't disable the compressed batch sorted merge plan with the enable_sort
-	 * GUC. We have a separate GUC for it, and this way you can try to force the
-	 * batch sorted merge plan by disabling sort.
-	 */
-	const bool old_enable_sort = enable_sort;
-	enable_sort = true;
-	cost_sort(&sort_path,
-			  root,
-			  dcpath->required_compressed_pathkeys,
+	/* We are utilizing compressed sort for batch sorted merge: do not need extra sort */
+	if (dcpath->required_compressed_pathkeys &&
+		pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
+	{
+		sort_path.rows = compressed_path->rows;
+		sort_path.startup_cost = compressed_path->startup_cost;
+		sort_path.total_cost = compressed_path->total_cost;
 #if PG18_GE
-			  compressed_path->disabled_nodes,
+		/* PG18 changes the way we handle disabled nodes so we
+		 * need to take those into account as well.
+		 *
+		 * https://github.com/postgres/postgres/commit/e2225346
+		 */
+		sort_path.disabled_nodes = compressed_path->disabled_nodes;
 #endif
-			  compressed_path->total_cost,
-			  compressed_path->rows,
-			  compressed_path->pathtarget->width,
-			  0.0,
-			  work_mem,
-			  -1);
-	enable_sort = old_enable_sort;
-
+	}
+	else
+	{
+		/*
+		 * Don't disable the compressed batch sorted merge plan with the enable_sort
+		 * GUC. We have a separate GUC for it, and this way you can try to force the
+		 * batch sorted merge plan by disabling sort.
+		 */
+		const bool old_enable_sort = enable_sort;
+		enable_sort = true;
+		cost_sort(&sort_path,
+				  root,
+				  dcpath->required_compressed_pathkeys,
+#if PG18_GE
+				  compressed_path->disabled_nodes,
+#endif
+				  compressed_path->total_cost,
+				  compressed_path->rows,
+				  compressed_path->pathtarget->width,
+				  0.0,
+				  work_mem,
+				  -1);
+		enable_sort = old_enable_sort;
+	}
 	/*
 	 * In compressed batch sorted merge, for each distinct segmentby value we
 	 * have to keep the corresponding latest batch open. Estimate the number of
@@ -1184,11 +1300,8 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 			 * and the DML target relation are one and the same. But these kinds of queries
 			 * should be rare.
 			 */
-			if (proot->parse->commandType == CMD_UPDATE || proot->parse->commandType == CMD_DELETE
-#if PG15_GE
-				|| proot->parse->commandType == CMD_MERGE
-#endif
-			)
+			if (proot->parse->commandType == CMD_UPDATE ||
+				proot->parse->commandType == CMD_DELETE || proot->parse->commandType == CMD_MERGE)
 			{
 				add_uncompressed_part = true;
 			}
@@ -1240,7 +1353,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 								  chunk_rel,
 								  sort_info.needs_sequence_num);
 
-	if (sort_info.use_compressed_sort)
+	if (sort_info.use_compressed_sort || sort_info.use_batch_sorted_merge)
 	{
 		sort_info.required_compressed_pathkeys =
 			build_compressed_scan_pathkeys(&sort_info,
@@ -1274,36 +1387,28 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 		ts_columnar_estimate_compressed_batch_size(compression_info->compressed_rte->relid);
 
 	/*
-	 * Estimate the size of decompressed chunk based on the compressed chunk.
-	 *
-	 * The tuple estimates derived from pg_class will be empty, so we have to
-	 * compute that based on the compressed relation as well. Wrong estimates
-	 * there lead to wrong join order choice and wrong low cost for Sort over
-	 * Append, and also different MergeAppend costs on Postgres before 17 due to
-	 * a bug there.
+	 * Add the decompressed row estimate to the chunk rel. The chunk_rel->rows
+	 * already has the PG estimate for uncompressed chunk table, which is nonzero
+	 * for partial chunks.
 	 */
-	const double new_row_estimate = compressed_rel->rows * compression_info->compressed_batch_size;
-	const double new_tuples_estimate =
+	const double compressed_row_estimate =
+		compressed_rel->rows * compression_info->compressed_batch_size;
+	const double compressed_tuples_estimate =
 		compressed_rel->tuples * compression_info->compressed_batch_size;
 	if (!compression_info->single_chunk)
 	{
-		/*
-		 * Adjust the hypertable estimate by the diff of new and old chunk
-		 * estimate.
-		 */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		const double delta = new_row_estimate - chunk_rel->rows;
-		hypertable_rel->rows += delta;
+		hypertable_rel->rows += compressed_row_estimate;
 		/*
 		 * For appendrel, set tuples to the same value as rows,
 		 * like set_append_rel_size() does.
 		 */
-		hypertable_rel->tuples += delta;
+		hypertable_rel->tuples += compressed_row_estimate;
 	}
-	chunk_rel->rows = new_row_estimate;
-	chunk_rel->tuples = new_tuples_estimate;
+	chunk_rel->rows += compressed_row_estimate;
+	chunk_rel->tuples += compressed_tuples_estimate;
 
 	/*
 	 * Create the paths for the compressed chunk table.
@@ -1463,6 +1568,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		 * query here.
 		 */
 		path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+		path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
+
 		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
 
 		if (ts_guc_debug_require_batch_sorted_merge == DRO_Force)
@@ -1682,16 +1789,23 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			sequential_paths = lappend(sequential_paths, unordered_uncompressed_path);
 		}
 
-		Path *plain_append = (Path *) create_append_path(root,
-														 chunk_rel,
-														 sequential_paths,
-														 parallel_paths,
-														 /* pathkeys = */ NIL,
-														 req_outer,
-														 workers,
-														 workers > 0,
-														 chunk_path_no_sort->rows +
-															 unordered_uncompressed_path->rows);
+		Path *plain_append =
+			(Path *) create_append_path(/* root = */ root,
+										/* rel = */ chunk_rel,
+#if PG19_GE
+										/* input = */
+										(AppendPathInput){ .subpaths = sequential_paths,
+														   .partial_subpaths = parallel_paths },
+#else
+										/* subpaths = */ sequential_paths,
+										/* partial_subpaths = */ parallel_paths,
+#endif
+										/* pathkeys = */ NIL,
+										/* required_outer = */ req_outer,
+										/* parallel_workers = */ workers,
+										/* parallel_aware = */ workers > 0,
+										/* rows = */ chunk_path_no_sort->rows +
+											unordered_uncompressed_path->rows);
 
 		combined_paths = lappend(combined_paths, plain_append);
 	}
@@ -1747,15 +1861,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			continue;
 		}
 
-		if (decompression_path == chunk_path_no_sort)
-		{
-			/*
-			 * We can't use the unsorted decompression path directly because it
-			 * doesn't have the sort projection cost workaround.
-			 */
-			continue;
-		}
-
 		if (!bms_is_empty(chunk_rel->lateral_relids) || !bms_is_empty(req_outer))
 		{
 			/*
@@ -1769,10 +1874,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			/*
 			 * We have to remove the explicit Sort, otherwise it will lead to
 			 * planning time regression because of double call of
-			 * prepare_sort_from_pathkeys() in MergeAppend plan creation. Still,
-			 * we have to use the copy of ColumnarScan path that we created
-			 * for explicit sorting, because it has the sort projection cost
-			 * workaround.
+			 * prepare_sort_from_pathkeys() in MergeAppend plan creation.
 			 */
 			decompression_path = castNode(SortPath, decompression_path)->subpath;
 		}
@@ -1782,6 +1884,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 											  chunk_rel,
 											  list_make2(decompression_path,
 														 uncompressed_path_for_merge),
+#if PG19_GE
+											  /* child_append_relid_sets = */ NIL,
+#endif
 											  sort_info->decompressed_sort_pathkeys,
 											  req_outer);
 		combined_paths = lappend(combined_paths, merge_append);
@@ -2043,12 +2148,6 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		newinfo->outer_relids = columnar_scan_adjust_child_relids(oldinfo->outer_relids,
 																  context->chunk_rel->relid,
 																  context->compressed_rel->relid);
-#if PG16_LT
-		newinfo->nullable_relids =
-			columnar_scan_adjust_child_relids(oldinfo->nullable_relids,
-											  context->chunk_rel->relid,
-											  context->compressed_rel->relid);
-#endif
 		newinfo->left_relids = columnar_scan_adjust_child_relids(oldinfo->left_relids,
 																 context->chunk_rel->relid,
 																 context->compressed_rel->relid);
@@ -2287,26 +2386,8 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 			em->em_is_const = false;
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
-#if PG16_GE
 			em->em_jdomain = cur_em->em_jdomain;
 			em->em_parent = cur_em;
-#endif
-
-#if PG16_LT
-			/*
-			 * For versions less than PG16, transform and set em_nullable_relids similar to
-			 * em_relids. Note that this code assumes parent and child relids are singletons.
-			 */
-			Relids new_nullable_relids = cur_em->em_nullable_relids;
-			if (bms_is_member(info->ht_rel->relid, new_nullable_relids))
-			{
-				new_nullable_relids = bms_copy(new_nullable_relids);
-				new_nullable_relids = bms_del_member(new_nullable_relids, info->ht_rel->relid);
-				new_nullable_relids =
-					bms_add_members(new_nullable_relids, info->compressed_rel->relids);
-			}
-			em->em_nullable_relids = new_nullable_relids;
-#endif
 
 			/*
 			 * In some cases the new EC member is likely to be accessed soon, so
@@ -2416,6 +2497,9 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	info->compressed_rte = columnar_scan_make_rte(info->settings->fd.compress_relid,
 												  info->chunk_rte->rellockmode,
 												  root->parse);
+
+	/* mark RTE to skip ts_classify_relation */
+	ts_rte_mark_compressed_relation(info->compressed_rte);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
 
 	root->parse->rtable = lappend(root->parse->rtable, info->compressed_rte);
@@ -2424,7 +2508,6 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 
 	RelOptInfo *compressed_rel = build_simple_rel(root, compressed_index, NULL);
 
-#if PG16_GE
 	/*
 	 * When initially creating the RTE we add a RTEPerminfo entry for the
 	 * RTE but that is only to make build_simple_rel happy.
@@ -2435,7 +2518,6 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	 */
 	root->parse->rteperminfos = list_delete_last(root->parse->rteperminfos);
 	info->compressed_rte->perminfoindex = 0;
-#endif
 
 	/* github issue :1558
 	 * set up top_parent_relids for this rel as the same as the
@@ -2642,17 +2724,22 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 		}
 	}
 
-	if (sort_info->use_compressed_sort)
+	/* We can use sorted input before decompression in both cases */
+	if (sort_info->use_compressed_sort || sort_info->use_batch_sorted_merge)
 	{
 		/*
 		 * If we can push down sort below decompression we temporarily switch
 		 * out root->query_pathkeys to allow matching to pathkeys produces by
 		 * decompression
 		 */
-		List *orig_pathkeys = root->query_pathkeys;
+		List *orig_query_pathkeys = root->query_pathkeys;
+		List *orig_sort_pathkeys = root->sort_pathkeys;
+		List *orig_window_pathkeys = root->window_pathkeys;
 		List *orig_eq_classes = root->eq_classes;
 		Bitmapset *orig_eclass_indexes = compression_info->compressed_rel->eclass_indexes;
 		root->query_pathkeys = sort_info->required_compressed_pathkeys;
+		root->sort_pathkeys = sort_info->required_compressed_pathkeys;
+		root->window_pathkeys = sort_info->required_compressed_pathkeys;
 
 		/* We can optimize iterating over EquivalenceClasses by reducing them to
 		 * the subset which are from the compressed chunk. This only works if we don't
@@ -2676,7 +2763,9 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 
 		check_index_predicates(root, compressed_rel);
 		create_index_paths(root, compressed_rel);
-		root->query_pathkeys = orig_pathkeys;
+		root->query_pathkeys = orig_query_pathkeys;
+		root->sort_pathkeys = orig_sort_pathkeys;
+		root->window_pathkeys = orig_window_pathkeys;
 		root->eq_classes = orig_eq_classes;
 		compression_info->compressed_rel->eclass_indexes = orig_eclass_indexes;
 	}
@@ -2733,16 +2822,8 @@ columnar_scan_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse)
 	rte->inh = false;
 	rte->inFromCl = false;
 
-#if PG16_LT
-	rte->requiredPerms = 0;
-	rte->checkAsUser = InvalidOid; /* not set-uid by default, either */
-	rte->selectedCols = NULL;
-	rte->insertedCols = NULL;
-	rte->updatedCols = NULL;
-#else
 	/* Add empty perminfo for the new RTE to make build_simple_rel happy. */
 	addRTEPermissionInfo(&parse->rteperminfos, rte);
-#endif
 
 	return rte;
 }
@@ -2865,6 +2946,8 @@ is_var_notnull(const CompressionInfo *compression_info, Var *var)
 #if PG17_LT
 	notnull = ts_get_attnotnull(compression_info->chunk_rte->relid, var->varattno);
 #else
+	/* Since PG18 "notnullattnums" contain only NOT NULL columns with validated NOT NULL constraints
+	 */
 	notnull = bms_is_member(var->varattno, compression_info->chunk_rel->notnullattnums);
 #endif
 
@@ -2886,24 +2969,12 @@ is_var_notnull(const CompressionInfo *compression_info, Var *var)
 		{
 			/* Is this column made non-nullable by the query predicates? */
 			List *nonnullable_vars = find_nonnullable_vars((Node *) ri->clause);
-#if PG16_GE
 			if (mbms_is_member(var->varno,
 							   var->varattno - FirstLowInvalidHeapAttributeNumber,
 							   nonnullable_vars))
 			{
 				return true;
 			}
-#else
-			ListCell *lv;
-			foreach (lv, nonnullable_vars)
-			{
-				Var *v = castNode(Var, lfirst(lv));
-				if (v->varno == var->varno && v->varattno == var->varattno)
-				{
-					return true;
-				}
-			}
-#endif
 		}
 	}
 	return false;
@@ -2916,8 +2987,8 @@ is_var_notnull(const CompressionInfo *compression_info, Var *var)
 static bool
 match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 									  int starting_pathkey_offset,
-									  const CompressionInfo *compression_info, bool for_bsm,
-									  bool *out_reverse)
+									  const CompressionInfo *compression_info,
+									  bool for_batch_sorted_merge, bool *out_reverse)
 {
 	int compressed_pk_index = 0;
 	for (int i = starting_pathkey_offset; i < list_length(pathkeys); i++)
@@ -2937,6 +3008,12 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		{
 			return false;
 		}
+		/* Pathkey collation different from underlying column collation may lead to different sort
+		 * order */
+		if (var->varcollid != pk->pk_eclass->ec_collation)
+		{
+			return false;
+		}
 
 		char *column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
 		int orderby_index = ts_array_position(compression_info->settings->fd.orderby, column_name);
@@ -2946,13 +3023,13 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			return false;
 		}
 
-		if (for_bsm)
+		/* Special handling for Batch Sorted Merge with minmax-only index */
+		if (for_batch_sorted_merge &&
+			orderby_sparse_kind(compression_info->settings, orderby_index) !=
+				ORDERBY_SPARSE_FIRSTLAST)
 		{
-			/* Bail out on Batch Sorted Merge if orderby column is nullable,
-			 * as at the moment the minmax metadata we have doesn't include NULLs,
-			 * so it's difficult to use it for null-sensitive ordering.
-			 * But this restriction can be lifted in the future on new type of chunks
-			 * with NULL-handling metadata.
+			/* Bail out on Batch Sorted Merge if orderby column is nullable
+			 * and does not have firstlast index
 			 */
 			if (!is_var_notnull(compression_info, var))
 			{
@@ -2967,9 +3044,7 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			 * will be sorted before  [(1,1) ..  (1,19)] with min(1),(1)
 			 * but it should be sorted after as (1,20) > (1,1): correct with firstlast index.
 			 */
-			if (compressed_pk_index > 1 &&
-				orderby_sparse_kind(compression_info->settings, orderby_index) !=
-					ORDERBY_SPARSE_FIRSTLAST)
+			if (compressed_pk_index > 1)
 			{
 				return false;
 			}
@@ -3081,6 +3156,17 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		if (!ec->ec_has_volatile)
 		{
 			em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
+
+			/*
+			 * We can't sort the ColumnarScan on a set-returning function. It is
+			 * expanded by a ProjectSet node above the scan, so treat it as no
+			 * match and let the sort happen there. The leading sort keys
+			 * collected before it are still usable to sort the ColumnarScan.
+			 */
+			if (em_expr && expression_returns_set((Node *) em_expr))
+			{
+				em_expr = NULL;
+			}
 		}
 		chunk_em_exprs = lappend(chunk_em_exprs, em_expr);
 	}
@@ -3188,7 +3274,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 														  chunk_em_exprs,
 														  /* starting_pathkey_offset = */ 0,
 														  compression_info,
-														  /* for_bsm = */ true,
+														  /* for_batch_sorted_merge = */ true,
 														  &sort_info.reverse);
 			}
 			return sort_info;
@@ -3220,7 +3306,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 													  chunk_em_exprs,
 													  /* starting_pathkey_offset = */ 0,
 													  compression_info,
-													  /* for_bsm = */ true,
+													  /* for_batch_sorted_merge = */ true,
 													  &sort_info.reverse);
 		}
 		return sort_info;
@@ -3236,12 +3322,13 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	 * loop over the rest of pathkeys
 	 * this needs to exactly match the configured compress_orderby
 	 */
-	sort_info.use_compressed_sort = match_pathkeys_to_compression_orderby(pathkeys,
-																		  chunk_em_exprs,
-																		  i,
-																		  compression_info,
-																		  /* for_bsm = */ false,
-																		  &sort_info.reverse);
+	sort_info.use_compressed_sort =
+		match_pathkeys_to_compression_orderby(pathkeys,
+											  chunk_em_exprs,
+											  i,
+											  compression_info,
+											  /* for_batch_sorted_merge = */ false,
+											  &sort_info.reverse);
 
 	return sort_info;
 }

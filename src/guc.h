@@ -27,6 +27,7 @@ extern TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown;
 extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
+extern bool ts_guc_enable_hypertable_expansion_for_dml;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT bool ts_guc_skip_cagg_invalidation;
@@ -34,9 +35,7 @@ extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
-#if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
-#endif
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_merge;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
@@ -76,19 +75,15 @@ extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT bool ts_guc_enable_uuid_compression;
 extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
 extern TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit;
-#if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
-#endif
 extern bool ts_guc_enable_event_triggers;
 extern bool ts_guc_enable_chunk_auto_publication;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan;
 extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
 extern TSDLLEXPORT bool ts_guc_debug_skip_scan_info;
-#if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_cagg_rewrites;
 extern TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info;
-#endif
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
@@ -123,7 +118,9 @@ extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
+#if PG19_LT
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
+#endif
 
 /*
  * Exit code to use when scheduler exits.

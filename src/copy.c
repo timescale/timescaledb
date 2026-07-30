@@ -828,7 +828,7 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 		ereport(DEBUG1,
 				(errmsg("Using normal unbuffered copy operation (TS_CIM_SINGLE) "
 						"because triggers are defined on the destination table.")));
-		if (ts_guc_enable_direct_compress_copy)
+		if (ts_guc_enable_direct_compress_copy || TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
 		{
 			ereport(WARNING,
 					(errmsg("disabling direct compress copy due to presence of triggers on the "
@@ -837,12 +837,19 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 		return TS_CIM_SINGLE;
 	}
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && ts_guc_enable_direct_compress_copy)
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) &&
+		(ts_guc_enable_direct_compress_copy || TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht)))
 	{
 		if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
 		{
 			ereport(WARNING,
 					(errmsg("disabling direct compress because the destination table has unique "
+							"constraints")));
+		}
+		else if (ts_indexing_relation_has_exclusion_constraint(ccstate->rel))
+		{
+			ereport(WARNING,
+					(errmsg("disabling direct compress because the destination table has exclusion "
 							"constraints")));
 		}
 		else if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->numtriggers > 1)
@@ -966,11 +973,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	 */
 	/* createSubid is creation check, newRelfilenodeSubid is truncation check */
 	if (ccstate->rel->rd_createSubid != InvalidSubTransactionId ||
-#if PG16_LT
-		ccstate->rel->rd_newRelfilenodeSubid != InvalidSubTransactionId)
-#else
 		ccstate->rel->rd_newRelfilelocatorSubid != InvalidSubTransactionId)
-#endif
 	{
 		ti_options |= HEAP_INSERT_SKIP_FSM;
 	}
@@ -986,9 +989,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	 */
 	resultRelInfo = makeNode(ResultRelInfo);
 
-#if PG16_LT
-	ExecInitRangeTable(estate, pstate->p_rtable);
-#elif PG18_LT
+#if PG18_LT
 	Assert(pstate->p_rteperminfos != NULL);
 	ExecInitRangeTable(estate, pstate->p_rtable, pstate->p_rteperminfos);
 #else
@@ -1002,7 +1003,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 #endif
 	ExecInitResultRelation(estate, resultRelInfo, 1);
 
-	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT, ONCONFLICT_NONE, NIL);
+	CheckValidResultRelCompat(resultRelInfo, CMD_INSERT, ONCONFLICT_NONE, NIL, NULL);
 
 	ExecOpenIndices(resultRelInfo, false);
 
@@ -1485,17 +1486,6 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 	RangeTblEntry *rte = nsitem->p_rte;
 	addNSItemToQuery(pstate, nsitem, true, true, true);
 
-#if PG16_LT
-	rte->requiredPerms = ACL_INSERT;
-
-	foreach (cur, attnums)
-	{
-		int attno = lfirst_int(cur) - FirstLowInvalidHeapAttributeNumber;
-		rte->insertedCols = bms_add_member(rte->insertedCols, attno);
-	}
-
-	ExecCheckRTPerms(pstate->p_rtable, true);
-#else
 	RTEPermissionInfo *perminfo = nsitem->p_perminfo;
 	perminfo->requiredPerms = ACL_INSERT;
 
@@ -1506,7 +1496,6 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 	}
 
 	ExecCheckPermissions(pstate->p_rtable, list_make1(perminfo), true);
-#endif
 
 	/*
 	 * Permission check for row security policies.
@@ -1689,7 +1678,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 
 	copy_constraints_and_check(pstate, rel, attnums);
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
-	scandesc = table_beginscan(rel, snapshot, 0, NULL);
+	scandesc = table_beginscan_compat(rel, snapshot, 0, NULL, 0);
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, NULL, scandesc);
 	copyfrom(ccstate, pstate, ht, copycontext, copy_table_to_chunk_error_callback, scandesc);
 	copy_chunk_state_destroy(ccstate);

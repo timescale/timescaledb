@@ -976,7 +976,7 @@ bool_compressed_size(int num_values, int flip_nth)
 static void
 test_bool()
 {
-	/* code covareage and simple tests */
+	/* code coverage and simple tests */
 	test_empty_bool_compressor();
 	test_bool_compressor_extended();
 
@@ -1177,8 +1177,8 @@ compare_datum_ptr(Datum datum1, Datum datum2, const char *msg)
 	char *ptr2 = DatumGetPointer(datum2);
 	TestAssertTrue(ptr1 != NULL);
 	TestAssertTrue(ptr2 != NULL);
-	size_t size1 = VARSIZE_ANY(datum1);
-	size_t size2 = VARSIZE_ANY(datum2);
+	size_t size1 = VARSIZE_ANY(ptr1);
+	size_t size2 = VARSIZE_ANY(ptr2);
 	TestAssertInt64Eq(size1, size2);
 	int memcmp_result = memcmp(ptr1, ptr2, size1);
 	if (memcmp_result != 0)

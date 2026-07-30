@@ -81,7 +81,7 @@ WHERE view_name = 'mat_refresh_test' \gset
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_refresh_test' \gset
 
-SELECT schema_name as mat_chunk_schema, table_name as mat_chunk_table
+SELECT relid::text as mat_chunk_table
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = :mat_hypertable_id
 ORDER BY id desc
@@ -159,7 +159,7 @@ SELECT * FROM mat_refresh_test;
 RESET timescaledb.enable_cagg_watermark_constify;
 
 SELECT * FROM :materialization_hypertable;
-SELECT * FROM :"mat_chunk_schema".:"mat_chunk_table";
+SELECT * FROM :mat_chunk_table;
 
 --cannot create a mat view without select and trigger grants
 CREATE MATERIALIZED VIEW mat_perm_view_test

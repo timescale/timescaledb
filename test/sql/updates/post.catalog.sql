@@ -2,11 +2,40 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+-- Chunk relation names are not deterministic between a fresh install and a
+-- post-upgrade catalog. The embedded hypertable id also shifts because a fresh
+-- install no longer creates internal compressed hypertables, so normalize both
+-- the hypertable id and the chunk id in relation names.
+CREATE OR REPLACE FUNCTION pg_temp.normalize_chunk(t text) RETURNS text
+  LANGUAGE sql IMMUTABLE AS $$
+  SELECT regexp_replace(
+           regexp_replace(
+             regexp_replace(t,
+               'compress_hyper_[0-9]+_[0-9]+_chunk|_hyper_[0-9]+_[0-9]+_chunk_compressed',
+               'compressed_chunk', 'g'),
+             '_hyper_[0-9]+_[0-9]+_chunk', '_hyper_X_X_chunk', 'g'),
+           '_compressed_hypertable_[0-9]+', '_compressed_hypertable_X', 'g')
+$$;
+
+-- Hypertable ids shift when internal compressed hypertables are present in one
+-- catalog but not the other. Map an id to the normalized name of its hypertable
+-- so the value is stable between a fresh install and a post-upgrade catalog.
+CREATE OR REPLACE FUNCTION pg_temp.normalize_hypertable_id(id int) RETURNS text
+  LANGUAGE sql STABLE AS $$
+  SELECT pg_temp.normalize_chunk(format('%I.%I', h.schema_name, h.table_name))
+  FROM _timescaledb_catalog.hypertable h WHERE h.id = normalize_hypertable_id.id
+$$;
+
 SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_compression_algorithms
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
 SELECT (extversion >= '2.28.0') AS has_chunk_owned_slices
+  FROM pg_extension WHERE extname = 'timescaledb' \gset
+
+-- The chunk catalog stores its relation as schema_name/table_name before 2.29.0
+-- and as a single relid afterwards.
+SELECT (extversion >= '2.29.0') AS has_chunk_relid
   FROM pg_extension WHERE extname = 'timescaledb' \gset
 
 \if :PG_UPGRADE_TEST
@@ -161,10 +190,10 @@ ORDER BY conrelid::regclass::text, contype, conname, confrelid::regclass::text;
 
 -- child tables
 SELECT parent.relname AS table_name,
-    i.inhrelid::regclass AS child_table
+    pg_temp.normalize_chunk(i.inhrelid::regclass::text) AS child_table
 FROM pg_catalog.pg_inherits i
 JOIN pg_catalog.pg_class parent ON parent.oid = i.inhparent AND parent.relnamespace = 'public'::regnamespace
-ORDER BY parent.relname, i.inhrelid::regclass::text;
+ORDER BY parent.relname, pg_temp.normalize_chunk(i.inhrelid::regclass::text);
 
 -- Keep the output backward compatible
 \if :PG_UPGRADE_TEST
@@ -199,44 +228,57 @@ ORDER BY parent.relname, i.inhrelid::regclass::text;
 -- The list of tables configured to be dumped.
 SELECT unnest(extconfig)::regclass::text, unnest(extcondition) FROM pg_extension WHERE extname = 'timescaledb' ORDER BY 1;
 
--- Show chunks that include owner in the output
-SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, cl.relowner::regrole
+-- Show chunks that include owner in the output. The chunk id is not
+-- deterministic post-upgrade, so drop it and normalize the chunk relation name.
+\if :has_chunk_relid
+SELECT pg_temp.normalize_hypertable_id(c.hypertable_id) AS hypertable, n.nspname AS schema_name, pg_temp.normalize_chunk(cl.relname) AS table_name, cl.relowner::regrole
 FROM  _timescaledb_catalog.chunk c
-INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
-ORDER BY c.id, c.hypertable_id;
-
--- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and differ
--- between a fresh install and a post-upgrade catalog, so dump path-stable
--- columns only.
-\if :has_chunk_owned_slices
-SELECT ds.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.dimension_slice ds
-ORDER BY ds.chunk_id, ds.dimension_id;
+INNER JOIN pg_class cl ON (cl.oid = c.relid)
+INNER JOIN pg_namespace n ON (n.oid = cl.relnamespace)
+ORDER BY pg_temp.normalize_hypertable_id(c.hypertable_id), pg_temp.normalize_chunk(cl.relname);
 \else
-SELECT cc.chunk_id, ds.dimension_id, ds.range_start, ds.range_end
-FROM _timescaledb_catalog.chunk_constraint cc
-JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
-ORDER BY cc.chunk_id, ds.dimension_id;
+SELECT pg_temp.normalize_hypertable_id(c.hypertable_id) AS hypertable, c.schema_name, pg_temp.normalize_chunk(c.table_name) AS table_name, cl.relowner::regrole
+FROM  _timescaledb_catalog.chunk c
+INNER JOIN pg_class cl ON (cl.oid = format('%I.%I', c.schema_name, c.table_name)::regclass)
+ORDER BY pg_temp.normalize_hypertable_id(c.hypertable_id), pg_temp.normalize_chunk(c.table_name);
 \endif
 
--- Show attnum of all regclass objects belonging to our extension
+-- Per-chunk dimensional ranges. Slice ids are assigned by SERIAL and chunk ids
+-- are renumbered, so both differ between a fresh install and a post-upgrade
+-- catalog. Dump and order by the dimensional range only.
+\if :has_chunk_owned_slices
+SELECT ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.dimension_slice ds
+ORDER BY ds.dimension_id, ds.range_start, ds.range_end;
+\else
+SELECT ds.dimension_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk_constraint cc
+JOIN _timescaledb_catalog.dimension_slice ds ON ds.id = cc.dimension_slice_id
+ORDER BY ds.dimension_id, ds.range_start, ds.range_end;
+\endif
+
+-- Show attributes of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken
+-- attstattarget default is -1 in PG16 and NULL in later versions
 SELECT
-  att.attrelid::regclass,
-  att.attnum,
-  att.attname
+  a.attrelid::regclass, a.attnum, a.attname, a.atttypid::regtype, a.attlen, a.atttypmod,
+  a.attndims, a.attbyval, a.attalign, a.attstorage, a.attcompression, a.attnotnull,
+  a.atthasdef, a.atthasmissing, a.attidentity, a.attgenerated, a.attisdropped, a.attislocal,
+  a.attinhcount, a.attcollation::regcollation,
+  NULLIF(a.attstattarget, -1) AS attstattarget,
+  a.attacl, a.attoptions, a.attfdwoptions, a.attmissingval
 FROM pg_depend dep
   INNER JOIN pg_extension ext ON (dep.refobjid=ext.oid AND ext.extname = 'timescaledb')
-  INNER JOIN pg_attribute att ON (att.attrelid=dep.objid AND att.attnum > 0)
+  INNER JOIN pg_attribute a ON (a.attrelid=dep.objid AND a.attnum > 0)
 WHERE classid='pg_class'::regclass
-ORDER BY attrelid::regclass::text,att.attnum;
+ORDER BY attrelid::regclass::text COLLATE "C", a.attnum;
 
 -- Show constraints, stripping numeric prefixes so the legacy
 -- "<chunk_id>_<seq>_<parent>" form (2.27.1) and the new "<chunk_id>_<parent>"
 -- form (2.28.0) compare equal. The dimensional CHECKs are named
 -- "constraint_<slice_id>" and slice ids are not deterministic between a
 -- fresh install and a post-upgrade catalog, so collapse the suffix too.
-SELECT conrelid::regclass::text,
+SELECT pg_temp.normalize_chunk(conrelid::regclass::text) AS conrelid,
        regexp_replace(
            regexp_replace(conname, '^([0-9]+_){1,2}', ''),
            '^constraint_[0-9]+$', 'constraint_dim') AS conname,
@@ -252,4 +294,8 @@ ORDER BY 1, 2, 3;
 -- orderby sparse index type changed across releases and existing chunks are
 -- not rewritten on upgrade), so it differs between a fresh install and a
 -- post-upgrade catalog. Skip it and compare the remaining columns.
-SELECT relid, compress_relid, segmentby, orderby, orderby_desc, orderby_nullsfirst FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
+SELECT pg_temp.normalize_chunk(relid::text) AS relid,
+       pg_temp.normalize_chunk(compress_relid::regclass::text) AS compress_relid,
+       segmentby, orderby, orderby_desc, orderby_nullsfirst
+FROM _timescaledb_catalog.compression_settings
+ORDER BY pg_temp.normalize_chunk(relid::text), segmentby, orderby;

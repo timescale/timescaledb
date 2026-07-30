@@ -21,6 +21,11 @@ typedef enum AlterTableFlags
 	AlterTableFlagOrderBy,
 	AlterTableFlagCompressChunkTimeInterval,
 	AlterTableFlagIndex,
+	AlterTableFlagGranularRefreshColumn,
+	AlterTableFlagGranularRefreshStartOffset,
+	AlterTableFlagGranularRefreshEndOffset,
+	AlterTableFlagDirectCompress,
+	AlterTableFlagDirectCompressScheduleInterval,
 	AlterTableFlagsMax
 } AlterTableFlags;
 

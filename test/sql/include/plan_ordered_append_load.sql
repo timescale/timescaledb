@@ -67,7 +67,7 @@ INSERT INTO ht_missing_indexes SELECT generate_series('2000-01-01'::timestamptz,
 SELECT format('%I.%I',i.schemaname,i.indexname) AS "INDEX_NAME"
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id = ht.id
-INNER JOIN pg_indexes i ON i.schemaname = c.schema_name AND i.tablename=c.table_name
+INNER JOIN pg_indexes i ON format('%I.%I', i.schemaname, i.tablename)::regclass = c.relid
 WHERE ht.table_name = 'ht_missing_indexes'
 ORDER BY c.id LIMIT 1 OFFSET 1 \gset
 

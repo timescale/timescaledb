@@ -65,8 +65,8 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 			size_t arrow_len = arrow_get_str(arrow, i, &arrow_cstring);
 
 			const Datum rowbyrow_varlena = results[i].val;
-			const size_t rowbyrow_len = VARSIZE_ANY_EXHDR(rowbyrow_varlena);
-			const char *rowbyrow_cstring = VARDATA_ANY(rowbyrow_varlena);
+			const size_t rowbyrow_len = VARSIZE_ANY_EXHDR(DatumGetPointer(rowbyrow_varlena));
+			const char *rowbyrow_cstring = VARDATA_ANY(DatumGetPointer(rowbyrow_varlena));
 
 			if (rowbyrow_len != arrow_len)
 			{
@@ -201,14 +201,15 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested
 			 * Floats can also be NaN/infinite and the comparison doesn't
 			 * work in that case.
 			 */
-			if (VARSIZE_ANY_EXHDR(old_value) != VARSIZE_ANY_EXHDR(new_value))
+			if (VARSIZE_ANY_EXHDR(DatumGetPointer(old_value)) !=
+				VARSIZE_ANY_EXHDR(DatumGetPointer(new_value)))
 			{
 				elog(ERROR, "the repeated decompression result doesn't match");
 			}
 
-			if (strncmp(VARDATA_ANY(old_value),
-						VARDATA_ANY(new_value),
-						VARSIZE_ANY_EXHDR(new_value)) != 0)
+			if (strncmp(VARDATA_ANY(DatumGetPointer(old_value)),
+						VARDATA_ANY(DatumGetPointer(new_value)),
+						VARSIZE_ANY_EXHDR(DatumGetPointer(new_value))) != 0)
 			{
 				elog(ERROR, "the repeated decompression result doesn't match");
 			}

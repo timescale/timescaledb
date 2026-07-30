@@ -18,7 +18,6 @@ typedef struct VectorAggDef
 {
 	VectorAggFunctions func;
 	Expr *argument;
-	int output_offset;
 	List *filter_clauses;
 
 	/*
@@ -42,6 +41,10 @@ typedef struct VectorAggState
 {
 	CustomScanState custom;
 
+	/*
+	 * Postgres makes some Aggrefs share the transition state. This array tracks
+	 * the unique transition states indexed by Aggref.aggtransno.
+	 */
 	int num_agg_defs;
 	VectorAggDef *agg_defs;
 
@@ -56,6 +59,18 @@ typedef struct VectorAggState
 	bool input_ended;
 
 	GroupingPolicy *grouping;
+
+	/*
+	 * Non-vectorized filters that we still can evaluate in the columnar pipeline.
+	 */
+	List *pg_quals;
+
+	/*
+	 * Per-batch result cache for common subexpression elimination. Contains
+	 * entries only for interned expression subtrees that appear more than
+	 * once. NULL when no common subexpressions were found at init time.
+	 */
+	struct expr_cache_hash *expr_cache;
 
 	/*
 	 * Function for getting the next slot from the child node depending on

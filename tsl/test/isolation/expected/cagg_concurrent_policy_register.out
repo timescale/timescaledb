@@ -78,3 +78,86 @@ debug_waitpoint_release
 step s1_run_pol7d_3d_refresh: <... completed>
 step s12_run_pol3d_1d_refresh: <... completed>
 step s13_run_pol1d_refresh: <... completed>
+
+starting permutation: s3_lock_before_register s1_run_l2_hist s12_run_l2_recent s4_enable_before_process_cagg_invalidations s3_release_after_register s5_show_running_jobs s4_release_before_process_cagg_invalidations s5_l2_consistency
+step s3_lock_before_register: 
+    -- lock jobs_refresh_ranges table to serialize registration
+    BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+
+step s1_run_l2_hist: 
+   DO $$
+   DECLARE
+     jid integer;
+   BEGIN
+     SELECT job_id INTO jid FROM cagg_policy_jobs WHERE job_name = 'l2_job_hist';
+     CALL run_job(jid);
+   END;
+   $$;
+ <waiting ...>
+step s12_run_l2_recent: 
+   DO $$
+   DECLARE
+     jid integer;
+   BEGIN
+     SELECT job_id INTO jid FROM cagg_policy_jobs WHERE job_name = 'l2_job_recent';
+     CALL run_job(jid);
+   END;
+   $$;
+ <waiting ...>
+step s4_enable_before_process_cagg_invalidations: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s3_release_after_register: 
+   -- release lock on jobs_refresh_ranges table
+   ROLLBACK;
+
+step s5_show_running_jobs: 
+  SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range,
+         to_timestamp(r.start_range / 1000000) AT TIME ZONE 'UTC' AS start_ts_utc,
+         to_timestamp(r.end_range / 1000000) AT TIME ZONE 'UTC' AS end_ts_utc
+  FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+  JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+  ORDER BY ca.user_view_name, start_range;
+
+cagg_name  |        start_range|       end_range|start_ts_utc               |end_ts_utc              
+-----------+-------------------+----------------+---------------------------+------------------------
+mat_2pol_m2|-210866803200000000|1748131200000000|Mon Nov 24 00:00:00 4714 BC|Sun May 25 00:00:00 2025
+mat_2pol_m2|   1748131200000000|1748304000000000|Sun May 25 00:00:00 2025   |Tue May 27 00:00:00 2025
+
+step s4_release_before_process_cagg_invalidations: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_run_l2_hist: <... completed>
+step s12_run_l2_recent: <... completed>
+step s5_l2_consistency: 
+  -- L2 must match re-aggregation from L1 for all materialized buckets
+  SELECT d.bucket AT TIME ZONE 'UTC' AS bucket,
+         (d.cnt = h.cnt) AS cnt_match,
+         (d.sumb = h.sumb) AS sumb_match
+  FROM mat_2pol_m2 d
+  JOIN (
+      SELECT time_bucket('1 day', bucket) AS bucket,
+             sum(count) AS cnt,
+             sum(sum) AS sumb
+      FROM mat_3pol_m1 GROUP BY 1
+  ) h ON h.bucket = d.bucket
+  ORDER BY 1;
+
+bucket                  |cnt_match|sumb_match
+------------------------+---------+----------
+Tue May 20 00:00:00 2025|t        |t         
+Wed May 21 00:00:00 2025|t        |t         
+Thu May 22 00:00:00 2025|t        |t         
+Fri May 23 00:00:00 2025|t        |t         
+Sat May 24 00:00:00 2025|t        |t         
+Sun May 25 00:00:00 2025|t        |t         
+Mon May 26 00:00:00 2025|t        |t         
+

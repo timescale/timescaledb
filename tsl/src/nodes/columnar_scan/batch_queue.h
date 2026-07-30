@@ -32,7 +32,4 @@ typedef struct BatchQueue
 	const BatchQueueFunctions *funcs;
 } BatchQueue;
 
-#include "batch_queue_fifo.h"
-#include "batch_queue_heap.h"
-
 #endif /* TIMESCALEDB_BATCH_QUEUE_H */

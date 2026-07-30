@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/attmap.h>
 #include <access/xact.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
@@ -336,6 +337,76 @@ ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 	return result;
 }
 
+bool TSDLLEXPORT
+ts_indexing_relation_has_exclusion_constraint(Relation htrel)
+{
+	List *indexoidlist = RelationGetIndexList(htrel);
+	ListCell *lc;
+	bool result = false;
+
+	foreach (lc, indexoidlist)
+	{
+		Oid indexoid = lfirst_oid(lc);
+		HeapTuple index_tuple;
+		Form_pg_index index;
+
+		index_tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
+		if (!HeapTupleIsValid(index_tuple)) /* should not happen */
+		{
+			elog(ERROR,
+				 "cache lookup failed for index %u in \"%s\" ",
+				 indexoid,
+				 RelationGetRelationName(htrel));
+		}
+		index = (Form_pg_index) GETSTRUCT(index_tuple);
+		result = index->indisexclusion;
+		ReleaseSysCache(index_tuple);
+		if (result)
+		{
+			break;
+		}
+	}
+
+	list_free(indexoidlist);
+	return result;
+}
+
+/*
+ * Collect the heap attribute numbers covered by any valid unique index
+ * (PRIMARY KEY included) on the relation. Returns a Bitmapset of raw attribute
+ * numbers, or NULL when the relation has no usable unique index.
+ *
+ * We do not use RelationGetIndexAttrBitmap(INDEX_ATTR_BITMAP_KEY): it leaves out
+ * partial and expression unique indexes, whose columns we still need to cover.
+ */
+TSDLLEXPORT Bitmapset *
+ts_indexing_relation_get_unique_columns(Relation rel)
+{
+	Bitmapset *unique_columns = NULL;
+	ListCell *lc;
+
+	foreach (lc, RelationGetIndexList(rel))
+	{
+		Relation index_rel = index_open(lfirst_oid(lc), AccessShareLock);
+		Form_pg_index index = index_rel->rd_index;
+
+		if (index->indisunique && index->indislive && index->indisvalid)
+		{
+			for (int i = 0; i < index->indnkeyatts; i++)
+			{
+				AttrNumber attno = index->indkey.values[i];
+				if (attno != 0)
+				{
+					unique_columns = bms_add_member(unique_columns, attno);
+				}
+			}
+		}
+		index_close(index_rel, AccessShareLock);
+	}
+
+	return unique_columns;
+}
+
 /* create the index on the root table of a hypertable.
  * based on postgres CREATE INDEX
  * https://github.com/postgres/postgres/blob/ebfe20dc706bd3238a9bdf3b44cd8f82337e86a8/src/backend/tcop/utility.c#L1291-L1374
@@ -579,11 +650,7 @@ ts_indexing_compare(Oid index1, Oid index2)
 	IndexInfo *info1 = BuildIndexInfo(indexrel1);
 	IndexInfo *info2 = BuildIndexInfo(indexrel2);
 
-#if PG16_GE
 	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(rel1), RelationGetDescr(rel2), false);
-#else
-	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(rel1), RelationGetDescr(rel2));
-#endif
 
 	bool result = CompareIndexInfo(info1,
 								   info2,

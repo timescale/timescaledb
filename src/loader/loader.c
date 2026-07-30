@@ -21,13 +21,6 @@
 #include <utils/guc.h>
 #include <utils/inval.h>
 
-#if PG_VERSION_NUM < 150000
-#include "compat/compat-msvc-enter.h"
-#include <commands/extension.h>
-#include <miscadmin.h>
-#include "compat/compat-msvc-exit.h"
-#endif
-
 #include "compat/compat.h"
 #include "config.h"
 #include "export.h"
@@ -95,10 +88,6 @@ TS_MODULE_MAGIC("timescaledb-loader");
 
 #define CalledInParallelWorker()                                                                   \
 	(MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
-
-#if PG16_LT
-extern void TSDLLEXPORT _PG_init(void);
-#endif
 
 /* was the versioned-extension loaded*/
 static bool loader_present = true;
@@ -404,6 +393,27 @@ should_load_on_create_extension(Node const *const utility_stmt, TsExtension cons
 }
 
 static bool
+should_load_on_transaction(Node const *const utility_stmt)
+{
+	TransactionStmt *stmt = (TransactionStmt *) utility_stmt;
+
+	/*
+	 * Do not load the extension just to open a transaction. This lets ALTER
+	 * EXTENSION ... UPDATE run as the first extension-touching command inside
+	 * a transaction block instead of failing because BEGIN already loaded the
+	 * old version.
+	 */
+	switch (stmt->kind)
+	{
+		case TRANS_STMT_BEGIN:
+		case TRANS_STMT_START:
+			return false;
+		default:
+			return true;
+	}
+}
+
+static bool
 load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 {
 	switch (nodeTag(utility_stmt))
@@ -414,6 +424,8 @@ load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 			return should_load_on_alter_extension(utility_stmt, ext);
 		case T_CreateExtensionStmt:
 			return should_load_on_create_extension(utility_stmt, ext);
+		case T_TransactionStmt:
+			return should_load_on_transaction(utility_stmt);
 		case T_DropStmt:
 			return !drop_statement_drops_extension((DropStmt *) utility_stmt, ext);
 		default:
@@ -476,7 +488,11 @@ database_allowconn(const Oid db_oid)
 }
 
 static void
+#if PG19_GE
+post_analyze_hook(ParseState *pstate, Query *query, const JumbleState *jstate)
+#else
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
+#endif
 {
 	if (query->commandType == CMD_UTILITY)
 	{
@@ -629,11 +645,6 @@ timescaledb_shmem_startup_hook(void)
 #endif
 }
 
-/*
- * PG15 requires all shared memory requests to be requested in a dedicated
- * hook. We group all our shared memory requests in this function and use
- * it as a normal function for PG < 14 and as a hook for PG 15+.
- */
 static void
 timescaledb_shmem_request_hook(void)
 {

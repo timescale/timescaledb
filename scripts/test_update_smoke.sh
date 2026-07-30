@@ -56,7 +56,7 @@ echo "**** pg_dump at   " "$(which pg_dump)"
 echo "**** pg_restore at" "$(which pg_restore)"
 
 # Extra options to pass to psql
-PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=${WITH_ROLES} -v WITH_CHUNK=false"
+PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=${WITH_ROLES} -v WITH_CHUNK=false -v UPDATE_MODE=direct"
 PSQL="psql -a -qX $PGOPTS"
 
 # If we are providing a URI for the connection, we parse it here and

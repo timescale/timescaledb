@@ -16,7 +16,7 @@ set timescaledb.enable_merge_multidim_chunks = true;
 -- Helper views --
 -------------------
 create view partitions as
-select c.table_name, d.column_name, ds.range_start, ds.range_end
+select c.relid::text AS table_name, d.column_name, ds.range_start, ds.range_end
 from _timescaledb_catalog.hypertable h
 join _timescaledb_catalog.chunk c on (c.hypertable_id = h.id)
 join _timescaledb_catalog.dimension_slice ds on (ds.chunk_id = c.id)
@@ -256,7 +256,7 @@ call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', 'mergeme_regular');
 call merge_chunks('mergeme_regular', '_timescaledb_internal._hyper_1_1_chunk');
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', 'mergeme_mat');
 -- Merge chunks from different hypertables
-call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_3_9_chunk');
+call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_3_6_chunk');
 
 -- Merge with unsupported access method
 alter table _timescaledb_internal._hyper_1_1_chunk set access method testam;
@@ -265,12 +265,12 @@ alter table _timescaledb_internal._hyper_1_1_chunk set access method heap;
 
 -- Merge OSM chunks
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = true where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = true where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_2_chunk');
 reset role;
-update _timescaledb_catalog.chunk ch set osm_chunk = false where table_name = '_hyper_1_1_chunk';
+update _timescaledb_catalog.chunk ch set osm_chunk = false where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass;
 set role :ROLE_DEFAULT_PERM_USER;
 
 -- Merge frozen chunks
@@ -342,7 +342,7 @@ order by chunk_id;
 \set ON_ERROR_STOP 0
 -- Test blocked multi-dimensional merges
 set timescaledb.enable_merge_multidim_chunks = false;
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_9_chunk']);
 set timescaledb.enable_merge_multidim_chunks = true;
 \set ON_ERROR_STOP 1
 
@@ -353,15 +353,15 @@ set timescaledb.enable_merge_multidim_chunks = true;
 begin;
 select * from compression_size_fraction;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_9_chunk']);
 
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_7_chunk','_timescaledb_internal._hyper_1_10_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
 
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
-call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_11_chunk','_timescaledb_internal._hyper_1_14_chunk', '_timescaledb_internal._hyper_1_16_chunk']);
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_8_chunk','_timescaledb_internal._hyper_1_11_chunk', '_timescaledb_internal._hyper_1_13_chunk']);
 
 -- Final merge, involving the two compressed chunks 1 and 2. The stats
 -- should also be merged.
@@ -391,11 +391,11 @@ grant select on chunks_being_merged to public;
 -- Concurrent merge cannot run in a transaction block
 \set ON_ERROR_STOP 0
 begin;
-call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_9_chunk']);
 rollback;
 
 select debug_waitpoint_enable('merge_chunks_fail');
-call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_9_chunk']);
 \set ON_ERROR_STOP 1
 
 select * from chunks_being_merged;
@@ -413,10 +413,12 @@ select create_hypertable('mergeme_role1', 'time', chunk_time_interval => interva
 
 insert into mergeme_role1 values ('2024-01-01', 1, 1.0), ('2024-01-02', 2, 2.0);
 select show_chunks('mergeme_role1');
+select show_chunks('mergeme_role1') as role1_chunk1 order by 1 limit 1 offset 0 \gset
+select show_chunks('mergeme_role1') as role1_chunk2 order by 1 limit 1 offset 1 \gset
 
 -- Fail merge to create multiple entries in chunk_rewrite with different owners
 \set ON_ERROR_STOP 0
-call merge_chunks('_timescaledb_internal._hyper_4_18_chunk', '_timescaledb_internal._hyper_4_19_chunk', concurrently => true);
+call merge_chunks(:'role1_chunk1', :'role1_chunk2', concurrently => true);
 \set ON_ERROR_STOP 1
 select * from chunks_being_merged;
 
@@ -444,9 +446,9 @@ select count(*) from pre_cleaned_chunks cc join pg_class c on (c.oid = cc.new_re
 
 -- Fail merges again to test superuser cleanup
 \set ON_ERROR_STOP 0
-call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_9_chunk']);
 set role :ROLE_1;
-call merge_chunks('_timescaledb_internal._hyper_4_18_chunk', '_timescaledb_internal._hyper_4_19_chunk', concurrently => true);
+call merge_chunks(:'role1_chunk1', :'role1_chunk2', concurrently => true);
 \set ON_ERROR_STOP 1
 set role :ROLE_DEFAULT_PERM_USER;
 select debug_waitpoint_release('merge_chunks_fail');
@@ -462,7 +464,7 @@ drop table pre_cleaned_chunks;
 
 -- Test successful merges in concurrent mode
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk', concurrently => true);
-call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_9_chunk']);
 
 drop view chunks_being_merged;
 
@@ -518,11 +520,11 @@ INSERT INTO compress_settings_merge VALUES
     ('2024-01-01 12:00', 1, 'one', 1.5, 100),
     ('2024-01-02 12:00', 2, 'two', 2.5, 200);
 
-SELECT format('%I.%I', schema_name, table_name) AS first_chunk
+SELECT relid::text AS first_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='compress_settings_merge')
 ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS second_chunk
+SELECT relid::text AS second_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='compress_settings_merge')
 ORDER BY id OFFSET 1 LIMIT 1 \gset
@@ -572,11 +574,11 @@ INSERT INTO concurrent_compressed_merge VALUES
     ('2024-01-02 12:00', 2, 2.5);
 SELECT compress_chunk(ch) FROM show_chunks('concurrent_compressed_merge') ch;
 
-SELECT format('%I.%I', schema_name, table_name) AS ccm_c1
+SELECT relid::text AS ccm_c1
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
  ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS ccm_c2
+SELECT relid::text AS ccm_c2
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
  ORDER BY id OFFSET 1 LIMIT 1 \gset
@@ -608,12 +610,12 @@ SELECT t, (i % 10) + 1, random() * 100, (i * 7) % 13
 FROM generate_series('2024-01-02 2:00'::timestamptz, '2024-01-02 23:59', '1 minute') t,
      generate_series(1, 5) i;
 
-SELECT format('%I.%I', schema_name, table_name) AS mso_c1
+SELECT relid::text AS mso_c1
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'merge_sparse_order')
  ORDER BY id LIMIT 1 \gset
-SELECT format('%I.%I', schema_name, table_name) AS mso_c2
+SELECT relid::text AS mso_c2
   FROM _timescaledb_catalog.chunk
  WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'merge_sparse_order')

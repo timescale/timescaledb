@@ -9,6 +9,8 @@
 #include <miscadmin.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
+#include <utils/fmgrprotos.h>
+#include <utils/jsonb.h>
 
 #include <parser/parse_func.h>
 #include <parser/parser.h>
@@ -31,6 +33,26 @@
 #define DEFAULT_RETRY_PERIOD (5 * USECS_PER_MINUTE)
 
 #define ALTER_JOB_NUM_COLS 13
+
+/* Argument positions of the alter_job() SQL function */
+enum alter_job_arg
+{
+	ALTER_JOB_ARG_JOB_ID = 0,
+	ALTER_JOB_ARG_SCHEDULE_INTERVAL,
+	ALTER_JOB_ARG_MAX_RUNTIME,
+	ALTER_JOB_ARG_MAX_RETRIES,
+	ALTER_JOB_ARG_RETRY_PERIOD,
+	ALTER_JOB_ARG_SCHEDULED,
+	ALTER_JOB_ARG_CONFIG,
+	ALTER_JOB_ARG_NEXT_START,
+	ALTER_JOB_ARG_IF_EXISTS,
+	ALTER_JOB_ARG_CHECK_CONFIG,
+	ALTER_JOB_ARG_FIXED_SCHEDULE,
+	ALTER_JOB_ARG_INITIAL_START,
+	ALTER_JOB_ARG_TIMEZONE,
+	ALTER_JOB_ARG_JOB_NAME,
+	ALTER_JOB_ARG_CONFIG_MERGE,
+};
 
 /*
  * This function ensures that the check function has the required signature
@@ -307,6 +329,7 @@ job_run(PG_FUNCTION_ARGS)
  * 11   initial_start TIMESTAMPTZ = NULL
  * 12   timezone TEXT = NULL
  * 13	job_name TEXT = NULL
+ * 14   config_merge JSONB = NULL
  * ) RETURNS TABLE (
  *      job_id INTEGER,
  *      schedule_interval INTERVAL,
@@ -332,23 +355,28 @@ job_alter(PG_FUNCTION_ARGS)
 	bool nulls[ALTER_JOB_NUM_COLS] = { false };
 	HeapTuple tuple;
 	TimestampTz next_start;
-	int job_id = PG_GETARG_INT32(0);
-	bool if_exists = PG_GETARG_BOOL(8);
+	int job_id = PG_GETARG_INT32(ALTER_JOB_ARG_JOB_ID);
+	bool if_exists = PG_GETARG_BOOL(ALTER_JOB_ARG_IF_EXISTS);
 	BgwJob *job;
 	NameData check_name = { .data = { 0 } };
 	NameData check_schema = { .data = { 0 } };
-	Oid check = PG_ARGISNULL(9) ? InvalidOid : PG_GETARG_OID(9);
+	Oid check = PG_ARGISNULL(ALTER_JOB_ARG_CHECK_CONFIG) ?
+					InvalidOid :
+					PG_GETARG_OID(ALTER_JOB_ARG_CHECK_CONFIG);
 	char *check_name_str = NULL;
 	/* Added space for period and NULL */
 	char schema_qualified_check_name[(2 * NAMEDATALEN) + 2] = { 0 };
-	bool unregister_check = (!PG_ARGISNULL(9) && !OidIsValid(check));
-	TimestampTz initial_start = PG_ARGISNULL(11) ? DT_NOBEGIN : PG_GETARG_TIMESTAMPTZ(11);
-	text *timezone = PG_ARGISNULL(12) ? NULL : PG_GETARG_TEXT_PP(12);
+	bool unregister_check = (!PG_ARGISNULL(ALTER_JOB_ARG_CHECK_CONFIG) && !OidIsValid(check));
+	TimestampTz initial_start = PG_ARGISNULL(ALTER_JOB_ARG_INITIAL_START) ?
+									DT_NOBEGIN :
+									PG_GETARG_TIMESTAMPTZ(ALTER_JOB_ARG_INITIAL_START);
+	text *timezone =
+		PG_ARGISNULL(ALTER_JOB_ARG_TIMEZONE) ? NULL : PG_GETARG_TEXT_PP(ALTER_JOB_ARG_TIMEZONE);
 	char *valid_timezone = NULL;
 	/* verify it's a valid timezone */
 	if (timezone != NULL)
 	{
-		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(12));
+		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(ALTER_JOB_ARG_TIMEZONE));
 	}
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
@@ -363,7 +391,7 @@ job_alter(PG_FUNCTION_ARGS)
 						"that cannot accept type record")));
 	}
 
-	job = find_job(job_id, PG_ARGISNULL(0), if_exists);
+	job = find_job(job_id, PG_ARGISNULL(ALTER_JOB_ARG_JOB_ID), if_exists);
 	if (job == NULL)
 	{
 		PG_RETURN_NULL();
@@ -371,32 +399,56 @@ job_alter(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_permission_check(job, "alter");
 
-	if (!PG_ARGISNULL(1))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_SCHEDULE_INTERVAL))
 	{
-		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(1);
+		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(ALTER_JOB_ARG_SCHEDULE_INTERVAL);
 	}
-	if (!PG_ARGISNULL(2))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_MAX_RUNTIME))
 	{
-		job->fd.max_runtime = *PG_GETARG_INTERVAL_P(2);
+		job->fd.max_runtime = *PG_GETARG_INTERVAL_P(ALTER_JOB_ARG_MAX_RUNTIME);
 	}
-	if (!PG_ARGISNULL(3))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_MAX_RETRIES))
 	{
-		job->fd.max_retries = PG_GETARG_INT32(3);
+		job->fd.max_retries = PG_GETARG_INT32(ALTER_JOB_ARG_MAX_RETRIES);
 	}
-	if (!PG_ARGISNULL(4))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_RETRY_PERIOD))
 	{
-		job->fd.retry_period = *PG_GETARG_INTERVAL_P(4);
+		job->fd.retry_period = *PG_GETARG_INTERVAL_P(ALTER_JOB_ARG_RETRY_PERIOD);
 	}
-	if (!PG_ARGISNULL(5))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_SCHEDULED))
 	{
-		job->fd.scheduled = PG_GETARG_BOOL(5);
+		job->fd.scheduled = PG_GETARG_BOOL(ALTER_JOB_ARG_SCHEDULED);
 	}
-	if (!PG_ARGISNULL(6))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_CONFIG) && !PG_ARGISNULL(ALTER_JOB_ARG_CONFIG_MERGE))
 	{
-		job->fd.config = PG_GETARG_JSONB_P(6);
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot specify both \"config\" and \"config_merge\""),
+				 errhint("Use \"config\" to replace the configuration or \"config_merge\" to merge "
+						 "into it.")));
+	}
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_CONFIG))
+	{
+		job->fd.config = PG_GETARG_JSONB_P(ALTER_JOB_ARG_CONFIG);
+	}
+	/* config_merge is merged into the existing configuration, with its keys
+	 * taking precedence over the ones already present. */
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_CONFIG_MERGE))
+	{
+		Jsonb *config_merge = PG_GETARG_JSONB_P(ALTER_JOB_ARG_CONFIG_MERGE);
+		if (job->fd.config == NULL)
+		{
+			job->fd.config = config_merge;
+		}
+		else
+		{
+			job->fd.config = DatumGetJsonbP(DirectFunctionCall2(jsonb_concat,
+																JsonbPGetDatum(job->fd.config),
+																JsonbPGetDatum(config_merge)));
+		}
 	}
 
-	if (!PG_ARGISNULL(9))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_CHECK_CONFIG))
 	{
 		if (OidIsValid(check))
 		{
@@ -487,9 +539,9 @@ job_alter(PG_FUNCTION_ARGS)
 		namestrcpy(&job->fd.check_name, NameStr(empty_namedata));
 	}
 
-	if (!PG_ARGISNULL(10))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_FIXED_SCHEDULE))
 	{
-		bool fixed_schedule = PG_GETARG_BOOL(10);
+		bool fixed_schedule = PG_GETARG_BOOL(ALTER_JOB_ARG_FIXED_SCHEDULE);
 		/*
 		 * initial_start is a required argument for fixed schedules
 		 * so we use the current timestamp if it's not provided
@@ -509,7 +561,7 @@ job_alter(PG_FUNCTION_ARGS)
 		}
 		job->fd.fixed_schedule = fixed_schedule;
 	}
-	if (!PG_ARGISNULL(11))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_INITIAL_START))
 	{
 		/* user provided +- infinity as initial_start, this is not acceptable */
 		if (TIMESTAMP_NOT_FINITE(initial_start))
@@ -524,7 +576,7 @@ job_alter(PG_FUNCTION_ARGS)
 		job->fd.initial_start = initial_start;
 	}
 
-	if (!PG_ARGISNULL(13))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_JOB_NAME))
 	{
 		char app_name[NAMEDATALEN];
 		int name_len;
@@ -532,7 +584,7 @@ job_alter(PG_FUNCTION_ARGS)
 		name_len = snprintf(app_name,
 							NAMEDATALEN,
 							"%s [%d]",
-							text_to_cstring(PG_GETARG_TEXT_PP(13)),
+							text_to_cstring(PG_GETARG_TEXT_PP(ALTER_JOB_ARG_JOB_NAME)),
 							job_id);
 
 		if (name_len >= NAMEDATALEN)
@@ -562,7 +614,8 @@ job_alter(PG_FUNCTION_ARGS)
 	but I'm not going to rely on this to change stuff */
 	ts_bgw_job_update_by_id(job_id, job);
 	/* one of the fields below changing necessitates a next_start update */
-	if (!PG_ARGISNULL(10) || !TIMESTAMP_NOT_FINITE(initial_start) || (valid_timezone != NULL))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_FIXED_SCHEDULE) || !TIMESTAMP_NOT_FINITE(initial_start) ||
+		(valid_timezone != NULL))
 	{
 		TimestampTz next_start_calculated;
 		if (job->fd.fixed_schedule)
@@ -590,9 +643,9 @@ job_alter(PG_FUNCTION_ARGS)
 		}
 	}
 
-	if (!PG_ARGISNULL(7))
+	if (!PG_ARGISNULL(ALTER_JOB_ARG_NEXT_START))
 	{
-		ts_bgw_job_stat_upsert_next_start(job_id, PG_GETARG_TIMESTAMPTZ(7));
+		ts_bgw_job_stat_upsert_next_start(job_id, PG_GETARG_TIMESTAMPTZ(ALTER_JOB_ARG_NEXT_START));
 	}
 
 	stat = ts_bgw_job_stat_find(job_id);

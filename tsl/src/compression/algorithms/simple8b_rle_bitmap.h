@@ -48,8 +48,8 @@ simple8brle_bitmap_num_ones(const Simple8bRleBitmap *bitmap)
  * useful for gorilla decompression. Can be unused by other users of this
  * header.
  */
-static Simple8bRleBitmap simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
-	pg_attribute_unused();
+pg_attribute_unused() static Simple8bRleBitmap
+	simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed);
 
 static Simple8bRleBitmap
 simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)

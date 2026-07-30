@@ -6,16 +6,16 @@
 \ir include/insert_two_partitions.sql
 \o
 
-SELECT * FROM _timescaledb_catalog.hypertable;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 SELECT * FROM test.show_subtables('"two_Partitions"');
 SELECT * FROM "two_Partitions";
 
 SET client_min_messages = WARNING;
 TRUNCATE "two_Partitions";
 
-SELECT * FROM _timescaledb_catalog.hypertable;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 -- should be empty
 SELECT * FROM test.show_subtables('"two_Partitions"');
@@ -27,7 +27,7 @@ INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1)
 (1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
 
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
 
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_5_chunk;
 

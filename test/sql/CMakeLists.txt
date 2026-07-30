@@ -21,6 +21,7 @@ set(TEST_FILES
     ddl_extra.sql
     debug_utils.sql
     delete.sql
+    dml_system_columns.sql
     drop_extension.sql
     drop_hypertable.sql
     drop_rename_hypertable.sql
@@ -30,6 +31,7 @@ set(TEST_FILES
     extension_scripts.sql
     generated_as_identity.sql
     hash.sql
+    histogram.sql
     index.sql
     information_views.sql
     insert_many.sql
@@ -41,10 +43,13 @@ set(TEST_FILES
     partition.sql
     partition_coercion.sql
     partitioning.sql
+    partitionwise.sql
     pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
+    plan_hashagg.sql
     plan_hypertable_inline.sql
+    plan_ordered_append.sql
     qual_filtering.sql
     query.sql
     relocate_extension.sql
@@ -55,6 +60,7 @@ set(TEST_FILES
     tableam.sql
     tableam_alter.sql
     tablespace.sql
+    timestamp.sql
     triggers.sql
     truncate.sql
     trusted_extension.sql
@@ -72,23 +78,12 @@ set(TEST_TEMPLATES
     append.sql.in
     drop_owned.sql.in
     grant_hypertable.sql.in
-    histogram_test.sql.in
     insert.sql.in
     null_exclusion.sql.in
-    plan_hashagg.sql.in
     rowsecurity.sql.in
     parallel.sql.in
-    partitionwise.sql.in
     plan_expand_hypertable.sql.in
-    plan_ordered_append.sql.in
-    timestamp.sql.in
     ts_merge.sql.in)
-
-# Loader test must distinguish between Apache and TSL builds so we parametrize
-# this here
-set(LOADER_TEST_FILE loader-${TEST_LICENSE_SUFFIX})
-configure_file(loader.sql.in
-               ${CMAKE_CURRENT_SOURCE_DIR}/${LOADER_TEST_FILE}.sql)
 
 # tests that fail or are unreliable when run in parallel bgw tests need to run
 # first otherwise they are flaky
@@ -103,7 +98,7 @@ set(SOLO_TESTS
     telemetry
     net)
 
-list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
+list(APPEND SOLO_TESTS loader)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
@@ -121,7 +116,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     symbol_conflict.sql
     test_tss_callbacks.sql
     test_utils.sql
-    ${LOADER_TEST_FILE}.sql)
+    loader.sql)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry.sql)
   endif()
@@ -130,11 +125,16 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES tableam_alter_defaults.sql)
+  list(APPEND TEST_FILES tableam_alter_defaults.sql
+       merge_not_matched_by_source.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
-  list(APPEND TEST_FILES insert_returning_old_new.sql dml_system_columns.sql)
+  list(APPEND TEST_FILES insert_returning_old_new.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
+  list(APPEND TEST_FILES repack.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture

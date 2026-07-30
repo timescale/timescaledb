@@ -77,6 +77,25 @@ cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 	ts_scan_iterator_close(&iterator);
 }
 
+void
+continuous_agg_set_granular_refresh_enabled(ContinuousAgg *agg, bool enabled)
+{
+	/* Only enabling is supported for now */
+	if (!enabled)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("disabling granular refresh on a continuous aggregate is not "
+						"supported")));
+	}
+
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("granular refresh is not implemented yet"),
+			 errhint("Granular refresh of continuous aggregates is a feature under "
+					 "development.")));
+}
+
 /* get the compression parameters for cagg. The parameters are
  * derived from the cagg view definition.
  * Computes:
@@ -222,6 +241,14 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 
 		cagg_alter_compression(agg, mat_ht, compression_options);
 		ts_cache_release(&hcache);
+	}
+
+	if (!with_clause_options[CreateMaterializedViewFlagEnableGranularRefresh].is_default)
+	{
+		bool enabled = DatumGetBool(
+			with_clause_options[CreateMaterializedViewFlagEnableGranularRefresh].parsed);
+
+		continuous_agg_set_granular_refresh_enabled(agg, enabled);
 	}
 
 	if (!with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].is_default)

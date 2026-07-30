@@ -21,7 +21,7 @@ jobs:
       pg_latest: ${{ github.event_name == 'pull_request' && steps.setter.outputs.PG_LATEST_ONLY || steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -34,7 +34,7 @@ jobs:
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [config, check_paths]
     container:
-      image: i386/debian:bookworm-slim@sha256:25df630e1c5d15797330d33e1cf3df6a20017c52eed3798109c7deb17d1a3d4a
+      image: i386/debian:bookworm-slim@sha256:4d0f3abf8160f14d07208ff72dc4c46882bc5f0a259a8bb8652702c0ee2cc67a
       options: --privileged --ulimit core=-1:-1 --ulimit fsize=-1:-1
       env:
         PG_SRC_DIR: pgbuild
@@ -65,10 +65,10 @@ jobs:
           append-*
           bgw_db_scheduler*
           chunkwise_agg_cost
-          columnar_scan_cost
+          columnar_scan_cost*
+          compress_bloom
           compress_bloom_sparse_compat
           compress_bloom_sparse_debug
-          compress_compbloom_hash_pushdown
           compress_composite_bloom_debug
           compress_observ-*
           compress_qualpushdown_saop
@@ -90,7 +90,6 @@ jobs:
           vector_agg_text
           vector_agg_uuid
           vectorized_aggregation
-          ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
@@ -118,7 +117,7 @@ jobs:
           icu-devtools
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -141,7 +140,7 @@ jobs:
     - name: Build PostgreSQL ${{ matrix.pg }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        wget -q -O postgresql.tar.bz2 \
+        wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
@@ -230,6 +229,21 @@ jobs:
       shell: bash
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
+
+        # TAP tests do not produce regression.diffs. Append prove's failure
+        # summary from installcheck.log plus, for each failing test, the failed
+        # assertions
+        sed -n '/^Test Summary Report/,/^Result:/p' installcheck.log >> regression.log 2>/dev/null || true
+        for t in $(grep -hoE 't/[^ ]+\.pl[[:space:]]+\(Wstat' installcheck.log 2>/dev/null | sed -E 's#t/(.+)\.pl.*#\1#'); do
+          echo "=== regress_log_$t ===" >> regression.log
+          find . -name "regress_log_$t" -exec awk '
+            FNR==1 { blk=0 }
+            { sub(/^\[[0-9:.]+\]\([0-9.]+s\) /, "") }
+            /^ok |^not ok |^# Looks like|^# Running:|^1\.\.|^Bail out/ { blk=0 }
+            /^#   Failed test/ { blk=1 }
+            blk { print }
+          ' {} + >> regression.log || true
+        done
 
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
@@ -339,7 +353,7 @@ jobs:
     name: Regression Linux i386 summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

@@ -13,6 +13,7 @@
 #include <executor/executor.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
+#include <utils/tuplestore.h>
 
 #include "compat/compat.h"
 #include "event_trigger.h"
@@ -49,7 +50,7 @@ ts_event_trigger_ddl_commands(void)
 	rsinfo.allowedModes = SFRM_Materialize;
 	rsinfo.econtext = CreateExprContext(estate);
 	FC_SET_NULL(fcinfo, 0);
-	fcinfo->resultinfo = (fmNodePtr) &rsinfo;
+	fcinfo->resultinfo = (Node *) &rsinfo;
 
 	FunctionCallInvoke(fcinfo);
 
@@ -238,7 +239,7 @@ ts_event_trigger_dropped_objects(void)
 	rsinfo.type = T_ReturnSetInfo;
 	rsinfo.allowedModes = SFRM_Materialize;
 	rsinfo.econtext = CreateExprContext(estate);
-	fcinfo->resultinfo = (fmNodePtr) &rsinfo;
+	fcinfo->resultinfo = (Node *) &rsinfo;
 
 	FunctionCallInvoke(fcinfo);
 

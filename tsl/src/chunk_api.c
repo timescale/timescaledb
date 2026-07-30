@@ -38,6 +38,7 @@
 #include "errors.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
+#include "jsonb_utils.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "utils.h"
@@ -52,13 +53,13 @@
  *  "device": [-9223372036854775808, 1073741823]}
  */
 static JsonbValue *
-hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbParseState **ps)
+hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbInState *state)
 {
 	int i;
 
 	Assert(hs->num_dimensions == hc->num_slices);
 
-	pushJsonbValue(ps, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_BEGIN_OBJECT, NULL);
 
 	for (i = 0; i < hc->num_slices; i++)
 	{
@@ -75,19 +76,20 @@ hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbParseState **ps)
 		k.val.string.len = strlen(dim_name);
 		k.val.string.val = dim_name;
 
-		pushJsonbValue(ps, WJB_KEY, &k);
-		pushJsonbValue(ps, WJB_BEGIN_ARRAY, NULL);
+		pushJsonbValueCompat(state, WJB_KEY, &k);
+		pushJsonbValueCompat(state, WJB_BEGIN_ARRAY, NULL);
 
 		v.type = jbvNumeric;
 		v.val.numeric = DatumGetNumeric(range_start);
-		pushJsonbValue(ps, WJB_ELEM, &v);
+		pushJsonbValueCompat(state, WJB_ELEM, &v);
 		v.val.numeric = DatumGetNumeric(range_end);
-		pushJsonbValue(ps, WJB_ELEM, &v);
+		pushJsonbValueCompat(state, WJB_ELEM, &v);
 
-		pushJsonbValue(ps, WJB_END_ARRAY, NULL);
+		pushJsonbValueCompat(state, WJB_END_ARRAY, NULL);
 	}
 
-	return pushJsonbValue(ps, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(state, WJB_END_OBJECT, NULL);
+	return state->result;
 }
 
 /*
@@ -253,21 +255,24 @@ chunk_form_tuple(Chunk *chunk, Hypertable *ht, TupleDesc tupdesc, bool created)
 {
 	Datum values[Natts_create_chunk];
 	bool nulls[Natts_create_chunk] = { false };
-	JsonbParseState *ps = NULL;
-	JsonbValue *jv = hypercube_to_jsonb_value(chunk->cube, ht->space, &ps);
+	JsonbInState state = { 0 };
+	JsonbValue *jv = hypercube_to_jsonb_value(chunk->cube, ht->space, &state);
 
 	if (NULL == jv)
 	{
 		return NULL;
 	}
 
+	NameData schema_name;
+	NameData table_name;
+	namestrcpy(&schema_name, ts_chunk_get_schema_name(chunk));
+	namestrcpy(&table_name, ts_chunk_get_table_name(chunk));
+
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_id)] = Int32GetDatum(chunk->fd.id);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_hypertable_id)] =
 		Int32GetDatum(chunk->fd.hypertable_id);
-	values[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)] =
-		NameGetDatum(&chunk->fd.schema_name);
-	values[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)] =
-		NameGetDatum(&chunk->fd.table_name);
+	values[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)] = NameGetDatum(&schema_name);
+	values[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)] = NameGetDatum(&table_name);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_relkind)] = CharGetDatum(chunk->relkind);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_slices)] =
 		JsonbPGetDatum(JsonbValueToJsonb(jv));
@@ -490,7 +495,7 @@ chunk_detach(PG_FUNCTION_ARGS)
 		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
 	};
 
-	ts_alter_table_with_event_trigger(chunk->table_id, (Node *) &stmt, list_make1(&cmd), false);
+	ts_alter_table_with_event_trigger(chunk->fd.relid, (Node *) &stmt, list_make1(&cmd), false);
 
 	ts_chunk_detach_by_relid(chunk_relid);
 

@@ -33,7 +33,7 @@ vacuum full analyze bloom;
 
 select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'bloom') limit 1
 \gset
@@ -291,7 +291,7 @@ vacuum full analyze badtable;
 
 select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'badtable') limit 1
 \gset
@@ -328,7 +328,7 @@ vacuum full analyze badtable;
 -- Verify that we actually got the bloom filter index.
 select cs.compress_relid::regclass chunk from _timescaledb_catalog.chunk ch
     join _timescaledb_catalog.compression_settings cs
-        on cs.relid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+        on cs.relid = ch.relid
     where ch.hypertable_id = (select id from _timescaledb_catalog.hypertable
         where table_name = 'badtable') limit 1
 \gset

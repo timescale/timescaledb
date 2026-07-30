@@ -129,9 +129,7 @@ select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
      5
 
 SET timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference.
---set timescaledb.enable_vectorized_aggregation to off;
---set timescaledb.debug_require_vector_agg = 'allow';
+-- /* uncomment to generate reference */ set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
 SELECT ver, u, ts, uuid_ts from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
 order by 1,2;
@@ -188,8 +186,9 @@ select uuid_timestamp(u), count(*)
           uuid_timestamp          | count 
 ----------------------------------+-------
  Tue Dec 31 16:00:00 2024 PST     |     1
+ Tue Dec 31 16:00:59.999 2024 PST |     1
  Wed Jun 25 08:16:46.347 2025 PDT |    16
- $                                |     7
+ $                                |     6
 
 select uuid_timestamp(to_uuidv7_boundary(uuid_ts)), count(*)
     from uuid_table group by 1 order by 1;

@@ -26,10 +26,6 @@
 PG_MODULE_MAGIC;
 #endif
 
-#if PG16_LT
-extern void PGDLLEXPORT _PG_init(void);
-#endif
-
 bool ts_license_guc_check_hook(char **newval, void **extra, GucSource source);
 void ts_license_guc_assign_hook(const char *newval, void *extra);
 

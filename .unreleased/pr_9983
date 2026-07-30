@@ -1,1 +1,0 @@
-Fixes: #9977 Fix COPY WHERE into a hypertable with dropped columns

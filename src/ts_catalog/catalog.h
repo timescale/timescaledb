@@ -49,6 +49,8 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
 	CONTINUOUS_AGGS_JOBS_REFRESH_RANGES,
+	CONTINUOUS_AGGS_TENANT_TRACKING,
+	HYPERTABLE_CAGG_SETTINGS,
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
@@ -378,10 +380,8 @@ enum
 enum Anum_chunk
 {
 	Anum_chunk_id = 1,
+	Anum_chunk_relid,
 	Anum_chunk_hypertable_id,
-	Anum_chunk_schema_name,
-	Anum_chunk_table_name,
-	Anum_chunk_compressed_chunk_id,
 	Anum_chunk_status,
 	Anum_chunk_osm_chunk,
 	Anum_chunk_creation_time,
@@ -393,10 +393,8 @@ enum Anum_chunk
 typedef struct FormData_chunk
 {
 	int32 id;
+	Oid relid;
 	int32 hypertable_id;
-	NameData schema_name;
-	NameData table_name;
-	int32 compressed_chunk_id;
 	int32 status;
 	bool osm_chunk;
 	TimestampTz creation_time;
@@ -408,8 +406,7 @@ enum
 {
 	CHUNK_ID_INDEX = 0,
 	CHUNK_HYPERTABLE_ID_INDEX,
-	CHUNK_SCHEMA_NAME_INDEX,
-	CHUNK_COMPRESSED_CHUNK_ID_INDEX,
+	CHUNK_RELID_INDEX,
 	CHUNK_OSM_CHUNK_INDEX,
 	CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX,
 	_MAX_CHUNK_INDEX,
@@ -425,15 +422,9 @@ enum Anum_chunk_hypertable_id_idx
 	Anum_chunk_hypertable_id_idx_hypertable_id = 1,
 };
 
-enum Anum_chunk_compressed_chunk_id_idx
+enum Anum_chunk_relid_idx
 {
-	Anum_chunk_compressed_chunk_id_idx_compressed_chunk_id = 1,
-};
-
-enum Anum_chunk_schema_name_idx
-{
-	Anum_chunk_schema_name_idx_schema_name = 1,
-	Anum_chunk_schema_name_idx_table_name,
+	Anum_chunk_relid_idx_relid = 1,
 };
 
 enum Anum_chunk_osm_chunk_idx
@@ -1091,6 +1082,84 @@ enum
 	_MAX_CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_INDEX,
 };
 
+/****** CONTINUOUS_AGGS_TENANT_TRACKING definitions */
+#define CONTINUOUS_AGGS_TENANT_TRACKING_TABLE_NAME "continuous_aggs_tenant_tracking"
+
+typedef enum Anum_continuous_aggs_tenant_tracking
+{
+	Anum_continuous_aggs_tenant_tracking_hypertable_id = 1,
+	Anum_continuous_aggs_tenant_tracking_tenant_id,
+	Anum_continuous_aggs_tenant_tracking_min_timestamp,
+	Anum_continuous_aggs_tenant_tracking_max_timestamp,
+	Anum_continuous_aggs_tenant_tracking_seqnum,
+	_Anum_continuous_aggs_tenant_tracking_max,
+} Anum_continuous_aggs_tenant_tracking;
+
+#define Natts_continuous_aggs_tenant_tracking (_Anum_continuous_aggs_tenant_tracking_max - 1)
+
+typedef struct FormData_continuous_aggs_tenant_tracking
+{
+	int32 hypertable_id;
+	text *tenant_id;
+	int64 min_timestamp;
+	int64 max_timestamp;
+	int32 seqnum;
+} FormData_continuous_aggs_tenant_tracking;
+
+typedef FormData_continuous_aggs_tenant_tracking *Form_continuous_aggs_tenant_tracking;
+
+enum
+{
+	CONTINUOUS_AGGS_TENANT_TRACKING_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_TENANT_TRACKING_INDEX,
+};
+typedef enum Anum_continuous_aggs_tenant_tracking_idx
+{
+	Anum_continuous_aggs_tenant_tracking_idx_hypertable_id = 1,
+	Anum_continuous_aggs_tenant_tracking_idx_seqnum,
+	_Anum_continuous_aggs_tenant_tracking_idx_max,
+} Anum_continuous_aggs_tenant_tracking_idx;
+
+#define Natts_continuous_aggs_tenant_tracking_idx                                                  \
+	(_Anum_continuous_aggs_tenant_tracking_idx_max - 1)
+
+/****** HYPERTABLE_CAGG_SETTINGS definitions */
+#define HYPERTABLE_CAGG_SETTINGS_TABLE_NAME "hypertable_cagg_settings"
+
+typedef enum Anum_hypertable_cagg_settings
+{
+	Anum_hypertable_cagg_settings_hypertable_id = 1,
+	Anum_hypertable_cagg_settings_granular_refresh_column,
+	Anum_hypertable_cagg_settings_granular_refresh_start_offset,
+	Anum_hypertable_cagg_settings_granular_refresh_end_offset,
+	_Anum_hypertable_cagg_settings_max,
+} Anum_hypertable_cagg_settings;
+
+#define Natts_hypertable_cagg_settings (_Anum_hypertable_cagg_settings_max - 1)
+
+typedef struct FormData_hypertable_cagg_settings
+{
+	int32 hypertable_id;
+	NameData granular_refresh_column;
+	text *granular_refresh_start_offset;
+	text *granular_refresh_end_offset;
+} FormData_hypertable_cagg_settings;
+
+typedef FormData_hypertable_cagg_settings *Form_hypertable_cagg_settings;
+
+enum
+{
+	HYPERTABLE_CAGG_SETTINGS_PKEY = 0,
+	_MAX_HYPERTABLE_CAGG_SETTINGS_INDEX,
+};
+typedef enum Anum_hypertable_cagg_settings_pkey
+{
+	Anum_hypertable_cagg_settings_pkey_hypertable_id = 1,
+	_Anum_hypertable_cagg_settings_pkey_max,
+} Anum_hypertable_cagg_settings_pkey;
+
+#define Natts_hypertable_cagg_settings_pkey (_Anum_hypertable_cagg_settings_pkey_max - 1)
+
 typedef enum Anum_continuous_aggs_jobs_refresh_ranges_idx
 {
 	Anum_continuous_aggs_jobs_refresh_ranges_idx_materialization_id = 1,
@@ -1342,6 +1411,10 @@ typedef struct CatalogSecurityContext
  * append.
  */
 #define HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS 2
+#define HYPERTABLE_STATUS_COMPRESSION 4
+/* flag set when the hypertable has opted into direct compress on insert/copy,
+ * independent of the instance-wide direct compress GUCs */
+#define HYPERTABLE_STATUS_DIRECT_COMPRESS 8
 
 extern void ts_catalog_table_info_init(CatalogTableInfo *tables, int max_table,
 									   const TableInfoDef *table_ary,

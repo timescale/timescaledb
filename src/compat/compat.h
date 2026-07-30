@@ -7,7 +7,6 @@
 
 #include <postgres.h>
 
-#include <commands/cluster.h>
 #include <commands/defrem.h>
 #include <commands/explain.h>
 #include <commands/trigger.h>
@@ -25,83 +24,200 @@
 
 #include "export.h"
 
-#define PG_MAJOR_MIN 15
-
 /*
  * Prevent building against upstream versions that had ABI breaking change (15.9, 16.5, 17.1)
  * that was reverted in the following release.
  */
 
-#define is_supported_pg_version_15(version) ((version >= 150010) && (version < 160000))
 #define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
 #define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
 #define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
+#define is_supported_pg_version_19(version) ((version >= 190000) && (version < 200000))
 
 /*
  * To compile with an unsupported version, use -DEXPERIMENTAL=ON with cmake.
  * (Useful when testing with unreleased versions)
  */
 #define is_supported_pg_version(version)                                                           \
-	(is_supported_pg_version_15(version) || is_supported_pg_version_16(version) ||                 \
-	 is_supported_pg_version_17(version) || is_supported_pg_version_18(version))
+	(is_supported_pg_version_16(version) || is_supported_pg_version_17(version) ||                 \
+	 is_supported_pg_version_18(version) || is_supported_pg_version_19(version))
 
-#define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
 #define PG17 is_supported_pg_version_17(PG_VERSION_NUM)
 #define PG18 is_supported_pg_version_18(PG_VERSION_NUM)
+#define PG19 is_supported_pg_version_19(PG_VERSION_NUM)
 
-#define PG15_LT (PG_VERSION_NUM < 150000)
-#define PG15_GE (PG_VERSION_NUM >= 150000)
 #define PG16_LT (PG_VERSION_NUM < 160000)
 #define PG16_GE (PG_VERSION_NUM >= 160000)
 #define PG17_LT (PG_VERSION_NUM < 170000)
 #define PG17_GE (PG_VERSION_NUM >= 170000)
 #define PG18_LT (PG_VERSION_NUM < 180000)
 #define PG18_GE (PG_VERSION_NUM >= 180000)
+#define PG19_LT (PG_VERSION_NUM < 190000)
+#define PG19_GE (PG_VERSION_NUM >= 190000)
+
+#if PG19_GE
+#include <commands/repack.h>
+#else
+#include <commands/cluster.h>
+#endif
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
 #endif
 
-#if ((PG_VERSION_NUM >= 150009 && PG_VERSION_NUM < 160000) ||                                      \
-	 (PG_VERSION_NUM >= 160005 && PG_VERSION_NUM < 170000) || (PG_VERSION_NUM >= 170001))
 /*
- * The above versions introduced a fix for potentially losing updates to
- * pg_class and pg_database due to inplace updates done to those catalog
- * tables by PostgreSQL. The fix requires taking a lock on the tuple via
- * SearchSysCacheLocked1(). For older PG versions, we just map the new
- * function to the unlocked version and the unlocking of the tuple is a noop.
- *
- * https://github.com/postgres/postgres/commit/3b7a689e1a805c4dac2f35ff14fd5c9fdbddf150
- *
- * Here's an excerpt from README.tuplock that explains the need for additional
- * tuple locks:
- *
- * If IsInplaceUpdateRelation() returns true for a table, the table is a
- * system catalog that receives systable_inplace_update_begin() calls.
- * Preparing a heap_update() of these tables follows additional locking rules,
- * to ensure we don't lose the effects of an inplace update. In particular,
- * consider a moment when a backend has fetched the old tuple to modify, not
- * yet having called heap_update(). Another backend's inplace update starting
- * then can't conclude until the heap_update() places its new tuple in a
- * buffer. We enforce that using locktags as follows. While DDL code is the
- * main audience, the executor follows these rules to make e.g. "MERGE INTO
- * pg_class" safer. Locking rules are per-catalog:
- *
- * pg_class heap_update() callers: before copying the tuple to modify, take a
- * lock on the tuple, a ShareUpdateExclusiveLock on the relation, or a
- * ShareRowExclusiveLock or stricter on the relation.
+ * PG19 renamed UpperUniquePath to UniquePath
+ * https://github.com/postgres/postgres/commit/24225ad9aa
  */
-#define SYSCACHE_TUPLE_LOCK_NEEDED 1
-#define AssertSufficientPgClassUpdateLockHeld(relid)                                               \
-	Assert(CheckRelationOidLockedByMe(relid, ShareUpdateExclusiveLock, false) ||                   \
-		   CheckRelationOidLockedByMe(relid, ShareRowExclusiveLock, true));
-#define UnlockSysCacheTuple(rel, tid) UnlockTuple(rel, tid, InplaceUpdateTupleLock);
+#if PG19_LT
+#define UniquePathCompat UpperUniquePath
+#define T_UniquePathCompat T_UpperUniquePath
+#define create_unique_path create_upper_unique_path
 #else
-#define SearchSysCacheLockedCopy1(rel, datum) SearchSysCacheCopy1(rel, datum)
-#define UnlockSysCacheTuple(rel, tid)
-#define AssertSufficientPgClassUpdateLockHeld(relid)
+#define UniquePathCompat UniquePath
+#define T_UniquePathCompat T_UniquePath
 #endif
+
+/*
+ * PG19 renamed OnConflictSetState to OnConflictActionState.
+ * https://github.com/postgres/postgres/commit/8832709
+ */
+#if PG19_LT
+#define OnConflictActionState OnConflictSetState
+#define T_OnConflictActionState T_OnConflictSetState
+#endif
+
+/*
+ * PG19 removed the PointerIsValid macro that used to live in c.h. Provide it
+ * when the server headers no longer do.
+ */
+#ifndef PointerIsValid
+#define PointerIsValid(pointer) ((const void *) (pointer) != NULL)
+#endif
+
+/*
+ * PG19 added a "flags" argument to table_beginscan(). Provide a wrapper taking
+ * the new signature that drops the flags on earlier versions.
+ */
+#include <access/tableam.h>
+static inline TableScanDesc
+table_beginscan_compat(Relation rel, Snapshot snapshot, int nkeys, ScanKey key, uint32 flags)
+{
+#if PG19_GE
+	return table_beginscan(rel, snapshot, nkeys, key, flags);
+#else
+	return table_beginscan(rel, snapshot, nkeys, key);
+#endif
+}
+
+/*
+ * PG19 replaced the "changingPart" boolean of table_tuple_delete() with an
+ * "options" bitmask and added an "options" argument to table_tuple_update().
+ * Provide wrappers with the new signature; on earlier versions the changingPart
+ * flag is derived from the bitmask and the update options are dropped.
+ */
+#if PG19_LT
+#define TABLE_DELETE_CHANGING_PARTITION (1 << 0)
+#endif
+
+static inline TM_Result
+table_tuple_delete_compat(Relation rel, ItemPointer tid, CommandId cid, uint32 options,
+						  Snapshot snapshot, Snapshot crosscheck, bool wait, TM_FailureData *tmfd)
+{
+#if PG19_GE
+	return table_tuple_delete(rel, tid, cid, options, snapshot, crosscheck, wait, tmfd);
+#else
+	return table_tuple_delete(rel,
+							  tid,
+							  cid,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  (options & TABLE_DELETE_CHANGING_PARTITION) != 0);
+#endif
+}
+
+static inline TM_Result
+table_tuple_update_compat(Relation rel, ItemPointer otid, TupleTableSlot *slot, CommandId cid,
+						  uint32 options, Snapshot snapshot, Snapshot crosscheck, bool wait,
+						  TM_FailureData *tmfd, LockTupleMode *lockmode,
+						  TU_UpdateIndexes *update_indexes)
+{
+#if PG19_GE
+	return table_tuple_update(rel,
+							  otid,
+							  slot,
+							  cid,
+							  options,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  lockmode,
+							  update_indexes);
+#else
+	return table_tuple_update(rel,
+							  otid,
+							  slot,
+							  cid,
+							  snapshot,
+							  crosscheck,
+							  wait,
+							  tmfd,
+							  lockmode,
+							  update_indexes);
+#endif
+}
+
+/*
+ * PG19 added a "flags" argument to MakeTupleTableSlot(). Provide a wrapper with
+ * the new signature that drops the flags on earlier versions.
+ */
+#if PG19_GE
+#define MakeTupleTableSlotCompat(tupleDesc, tts_ops, flags)                                        \
+	MakeTupleTableSlot(tupleDesc, tts_ops, flags)
+#else
+#define MakeTupleTableSlotCompat(tupleDesc, tts_ops, flags) MakeTupleTableSlot(tupleDesc, tts_ops)
+#endif
+
+#if PG19_GE
+/*
+ * PG19 generalized CLUSTER into REPACK and renamed the CLUSTER progress
+ * constants accordingly.
+ */
+#define PROGRESS_CLUSTER_PHASE PROGRESS_REPACK_PHASE
+#define PROGRESS_CLUSTER_PHASE_SWAP_REL_FILES PROGRESS_REPACK_PHASE_SWAP_REL_FILES
+#define PROGRESS_CLUSTER_PHASE_REBUILD_INDEX PROGRESS_REPACK_PHASE_REBUILD_INDEX
+#define PROGRESS_CLUSTER_PHASE_FINAL_CLEANUP PROGRESS_REPACK_PHASE_FINAL_CLEANUP
+#endif
+
+/*
+ * PG19 reworked jsonb construction: pushJsonbValue() now takes a JsonbInState *
+ * and returns void, leaving the completed value in state->result (populated only
+ * when the outermost container is closed). Older versions took a JsonbParseState **
+ * and returned the completed value directly.
+ *
+ * https://github.com/postgres/postgres/commit/0986e95161
+ */
+#if PG19_LT
+typedef struct JsonbInState
+{
+	JsonbParseState *parseState;
+	JsonbValue *result;
+} JsonbInState;
+#endif
+
+static inline void
+pushJsonbValueCompat(JsonbInState *state, JsonbIteratorToken seq, JsonbValue *jbval)
+{
+#if PG19_GE
+	pushJsonbValue(state, seq, jbval);
+#else
+	state->result = pushJsonbValue(&state->parseState, seq, jbval);
+#endif
+}
 
 /*
  * The following are compatibility functions for different versions of
@@ -123,17 +239,15 @@
  * behavior of the new version we simply adopt the new version's name.
  */
 
-#if PG16_LT
-#define ExecInsertIndexTuplesCompat(rri,                                                           \
-									slot,                                                          \
-									estate,                                                        \
-									update,                                                        \
-									noDupErr,                                                      \
-									specConflict,                                                  \
-									arbiterIndexes,                                                \
-									onlySummarizing)                                               \
-	ExecInsertIndexTuples(rri, slot, estate, update, noDupErr, specConflict, arbiterIndexes)
-#else
+/*
+ * GetRelationPublications was renamed to GetRelationIncludedPublications in PG19.
+ * https://github.com/postgres/postgres/commit/fd366065e0
+ */
+#if PG19_LT
+#define GetRelationIncludedPublications(relid) GetRelationPublications(relid)
+#endif
+
+#if PG19_LT
 #define ExecInsertIndexTuplesCompat(rri,                                                           \
 									slot,                                                          \
 									estate,                                                        \
@@ -150,62 +264,24 @@
 						  specConflict,                                                            \
 						  arbiterIndexes,                                                          \
 						  onlySummarizing)
-#endif
-
-/*
- * PG16 removed outerjoin_delayed, nullable_relids arguments from make_restrictinfo
- * https://github.com/postgres/postgres/commit/b448f1c8d8
- *
- * PG16 adds three new parameter - has_clone, is_clone and incompatible_relids, as a
- * part of fixing the filtering of "cloned" outer-join quals
- * https://github.com/postgres/postgres/commit/991a3df227
- */
-
-#if PG16_LT
-#define make_restrictinfo_compat(root,                                                             \
-								 clause,                                                           \
-								 is_pushed_down,                                                   \
-								 has_clone,                                                        \
-								 is_clone,                                                         \
-								 outerjoin_delayed,                                                \
-								 pseudoconstant,                                                   \
-								 security_level,                                                   \
-								 required_relids,                                                  \
-								 incompatible_relids,                                              \
-								 outer_relids,                                                     \
-								 nullable_relids)                                                  \
-	make_restrictinfo(root,                                                                        \
-					  clause,                                                                      \
-					  is_pushed_down,                                                              \
-					  outerjoin_delayed,                                                           \
-					  pseudoconstant,                                                              \
-					  security_level,                                                              \
-					  required_relids,                                                             \
-					  outer_relids,                                                                \
-					  nullable_relids)
 #else
-#define make_restrictinfo_compat(root,                                                             \
-								 clause,                                                           \
-								 is_pushed_down,                                                   \
-								 has_clone,                                                        \
-								 is_clone,                                                         \
-								 outerjoin_delayed,                                                \
-								 pseudoconstant,                                                   \
-								 security_level,                                                   \
-								 required_relids,                                                  \
-								 incompatible_relids,                                              \
-								 outer_relids,                                                     \
-								 nullable_relids)                                                  \
-	make_restrictinfo(root,                                                                        \
-					  clause,                                                                      \
-					  is_pushed_down,                                                              \
-					  has_clone,                                                                   \
-					  is_clone,                                                                    \
-					  pseudoconstant,                                                              \
-					  security_level,                                                              \
-					  required_relids,                                                             \
-					  incompatible_relids,                                                         \
-					  outer_relids)
+/* PG19 replaced the bool arguments with a flags bitmask and reordered them. */
+#define ExecInsertIndexTuplesCompat(rri,                                                           \
+									slot,                                                          \
+									estate,                                                        \
+									update,                                                        \
+									noDupErr,                                                      \
+									specConflict,                                                  \
+									arbiterIndexes,                                                \
+									onlySummarizing)                                               \
+	ExecInsertIndexTuples(rri,                                                                     \
+						  estate,                                                                  \
+						  (((update) ? EIIT_IS_UPDATE : 0) |                                       \
+						   ((noDupErr) ? EIIT_NO_DUPE_ERROR : 0) |                                 \
+						   ((onlySummarizing) ? EIIT_ONLY_SUMMARIZING : 0)),                       \
+						  slot,                                                                    \
+						  arbiterIndexes,                                                          \
+						  specConflict)
 #endif
 
 /* fmgr
@@ -250,14 +326,14 @@
 #define ts_tuptableslot_set_table_oid(slot, table_oid) (slot)->tts_tableOid = table_oid
 
 static inline ClusterParams *
-get_cluster_options(const ClusterStmt *stmt)
+get_cluster_options(List *stmt_params)
 {
 	ListCell *lc;
 	ClusterParams *params = palloc0(sizeof(ClusterParams));
 	bool verbose = false;
 
 	/* Parse option list */
-	foreach (lc, stmt->params)
+	foreach (lc, stmt_params)
 	{
 		DefElem *opt = (DefElem *) lfirst(lc);
 		if (strcmp(opt->defname, "verbose") == 0)
@@ -316,117 +392,13 @@ get_reindex_options(ReindexStmt *stmt)
 #define lfifth(l) lfirst(list_nth_cell(l, 4))
 #define lfifth_int(l) lfirst_int(list_nth_cell(l, 4))
 
-#if PG16_LT
-/*
- * PG15 consolidate VACUUM xid cutoff logic.
- *
- * https://github.com/postgres/postgres/commit/efa4a946
- *
- * PG16 introduced VacuumCutoffs so define here for previous PG versions.
- */
-struct VacuumCutoffs
-{
-	TransactionId relfrozenxid;
-	MultiXactId relminmxid;
-	TransactionId OldestXmin;
-	MultiXactId OldestMxact;
-	TransactionId FreezeLimit;
-	MultiXactId MultiXactCutoff;
-};
-
-static inline bool
-vacuum_get_cutoffs(Relation rel, const VacuumParams *params, struct VacuumCutoffs *cutoffs)
-{
-	return vacuum_set_xid_limits(rel,
-								 0,
-								 0,
-								 0,
-								 0,
-								 &cutoffs->OldestXmin,
-								 &cutoffs->OldestMxact,
-								 &cutoffs->FreezeLimit,
-								 &cutoffs->MultiXactCutoff);
-}
-#endif
-
-/*
- * PG16 adds TMResult argument to ExecBRUpdateTriggers
- * https://github.com/postgres/postgres/commit/7103ebb7
- * this was backported to PG15 in
- * https://github.com/postgres/postgres/commit/7d9a75713ab9
- */
-#if PG15
-#define ExecBRUpdateTriggers(estate,                                                               \
-							 epqstate,                                                             \
-							 resultRelInfo,                                                        \
-							 tupleid,                                                              \
-							 oldtuple,                                                             \
-							 slot,                                                                 \
-							 result,                                                               \
-							 tmfdp)                                                                \
-	ExecBRUpdateTriggersNew(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
-#endif
-
-/*
- * PG16 adds TMResult argument to ExecBRDeleteTriggers
- * https://github.com/postgres/postgres/commit/9321c79c
- * this was backported to PG15 in
- * https://github.com/postgres/postgres/commit/7d9a75713ab9
- */
-#if PG15
-#define ExecBRDeleteTriggers(estate,                                                               \
-							 epqstate,                                                             \
-							 relinfo,                                                              \
-							 tupleid,                                                              \
-							 fdw_trigtuple,                                                        \
-							 epqslot,                                                              \
-							 tmresult,                                                             \
-							 tmfd)                                                                 \
-	ExecBRDeleteTriggersNew(estate,                                                                \
-							epqstate,                                                              \
-							relinfo,                                                               \
-							tupleid,                                                               \
-							fdw_trigtuple,                                                         \
-							epqslot,                                                               \
-							tmresult,                                                              \
-							tmfd)
-#endif
-
-#if PG16_GE
-#define pgstat_get_local_beentry_by_index_compat(idx) pgstat_get_local_beentry_by_index(idx)
-#else
-#define pgstat_get_local_beentry_by_index_compat(idx) pgstat_fetch_stat_local_beentry(idx)
-#endif
-
 /*
  * PG16 adds a new parameter to DefineIndex, total_parts, that takes
  * in the total number of direct and indirect partitions of the relation.
  *
  * https://github.com/postgres/postgres/commit/27f5c712
  */
-#if PG16_LT
-#define DefineIndexCompat(relationId,                                                              \
-						  stmt,                                                                    \
-						  indexRelationId,                                                         \
-						  parentIndexId,                                                           \
-						  parentConstraintId,                                                      \
-						  total_parts,                                                             \
-						  is_alter_table,                                                          \
-						  check_rights,                                                            \
-						  check_not_in_use,                                                        \
-						  skip_build,                                                              \
-						  quiet)                                                                   \
-	DefineIndex(relationId,                                                                        \
-				stmt,                                                                              \
-				indexRelationId,                                                                   \
-				parentIndexId,                                                                     \
-				parentConstraintId,                                                                \
-				is_alter_table,                                                                    \
-				check_rights,                                                                      \
-				check_not_in_use,                                                                  \
-				skip_build,                                                                        \
-				quiet)
-#else
+#if PG19_LT
 #define DefineIndexCompat(relationId,                                                              \
 						  stmt,                                                                    \
 						  indexRelationId,                                                         \
@@ -449,57 +421,31 @@ vacuum_get_cutoffs(Relation rel, const VacuumParams *params, struct VacuumCutoff
 				check_not_in_use,                                                                  \
 				skip_build,                                                                        \
 				quiet)
-#endif
-
-#if PG16_LT
-#include <catalog/pg_database_d.h>
-#include <catalog/pg_foreign_server_d.h>
-#include <catalog/pg_namespace_d.h>
-#include <catalog/pg_proc_d.h>
-#include <catalog/pg_tablespace_d.h>
-#include <utils/acl.h>
-
-/*
- * PG16 replaces most aclcheck functions with a common object_aclcheck() function
- * https://github.com/postgres/postgres/commit/c727f511
- */
-static inline AclResult
-object_aclcheck(Oid classid, Oid objectid, Oid roleid, AclMode mode)
-{
-	switch (classid)
-	{
-		case DatabaseRelationId:
-			return pg_database_aclcheck(objectid, roleid, mode);
-		case ForeignServerRelationId:
-			return pg_foreign_server_aclcheck(objectid, roleid, mode);
-		case NamespaceRelationId:
-			return pg_namespace_aclcheck(objectid, roleid, mode);
-		case ProcedureRelationId:
-			return pg_proc_aclcheck(objectid, roleid, mode);
-		case TableSpaceRelationId:
-			return pg_tablespace_aclcheck(objectid, roleid, mode);
-		default:
-			Assert(false);
-	}
-	return ACLCHECK_NOT_OWNER;
-}
-
-/*
- * PG16 replaces pg_foo_ownercheck() functions with a common object_ownercheck() function
- * https://github.com/postgres/postgres/commit/afbfc029
- */
-static inline bool
-object_ownercheck(Oid classid, Oid objectid, Oid roleid)
-{
-	switch (classid)
-	{
-		case RelationRelationId:
-			return pg_class_ownercheck(objectid, roleid);
-		default:
-			Assert(false);
-	}
-	return false;
-}
+#else
+/* PG19 adds a leading ParseState argument to DefineIndex. */
+#define DefineIndexCompat(relationId,                                                              \
+						  stmt,                                                                    \
+						  indexRelationId,                                                         \
+						  parentIndexId,                                                           \
+						  parentConstraintId,                                                      \
+						  total_parts,                                                             \
+						  is_alter_table,                                                          \
+						  check_rights,                                                            \
+						  check_not_in_use,                                                        \
+						  skip_build,                                                              \
+						  quiet)                                                                   \
+	DefineIndex(NULL,                                                                              \
+				relationId,                                                                        \
+				stmt,                                                                              \
+				indexRelationId,                                                                   \
+				parentIndexId,                                                                     \
+				parentConstraintId,                                                                \
+				total_parts,                                                                       \
+				is_alter_table,                                                                    \
+				check_rights,                                                                      \
+				check_not_in_use,                                                                  \
+				skip_build,                                                                        \
+				quiet)
 #endif
 
 #if PG17_LT
@@ -521,6 +467,23 @@ RestrictSearchPath(void)
 					  true,
 					  0,
 					  false);
+}
+
+/*
+ * murmurhash64 was added to common/hashfn.h in PG17 (954e43564d9).
+ */
+static inline uint64
+murmurhash64(uint64 data)
+{
+	uint64 h = data;
+
+	h ^= h >> 33;
+	h *= 0xff51afd7ed558ccd;
+	h ^= h >> 33;
+	h *= 0xc4ceb9fe1a85ec53;
+	h ^= h >> 33;
+
+	return h;
 }
 #endif
 
@@ -651,14 +614,34 @@ RestrictSearchPath(void)
 
 #if PG17_LT
 /* 'mergeActions' argument was added in 5f2e179bd31e */
-#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+#define CheckValidResultRelCompat(resultRelInfo,                                                   \
+								  operation,                                                       \
+								  onConflictAction,                                                \
+								  mergeActions,                                                    \
+								  mtnode)                                                          \
 	CheckValidResultRel(resultRelInfo, operation)
 #elif PG18_LT
-#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+#define CheckValidResultRelCompat(resultRelInfo,                                                   \
+								  operation,                                                       \
+								  onConflictAction,                                                \
+								  mergeActions,                                                    \
+								  mtnode)                                                          \
 	CheckValidResultRel(resultRelInfo, operation, mergeActions)
-#else
-#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+#elif PG19_LT
+#define CheckValidResultRelCompat(resultRelInfo,                                                   \
+								  operation,                                                       \
+								  onConflictAction,                                                \
+								  mergeActions,                                                    \
+								  mtnode)                                                          \
 	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions)
+#else
+/* 'mtnode' argument was added in PG19 */
+#define CheckValidResultRelCompat(resultRelInfo,                                                   \
+								  operation,                                                       \
+								  onConflictAction,                                                \
+								  mergeActions,                                                    \
+								  mtnode)                                                          \
+	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions, mtnode)
 #endif
 
 #if PG17_LT
@@ -674,20 +657,6 @@ pg_cmp_u32(uint32 a, uint32 b)
 
 #endif
 
-#if PG16_LT
-/*
- * Similarly, wrappers around labs()/llabs() matching our int64.
- *
- * Introduced on PG16:
- * https://github.com/postgres/postgres/commit/357cfefb09115292cfb98d504199e6df8201c957
- */
-#ifdef HAVE_LONG_INT_64
-#define i64abs(i) labs(i)
-#else
-#define i64abs(i) llabs(i)
-#endif
-#endif
-
 /*
  * PG18 adds IndexScanInstrumentation parameter to index_beginscan
  * https://github.com/postgres/postgres/commit/0fbceae8
@@ -700,7 +669,7 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, nkeys, norderbys)
-#else
+#elif PG19_LT
 #define index_beginscan_compat(heapRelation,                                                       \
 							   indexRelation,                                                      \
 							   snapshot,                                                           \
@@ -708,14 +677,15 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys)
-#endif
-
-#if PG16_LT
-#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
-	make_range(typcache, lower, upper, empty)
 #else
-#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
-	make_range(typcache, lower, upper, empty, escontext)
+/* PG19 adds a trailing flags argument to index_beginscan. */
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys, 0)
 #endif
 
 /* Copied from PG17. We can remove it once we deprecate older versions. */
@@ -757,6 +727,8 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 #define COMPARE_LT BTLessStrategyNumber
 #define COMPARE_GT BTGreaterStrategyNumber
 #define pk_cmptype pk_strategy
+#define get_opfamily_member_for_cmptype(opfamily, lefttype, righttype, cmptype)                    \
+	get_opfamily_member(opfamily, lefttype, righttype, cmptype)
 #endif
 
 /* PG18 adds is_merge_delete param to ExecBR{Delete|Update}Triggers function.
@@ -862,32 +834,6 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 						 tmresult,                                                                 \
 						 tmfd,                                                                     \
 						 is_merge_delete)
-#endif
-
-/* PG16 removes create_new_ph parameter from add_vars_to_targetlist
- * https://github.com/postgres/postgres/commit/2489d76c4906 */
-#if PG16_LT
-#define add_vars_to_targetlist_compat(root, vars, where_needed)                                    \
-	add_vars_to_targetlist(root, vars, where_needed, false)
-#else
-#define add_vars_to_targetlist_compat(root, vars, where_needed)                                    \
-	add_vars_to_targetlist(root, vars, where_needed)
-#endif
-
-/* PG16 consolidates ItemPointer to datum functions so backported it to PG15
- * https://github.com/postgres/postgres/commit/bd944884e92a */
-#if PG16_LT
-static inline ItemPointer
-DatumGetItemPointer(Datum X)
-{
-	return (ItemPointer) DatumGetPointer(X);
-}
-
-static inline Datum
-ItemPointerGetDatum(const ItemPointerData *X)
-{
-	return PointerGetDatum(X);
-}
 #endif
 
 #if PG17_LT

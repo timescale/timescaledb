@@ -40,10 +40,15 @@ typedef struct TimescaleDBPrivate
 
 	/* Cached equivalence members for compressed chunks. List of (EC, EM) Lists. */
 	List *compressed_ec_em_pairs;
+
+	/* Cached transformed pathkeys */
+	List *transformed_sort_pathkeys;
+	bool transformed_sort_pathkeys_valid;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte);
+extern TSDLLEXPORT void ts_rte_mark_compressed_relation(RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_contains_external_param(Node *node);
 extern TSDLLEXPORT bool ts_contains_join_param(Node *node);
 
@@ -92,6 +97,7 @@ extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, 
 											 bool include_osm);
 extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
 extern Expr *ts_transform_time_bucket_comparison(Expr *);
+extern Expr *ts_transform_nested_time_bucket_comparison(Expr *);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);

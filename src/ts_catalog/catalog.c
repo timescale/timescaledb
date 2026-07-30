@@ -93,6 +93,14 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_TABLE_NAME,
 	},
+	[CONTINUOUS_AGGS_TENANT_TRACKING] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_TENANT_TRACKING_TABLE_NAME,
+	},
+	[HYPERTABLE_CAGG_SETTINGS] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = HYPERTABLE_CAGG_SETTINGS_TABLE_NAME,
+	},
 	[COMPRESSION_SETTINGS] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = COMPRESSION_SETTINGS_TABLE_NAME,
@@ -154,8 +162,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.names = (char *[]) {
 			[CHUNK_ID_INDEX] = "chunk_pkey",
 			[CHUNK_HYPERTABLE_ID_INDEX] = "chunk_hypertable_id_idx",
-			[CHUNK_SCHEMA_NAME_INDEX] = "chunk_schema_name_table_name_key",
-			[CHUNK_COMPRESSED_CHUNK_ID_INDEX] = "chunk_compressed_chunk_id_idx",
+			[CHUNK_RELID_INDEX] = "chunk_relid_key",
 			[CHUNK_OSM_CHUNK_INDEX] = "chunk_osm_chunk_idx",
 			[CHUNK_HYPERTABLE_ID_CREATION_TIME_INDEX] = "chunk_hypertable_id_creation_time_idx",
 		},
@@ -241,6 +248,18 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_INDEX,
 		.names = (char *[]) {
 			[CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_IDX] = "continuous_aggs_jobs_refresh_ranges_idx",
+		},
+	},
+	[CONTINUOUS_AGGS_TENANT_TRACKING] = {
+		.length = _MAX_CONTINUOUS_AGGS_TENANT_TRACKING_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_TENANT_TRACKING_IDX] = "continuous_aggs_tenant_tracking_idx",
+		},
+	},
+	[HYPERTABLE_CAGG_SETTINGS] = {
+		.length = _MAX_HYPERTABLE_CAGG_SETTINGS_INDEX,
+		.names = (char *[]) {
+			[HYPERTABLE_CAGG_SETTINGS_PKEY] = "hypertable_cagg_settings_pkey",
 		},
 	},
 	[CONTINUOUS_AGGS_WATERMARK] = {
@@ -449,11 +468,7 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 		{
 			RangeVar *sequence;
 
-#if PG16_LT
-			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name));
-#else
 			sequence = makeRangeVarFromNameList(stringToQualifiedNameList(sequence_name, NULL));
-#endif
 			tables_info[i].serial_relid = RangeVarGetRelid(sequence, NoLock, false);
 		}
 		else
@@ -508,6 +523,9 @@ ts_catalog_get(void)
 	for (i = 0; i < _MAX_INTERNAL_FUNCTIONS; i++)
 	{
 		InternalFunctionDef def = internal_function_definitions[i];
+#if PG19_GE
+		int fgc_flags = 0; /* PG19 writes the result bitmask here; must not be NULL */
+#endif
 		FuncCandidateList funclist =
 			FuncnameGetCandidates(list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
 											 makeString(def.name)),
@@ -516,7 +534,12 @@ ts_catalog_get(void)
 								  false,
 								  false, /* include_out_arguments */
 								  false,
-								  false);
+								  false /* missing_ok */
+#if PG19_GE
+								  ,
+								  &fgc_flags
+#endif
+			);
 
 		if (funclist == NULL || funclist->next)
 		{

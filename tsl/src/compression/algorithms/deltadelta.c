@@ -40,8 +40,7 @@ typedef struct DeltaDeltaCompressed
 	char delta_deltas[FLEXIBLE_ARRAY_MEMBER];
 } DeltaDeltaCompressed;
 
-static void
-pg_attribute_unused() assertions(void)
+pg_attribute_unused() static void assertions(void)
 {
 	DeltaDeltaCompressed test_val = { .vl_len_ = { 0 } };
 	/* make sure no padding bytes make it to disk */

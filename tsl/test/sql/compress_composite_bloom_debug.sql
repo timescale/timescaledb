@@ -133,8 +133,8 @@ CREATE TABLE composite_filter_ref AS SELECT * FROM composite_filter_test;
 -----------------------------------------------------------
 SELECT cs.compress_relid AS chunk
 FROM _timescaledb_catalog.chunk uc, timescaledb_information.chunks tc, _timescaledb_catalog.compression_settings cs
-WHERE uc.table_name = tc.chunk_name
-  AND cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+WHERE uc.relid = format('%I.%I', tc.chunk_schema, tc.chunk_name)::regclass
+  AND cs.relid = uc.relid
   AND tc.hypertable_name = 'composite_filter_test'
   AND tc.is_compressed
 ORDER BY cs.compress_relid::text

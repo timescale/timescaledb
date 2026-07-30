@@ -269,16 +269,12 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	Bitmapset *uncompressed_attrs_found = NULL;
 	Bitmapset *selectedCols = NULL;
 
-#if PG16_LT
-	selectedCols = info->ht_rte->selectedCols;
-#else
 	if (info->ht_rte->perminfoindex > 0)
 	{
 		RTEPermissionInfo *perminfo =
 			getRTEPermissionInfo(context->root->parse->rteperminfos, info->ht_rte);
 		selectedCols = perminfo->selectedCols;
 	}
-#endif
 	/*
 	 * TODO this way to determine which columns are used is actually wrong, see
 	 * https://github.com/timescale/timescaledb/issues/4195#issuecomment-1104238863
@@ -577,9 +573,7 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 						  var->vartypmod,
 						  var->varcollid,
 						  var->varlevelsup);
-#if PG16_GE
 		new_var->varnullingrels = var->varnullingrels;
-#endif
 
 		if (!AttributeNumberIsValid(new_var->varattno))
 		{
@@ -590,39 +584,6 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 		return (Node *) new_var;
 	}
 	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
-}
-
-/*
- * Find the resno of the given attribute in the provided target list
- */
-static AttrNumber
-find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
-{
-	ListCell *lc;
-
-	Assert(targetlist != NIL);
-	Assert(pos > 0 && pos != InvalidAttrNumber);
-
-	foreach (lc, targetlist)
-	{
-		TargetEntry *target = (TargetEntry *) lfirst(lc);
-
-		if (!IsA(target->expr, Var))
-		{
-			elog(ERROR, "compressed scan targetlist entries must be Vars");
-		}
-
-		Var *var = castNode(Var, target->expr);
-		AttrNumber compressed_attno = var->varattno;
-
-		if (compressed_attno == pos)
-		{
-			return target->resno;
-		}
-	}
-
-	elog(ERROR, "Unable to locate var %d in targetlist", pos);
-	pg_unreachable();
 }
 
 static bool
@@ -1139,7 +1100,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	 * paths of the Custom path, so we won't automatically get a physical tlist
 	 * here.
 	 */
-	bool target_list_compressed_is_physical = false;
 	if (compressed_path->pathtype == T_IndexOnlyScan)
 	{
 		compressed_scan->plan.targetlist = ((IndexPath *) compressed_path)->indexinfo->indextlist;
@@ -1151,7 +1111,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		if (physical_tlist)
 		{
 			compressed_scan->plan.targetlist = physical_tlist;
-			target_list_compressed_is_physical = true;
 		}
 	}
 
@@ -1195,8 +1154,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		 * we must match the pathkeys to the decompressed chunk tupdesc.
 		 */
 
-		int numsortkeys = list_length(dcpath->custom_path.path.pathkeys);
-
 		List *sort_col_idx = NIL;
 		List *sort_ops = NIL;
 		List *sort_collations = NIL;
@@ -1214,7 +1171,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			 * Find the equivalence member that belongs to decompressed relation.
 			 */
 			EquivalenceMember *em;
-			ListCell *membercell = NULL;
+			bool found = false;
 #if PG18_GE
 			/* In PG18, iterating over child ems requires you to
 			 * use child relids with a special iterator. Here we gather
@@ -1227,14 +1184,12 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			setup_eclass_member_iterator(&it, ec, dcpath->custom_path.path.parent->relids);
 			while ((em = eclass_member_iterator_next(&it)) != NULL)
 			{
-				/* Setting up so that the check below doesn't complain */
-				membercell = &list_make_int_cell(1);
 #else
+			ListCell *membercell;
 			foreach (membercell, ec->ec_members)
 			{
 				em = lfirst(membercell);
 #endif
-
 				if (em->em_is_const)
 				{
 					continue;
@@ -1294,88 +1249,27 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
 				sort_ops = lappend_oid(sort_ops, sortop);
 
+				found = true;
 				break;
 			}
 
-			Ensure(membercell != NULL,
+			Ensure(found,
 				   "could not find matching decompressed chunk column for batch sorted merge "
 				   "pathkey");
 		}
 
 		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
+	}
 
-		/*
-		 * Build a sort node for the compressed batches. The sort function is
-		 * derived from the sort function of the pathkeys, except that it refers
-		 * to the min and max metadata columns of the batches. We have already
-		 * verified that the pathkeys match the compression order_by, so this
-		 * mapping is possible.
-		 */
-		AttrNumber *sortColIdx = palloc(sizeof(AttrNumber) * numsortkeys);
-		Oid *sortOperators = palloc(sizeof(Oid) * numsortkeys);
-		Oid *collations = palloc(sizeof(Oid) * numsortkeys);
-		bool *nullsFirst = palloc(sizeof(bool) * numsortkeys);
-		for (int i = 0; i < numsortkeys; i++)
-		{
-			Oid sortop = list_nth_oid(sort_ops, i);
-
-			/* Find the operator in pg_amop --- failure shouldn't happen */
-			Oid opfamily, opcintype;
-			CompareType strategy;
-			if (!get_ordering_op_properties(list_nth_oid(sort_ops, i),
-											&opfamily,
-											&opcintype,
-											&strategy))
-			{
-				elog(ERROR, "operator %u is not a valid ordering operator", sortOperators[i]);
-			}
-
-			/*
-			 * This way to determine the matching metadata column works, because
-			 * we have already verified that the pathkeys match the compression
-			 * orderby.
-			 */
-			Assert(strategy == BTLessStrategyNumber || strategy == BTGreaterStrategyNumber);
-			char *lower_name;
-			char *upper_name;
-			orderby_sparse_metadata_names(dcpath->info->settings, i + 1, &lower_name, &upper_name);
-			char *meta_col_name = strategy == BTLessStrategyNumber ? lower_name : upper_name;
-
-			AttrNumber attr_position =
-				get_attnum(dcpath->info->compressed_rte->relid, meta_col_name);
-
-			if (attr_position == InvalidAttrNumber)
-			{
-				elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
-			}
-
-			/*
-			 * If the compressed target list is not based on the layout of
-			 * the uncompressed chunk (see comment for physical_tlist above),
-			 * adjust the position of the attribute.
-			 */
-			if (target_list_compressed_is_physical)
-			{
-				sortColIdx[i] = attr_position;
-			}
-			else
-			{
-				sortColIdx[i] =
-					find_attr_pos_in_tlist(compressed_scan->plan.targetlist, attr_position);
-			}
-
-			sortOperators[i] = sortop;
-			collations[i] = list_nth_oid(sort_collations, i);
-			nullsFirst[i] = list_nth_oid(sort_nulls, i);
-		}
-
-		/* Now build the compressed batches sort node */
-		Sort *sort = ts_make_sort((Plan *) compressed_scan,
-								  numsortkeys,
-								  sortColIdx,
-								  sortOperators,
-								  collations,
-								  nullsFirst);
+	/*
+	 * Add a sort if the compressed scan is not ordered appropriately.
+	 */
+	if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
+	{
+		List *compressed_pks = dcpath->required_compressed_pathkeys;
+		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
+												compressed_pks,
+												bms_make_singleton(compressed_scan->scanrelid));
 
 		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ -1.0);
 
@@ -1383,24 +1277,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	}
 	else
 	{
-		/*
-		 * Add a sort if the compressed scan is not ordered appropriately.
-		 */
-		if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
-		{
-			List *compressed_pks = dcpath->required_compressed_pathkeys;
-			Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
-													compressed_pks,
-													bms_make_singleton(compressed_scan->scanrelid));
-
-			ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ -1.0);
-
-			decompress_plan->custom_plans = list_make1(sort);
-		}
-		else
-		{
-			decompress_plan->custom_plans = custom_plans;
-		}
+		decompress_plan->custom_plans = custom_plans;
 	}
 
 	Assert(list_length(custom_plans) == 1);

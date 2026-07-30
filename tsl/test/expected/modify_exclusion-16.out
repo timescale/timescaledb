@@ -1778,20 +1778,20 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_compressed (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_8_33_chunk metrics_compressed
-         Delete on _timescaledb_internal._hyper_8_35_chunk metrics_compressed_1
-         Delete on _timescaledb_internal._hyper_8_36_chunk metrics_compressed_2
-         Delete on _timescaledb_internal._hyper_8_37_chunk metrics_compressed_3
+         Delete on _timescaledb_internal._hyper_8_34_chunk metrics_compressed_1
+         Delete on _timescaledb_internal._hyper_8_35_chunk metrics_compressed_2
+         Delete on _timescaledb_internal._hyper_8_36_chunk metrics_compressed_3
          ->  Custom Scan (ChunkAppend) on public.metrics_compressed (actual rows=3.00 loops=1)
                Startup Exclusion: true
                Runtime Exclusion: false
                Chunks excluded during startup: 1
-               ->  Index Scan using _hyper_8_35_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_35_chunk metrics_compressed_1 (actual rows=1.00 loops=1)
+               ->  Index Scan using _hyper_8_34_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_34_chunk metrics_compressed_1 (actual rows=1.00 loops=1)
                      Output: metrics_compressed_1.tableoid, metrics_compressed_1.ctid
                      Index Cond: (metrics_compressed_1."time" > ('2005-01-01'::cstring)::timestamp with time zone)
-               ->  Index Scan using _hyper_8_36_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_36_chunk metrics_compressed_2 (actual rows=1.00 loops=1)
+               ->  Index Scan using _hyper_8_35_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_35_chunk metrics_compressed_2 (actual rows=1.00 loops=1)
                      Output: metrics_compressed_2.tableoid, metrics_compressed_2.ctid
                      Index Cond: (metrics_compressed_2."time" > ('2005-01-01'::cstring)::timestamp with time zone)
-               ->  Index Scan using _hyper_8_37_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_37_chunk metrics_compressed_3 (actual rows=1.00 loops=1)
+               ->  Index Scan using _hyper_8_36_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_36_chunk metrics_compressed_3 (actual rows=1.00 loops=1)
                      Output: metrics_compressed_3.tableoid, metrics_compressed_3.ctid
                      Index Cond: (metrics_compressed_3."time" > ('2005-01-01'::cstring)::timestamp with time zone)
 
@@ -1803,9 +1803,9 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_compressed (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_8_33_chunk metrics_compressed
-         Update on _timescaledb_internal._hyper_8_35_chunk metrics_compressed_1
-         Update on _timescaledb_internal._hyper_8_36_chunk metrics_compressed_2
-         Update on _timescaledb_internal._hyper_8_37_chunk metrics_compressed_3
+         Update on _timescaledb_internal._hyper_8_34_chunk metrics_compressed_1
+         Update on _timescaledb_internal._hyper_8_35_chunk metrics_compressed_2
+         Update on _timescaledb_internal._hyper_8_36_chunk metrics_compressed_3
          ->  Result (actual rows=3.00 loops=1)
                Output: ('2'::double precision * metrics_compressed.value), metrics_compressed.tableoid, metrics_compressed.ctid
                ->  Custom Scan (ChunkAppend) on public.metrics_compressed (actual rows=3.00 loops=1)
@@ -1813,13 +1813,13 @@ BEGIN;
                      Startup Exclusion: true
                      Runtime Exclusion: false
                      Chunks excluded during startup: 1
-                     ->  Index Scan using _hyper_8_35_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_35_chunk metrics_compressed_1 (actual rows=1.00 loops=1)
+                     ->  Index Scan using _hyper_8_34_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_34_chunk metrics_compressed_1 (actual rows=1.00 loops=1)
                            Output: metrics_compressed_1.value, metrics_compressed_1.tableoid, metrics_compressed_1.ctid
                            Index Cond: (metrics_compressed_1."time" > ('2005-01-01'::cstring)::timestamp with time zone)
-                     ->  Index Scan using _hyper_8_36_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_36_chunk metrics_compressed_2 (actual rows=1.00 loops=1)
+                     ->  Index Scan using _hyper_8_35_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_35_chunk metrics_compressed_2 (actual rows=1.00 loops=1)
                            Output: metrics_compressed_2.value, metrics_compressed_2.tableoid, metrics_compressed_2.ctid
                            Index Cond: (metrics_compressed_2."time" > ('2005-01-01'::cstring)::timestamp with time zone)
-                     ->  Index Scan using _hyper_8_37_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_37_chunk metrics_compressed_3 (actual rows=1.00 loops=1)
+                     ->  Index Scan using _hyper_8_36_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_36_chunk metrics_compressed_3 (actual rows=1.00 loops=1)
                            Output: metrics_compressed_3.value, metrics_compressed_3.tableoid, metrics_compressed_3.ctid
                            Index Cond: (metrics_compressed_3."time" > ('2005-01-01'::cstring)::timestamp with time zone)
 

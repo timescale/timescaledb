@@ -174,16 +174,6 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	/* First verify that the hypertable corresponds to a valid table */
 	owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add reorder policy to compressed hypertable \"%s\"",
-						get_rel_name(ht_oid)),
-				 errhint("Please add the policy to the corresponding uncompressed hypertable "
-						 "instead.")));
-	}
-
 	/* Now verify that the index is an actual index on that hypertable */
 	check_valid_index(ht, index_name);
 
@@ -263,12 +253,13 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	namestrcpy(&check_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
-	JsonbParseState *parse_state = NULL;
+	JsonbInState parse_state = { 0 };
 
-	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable_id);
-	ts_jsonb_add_str(parse_state, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
-	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(&parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable_id);
+	ts_jsonb_add_str(&parse_state, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+	JsonbValue *result = parse_state.result;
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	/* for the reorder policy, we choose a drifting schedule

@@ -97,21 +97,8 @@ RESET client_min_messages;
 --compress all chunks for metrics_ordered_idx table --
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics_ordered_idx') ch;
 
--- reindexing compressed hypertable to update statistics
-DO
-$$
-DECLARE
-  hyper_id int;
-BEGIN
-  SELECT h.compressed_hypertable_id
-  INTO hyper_id
-  FROM _timescaledb_catalog.hypertable h
-  WHERE h.table_name = 'metrics_ordered_idx';
-  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
-    hyper_id);
-END;
-$$;
-
+-- reindexing hypertable to update statistics
+REINDEX TABLE metrics_ordered_idx;
 VACUUM FULL ANALYZE metrics_ordered_idx;
 
 -- run queries on compressed hypertable and store result

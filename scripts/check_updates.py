@@ -4,14 +4,34 @@
 # intended to be run on the compiled update script or subsets of
 # the update script (e.g. latest-dev.sql and reverse-dev.sql)
 
-from pglast import parse_sql
+from pglast import ast, parse_sql, parse_plpgsql
 from pglast.ast import ColumnDef
 from pglast.enums.parsenodes import ObjectType
+from pglast.stream import RawStream
 from pglast.visitors import Visitor
 from pglast import enums
 import sys
 import re
 import argparse
+
+
+def resultless_selects(node):
+    """Yield the queries of SELECTs in a PL/pgSQL parse tree that discard their
+    result: execsql statements with no INTO target whose query is a plain
+    SELECT. PERFORM, INSERT/UPDATE/DELETE and CREATE TABLE AS are other node
+    types and produce no result, so they are fine."""
+    if isinstance(node, list):
+        for item in node:
+            yield from resultless_selects(item)
+    elif isinstance(node, dict):
+        execsql = node.get("PLpgSQL_stmt_execsql")
+        if execsql and not execsql.get("into"):
+            query = execsql["sqlstmt"]["PLpgSQL_expr"]["query"]
+            if any(isinstance(s.stmt, ast.SelectStmt) for s in parse_sql(query)):
+                yield query
+        for value in node.values():
+            yield from resultless_selects(value)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("filename")
@@ -177,6 +197,22 @@ class SQLVisitor(Visitor):
             self.error(
                 f"Attempting to create {functype} {node.funcname[1].sval} in the internal schema",
                 "_timescaledb_functions should be used as schema for internal functions",
+            )
+
+    # DO $$ ... $$ with a SELECT that has no destination for its result
+    def visit_DoStmt(self, _ancestors, node):
+        # A SELECT inside a PL/pgSQL block with no INTO target (and not wrapped
+        # in PERFORM) fails at runtime with "query has no destination for
+        # result data".
+        try:
+            tree = parse_plpgsql(RawStream()(node))
+        except Exception:  # pylint: disable=broad-except
+            return  # not PL/pgSQL or unparsable
+
+        for query in resultless_selects(tree):
+            self.error(
+                f"SELECT without a target in DO block: {query}",
+                "Use SELECT ... INTO or PERFORM to discard the result",
             )
 
     def visit_DropStmt(self, _ancestors, node):

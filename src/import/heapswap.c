@@ -45,15 +45,6 @@
 #include "compat/compat.h"
 #include "heapswap.h"
 
-#if PG16_LT
-typedef Oid RelFileNumber;
-#define RelFileNumberIsValid OidIsValid
-#define RelationMapOidToFilenumber RelationMapOidToFilenode
-#define rd_newRelfilelocatorSubid rd_newRelfilenodeSubid
-#define rd_firstRelfilelocatorSubid rd_firstRelfilenodeSubid
-#define RelationAssumeNewRelfilelocator RelationAssumeNewRelfilenode
-#endif
-
 /**
  * The code in this file is imported from PostgreSQL and slightly modified to:
  *

@@ -30,7 +30,7 @@ select * from dml_test where foo = 1001 and boo = 1002;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: ((foo = 1001) AND (boo = 1002))
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=0.00 loops=1)
          Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_701f_boo_foo, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_boo, TEST-HASHES::bigint[]))
          Rows Removed by Filter: 50
 
@@ -103,7 +103,7 @@ select * from dml_test where foo = 12;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: (foo = 12)
    Rows Removed by Filter: 50000
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=50.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=50.00 loops=1)
 
 SET timescaledb.enable_dml_bloom_filter = off;
 BEGIN;
@@ -170,7 +170,7 @@ select * from dml_test where foo = 1002;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (foo = 1002)
    Rows Removed by Filter: 49999
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=50.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=50.00 loops=1)
 
 SET timescaledb.enable_dml_bloom_filter = off;
 BEGIN;

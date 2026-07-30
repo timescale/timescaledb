@@ -133,14 +133,6 @@ function_allowed_in_cagg_definition(Oid funcid)
 void
 RemoveRangeTableEntries(Query *query)
 {
-#if PG16_LT
-	List *rtable = query->rtable;
-	Assert(list_length(rtable) >= 3);
-	rtable = list_delete_first(rtable);
-	query->rtable = list_delete_first(rtable);
-	OffsetVarNodes((Node *) query, -2, 0);
-	Assert(list_length(query->rtable) >= 1);
-#endif
 }
 
 /*
@@ -213,7 +205,11 @@ process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *
 			if (!arg->constisnull)
 			{
 				bf->bucket_time_origin =
+#if PG19_GE
+					date2timestamptz_safe(DatumGetDateADT(arg->constvalue), NULL);
+#else
 					date2timestamptz_opt_overflow(DatumGetDateADT(arg->constvalue), NULL);
+#endif
 			}
 			*custom_origin = true;
 			break;
@@ -931,22 +927,6 @@ const Dimension *
 cagg_hypertable_dim_supported(RangeTblEntry *ht_rte, Hypertable *ht, StringInfo msg,
 							  StringInfo detail, StringInfo hint, const bool for_rewrites)
 {
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		if (!for_rewrites)
-		{
-			appendStringInfoString(msg, "hypertable is an internal compressed hypertable");
-		}
-		else if (msg)
-		{
-			appendStringInfo(msg,
-							 "hypertable \"%s.%s\" is an internal compressed hypertable",
-							 NameStr(ht->fd.schema_name),
-							 NameStr(ht->fd.table_name));
-		}
-		return NULL;
-	}
-
 	if (ht_rte->relkind == RELKIND_RELATION)
 	{
 		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
@@ -2058,23 +2038,13 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 	Oid mat_relid = mat_ht->main_table_relid;
 	Query *finalize_query;
 
-#if PG16_LT
-	/* The view rule has dummy old and new range table entries as the 1st and 2nd entries */
-	Assert(list_length(cagg_view_query->rtable) >= 2);
-#endif
-
 	if (cagg_view_query->setOperations)
 	{
 		/*
 		 * This corresponds to the union view.
-		 *   PG16_LT the 3rd RTE entry has the SELECT 1 query from the union view.
-		 *   PG16_GE the 1st RTE entry has the SELECT 1 query from the union view
+		 *   the 1st RTE entry has the SELECT 1 query from the union view
 		 */
-#if PG16_LT
-		RangeTblEntry *finalize_query_rte = lthird(cagg_view_query->rtable);
-#else
 		RangeTblEntry *finalize_query_rte = linitial(cagg_view_query->rtable);
-#endif
 		if (finalize_query_rte->rtekind != RTE_SUBQUERY)
 		{
 			ereport(ERROR,

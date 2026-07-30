@@ -120,9 +120,9 @@ $result = $s2->query_safe("COMMIT");
 
 # No AccessExclusiveLock on the uncompressed chunk
 $result = $s1->query_safe(
-	"SELECT relation::regclass::text FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' AND locktype = 'relation' AND mode = 'AccessExclusiveLock' ORDER BY relation::regclass::text COLLATE \"C\", locktype;"
+	"SELECT relation::regclass::text FROM pg_locks l JOIN pg_class c ON c.oid = l.relation WHERE l.granted AND c.relkind = 'r' AND relation::regclass::text LIKE '%hyper%chunk%' AND l.locktype = 'relation' AND l.mode = 'AccessExclusiveLock' ORDER BY relation::regclass::text COLLATE \"C\", l.locktype;"
 );
-$expected = "_timescaledb_internal.compress_hyper_2_2_chunk";
+$expected = "_timescaledb_internal._hyper_1_1_chunk_compressed";
 is($result, $expected, "verify AccessExclusiveLock was not taken");
 
 
@@ -160,11 +160,11 @@ is($result, 'Compressed|1', "verify chunks are compressed");
 
 # AccessExclusiveLock taken on the uncompressed chunk
 $result = $s1->query_safe(
-	"SELECT relation::regclass::text FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' AND locktype = 'relation' AND mode = 'AccessExclusiveLock' ORDER BY relation::regclass::text COLLATE \"C\", locktype;"
+	"SELECT relation::regclass::text FROM pg_locks l JOIN pg_class c ON c.oid = l.relation WHERE l.granted AND c.relkind = 'r' AND relation::regclass::text LIKE '%hyper%chunk%' AND l.locktype = 'relation' AND l.mode = 'AccessExclusiveLock' ORDER BY relation::regclass::text COLLATE \"C\", l.locktype;"
 );
 
 $expected = "_timescaledb_internal._hyper_1_1_chunk
-_timescaledb_internal.compress_hyper_2_3_chunk";
+_timescaledb_internal._hyper_1_1_chunk_compressed";
 is($result, $expected, "verify AccessExclusiveLock was taken");
 
 $result = $s1->query_safe("ROLLBACK");

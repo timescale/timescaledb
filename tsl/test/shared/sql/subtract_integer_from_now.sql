@@ -12,18 +12,6 @@ SELECT _timescaledb_functions.subtract_integer_from_now('pg_class', 1);
 SELECT _timescaledb_functions.subtract_integer_from_now('metrics', 1);
 \set ON_ERROR_STOP 1
 
-SELECT
-  format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
-FROM
-  _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
-      AND uncompress.table_name = 'metrics_compressed') \gset
-
--- test on hypertable without dimensions
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.subtract_integer_from_now(:'TABLENAME', 1);
-\set ON_ERROR_STOP 1
-
 -- test on hypertable without now function
 CREATE TABLE subtract_int_no_func(time int NOT NULL);
 SELECT table_name FROM create_hypertable('subtract_int_no_func','time',chunk_time_interval:=10);
@@ -50,11 +38,6 @@ SELECT set_integer_now_func('subtract_int8', 'sub_int8_now');
 SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int2', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
 SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int4', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
 SELECT _timescaledb_functions.subtract_integer_from_now('subtract_int8', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
-
--- test set_integer_now_func on internal table
-\set ON_ERROR_STOP 0
-SELECT set_integer_now_func(:'TABLENAME', 'sub_int2_now');
-\set ON_ERROR_STOP 1
 
 -- cleanup
 DROP TABLE subtract_int_no_func;

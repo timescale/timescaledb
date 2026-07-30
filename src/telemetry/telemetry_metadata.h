@@ -10,4 +10,6 @@
 
 #include <export.h>
 
-extern void ts_telemetry_metadata_add_values(JsonbParseState *state);
+#include "jsonb_utils.h"
+
+extern void ts_telemetry_metadata_add_values(JsonbInState *state);

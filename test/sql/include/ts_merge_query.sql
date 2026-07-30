@@ -552,7 +552,7 @@ BEGIN
 END;
 $$;
 
-SELECT * FROM target full outer join source on (sid = tid);
+SELECT * FROM target full outer join source on (sid = tid) ORDER BY tid, balance, sid, delta;
 create trigger merge_skip BEFORE INSERT OR UPDATE or DELETE
   ON target FOR EACH ROW EXECUTE FUNCTION skip_merge_op();
 DO $$
@@ -574,7 +574,7 @@ GET DIAGNOSTICS result := ROW_COUNT;
 RAISE NOTICE 'ROW_COUNT = %', result;
 END;
 $$;
-SELECT * FROM target FULL OUTER JOIN source ON (sid = tid);
+SELECT * FROM target FULL OUTER JOIN source ON (sid = tid) ORDER BY tid, balance, sid, delta;
 DROP TRIGGER merge_skip ON target;
 DROP FUNCTION skip_merge_op();
 
@@ -795,10 +795,11 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta);
-SELECT * from target;
+SELECT * from target ORDER BY tid;
 ROLLBACK;
 
 BEGIN;
+WITH m AS (
 MERGE INTO target t
 USING source s
 ON t.tid = s.sid
@@ -808,7 +809,8 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta)
-RETURNING merge_action(), t.*;
+RETURNING merge_action() AS merge_action, t.*
+) SELECT * FROM m ORDER BY tid;
 ROLLBACK;
 
 -- Views
@@ -824,11 +826,12 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta);
-SELECT * from tv;
-SELECT * from target; -- should also update the underlying table
+SELECT * from tv ORDER BY tid;
+SELECT * from target ORDER BY tid; -- should also update the underlying table
 ROLLBACK;
 
 BEGIN;
+WITH m AS (
 MERGE INTO tv t
 USING source s
 ON t.tid = s.sid
@@ -838,7 +841,8 @@ WHEN MATCHED THEN
 	DELETE
 WHEN NOT MATCHED THEN
 	INSERT (tid, balance) VALUES (sid, delta)
-RETURNING merge_action(), t.*;
+RETURNING merge_action() AS merge_action, t.*
+) SELECT * FROM m ORDER BY tid;
 ROLLBACK;
 
 DROP VIEW tv;

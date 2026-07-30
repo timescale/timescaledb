@@ -13,17 +13,6 @@
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
 
-#if PG_VERSION_NUM < 150000
-/*
- * Some externs are mislabeled when building on Windows so we try to fix them
- * with this hack. This is only needed for versions < 15.
- */
-#include "compat/compat-msvc-enter.h"
-#include <commands/extension.h>
-#include <miscadmin.h>
-#include "compat/compat-msvc-exit.h"
-#endif
-
 #include <access/relscan.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_extension.h>

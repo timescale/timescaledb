@@ -8,24 +8,21 @@ CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
    h.table_name AS hypertable_name,
-   c.schema_name as chunk_schema,
-   c.table_name as chunk_name,
+   c.relid::text as chunk_name,
    c.status as chunk_status,
-   comp.schema_name as compressed_chunk_schema,
-   comp.table_name as compressed_chunk_name,
+   (select nspname from pg_class cl join pg_namespace n on n.oid = cl.relnamespace where cl.oid = cs.compress_relid) as compressed_chunk_schema,
+   (select relname from pg_class cl where cl.oid = cs.compress_relid) as compressed_chunk_name,
    c.id as chunk_id
 FROM
    _timescaledb_catalog.hypertable h JOIN
   _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
    LEFT JOIN _timescaledb_catalog.compression_settings cs
-ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
-   LEFT JOIN _timescaledb_catalog.chunk comp
-ON cs.compress_relid = format('%I.%I', comp.schema_name, comp.table_name)::regclass
+ON cs.relid = c.relid
 ;
 
 CREATE OR REPLACE VIEW compression_rowcnt_view AS
 select ccs.numrows_pre_compression, ccs.numrows_post_compression,
-(v.chunk_schema || '.' || v.chunk_name) as chunk_name,
+v.chunk_name as chunk_name,
 v.chunk_id as chunk_id
  from _timescaledb_catalog.compression_chunk_size ccs
 join compressed_chunk_info_view v on ccs.chunk_id = v.chunk_id;
@@ -197,11 +194,14 @@ SELECT compress_chunk(:'chunk_to_compress_prep'); -- the output of the prepared 
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 
--- plan should be invalidated to return results from the uncompressed chunk also
-set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
+-- Plan should be invalidated to return results from the uncompressed chunk as well.
+-- Penalize MergeAppend for predictable plans on PG < 17.
+set enable_sort to off;
+set enable_indexscan to off;
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 EXECUTE p1;
 reset enable_sort;
+reset enable_indexscan;
 
 -- check plan again after recompression
 SELECT compress_chunk(:'chunk_to_compress_prep');
@@ -351,9 +351,21 @@ SET timescaledb.enable_segmentwise_recompression TO OFF;
 SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
 \set ON_ERROR_STOP 1
 -- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
+BEGIN;
 SELECT compress_chunk(:'chunk_to_compress');
+ROLLBACK;
 
 RESET timescaledb.enable_segmentwise_recompression;
+
+-- Same when the optimizations GUC is off.
+SET timescaledb.enable_optimizations TO OFF;
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+\set ON_ERROR_STOP 1
+SELECT compress_chunk(:'chunk_to_compress');
+RESET timescaledb.enable_optimizations;
+RESET timescaledb.enable_segmentwise_recompression;
+
 
 --- Test behaviour of enable_exclusive_locking_recompression GUC
 CREATE TABLE exclusive_test(time timestamptz not null, a int, b int, c int);
@@ -494,7 +506,7 @@ SELECT compress_chunk(c) FROM show_chunks('segwise_no_overlap') c;
 -- Locate the compressed chunk for the metadata check.
 SELECT cs.compress_relid AS comp_table_segwise
 FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = uc.relid
 JOIN _timescaledb_catalog.hypertable h  ON h.id  = uc.hypertable_id
 WHERE h.table_name = 'segwise_no_overlap' \gset
 

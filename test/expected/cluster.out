@@ -18,8 +18,8 @@ INSERT INTO cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1),
        ('2017-01-21T09:00:01', 21.3, 2);
 -- Run cluster
 CLUSTER VERBOSE cluster_test USING cluster_test_time_idx;
-INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using index scan on "_hyper_1_1_chunk_cluster_test_time_idx"
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using index scan on "_hyper_1_2_chunk_cluster_test_time_idx"
+INFO:  repacking "_timescaledb_internal._hyper_1_1_chunk" using index scan on "_hyper_1_1_chunk_cluster_test_time_idx"
+INFO:  repacking "_timescaledb_internal._hyper_1_2_chunk" using index scan on "_hyper_1_2_chunk_cluster_test_time_idx"
 -- Create a third chunk
 INSERT INTO cluster_test VALUES ('2017-01-22T09:00:01', 19.5, 3);
 -- Show clustered indexes
@@ -34,9 +34,9 @@ WHERE indisclustered = true ORDER BY 1;
 
 -- Reorder just our table
 CLUSTER VERBOSE cluster_test;
-INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using index scan on "_hyper_1_3_chunk_cluster_test_time_idx"
+INFO:  repacking "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_3_chunk" using index scan on "_hyper_1_3_chunk_cluster_test_time_idx"
 -- Show clustered indexes, including new chunk
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
@@ -50,16 +50,16 @@ WHERE indisclustered = true ORDER BY 1;
 
 -- Reorder all tables (although will only be our test table)
 CLUSTER VERBOSE;
-INFO:  clustering "public.cluster_test" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  repacking "public.cluster_test" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
 -- Change the clustered index
 CREATE INDEX ON cluster_test (time, location);
 CLUSTER VERBOSE cluster_test using cluster_test_time_location_idx;
-INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
 -- Show updated clustered indexes
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
@@ -85,9 +85,9 @@ ORDER BY 1,2;
  _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_idx | t
 
 CLUSTER VERBOSE cluster_test;
-INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
-INFO:  clustering "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_3_chunk" using sequential scan and sort
 ALTER TABLE cluster_test SET WITHOUT CLUSTER;
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index
@@ -110,7 +110,7 @@ ORDER BY 1,2;
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
 
 CLUSTER VERBOSE _timescaledb_internal._hyper_1_1_chunk;
-INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
+INFO:  repacking "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
 ALTER TABLE _timescaledb_internal._hyper_1_1_chunk SET WITHOUT CLUSTER;
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index

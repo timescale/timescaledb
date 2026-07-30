@@ -10,11 +10,9 @@ RETURNS TABLE(attname name, typname name) AS $$
     FROM pg_attribute a
     JOIN pg_type t ON a.atttypid = t.oid
     WHERE a.attrelid = (
-        SELECT format('%I.%I', cc.schema_name, cc.table_name)::regclass
-        FROM _timescaledb_catalog.chunk uc
-        JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-        JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-        WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = chunk_regclass
+        SELECT cs.compress_relid
+        FROM _timescaledb_catalog.compression_settings cs
+        WHERE cs.relid = chunk_regclass
     )
     AND a.attname LIKE '_ts_meta_%'
     AND a.attnum > 0
@@ -43,7 +41,7 @@ SELECT t, (i % 5) + 1, (i % 3) + 1, random() * 100, (i * 7) % 13
 FROM generate_series('2024-01-01 01:00'::timestamptz, '2024-01-01 23:59', '1 minute') t,
      generate_series(1, 3) i;
 
-SELECT format('%I.%I', schema_name, table_name) AS chunk1
+SELECT relid::text AS chunk1
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
                         WHERE table_name = 'rsi_test')
@@ -133,12 +131,12 @@ SELECT
     CASE WHEN row_num % 5000 IN (0, 1) THEN NULL ELSE gen_random_uuid() END
 FROM generate_series(1, 15000) row_num;
 
-SELECT format('%I.%I', schema_name, table_name) AS ichunk1
+SELECT relid::text AS ichunk1
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'rsi_integrity')
 ORDER BY id LIMIT 1 \gset
 
-SELECT format('%I.%I', schema_name, table_name) AS ichunk2
+SELECT relid::text AS ichunk2
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'rsi_integrity')
 ORDER BY id LIMIT 1 OFFSET 1 \gset
@@ -154,11 +152,9 @@ DECLARE
     compressed_relid oid;
     col_list text;
 BEGIN
-    SELECT format('%I.%I', cc.schema_name, cc.table_name)::regclass INTO compressed_relid
-    FROM _timescaledb_catalog.chunk uc
-    JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-    JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-    WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = chunk_regclass;
+    SELECT cs.compress_relid INTO compressed_relid
+    FROM _timescaledb_catalog.compression_settings cs
+    WHERE cs.relid = chunk_regclass;
 
     SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY a.attname) INTO col_list
     FROM pg_attribute a
@@ -183,17 +179,17 @@ ALTER TABLE rsi_integrity SET (
 SELECT compress_chunk(:'ichunk1');
 SELECT compress_chunk(:'ichunk2');
 
-SELECT cc.schema_name AS ic_schema1, cc.table_name AS ic_table1
-FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk1'::regclass \gset
+SELECT comp_ns.nspname AS ic_schema1, comp_cl.relname AS ic_table1
+FROM _timescaledb_catalog.compression_settings cs
+JOIN pg_class comp_cl ON cs.compress_relid = comp_cl.oid
+JOIN pg_namespace comp_ns ON comp_cl.relnamespace = comp_ns.oid
+WHERE cs.relid = :'ichunk1'::regclass \gset
 
-SELECT cc.schema_name AS ic_schema2, cc.table_name AS ic_table2
-FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk2'::regclass \gset
+SELECT comp_ns.nspname AS ic_schema2, comp_cl.relname AS ic_table2
+FROM _timescaledb_catalog.compression_settings cs
+JOIN pg_class comp_cl ON cs.compress_relid = comp_cl.oid
+JOIN pg_namespace comp_ns ON comp_cl.relnamespace = comp_ns.oid
+WHERE cs.relid = :'ichunk2'::regclass \gset
 
 \o :ORIGINAL
 SELECT * FROM dump_sparse_metadata(:'ichunk1'::regclass);
@@ -241,17 +237,17 @@ SELECT compress_chunk(:'ichunk1');
 SELECT compress_chunk(:'ichunk2');
 
 -- re-fetch compressed chunk names after recompress
-SELECT cc.schema_name AS ic_schema1, cc.table_name AS ic_table1
-FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk1'::regclass \gset
+SELECT comp_ns.nspname AS ic_schema1, comp_cl.relname AS ic_table1
+FROM _timescaledb_catalog.compression_settings cs
+JOIN pg_class comp_cl ON cs.compress_relid = comp_cl.oid
+JOIN pg_namespace comp_ns ON comp_cl.relnamespace = comp_ns.oid
+WHERE cs.relid = :'ichunk1'::regclass \gset
 
-SELECT cc.schema_name AS ic_schema2, cc.table_name AS ic_table2
-FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk2'::regclass \gset
+SELECT comp_ns.nspname AS ic_schema2, comp_cl.relname AS ic_table2
+FROM _timescaledb_catalog.compression_settings cs
+JOIN pg_class comp_cl ON cs.compress_relid = comp_cl.oid
+JOIN pg_namespace comp_ns ON comp_cl.relnamespace = comp_ns.oid
+WHERE cs.relid = :'ichunk2'::regclass \gset
 
 \o :ORIGINAL
 SELECT * FROM dump_sparse_metadata(:'ichunk1'::regclass);
@@ -297,11 +293,11 @@ ALTER TABLE rsi_integrity SET (
 );
 SELECT compress_chunk(:'ichunk1');
 
-SELECT cc.schema_name AS ic_schema1, cc.table_name AS ic_table1
-FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk1'::regclass \gset
+SELECT comp_ns.nspname AS ic_schema1, comp_cl.relname AS ic_table1
+FROM _timescaledb_catalog.compression_settings cs
+JOIN pg_class comp_cl ON cs.compress_relid = comp_cl.oid
+JOIN pg_namespace comp_ns ON comp_cl.relnamespace = comp_ns.oid
+WHERE cs.relid = :'ichunk1'::regclass \gset
 
 ALTER TABLE rsi_integrity SET (
     timescaledb.compress,
@@ -359,6 +355,21 @@ SELECT _timescaledb_functions.bloom1_contains(:"bloom_label", 'nonexistent'::tex
        _timescaledb_functions.bloom1_contains(:"bloom_label", 'NOPE'::text) AS nope3
 FROM :ic_schema1.:ic_table1 WHERE device = 'd2' LIMIT 1;
 
+-- Sparse index integrity: the (device, first_time, last_time) btree must be
+-- able to find every batch for every device after rebuild_sparse_index, not
+-- just the ones whose metadata rewrite happened to be a HOT update. Forced
+-- index/bitmap scans must return the same per-device batch counts as an
+-- unindexed scan.
+SET enable_indexscan = off;
+SET enable_bitmapscan = off;
+SELECT device, count(*) FROM :ic_schema1.:ic_table1 GROUP BY device ORDER BY device;
+RESET enable_indexscan;
+RESET enable_bitmapscan;
+
+SET enable_seqscan = off;
+SELECT device, count(*) FROM :ic_schema1.:ic_table1 GROUP BY device ORDER BY device;
+RESET enable_seqscan;
+
 SELECT decompress_chunk(:'ichunk1');
 
 -- Test 11: composite bloom integrity (drop, rebuild, verify via explain)
@@ -370,11 +381,11 @@ ALTER TABLE rsi_integrity SET (
 );
 SELECT compress_chunk(:'ichunk1');
 
-SELECT cc.schema_name AS ic_schema1, cc.table_name AS ic_table1
-FROM _timescaledb_catalog.chunk uc
-JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
-WHERE format('%I.%I', uc.schema_name, uc.table_name)::regclass = :'ichunk1'::regclass \gset
+SELECT comp_ns.nspname AS ic_schema1, comp_cl.relname AS ic_table1
+FROM _timescaledb_catalog.compression_settings cs
+JOIN pg_class comp_cl ON cs.compress_relid = comp_cl.oid
+JOIN pg_namespace comp_ns ON comp_cl.relnamespace = comp_ns.oid
+WHERE cs.relid = :'ichunk1'::regclass \gset
 
 ALTER TABLE rsi_integrity SET (
     timescaledb.compress,

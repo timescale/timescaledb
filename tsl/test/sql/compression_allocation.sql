@@ -26,7 +26,7 @@ LIMIT 1 \gset
 
 select  cs.compress_relid as "COMPRESSED_CHUNK_NAME"
 from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.compression_settings cs
-where cs.relid = format('%I.%I', uncompressed.schema_name, uncompressed.table_name)::regclass
+where cs.relid = uncompressed.relid
   AND uncompressed.id = :'CHUNK_ID' \gset
 
 -- Confirm we have multiple batches

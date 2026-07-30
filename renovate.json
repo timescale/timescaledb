@@ -9,7 +9,7 @@
     {
       "matchUpdateTypes": ["patch", "minor", "major", "digest"],
       "groupName": "dependencies",
-      "schedule": ["on monday"],
+      "schedule": ["on the first day of the month"],
       "minimumReleaseAge": "7 days"
     }
   ],

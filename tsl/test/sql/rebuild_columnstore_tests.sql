@@ -8,12 +8,11 @@
 CREATE VIEW chunk_status_view AS
 SELECT
     h.table_name AS hypertable_name,
-    uc.schema_name || '.' || uc.table_name AS chunk,
-    cc.schema_name || '.' || cc.table_name AS compressed_chunk,
-    _timescaledb_functions.chunk_status_text((uc.schema_name || '.' || uc.table_name)::regclass) AS status
+    uc.relid::text AS chunk,
+    cs.compress_relid::text AS compressed_chunk,
+    _timescaledb_functions.chunk_status_text((uc.relid::text)::regclass) AS status
 FROM _timescaledb_catalog.chunk uc
-LEFT JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
-LEFT JOIN _timescaledb_catalog.chunk cc ON cs.compress_relid = format('%I.%I', cc.schema_name, cc.table_name)::regclass
+LEFT JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = uc.relid
 JOIN _timescaledb_catalog.hypertable h ON uc.hypertable_id = h.id;
 
 SET timescaledb.enable_direct_compress_insert = true;
@@ -198,12 +197,25 @@ SELECT _timescaledb_functions.freeze_chunk(chunk) FROM show_chunks('rebuild_erro
 -- frozen notice
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 SELECT _timescaledb_functions.unfreeze_chunk(chunk) FROM show_chunks('rebuild_error') AS chunk;
-SET timescaledb.enable_in_memory_recompression = false;
+
 -- guc disabled, decompress/compress fallback
+SET timescaledb.debug_compression_path_info = on;
+
+SET timescaledb.enable_in_memory_recompression = false;
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
 CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
 RESET timescaledb.enable_in_memory_recompression;
+
+-- optimizations guc should disable too
+SET timescaledb.enable_optimizations = false;
+SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
+CALL _timescaledb_functions.rebuild_columnstore(:'chunk'::regclass);
+SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_error';
+RESET timescaledb.enable_optimizations;
+
+RESET timescaledb.debug_compression_path_info;
+
 DROP TABLE rebuild_error CASCADE;
 
 CREATE TABLE rebuild_no_orderby (col1 INT NOT NULL, device INT);

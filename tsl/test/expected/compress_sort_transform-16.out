@@ -1,0 +1,504 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- this test checks the validity of the produced plans for partially compressed chunks
+-- when injecting query_pathkeys on top of the append
+-- path that combines the uncompressed and compressed parts of a chunk.
+set work_mem to '64MB';
+set enable_hashagg to off;
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+CREATE TABLE ht_metrics_partially_compressed(time timestamptz, device int, value float);
+SELECT create_hypertable('ht_metrics_partially_compressed','time');
+              create_hypertable               
+----------------------------------------------
+ (1,public,ht_metrics_partially_compressed,t)
+
+ALTER TABLE ht_metrics_partially_compressed SET (timescaledb.compress,
+    timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time');
+INSERT INTO ht_metrics_partially_compressed
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'20 minute') time,
+generate_series(1,3) device;
+SELECT compress_chunk(c) FROM show_chunks('ht_metrics_partially_compressed') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+
+-- make them partially compressed
+INSERT INTO ht_metrics_partially_compressed
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'30 minute') time,
+generate_series(1,3) device;
+VACUUM ANALYZE ht_metrics_partially_compressed;
+-- sort transform
+-- Grouping can use compressed data order.
+:PREFIX
+select device, time_bucket('1 minute', time), count(*)
+from ht_metrics_partially_compressed
+group by 1, 2 order by 1, 2 limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Finalize GroupAggregate (actual rows=1.00 loops=1)
+         Group Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+         ->  Merge Append (actual rows=3.00 loops=1)
+               Sort Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+               ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                     Group Key: _hyper_1_1_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_1_1_chunk_compressed.device, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                     Group Key: _hyper_1_1_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
+                     ->  Sort (actual rows=3.00 loops=1)
+                           Sort Key: _hyper_1_1_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
+                           Sort Method: quicksort 
+                           ->  Seq Scan on _hyper_1_1_chunk (actual rows=960.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
+                     Group Key: _hyper_1_2_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_1_2_chunk_compressed.device, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=3.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
+                     Group Key: _hyper_1_2_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
+                     ->  Sort (actual rows=2.00 loops=1)
+                           Sort Key: _hyper_1_2_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
+                           Sort Method: quicksort 
+                           ->  Seq Scan on _hyper_1_2_chunk (actual rows=1008.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
+                     Group Key: _hyper_1_3_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=2.00 loops=1)
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_1_3_chunk_compressed.device, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on _hyper_1_3_chunk_compressed (actual rows=3.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
+                     Group Key: _hyper_1_3_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
+                     ->  Sort (actual rows=2.00 loops=1)
+                           Sort Key: _hyper_1_3_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
+                           Sort Method: quicksort 
+                           ->  Seq Scan on _hyper_1_3_chunk (actual rows=339.00 loops=1)
+
+-- Should be disabled when disabling optimizations.
+SET timescaledb.enable_optimizations TO false;
+:PREFIX
+select device, time_bucket('1 minute', time), count(*)
+from ht_metrics_partially_compressed
+group by 1, 2 order by 1, 2 limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  GroupAggregate (actual rows=1.00 loops=1)
+         Group Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+         ->  Sort (actual rows=3.00 loops=1)
+               Sort Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+               Sort Method: quicksort 
+               ->  Result (actual rows=5766.00 loops=1)
+                     ->  Append (actual rows=5766.00 loops=1)
+                           ->  Seq Scan on ht_metrics_partially_compressed ht_metrics_partially_compressed_1 (actual rows=0.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk ht_metrics_partially_compressed_2 (actual rows=1440.00 loops=1)
+                                 ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+                           ->  Seq Scan on _hyper_1_1_chunk ht_metrics_partially_compressed_2 (actual rows=960.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk ht_metrics_partially_compressed_3 (actual rows=1512.00 loops=1)
+                                 ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=3.00 loops=1)
+                           ->  Seq Scan on _hyper_1_2_chunk ht_metrics_partially_compressed_3 (actual rows=1008.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk ht_metrics_partially_compressed_4 (actual rows=507.00 loops=1)
+                                 ->  Seq Scan on _hyper_1_3_chunk_compressed (actual rows=3.00 loops=1)
+                           ->  Seq Scan on _hyper_1_3_chunk ht_metrics_partially_compressed_4 (actual rows=339.00 loops=1)
+
+RESET timescaledb.enable_optimizations;
+-- Batch sorted merge.
+:PREFIX
+select time_bucket('1 minute', time), count(*)
+from ht_metrics_partially_compressed
+group by 1 order by 1 limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Finalize GroupAggregate (actual rows=1.00 loops=1)
+         Group Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+         ->  Custom Scan (ChunkAppend) on ht_metrics_partially_compressed (actual rows=3.00 loops=1)
+               Order: time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time")
+               ->  Merge Append (actual rows=3.00 loops=1)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=7.00 loops=1)
+                                 ->  Sort (actual rows=3.00 loops=1)
+                                       Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time
+                                       Sort Method: quicksort 
+                                       ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+                     ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=7.00 loops=1)
+               ->  Merge Append (never executed)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Partial GroupAggregate (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
+                                 ->  Sort (never executed)
+                                       Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_first_time
+                                       ->  Seq Scan on _hyper_1_2_chunk_compressed (never executed)
+                     ->  Partial GroupAggregate (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (never executed)
+               ->  Merge Append (never executed)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Partial GroupAggregate (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
+                                 ->  Sort (never executed)
+                                       Sort Key: _hyper_1_3_chunk_compressed._ts_meta_v2_first_time
+                                       ->  Seq Scan on _hyper_1_3_chunk_compressed (never executed)
+                     ->  Partial GroupAggregate (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (never executed)
+
+-- Batch sorted merge with different order in SELECT list.
+:PREFIX
+select count(*), time_bucket('1 minute', time)
+from ht_metrics_partially_compressed
+group by 2 order by 2 limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Finalize GroupAggregate (actual rows=1.00 loops=1)
+         Group Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+         ->  Custom Scan (ChunkAppend) on ht_metrics_partially_compressed (actual rows=3.00 loops=1)
+               Order: time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time")
+               ->  Merge Append (actual rows=3.00 loops=1)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=7.00 loops=1)
+                                 ->  Sort (actual rows=3.00 loops=1)
+                                       Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time
+                                       Sort Method: quicksort 
+                                       ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+                     ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=7.00 loops=1)
+               ->  Merge Append (never executed)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Partial GroupAggregate (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
+                                 ->  Sort (never executed)
+                                       Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_first_time
+                                       ->  Seq Scan on _hyper_1_2_chunk_compressed (never executed)
+                     ->  Partial GroupAggregate (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (never executed)
+               ->  Merge Append (never executed)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Partial GroupAggregate (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
+                                 ->  Sort (never executed)
+                                       Sort Key: _hyper_1_3_chunk_compressed._ts_meta_v2_first_time
+                                       ->  Seq Scan on _hyper_1_3_chunk_compressed (never executed)
+                     ->  Partial GroupAggregate (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (never executed)
+
+-- Batch sorted merge with grouping column not in SELECT list.
+:PREFIX
+select count(*)
+from ht_metrics_partially_compressed
+group by time_bucket('1 minute', time) limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Finalize GroupAggregate (actual rows=1.00 loops=1)
+         Group Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+         ->  Merge Append (actual rows=3.00 loops=1)
+               Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+               ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=7.00 loops=1)
+                           ->  Sort (actual rows=3.00 loops=1)
+                                 Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=2.00 loops=1)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=7.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=4.00 loops=1)
+                           ->  Sort (actual rows=3.00 loops=1)
+                                 Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_first_time
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=3.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (actual rows=4.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=4.00 loops=1)
+                           ->  Sort (actual rows=3.00 loops=1)
+                                 Sort Key: _hyper_1_3_chunk_compressed._ts_meta_v2_first_time
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on _hyper_1_3_chunk_compressed (actual rows=3.00 loops=1)
+               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (actual rows=4.00 loops=1)
+
+-- Ordering by time_bucket.
+:PREFIX
+select time_bucket('1 minute', time), *
+from ht_metrics_partially_compressed
+order by 1 limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Result (actual rows=1.00 loops=1)
+         ->  Custom Scan (ChunkAppend) on ht_metrics_partially_compressed (actual rows=1.00 loops=1)
+               Order: time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time")
+               ->  Merge Append (actual rows=1.00 loops=1)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                           ->  Sort (actual rows=3.00 loops=1)
+                                 Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+               ->  Merge Append (never executed)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_first_time
+                                 ->  Seq Scan on _hyper_1_2_chunk_compressed (never executed)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (never executed)
+               ->  Merge Append (never executed)
+                     Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_1_3_chunk_compressed._ts_meta_v2_first_time
+                                 ->  Seq Scan on _hyper_1_3_chunk_compressed (never executed)
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (never executed)
+
+-- Ordering by time_bucket, but it's not in the SELECT list.
+:PREFIX
+select * from ht_metrics_partially_compressed
+order by time_bucket('1 minute', time) limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on ht_metrics_partially_compressed (actual rows=1.00 loops=1)
+         Order: time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time")
+         ->  Merge Append (actual rows=1.00 loops=1)
+               Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                     ->  Sort (actual rows=3.00 loops=1)
+                           Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time
+                           Sort Method: quicksort 
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+               ->  Index Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed (never executed)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (never executed)
+         ->  Merge Append (never executed)
+               Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_1_3_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_1_3_chunk_compressed (never executed)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (never executed)
+
+-- Ordering in compressed data order.
+:PREFIX
+select * from ht_metrics_partially_compressed
+order by device, time_bucket('1 minute', time) limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=1.00 loops=1)
+         Sort Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
+                     Sort Key: _hyper_1_1_chunk_compressed.device, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
+               Sort Key: _hyper_1_1_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
+               Sort Method: top-N heapsort 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=960.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
+                     Sort Key: _hyper_1_2_chunk_compressed.device, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
+               Sort Key: _hyper_1_2_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
+               Sort Method: top-N heapsort 
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=1008.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
+                     Sort Key: _hyper_1_3_chunk_compressed.device, _hyper_1_3_chunk_compressed._ts_meta_v2_first_time, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time
+                     Sort Method: quicksort 
+                     ->  Seq Scan on _hyper_1_3_chunk_compressed (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
+               Sort Key: _hyper_1_3_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
+               Sort Method: top-N heapsort 
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=339.00 loops=1)
+
+-- Test incorrect transformation into a Pathkey on different relation through
+-- a join EquivalenceClass.
+set max_parallel_workers_per_gather = 0;
+:PREFIX
+select time_bucket('1 minute', a.time) from ht_metrics_partially_compressed a
+join ht_metrics_partially_compressed b
+on a.time = b.time
+where b.time < '2020-01-07'
+group by 1
+;
+--- QUERY PLAN ---
+ Group (actual rows=480.00 loops=1)
+   Group Key: (time_bucket('@ 1 min'::interval, a."time"))
+   ->  Sort (actual rows=7560.00 loops=1)
+         Sort Key: (time_bucket('@ 1 min'::interval, a."time"))
+         Sort Method: quicksort 
+         ->  Hash Join (actual rows=7560.00 loops=1)
+               Hash Cond: (a."time" = b."time")
+               ->  Append (actual rows=1800.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk a_1 (actual rows=1080.00 loops=1)
+                           Vectorized Filter: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+                           Rows Removed by Filter: 360
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
+                                 Filter: (_ts_meta_v2_first_time < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+                     ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk a_1 (actual rows=720.00 loops=1)
+                           Index Cond: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+               ->  Hash (actual rows=1800.00 loops=1)
+                     ->  Append (actual rows=1800.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk b_1 (actual rows=1080.00 loops=1)
+                                 Vectorized Filter: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+                                 Rows Removed by Filter: 360
+                                 ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1 (actual rows=3.00 loops=1)
+                                       Filter: (_ts_meta_v2_first_time < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+                           ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk b_1 (actual rows=720.00 loops=1)
+                                 Index Cond: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+
+reset max_parallel_workers_per_gather;
+reset work_mem;
+reset enable_hashagg;
+-- Sorting on a set-returning function.
+set max_parallel_workers_per_gather to 0;
+create table srf_sort(time timestamptz not null, dev int, seg int);
+select create_hypertable('srf_sort', 'time', chunk_time_interval => interval '1 day');
+   create_hypertable   
+-----------------------
+ (2,public,srf_sort,t)
+
+insert into srf_sort values
+    ('2025-01-01', 3, 1),
+    ('2025-01-02', 2, 1),
+    ('2025-01-03', 4, 2);
+alter table srf_sort set (timescaledb.compress, timescaledb.compress_segmentby='seg', timescaledb.compress_orderby='time');
+select count(compress_chunk(c)) from show_chunks('srf_sort') c;
+ count 
+-------
+     3
+
+-- Sorting by the set-returning function with a LIMIT.
+select generate_series(1, dev) g from srf_sort order by g limit 5;
+ g 
+---
+ 1
+ 1
+ 1
+ 2
+ 2
+
+explain (costs off) select generate_series(1, dev) g from srf_sort order by g limit 5;
+--- QUERY PLAN ---
+ Limit
+   ->  Sort
+         Sort Key: (generate_series(1, srf_sort.dev))
+         ->  ProjectSet
+               ->  Append
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk
+                           ->  Seq Scan on _hyper_2_4_chunk_compressed
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk
+                           ->  Seq Scan on _hyper_2_5_chunk_compressed
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk
+                           ->  Seq Scan on _hyper_2_6_chunk_compressed
+
+-- Without a LIMIT it produces the same data.
+select generate_series(1, dev) g from srf_sort order by g;
+ g 
+---
+ 1
+ 1
+ 1
+ 2
+ 2
+ 2
+ 3
+ 3
+ 4
+
+-- A set-returning function only in the output, sorting on a real column.
+explain (costs off) select generate_series(1, dev) g, time from srf_sort order by time limit 3;
+--- QUERY PLAN ---
+ Limit
+   ->  ProjectSet
+         ->  Custom Scan (ChunkAppend) on srf_sort
+               Order: srf_sort."time"
+               ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk
+                     ->  Sort
+                           Sort Key: _hyper_2_4_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_2_4_chunk_compressed
+               ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk
+                     ->  Sort
+                           Sort Key: _hyper_2_5_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_2_5_chunk_compressed
+               ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk
+                     ->  Sort
+                           Sort Key: _hyper_2_6_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_2_6_chunk_compressed
+
+-- Sorting on a real column followed by a set-returning function.
+select dev, generate_series(1, dev) g from srf_sort order by dev, g limit 4;
+ dev | g 
+-----+---
+   2 | 1
+   2 | 2
+   3 | 1
+   3 | 2
+
+-- Sorting on a segment column followed by a set-returning function.
+explain (costs off) select seg, generate_series(1, dev) g from srf_sort order by seg, g limit 4;
+--- QUERY PLAN ---
+ Limit
+   ->  Incremental Sort
+         Sort Key: srf_sort.seg, (generate_series(1, srf_sort.dev))
+         Presorted Key: srf_sort.seg
+         ->  ProjectSet
+               ->  Merge Append
+                     Sort Key: srf_sort.seg
+                     ->  Sort
+                           Sort Key: _hyper_2_4_chunk.seg
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk
+                                 ->  Seq Scan on _hyper_2_4_chunk_compressed
+                     ->  Sort
+                           Sort Key: _hyper_2_5_chunk.seg
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk
+                                 ->  Seq Scan on _hyper_2_5_chunk_compressed
+                     ->  Sort
+                           Sort Key: _hyper_2_6_chunk.seg
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk
+                                 ->  Seq Scan on _hyper_2_6_chunk_compressed
+
+select seg, generate_series(1, dev) g from srf_sort order by seg, g limit 4;
+ seg | g 
+-----+---
+   1 | 1
+   1 | 1
+   1 | 2
+   1 | 2
+
+drop table srf_sort cascade;
+reset max_parallel_workers_per_gather;

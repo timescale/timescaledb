@@ -57,7 +57,7 @@ ALTER TABLE skip_scan_htc SET (autovacuum_enabled = off);
 SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, create_default_indexes => false);
      create_hypertable      
 ----------------------------
- (3,public,skip_scan_htc,t)
+ (2,public,skip_scan_htc,t)
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -91,7 +91,7 @@ ALTER TABLE skip_scan_htcl SET (autovacuum_enabled = off);
 SELECT create_hypertable('skip_scan_htcl', 'time', chunk_time_interval => 250, create_default_indexes => false);
       create_hypertable      
 -----------------------------
- (5,public,skip_scan_htcl,t)
+ (3,public,skip_scan_htcl,t)
 
 ALTER TABLE skip_scan_htcl SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -99,7 +99,7 @@ INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::t
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_9_chunk
+ _timescaledb_internal._hyper_3_9_chunk
 
 ALTER TABLE skip_scan_htcl DROP COLUMN f1;
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
@@ -113,9 +113,9 @@ INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FRO
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch order by 1 desc limit 3;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_13_chunk
- _timescaledb_internal._hyper_5_12_chunk
- _timescaledb_internal._hyper_5_11_chunk
+ _timescaledb_internal._hyper_3_12_chunk
+ _timescaledb_internal._hyper_3_11_chunk
+ _timescaledb_internal._hyper_3_10_chunk
 
 ANALYZE skip_scan_htcl;
 -- adjust statistics so we get skipscan plans
@@ -1950,7 +1950,7 @@ CREATE TABLE mskip_scan_ht(time int not null, status int not null, region text n
 SELECT create_hypertable('mskip_scan_ht', 'time', chunk_time_interval => 1000, create_default_indexes => false);
      create_hypertable      
 ----------------------------
- (7,public,mskip_scan_ht,t)
+ (4,public,mskip_scan_ht,t)
 
 INSERT INTO mskip_scan_ht SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(0, 999) t, generate_series(1, 4) r, generate_series(1, 5) d;
 INSERT INTO mskip_scan_ht SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(1000, 1999) t, generate_series(1, 4) r, generate_series(1, 5) d;
@@ -1965,7 +1965,7 @@ CREATE TABLE mskip_scan_htc(time int not null, status int not null, region text 
 SELECT create_hypertable('mskip_scan_htc', 'time', chunk_time_interval => 1000, create_default_indexes => false);
       create_hypertable      
 -----------------------------
- (8,public,mskip_scan_htc,t)
+ (5,public,mskip_scan_htc,t)
 
 -- Cannot have reverse orders on segmented columns in columnar index, so it won't be tested for columnar table
 ALTER TABLE mskip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='status,region,dev,dev_name');
@@ -1976,10 +1976,10 @@ INSERT INTO mskip_scan_htc SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::te
 SELECT compress_chunk(ch) FROM show_chunks('mskip_scan_htc') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_8_69_chunk
- _timescaledb_internal._hyper_8_70_chunk
- _timescaledb_internal._hyper_8_71_chunk
- _timescaledb_internal._hyper_8_72_chunk
+ _timescaledb_internal._hyper_5_17_chunk
+ _timescaledb_internal._hyper_5_18_chunk
+ _timescaledb_internal._hyper_5_19_chunk
+ _timescaledb_internal._hyper_5_20_chunk
 
 ANALYZE mskip_scan_htc;
 alter table mskip_scan set (autovacuum_enabled = off);
@@ -2620,113 +2620,113 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
 -- multicolumn index with uniform order
 :PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
-psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
-psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 -- index with reverse column orders (applied to non-columnstore ony)
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
-psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 :PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
-psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
 set enable_seqscan=0;
 -- (1,N) distinct scenario
 :PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
-psql:include/skip_scan_multi_query.sql:18: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:18: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
 -- (N,1) distinct scenario
 :PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
-psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
 -- SELECT list order of distinct columns shouldn't matter if OBY matches index order
 :PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
-psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
 reset enable_seqscan;
 -- Basic queries
 :PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
-psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
-psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
-psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
-psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
-psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 \qecho ordered append on :TABLE
 :PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
-psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 \qecho SUBSELECTS on :TABLE
 :PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
-psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 :PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
-psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 \qecho ORDER BY
 :PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
-psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 -- RowCompareExpr
 :PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
-psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
 -- always false expr similar to our initial skip qual
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
 -- no tuples matching
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
-psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 -- test constants in ORDER BY
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
-psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 -- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
 :PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
 ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
@@ -2735,25 +2735,25 @@ ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) 
 	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
 )
 SELECT * FROM devices;
-psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 :PREFIX WITH devices AS (
 	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
 )
 SELECT * FROM devices ORDER BY region, dev;
-psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
 -- prepared statements
 PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
 :PREFIX EXECUTE prep;
-psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX EXECUTE prep;
 :PREFIX EXECUTE prep;
 DEALLOCATE prep;
@@ -2765,26 +2765,26 @@ set enable_seqscan=0;
 :PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
     VALUES (1), (2)) a(v),
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
-psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 -- RuntimeKeys
 :PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
     VALUES (1), (2)) a(v),
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
-psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 reset enable_seqscan;
 -- parallel query
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_4_13_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_4_14_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_4_15_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_4_16_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
 \o
 \set TABLE mskip_scan_htc
@@ -2797,101 +2797,101 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
 -- multicolumn index with uniform order
 :PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
-psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
-psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 -- index with reverse column orders (applied to non-columnstore ony)
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
 :PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
 set enable_seqscan=0;
 -- (1,N) distinct scenario
 :PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
-psql:include/skip_scan_multi_query.sql:18: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:18: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL)
 -- (N,1) distinct scenario
 :PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
-psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(dev NOT NULL, dev_name NOT NULL)
 -- SELECT list order of distinct columns shouldn't matter if OBY matches index order
 :PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
-psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
 reset enable_seqscan;
 -- Basic queries
 :PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
-psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
-psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
-psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
-psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
-psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 \qecho ordered append on :TABLE
 :PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
-psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 \qecho SUBSELECTS on :TABLE
 :PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
-psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 :PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
-psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 \qecho ORDER BY
 :PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
-psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 -- RowCompareExpr
 :PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
-psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, dev NOT NULL)
 -- always false expr similar to our initial skip qual
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
 -- no tuples matching
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
 -- test constants in ORDER BY
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
-psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 -- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
 :PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
 ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
@@ -2900,25 +2900,25 @@ ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) 
 	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
 )
 SELECT * FROM devices;
-psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 :PREFIX WITH devices AS (
 	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
 )
 SELECT * FROM devices ORDER BY region, dev;
-psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL)
 -- prepared statements
 PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
 :PREFIX EXECUTE prep;
-psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
-psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
 :PREFIX EXECUTE prep;
 :PREFIX EXECUTE prep;
 DEALLOCATE prep;
@@ -2930,26 +2930,26 @@ set enable_seqscan=0;
 :PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
     VALUES (1), (2)) a(v),
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
-psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 -- RuntimeKeys
 :PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
     VALUES (1), (2)) a(v),
     LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
-psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 reset enable_seqscan;
 -- parallel query
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
-psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_17_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_18_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_19_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_5_20_chunk_compressed_status_region_dev_dev_name__ts_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
 \o
 RESET timescaledb.debug_skip_scan_info;

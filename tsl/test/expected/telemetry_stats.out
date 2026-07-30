@@ -539,7 +539,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
     create_hypertable    
 -------------------------
- (5,public,conditions,t)
+ (3,public,conditions,t)
 
 CREATE MATERIALIZED VIEW conditions_summary_hourly_1
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS

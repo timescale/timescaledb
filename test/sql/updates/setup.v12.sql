@@ -4,6 +4,13 @@
 
 \ir setup.v11.sql
 
+-- Skip int2 boom test in singlestep mode cause otherwise we
+-- would have to skip too many intermediate steps
+SELECT :'UPDATE_MODE' <> 'singlestep' AS run_int2_bloom \gset
+\if :run_int2_bloom
+\ir setup.int2_bloom_migration.sql
+\endif
+
 CREATE schema user_views;
 
 CREATE OR REPLACE VIEW user_views.hypertables AS SELECT * FROM timescaledb_information.hypertables;

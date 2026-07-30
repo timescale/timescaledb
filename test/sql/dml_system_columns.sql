@@ -6,9 +6,13 @@
 -- Some test cases for DML with system-column references on a hypertable target.
 \set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
+SET enable_material TO OFF;
+
 CREATE TABLE ht_update_join(time timestamptz NOT NULL, val int);
 SELECT create_hypertable('ht_update_join', 'time', chunk_time_interval => interval '1 month');
-INSERT INTO ht_update_join VALUES ('2020-01-15', 1), ('2020-02-15', 2);
+INSERT INTO ht_update_join
+  SELECT '2020-01-01'::timestamptz + i * interval '1 hour', i % 10
+  FROM generate_series(1, 1200) i;
 VACUUM FREEZE ANALYZE ht_update_join;
 
 -- ctid self-join UPDATE
@@ -128,7 +132,8 @@ BEGIN;
 :PREFIX
 UPDATE ht_update_join SET val = 17
 WHERE EXISTS (SELECT 1 FROM ht_update_join b
-              WHERE b.ctid = ht_update_join.ctid AND b.time = ht_update_join.time)
+              WHERE b.ctid = ht_update_join.ctid AND b.time = ht_update_join.time
+                AND b.val = 1)
 ;
 ROLLBACK;
 
@@ -178,3 +183,18 @@ RETURNING ctid, xmin, tableoid::regclass, *
 
 DROP TABLE ht_dummy;
 
+
+-- It's possible for a hypertable itself to be excluded by constraint exclusion
+-- under a non-default GUC setting.
+CREATE TABLE ht_excluded(time timestamptz NOT NULL, val int CHECK (val > 0));
+SELECT create_hypertable('ht_excluded', 'time');
+INSERT INTO ht_excluded VALUES ('2020-01-15', 1);
+
+SET constraint_exclusion = on;
+
+UPDATE ht_excluded SET val = 99 WHERE val < 0;
+
+DROP TABLE ht_excluded;
+
+
+RESET enable_material;

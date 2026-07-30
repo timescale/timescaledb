@@ -5,6 +5,8 @@
  */
 #include <postgres.h>
 
+#include <utils/lsyscache.h>
+
 #include "chunk.h"
 #include "scan_iterator.h"
 #include "scanner.h"
@@ -33,7 +35,10 @@ TS_TEST_FN(ts_test_scanner)
 
 		ts_chunk_formdata_fill(&fd, ti);
 
-		elog(NOTICE, "1. Scan: \"%s.%s\"", NameStr(fd.schema_name), NameStr(fd.table_name));
+		elog(NOTICE,
+			 "1. Scan: \"%s.%s\"",
+			 get_namespace_name(get_rel_namespace(fd.relid)),
+			 get_rel_name(fd.relid));
 
 		if (i < lengthof(chunk_id) && chunk_id[i] == -1)
 		{
@@ -60,8 +65,8 @@ TS_TEST_FN(ts_test_scanner)
 
 		elog(NOTICE,
 			 "2. Scan with filter: \"%s.%s\"",
-			 NameStr(fd.schema_name),
-			 NameStr(fd.table_name));
+			 get_namespace_name(get_rel_namespace(fd.relid)),
+			 get_rel_name(fd.relid));
 	}
 
 	/* Rescan */
@@ -80,7 +85,10 @@ TS_TEST_FN(ts_test_scanner)
 
 		ts_chunk_formdata_fill(&fd, ti);
 
-		elog(NOTICE, "3. ReScan: \"%s.%s\"", NameStr(fd.schema_name), NameStr(fd.table_name));
+		elog(NOTICE,
+			 "3. ReScan: \"%s.%s\"",
+			 get_namespace_name(get_rel_namespace(fd.relid)),
+			 get_rel_name(fd.relid));
 	}
 
 	ts_scan_iterator_end(&it);
@@ -97,7 +105,10 @@ TS_TEST_FN(ts_test_scanner)
 
 		ts_chunk_formdata_fill(&fd, ti);
 
-		elog(NOTICE, "4. IndexScan: \"%s.%s\"", NameStr(fd.schema_name), NameStr(fd.table_name));
+		elog(NOTICE,
+			 "4. IndexScan: \"%s.%s\"",
+			 get_namespace_name(get_rel_namespace(fd.relid)),
+			 get_rel_name(fd.relid));
 	}
 
 	ts_scan_iterator_close(&it);

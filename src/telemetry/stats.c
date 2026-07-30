@@ -24,6 +24,7 @@
 #include "hypertable_cache.h"
 #include "stats.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
 
@@ -32,57 +33,6 @@ typedef struct StatsContext
 	TelemetryStats *stats;
 	Snapshot snapshot;
 } StatsContext;
-
-/*
- * Determine the type of a hypertable.
- */
-static StatsRelType
-classify_hypertable(const Hypertable *ht)
-{
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		/*
-		 * This is an internal compression table, but could be for a
-		 * regular hypertable, or for an internal materialized
-		 * hypertable (cagg). The latter case is currently not handled
-		 */
-		return RELTYPE_COMPRESSION_HYPERTABLE;
-	}
-	else
-	{
-		/*
-		 * Not dealing with an internal compression hypertable, but
-		 * could be a materialized hypertable (cagg).
-		 */
-		return RELTYPE_HYPERTABLE;
-	}
-}
-
-static StatsRelType
-classify_chunk(Cache *htcache, const Hypertable **ht, const Chunk *chunk)
-{
-	StatsRelType parent_reltype;
-
-	Assert(NULL != chunk);
-	/* Classify the chunk's parent */
-	*ht = ts_hypertable_cache_get_entry(htcache, chunk->hypertable_relid, CACHE_FLAG_MISSING_OK);
-	Assert(NULL != *ht);
-	parent_reltype = classify_hypertable(*ht);
-
-	/* Classify the chunk's parent */
-	switch (parent_reltype)
-	{
-		case RELTYPE_HYPERTABLE:
-			return RELTYPE_CHUNK;
-		case RELTYPE_MATERIALIZED_HYPERTABLE:
-			return RELTYPE_MATERIALIZED_CHUNK;
-		case RELTYPE_COMPRESSION_HYPERTABLE:
-			return RELTYPE_COMPRESSION_CHUNK;
-		default:
-			/* Shouldn't really get here */
-			return RELTYPE_OTHER;
-	}
-}
 
 static StatsRelType
 classify_table(const Form_pg_class class, Cache *htcache, const Hypertable **ht,
@@ -97,18 +47,26 @@ classify_table(const Form_pg_class class, Cache *htcache, const Hypertable **ht,
 
 	/* Check if it is a hypertable */
 	*ht = ts_hypertable_cache_get_entry(htcache, class->oid, CACHE_FLAG_MISSING_OK);
-
 	if (*ht)
 	{
-		return classify_hypertable(*ht);
+		return RELTYPE_HYPERTABLE;
 	}
 
 	/* Check if it is a chunk */
 	*chunk = ts_chunk_get_by_relid(class->oid, false);
-
-	if (NULL != *chunk)
+	if (*chunk)
 	{
-		return classify_chunk(htcache, ht, *chunk);
+		return RELTYPE_CHUNK;
+	}
+
+	/*
+	 * The relation holding the compressed data of a chunk is not a chunk
+	 * catalog entry on its own, so classify it directly here. Its stats are
+	 * tracked separately via the compressed chunk size metadata.
+	 */
+	if (ts_relation_is_compressed_chunk_relation(class->oid))
+	{
+		return RELTYPE_COMPRESSION_CHUNK;
 	}
 
 	return RELTYPE_TABLE;
@@ -133,13 +91,12 @@ classify_partitioned_table(const Form_pg_class class)
 }
 
 static StatsRelType
-classify_foreign_table(Cache *htcache, Oid relid, const Hypertable **ht, const Chunk **chunk)
+classify_foreign_table(Oid relid, const Chunk **chunk)
 {
 	*chunk = ts_chunk_get_by_relid(relid, false);
-
 	if (*chunk)
 	{
-		return classify_chunk(htcache, ht, *chunk);
+		return RELTYPE_CHUNK;
 	}
 
 	/*
@@ -150,7 +107,7 @@ classify_foreign_table(Cache *htcache, Oid relid, const Hypertable **ht, const C
 }
 
 static StatsRelType
-classify_view(const Form_pg_class class, Cache *htcache, const ContinuousAgg **cagg)
+classify_view(const Form_pg_class class, const ContinuousAgg **cagg)
 {
 	const Catalog *catalog = ts_catalog_get();
 
@@ -184,11 +141,11 @@ classify_relation(const Form_pg_class class, Cache *htcache, const Hypertable **
 		case RELKIND_PARTITIONED_TABLE:
 			return classify_partitioned_table(class);
 		case RELKIND_FOREIGN_TABLE:
-			return classify_foreign_table(htcache, class->oid, ht, chunk);
+			return classify_foreign_table(class->oid, chunk);
 		case RELKIND_MATVIEW:
 			return RELTYPE_MATVIEW;
 		case RELKIND_VIEW:
-			return classify_view(class, htcache, cagg);
+			return classify_view(class, cagg);
 		default:
 			return RELTYPE_OTHER;
 	}
@@ -548,8 +505,14 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 			case RELTYPE_PARTITIONED_TABLE:
 				process_relation(&stats->partitioned_tables.storage.base, class);
 				break;
-			case RELTYPE_CHUNK:
 			case RELTYPE_COMPRESSION_CHUNK:
+				/*
+				 * Ignore the compressed data relation. Its stats are tracked
+				 * separately via the compressed chunk size metadata, which is
+				 * accounted for when processing the owning chunk.
+				 */
+				break;
+			case RELTYPE_CHUNK:
 			case RELTYPE_MATERIALIZED_CHUNK:
 				Assert(NULL != chunk);
 				process_chunk(&statsctx, reltype, class, chunk);
@@ -572,7 +535,6 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 				process_continuous_agg(&stats->continuous_aggs, class, cagg);
 				break;
 				/* No stats collected for types below */
-			case RELTYPE_COMPRESSION_HYPERTABLE:
 			case RELTYPE_MATERIALIZED_HYPERTABLE:
 			case RELTYPE_OTHER:
 				break;

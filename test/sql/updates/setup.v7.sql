@@ -19,3 +19,25 @@ ALTER TABLE PUBLIC.hyper_timestamp
 \ir setup.continuous_aggs.sql
 \ir setup.compression.sql
 \ir setup.policies.sql
+
+-- Space-partitioned hypertable for extra update/downgrade coverage
+CREATE TABLE space_constraints (
+  time timestamptz NOT NULL,
+  device int NOT NULL,
+  value double precision
+);
+
+SELECT create_hypertable('space_constraints', 'time', 'device',
+                         number_partitions => 2,
+                         chunk_time_interval => interval '1 day');
+
+INSERT INTO space_constraints
+SELECT '2020-01-01'::timestamptz + (g % 6) * interval '1 day', g % 4, g
+FROM generate_series(1, 200) g;
+
+-- Drop a couple of chunks.
+SELECT drop_chunks('space_constraints', '2020-01-03'::timestamptz);
+
+INSERT INTO space_constraints
+SELECT '2020-02-01'::timestamptz + (g % 5) * interval '1 day', g % 4, g
+FROM generate_series(1, 200) g;

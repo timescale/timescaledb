@@ -53,7 +53,7 @@ CALL run_job(:compressjob_id);
 select chunk_name, pg_size_pretty(before_compression_total_bytes) before_total,
 pg_size_pretty( after_compression_total_bytes)  after_total
 from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
-SELECT id, hypertable_id, schema_name, table_name, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
+SELECT id, relid, hypertable_id, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
 
 -- TEST 4 --
 --cannot set another policy
@@ -301,8 +301,8 @@ SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','false'), next_start =>
 -- do an INSERT so recompress has something to do
 INSERT INTO metrics2 SELECT '2000-01-01' FROM generate_series(1,3000);
 
-SELECT chunk_schema, chunk_name FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2' AND chunk_status = 9 LIMIT 1; \gset
-SELECT format('%I.%I', :'chunk_schema', :'chunk_name') AS "RECOMPRESS_CHUNK_NAME"; \gset
+SELECT chunk_name FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2' AND chunk_status = 9 LIMIT 1; \gset
+SELECT :'chunk_name' AS "RECOMPRESS_CHUNK_NAME"; \gset
 
 -- get size of the chunk that needs recompression
 VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;
@@ -312,7 +312,7 @@ SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS "SIZE_BEFORE_REINDEX"; \gset
 CALL run_job(:JOB_COMPRESS);
 
 -- status should be 1
-SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 
 -- index size should not have decreased
 VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;
@@ -329,7 +329,7 @@ SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','true'), next_start => 
 INSERT INTO metrics2 SELECT '2000-01-01';
 
 ---- status should be 3
-SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 
 -- Capture relfilenode BEFORE the third run_job
 SELECT c.relfilenode AS "INDEX_RELFILENODE_BEFORE"
@@ -350,7 +350,7 @@ ORDER BY c.relfilenode LIMIT 1;
 SELECT count(*) AS live_in_chunk_heap FROM ONLY :RECOMPRESS_CHUNK_NAME;
 
 -- chunk should be fully compressed now (status = 1) so reindex can run
-SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_name';
 
 -- index size should decrease due to reindexing (8kB or 16kB)
 VACUUM ANALYZE metrics2;
@@ -431,3 +431,64 @@ ORDER BY 2 DESC;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REVOKE CREATE ON SCHEMA public FROM NOLOGIN_ROLE;
 DROP ROLE NOLOGIN_ROLE;
+
+--TEST 9
+-- recompress_unordered controls whether the policy touches unordered chunks,
+-- but partial chunks are always recompressed regardless of the setting
+CREATE TABLE test_recompress_unordered(time TIMESTAMPTZ, val SMALLINT);
+SELECT create_hypertable('test_recompress_unordered', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE test_recompress_unordered SET (timescaledb.compress, timescaledb.compress_segmentby = 'val', timescaledb.compress_orderby = 'time');
+
+INSERT INTO test_recompress_unordered SELECT time, (random()*10)::smallint
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-04 00:00'::timestamp, '10 min') AS time;
+
+-- compress every chunk so they all start fully compressed
+SET client_min_messages TO ERROR;
+SELECT count(compress_chunk(c)) FROM show_chunks('test_recompress_unordered') c;
+
+-- turn one chunk unordered and another both unordered and partial through inserts.
+-- a direct compress insert that is not client sorted marks the chunk unordered;
+-- a following plain insert leaves uncompressed rows behind and marks it partial.
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = false;
+INSERT INTO test_recompress_unordered
+SELECT '2018-12-01 00:05'::timestamptz + (i || ' second')::interval, 1 FROM generate_series(1, 50) i;
+INSERT INTO test_recompress_unordered
+SELECT '2018-12-02 00:05'::timestamptz + (i || ' second')::interval, 1 FROM generate_series(1, 50) i;
+SET timescaledb.enable_direct_compress_insert = false;
+INSERT INTO test_recompress_unordered VALUES ('2018-12-02 00:06', 1);
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.enable_direct_compress_insert_client_sorted;
+SET client_min_messages TO NOTICE;
+
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id
+WHERE h.table_name = 'test_recompress_unordered'
+GROUP BY c.status ORDER BY c.status;
+
+SELECT add_compression_policy('test_recompress_unordered', '1 minute'::interval) AS unordered_job \gset
+SELECT config AS unordered_config FROM _timescaledb_catalog.bgw_job WHERE id = :unordered_job \gset
+
+-- with recompress_unordered off, the unordered chunk is left untouched but the
+-- partial chunk is still recompressed
+SELECT FROM alter_job(:unordered_job, config => jsonb_set(:'unordered_config'::jsonb, '{recompress_unordered}', 'false'));
+CALL run_job(:unordered_job);
+
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id
+WHERE h.table_name = 'test_recompress_unordered'
+GROUP BY c.status ORDER BY c.status;
+
+-- default behaviour recompresses the remaining unordered chunk
+SELECT FROM alter_job(:unordered_job, config => jsonb_set(:'unordered_config'::jsonb, '{recompress_unordered}', 'true'));
+CALL run_job(:unordered_job);
+
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id
+WHERE h.table_name = 'test_recompress_unordered'
+GROUP BY c.status ORDER BY c.status;
+
+DROP TABLE test_recompress_unordered;

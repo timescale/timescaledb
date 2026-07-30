@@ -50,7 +50,7 @@ params_register_dsm_handle(dsm_handle handle)
 	FormData_bgw_dsm_handle *fd;
 
 	rel = table_open(get_dsm_handle_table_oid(), RowExclusiveLock);
-	scan = table_beginscan(rel, SnapshotSelf, 0, NULL);
+	scan = table_beginscan_compat(rel, SnapshotSelf, 0, NULL, 0);
 	tuple = heap_copytuple(heap_getnext(scan, ForwardScanDirection));
 	fd = (FormData_bgw_dsm_handle *) GETSTRUCT(tuple);
 	fd->handle = handle;
@@ -70,7 +70,7 @@ params_load_dsm_handle()
 	dsm_handle handle;
 
 	rel = table_open(get_dsm_handle_table_oid(), RowExclusiveLock);
-	scan = table_beginscan(rel, SnapshotSelf, 0, NULL);
+	scan = table_beginscan_compat(rel, SnapshotSelf, 0, NULL, 0);
 	tuple = heap_getnext(scan, ForwardScanDirection);
 	TestAssertTrue(tuple != NULL);
 	tuple = heap_copytuple(tuple);

@@ -22,8 +22,8 @@ SELECT
     h.table_name AS hypertable_name,
     h.id AS hypertable_id,
     c.id AS chunk_id,
-    c.schema_name AS chunk_schema,
-    c.table_name AS chunk_name,
+    n.nspname AS chunk_schema,
+    cl.relname AS chunk_name,
     COALESCE((relsize).total_size, 0) AS total_bytes,
     COALESCE((relsize).heap_size, 0) AS heap_bytes,
     COALESCE((relsize).index_size, 0) AS index_bytes,
@@ -35,9 +35,8 @@ SELECT
 FROM
     _timescaledb_catalog.hypertable h
     JOIN _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
-    JOIN pg_class cl ON cl.relname = c.table_name AND cl.relkind = 'r'
+    JOIN pg_class cl ON cl.oid = c.relid AND cl.relkind = 'r'
     JOIN pg_namespace n ON n.oid = cl.relnamespace
-    AND n.nspname = c.schema_name
     JOIN LATERAL _timescaledb_functions.relation_size(cl.oid) AS relsize ON TRUE
     LEFT JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = cl.oid
     LEFT JOIN LATERAL _timescaledb_functions.relation_size(cs.compress_relid) AS relcompsize ON TRUE;
@@ -340,7 +339,7 @@ BEGIN
     -- for hypertables return the sum of the row counts of all chunks
     SELECT id FROM _timescaledb_catalog.hypertable INTO v_hypertable_id WHERE table_name = v_name AND schema_name = v_schema;
     IF FOUND THEN
-        RETURN (SELECT coalesce(sum(_timescaledb_functions.get_approx_row_count(format('%I.%I',schema_name,table_name))),0)
+        RETURN (SELECT coalesce(sum(_timescaledb_functions.get_approx_row_count(relid)),0)
           FROM _timescaledb_catalog.chunk
           WHERE hypertable_id = v_hypertable_id);
     END IF;
@@ -378,10 +377,10 @@ BEGIN
   SELECT compress_relid FROM _timescaledb_catalog.compression_settings INTO v_oid WHERE relid = relation;
 
   IF v_oid IS NOT NULL THEN
-    row_count := (SELECT CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 ELSE reltuples * _timescaledb_functions.estimate_compressed_batch_size(oid) END FROM pg_class WHERE oid = v_oid);
+    row_count := (SELECT CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 WHEN reltuples = 'Infinity'::float4 THEN 0 ELSE reltuples * _timescaledb_functions.estimate_compressed_batch_size(oid) END FROM pg_class WHERE oid = v_oid);
   END IF;
 
-  row_count := COALESCE((SELECT row_count + CASE WHEN reltuples < 0 OR relkind = 'p' THEN 0 ELSE reltuples END FROM pg_class WHERE oid = relation), 0);
+  row_count := COALESCE((SELECT row_count + CASE WHEN reltuples < 0 OR relkind = 'p' or reltuples = 'Infinity' THEN 0 ELSE reltuples END FROM pg_class WHERE oid = relation), 0);
 
   RETURN row_count;
 END
@@ -392,8 +391,8 @@ CREATE OR REPLACE VIEW _timescaledb_internal.compressed_chunk_stats AS
 SELECT
     srcht.schema_name AS hypertable_schema,
     srcht.table_name AS hypertable_name,
-    srcch.schema_name AS chunk_schema,
-    srcch.table_name AS chunk_name,
+    n.nspname AS chunk_schema,
+    cl.relname AS chunk_name,
     CASE WHEN srcch.status & 1 = 1 THEN
         'Compressed'::text
     ELSE
@@ -410,7 +409,9 @@ SELECT
 FROM
     _timescaledb_catalog.hypertable AS srcht
     JOIN _timescaledb_catalog.chunk AS srcch ON srcht.id = srcch.hypertable_id
-        AND srcht.compressed_hypertable_id IS NOT NULL
+        AND srcht.status & 4 = 4
+    JOIN pg_class cl ON cl.oid = srcch.relid
+    JOIN pg_namespace n ON n.oid = cl.relnamespace
     LEFT JOIN _timescaledb_catalog.compression_chunk_size map ON srcch.id = map.chunk_id;
 
 GRANT SELECT ON _timescaledb_internal.compressed_chunk_stats TO PUBLIC;
@@ -592,11 +593,12 @@ $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -------------End index size for hypertables -------
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.estimate_uncompressed_size(IN regclass, OUT tuples bigint, OUT relation_size bigint, OUT index_size bigint, OUT total_size bigint)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.estimate_uncompressed_size(IN regclass, IN samplerate double precision DEFAULT 100, OUT tuples bigint, OUT relation_size bigint, OUT index_size bigint, OUT total_size bigint)
 AS $$
 DECLARE
   v_compressed_chunk regclass;
   v_uncompressed_chunk regclass;
+  v_segmentby text[];
   v_index regclass;
   v_fixed_column_size integer;
   v_num_varlen_columns integer;
@@ -608,11 +610,23 @@ DECLARE
   v_varlen_query text:= '';
   v_multiplier decimal:=1.15; -- multiplier to account for page header, fill factor and alignment padding
   v_index_multiplier decimal:=1.25; -- multiplier to account for page header, fill factor and alignment padding
+  v_sample_clause text:= '';
+  v_scale decimal:=1;
 BEGIN
 
   v_compressed_chunk := $1;
 
-  SELECT relid INTO v_uncompressed_chunk FROM _timescaledb_catalog.compression_settings WHERE compress_relid = v_compressed_chunk;
+  IF samplerate IS NULL OR samplerate >= 100 THEN
+    v_sample_clause := '';
+    v_scale := 1;
+  ELSIF samplerate <= 0 THEN
+    RAISE EXCEPTION 'samplerate must be in the range (0, 100]';
+  ELSE
+    v_sample_clause := format(' TABLESAMPLE BERNOULLI(%s)', samplerate);
+    v_scale := 100.0 / samplerate;
+  END IF;
+
+  SELECT relid, segmentby INTO v_uncompressed_chunk, v_segmentby FROM _timescaledb_catalog.compression_settings WHERE compress_relid = v_compressed_chunk;
   IF NOT FOUND THEN
     RETURN;
   END IF;
@@ -632,25 +646,40 @@ BEGIN
   v_tuple_data := v_tuple_data + 7 & ~7; -- align to 8 bytes
 
   IF v_num_varlen_columns > 0 THEN
-	  SELECT ' + (' || string_agg(format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod)), ' + ') || ')' FROM pg_attribute INTO v_varlen_query WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped AND attlen = -1;
+	  SELECT ' + (' || string_agg(
+	    CASE WHEN attname = ANY(v_segmentby)
+	      THEN format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
+	      ELSE format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
+	    END, ' + ') || ') * ' || v_scale
+    FROM pg_attribute
+    INTO v_varlen_query
+    WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped AND attlen = -1;
   END IF;
 
   EXECUTE format('SELECT sum(_ts_meta_count) FROM %s', v_compressed_chunk) INTO tuples;
   -- we can optimize the following query if all columns are fixed size
-  EXECUTE format('SELECT (((%s::bigint * (%s::bigint + %s::bigint)) %s) * %s)::bigint FROM %s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk) INTO relation_size;
+  EXECUTE format('SELECT (((%s::bigint * (%s::bigint + %s::bigint)) %s) * %s)::bigint FROM %s%s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk, v_sample_clause) INTO relation_size;
 
   index_size := 0;
   FOR v_index, v_varlen_query, v_columns IN
     SELECT
       i.indexrelid::regclass,
-      (SELECT ' + (' || string_agg(format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod)), ' + ' ORDER BY attnum) || ')' FROM pg_attribute att WHERE att.attrelid=i.indrelid AND attnum =ANY(i.indkey)),
+      (SELECT ' + (' || string_agg(
+         CASE WHEN attname = ANY(v_segmentby)
+           THEN format('sum(pg_catalog.pg_column_size(%I) * _ts_meta_count)', attname)
+           ELSE format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod))
+         END, ' + ' ORDER BY attnum
+         )
+         || ') * ' || v_scale
+       FROM pg_attribute att
+       WHERE att.attrelid=i.indrelid AND attnum =ANY(i.indkey)),
       array_length(i.indkey,1) FROM pg_index i
     WHERE i.indrelid = v_uncompressed_chunk
   LOOP
     v_index_header := 8; -- Index tuple header
 
     -- v_compressed_chunk is a regclass, which will be properly escaped when cast to `text`
-    EXECUTE format('SELECT (((%s::bigint * %s::bigint) %s) * %s)::bigint FROM %s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk) INTO v_index_size;
+    EXECUTE format('SELECT (((%s::bigint * %s::bigint) %s) * %s)::bigint FROM %s%s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk, v_sample_clause) INTO v_index_size;
     index_size := index_size + v_index_size;
   END LOOP;
 

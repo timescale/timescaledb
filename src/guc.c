@@ -50,6 +50,13 @@ static const struct config_enum_entry telemetry_level_options[] = {
 #endif
 
 /* Copied from contrib/auto_explain/auto_explain.c */
+#if PG19_LT
+/*
+ * PG19 lets log_min_messages be set per process type (e.g. "warning,
+ * bgworker:debug1"), which supersedes our timescaledb.bgw_log_level GUC, so we
+ * only define it on earlier versions.
+ * https://github.com/postgres/postgres/commit/38e0190ced
+ */
 static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
 	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
@@ -57,6 +64,7 @@ static const struct config_enum_entry loglevel_options[] = {
 	{ "log", LOG, false },		 { "error", ERROR, false },	  { "fatal", FATAL, false },
 	{ NULL, 0, false }
 };
+#endif
 
 static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
@@ -86,6 +94,7 @@ bool ts_guc_enable_chunk_append = true;
 bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
+bool ts_guc_enable_hypertable_expansion_for_dml = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
@@ -94,9 +103,7 @@ TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
 TSDLLEXPORT bool ts_guc_skip_cagg_invalidation = false;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_foreign_key_propagation = true;
-#if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
-#endif
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
@@ -138,11 +145,11 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
+#if PG19_LT
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
-TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
-#if PG16_GE
-TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 #endif
+TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
+TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
 TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan = true;
 TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier = 1.0;
@@ -156,10 +163,8 @@ TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 bool ts_guc_enable_partitioned_hypertables = false;
 TSDLLEXPORT int ts_guc_stats_max_chunks = TS_STATS_MAX_CHUNKS_DEFAULT;
 
-#if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_cagg_rewrites = false;
 TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info = false;
-#endif
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
  * GUC mechanism starts up */
@@ -208,7 +213,7 @@ DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
 DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 #endif
 
-DebugRequireOption ts_guc_debug_require_batch_sorted_merge = false;
+DebugRequireOption ts_guc_debug_require_batch_sorted_merge = DRO_Allow;
 
 bool ts_guc_debug_compression_path_info = false;
 bool ts_guc_enable_rowlevel_compression_locking = false;
@@ -335,11 +340,7 @@ get_segmentby_func(char *input_name)
 		return InvalidOid;
 	}
 
-#if PG16_LT
-	namelist = stringToQualifiedNameList(input_name);
-#else
 	namelist = stringToQualifiedNameList(input_name, NULL);
-#endif
 	Oid argtyp[] = { REGCLASSOID };
 	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
 }
@@ -377,11 +378,7 @@ get_orderby_func(char *input_name)
 		return InvalidOid;
 	}
 
-#if PG16_LT
-	namelist = stringToQualifiedNameList(input_name);
-#else
 	namelist = stringToQualifiedNameList(input_name, NULL);
-#endif
 	Oid argtyp[] = { REGCLASSOID, TEXTARRAYOID };
 	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
 }
@@ -424,29 +421,6 @@ chunk_skipping_assign_hook(bool newval, void *extra)
 		ts_hypertable_cache_invalidate_callback();
 	}
 }
-
-#if PG16_LT
-/*
- * guc_malloc is not public in PostgreSQL < 16.
- */
-static void *
-guc_malloc(int elevel, size_t size)
-{
-	void *data;
-
-	/* Avoid unportable behavior of malloc(0) */
-	if (size == 0)
-	{
-		size = 1;
-	}
-	data = malloc(size);
-	if (data == NULL)
-	{
-		ereport(elevel, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("out of memory")));
-	}
-	return data;
-}
-#endif
 
 static bool
 check_default_chunk_time_interval(char **newval, void **extra, GucSource source)
@@ -791,6 +765,19 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_hypertable_expansion_for_dml"),
+							 "Enable TimescaleDB hypertable expansion for DML",
+							 "Allow using the TimescaleDB hypertable expansion code for "
+							 "UPDATE/DELETE queries, instead of the slower Postgres inheritance "
+							 "hierarchy expansion code.",
+							 &ts_guc_enable_hypertable_expansion_for_dml,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_foreign_key_propagation"),
 							 "Enable foreign key propagation",
 							 "Adjust foreign key lookup queries to target whole hypertable",
@@ -925,7 +912,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-#if PG16_GE
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_skipscan_for_distinct_aggregates"),
 							 "Enable SkipScan for DISTINCT aggregates",
 							 "Enable SkipScan for DISTINCT aggregates",
@@ -936,7 +922,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_skipscan"),
 							 "Enable SkipScan for compressed chunks",
@@ -985,7 +970,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-#if PG16_GE
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_rewrites"),
 							 "Enable rewriting queries with Caggs",
 							 "Enable rewriting queries with eligible continuous aggregates",
@@ -1007,7 +992,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-#endif
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "
@@ -1084,7 +1069,6 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-#if PG16_GE
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_sort_pushdown"),
 							 "Enable sort pushdown for continuous aggregates",
 							 "Enable pushdown of ORDER BY clause for continuous aggregates",
@@ -1095,7 +1079,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_watermark_constify"),
 							 "Enable cagg watermark constify",
@@ -1551,6 +1534,7 @@ _guc_init(void)
 							   /* assign_hook= */ ts_license_guc_assign_hook,
 							   /* show_hook= */ NULL);
 
+#if PG19_LT
 	DefineCustomEnumVariable(MAKE_EXTOPTION("bgw_log_level"),
 							 "Log level for the background worker subsystem",
 							 "Log level for the scheduler and workers of the background worker "
@@ -1563,6 +1547,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	/* this information is useful in general on customer deployments */
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_compression_path_info"),

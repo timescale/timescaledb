@@ -5,7 +5,7 @@
 -- print chunks ordered by time to ensure ordering we want
 SELECT
   ht.table_name AS hypertable,
-  c.table_name AS chunk,
+  c.relid::text AS chunk,
   ds.range_start
 FROM
   _timescaledb_catalog.chunk c

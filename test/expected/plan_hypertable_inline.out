@@ -92,15 +92,17 @@ SELECT * FROM ct;
                        Index Cond: ((b >= 5) AND (b <= 7))
 
 -- CTE within CTE
+-- use a distinct outer name so the plan does not depend on how a
+-- PG version disambiguates duplicate CTE names in EXPLAIN output
 :PREFIX
-WITH ct AS MATERIALIZED (
+WITH octe AS MATERIALIZED (
    SELECT * FROM test_f(5)
 )
-SELECT * FROM ct;
+SELECT * FROM octe;
 --- QUERY PLAN ---
- CTE Scan on ct
-   CTE ct
-     ->  CTE Scan on ct ct_1
+ CTE Scan on octe
+   CTE octe
+     ->  CTE Scan on ct
            CTE ct
              ->  Unique
                    ->  Sort

@@ -1,1 +1,0 @@
-Fixes: #9976 Fix wrong results when comparing a date column to a timestamptz value

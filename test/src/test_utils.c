@@ -9,6 +9,9 @@
 
 #include <compat/compat.h>
 #include <commands/dbcommands.h>
+#if PG19_GE
+#include <catalog/pg_database.h>
+#endif
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <storage/latch.h>

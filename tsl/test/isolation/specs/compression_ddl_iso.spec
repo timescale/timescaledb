@@ -59,7 +59,7 @@ session "LC"
 step "LockChunk1" {
   BEGIN;
   SELECT
-    lock_chunktable(format('%I.%I',ch.schema_name, ch.table_name))
+    lock_chunktable(ch.relid::text)
   FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
   WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
   ORDER BY ch.id LIMIT 1;
@@ -72,7 +72,7 @@ step "C1"   {
   SET LOCAL lock_timeout = '500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
-    compress_chunk(format('%I.%I',ch.schema_name, ch.table_name)) IS NOT NULL AS compress
+    compress_chunk(ch.relid) IS NOT NULL AS compress
   FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
   WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
   ORDER BY ch.id LIMIT 1;

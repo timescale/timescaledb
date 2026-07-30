@@ -149,7 +149,7 @@ create table test2(
 select create_hypertable('test2', by_range('created_at'));
  create_hypertable 
 -------------------
- (3,t)
+ (2,t)
 
 create trigger save_test2_insert_trg
        after insert on test2

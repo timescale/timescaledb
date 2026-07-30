@@ -504,15 +504,6 @@ CREATE TABLE comp_ht_test(time timestamptz NOT NULL);
 SELECT table_name FROM create_hypertable('comp_ht_test','time');
 ALTER TABLE comp_ht_test SET (timescaledb.compress);
 
-SELECT
-  format('%I.%I', ht.schema_name, ht.table_name) AS "INTERNALTABLE"
-FROM
-  _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
-      AND uncompress.table_name = 'comp_ht_test') \gset
-
-CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',now()) FROM :INTERNALTABLE GROUP BY 1;
-
 --TEST ht + cagg, do not enable compression on ht and try to compress chunk on ht.
 --Check error handling for this case
 SELECT compress_chunk(ch) FROM show_chunks('i2980') ch;

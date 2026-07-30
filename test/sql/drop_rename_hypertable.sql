@@ -12,7 +12,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
 ALTER TABLE "two_Partitions" RENAME TO "newname";
 SELECT * FROM "newname";
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA "newschema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
@@ -20,11 +20,11 @@ CREATE SCHEMA "newschema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 
 ALTER TABLE "newname" SET SCHEMA "newschema";
 SELECT * FROM "newschema"."newname";
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 
 DROP TABLE "newschema"."newname";
 
-SELECT * FROM _timescaledb_catalog.hypertable;
+SELECT id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, compression_state, status FROM _timescaledb_catalog.hypertable;
 SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_catalog', '_timescaledb_internal');
 
 -- Test that renaming ordinary table works

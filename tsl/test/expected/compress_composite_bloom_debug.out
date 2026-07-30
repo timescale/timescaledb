@@ -183,15 +183,15 @@ CREATE TABLE composite_filter_ref AS SELECT * FROM composite_filter_test;
 -----------------------------------------------------------
 SELECT cs.compress_relid AS chunk
 FROM _timescaledb_catalog.chunk uc, timescaledb_information.chunks tc, _timescaledb_catalog.compression_settings cs
-WHERE uc.table_name = tc.chunk_name
-  AND cs.relid = format('%I.%I', uc.schema_name, uc.table_name)::regclass
+WHERE uc.relid = format('%I.%I', tc.chunk_schema, tc.chunk_name)::regclass
+  AND cs.relid = uc.relid
   AND tc.hypertable_name = 'composite_filter_test'
   AND tc.is_compressed
 ORDER BY cs.compress_relid::text
 LIMIT 1
 \gset
 \echo 'Chunk: ' :chunk
-Chunk:  _timescaledb_internal.compress_hyper_2_2_chunk
+Chunk:  _timescaledb_internal._hyper_1_1_chunk_compressed
 SELECT attname AS composite_bloom_col
 FROM pg_attribute
 WHERE attrelid = :'chunk'::regclass
@@ -210,7 +210,7 @@ SELECT * FROM composite_filter_test WHERE device_id = 1 AND sensor_type = 'temp'
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1300.00 loops=1)
    Vectorized Filter: ((device_id = 1) AND (sensor_type = 'temp'::text))
    Rows Removed by Filter: 600
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=2.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_d3fa_device_id_sensor_type, TEST-HASHES::bigint[])
          Rows Removed by Filter: 2
 
@@ -226,7 +226,7 @@ SELECT * FROM composite_filter_test WHERE device_id = 2 AND sensor_type = 'humid
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1300.00 loops=1)
    Vectorized Filter: ((device_id = 2) AND (sensor_type = 'humidity'::text))
    Rows Removed by Filter: 600
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=2.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_d3fa_device_id_sensor_type, TEST-HASHES::bigint[])
          Rows Removed by Filter: 2
 
@@ -237,7 +237,7 @@ SELECT * FROM composite_filter_test WHERE device_id = 5 AND sensor_type = 'temp'
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: ((device_id = 5) AND (sensor_type = 'temp'::text))
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=0.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_d3fa_device_id_sensor_type, TEST-HASHES::bigint[])
          Rows Removed by Filter: 4
 
@@ -250,7 +250,7 @@ SELECT * FROM composite_filter_test WHERE device_id = 1 AND sensor_type = 'humid
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: ((device_id = 1) AND (sensor_type = 'humidity'::text))
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=0.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_d3fa_device_id_sensor_type, TEST-HASHES::bigint[])
          Rows Removed by Filter: 4
 
@@ -314,7 +314,7 @@ CREATE TABLE null_test(
 SELECT create_hypertable('null_test', 'ts');
    create_hypertable    
 ------------------------
- (3,public,null_test,t)
+ (2,public,null_test,t)
 
 ALTER TABLE null_test SET (
     timescaledb.compress,
@@ -331,7 +331,7 @@ INSERT INTO null_test VALUES (5, NULL, 'test', 1);
 SELECT compress_chunk(c) FROM show_chunks('null_test') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
+ _timescaledb_internal._hyper_2_2_chunk
 
 -- Test NULL queries
 SELECT COUNT(*) FROM null_test WHERE a IS NULL AND b IS NULL;
@@ -449,7 +449,7 @@ CREATE TABLE test_triple(ts int, a int, b text, c float8, seg int);
 SELECT create_hypertable('test_triple', 'ts');
     create_hypertable     
 --------------------------
- (5,public,test_triple,t)
+ (3,public,test_triple,t)
 
 ALTER TABLE test_triple SET (
     timescaledb.compress,
@@ -467,7 +467,7 @@ FROM generate_series(1, 1000) ts;
 SELECT compress_chunk(c) FROM show_chunks('test_triple') c;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_5_5_chunk
+ _timescaledb_internal._hyper_3_3_chunk
 
 -- Test various triple combinations
 SELECT COUNT(*) FROM test_triple WHERE a = 1 AND b = 'x' AND c = 2.0;

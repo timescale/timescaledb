@@ -58,10 +58,6 @@ extern void _conn_mock_fini();
 
 extern void _chunk_append_init();
 
-#if PG16_LT
-extern void TSDLLEXPORT _PG_init(void);
-#endif
-
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
 /* Called when the backend exits */

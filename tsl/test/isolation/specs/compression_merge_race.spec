@@ -74,7 +74,7 @@ step "s1_compress_finish" {
 }
 
 step "s1_compress_single_chunk" {
-    select compress_chunk(c, true) from show_chunks('sensor_data') c limit 1;
+    select compress_chunk(c, true) is not null as compress from show_chunks('sensor_data') c limit 1;
 }
 
 
@@ -135,7 +135,7 @@ step "s3_select_on_compressed_chunk" {
       INNER JOIN _timescaledb_catalog.chunk c
       ON h.id = c.hypertable_id
       INNER JOIN _timescaledb_catalog.compression_settings cs
-      ON cs.relid = format('%I.%I', c.schema_name, c.table_name)::regclass
+      ON cs.relid = c.relid
       WHERE h.table_name = 'sensor_data'
       AND cs.compress_relid IS NOT NULL;
       EXECUTE format('SELECT *

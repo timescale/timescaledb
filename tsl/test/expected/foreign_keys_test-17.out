@@ -368,7 +368,7 @@ INSERT INTO ht(time) VALUES ('2020-01-01');
 -- NO ACTION
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
-psql:include/foreign_keys.sql:422: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_no_action_fkey"
+psql:include/foreign_keys.sql:422: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_no_action_fkey"
 -- ON UPDATE NO ACTION
 BEGIN;
 INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
@@ -406,7 +406,7 @@ ROLLBACK;
 -- RESTRICT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
-psql:include/foreign_keys.sql:460: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_restrict_fkey"
+psql:include/foreign_keys.sql:460: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_restrict_fkey"
 -- ON UPDATE RESTRICT
 BEGIN;
 INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
@@ -444,7 +444,7 @@ ROLLBACK;
 -- CASCADE
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
-psql:include/foreign_keys.sql:499: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_cascade_fkey"
+psql:include/foreign_keys.sql:499: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_cascade_fkey"
 -- ON UPDATE CASCADE
 BEGIN;
 INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
@@ -533,7 +533,7 @@ ROLLBACK;
 -- SET NULL
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
-psql:include/foreign_keys.sql:599: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_set_null_fkey"
+psql:include/foreign_keys.sql:599: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_set_null_fkey"
 -- ON UPDATE SET NULL
 BEGIN;
 INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
@@ -595,7 +595,7 @@ ROLLBACK;
 -- SET DEFAULT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
-psql:include/foreign_keys.sql:667: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_set_default_fkey"
+psql:include/foreign_keys.sql:667: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_set_default_fkey"
 -- ON UPDATE SET DEFAULT
 BEGIN;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
@@ -678,7 +678,7 @@ INSERT INTO converted_fk SELECT '2020-01-01 0:01', 1;
 \set ON_ERROR_STOP 0
 -- should fail
 DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
-psql:include/foreign_keys.sql:761: ERROR:  update or delete on table "_hyper_16_34_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
+psql:include/foreign_keys.sql:761: ERROR:  update or delete on table "_hyper_14_15_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
 TRUNCATE converted_pk;
 psql:include/foreign_keys.sql:762: ERROR:  cannot truncate a table referenced in a foreign key constraint
 \set ON_ERROR_STOP 1
@@ -1053,7 +1053,7 @@ INSERT INTO ht(time) VALUES ('2020-01-01');
 -- NO ACTION
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
-psql:include/foreign_keys.sql:422: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_no_action_fkey"
+psql:include/foreign_keys.sql:422: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_no_action_fkey"
 -- ON UPDATE NO ACTION
 BEGIN;
 INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
@@ -1091,7 +1091,7 @@ ROLLBACK;
 -- RESTRICT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
-psql:include/foreign_keys.sql:460: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_restrict_fkey"
+psql:include/foreign_keys.sql:460: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_restrict_fkey"
 -- ON UPDATE RESTRICT
 BEGIN;
 INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
@@ -1129,7 +1129,7 @@ ROLLBACK;
 -- CASCADE
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
-psql:include/foreign_keys.sql:499: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_cascade_fkey"
+psql:include/foreign_keys.sql:499: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_cascade_fkey"
 -- ON UPDATE CASCADE
 BEGIN;
 INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
@@ -1218,7 +1218,7 @@ ROLLBACK;
 -- SET NULL
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
-psql:include/foreign_keys.sql:599: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_set_null_fkey"
+psql:include/foreign_keys.sql:599: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_set_null_fkey"
 -- ON UPDATE SET NULL
 BEGIN;
 INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
@@ -1280,7 +1280,7 @@ ROLLBACK;
 -- SET DEFAULT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
-psql:include/foreign_keys.sql:667: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "ht_fk_set_default_fkey"
+psql:include/foreign_keys.sql:667: ERROR:  insert or update on table "_hyper_12_13_chunk" violates foreign key constraint "ht_fk_set_default_fkey"
 -- ON UPDATE SET DEFAULT
 BEGIN;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
@@ -1363,7 +1363,7 @@ INSERT INTO converted_fk SELECT '2020-01-01 0:01', 1;
 \set ON_ERROR_STOP 0
 -- should fail
 DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
-psql:include/foreign_keys.sql:761: ERROR:  update or delete on table "_hyper_16_34_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
+psql:include/foreign_keys.sql:761: ERROR:  update or delete on table "_hyper_14_15_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
 TRUNCATE converted_pk;
 psql:include/foreign_keys.sql:762: ERROR:  cannot truncate a table referenced in a foreign key constraint
 \set ON_ERROR_STOP 1

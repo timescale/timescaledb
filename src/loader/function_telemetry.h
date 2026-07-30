@@ -6,6 +6,9 @@
  */
 #pragma once
 
+#include <storage/lwlock.h>
+#include <utils/hsearch.h>
+
 #define RENDEZVOUS_FUNCTION_TELEMENTRY "ts_function_telemetry"
 #define FN_TELEMETRY_LWLOCK_TRANCHE_NAME "ts_fn_telemetry_lwlock_tranche"
 

@@ -10,9 +10,9 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
 WITH
   hypertable_info AS (
     SELECT hypertable_id, schema_name, table_name,
-           num_dimensions, compression_state, column_name,
+           num_dimensions, status, column_name,
            column_type, interval_length,
-           (compression_state = 1) AS compression_enabled,
+           (status & 4 = 4) AS compression_enabled,
            row_number() OVER (PARTITION BY hypertable_id ORDER BY di.id) AS dimension_num
       FROM _timescaledb_catalog.hypertable ht
       JOIN _timescaledb_catalog.dimension di ON ht.id = di.hypertable_id
@@ -40,8 +40,8 @@ LEFT JOIN (
       array_agg(tablespace_name ORDER BY id) AS tablespace_list
     FROM _timescaledb_catalog.tablespace
     GROUP BY hypertable_id) srchtbs ON ht.hypertable_id = srchtbs.hypertable_id
-WHERE ht.compression_state != 2 --> no internal compression tables
-  AND ca.mat_hypertable_id IS NULL
+WHERE
+  ca.mat_hypertable_id IS NULL
   AND ht.interval_length IS NOT NULL
   AND ht.dimension_num = 1;
 
@@ -123,10 +123,7 @@ SELECT ht.schema_name AS hypertable_schema,
   cagg.user_view_name AS view_name,
   viewinfo.viewowner AS view_owner,
   cagg.materialized_only,
-  CASE WHEN mat_ht.compressed_hypertable_id IS NOT NULL
-       THEN TRUE
-       ELSE FALSE
-  END AS compression_enabled,
+  mat_ht.status & 4 = 4 AS compression_enabled,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
   directview.viewdefinition AS view_definition
@@ -148,7 +145,7 @@ FROM _timescaledb_catalog.continuous_agg cagg,
     AND C.relname = cagg.direct_view_name
     AND N.nspname = cagg.direct_view_schema) directview,
   LATERAL (
-    SELECT schema_name, table_name, compressed_hypertable_id
+    SELECT schema_name, table_name, status
     FROM _timescaledb_catalog.hypertable
     WHERE cagg.mat_hypertable_id = id) mat_ht
 WHERE cagg.raw_hypertable_id = ht.id;
@@ -174,8 +171,8 @@ SELECT hypertable_schema,
 FROM (
   SELECT ht.schema_name AS hypertable_schema,
     ht.table_name AS hypertable_name,
-    srcch.schema_name AS schema_name,
-    srcch.table_name AS chunk_name,
+    cl.schema_name AS schema_name,
+    cl.relname AS chunk_name,
     dim.column_name AS primary_dimension,
     dim.column_type AS primary_dimension_type,
     row_number() OVER (PARTITION BY dimsl.chunk_id ORDER BY dim.id) AS chunk_dimension_num,
@@ -210,16 +207,16 @@ FROM (
     INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dimsl.chunk_id = srcch.id
     INNER JOIN _timescaledb_catalog.dimension dim ON dim.id = dimsl.dimension_id
     INNER JOIN (
-      SELECT relname,
+      SELECT pg_class.oid AS reloid,
+        relname,
         reltablespace,
         nspname AS schema_name
       FROM pg_class,
         pg_namespace
-      WHERE pg_class.relnamespace = pg_namespace.oid) cl ON srcch.table_name = cl.relname
-      AND srcch.schema_name = cl.schema_name
+      WHERE pg_class.relnamespace = pg_namespace.oid) cl ON cl.reloid = srcch.relid
     LEFT OUTER JOIN pg_tablespace pgtab ON pgtab.oid = reltablespace
   WHERE srcch.osm_chunk IS FALSE
-    AND ht.compression_state != 2 ) finalq
+  ) finalq
 WHERE chunk_dimension_num = 1;
 
 -- hypertable's dimension information
@@ -269,7 +266,6 @@ SELECT
   NULL::bool AS orderby_nullsfirst
 FROM _timescaledb_catalog.hypertable ht
 INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.segmentby IS NOT NULL
-WHERE compressed_hypertable_id IS NOT NULL
 UNION ALL
 SELECT
 	schema_name AS hypertable_schema,
@@ -281,7 +277,6 @@ SELECT
   unnest(cs.orderby_nullsfirst) AS orderby_nullsfirst
 FROM _timescaledb_catalog.hypertable ht
 INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.orderby IS NOT NULL
-WHERE compressed_hypertable_id IS NOT NULL
 ORDER BY hypertable_name,
   segmentby_column_index,
   orderby_column_index;
@@ -402,13 +397,13 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings A
 CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 	SELECT
 		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
-		format('%I.%I',ch.schema_name,ch.table_name)::regclass AS chunk,
+		ch.relid AS chunk,
 		array_to_string(segmentby,',') AS segmentby,
 		un.orderby,
     s.index AS index
 	FROM _timescaledb_catalog.hypertable ht
     INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
-    INNER JOIN _timescaledb_catalog.compression_settings s ON (format('%I.%I',ch.schema_name,ch.table_name)::regclass = s.relid)
+    INNER JOIN _timescaledb_catalog.compression_settings s ON (ch.relid = s.relid)
 	LEFT JOIN LATERAL (
 		SELECT
 			string_agg(
@@ -492,7 +487,7 @@ SELECT
     o.last_update
 FROM _timescaledb_functions.chunk_statistics() o
 LEFT JOIN _timescaledb_catalog.chunk c
-       ON format('%I.%I', c.schema_name, c.table_name)::regclass = o.uncompressed_relid
+       ON c.relid = o.uncompressed_relid
 LEFT JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

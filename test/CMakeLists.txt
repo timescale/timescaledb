@@ -18,8 +18,7 @@ if(PG_REGRESS)
   add_custom_target(
     regresscheck
     COMMAND
-      ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
-      TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE} TEST_SCHEDULE=${TEST_SCHEDULE}
+      ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV} TEST_SCHEDULE=${TEST_SCHEDULE}
       TEST_TIMEOUT=${TEST_TIMEOUT} ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
       ${PG_REGRESS_OPTS_BASE} ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
       ${PG_REGRESS_OPTS_TEMP_INSTANCE}
@@ -55,7 +54,6 @@ if(PG_ISOLATION_REGRESS)
     COMMAND
       ${CMAKE_COMMAND} -E env ${PG_ISOLATION_REGRESS_ENV}
       SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
-      TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE}
       ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_BASE}
       ${PG_ISOLATION_REGRESS_OPTS_EXTRA} ${PG_ISOLATION_REGRESS_OPTS_INOUT}
       ${PG_REGRESS_OPTS_TEMP_INSTANCE}
@@ -107,16 +105,6 @@ endif()
 # We add the installcheck target even when _install_checks is empty as tsl code
 # might add dependencies to it even when regress checks are disabled.
 add_custom_target(installcheck DEPENDS ${_install_checks})
-
-# Define a post test hook that is invoked after the installcheck target
-# finishes. One can use add_dependencies on post hook target to run other
-# targets after tests complete. This is used, e.g., by code coverage.
-add_custom_target(installcheck-post-hook COMMENT "Post test hook")
-add_custom_command(
-  TARGET installcheck
-  POST_BUILD
-  COMMAND cmake --build ${CMAKE_CURRENT_BINARY_DIR} --target
-          installcheck-post-hook)
 
 add_custom_target(
   installcheck-rerun

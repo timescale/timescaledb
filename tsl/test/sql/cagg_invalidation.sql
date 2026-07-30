@@ -902,12 +902,12 @@ EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direc
 EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direct_compress_insert SELECT '2024-01-01'::timestamptz - format('%sm',i)::interval FROM generate_series(1,1000) g(i);
 
 -- should have 2 entries
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_insert' ORDER BY 1,2;
 
 EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direct_compress_insert SELECT '2023-12-31'::timestamptz + format('%sm',i)::interval FROM generate_series(1,2000) g(i);
 
 -- should have 3 entries
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_insert' ORDER BY 1,2;
 
 -- should have 1 uncompressed and 1 compressed chunk
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_insert;
@@ -925,7 +925,7 @@ COPY direct_compress_copy FROM STDIN;
 \.
 
 -- should have 1 entries now
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_copy' ORDER BY 1,2;
 
 COPY direct_compress_copy FROM STDIN;
 2023-01-03
@@ -933,7 +933,7 @@ COPY direct_compress_copy FROM STDIN;
 \.
 
 -- should have 2 entries now
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_copy' ORDER BY 1,2;
 
 -- range spanning multiple chunks
 COPY direct_compress_copy FROM STDIN;
@@ -942,7 +942,7 @@ COPY direct_compress_copy FROM STDIN;
 \.
 
 -- should have 3 entries now
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'direct_compress_copy' ORDER BY 1,2;
 
 -- should have 1 uncompressed and 3 compressed chunk
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_copy;
@@ -970,7 +970,7 @@ UPDATE inval_update SET time = NULL WHERE time = '2025-01-01';
 
 UPDATE inval_update SET time = '2025-01-01 00:00:23' WHERE time = '2025-01-01';
 -- should have 1 entries now
-SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 25 ORDER BY 1,2;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il JOIN _timescaledb_catalog.hypertable h ON il.hypertable_id = h.id WHERE h.table_name = 'inval_update' ORDER BY 1,2;
 
 ------------------------------------------------------------------------------------------
 --Test that invalidation's greatest_modified value are handle correctly for variable bucket

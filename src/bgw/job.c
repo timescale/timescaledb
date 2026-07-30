@@ -160,7 +160,7 @@ job_config_check(BgwJob *job, Jsonb *config)
 
 	/* Both should either be empty or contain a schema and name */
 	Assert((strlen(NameStr(job->fd.check_schema)) == 0) ==
-		   (strlen(NameStr(job->fd.check_schema)) == 0));
+		   (strlen(NameStr(job->fd.check_name)) == 0));
 
 	/* If there is no function, just return */
 	if (strlen(NameStr(job->fd.check_name)) == 0)
@@ -652,7 +652,7 @@ cancel_worker_for_job(const char *appname)
 	const int num_backends = pgstat_fetch_stat_numbackends();
 	for (int i = 1; i <= num_backends; i++)
 	{
-		const LocalPgBackendStatus *local_beentry = pgstat_get_local_beentry_by_index_compat(i);
+		const LocalPgBackendStatus *local_beentry = pgstat_get_local_beentry_by_index(i);
 		const PgBackendStatus *beentry = &local_beentry->backendStatus;
 		if (beentry->st_databaseid == MyDatabaseId && beentry->st_appname[0] != '\0' &&
 			strcmp(beentry->st_appname, appname) == 0)
@@ -1134,7 +1134,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
+#if PG19_LT
 	log_min_messages = ts_guc_bgw_log_level;
+#endif
 
 	elog(DEBUG2, "job %d started execution", params.job_id);
 

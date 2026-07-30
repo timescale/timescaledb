@@ -111,7 +111,10 @@ ALTER materialized view mat_m1 set (timescaledb.compress = false);
 
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
+-- terse verbosity: the not-found message differs between PG versions
+\set VERBOSITY terse
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
+\set VERBOSITY default
 SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
 --start_interval < end_interval
 SELECT add_continuous_aggregate_policy('mat_m1', 5, 10, '1h'::interval);

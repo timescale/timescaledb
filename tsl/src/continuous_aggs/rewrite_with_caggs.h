@@ -11,7 +11,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 
-#if PG16_GE
 typedef struct CaggRewriteContext
 {
 	bool eligible;						/* whether query is eligible for Caggs match */
@@ -25,5 +24,3 @@ typedef struct CaggRewriteContext
 } CaggRewriteContext;
 
 Query *continuous_agg_apply_rewrites(Query *parse);
-
-#endif
