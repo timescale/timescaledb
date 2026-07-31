@@ -1,4 +1,4 @@
-Parsed test spec with 8 sessions
+Parsed test spec with 7 sessions
 
 starting permutation: chk_hyper_invals WP_before_enable L1_refresh_jan1 WP_before_release chk_hyper_invals WP_before_enable L2_refresh_jan1 WP_before_release chk_cagg_6h chk_cagg_1d chk_6h_consistency chk_1d_consistency
 step chk_hyper_invals: 
@@ -463,7 +463,7 @@ Fri Jan 02 00:00:00 2026 UTC|32.1666666666667|32.1666666666667|        288|     
 Sat Jan 03 00:00:00 2026 UTC|            31.5|            31.5|         96|           96|t        |t          
 
 
-starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2_refresh_jan1 insert_ht L1_refresh_full L2b_refresh_jan1_2 WP_before_release unlock chk_cagg_1d chk_1d_consistency
+starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2_refresh_jan1 insert_ht L1_refresh_full L2b_refresh_jan1_2 WP_before_release unlock_L2_source chk_cagg_1d chk_1d_consistency
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
 
@@ -546,7 +546,7 @@ debug_waitpoint_release
                        
 
 step L1_refresh_full: <... completed>
-step unlock: 
+step unlock_L2_source: 
     ROLLBACK;
 
 step L2_refresh_jan1: <... completed>
@@ -586,7 +586,7 @@ Fri Jan 02 00:00:00 2026 UTC|            31.5|32.1666666666667|         96|     
 Sat Jan 03 00:00:00 2026 UTC|            31.5|            40.5|         96|          288|f        |f          
 
 
-starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2b_refresh_jan1_2 insert_ht L1_refresh_full L2_refresh_jan1 WP_before_release unlock chk_cagg_1d chk_1d_consistency
+starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2b_refresh_jan1_2 insert_ht L1_refresh_full L2_refresh_jan1 WP_before_release unlock_L2_source chk_cagg_1d chk_1d_consistency
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
 
@@ -669,7 +669,7 @@ debug_waitpoint_release
                        
 
 step L1_refresh_full: <... completed>
-step unlock: 
+step unlock_L2_source: 
     ROLLBACK;
 
 step L2b_refresh_jan1_2: <... completed>
@@ -864,7 +864,7 @@ Fri Jan 02 00:00:00 2026 UTC|            31.5|            31.5|         96|     
 Sat Jan 03 00:00:00 2026 UTC|            40.5|            40.5|        288|          288|t        |t          
 
 
-starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2_refresh_jan1 insert_ht L1_refresh_full L2b_refresh_jan3 WP_before_release unlock chk_cagg_1d chk_1d_consistency
+starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2_refresh_jan1 insert_ht L1_refresh_full L2b_refresh_jan3 WP_before_release unlock_L2_source chk_cagg_1d chk_1d_consistency
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
 
@@ -946,7 +946,7 @@ debug_waitpoint_release
                        
 
 step L1_refresh_full: <... completed>
-step unlock: 
+step unlock_L2_source: 
     ROLLBACK;
 
 step L2_refresh_jan1: <... completed>
@@ -987,19 +987,15 @@ Fri Jan 02 00:00:00 2026 UTC|            31.5|32.1666666666667|         96|     
 Sat Jan 03 00:00:00 2026 UTC|            40.5|            40.5|        288|          288|t        |t          
 
 
-starting permutation: insert_ht WP_after_enable chk_6h_consistency L1_refresh_jan1 lock_mat_invals WP_after_release L2_refresh_full unlock chk_mat_invals chk_6h_consistency chk_1d_consistency
+starting permutation: insert_ht L1b_refresh_jan3 chk_6h_consistency lock_6h_mat_table L1_refresh_jan1 L2_refresh_full unlock_6h_mat_table chk_mat_invals chk_6h_consistency chk_1d_consistency
 step insert_ht: 
     INSERT INTO conditions (time, temp)
     SELECT ts, 50.0
     FROM generate_series('2026-01-01 00:00:00+00'::timestamptz,
                          '2026-01-04 23:45:00+00', '15 minutes') ts;
 
-step WP_after_enable: 
-    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
-
-debug_waitpoint_enable
-----------------------
-                      
+step L1b_refresh_jan3: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-03 00:00', '2026-01-04 00:00');
 
 step chk_6h_consistency: 
     -- Verify L1 (6-hour) matches re-aggregation from raw hypertable
@@ -1029,34 +1025,35 @@ Fri Jan 02 00:00:00 2026 UTC|    22.5|            27.5|        24|       72|f   
 Fri Jan 02 06:00:00 2026 UTC|    28.5|            29.5|        24|       72|f        |f          
 Fri Jan 02 12:00:00 2026 UTC|    34.5|34.8333333333333|        24|       72|f        |f          
 Fri Jan 02 18:00:00 2026 UTC|    40.5|36.8333333333333|        24|       72|f        |f          
-Sat Jan 03 00:00:00 2026 UTC|    22.5|            37.5|        24|       72|f        |f          
-Sat Jan 03 06:00:00 2026 UTC|    28.5|            39.5|        24|       72|f        |f          
-Sat Jan 03 12:00:00 2026 UTC|    34.5|            41.5|        24|       72|f        |f          
-Sat Jan 03 18:00:00 2026 UTC|    40.5|            43.5|        24|       72|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|    37.5|            37.5|        72|       72|t        |t          
+Sat Jan 03 06:00:00 2026 UTC|    39.5|            39.5|        72|       72|t        |t          
+Sat Jan 03 12:00:00 2026 UTC|    41.5|            41.5|        72|       72|t        |t          
+Sat Jan 03 18:00:00 2026 UTC|    43.5|            43.5|        72|       72|t        |t          
+
+step lock_6h_mat_table: 
+    BEGIN;
+    DO $$
+    DECLARE
+        mat_table text;
+    BEGIN
+        SELECT format('%I.%I', h.schema_name, h.table_name) INTO mat_table
+        FROM _timescaledb_catalog.continuous_agg ca
+        JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+        WHERE ca.user_view_name = 'cagg_6h';
+        EXECUTE format('LOCK TABLE %s IN ACCESS EXCLUSIVE MODE', mat_table);
+    END;
+    $$;
 
 step L1_refresh_jan1: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01 00:00', '2026-01-02 00:00');
  <waiting ...>
-step lock_mat_invals: 
-    BEGIN;
-    LOCK _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-    IN ACCESS EXCLUSIVE MODE;
-
-step WP_after_release: 
-    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
-
-debug_waitpoint_release
------------------------
-                       
-
 step L2_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-05');
  <waiting ...>
-step unlock: 
+step unlock_6h_mat_table: 
     ROLLBACK;
 
 step L1_refresh_jan1: <... completed>
-L2: NOTICE:  continuous aggregate "cagg_1d" is already up-to-date
 step L2_refresh_full: <... completed>
 step chk_mat_invals: 
     SELECT ca.user_view_name AS cagg,
@@ -1071,7 +1068,7 @@ cagg   |lowest                      |greatest
 cagg_1d|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
 cagg_1d|Mon Jan 05 00:00:00 2026 UTC|infinity                           
 cagg_6h|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
-cagg_6h|Fri Jan 02 00:00:00 2026 UTC|Sat Jan 03 23:59:59.999999 2026 UTC
+cagg_6h|Fri Jan 02 00:00:00 2026 UTC|Fri Jan 02 23:59:59.999999 2026 UTC
 cagg_6h|Sun Jan 04 00:00:00 2026 UTC|infinity                           
 
 step chk_6h_consistency: 
@@ -1102,10 +1099,10 @@ Fri Jan 02 00:00:00 2026 UTC|            22.5|            27.5|        24|      
 Fri Jan 02 06:00:00 2026 UTC|            28.5|            29.5|        24|       72|f        |f          
 Fri Jan 02 12:00:00 2026 UTC|            34.5|34.8333333333333|        24|       72|f        |f          
 Fri Jan 02 18:00:00 2026 UTC|            40.5|36.8333333333333|        24|       72|f        |f          
-Sat Jan 03 00:00:00 2026 UTC|            22.5|            37.5|        24|       72|f        |f          
-Sat Jan 03 06:00:00 2026 UTC|            28.5|            39.5|        24|       72|f        |f          
-Sat Jan 03 12:00:00 2026 UTC|            34.5|            41.5|        24|       72|f        |f          
-Sat Jan 03 18:00:00 2026 UTC|            40.5|            43.5|        24|       72|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|            37.5|            37.5|        72|       72|t        |t          
+Sat Jan 03 06:00:00 2026 UTC|            39.5|            39.5|        72|       72|t        |t          
+Sat Jan 03 12:00:00 2026 UTC|            41.5|            41.5|        72|       72|t        |t          
+Sat Jan 03 18:00:00 2026 UTC|            43.5|            43.5|        72|       72|t        |t          
 
 step chk_1d_consistency: 
     -- Verify L2 (daily) matches re-aggregation from L1 (6-hour)
@@ -1129,5 +1126,5 @@ bucket                      |daily_avg|     from_6h_avg|daily_count|from_6h_coun
 ----------------------------+---------+----------------+-----------+-------------+---------+-----------
 Thu Jan 01 00:00:00 2026 UTC|     31.5|37.1666666666667|         96|          288|f        |f          
 Fri Jan 02 00:00:00 2026 UTC|     31.5|            31.5|         96|           96|t        |t          
-Sat Jan 03 00:00:00 2026 UTC|     31.5|            31.5|         96|           96|t        |t          
+Sat Jan 03 00:00:00 2026 UTC|     40.5|            40.5|        288|          288|t        |t          
 

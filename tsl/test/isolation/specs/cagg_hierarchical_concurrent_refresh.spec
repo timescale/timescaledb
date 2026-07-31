@@ -116,16 +116,6 @@ step "WP_before_release"
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
 }
 
-session "WP_after"
-step "WP_after_enable"
-{
-    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
-}
-step "WP_after_release"
-{
-    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
-}
-
 # Session to refresh L1 (6-hour)
 session "L1"
 setup
@@ -210,13 +200,27 @@ step "lock_L2_source"
     END;
     $$;
 }
-step "lock_mat_invals"
+step "unlock_L2_source"
+{
+    ROLLBACK;
+}
+
+step "lock_6h_mat_table"
 {
     BEGIN;
-    LOCK _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-    IN ACCESS EXCLUSIVE MODE;
+    DO $$
+    DECLARE
+        mat_table text;
+    BEGIN
+        SELECT format('%I.%I', h.schema_name, h.table_name) INTO mat_table
+        FROM _timescaledb_catalog.continuous_agg ca
+        JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+        WHERE ca.user_view_name = 'cagg_6h';
+        EXECUTE format('LOCK TABLE %s IN ACCESS EXCLUSIVE MODE', mat_table);
+    END;
+    $$;
 }
-step "unlock"
+step "unlock_6h_mat_table"
 {
     ROLLBACK;
 }
@@ -317,10 +321,10 @@ permutation "WP_before_enable" "chk_hyper_invals" "L1b_refresh_jan1_2" "insert_h
 
 # Two concurrent refreshes on L2 CAgg with overlapping ranges. One should fail due to overlap.
 # L1 is refreshed between the two L2 refreshes so that the second L2 refresh encounters an overlapping materialization range and fails.
-permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "lock_L2_source" "L2_refresh_jan1" "insert_ht" "L1_refresh_full" "L2b_refresh_jan1_2" "WP_before_release" "unlock" "chk_cagg_1d" "chk_1d_consistency"
+permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "lock_L2_source" "L2_refresh_jan1" "insert_ht" "L1_refresh_full" "L2b_refresh_jan1_2" "WP_before_release" "unlock_L2_source" "chk_cagg_1d" "chk_1d_consistency"
 
 # Same as above, reverse refresh order.
-permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "lock_L2_source" "L2b_refresh_jan1_2" "insert_ht" "L1_refresh_full" "L2_refresh_jan1" "WP_before_release" "unlock" "chk_cagg_1d" "chk_1d_consistency"
+permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "lock_L2_source" "L2b_refresh_jan1_2" "insert_ht" "L1_refresh_full" "L2_refresh_jan1" "WP_before_release" "unlock_L2_source" "chk_cagg_1d" "chk_1d_consistency"
 
 # Non-overlapping concurrent refreshes on L1. Both refreshes should succeed. Both are blocked before Txn 3.
 # Refreshing Jan 3 adds cagg invalidations that are partially overlapping with the one created by refreshing Jan 1.
@@ -330,8 +334,20 @@ permutation "WP_before_enable" "chk_hyper_invals" "L1_refresh_jan1" "insert_ht" 
 # Non-overlapping concurrent refresh on L2. Both refreshes should succeed. Both are blocked before Txn 3.
 # Refreshing Jan 3 adds cagg invalidations that are partially overlapping with the one created by refreshing Jan 1.
 # Those invalidations are left behind, but both Jan 1 and Jan 3 are refreshed successfully.
-permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "lock_L2_source" "L2_refresh_jan1" "insert_ht" "L1_refresh_full" "L2b_refresh_jan3" "WP_before_release" "unlock" "chk_cagg_1d" "chk_1d_consistency"
+permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "lock_L2_source" "L2_refresh_jan1" "insert_ht" "L1_refresh_full" "L2b_refresh_jan3" "WP_before_release" "unlock_L2_source" "chk_cagg_1d" "chk_1d_consistency"
 
-# L1 (txn3, deleting/inserting mat_inval entries) and L2 (txn2, processing mat_inval entries) should not block each other.
-# Lock materialization invalidation table to make both refreshes wait before processing entries, then release simultaneously.
-permutation "insert_ht" "WP_after_enable"  "chk_6h_consistency" "L1_refresh_jan1" "lock_mat_invals" "WP_after_release" "L2_refresh_full" "unlock" "chk_mat_invals" "chk_6h_consistency" "chk_1d_consistency"
+# Lock cagg_6h's materialization table to block L1's refresh in txn3, before it makes any
+# change to that table. Any change there generates invalidations for L2's cagg (cagg_1d),
+# so we synchronize both refreshes around it.
+#
+# Once L1 is blocked in txn3 and still holding its lock on the materialization invalidation
+# log, since it hasn't committed yet, run L2's refresh. L2 should get through txn1 and txn2
+# without any issue despite that lock. Once L2 also hits the block in txn3, release it.
+#
+# L1_refresh_jan1 refreshes Jan 1, but is blocked in txn3, so its changes aren't materialized
+# yet while L2_refresh_full processes invalidations in txn1 and txn2. Jan 1 is therefore not
+# visible to L2 and it only updates data for Jan 3.
+#
+# There shouldn't be a race condition on materialization invalidation reads/writes between
+# the two refreshes, so both refreshes should succeed.
+permutation "insert_ht" "L1b_refresh_jan3" "chk_6h_consistency" "lock_6h_mat_table" "L1_refresh_jan1" "L2_refresh_full"("L1_refresh_jan1") "unlock_6h_mat_table" "chk_mat_invals" "chk_6h_consistency" "chk_1d_consistency"
