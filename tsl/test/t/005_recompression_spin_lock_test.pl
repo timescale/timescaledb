@@ -111,9 +111,10 @@ $s1->query_safe("SET timescaledb.enable_recompress_waiting TO on;");
 # We use session 3 to set up debug waitpoints
 # Begin txns in all sessions
 
-$s1->query_safe("BEGIN;");
-$s2->query_safe("BEGIN;");
-$s3->query_safe("BEGIN;");
+# use SELECT to trigger extension load
+$s1->query_safe("BEGIN; SELECT;");
+$s2->query_safe("BEGIN; SELECT;");
+$s3->query_safe("BEGIN; SELECT;");
 
 # We enable the debug_waitpoint after the latch and release it after s2 aborts
 # This allows s1 to successfully acquire the lock the second time around
