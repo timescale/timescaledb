@@ -67,6 +67,6 @@ cmake --build ./build --config Release
 # To install
 cmake --build ./build --config Release --target install
 
-# Alternatively, build in Visual Studio via its built-in support for
+# Alternatively, build in Visual Studio via its built-in supported for
 # CMake or by opening the generated build/timescaledb.sln solution file.
 ```
