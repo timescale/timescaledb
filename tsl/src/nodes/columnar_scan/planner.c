@@ -1157,10 +1157,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		 * Batch sorted merge is done over the decompressed chunk scan tuple, so
 		 * we must match the pathkeys to the decompressed chunk tupdesc.
 		 */
-
-		int numsegkeys = 0;
-		char *column_name;
-
 		List *sort_col_idx = NIL;
 		List *sort_ops = NIL;
 		List *sort_collations = NIL;
@@ -1222,12 +1218,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 
 				Assert((Index) var->varno == (Index) em_relid);
 
-				column_name = get_attname(dcpath->info->chunk_rte->relid, var->varattno, false);
-				if (ts_array_is_member(dcpath->info->settings->fd.segmentby, column_name))
-				{
-					numsegkeys++;
-				}
-
 				/*
 				 * Convert its varattno which is the varattno of the
 				 * uncompressed chunk tuple, to the decompressed scan tuple
@@ -1267,9 +1257,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				   "could not find matching decompressed chunk column for batch sorted merge "
 				   "pathkey");
 		}
-		List *sort_numsegkeys = list_make1_int(numsegkeys);
-		sort_options =
-			list_make5(sort_col_idx, sort_ops, sort_collations, sort_nulls, sort_numsegkeys);
+		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
 	}
 
 	/*

@@ -478,10 +478,6 @@ SELECT * FROM test_segby ORDER BY time DESC NULLS LAST;
 :PREFIX
 SELECT * FROM test_segby ORDER BY time ASC NULLS FIRST;
 
--- Should not be optimized (using segmentby)
-:PREFIX
-SELECT * FROM test_segby ORDER BY segby, time;
-
 -- Tests for #9445: forbid BatchSortedMerge on nullable orderby columns with no firstlast index
 CREATE TABLE t(time int NOT NULL, device int, val int);
 SELECT create_hypertable('t', 'time', chunk_time_interval => 10000);
@@ -907,9 +903,13 @@ INSERT INTO t2_seg (time, dev, v) values
 
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t2_seg') chunk;
 
--- Should be optimized (segmentby + orderby matches)
+-- Should be optimized (segmentby any direction + orderby)
 :PREFIX
 SELECT * FROM test_segby ORDER BY segby, time DESC;
+
+-- Should be optimized (segmentby any direction + orderby reversed)
+:PREFIX
+SELECT * FROM test_segby ORDER BY segby, time;
 
 -- matches (segmentby + orderby) order
 :PREFIX
@@ -1070,3 +1070,4 @@ RESET timescaledb.debug_require_batch_sorted_merge;
 
 RESET enable_seqscan;
 RESET enable_bitmapscan;
+RESET enable_indexscan;
