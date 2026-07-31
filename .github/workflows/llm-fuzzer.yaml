@@ -79,14 +79,16 @@ jobs:
             display_name: "Internal Program Errors"
           - oracle: "optimizations"
             display_name: "Optimizations ON-OFF"
+          - oracle: "hypertable"
+            display_name: "Hypertable ON-OFF"
 
     steps:
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
         sudo apt-get update
-        sudo apt-get install ccache cmake flex bison systemd-coredump gdb \
-          jq postgresql-client ${{ env.extra_packages }}
+        sudo apt-get install ccache cmake flex bison icu-devtools systemd-coredump \
+          gdb jq postgresql-client ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -313,6 +315,14 @@ jobs:
 
         printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
         cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
+
+        PSQLRC=oracle-psqlrc
+        export PSQLRC
+        echo "
+          \set QUIET on
+          \set ON_ERROR_STOP on
+          set client_min_messages = error;
+        " > "${PSQLRC}"
 
         .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh restricted-repro.sql &> repro_result.txt
 
