@@ -295,6 +295,7 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 	if (best_match.num_cols > 0)
 	{
 		Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+		Oid collation_oids[MAX_BLOOM_FILTER_COLUMNS];
 		cdst->bloom_column_name = best_match.column_name;
 		cdst->bloom_insert_attnums = best_match.attnums;
 		cdst->upsert_bloom_attnum = best_match.compressed_attnum;
@@ -303,12 +304,14 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 		int attnum = -1;
 		while ((attnum = bms_next_member(best_match.attnums, attnum)) >= 0)
 		{
-			type_oids[col_idx++] = get_atttype(cis->hypertable_relid, attnum);
+			type_oids[col_idx] = get_atttype(cis->hypertable_relid, attnum);
+			collation_oids[col_idx] = get_attcollation(cis->hypertable_relid, attnum);
+			col_idx++;
 		}
 
 		if (ts_guc_enable_sparse_index_bloom)
 		{
-			cdst->bloom_hasher = bloom1_hasher_create(type_oids, best_match.num_cols);
+			cdst->bloom_hasher = bloom1_hasher_create(type_oids, collation_oids, best_match.num_cols);
 		}
 	}
 
@@ -2390,12 +2393,14 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 			 * the order used during compression.
 			 */
 			Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+			Oid collation_oids[MAX_BLOOM_FILTER_COLUMNS];
 			NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
 			int col_idx = 0;
 			int attnum = -1;
 			while ((attnum = bms_next_member(bloom_attnos, attnum)) >= 0)
 			{
 				type_oids[col_idx] = get_atttype(ch->fd.relid, attnum);
+				collation_oids[col_idx] = get_attcollation(ch->fd.relid, attnum);
 
 				/* Find the matching equality predicate for this attnum */
 				foreach_ptr(EqualityPredicate, ep, eq_preds)
@@ -2410,7 +2415,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 				col_idx++;
 			}
 
-			Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_columns);
+			Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, collation_oids, num_columns);
 			uint64 hash = hasher->hash_values(hasher, values);
 
 			/* Resolve bloom metadata column attno in compressed chunk */

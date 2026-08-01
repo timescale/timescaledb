@@ -57,6 +57,7 @@ typedef struct Bloom1HasherInternal
 	Bloom1Hasher functions;
 	PGFunction hash_functions[MAX_BLOOM_FILTER_COLUMNS];
 	FmgrInfo *hash_function_finfos[MAX_BLOOM_FILTER_COLUMNS];
+	Oid collation_oids[MAX_BLOOM_FILTER_COLUMNS];
 } Bloom1HasherInternal;
 
 typedef struct Bloom1MetadataBuilder
@@ -69,7 +70,8 @@ typedef struct Bloom1MetadataBuilder
 	Bloom1HasherInternal hasher;
 } Bloom1MetadataBuilder;
 
-static Bloom1HasherInternal bloom1_hasher_init(const Oid *type_oids, int num_columns);
+static Bloom1HasherInternal bloom1_hasher_init(const Oid *type_oids, const Oid *collation_oids,
+												int num_columns);
 
 /*
  * Low-bias invertible hash function from this article:
@@ -350,17 +352,18 @@ bloom1_insert_to_compressed_row(void *builder_, Datum *compressed_values, bool *
  */
 uint64
 batch_metadata_builder_bloom1_calculate_hash(PGFunction hash_function, FmgrInfo *finfo,
-											 Datum needle)
+											 Datum needle, Oid collation)
 {
 	LOCAL_FCINFO(hashfcinfo, 2);
 	*hashfcinfo = (FunctionCallInfoBaseData){ 0 };
 
 	/*
-	 * Our hashing is not collation-sensitive, but the Postgres hashing functions
-	 * might refuse to work if the collation is not deterministic, so make them
-	 * happy.
+	 * Use the column's collation for hashing. For non-deterministic collations
+	 * (e.g. ICU case-insensitive), this ensures that collation-equivalent
+	 * values produce the same hash. For deterministic collations and C collation
+	 * this is a no-op.
 	 */
-	hashfcinfo->fncollation = C_COLLATION_OID;
+	hashfcinfo->fncollation = collation;
 
 	hashfcinfo->nargs = 2;
 	hashfcinfo->args[0].value = needle;
@@ -445,8 +448,9 @@ bloom1_hash_values(void *hasher_, const NullableDatum *values)
 	else
 	{
 		accumulated = batch_metadata_builder_bloom1_calculate_hash(hasher->hash_functions[0],
-																   hasher->hash_function_finfos[0],
-																   values[0].value);
+																	   hasher->hash_function_finfos[0],
+																	   values[0].value,
+																	   hasher->collation_oids[0]);
 	}
 
 	for (int i = 1; i < num_columns; i++)
@@ -458,8 +462,9 @@ bloom1_hash_values(void *hasher_, const NullableDatum *values)
 		else
 		{
 			uint64 h = batch_metadata_builder_bloom1_calculate_hash(hasher->hash_functions[i],
-																	hasher->hash_function_finfos[i],
-																	values[i].value);
+																			hasher->hash_function_finfos[i],
+																			values[i].value,
+																			hasher->collation_oids[i]);
 			accumulated = city_hash_combine(accumulated, h);
 		}
 	}
@@ -525,6 +530,7 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 		}
 
 		Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+		Oid collation_oids[MAX_BLOOM_FILTER_COLUMNS];
 		int num_columns;
 
 		if (context->element_type == RECORDOID)
@@ -554,16 +560,18 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 			for (int i = 0; i < num_columns; i++)
 			{
 				type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
+				collation_oids[i] = TupleDescAttr(tupdesc, i)->attcollation;
 			}
 			ReleaseTupleDesc(tupdesc);
 		}
 		else
 		{
 			type_oids[0] = context->element_type;
+			collation_oids[0] = C_COLLATION_OID;
 			num_columns = 1;
 		}
 
-		context->bloom_hasher = bloom1_hasher_init(type_oids, num_columns);
+		context->bloom_hasher = bloom1_hasher_init(type_oids, collation_oids, num_columns);
 
 		get_typlenbyvalalign(context->element_type,
 							 &context->element_typlen,
@@ -746,7 +754,7 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 		}
 
 		item_base_hashes[valid++] =
-			batch_metadata_builder_bloom1_calculate_hash(hash_fn, finfo, items[i]);
+			batch_metadata_builder_bloom1_calculate_hash(hash_fn, finfo, items[i], context->bloom_hasher.collation_oids[0]);
 	}
 
 	if (valid == 0)
@@ -898,6 +906,7 @@ bloom1_hash(PG_FUNCTION_ARGS)
 	Oid type = get_fn_expr_argtype(fcinfo->flinfo, 0);
 
 	Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+	Oid collation_oids[MAX_BLOOM_FILTER_COLUMNS];
 	NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
 	int num_columns;
 
@@ -929,6 +938,7 @@ bloom1_hash(PG_FUNCTION_ARGS)
 		for (int i = 0; i < num_columns; i++)
 		{
 			type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
+			collation_oids[i] = TupleDescAttr(tupdesc, i)->attcollation;
 			values[i].value = GetAttributeByNum(tuple, i + 1, &values[i].isnull);
 		}
 		ReleaseTupleDesc(tupdesc);
@@ -947,12 +957,13 @@ bloom1_hash(PG_FUNCTION_ARGS)
 	{
 		/* Scalar: single column */
 		type_oids[0] = type;
+		collation_oids[0] = C_COLLATION_OID;
 		values[0].value = PG_GETARG_DATUM(0);
 		values[0].isnull = false;
 		num_columns = 1;
 	}
 
-	Bloom1HasherInternal hasher = bloom1_hasher_init(type_oids, num_columns);
+	Bloom1HasherInternal hasher = bloom1_hasher_init(type_oids, collation_oids, num_columns);
 	uint64 hash = hasher.functions.hash_values(&hasher, values);
 	PG_RETURN_INT64((int64) hash);
 }
@@ -995,8 +1006,8 @@ batch_metadata_builder_bloom1_varlena_size(void)
 	return bloom1_varlena_alloc_size(desired_bits);
 }
 
-static Bloom1HasherInternal
-bloom1_hasher_init(const Oid *type_oids, int num_columns)
+static Bloom1HasherInternal bloom1_hasher_init(const Oid *type_oids, const Oid *collation_oids,
+												int num_columns)
 {
 	Bloom1HasherInternal hasher = (Bloom1HasherInternal){
 		.functions =
@@ -1018,21 +1029,23 @@ bloom1_hasher_init(const Oid *type_oids, int num_columns)
 					 errmsg("the argument type %s lacks an extended hash function",
 							format_type_be(type_oids[i]))));
 		}
+		hasher.collation_oids[i] = collation_oids[i];
 	}
 
 	return hasher;
 }
 
 Bloom1Hasher *
-bloom1_hasher_create(const Oid *type_oids, int num_columns)
+bloom1_hasher_create(const Oid *type_oids, const Oid *collation_oids, int num_columns)
 {
 	Bloom1HasherInternal *hasher = palloc(sizeof(*hasher));
-	*hasher = bloom1_hasher_init(type_oids, num_columns);
+	*hasher = bloom1_hasher_init(type_oids, collation_oids, num_columns);
 	return &hasher->functions;
 }
 
 BatchMetadataBuilder *
 batch_metadata_builder_bloom1_create(int num_columns, const Oid *type_oids,
+									 const Oid *collation_oids,
 									 const AttrNumber *attnums, int bloom_attr_offset)
 {
 	Assert(num_columns >= 1 && num_columns <= MAX_BLOOM_FILTER_COLUMNS);
@@ -1055,7 +1068,7 @@ batch_metadata_builder_bloom1_create(int num_columns, const Oid *type_oids,
 	memcpy(builder->input_columns, attnums, num_columns * sizeof(AttrNumber));
 
 	/* Initialize the embedded hasher */
-	builder->hasher = bloom1_hasher_init(type_oids, num_columns);
+	builder->hasher = bloom1_hasher_init(type_oids, collation_oids, num_columns);
 
 	/*
 	 * Initialize the bloom filter.
@@ -1179,7 +1192,7 @@ ts_bloom1_debug_hash(PG_FUNCTION_ARGS)
 
 	Assert(!PG_ARGISNULL(0));
 	Datum needle = PG_GETARG_DATUM(0);
-	PG_RETURN_UINT64(batch_metadata_builder_bloom1_calculate_hash(fn, finfo, needle));
+	PG_RETURN_UINT64(batch_metadata_builder_bloom1_calculate_hash(fn, finfo, needle, C_COLLATION_OID));
 }
 
 TS_FUNCTION_INFO_V1(ts_bloom1_composite_debug_hash);
@@ -1208,13 +1221,15 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 	}
 
 	Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+	Oid collation_oids[MAX_BLOOM_FILTER_COLUMNS];
 	for (int i = 0; i < num_fields; i++)
 	{
 		type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
+		collation_oids[i] = TupleDescAttr(tupdesc, i)->attcollation;
 	}
 	ReleaseTupleDesc(tupdesc);
 
-	Bloom1HasherInternal hasher = bloom1_hasher_init(type_oids, num_fields);
+	Bloom1HasherInternal hasher = bloom1_hasher_init(type_oids, collation_oids, num_fields);
 
 	NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
 	for (int i = 0; i < num_fields; i++)
