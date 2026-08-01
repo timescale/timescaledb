@@ -1,0 +1,2 @@
+Fixes: #10327 Assertion failure in add_dimension when the hypertable argument is NULL
+Thanks: @JoongHyuk-Shin for reporting and fixing NULL handling in add_dimension

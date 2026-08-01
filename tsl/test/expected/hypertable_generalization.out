@@ -18,6 +18,8 @@ SELECT create_hypertable('n',NULL::_timescaledb_internal.dimension_info);
 ERROR:  dimension cannot be NULL
 SELECT add_dimension('n',NULL::_timescaledb_internal.dimension_info);
 ERROR:  dimension cannot be NULL
+SELECT add_dimension(NULL, by_range('id'));
+ERROR:  hypertable cannot be NULL
 \set ON_ERROR_STOP 1
 -- test int types
 SELECT by_range('id',2::int2);
