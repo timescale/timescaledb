@@ -49,7 +49,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL
       id: cache-postgresql
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "postgresql-libfuzzer-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
@@ -183,7 +183,7 @@ jobs:
 
     - name: Restore the cached fuzzing corpus (bulk)
       id: restore-corpus-cache-bulk
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: db/corpus-bulk
         key: "${{ steps.config.outputs.cache_prefix }}-bulk"
@@ -192,7 +192,7 @@ jobs:
     # they don't overwrite each other. Now we are going to combine them.
     - name: Restore the cached fuzzing corpus (rowbyrow)
       id: restore-corpus-cache-rowbyrow
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: db/corpus-rowbyrow
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
@@ -346,7 +346,7 @@ jobs:
 
     - name: Save fuzzer corpus
       if: always()
-      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
         key: "${{ format('{0}-{1}-{2}-{3}',
