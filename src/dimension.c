@@ -1948,7 +1948,7 @@ ts_dimension_add_general(PG_FUNCTION_ARGS)
 {
 	DimensionInfo *info = NULL;
 	GETARG_NOTNULL_POINTER(info, 1, "dimension", DimensionInfo);
-	info->table_relid = PG_GETARG_OID(0);
+	GETARG_NOTNULL_OID(info->table_relid, 0, "hypertable");
 	if (PG_GETARG_BOOL(2))
 	{
 		info->if_not_exists = true;
