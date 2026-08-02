@@ -182,7 +182,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     detach_chunk.sql
     direct_compress_memory.sql
     hypertable_generalization.sql
-    deferredchunkscan.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
     read_only.sql
@@ -208,7 +207,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vacuum.sql)
 
   list(APPEND TEST_TEMPLATES compression_update_delete.sql.in
-       transparent_decompression_queries.sql.in)
+       transparent_decompression_queries.sql.in deferredchunkscan.sql.in)
 
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
