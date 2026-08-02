@@ -402,6 +402,41 @@ ERROR:  permission denied for table metrics_colpriv
 -- back to the owning user for the remaining queries
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SET timescaledb.enable_deferredchunkscan TO on;
+-- Views: a view checks base-table access as its owner (checkAsUser on the
+-- underlying RTE), but the per-chunk query runs as the current user. The node
+-- must stay off so the normal plan enforces the view owner's permissions.
+CREATE VIEW metrics_view AS SELECT * FROM metrics;
+GRANT SELECT ON metrics_view TO :ROLE_DEFAULT_PERM_USER_2;
+-- a security_barrier view is not pulled up, so the node never sees a plain
+-- hypertable reference and must stay off there too
+CREATE VIEW metrics_barrier WITH (security_barrier) AS SELECT * FROM metrics;
+GRANT SELECT ON metrics_barrier TO :ROLE_DEFAULT_PERM_USER_2;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
+-- reads through the views succeed without any direct grant on the hypertable
+SELECT count(*) = 5 AS ok FROM (SELECT device FROM metrics_view ORDER BY time LIMIT 5) x;
+ ok 
+----
+ t
+
+SELECT count(*) = 5 AS ok FROM (SELECT device FROM metrics_barrier ORDER BY time LIMIT 5) x;
+ ok 
+----
+ t
+
+RESET timescaledb.debug_require_deferred_chunk_scan;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET timescaledb.enable_deferredchunkscan TO on;
+-- the view owner querying their own view: checkAsUser matches the current user,
+-- so the node is safe to use
+SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SELECT count(x) >= 0 AS ok FROM (SELECT device FROM metrics_view ORDER BY time LIMIT 5) x;
+ ok 
+----
+ t
+
+RESET timescaledb.debug_require_deferred_chunk_scan;
 -- Feature off: node is never chosen, even for an accepted shape.
 SET timescaledb.enable_deferredchunkscan TO off;
 SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';

@@ -22,6 +22,7 @@
 #include <commands/explain.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
+#include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
@@ -29,6 +30,7 @@
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
+#include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <storage/lockdefs.h>
@@ -386,6 +388,20 @@ deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
 	if (rte->securityQuals != NIL || ts_has_row_security(ht->main_table_relid))
 	{
 		return false;
+	}
+
+	/*
+	 * A view checks base-table permissions as the view owner (checkAsUser), but
+	 * the per-chunk query runs as the current user. When the two differ that
+	 * would enforce the wrong permissions, so bail out.
+	 */
+	if (rte->perminfoindex > 0)
+	{
+		RTEPermissionInfo *perminfo = getRTEPermissionInfo(query->rteperminfos, rte);
+		if (OidIsValid(perminfo->checkAsUser) && perminfo->checkAsUser != GetUserId())
+		{
+			return false;
+		}
 	}
 
 	/*
