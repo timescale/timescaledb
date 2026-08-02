@@ -20,7 +20,6 @@
 #include <catalog/pg_operator.h>
 #include <catalog/pg_type.h>
 #include <commands/explain.h>
-#include <commands/explain_format.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
@@ -48,6 +47,9 @@
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#if PG18_GE
+#include <commands/explain_format.h>
+#endif
 #include "chunk.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -814,41 +816,50 @@ deferred_chunk_scan_chunk_sql(DeferredChunkScanState *state, Oid reloid)
 static Oid
 next_chunk_reloid_ordered(DeferredChunkScanState *state)
 {
-	StrategyNumber start_strategy = InvalidStrategy;
-	int64 start_value = 0;
-	if (state->have_last)
+	/* A slice's chunk may have been dropped since the slice was read; skip such
+	 * slices and keep going so a mid-scan drop can't truncate the result. Only
+	 * return InvalidOid once the slices are exhausted. */
+	for (;;)
 	{
-		start_strategy = state->descending ? BTLessStrategyNumber : BTGreaterStrategyNumber;
-		start_value = state->last_range_start;
-	}
+		StrategyNumber start_strategy = InvalidStrategy;
+		int64 start_value = 0;
+		if (state->have_last)
+		{
+			start_strategy = state->descending ? BTLessStrategyNumber : BTGreaterStrategyNumber;
+			start_value = state->last_range_start;
+		}
 
-	ScanIterator it = ts_dimension_slice_scan_iterator_create(NULL, CurrentMemoryContext);
-	ts_dimension_slice_scan_iterator_set_range(&it,
-											   state->primary_dimension_id,
-											   start_strategy,
-											   start_value,
-											   InvalidStrategy,
-											   0);
-	it.ctx.scandirection = state->descending ? BackwardScanDirection : ForwardScanDirection;
-	ts_scan_iterator_start_scan(&it);
+		ScanIterator it = ts_dimension_slice_scan_iterator_create(NULL, CurrentMemoryContext);
+		ts_dimension_slice_scan_iterator_set_range(&it,
+												   state->primary_dimension_id,
+												   start_strategy,
+												   start_value,
+												   InvalidStrategy,
+												   0);
+		it.ctx.scandirection = state->descending ? BackwardScanDirection : ForwardScanDirection;
+		ts_scan_iterator_start_scan(&it);
 
-	TupleInfo *ti = ts_scan_iterator_next(&it);
-	if (ti == NULL)
-	{
+		TupleInfo *ti = ts_scan_iterator_next(&it);
+		if (ti == NULL)
+		{
+			ts_scan_iterator_close(&it);
+			return InvalidOid;
+		}
+
+		bool isnull;
+		int32 chunk_id =
+			DatumGetInt32(slot_getattr(ti->slot, Anum_dimension_slice_chunk_id, &isnull));
+		state->last_range_start =
+			DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
+		state->have_last = true;
 		ts_scan_iterator_close(&it);
-		return InvalidOid;
+
+		Oid reloid = ts_chunk_get_relid(chunk_id, /* missing_ok = */ true);
+		if (OidIsValid(reloid))
+		{
+			return reloid;
+		}
 	}
-
-	bool isnull;
-	int32 chunk_id = DatumGetInt32(slot_getattr(ti->slot, Anum_dimension_slice_chunk_id, &isnull));
-	state->last_range_start =
-		DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
-	state->have_last = true;
-	ts_scan_iterator_close(&it);
-
-	/* The chunk may have been dropped since the slice was read; open_next_chunk
-	 * skips an InvalidOid. */
-	return ts_chunk_get_relid(chunk_id, /* missing_ok = */ true);
 }
 
 /*
