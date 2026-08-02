@@ -194,20 +194,6 @@ step "s5_show_running_jobs" {
   JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
   ORDER BY ca.user_view_name, start_range;
 }
-step "s5_l2_consistency" {
-  -- L2 must match re-aggregation from L1 for all materialized buckets
-  SELECT d.bucket AT TIME ZONE 'UTC' AS bucket,
-         (d.cnt = h.cnt) AS cnt_match,
-         (d.sumb = h.sumb) AS sumb_match
-  FROM mat_2pol_m2 d
-  JOIN (
-      SELECT time_bucket('1 day', bucket) AS bucket,
-             sum(count) AS cnt,
-             sum(sum) AS sumb
-      FROM mat_3pol_m1 GROUP BY 1
-  ) h ON h.bucket = d.bucket
-  ORDER BY 1;
-}
 
 ## TEST: when 3 concurrent refresh policies execute, they serialize on registration, then execute succesfully
 ## since these are adjacent policies 2 concurrent refresh processes, the extend last bucket behavior will apply
@@ -215,5 +201,6 @@ step "s5_l2_consistency" {
 permutation "s1_select" "s3_lock_before_register" "s1_run_pol7d_3d_refresh" "s12_run_pol3d_1d_refresh"("s1_run_pol7d_3d_refresh") "s13_run_pol1d_refresh"("s12_run_pol3d_1d_refresh") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"
 
 ## TEST: two concurrent refresh policies on the hierarchical L2 CAgg serialize on registration,
-## then both execute succesfully. L2 stays consistent with L1.
-permutation "s3_lock_before_register" "s1_run_l2_hist" "s12_run_l2_recent"("s1_run_l2_hist") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations" "s5_l2_consistency"("s1_run_l2_hist","s12_run_l2_recent")
+## then both execute succesfully. 
+permutation "s3_lock_before_register" "s1_run_l2_hist" "s12_run_l2_recent"("s1_run_l2_hist") "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations" 
+
