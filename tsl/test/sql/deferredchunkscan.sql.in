@@ -220,6 +220,34 @@ EXPLAIN (COSTS OFF) SELECT min(time) FROM metrics;  -- min/max rewrite served by
 EXPLAIN (COSTS OFF) SELECT time, device FROM metrics_ord ORDER BY time, device DESC LIMIT 3;  -- multi-key Order property
 EXPLAIN (COSTS OFF) SELECT time, grp FROM metrics_ord ORDER BY time DESC, grp USING ~<~ NULLS LAST LIMIT 3;  -- USING operator in Order property
 
+-- Deparsed names must be schema-qualified, not left bare.
+CREATE FUNCTION dcs_nonneg(int) RETURNS boolean LANGUAGE plpgsql STABLE AS 'BEGIN RETURN $1 >= 0; END';
+CREATE FUNCTION dcs_eq(int, int) RETURNS boolean LANGUAGE plpgsql STABLE AS 'BEGIN RETURN $1 = $2; END';
+CREATE OPERATOR === (LEFTARG = int, RIGHTARG = int, FUNCTION = dcs_eq);
+SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+EXPLAIN (COSTS OFF) SELECT time FROM metrics WHERE dcs_nonneg(device) ORDER BY time LIMIT 3;  -- function schema-qualified
+EXPLAIN (COSTS OFF) SELECT time FROM metrics WHERE device === 1 ORDER BY time LIMIT 3;  -- operator schema-qualified
+SELECT count(x) >= 0 AS ok FROM (SELECT time FROM metrics WHERE dcs_nonneg(device) AND device === 1 ORDER BY time LIMIT 100) x;  -- qualified names resolve at execution
+RESET timescaledb.debug_require_deferred_chunk_scan;
+
+-- a mid-query search_path change must not swap in a shadowing function and bypass the filter.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.enable_deferred_chunk_scan TO on;
+CREATE SCHEMA dcs_trusted;
+CREATE SCHEMA dcs_attacker;
+CREATE FUNCTION dcs_trusted.allow(int) RETURNS boolean LANGUAGE plpgsql STABLE AS $$ BEGIN PERFORM set_config('search_path', 'dcs_attacker, public', false); RETURN $1 = 1; END $$;
+CREATE FUNCTION dcs_attacker.allow(int) RETURNS boolean LANGUAGE plpgsql STABLE AS $$ BEGIN RETURN true; END $$;
+CREATE TABLE dcs_flip (time timestamptz NOT NULL, device int)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
+INSERT INTO dcs_flip SELECT '2020-01-01'::timestamptz + d * interval '1 day', g FROM generate_series(0, 4) d, generate_series(1, 3) g;
+SET search_path TO dcs_trusted, public;
+SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SELECT count(*) AS returned, count(*) FILTER (WHERE device <> 1) AS leaked FROM (SELECT device FROM dcs_flip WHERE allow(device) LIMIT 1000) x;  -- leaked must be 0
+RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET search_path;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET timescaledb.enable_deferred_chunk_scan TO on;
+
 -- test correctness by diffing optimized and unoptimized results
 \set TEST_BASE_NAME deferredchunkscan
 SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
