@@ -315,7 +315,7 @@ deferred_chunk_scan_quals_supported(Node *quals, Index rtindex, Bitmapset *dimen
 static bool
 deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
 {
-	if (!ts_guc_enable_deferredchunkscan || ht == NULL)
+	if (!ts_guc_enable_optimizations || !ts_guc_enable_deferredchunkscan || ht == NULL)
 	{
 		return false;
 	}
