@@ -47,6 +47,7 @@
 #include <utils/timestamp.h>
 #include <utils/typcache.h>
 
+#include "compat/compat.h"
 #include "chunk.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -971,7 +972,7 @@ open_next_chunk(DeferredChunkScanState *state)
 	List *querytree = pg_analyze_and_rewrite_fixedparams(raw, sql, NULL, 0, NULL);
 	Query *query = linitial_node(Query, querytree);
 	PlannedStmt *plan =
-		pg_plan_query(query, sql, CURSOR_OPT_FAST_PLAN | CURSOR_OPT_NO_SCROLL, NULL);
+		pg_plan_query_compat(query, sql, CURSOR_OPT_FAST_PLAN | CURSOR_OPT_NO_SCROLL, NULL, NULL);
 
 	Portal portal = CreateNewPortal();
 	portal->visible = false;
