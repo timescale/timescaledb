@@ -62,7 +62,7 @@ INSERT INTO metrics_ord VALUES
   ('2021-01-01 06:00', 2, 'a', 5),  ('2021-01-01 06:00', 1, 'b', NULL),
   ('2021-01-02 00:00', 5, 'a', 50), ('2021-01-02 00:00', 4, 'b', 40),  ('2021-01-02 00:00', 6, 'c', NULL);
 
-SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.enable_deferred_chunk_scan TO on;
 
 -- queries expected to use deferredchunkscan
 SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
@@ -167,7 +167,7 @@ GRANT SELECT (time, device) ON metrics_colpriv TO :ROLE_DEFAULT_PERM_USER_2;
 
 -- reconnect as the grantee (resets session GUCs, so set them again)
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
-SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.enable_deferred_chunk_scan TO on;
 -- granted columns: the node is used and returns rows
 SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
 SELECT count(x) >= 0 AS ok FROM (SELECT device FROM metrics_colpriv ORDER BY time LIMIT 5) x;
@@ -179,7 +179,7 @@ SELECT value FROM metrics_colpriv ORDER BY time LIMIT 1;
 
 -- back to the owning user for the remaining queries
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.enable_deferred_chunk_scan TO on;
 
 -- Views: a view checks base-table access as its owner (checkAsUser on the
 -- underlying RTE), but the per-chunk query runs as the current user. The node
@@ -191,14 +191,14 @@ GRANT SELECT ON metrics_view TO :ROLE_DEFAULT_PERM_USER_2;
 CREATE VIEW metrics_barrier WITH (security_barrier) AS SELECT * FROM metrics;
 GRANT SELECT ON metrics_barrier TO :ROLE_DEFAULT_PERM_USER_2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
-SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.enable_deferred_chunk_scan TO on;
 SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
 -- reads through the views succeed without any direct grant on the hypertable
 SELECT count(*) = 5 AS ok FROM (SELECT device FROM metrics_view ORDER BY time LIMIT 5) x;
 SELECT count(*) = 5 AS ok FROM (SELECT device FROM metrics_barrier ORDER BY time LIMIT 5) x;
 RESET timescaledb.debug_require_deferred_chunk_scan;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.enable_deferred_chunk_scan TO on;
 -- the view owner querying their own view: checkAsUser matches the current user,
 -- so the node is safe to use
 SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
@@ -206,11 +206,11 @@ SELECT count(x) >= 0 AS ok FROM (SELECT device FROM metrics_view ORDER BY time L
 RESET timescaledb.debug_require_deferred_chunk_scan;
 
 -- Feature off: node is never chosen, even for an accepted shape.
-SET timescaledb.enable_deferredchunkscan TO off;
+SET timescaledb.enable_deferred_chunk_scan TO off;
 SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics ORDER BY time LIMIT 1) x;
 RESET timescaledb.debug_require_deferred_chunk_scan;
-SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.enable_deferred_chunk_scan TO on;
 
 EXPLAIN (COSTS OFF) SELECT time FROM metrics ORDER BY time LIMIT 3;
 EXPLAIN (COSTS OFF) SELECT time FROM metrics ORDER BY time DESC LIMIT 3;
@@ -227,7 +227,7 @@ SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
        format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_UNOPTIMIZED" \gset
 SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') AS "DIFF_CMD" \gset
 
-SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.enable_deferred_chunk_scan TO on;
 SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
 \ir :TEST_QUERY_NAME
 RESET timescaledb.debug_require_deferred_chunk_scan;
@@ -236,10 +236,10 @@ RESET timescaledb.debug_require_deferred_chunk_scan;
 \o :TEST_RESULTS_OPTIMIZED
 \ir :TEST_QUERY_NAME
 \o
-SET timescaledb.enable_deferredchunkscan TO off;
+SET timescaledb.enable_deferred_chunk_scan TO off;
 \o :TEST_RESULTS_UNOPTIMIZED
 \ir :TEST_QUERY_NAME
 \o
-SET timescaledb.enable_deferredchunkscan TO on;
+SET timescaledb.enable_deferred_chunk_scan TO on;
 :DIFF_CMD
 

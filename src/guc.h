@@ -28,7 +28,7 @@ extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_hypertable_expansion_for_dml;
-extern TSDLLEXPORT bool ts_guc_enable_deferredchunkscan;
+extern TSDLLEXPORT bool ts_guc_enable_deferred_chunk_scan;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT bool ts_guc_skip_cagg_invalidation;
