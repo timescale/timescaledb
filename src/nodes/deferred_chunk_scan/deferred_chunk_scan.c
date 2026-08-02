@@ -365,7 +365,7 @@ deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
 	}
 
 	/*
-	 * WHERE clause most not have constraints on dimension columns.
+	 * WHERE clause must not have constraints on dimension columns.
 	 */
 	Bitmapset *dimension_attnos = NULL;
 	for (int i = 0; i < ht->space->num_dimensions; i++)

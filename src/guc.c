@@ -783,7 +783,7 @@ _guc_init(void)
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deferredchunkscan"),
 							 "Enable DeferredChunkScan for LIMIT queries",
-							 "Custom scan node for hypertables that iterates chunks at"
+							 "Custom scan node for hypertables that iterates chunks at "
 							 "execution instead of expanding every chunk at plan time.",
 							 &ts_guc_enable_deferredchunkscan,
 							 false,
