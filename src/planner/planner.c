@@ -54,6 +54,7 @@
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "nodes/deferred_chunk_scan/deferred_chunk_scan.h"
 #include "nodes/modify_hypertable.h"
 #include "partitioning.h"
 #include "planner/planner.h"
@@ -1498,6 +1499,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	reltype = ts_classify_relation(root, rel, &ht);
 
 	/*
+	 * Attach DeferredChunkScan path for the (unexpanded) hypertable.
+	 */
+	if (reltype == TS_REL_HYPERTABLE && ht && ts_get_private_reloptinfo(rel)->deferred_chunk_scan)
+	{
+		ts_deferred_chunk_scan_add_path(root, rel, ht);
+		if (prev_set_rel_pathlist_hook != NULL)
+		{
+			(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+		}
+		return;
+	}
+
+	/*
 	 * Check for unexpanded hypertable.
 	 *
 	 * We're going to expand all hypertables in the query when this hook is
@@ -1634,6 +1648,8 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * including the target relation. The support for expanding target
 			 * relation of MERGE is not implemented at the moment.
 			 *
+			 * For DeferredChunkScan we don't expand during planning.
+			 *
 			 * The hypertables that are not expanded by our custom code here
 			 * fall back to the standard Postgres inheritance hierarchy
 			 * expansion.
@@ -1641,8 +1657,13 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * `inhparent` goes to false in two cases: a hypertable without
 			 * chunks or a SELECT FROM ONLY hypertable.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL)
+			bool use_deferred_chunk_scan = inhparent && ts_should_deferred_chunk_scan(query, ht);
+			if (use_deferred_chunk_scan)
+			{
+				rte->inh = false;
+			}
+			else if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
+					 inhparent && rte->ctename == NULL)
 			{
 				if (rel->relid != (Index) query->resultRelation)
 				{
@@ -1654,7 +1675,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 				}
 			}
 
-			ts_create_private_reloptinfo(rel);
+			ts_create_private_reloptinfo(rel)->deferred_chunk_scan = use_deferred_chunk_scan;
 
 			if (ts_guc_enable_optimizations)
 			{
