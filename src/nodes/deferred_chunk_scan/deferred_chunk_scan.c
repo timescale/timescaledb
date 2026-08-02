@@ -39,6 +39,7 @@
 #include <tcop/tcopprot.h>
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
+#include <utils/guc.h>
 #include <utils/lsyscache.h>
 #include <utils/portal.h>
 #include <utils/rel.h>
@@ -634,10 +635,14 @@ ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypert
 		cpath->path.pathkeys = NIL;
 	}
 
+	/* Deparse under a locked-down search_path so names come out fully qualified. */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 	char *where_clause = deferred_chunk_scan_deparse_quals(rel, ht->main_table_relid);
 	char *order_by =
 		sgc != NULL ? deferred_chunk_scan_deparse_orderby(root->parse, rel, ht->main_table_relid) :
 					  NULL;
+	AtEOXact_GUC(false, save_nestlevel);
 
 	List *ints = list_make3_int(sgc != NULL, (int) push_limit, descending);
 	cpath->custom_private =
@@ -994,12 +999,17 @@ open_next_chunk(DeferredChunkScanState *state)
 	state->chunks_scanned++;
 
 	char *sql = deferred_chunk_scan_chunk_sql(state, reloid);
+
+	/* Reparse under the same locked-down search_path used to deparse the quals. */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 	List *parsetree = pg_parse_query(sql);
 	RawStmt *raw = linitial_node(RawStmt, parsetree);
 	List *querytree = pg_analyze_and_rewrite_fixedparams(raw, sql, NULL, 0, NULL);
 	Query *query = linitial_node(Query, querytree);
 	PlannedStmt *plan =
 		pg_plan_query_compat(query, sql, CURSOR_OPT_FAST_PLAN | CURSOR_OPT_NO_SCROLL, NULL, NULL);
+	AtEOXact_GUC(false, save_nestlevel);
 
 	Portal portal = CreateNewPortal();
 	portal->visible = false;
