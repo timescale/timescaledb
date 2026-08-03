@@ -95,7 +95,8 @@ step "r_check_tracking"
 ## refresh works correctly even though we have a victim tenant.
 step "r_refresh2" { CALL refresh_continuous_aggregate('cond_daily', '2026-06-15 00:00+00', NULL) ; } 
 step "r_check_cagg" { SELECT * FROM cond_daily ORDER BY 1, 2; }
-##orphaned tenant needs to be cleaned up. Need a fix for this
+# The tracking rows for a generation, orphan included, disappear once nothing
+# references their seqnum and a newer generation has taken its place.
 step "r_check_tracking2"
 {
     SELECT tenant_id, seqnum
@@ -106,4 +107,4 @@ step "r_check_tracking2"
     ORDER BY tenant_id, seqnum;
 }
 
-permutation "wp_pc_enable" "v_register_pid" "v_insert"("wp_pc_enable") "k_cancel"("v_insert") "wp_pc_release" "r_anchor_insert"("wp_pc_release") "r_refresh" "r_check_conditions" "r_check_tracking" "r_refresh2" "r_check_cagg" "r_check_tracking2"
+permutation "wp_pc_enable" "v_register_pid" "v_insert"("wp_pc_enable") "k_cancel"("v_insert") "wp_pc_release" "r_anchor_insert"("wp_pc_release") "r_refresh" "r_check_conditions" "r_check_tracking" "r_refresh2" "r_check_cagg" "r_check_tracking2" "r_anchor_insert" "r_refresh2" "r_refresh2" "r_check_tracking2"

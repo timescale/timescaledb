@@ -1,6 +1,6 @@
 Parsed test spec with 4 sessions
 
-starting permutation: wp_pc_enable v_register_pid v_insert k_cancel wp_pc_release r_anchor_insert r_refresh r_check_conditions r_check_tracking r_refresh2 r_check_cagg r_check_tracking2
+starting permutation: wp_pc_enable v_register_pid v_insert k_cancel wp_pc_release r_anchor_insert r_refresh r_check_conditions r_check_tracking r_refresh2 r_check_cagg r_check_tracking2 r_anchor_insert r_refresh2 r_refresh2 r_check_tracking2
 step wp_pc_enable: SELECT debug_waitpoint_enable('tenant_tracker_after_precommit_drain');
 debug_waitpoint_enable
 ----------------------
@@ -39,6 +39,7 @@ step r_check_tracking:
 tenant_id    |seqnum
 -------------+------
 sensor_1     |     1
+sensor_anchor|     1
 sensor_victim|     1
 
 step r_refresh2: CALL refresh_continuous_aggregate('cond_daily', '2026-06-15 00:00+00', NULL) ;
@@ -58,5 +59,22 @@ step r_check_tracking2:
 
 tenant_id    |seqnum
 -------------+------
+sensor_1     |     1
+sensor_anchor|     1
 sensor_victim|     1
+
+step r_anchor_insert: INSERT INTO conditions VALUES ('2026-07-15 00:00+00', 'sensor_anchor', 0);
+step r_refresh2: CALL refresh_continuous_aggregate('cond_daily', '2026-06-15 00:00+00', NULL) ;
+step r_refresh2: CALL refresh_continuous_aggregate('cond_daily', '2026-06-15 00:00+00', NULL) ;
+step r_check_tracking2: 
+    SELECT tenant_id, seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY tenant_id, seqnum;
+
+tenant_id    |seqnum
+-------------+------
+sensor_anchor|     4
 
