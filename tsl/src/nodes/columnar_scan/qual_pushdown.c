@@ -1767,8 +1767,10 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 		}
 
 		/*
-		 * These nodes do not influence the pushdown by themselves, so we
-		 * recurse.
+		 * These nodes transform their child value, so we can only push them
+		 * down when every child pushes down exactly. A child that needs a
+		 * recheck is only approximate, and the transform could flip its result
+		 * (e.g. IS NULL), giving wrong results.
 		 */
 		case T_FuncExpr:
 		case T_CoerceViaIO:
@@ -1782,8 +1784,14 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 		case T_CaseWhen:
 		case T_ArrayExpr:
 		{
+			QualPushdownContext tmp_context = copy_context(context);
 			Node *pushed_down =
-				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, context);
+				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, &tmp_context);
+			if (!tmp_context.can_pushdown || tmp_context.needs_recheck)
+			{
+				context->can_pushdown = false;
+				return orig_node;
+			}
 			return pushed_down;
 		}
 
