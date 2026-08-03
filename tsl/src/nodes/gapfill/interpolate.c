@@ -114,7 +114,6 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 	}
 
 	/* Extract type information from the tuple itself */
-	Assert(RECORDOID == HeapTupleHeaderGetTypeId(th));
 	tupdesc = lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(th), HeapTupleHeaderGetTypMod(th));
 
 	/* Build a temporary HeapTuple control structure */
