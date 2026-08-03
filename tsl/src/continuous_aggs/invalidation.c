@@ -8,6 +8,7 @@
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <executor/spi.h>
 #include <extension.h>
 #include <fmgr.h>
 #include <funcapi.h>
@@ -1150,6 +1151,138 @@ hypertable_invalidation_state_cleanup(const HypertableInvalidationState *state)
 }
 
 /*
+ * How many of the newest generations the collector leaves alone, counted down
+ * from the highest seqnum the tracking table holds.
+ */
+#define TRACKING_CLEANUP_HEADROOM 1
+
+/*
+ * Reclaim tenant-tracking rows that has no associated invalidations (i.e.,
+ * invalidations with the same seqnum)
+ *
+ * An invalidation can still land after its seqnum looked dead -- a DML that
+ * started in an older generation and commits later. Its tracking rows are gone
+ * by then, so that range takes a full refresh instead of a granular one.
+ *
+ * TODO: this assumes a single granular-tracking cagg per hypertable, so the
+ * refreshing cagg's own log settles liveness for the per-hypertable tracking
+ * rows. With several such caggs liveness has to be established across all of
+ * their logs -- otherwise this cagg's GC deletes rows a sibling still needs.
+ */
+void
+invalidation_garbage_collect_tenant_tracking(const ContinuousAgg *cagg)
+{
+	/*
+	 * The headroom bound keeps the top of the seqnum range out of the result even
+	 * when it looks dead. A DML publishes its tenant hint at pre-commit, so a
+	 * flush can persist tracking rows for a generation whose invalidation has not
+	 * committed yet. Leaving headroom at the top gives those invalidations time to land.
+	 *
+	 * The bound is the tracking table's own highest seqnum, which the planner
+	 * answers with one more index lookup, rather than the tracker's in-memory
+	 * generation.
+	 */
+	const char *sql =
+		"SELECT d.seqnum FROM ("
+		"  SELECT DISTINCT seqnum"
+		"    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking"
+		"   WHERE hypertable_id = $1) d"
+		" WHERE d.seqnum <= (SELECT max(seqnum)"
+		"    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking"
+		"   WHERE hypertable_id = $1) - $3"
+		" AND NOT EXISTS ("
+		"  SELECT 1"
+		"    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log"
+		"   WHERE materialization_id = $2 AND seqnum = d.seqnum)"
+		" AND NOT EXISTS ("
+		"  SELECT 1"
+		"    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log"
+		"   WHERE hypertable_id = $1 AND seqnum = d.seqnum)";
+	Oid argtypes[3] = { INT4OID, INT4OID, INT4OID };
+	Datum args[3];
+	int32 hypertable_id = cagg->data.raw_hypertable_id;
+	MemoryContext caller_cxt = CurrentMemoryContext;
+	int32 *dead;
+	uint64 ndead;
+	uint64 i;
+
+	/*
+	 * Only a cagg doing granular refresh has tracking rows to reclaim, and only
+	 * its own log can keep them alive. A cagg that does not opt in has its
+	 * entries stamped seqnum 0, which no tracking row carries.
+	 */
+	if (!cagg->data.granular_refresh_enabled)
+	{
+		return;
+	}
+
+	args[0] = Int32GetDatum(hypertable_id);
+	args[1] = Int32GetDatum(cagg->data.mat_hypertable_id);
+	args[2] = Int32GetDatum(TRACKING_CLEANUP_HEADROOM);
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+	{
+		elog(ERROR, "could not connect to SPI to reclaim tenant tracking");
+	}
+
+	/*
+	 * read_only = false so SPI advances the command counter and takes a fresh
+	 * snapshot. This is required, not incidental: the caller has just moved the
+	 * hypertable log into this cagg's log in the very same transaction, and we want
+	 * to include those invalidations in determining a seqnum's liveness.
+	 *
+	 * A seqnum of 0 or NULL in the log matches nothing here, which is right: no
+	 * tracking row carries either, so neither can keep one alive.
+	 */
+	if (SPI_execute_with_args(sql, 3, argtypes, args, NULL, false /* read_only */, 0) !=
+		SPI_OK_SELECT)
+	{
+		elog(ERROR, "could not scan for reclaimable tenant tracking");
+	}
+
+	ndead = SPI_processed;
+	dead = (ndead > 0) ? (int32 *) MemoryContextAlloc(caller_cxt, ndead * sizeof(int32)) : NULL;
+
+	/* Copy out before the result is released. seqnum is NOT NULL. */
+	for (i = 0; i < ndead; i++)
+	{
+		bool isnull;
+		Datum datum = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
+
+		Assert(!isnull);
+		dead[i] = DatumGetInt32(datum);
+	}
+
+	SPI_finish();
+
+	/*
+	 * Deletes go through the catalog API, a whole seqnum
+	 * at a time.
+	 */
+	for (i = 0; i < ndead; i++)
+	{
+		ts_cagg_tenant_tracking_delete_by_seqnum_only(hypertable_id, dead[i]);
+	}
+
+	if (ndead > 0)
+	{
+		/* Publish the whole reclamation to later commands in a single step. */
+		CommandCounterIncrement();
+	}
+
+	elog(DEBUG1,
+		 "Continuous aggregate \"%s\": reclaimed tenant tracking for " UINT64_FORMAT
+		 " generation(s)",
+		 NameStr(cagg->data.user_view_name),
+		 ndead);
+
+	if (dead != NULL)
+	{
+		pfree(dead);
+	}
+}
+
+/*
  * Move invalidations for a single hypertable from hypertable invalidation log
  * to materialization invalidation log. This will move *all* hypertable
  * invalidations for the hypertable to the associated continuous aggregates.
@@ -1165,235 +1298,14 @@ invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype)
 	hypertable_invalidation_state_cleanup(&state);
 }
 
-/*
- * Cut tenant-tracking rows along the refresh window, at the same time as cutting
- * invalidations (Txn 2).
- *
- * Tenant tracking lives in continuous_aggs_tenant_tracking keyed by the raw
- * hypertable id. For the cagg being refreshed we take all rows for its raw
- * hypertable and cut each row that overlaps the (bucket-aligned) refresh
- * window into the out-of-window parts and in-window part. Both are written back
- * to the table. Rows fully inside or fully outside the window are left untouched.
- * Later, Txn 3 will consume the in-window parts and delete them,
- * while leaving the out-of-window parts for future refreshes.
- *
- * Rows are not merged. Within a (tenant_id, seqnum) the rows are always
- * disjoint by construction -- a flush writes exactly one [min, max] per tenant
- * per seqnum, and cutting only produces disjoint residuals separated by
- * the consumed window -- so there is never an overlapping/adjacent pair to
- * merge.
- *
- * Because the refresh window is bucket-aligned, the raw (non-bucket-aligned)
- * tenant ranges can be compared and cut directly against it -- a raw range
- * overlaps the window iff its bucket-circumscribed form does. Every tracking
- * row is a per-tenant row with real timestamps; an invalid generation persists
- * no rows for its seqnum, so a refresh for that seqnum falls back to the full
- * invalidation log on its own.
- *
- * For now, because we assume only one cagg per hypertable can have tracking,
- * no extra row locks on the tracking table are taken. This is safe because
- * Txn 2 only modifies rows that overlap the window, while Txn 3 deletes
- * only rows that fall entirely inside the window, and refresh registration
- * forces concurrent refreshes of the same cagg to use non-overlapping windows.
- * With disjoint windows W1 and W2, the fully-inside-W1 set (written by one
- * refresh's Txn 3)and the overlapping-W2 set (written by another's Txn 2) cannot
- * share a row, so no two concurrent operations write the same tracking row
- * (same-cagg Txn 2 cuts are additionally serialized by ts_lock_continuous_agg_tuple).
- *
- * TODO: Note again that this assumes a single granular-tracking cagg per hypertable.
- * Multiple caggs on one hypertable share these per-hypertable rows, take different
- * cagg-tuple locks (not serialized), and can have overlapping windows -- so the
- * disjointness argument breaks and locking (or per-cagg copies) would be
- * required. Deferred to a later version.
- */
-static void
-process_tenant_tracking_for_refresh(const ContinuousAggInvalidationState *state,
-									const InternalTimeRange *refresh_window)
-{
-	int32 hyper_id = state->cagg->data.raw_hypertable_id;
-	int64 start = refresh_window->start;
-	int64 end = refresh_window->end;
-	Catalog *catalog = ts_catalog_get();
-	Relation rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_TENANT_TRACKING),
-							  RowExclusiveLock);
-	MemoryContext per_tuple_mctx =
-		AllocSetContextCreate(CurrentMemoryContext, "Tenant tracking cut", ALLOCSET_DEFAULT_SIZES);
-	ScanIterator iterator;
-
-	/*
-	 * Scan all tenant-tracking rows for the cagg's raw hypertable and cut each
-	 * row that overlaps the window, mutating inline.
-	 *
-	 * Inserting the cut pieces back into the table being scanned is safe: every
-	 * piece is non-straddling (fully inside or fully outside the window), so if
-	 * the scan re-encounters one it hits the skip branch below and is left
-	 * untouched -- no re-cut, no loop.
-	 */
-	iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_TENANT_TRACKING,
-									   RowExclusiveLock,
-									   CurrentMemoryContext);
-	iterator.ctx.index = catalog_get_index(catalog,
-										   CONTINUOUS_AGGS_TENANT_TRACKING,
-										   CONTINUOUS_AGGS_TENANT_TRACKING_IDX);
-	iterator.ctx.snapshot = state->snapshot;
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_continuous_aggs_tenant_tracking_idx_hypertable_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(hyper_id));
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		/*
-		 * Do all per-row work in the per-tuple context and reset it at the end
-		 * of every iteration
-		 */
-		MemoryContext oldmctx = MemoryContextSwitchTo(per_tuple_mctx);
-		bool should_free;
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-		Datum values[Natts_continuous_aggs_tenant_tracking];
-		bool nulls[Natts_continuous_aggs_tenant_tracking];
-
-		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
-
-		/*
-		 * Every tracking row is a per-tenant row with real timestamps (an invalid
-		 * generation persists no rows). Only rows that straddle the window need
-		 * cutting: rows fully outside (max < start or min >= end) or fully inside
-		 * (min >= start and max < end) are left as-is. The window end is exclusive.
-		 */
-		Assert(
-			!nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_min_timestamp)] &&
-			!nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_max_timestamp)]);
-
-		int64 min_ts = DatumGetInt64(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_min_timestamp)]);
-		int64 max_ts = DatumGetInt64(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_max_timestamp)]);
-
-		if (max_ts >= start && min_ts < end && !(min_ts >= start && max_ts < end))
-		{
-			text *tenant_id = (text *) PG_DETOAST_DATUM_COPY(
-				values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_tenant_id)]);
-			int32 seqnum = DatumGetInt32(
-				values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_seqnum)]);
-			ItemPointerData tid;
-
-			ItemPointerCopy(&tuple->t_self, &tid);
-			ts_catalog_delete_tid_only(rel, &tid);
-
-			if (min_ts < start)
-			{
-				/* left-of-window part */
-				ts_cagg_tenant_tracking_insert_only(rel,
-													hyper_id,
-													tenant_id,
-													min_ts,
-													start - 1,
-													seqnum);
-			}
-			/* In-window (consumed) part; write back for Txn 3. End is exclusive. */
-			ts_cagg_tenant_tracking_insert_only(rel,
-												hyper_id,
-												tenant_id,
-												Max(min_ts, start),
-												Min(max_ts, end - 1),
-												seqnum);
-			if (max_ts >= end)
-			{
-				/* right-of-window part */
-				ts_cagg_tenant_tracking_insert_only(rel, hyper_id, tenant_id, end, max_ts, seqnum);
-			}
-		}
-
-		if (should_free)
-		{
-			heap_freetuple(tuple);
-		}
-		MemoryContextSwitchTo(oldmctx);
-		MemoryContextReset(per_tuple_mctx);
-	}
-	ts_scan_iterator_close(&iterator);
-
-	table_close(rel, NoLock);
-	MemoryContextDelete(per_tuple_mctx);
-}
-
 void
-invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
-							  bool is_granular_refresh)
+invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window)
 {
 	ContinuousAggInvalidationState state;
 
 	cagg_invalidation_state_init(&state, cagg);
 	process_cagg_invalidations_for_refresh(&state, refresh_window);
-	/*
-	 * Cut tenant tracking the same way, so Txn 3 can refresh only changed
-	 * tenants. Skipped when the cagg isn't doing a granular refresh -- there are
-	 * no tracking rows to cut.
-	 */
-	if (is_granular_refresh)
-	{
-		process_tenant_tracking_for_refresh(&state, refresh_window);
-	}
 	cagg_invalidation_state_cleanup(&state);
-}
-
-/*
- * End-of-refresh tenant-tracking cleanup. Scan the hypertable's tenant-tracking
- * rows and delete the ones this refresh has consumed: a per-tenant row whose
- * [min,max] lies entirely within the refresh window [start, end) (end exclusive)
- * has just had its in-window piece materialized and can be dropped.
- *
- * Trackings can be orphaned when a DML writes tenant trackings to the shared
- * memory structure which are then flushed, but the DML itself cannot commit so
- * the associated invalidations are not persisted. Those orphans are still cut
- * along each refresh window and their in-window parts consumed, so eventually
- * every orphaned tracking is deleted by refreshes.
- */
-void
-invalidation_cleanup_tenant_tracking(const ContinuousAgg *cagg,
-									 const InternalTimeRange *refresh_window)
-{
-	int64 start = refresh_window->start;
-	int64 end = refresh_window->end;
-	ScanIterator iterator;
-
-	/* Scan the tenant-tracking rows for the hypertable and delete the done ones. */
-	iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_TENANT_TRACKING,
-									   RowExclusiveLock,
-									   CurrentMemoryContext);
-	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
-										   CONTINUOUS_AGGS_TENANT_TRACKING,
-										   CONTINUOUS_AGGS_TENANT_TRACKING_IDX);
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_continuous_aggs_tenant_tracking_idx_hypertable_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(cagg->data.raw_hypertable_id));
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool isnull PG_USED_FOR_ASSERTS_ONLY;
-		Datum min_datum =
-			slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_min_timestamp, &isnull);
-		Assert(!isnull);
-		Datum max_datum =
-			slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_max_timestamp, &isnull);
-		Assert(!isnull);
-
-		/*
-		 * Drop the row once its whole range falls within the refresh window
-		 * (its consumed, in-window piece). End is exclusive.
-		 */
-		if (DatumGetInt64(min_datum) >= start && DatumGetInt64(max_datum) < end)
-		{
-			ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-		}
-	}
-	ts_scan_iterator_close(&iterator);
 }
 
 /*
@@ -1677,10 +1589,10 @@ scan_max_seqnum(CatalogTable table, int index, AttrNumber id_attno, int32 id_val
  * tenant-tracking catalog -- and takes the max.
  *
  * Note that because we cannot assume any relative ordering of seqnums across the
- * three souces. An invalidations of seqnum X can be processed and stored in the cagg
+ * three sources. An invalidations of seqnum X can be processed and stored in the cagg
  * invalidation log before an invalidation of seqnum X-1 is persisted in the hypertable
  * invalidation log. This is because the flusher, which increases seqnum, only waits for
- * tracking writers to finish writting, rather than wait for the DML txn to finish.
+ * tracking writers to finish writing, rather than wait for the DML txn to finish.
  * Similarly, trackings of seqnum X can be flushed either before or
  * after its association validation (of the same seqnum X) is persisted in the hypertable
  * invalidation log.

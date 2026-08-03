@@ -1023,7 +1023,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 		flush_tenant_tracking(cagg);
 	}
 
-	invalidation_process_cagg_log(cagg, refresh_window, cagg->data.granular_refresh_enabled);
+	invalidation_process_cagg_log(cagg, refresh_window);
 
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn2");
 	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
@@ -1053,16 +1053,6 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   context,
 										   bucketing_refresh_window);
 		invalidation_store_free(invalidations);
-	}
-
-	/*
-	 * Clean up the tenant-tracking rows now that this window has been
-	 * materialized: delete the consumed in-window pieces. Only relevant for caggs
-	 * configured for granular tracking.
-	 */
-	if (cagg->data.granular_refresh_enabled)
-	{
-		invalidation_cleanup_tenant_tracking(cagg, refresh_window);
 	}
 
 	return (invalidations != NULL);
@@ -1328,6 +1318,22 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			  invalidation_threshold == ts_time_get_min(refresh_window.type)))
 		{
 			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+
+			/*
+			 * Reclaim tracking rows no invalidation can reach any more. Runs after
+			 * the move, so this cagg's log alone settles which seqnums are still
+			 * referenced, and while the invalidation-threshold tuple lock taken
+			 * above still serializes this transaction against other refreshes of
+			 * the same hypertable.
+			 *
+			 * Once per refresh rather than once per batch: every batch would repeat
+			 * the same scan, and the first batch's move has already drained the
+			 * hypertable log, so later batches find nothing new to reclaim.
+			 */
+			if (context.processing_batch <= 1)
+			{
+				invalidation_garbage_collect_tenant_tracking(cagg);
+			}
 
 			DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn1");
 			/* Commit and Start a new transaction */
