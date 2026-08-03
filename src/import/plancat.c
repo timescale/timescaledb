@@ -279,10 +279,24 @@ ts_build_indexlist(PlannerInfo *root, RelOptInfo *rel)
 
 		info->indexprs = RelationGetIndexExpressions(indexRelation);
 		info->indpred = RelationGetIndexPredicate(indexRelation);
-		if (info->indexprs && varno != 1)
-			ChangeVarNodes((Node *) info->indexprs, 1, varno, 0);
-		if (info->indpred && varno != 1)
-			ChangeVarNodes((Node *) info->indpred, 1, varno, 0);
+		if (info->indexprs)
+		{
+			if (varno != 1)
+				ChangeVarNodes((Node *) info->indexprs, 1, varno, 0);
+#if PG19_GE
+			info->indexprs = (List *) eval_const_expressions(root, (Node *) info->indexprs);
+#endif
+		}
+		if (info->indpred)
+		{
+			if (varno != 1)
+				ChangeVarNodes((Node *) info->indpred, 1, varno, 0);
+#if PG19_GE
+			info->indpred =
+				(List *) eval_const_expressions(root, (Node *) make_ands_explicit(info->indpred));
+			info->indpred = make_ands_implicit((Expr *) info->indpred);
+#endif
+		}
 
 		info->indextlist = build_index_tlist(root, info, relation);
 
