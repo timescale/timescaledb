@@ -723,7 +723,10 @@ CREATE TABLE pub_split_test(time timestamptz not null, device int, temp float);
 SELECT create_hypertable('pub_split_test', 'time', chunk_time_interval => interval '1 month');
 
 -- Create publication
+-- This suite runs at wal_level = replica, so hide the warning about that
+SET client_min_messages TO error;
 CREATE PUBLICATION test_split_pub FOR TABLE pub_split_test;
+RESET client_min_messages;
 
 -- Insert data to create a single chunk
 INSERT INTO pub_split_test VALUES
