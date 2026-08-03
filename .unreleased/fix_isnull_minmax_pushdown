@@ -1,0 +1,1 @@
+Fixes: #9921 Fix wrong results with IS NULL and minmax sparse index pushdown
