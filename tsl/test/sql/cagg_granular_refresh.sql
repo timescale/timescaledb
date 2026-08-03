@@ -7,7 +7,7 @@
 -- On INSERT, each row's <tenant column, time> is recorded in the shared-memory
 -- tenant tracker and flushed to _timescaledb_catalog.continuous_aggs_tenant_tracking
 -- during the refresh. The refresh then materializes only the tracked tenants
--- and consumes (deletes) the tracking rows.
+-- and leaves the tracking rows to be reclaimed once nothing references their seqnum
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -94,7 +94,7 @@ SELECT sensor_id, bucket, avg
 FROM cond_daily
 ORDER BY sensor_id, bucket;
 
--- The refresh consumed (deleted) this cagg's per-tenant tracking rows.
+-- Tracking rows are still present; nothing has reclaimed them yet
 SELECT count(*) AS remaining_tracking_rows
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -104,9 +104,9 @@ WHERE hypertable_id = (
 DROP MATERIALIZED VIEW cond_daily;
 DROP TABLE conditions;
 
--- TEST: If transaction aborts, tracking rows don't make it into the
--- catalog table
--- FIXME: this is not entirely true. This can happen.
+-- TEST: If transaction rollback, tracking rows don't make it into the
+-- catalog table. Note that this is true for normal rollback, when the txn
+-- does not get to the precommit hook that write trackings.
 
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
@@ -135,10 +135,33 @@ ROLLBACK;
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_c', 3);
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_d', 3);
 
--- should see rows for 2020 in tracker as we refresh only 2025.
+-- Run a refresh so trackings are flushed to the tracking table
 -- should not see sensor_b, only sensor_a , sensor_c and sensor_d committed.
--- sensor_a was consumed by the refresh. so we should have 2 entries.
+-- sensor_a tracking stays although its invalidation has been consumed.
+-- Later, when all trackings of seqnum 1 are consumed, all of them will
+-- be reclaimed in a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- A refresh to consume all invalidations of seqnum 1 (also increases seqnum so seqnum 1
+-- will gets cleanup in the next refresh).
+-- Insert some dummy rows before the refresh so the new seqnum show up in the tracking table
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_a', 1);
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+--should still see all the trackings of seqnum 1 and 2
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+--the following refresh will cleanup all seqnum 1 tracking rows
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00','2020-01-03 00:00+00');
+--all trackings of seqnum 1 should be cleaned up, only seqnum 2 and 3 remain
 SELECT * FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
     SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
@@ -203,16 +226,6 @@ CALL refresh_continuous_aggregate('read_daily', '2025-01-01 00:00+00', NULL);
 SELECT * FROM continuous_aggs_tenant_tracking_view
 ORDER BY hypertable_id, tenant_id, seqnum;
 
--- Phase 2: late data for sensor_a in "conditions" only.  A granular refresh of
--- cond_daily must update only conditions/sensor_a; readings (a different
--- hypertable, hence a different tracker) must be untouched.
-INSERT INTO conditions VALUES ('2020-01-01 06:00+00', 'sensor_a', 50);
-
-CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 10:00+00', NULL);
--- sensor_a is cut along the refresh window, leaving its pre-window residual.
-SELECT * FROM continuous_aggs_tenant_tracking_view
-ORDER BY hypertable_id, tenant_id, seqnum;
-
 DROP MATERIALIZED VIEW cond_daily;
 DROP MATERIALIZED VIEW read_daily;
 DROP TABLE conditions;
@@ -239,16 +252,20 @@ CREATE MATERIALIZED VIEW cond_daily
   WITH NO DATA;
 ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
 
+-- Move the invalidation threshold past the 2020 rows below, so that inserting
+-- them is late-arriving and logs invalidations.
+CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
+
 -- sensor_a/sensor_c: old (2020) rows that will be updated/deleted below.
--- to do so it drains the tracker; it falls inside the refresh window and gets
--- consumed, so it won't appear in the final assertion.
 INSERT INTO conditions VALUES
   ('2020-01-01 00:00+00', 'sensor_a', 1),
   ('2020-01-01 00:00+00', 'sensor_c', 3);
--- add 2025 row, that will be refreshed and we wills ee tracker entries for 2020
-INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
-CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+
+-- Should see trackings for sensor_a, sensor_c because 
+-- the above refresh consumed the invalidations but didn't clean up
+-- the trackings (left for garbage collection in the following refresh)
 SELECT * 
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -257,19 +274,10 @@ WHERE hypertable_id = (
 ORDER BY hypertable_id, tenant_id, seqnum;
 
 -- UPDATE sensor_a's tenant to sensor_b: must track both the old (sensor_a)
--- and new (sensor_b) tenant.
+-- and new (sensor_b) tenant, with a new seqnum
 UPDATE conditions SET sensor_id = 'sensor_b' WHERE sensor_id = 'sensor_a';
--- Another fresh row to force the next refresh to drain the tracker again.
-INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
-CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-SELECT * 
-FROM continuous_aggs_tenant_tracking_view
-WHERE hypertable_id = (
-    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
-    WHERE user_view_name = 'cond_daily')
-ORDER BY hypertable_id, tenant_id, seqnum;
-
--- will flush all the tracker entries now
+-- Note that this refresh doesn't clean up tracking with seqnum 1 because of the
+-- cleanup headroom, so we still see them here
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
 SELECT * 
 FROM continuous_aggs_tenant_tracking_view
@@ -280,9 +288,9 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 
 -- TEST DELETE sensor_c's row: must track sensor_c (the deleted row's tenant).
 DELETE FROM conditions WHERE sensor_id = 'sensor_c';
--- add 2025 row, that will be refreshed and we wills ee tracker entries for 2020
-INSERT INTO conditions VALUES ('2025-01-03 00:00+00', 'sensor_z3', 0);
-CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+--(the above refresh garbage-collected trackings of seqnum 1, so we don't see them)
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -460,7 +468,8 @@ INSERT INTO conditions VALUES
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 COMMIT;
 
---refresh will clean up tracking entries for 2025.
+-- refresh drains the tracker; its entries remain in the catalog until garbage collected
+-- by a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 
 -- baseline: sensor_a through sensor_e, all tracked from the bulk INSERT.
@@ -739,7 +748,7 @@ CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', NULL);
 
 -- Full refresh clears every stale bucket, so cond_daily is empty again.
 SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
--- tracker entries in tenant_tracker catalog are also cleaned up
+-- Tracking rows with seqnum 1 (sensor_c) are garbage-collected by the refresh above.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -811,7 +820,7 @@ CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
 
 -- no invalid marker for seq_num=3
--- tracking entries in 2020 for sensor_a and sensor_b from earlier seqnums.
+-- tracking entry in 2020 for sensor_b; seqnum 1 is garbage-collected.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -822,7 +831,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 --refresh from 2020 so that we can see sensor_a . falls back to full refresh
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
 
--- everything is cleaned up --
+-- tracking rows remain until garbage collected by a later refresh.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -879,7 +888,8 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::r
 -- the cagg log for a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2024-01-01 00:00+00', '2024-01-10 00:00+00');
 
--- No tracking rows for the dead generation at all.
+--The dead generation's tracking row is still present until garbage collected
+--by a later refresh.
 SELECT count(*) AS tracking_rows
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -930,7 +940,7 @@ WHERE time < '2025-01-01 00:00+00'
 GROUP BY bucket, sensor_id
 ORDER BY sensor_id, bucket;
 
--- Still nothing to clean up.
+-- Tracking rows still present until later refresh garbage collects them.
 SELECT count(*) AS tracking_rows
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (

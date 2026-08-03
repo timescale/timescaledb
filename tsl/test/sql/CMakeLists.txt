@@ -15,6 +15,7 @@ set(TEST_FILES
     cagg_granular_refresh_api.sql
     cagg_granular_refresh_coltypes.sql
     cagg_granular_refresh_fallback.sql
+    cagg_granular_refresh_garbage_collector.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
     cagg_policy.sql

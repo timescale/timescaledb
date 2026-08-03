@@ -6,7 +6,7 @@
 -- On INSERT, each row's <tenant column, time> is recorded in the shared-memory
 -- tenant tracker and flushed to _timescaledb_catalog.continuous_aggs_tenant_tracking
 -- during the refresh. The refresh then materializes only the tracked tenants
--- and consumes (deletes) the tracking rows.
+-- and leaves the tracking rows to be reclaimed once nothing references their seqnum
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SET timezone TO 'UTC';
 SET timescaledb.current_timestamp_mock = '2025-01-10 00:00:00+00';
@@ -100,7 +100,7 @@ ORDER BY sensor_id, bucket;
  sensor_a  | Thu Jan 02 00:00:00 2020 UTC |   2
  sensor_b  | Wed Jan 01 00:00:00 2020 UTC |   3
 
--- The refresh consumed (deleted) this cagg's per-tenant tracking rows.
+-- Tracking rows are still present; nothing has reclaimed them yet
 SELECT count(*) AS remaining_tracking_rows
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -108,14 +108,14 @@ WHERE hypertable_id = (
     WHERE user_view_name = 'cond_daily');
  remaining_tracking_rows 
 -------------------------
-                       0
+                       2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 DROP TABLE conditions;
--- TEST: If transaction aborts, tracking rows don't make it into the
--- catalog table
--- FIXME: this is not entirely true. This can happen.
+-- TEST: If transaction rollback, tracking rows don't make it into the
+-- catalog table. Note that this is true for normal rollback, when the txn
+-- does not get to the precommit hook that write trackings.
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
     create_hypertable    
@@ -142,9 +142,11 @@ INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2);
 ROLLBACK;
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_c', 3);
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_d', 3);
--- should see rows for 2020 in tracker as we refresh only 2025.
+-- Run a refresh so trackings are flushed to the tracking table
 -- should not see sensor_b, only sensor_a , sensor_c and sensor_d committed.
--- sensor_a was consumed by the refresh. so we should have 2 entries.
+-- sensor_a tracking stays although its invalidation has been consumed.
+-- Later, when all trackings of seqnum 1 are consumed, all of them will
+-- be reclaimed in a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 SELECT * FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -153,11 +155,42 @@ WHERE hypertable_id = (
 ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
+             3 | sensor_a  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
              3 | sensor_c  | Fri Jan 03 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      1
              3 | sensor_d  | Fri Jan 03 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      1
 
+-- A refresh to consume all invalidations of seqnum 1 (also increases seqnum so seqnum 1
+-- will gets cleanup in the next refresh).
+-- Insert some dummy rows before the refresh so the new seqnum show up in the tracking table
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_a', 1);
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+--should still see all the trackings of seqnum 1 and 2
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+ hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
+---------------+-----------+------------------------------+------------------------------+--------
+             3 | sensor_a  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
+             3 | sensor_a  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
+             3 | sensor_c  | Fri Jan 03 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      1
+             3 | sensor_d  | Fri Jan 03 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      1
+
+--the following refresh will cleanup all seqnum 1 tracking rows
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00','2020-01-03 00:00+00');
+--all trackings of seqnum 1 should be cleaned up, only seqnum 2 and 3 remain
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+ hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
+---------------+-----------+------------------------------+------------------------------+--------
+             3 | sensor_a  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
+
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_7_chunk
+NOTICE:  drop cascades to 3 other objects
 DROP TABLE conditions;
 -- TEST : Per-tenant tracking across multiple hypertables.
 --
@@ -215,33 +248,17 @@ CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 CALL refresh_continuous_aggregate('read_daily', '2025-01-01 00:00+00', NULL);
 SELECT * FROM continuous_aggs_tenant_tracking_view
 ORDER BY hypertable_id, tenant_id, seqnum;
- hypertable_id | tenant_id |        min_timestamp         |            max_timestamp            | seqnum 
----------------+-----------+------------------------------+-------------------------------------+--------
-             5 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Tue Dec 31 23:59:59.999999 2024 UTC |      1
-             5 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC        |      1
-             6 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Tue Dec 31 23:59:59.999999 2024 UTC |      1
-             6 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC        |      1
-
--- Phase 2: late data for sensor_a in "conditions" only.  A granular refresh of
--- cond_daily must update only conditions/sensor_a; readings (a different
--- hypertable, hence a different tracker) must be untouched.
-INSERT INTO conditions VALUES ('2020-01-01 06:00+00', 'sensor_a', 50);
-CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 10:00+00', NULL);
-NOTICE:  continuous aggregate "cond_daily" is already up-to-date
--- sensor_a is cut along the refresh window, leaving its pre-window residual.
-SELECT * FROM continuous_aggs_tenant_tracking_view
-ORDER BY hypertable_id, tenant_id, seqnum;
- hypertable_id | tenant_id |        min_timestamp         |            max_timestamp            | seqnum 
----------------+-----------+------------------------------+-------------------------------------+--------
-             5 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Tue Dec 31 23:59:59.999999 2024 UTC |      1
-             5 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC        |      1
-             6 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Tue Dec 31 23:59:59.999999 2024 UTC |      1
-             6 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC        |      1
+ hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
+---------------+-----------+------------------------------+------------------------------+--------
+             5 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
+             5 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
+             6 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
+             6 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
 
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_12_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_15_chunk
 DROP MATERIALIZED VIEW read_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_13_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_16_chunk
 DROP TABLE conditions;
 DROP TABLE readings;
 -- TEST: UPDATE and DELETE tenant tracking.
@@ -267,15 +284,17 @@ CREATE MATERIALIZED VIEW cond_daily
   GROUP BY bucket, sensor_id
   WITH NO DATA;
 ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+-- Move the invalidation threshold past the 2020 rows below, so that inserting
+-- them is late-arriving and logs invalidations.
+CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
 -- sensor_a/sensor_c: old (2020) rows that will be updated/deleted below.
--- to do so it drains the tracker; it falls inside the refresh window and gets
--- consumed, so it won't appear in the final assertion.
 INSERT INTO conditions VALUES
   ('2020-01-01 00:00+00', 'sensor_a', 1),
   ('2020-01-01 00:00+00', 'sensor_c', 3);
--- add 2025 row, that will be refreshed and we wills ee tracker entries for 2020
-INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
-CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+-- Should see trackings for sensor_a, sensor_c because 
+-- the above refresh consumed the invalidations but didn't clean up
+-- the trackings (left for garbage collection in the following refresh)
 SELECT * 
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -288,11 +307,11 @@ ORDER BY hypertable_id, tenant_id, seqnum;
              9 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
 
 -- UPDATE sensor_a's tenant to sensor_b: must track both the old (sensor_a)
--- and new (sensor_b) tenant.
+-- and new (sensor_b) tenant, with a new seqnum
 UPDATE conditions SET sensor_id = 'sensor_b' WHERE sensor_id = 'sensor_a';
--- Another fresh row to force the next refresh to drain the tracker again.
-INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
-CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+-- Note that this refresh doesn't clean up tracking with seqnum 1 because of the
+-- cleanup headroom, so we still see them here
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
 SELECT * 
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -306,22 +325,10 @@ ORDER BY hypertable_id, tenant_id, seqnum;
              9 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
              9 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
 
--- will flush all the tracker entries now
-CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
-SELECT * 
-FROM continuous_aggs_tenant_tracking_view
-WHERE hypertable_id = (
-    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
-    WHERE user_view_name = 'cond_daily')
-ORDER BY hypertable_id, tenant_id, seqnum;
- hypertable_id | tenant_id | min_timestamp | max_timestamp | seqnum 
----------------+-----------+---------------+---------------+--------
-
 -- TEST DELETE sensor_c's row: must track sensor_c (the deleted row's tenant).
 DELETE FROM conditions WHERE sensor_id = 'sensor_c';
--- add 2025 row, that will be refreshed and we wills ee tracker entries for 2020
-INSERT INTO conditions VALUES ('2025-01-03 00:00+00', 'sensor_z3', 0);
-CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+--(the above refresh garbage-collected trackings of seqnum 1, so we don't see them)
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -330,10 +337,12 @@ WHERE hypertable_id = (
 ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
-             9 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      5
+             9 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
+             9 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
+             9 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      3
 
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_18_chunk
 DROP TABLE conditions;
 -- TEST : more update scenarios
 -- Test upd 1:  2 UPDATES to same tenant column. should see single entry in tracker
@@ -374,6 +383,8 @@ ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
             11 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      2
+            11 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
+            11 | sensor_z  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to 2 other objects
@@ -411,6 +422,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
             13 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
+            13 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
 
 -- Move sensor_a's row to 2020-01-01 10:00 (same chunk, tenant unchanged).  The old
 -- tuple (2020-01-01) and new tuple (2020-01-05) fold into one entry for
@@ -429,6 +441,8 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 ---------------+-----------+------------------------------+------------------------------+--------
             13 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
             13 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 10:00:00 2020 UTC |      2
+            13 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
+            13 | sensor_z  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to 2 other objects
@@ -467,6 +481,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
             15 | sensor_a  | Fri Jan 03 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      1
+            15 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
 
 -- sensor_a -> sensor_b, 2020-01-03 -> 2020-01-03 00:01 : old and new tuple have
 -- different keys and seqnum, i.e 2 tracker entries.
@@ -486,6 +501,8 @@ ORDER BY hypertable_id, tenant_id, seqnum;
             15 | sensor_a  | Fri Jan 03 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      1
             15 | sensor_a  | Fri Jan 03 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      2
             15 | sensor_b  | Fri Jan 03 00:01:00 2020 UTC | Fri Jan 03 00:01:00 2020 UTC |      2
+            15 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
+            15 | sensor_z  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to 2 other objects
@@ -521,7 +538,8 @@ INSERT INTO conditions VALUES
   ('2020-01-01 00:00+00', 'sensor_e', 5);
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 COMMIT;
---refresh will clean up tracking entries for 2025.
+-- refresh drains the tracker; its entries remain in the catalog until garbage collected
+-- by a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 -- baseline: sensor_a through sensor_e, all tracked from the bulk INSERT.
 SELECT *
@@ -537,6 +555,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
             17 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
             17 | sensor_d  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
             17 | sensor_e  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
+            17 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
 
 -- UPDATE: sensor_a/b/c all renamed to sensor_x in one statement --
 -- three old-tenant writes (a, b, c) plus one shared new-tenant write (x).
@@ -562,12 +581,14 @@ ORDER BY hypertable_id, seqnum, tenant_id;
             17 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
             17 | sensor_d  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
             17 | sensor_e  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
+            17 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
             17 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
             17 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
             17 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
             17 | sensor_d  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
             17 | sensor_e  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
             17 | sensor_x  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
+            17 | sensor_z  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to 2 other objects
@@ -608,6 +629,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
             19 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
+            19 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
 
 -- Same (time, sensor_id) key -- this time it conflicts and takes the
 -- DO UPDATE branch 
@@ -626,6 +648,8 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 ---------------+-----------+------------------------------+------------------------------+--------
             19 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
             19 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
+            19 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
+            19 | sensor_z  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to 2 other objects
@@ -666,6 +690,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
             21 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
+            21 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
 
 -- One transaction: INSERT sensor_a, UPDATE it (same tenant/time -- dedups),
 -- and DELETE sensor_b -- all in the same per-txn buffer, drained together.
@@ -690,6 +715,8 @@ ORDER BY hypertable_id, tenant_id, seqnum;
             21 | sensor_a  | Thu Jan 02 00:00:00 2020 UTC | Thu Jan 02 00:00:00 2020 UTC |      2
             21 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
             21 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
+            21 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
+            21 | sensor_z  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to 2 other objects
@@ -724,7 +751,7 @@ WHERE hypertable_id = (
              0
 
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_54_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_53_chunk
 DROP TABLE conditions;
 -- Test copy: plain COPY into the hypertable.  
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
@@ -766,9 +793,10 @@ ORDER BY hypertable_id, tenant_id, seqnum;
             25 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
             25 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Sun Jan 05 00:00:00 2020 UTC |      1
             25 | sensor_d  | Thu Jan 02 00:00:00 2020 UTC | Sat Jan 04 00:00:00 2020 UTC |      1
+            25 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
 
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_58_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_57_chunk
 DROP TABLE conditions;
 -- Test: TRUNCATE must always force a full (non-granular) refresh over the
 -- truncated range.
@@ -828,6 +856,8 @@ ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
             27 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
+            27 | sensor_c  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      1
+            27 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      2
 
 -- TRUNCATE wipes out both sensor_a's and sensor_c's rows.  The tenant
 -- tracker is never touched -- sensor_a's stale tracking row survives.
@@ -853,15 +883,18 @@ SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
  sensor_id | bucket | avg 
 -----------+--------+-----
 
--- tracker entries in tenant_tracker catalog are also cleaned up
+-- Tracking rows with seqnum 1 (sensor_c) are garbage-collected by the refresh above.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
     SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
     WHERE user_view_name = 'cond_daily')
 ORDER BY hypertable_id, tenant_id, seqnum;
- hypertable_id | tenant_id | min_timestamp | max_timestamp | seqnum 
----------------+-----------+---------------+---------------+--------
+ hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
+---------------+-----------+------------------------------+------------------------------+--------
+            27 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      2
+            27 | sensor_b  | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      3
+            27 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to 2 other objects
@@ -901,6 +934,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
             29 | sensor_a  | Wed Jan 01 01:00:00 2020 UTC | Wed Jan 01 01:00:00 2020 UTC |      1
+            29 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
 
 --another insert for sensor_b for 2020-01-01. should see tracker entry after
 -- refresh.
@@ -946,7 +980,7 @@ SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
  Thu Jan 02 00:00:00 2025 UTC | sensor_z  |   0
 
 -- no invalid marker for seq_num=3
--- tracking entries in 2020 for sensor_a and sensor_b from earlier seqnums.
+-- tracking entry in 2020 for sensor_b; seqnum 1 is garbage-collected.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -955,20 +989,22 @@ WHERE hypertable_id = (
 ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
-            29 | sensor_a  | Wed Jan 01 01:00:00 2020 UTC | Wed Jan 01 01:00:00 2020 UTC |      1
             29 | sensor_b  | Wed Jan 01 01:00:00 2020 UTC | Wed Jan 01 01:00:00 2020 UTC |      2
+            29 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      2
 
 --refresh from 2020 so that we can see sensor_a . falls back to full refresh
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
--- everything is cleaned up --
+-- tracking rows remain until garbage collected by a later refresh.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
     SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
     WHERE user_view_name = 'cond_daily')
 ORDER BY hypertable_id, tenant_id, seqnum;
- hypertable_id | tenant_id | min_timestamp | max_timestamp | seqnum 
----------------+-----------+---------------+---------------+--------
+ hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
+---------------+-----------+------------------------------+------------------------------+--------
+            29 | sensor_b  | Wed Jan 01 01:00:00 2020 UTC | Wed Jan 01 01:00:00 2020 UTC |      2
+            29 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      2
 
 -- sensor_z, sensor_x, sensor_b and sensor_a renamed as xxxxx should be visible
 SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
@@ -1035,7 +1071,8 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::r
 -- for the dead seqnum) recomputes the 01-05 bucket; the 01-20 entry is left in
 -- the cagg log for a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2024-01-01 00:00+00', '2024-01-10 00:00+00');
--- No tracking rows for the dead generation at all.
+--The dead generation's tracking row is still present until garbage collected
+--by a later refresh.
 SELECT count(*) AS tracking_rows
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -1043,7 +1080,7 @@ WHERE hypertable_id = (
     WHERE user_view_name = 'cond_daily');
  tracking_rows 
 ---------------
-             0
+             1
 
 -- 01-05 bucket is refreshed
 SELECT bucket, sensor_id, cnt FROM cond_daily
@@ -1067,7 +1104,9 @@ WHERE hypertable_id = (
 ORDER BY 1, 2, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
+            31 | sensor_a  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
             31 | sensor_b  | Sat Jan 20 01:00:00 2024 UTC | Sat Jan 20 01:00:00 2024 UTC |      3
+            31 | sensor_c  | Mon Jan 01 01:00:00 2024 UTC | Mon Jan 01 01:00:00 2024 UTC |      3
 
 --picks up sensor_c now. But not changes to sensor_b.
 SELECT bucket, sensor_id, cnt FROM cond_daily
@@ -1116,7 +1155,7 @@ ORDER BY sensor_id, bucket;
  Sat Jan 20 00:00:00 2024 UTC | sensor_b  |     2
  Mon Jan 01 00:00:00 2024 UTC | sensor_c  |     1
 
--- Still nothing to clean up.
+-- Tracking rows still present until later refresh garbage collects them.
 SELECT count(*) AS tracking_rows
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -1124,7 +1163,7 @@ WHERE hypertable_id = (
     WHERE user_view_name = 'cond_daily');
  tracking_rows 
 ---------------
-             0
+             2
 
 DROP MATERIALIZED VIEW cond_daily;
 NOTICE:  drop cascades to 3 other objects
@@ -1201,7 +1240,7 @@ SELECT count(*) AS tracking_rows FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics');
  tracking_rows 
 ---------------
-             0
+             3
 
 -- Refresh a NON-granular cagg. It must not flush: seqnum and nentries stay put.
 CALL refresh_continuous_aggregate('m_ng1', NULL, '2019-05-01 00:00+00');
@@ -1223,6 +1262,9 @@ SELECT seq_num, nentries, status FROM _timescaledb_functions.hypertable_get_tena
 SELECT * FROM continuous_aggs_tenant_tracking_view;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
 ---------------+-----------+------------------------------+------------------------------+--------
+            33 | C         | Sun Mar 01 00:00:00 2020 UTC | Mon Mar 02 00:00:00 2020 UTC |      1
+            33 | B         | Sun Mar 01 00:00:00 2020 UTC | Mon Mar 02 00:00:00 2020 UTC |      1
+            33 | A         | Sun Mar 01 00:00:00 2020 UTC | Mon Mar 02 00:00:00 2020 UTC |      1
             33 | A         | Sun Mar 01 12:00:00 2020 UTC | Sun Mar 01 12:00:00 2020 UTC |      2
 
 -- Reset to a clean slate (drain every cagg's mat log and the tracker).
