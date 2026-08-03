@@ -24,7 +24,7 @@ jobs:
     - name: Set PostgreSQL version
       id: pg
       run: |
-        MAJOR=17
+        MAJOR=18
         echo "major=$MAJOR" >> $GITHUB_OUTPUT
 
         # Choose the latest version from config that matches our major version.
