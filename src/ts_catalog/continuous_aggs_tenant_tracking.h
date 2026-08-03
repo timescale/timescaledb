@@ -60,3 +60,10 @@ extern TSDLLEXPORT bool ts_cagg_tenant_tracking_exists(int32 hypertable_id, int3
  * Uses the (hypertable_id, seqnum) index for a backward limit-1 seek.
  */
 extern TSDLLEXPORT int32 ts_cagg_tenant_tracking_max_seqnum(int32 hypertable_id);
+
+/*
+ * Delete every tracking row of one (hypertable, seqnum) pair, without advancing
+ * the command counter -- the caller publishes once it has finished reclaiming.
+ */
+extern TSDLLEXPORT void ts_cagg_tenant_tracking_delete_by_seqnum_only(int32 hypertable_id,
+																	  int32 seqnum);
