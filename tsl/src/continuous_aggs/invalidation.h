@@ -51,11 +51,9 @@ extern void continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hyp
 extern void invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype);
 
 extern void invalidation_process_cagg_log(const ContinuousAgg *cagg,
-										  const InternalTimeRange *refresh_window,
-										  bool is_granular_refresh);
+										  const InternalTimeRange *refresh_window);
 
-extern void invalidation_cleanup_tenant_tracking(const ContinuousAgg *cagg,
-												 const InternalTimeRange *refresh_window);
+extern void invalidation_garbage_collect_tenant_tracking(const ContinuousAgg *cagg);
 
 extern InvalidationStore *collect_and_delete_cagg_invalidations_in_window(
 	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window, bool force);

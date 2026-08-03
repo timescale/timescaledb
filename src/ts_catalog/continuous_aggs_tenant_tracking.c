@@ -246,6 +246,34 @@ ts_cagg_tenant_tracking_delete_by_hypertable_id(int32 hypertable_id)
 }
 
 /*
+ * Delete every tracking row of one (hypertable, seqnum) pair, without advancing
+ * the command counter (mirrors ts_cagg_tenant_tracking_insert_only). A caller
+ * reclaiming several seqnums publishes once when it is done.
+ */
+TSDLLEXPORT void
+ts_cagg_tenant_tracking_delete_by_seqnum_only(int32 hypertable_id, int32 seqnum)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_TENANT_TRACKING,
+													RowExclusiveLock,
+													CurrentMemoryContext);
+
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_aggs_tenant_tracking_idx_seqnum,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(seqnum));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
+/*
  * Highest seqnum among a hypertable's tenant-tracking rows, or 0 if it has none.
  *
  * The index is (hypertable_id, seqnum), so a backward scan on the hypertable_id
