@@ -2,7 +2,7 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
-## 2.29.1 (2026-08-03)
+## 2.29.1 (2026-08-04)
 
 This release contains performance improvements and bug fixes since the 2.29.0 release and fixes for security vulnerabilities (#10360, #10379, #10386). You can check the [security advisory](https://github.com/timescale/timescaledb/security/advisories/GHSA-hcfx-29v5-2rcw) for more information on the vulnerability and the platforms that are affected. We recommend that you upgrade at the next available opportunity.
 
