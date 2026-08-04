@@ -240,14 +240,12 @@ jobs:
           show debug-file-directory
           printf "'"'"query = '%s'\n\n"'"'", debug_query_string
           bt full
-
           frame function __sanitizer::Die
           up 4
-
           list
           info args
           info locals
-        " 2>&1 | tee stacktrace.log
+        " 2>&1 | tee -a stacktrace.log
         ./scripts/bundle_coredumps.sh
 
     - name: Show sanitizer logs
