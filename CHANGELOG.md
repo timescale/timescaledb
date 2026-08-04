@@ -4,7 +4,7 @@
 
 ## 2.29.1 (2026-08-03)
 
-This release contains performance improvements and bug fixes since the 2.29.0 release. We recommend that you upgrade at the next available opportunity.
+This release contains performance improvements and bug fixes since the 2.29.0 release and fixes for security vulnerabilities (#10360, #10379, #10386). You can check the [security advisory](https://github.com/timescale/timescaledb/security/advisories/GHSA-hcfx-29v5-2rcw) for more information on the vulnerability and the platforms that are affected. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
 * [#10327](https://github.com/timescale/timescaledb/pull/10327) Assertion failure in `add_dimension()` when the hypertable argument is `NULL`
