@@ -17,7 +17,3 @@ src:
 
 windows-workflow:
   - '.github/workflows/windows-build-and-test.yaml'
-
-llm-fuzzer-workflow:
- - '.github/workflows/llm-fuzzer.yaml'
- - '.github/workflows/llm-fuzzer/**'

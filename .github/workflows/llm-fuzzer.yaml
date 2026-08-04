@@ -52,10 +52,9 @@ jobs:
       have_key: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
       should_run: >-
-        ${{ github.event_name == 'push'
+        ${{ github.event_name != 'pull_request'
           || (!contains(github.event.pull_request.labels.*.name, 'skip-ci')
-            && (steps.filter.outputs.src == 'true'
-              || steps.filter.outputs.llm-fuzzer-workflow == 'true')) }}
+            && steps.filter.outputs.src == 'true') }}
 
     steps:
     - name: Checkout source code
