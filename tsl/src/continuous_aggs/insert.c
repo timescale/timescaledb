@@ -94,6 +94,8 @@ typedef struct HypertableSeqnumEntry
 {
 	int32 hypertable_id;
 	int32 seqnum;
+	int64 late_threshold_start;
+	int64 late_threshold_end;
 } HypertableSeqnumEntry;
 
 typedef struct ContinuousAggsCacheHyperInvalThresholdEntry
@@ -465,12 +467,14 @@ tenant_local_htab_write(void)
 
 		/*
 		 * Record this hypertable's seqnum entry up front, defaulting to 0
-		 * (untracked -> refresh falls back to the full log).  The tracked branch
-		 * below overwrites the seqnum once the generation is pinned.
+		 * (untracked -> refresh falls back to the full log) with an empty window.
+		 * The tracked branch below overwrites both once the generation is pinned.
 		 */
 		seq_entry = palloc(sizeof(*seq_entry));
 		seq_entry->hypertable_id = hypertable_id;
 		seq_entry->seqnum = 0;
+		seq_entry->late_threshold_start = PG_INT64_MAX;
+		seq_entry->late_threshold_end = PG_INT64_MIN;
 		hypertable_seqnums = lappend(hypertable_seqnums, seq_entry);
 
 		/*
@@ -545,6 +549,8 @@ tenant_local_htab_write(void)
 		 * generation gates on the same [window_start, window_end). */
 		generation = ts_tenant_tracker_begin_batch(tracking, &seqnum, &window_start, &window_end);
 		seq_entry->seqnum = seqnum;
+		seq_entry->late_threshold_start = window_start;
+		seq_entry->late_threshold_end = window_end;
 
 		hash_seq_init(&hash_seq, tenant_local_htab);
 		while ((entry = hash_seq_search(&hash_seq)) != NULL)
@@ -596,12 +602,13 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 }
 
 /*
- * Look up the tenant-tracking seqnum drained for this hypertable this
- * transaction.  Returns 0 (untracked -> stored as NULL) if the hypertable was
- * not tracked (no tracker available, buffer forced INVALID, or nothing buffered).
+ * Look up the seqnum and late-arrival window this hypertable's tenants were
+ * drained under this transaction.  Returns NULL if nothing was buffered for it;
+ * a found entry carries seqnum 0 when the hypertable ended up untracked (no
+ * tracker available or buffer forced INVALID).
  */
-static int32
-tenant_seqnum_for_hypertable(List *hypertable_seqnums, int32 hypertable_id)
+static const HypertableSeqnumEntry *
+tenant_tracking_for_hypertable(List *hypertable_seqnums, int32 hypertable_id)
 {
 	ListCell *lc;
 
@@ -611,10 +618,10 @@ tenant_seqnum_for_hypertable(List *hypertable_seqnums, int32 hypertable_id)
 
 		if (seq_entry->hypertable_id == hypertable_id)
 		{
-			return seq_entry->seqnum;
+			return seq_entry;
 		}
 	}
-	return 0;
+	return NULL;
 }
 
 static inline void
@@ -622,13 +629,23 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_s
 {
 	int64 liv;
 	int32 seqnum;
+	const HypertableSeqnumEntry *tracking_entry;
 
 	if (!entry->value_is_set)
 	{
 		return;
 	}
 
-	seqnum = tenant_seqnum_for_hypertable(hypertable_seqnums, entry->hypertable_id);
+	tracking_entry = tenant_tracking_for_hypertable(hypertable_seqnums, entry->hypertable_id);
+	seqnum = (tracking_entry != NULL) ? tracking_entry->seqnum : 0;
+
+	/* This invalidation entry is disjoint from the late-arrival window, so it does
+	 * not have any tracking entries. Set seqnum as invalid i.e. 0. */
+	if (seqnum != 0 && (entry->greatest_modified_value < tracking_entry->late_threshold_start ||
+						entry->lowest_modified_value >= tracking_entry->late_threshold_end))
+	{
+		seqnum = 0;
+	}
 
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
 	 * use a stronger isolation level, the isolation threshold could update without us seeing the
