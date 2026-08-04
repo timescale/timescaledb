@@ -976,7 +976,7 @@ bool_compressed_size(int num_values, int flip_nth)
 static void
 test_bool()
 {
-	/* code covareage and simple tests */
+	/* code coverage and simple tests */
 	test_empty_bool_compressor();
 	test_bool_compressor_extended();
 

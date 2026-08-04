@@ -192,7 +192,7 @@ USING source s
 ON t.time = s.time AND t.device_id = s.device_id
 WHEN MATCHED THEN
 UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics);
-ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not supported on compressed hypertables
 -- MERGE DELETE matched rows for compressed hypertable
 -- should report error as DELETE is not allowed on compressed hypertable
 MERGE INTO metrics_compressed t
@@ -200,7 +200,7 @@ MERGE INTO metrics_compressed t
        ON t.time = s.time AND t.device_id = s.device_id
        WHEN MATCHED THEN
        DELETE;
-ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not supported on compressed hypertables
 -- MERGE UDPATE/INSERT matched rows for compressed hypertable
 -- should report error as UPDATE is not allowed on compressed hypertable
 MERGE INTO metrics_compressed t
@@ -211,7 +211,7 @@ UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metric
 WHEN NOT MATCHED THEN
 INSERT (time, device_id, v0, v1, v2, v3) VALUES
                      ('2021-11-01 00:00:05', 2, 1,2,3,4);
-ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not supported on compressed hypertables
 -- MERGE DELETE/INSERT matched rows for compressed hypertable
 -- should report error as DELETE is not allowed on compressed hypertable
 MERGE INTO metrics_compressed t
@@ -222,7 +222,7 @@ MERGE INTO metrics_compressed t
 WHEN NOT MATCHED THEN
 INSERT (time, device_id, v0, v1, v2, v3) VALUES
                      ('2021-11-01 00:00:05', 2, 1,2,3,4);
-ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not supported on compressed hypertables
 -- MERGE UDPATE matched rows for space partitioned compressed hypertable
 -- should report error as UPDATE is not allowed on compressed hypertable
 MERGE INTO metrics_space_compressed t
@@ -230,7 +230,7 @@ USING source s
 ON t.time = s.time AND t.device_id = s.device_id
 WHEN MATCHED THEN
 UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics);
-ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not supported on compressed hypertables
 -- MERGE DELETE matched rows for space partitioned compressed hypertable
 -- should report error as DELETE is not allowed on compressed hypertable
 MERGE INTO metrics_space_compressed t
@@ -238,7 +238,7 @@ MERGE INTO metrics_space_compressed t
        ON t.time = s.time AND t.device_id = s.device_id
        WHEN MATCHED THEN
        DELETE;
-ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not supported on compressed hypertables
 -- MERGE UDPATE/INSERT matched rows for space partitioned compressed hypertable
 -- should report error as UPDATE is not allowed on compressed hypertable
 MERGE INTO metrics_space_compressed t
@@ -249,7 +249,7 @@ UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metric
 WHEN NOT MATCHED THEN
 INSERT (time, device_id, v0, v1, v2, v3) VALUES
                      ('2021-11-01 00:00:05', 2, 1,2,3,4);
-ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not supported on compressed hypertables
 -- MERGE DELETE/INSERT matched rows for space partitioned compressed hypertable
 -- should report error as DELETE is not allowed on compressed hypertable
 MERGE INTO metrics_space_compressed t
@@ -260,5 +260,5 @@ MERGE INTO metrics_space_compressed t
 WHEN NOT MATCHED THEN
 INSERT (time, device_id, v0, v1, v2, v3) VALUES
                      ('2021-11-01 00:00:05', 2, 1,2,3,4);
-ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not supported on compressed hypertables
 \set ON_ERROR_STOP 1

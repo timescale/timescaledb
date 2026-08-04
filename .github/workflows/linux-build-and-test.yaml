@@ -21,7 +21,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Build matrix
       id: set-matrix
@@ -42,8 +42,8 @@ jobs:
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: filter
         with:
           filters: .github/filters.yaml
@@ -58,8 +58,6 @@ jobs:
     continue-on-error: ${{ contains(matrix.name, 'Flaky') }}
 
     env:
-      PG_SRC_DIR: pgbuild
-      PG_INSTALL_DIR: postgresql
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
@@ -104,7 +102,7 @@ jobs:
       run: sudo chmod 777 /cores
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -123,17 +121,21 @@ jobs:
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
     # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
-      id: cache-postgresql
+    - name: Restore PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
+      id: restore-postgresql-cache
       if: matrix.snapshot != 'snapshot'
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/${{ env.PG_SRC_DIR }}
+        path: |
+          install
+          pg
         key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       run: |
+        set -xeu
+
         if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
           wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
@@ -141,37 +143,51 @@ jobs:
           wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
             https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         fi
-        mkdir -p ~/$PG_SRC_DIR
-        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
-        cd ~/$PG_SRC_DIR
-        ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
+        mkdir -p pg build-pg install
+        tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
+
+        cd build-pg
+
+        ../pg/configure --prefix="$(readlink -f ../install)" --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
         make -j $(getconf _NPROCESSORS_ONLN)
         for ext in ${{ matrix.pg_extensions }}; do
           make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
-    - name: Install PostgreSQL ${{ matrix.pg }}
-      run: |
-        cd ~/$PG_SRC_DIR
         make install
         for ext in ${{ matrix.pg_extensions }}; do
           make -C contrib/${ext} install
         done
-        echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
+        make install-tests
+
+    - name: Save PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
+      if: matrix.snapshot != 'snapshot' && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          install
+          pg
+        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Upload config.log
-      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
+      if: always() && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: ~/${{ env.PG_SRC_DIR }}/config.log
+        path: build-pg/config.log
+
+    - name: Set up PATH
+      run: |
+        set -xeu
+
+        echo "$(readlink -f install/bin)" >> "${GITHUB_PATH}"
 
     - name: Test telemetry without OpenSSL
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
-          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$(readlink -f pg) \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(getconf _NPROCESSORS_ONLN) -C nossl
@@ -184,7 +200,7 @@ jobs:
         gcc -march=native -E -v - </dev/null 2>&1 | grep cc1
 
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
-          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
+          -DPG_SOURCE_DIR=$(readlink -f pg) \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DREQUIRE_ALL_TESTS=${{ matrix.installcheck && 'ON' || 'OFF' }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
@@ -266,6 +282,21 @@ jobs:
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
 
+        # TAP tests do not produce regression.diffs. Append prove's failure
+        # summary from installcheck.log plus, for each failing test, the failed
+        # assertions
+        sed -n '/^Test Summary Report/,/^Result:/p' installcheck.log >> regression.log 2>/dev/null || true
+        for t in $(grep -hoE 't/[^ ]+\.pl[[:space:]]+\(Wstat' installcheck.log 2>/dev/null | sed -E 's#t/(.+)\.pl.*#\1#'); do
+          echo "=== regress_log_$t ===" >> regression.log
+          find . -name "regress_log_$t" -exec awk '
+            FNR==1 { blk=0 }
+            { sub(/^\[[0-9:.]+\]\([0-9.]+s\) /, "") }
+            /^ok |^not ok |^# Looks like|^# Running:|^1\.\.|^Bail out/ { blk=0 }
+            /^#   Failed test/ { blk=1 }
+            blk { print }
+          ' {} + >> regression.log || true
+        done
+
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
@@ -322,7 +353,7 @@ jobs:
     - name: Stack trace macOS
       if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
       run: |
-        ~/$PG_SRC_DIR/src/tools/ci/cores_backtrace.sh macos /cores
+        pg/src/tools/ci/cores_backtrace.sh macos /cores
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'

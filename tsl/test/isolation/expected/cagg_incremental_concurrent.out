@@ -98,23 +98,23 @@ bucket|device_id|copies
 
 starting permutation: wp_enable r1_run i1_insert s1_refresh_ranges r2_refresh s1_refresh_ranges s1_count wp_release s1_count s1_check_duplicates
 R1: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R2: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R3: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
 R4: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
@@ -231,23 +231,23 @@ bucket|device_id|copies
 
 starting permutation: wp_enable r1_run s1_refresh_ranges r2_refresh_overlap wp_release s1_count s1_check_duplicates
 R1: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R2: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R3: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
 R4: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
@@ -352,23 +352,23 @@ bucket|device_id|copies
 
 starting permutation: wp_enable r3_run i2_insert wp_release
 R1: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R2: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R3: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
 R4: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
@@ -448,23 +448,23 @@ step r3_run: <... completed>
 
 starting permutation: wp_enable r3_run_oldest_first i2_insert wp_release
 R1: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R2: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R3: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
 R4: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
@@ -544,23 +544,23 @@ step r3_run_oldest_first: <... completed>
 
 starting permutation: wp_enable r4_run s1_refresh_ranges s1_count r2_refresh wp_release s1_count s1_check_duplicates
 R1: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R2: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R3: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
 R4: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
@@ -644,23 +644,23 @@ bucket|device_id|copies
 
 starting permutation: wp_enable r4_run s1_refresh_ranges r2_refresh_overlap wp_release s1_count s1_check_duplicates
 R1: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R2: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 
 R3: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
     SET timescaledb.current_timestamp_mock TO '2026-04-01 00:30:00+00';
 
 R4: LOG:  statement: 
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     SET SESSION client_min_messages = 'LOG';
 

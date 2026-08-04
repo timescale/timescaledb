@@ -72,7 +72,6 @@ set(TEST_FILES
     direct_compress_insert.sql
     direct_compress_policy.sql
     move.sql
-    plan_skip_scan_notnull.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
@@ -112,6 +111,7 @@ set(TEST_TEMPLATES
     ordered_append.sql.in
     plan_skip_scan.sql.in
     plan_skip_scan_dagg.sql.in
+    plan_skip_scan_notnull.sql.in
     vector_agg_planning.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
@@ -128,7 +128,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
-    attach_chunk.sql
     bgw_custom.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
@@ -208,7 +207,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_qual_default.sql
     vacuum.sql)
 
-  list(APPEND TEST_TEMPLATES compression_update_delete.sql.in
+  list(APPEND TEST_TEMPLATES attach_chunk.sql.in
+       compression_update_delete.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
@@ -234,6 +234,10 @@ endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
   list(APPEND TEST_FILES constraints_not_valid.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
+  list(APPEND TEST_FILES upsert_do_select.sql repack.sql)
 endif()
 
 set(SOLO_TESTS

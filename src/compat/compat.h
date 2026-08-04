@@ -727,6 +727,8 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 #define COMPARE_LT BTLessStrategyNumber
 #define COMPARE_GT BTGreaterStrategyNumber
 #define pk_cmptype pk_strategy
+#define get_opfamily_member_for_cmptype(opfamily, lefttype, righttype, cmptype)                    \
+	get_opfamily_member(opfamily, lefttype, righttype, cmptype)
 #endif
 
 /* PG18 adds is_merge_delete param to ExecBR{Delete|Update}Triggers function.

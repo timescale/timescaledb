@@ -140,7 +140,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	/*
 	 * For a chunk, we can get here via a query on the hypertable that expands
 	 * to the chunk or by direct query on the chunk. In the former case,
-	 * reloptkind will be RELOPT_OTHER_MEMBER_REL (nember of hypertable) or in
+	 * reloptkind will be RELOPT_OTHER_MEMBER_REL (member of hypertable) or in
 	 * the latter case reloptkind will be RELOPT_BASEREL (standalone rel).
 	 *
 	 * These two cases are checked in ts_planner_chunk_fetch().
@@ -168,8 +168,9 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("The MERGE command with UPDATE/DELETE merge actions is not support on "
-							"compressed hypertables")));
+					 errmsg(
+						 "The MERGE command with UPDATE/DELETE merge actions is not supported on "
+						 "compressed hypertables")));
 		}
 	}
 }

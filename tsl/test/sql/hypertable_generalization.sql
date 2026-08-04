@@ -18,6 +18,7 @@ $BODY$;
 CREATE TABLE n();
 SELECT create_hypertable('n',NULL::_timescaledb_internal.dimension_info);
 SELECT add_dimension('n',NULL::_timescaledb_internal.dimension_info);
+SELECT add_dimension(NULL, by_range('id'));
 \set ON_ERROR_STOP 1
 
 -- test int types

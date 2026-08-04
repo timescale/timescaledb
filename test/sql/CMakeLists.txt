@@ -85,12 +85,6 @@ set(TEST_TEMPLATES
     plan_expand_hypertable.sql.in
     ts_merge.sql.in)
 
-# Loader test must distinguish between Apache and TSL builds so we parametrize
-# this here
-set(LOADER_TEST_FILE loader-${TEST_LICENSE_SUFFIX})
-configure_file(loader.sql.in
-               ${CMAKE_CURRENT_SOURCE_DIR}/${LOADER_TEST_FILE}.sql)
-
 # tests that fail or are unreliable when run in parallel bgw tests need to run
 # first otherwise they are flaky
 set(SOLO_TESTS
@@ -104,7 +98,7 @@ set(SOLO_TESTS
     telemetry
     net)
 
-list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
+list(APPEND SOLO_TESTS loader)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
@@ -122,7 +116,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     symbol_conflict.sql
     test_tss_callbacks.sql
     test_utils.sql
-    ${LOADER_TEST_FILE}.sql)
+    loader.sql)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry.sql)
   endif()
@@ -137,6 +131,10 @@ endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
   list(APPEND TEST_FILES insert_returning_old_new.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
+  list(APPEND TEST_FILES repack.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture

@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/genam.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/reloptions.h>
@@ -13,6 +14,7 @@
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_attribute.h>
 #include <catalog/pg_class.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
@@ -46,6 +48,7 @@
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/elog.h>
+#include <utils/fmgroids.h>
 #include <utils/hsearch.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
@@ -1117,6 +1120,80 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 }
 
 /*
+ * A chunk should have all columns and constraints inherited and none marked as
+ * local, so clear the attislocal/conislocal flags that ALTER TABLE ... INHERIT
+ * leaves set when attaching a pre-existing table. Otherwise a later DROP COLUMN
+ * or DROP CONSTRAINT on the hypertable would not propagate to the chunk.
+ * Locally-defined objects (inhcount == 0), such as the chunk's dimension
+ * constraints, are left untouched.
+ */
+static void
+chunk_reset_inherited_flags(Oid chunk_relid)
+{
+	/* Columns */
+	Relation attrel = table_open(AttributeRelationId, RowExclusiveLock);
+	Relation chunkrel = table_open(chunk_relid, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(chunkrel);
+
+	for (int i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, i);
+
+		if (att->attisdropped || !att->attislocal || att->attinhcount == 0)
+		{
+			continue;
+		}
+
+		HeapTuple tuple = SearchSysCacheCopyAttNum(chunk_relid, att->attnum);
+		if (!HeapTupleIsValid(tuple))
+		{
+			elog(ERROR,
+				 "cache lookup failed for attribute %d of relation %u",
+				 att->attnum,
+				 chunk_relid);
+		}
+
+		((Form_pg_attribute) GETSTRUCT(tuple))->attislocal = false;
+		CatalogTupleUpdate(attrel, &tuple->t_self, tuple);
+		heap_freetuple(tuple);
+	}
+
+	table_close(chunkrel, NoLock);
+	table_close(attrel, RowExclusiveLock);
+
+	/* Constraints (CHECK and NOT NULL) */
+	ScanKeyData skey;
+	ScanKeyInit(&skey,
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(chunk_relid));
+
+	Relation conrel = table_open(ConstraintRelationId, RowExclusiveLock);
+	SysScanDesc scan =
+		systable_beginscan(conrel, ConstraintRelidTypidNameIndexId, true, NULL, 1, &skey);
+	HeapTuple contup;
+
+	while (HeapTupleIsValid(contup = systable_getnext(scan)))
+	{
+		Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(contup);
+
+		if (con->coninhcount == 0 || !con->conislocal)
+		{
+			continue;
+		}
+
+		HeapTuple newtup = heap_copytuple(contup);
+		((Form_pg_constraint) GETSTRUCT(newtup))->conislocal = false;
+		CatalogTupleUpdate(conrel, &newtup->t_self, newtup);
+		heap_freetuple(newtup);
+	}
+
+	systable_endscan(scan);
+	table_close(conrel, RowExclusiveLock);
+}
+
+/*
  * Make a chunk table inherit a hypertable.
  *
  * Execution happens via high-level ALTER TABLE statement. This includes
@@ -1149,6 +1226,8 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 	};
 
 	AlterTable(&alterstmt, lockmode, &atcontext);
+
+	chunk_reset_inherited_flags(atcontext.relid);
 }
 
 static Chunk *
@@ -3994,11 +4073,93 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   CurrentMemoryContext,
 															   true);
 	Assert(ch != NULL);
+
+	/* Only the hypertable owner may drop a chunk */
+	ts_hypertable_permissions_check(ch->hypertable_relid, GetUserId());
+
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
 	PG_RETURN_BOOL(true);
+}
+
+/*
+ * Drop chunks from a hypertable, dropping everything older than the given boundary.
+ *
+ * The boundary is either an "older_than" value (matched against the chunk
+ * ranges) or, when use_creation_time is set, a "drop_created_before" value
+ * (matched against the chunk creation time).
+ *
+ * Returns the number of dropped chunks.
+ */
+int
+ts_chunk_drop_chunks_by_boundary(Oid relid, Datum older_than, Oid older_than_type,
+								 bool use_creation_time)
+{
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, false);
+	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Oid time_type = ts_dimension_get_partition_type(time_dim);
+	int64 older_than_internal;
+	bool older_newer;
+	List *dropped_chunks;
+	MemoryContext oldcontext = CurrentMemoryContext;
+
+	/* UUID (v7) partitioning is treated as TIMESTAMPTZ, matching the boundary. */
+	if (IS_UUID_TYPE(time_type))
+	{
+		time_type = TIMESTAMPTZOID;
+	}
+
+	if (use_creation_time)
+	{
+		/* drop_created_before compares against the chunk creation time. */
+		int64 created_before =
+			ts_time_value_from_arg(older_than, older_than_type, TIMESTAMPTZOID, false);
+		older_than_internal = ts_internal_to_time_int64(created_before, TIMESTAMPTZOID);
+		older_newer = false;
+	}
+	else
+	{
+		older_than_internal = ts_time_value_from_arg(older_than, older_than_type, time_type, true);
+		older_newer = true;
+	}
+
+	PG_TRY();
+	{
+		dropped_chunks = ts_chunk_do_drop_chunks(ht,
+												 older_than_internal,
+												 PG_INT64_MIN,
+												 DEBUG2,
+												 time_type,
+												 older_than_type,
+												 older_newer);
+	}
+	PG_CATCH();
+	{
+		/* Replace the generic dependent objects hint with an accurate one since
+		 * we don't support CASCADE here. */
+		ErrorData *edata;
+
+		/* CopyErrorData requires we leave the error context first. */
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+		FlushErrorState();
+
+		if (edata->sqlerrcode == ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST)
+		{
+			edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
+		}
+
+		ts_cache_release(&hcache);
+		ReThrowError(edata);
+	}
+	PG_END_TRY();
+
+	ts_cache_release(&hcache);
+
+	return list_length(dropped_chunks);
 }
 
 Datum
@@ -5131,6 +5292,9 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, hypertable_relid, true);
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+
+	/* Only the hypertable owner may drop the OSM chunk */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
 	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
 

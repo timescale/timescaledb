@@ -300,3 +300,35 @@ DROP FUNCTION cagg_analyze_count_analyzed(name);
 DROP MATERIALIZED VIEW cagg_analyze_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_9_chunk
 DROP TABLE cagg_analyze_src;
+-- VACUUM FULL on an individual chunk should also rewrite the underlying compressed relation
+-- VACUUM FULL assigns a new relfilenode, so we use that as a proxy for the
+-- compressed relation actually being processed.
+CREATE TABLE vacuum_chunk_test(time timestamptz NOT NULL, device int, value float);
+SELECT create_hypertable('vacuum_chunk_test', 'time', chunk_time_interval => interval '1 day');
+       create_hypertable        
+--------------------------------
+ (7,public,vacuum_chunk_test,t)
+
+INSERT INTO vacuum_chunk_test
+SELECT '2024-01-01'::timestamptz + (i || ' minute')::interval, i % 4, i::float
+FROM generate_series(0, 5000) i;
+ALTER TABLE vacuum_chunk_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(ch)) FROM show_chunks('vacuum_chunk_test') ch;
+ count 
+-------
+     4
+
+SELECT ch AS chunk FROM show_chunks('vacuum_chunk_test') ch ORDER BY ch LIMIT 1 \gset
+SELECT cs.compress_relid::oid AS compressed_relid
+FROM _timescaledb_catalog.compression_settings cs
+WHERE cs.relid = :'chunk'::regclass \gset
+SELECT relfilenode AS compressed_relfilenode_before
+FROM pg_class WHERE oid = :compressed_relid \gset
+VACUUM FULL :chunk;
+SELECT relfilenode <> :compressed_relfilenode_before AS compressed_rel_rewritten
+FROM pg_class WHERE oid = :compressed_relid;
+ compressed_rel_rewritten 
+--------------------------
+ t
+
+DROP TABLE vacuum_chunk_test;

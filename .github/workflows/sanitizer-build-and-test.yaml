@@ -63,7 +63,7 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -89,7 +89,7 @@ jobs:
           libtest-most-perl jq ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -109,7 +109,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }}
       id: cache-postgresql
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}\
@@ -174,6 +174,20 @@ jobs:
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
+        # TAP tests do not produce regression.diffs. Append prove's failure
+        # summary from installcheck.log plus, for each failing test, the failed
+        # assertions
+        sed -n '/^Test Summary Report/,/^Result:/p' installcheck.log >> regression.log 2>/dev/null || true
+        for t in $(grep -hoE 't/[^ ]+\.pl[[:space:]]+\(Wstat' installcheck.log 2>/dev/null | sed -E 's#t/(.+)\.pl.*#\1#'); do
+          echo "=== regress_log_$t ===" >> regression.log
+          find . -name "regress_log_$t" -exec awk '
+            FNR==1 { blk=0 }
+            { sub(/^\[[0-9:.]+\]\([0-9.]+s\) /, "") }
+            /^ok |^not ok |^# Looks like|^# Running:|^1\.\.|^Bail out/ { blk=0 }
+            /^#   Failed test/ { blk=1 }
+            blk { print }
+          ' {} + >> regression.log || true
+        done
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
