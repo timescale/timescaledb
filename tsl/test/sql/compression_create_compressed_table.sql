@@ -68,3 +68,47 @@ SELECT _timescaledb_functions.create_compressed_chunk(
 );
 \set ON_ERROR_STOP 1
 
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- test create_compressed_chunk column/column type validation
+CREATE TABLE selfref(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('selfref', 'time');
+ALTER TABLE selfref SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO selfref VALUES ('2025-01-01', 'dev1', 1.0);
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    ch, ch,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+) FROM show_chunks('selfref') ch;
+\set ON_ERROR_STOP 1
+
+-- create_compressed_chunk must reject a table where a segmentby column type does not match
+CREATE TABLE badtype(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('badtype', 'time');
+ALTER TABLE badtype SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO badtype VALUES ('2025-01-01', 'dev1', 1.0);
+SELECT ch AS "BADTYPE_CHUNK" FROM show_chunks('badtype') ch LIMIT 1 \gset
+-- segmentby column "device" has the wrong type (varchar instead of text)
+CREATE TABLE _timescaledb_internal.badtype_compressed(_ts_meta_count int4, device varchar(3));
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'BADTYPE_CHUNK'::regclass, '_timescaledb_internal.badtype_compressed'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+\set ON_ERROR_STOP 1
+
+-- create_compressed_chunk must reject a table where a metadata column type does not match
+CREATE TABLE badcount(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('badcount', 'time');
+ALTER TABLE badcount SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO badcount VALUES ('2025-01-01', 'dev1', 1.0);
+SELECT ch AS "BADCOUNT_CHUNK" FROM show_chunks('badcount') ch LIMIT 1 \gset
+-- metadata column "_ts_meta_count" has the wrong type (text instead of int4)
+CREATE TABLE _timescaledb_internal.badcount_compressed(_ts_meta_count text, device text);
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'BADCOUNT_CHUNK'::regclass, '_timescaledb_internal.badcount_compressed'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+\set ON_ERROR_STOP 1
