@@ -118,9 +118,6 @@ jobs:
       if: runner.os == 'macOS'
       run: echo "CACHE_SUFFIX=-${ImageVersion}" >> $GITHUB_ENV
 
-    # we cache the build directory instead of the install directory here
-    # because extension installation will write files to install directory
-    # leading to a tainted cache
     - name: Restore PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
       id: restore-postgresql-cache
       if: matrix.snapshot != 'snapshot'
