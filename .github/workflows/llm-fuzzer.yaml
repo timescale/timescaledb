@@ -71,7 +71,7 @@ jobs:
         filters: .github/filters.yaml
 
   fuzzer:
-    if: needs.config.outputs.have_key && needs.config.outputs.should_run
+    if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
     runs-on: timescaledb-runner-arm64
     needs: config
