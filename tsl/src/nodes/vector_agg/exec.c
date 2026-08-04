@@ -1105,11 +1105,17 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	/*
 	 * We might have non-vectorized filters that we still can evaluate in the
-	 * columnar pipeline.
+	 * columnar pipeline. Collect them and evaluate stable expressions there.
 	 */
-	vector_agg_state->pg_quals =
+	List *pg_quals_original =
 		list_nth(castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_private,
 				 VASI_PostgresQuals);
+	ListCell *lc;
+	foreach (lc, pg_quals_original)
+	{
+		Node *constified = estimate_expression_value(&root, (Node *) lfirst(lc));
+		vector_agg_state->pg_quals = lappend(vector_agg_state->pg_quals, constified);
+	}
 
 	/*
 	 * Intern the expression subtrees for common subexpression elimination.
