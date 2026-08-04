@@ -241,14 +241,9 @@ jobs:
           printf "'"'"query = '%s'\n\n"'"'", debug_query_string
           bt full
 
-          # We try to find ExceptionalCondition frame to print the failed condition
-          # for searching in logs.
-          frame function ExceptionalCondition
-          printf "'"'"condition = '%s'\n"'"'", conditionName
+          frame function __sanitizer::Die
+          up 4
 
-          # Hopefully now we should be around the failed assertion, print where
-          # we are.
-          up 1
           list
           info args
           info locals
