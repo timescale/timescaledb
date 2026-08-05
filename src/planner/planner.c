@@ -1018,16 +1018,34 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
-	if (path->param_info != NULL && ordered)
+	if (path->param_info != NULL)
 	{
+		if (ordered)
+		{
+			/*
+			 * Ordered ChunkAppend might create MergeAppend path for individual
+			 * chunks when we have space partitioning or partial chunks. MergeAppend
+			 * paths cannot be parameterized. Refuse to use parameterized ordered
+			 * ChunkAppend altogether, because the more precise conditions are
+			 * difficult to check.
+			 */
+			return false;
+		}
+
+		if (path->param_info->ppi_clauses != NIL)
+		{
+			/*
+			 * If we have any parameterized clauses, we can apply runtime chunk
+			 * exclusion.
+			 */
+			return true;
+		}
+
 		/*
-		 * Ordered ChunkAppend might create MergeAppend path for individual
-		 * chunks when we have space partitioning or partial chunks. MergeAppend
-		 * paths cannot be parameterized. Refuse to use parameterized ordered
-		 * ChunkAppend altogether, because the more precise conditions are
-		 * difficult to check.
+		 * The path can be parameterized but not have any parameterized clauses,
+		 * effectively if it's a cross join written as LATERAL. Check the other
+		 * conditions for chunk append in this case.
 		 */
-		return false;
 	}
 
 	if (
