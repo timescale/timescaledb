@@ -85,7 +85,7 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby = true;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 30000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows = 5000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit = 500;
-TSDLLEXPORT bool ts_guc_use_custom_toaster = false;
+TSDLLEXPORT bool ts_guc_use_custom_toaster = true;
 bool ts_guc_enable_deprecation_warnings = true;
 TSDLLEXPORT bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -636,7 +636,7 @@ _guc_init(void)
 							 "Use a custom TOAST writer for compressed row inserts",
 							 "This setting is only used for compression.",
 							 &ts_guc_use_custom_toaster,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
