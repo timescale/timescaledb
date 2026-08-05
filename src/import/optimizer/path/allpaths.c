@@ -86,7 +86,7 @@ set_tablesample_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *
 		!(GetTsmRoutine(rte->tablesample->tsmhandler)->repeatable_across_scans))
 	{
 #if PG19_GE
-		path = (Path *) create_material_path(rel, path, enable_material);
+		path = (Path *) create_material_path(rel, path, true);
 #else
 		path = (Path *) create_material_path(rel, path);
 #endif
