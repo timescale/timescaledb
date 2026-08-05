@@ -167,6 +167,36 @@ validate_granular_refresh_enable(ContinuousAgg *agg, Hypertable *mat_ht)
 						refresh_column),
 				 errhint("The continuous aggregate must group by the granular refresh column.")));
 	}
+
+	/*
+	 * If we turns on granular refresh for this continuous aggregate, ensure that no other
+	 * continuous aggregate on the same raw hypertable has granular refresh enabled.
+	 * For now we only support one continuous aggregate with granular refresh enabled
+	 * per raw hypertable.
+	 */
+	List *caggs = ts_continuous_aggs_find_by_raw_table_id(agg->data.raw_hypertable_id);
+
+	foreach (lc, caggs)
+	{
+		const ContinuousAgg *other = lfirst(lc);
+
+		if (other->data.mat_hypertable_id == agg->data.mat_hypertable_id)
+		{
+			continue;
+		}
+
+		if (other->data.granular_refresh_enabled)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("granular refresh is already enabled for continuous aggregate \"%s\"",
+							NameStr(other->data.user_view_name)),
+					 errdetail("A hypertable can have at most one continuous aggregate with "
+							   "granular refresh enabled.")));
+		}
+	}
+
+	list_free(caggs);
 }
 
 /*
