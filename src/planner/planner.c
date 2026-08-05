@@ -1018,6 +1018,20 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
+	if (!ts_guc_enable_chunk_append)
+	{
+		return false;
+	}
+
+	if ((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
+		bms_num_members(root->all_baserels) > 1)
+	{
+		/*
+		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
+		 */
+		return false;
+	}
+
 	if (path->param_info != NULL)
 	{
 		if (ordered)
@@ -1046,17 +1060,6 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 		 * effectively if it's a cross join written as LATERAL. Check the other
 		 * conditions for chunk append in this case.
 		 */
-	}
-
-	if (
-		/*
-		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
-		 */
-		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
-		 bms_num_members(root->all_baserels) > 1) ||
-		!ts_guc_enable_chunk_append)
-	{
-		return false;
 	}
 
 	switch (nodeTag(path))
