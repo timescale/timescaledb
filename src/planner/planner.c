@@ -1027,7 +1027,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 		bms_num_members(root->all_baserels) > 1)
 	{
 		/*
-		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
+		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved.
 		 */
 		return false;
 	}
