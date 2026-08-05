@@ -32,7 +32,8 @@
 
 #include <math.h>
 
-#include "allpaths.h"
+#include "import/allpaths.h"
+
 #include "chunk.h"
 #include "compat/compat.h"
 #include "cross_module_fn.h"
