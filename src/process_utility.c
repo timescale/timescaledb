@@ -16,6 +16,7 @@
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_publication.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
 #include <commands/copy.h>
@@ -805,6 +806,24 @@ process_altertableschema(ProcessUtilityArgs *args)
 
 	if (ht)
 	{
+		Oid old_schema = get_rel_namespace(relid);
+		Oid new_schema = get_namespace_oid(alterstmt->newschema, true);
+
+		/*
+		 * Chunks live in _timescaledb_internal and don't move with the root
+		 * table, so a schema publication (which follows the root table's
+		 * schema) leaves chunk rows behind. Reconcile them for the schema the
+		 * hypertable is leaving and the one it is entering. This must run
+		 * before ts_hypertable_set_schema flips the catalog schema, since
+		 * ts_chunk_publication_reconcile_ht_schema_change resolves the
+		 * hypertable's relid from the catalog (which still points at the old
+		 * schema's physical table); the chunk rows themselves are stable.
+		 */
+		if (OidIsValid(new_schema))
+		{
+			ts_chunk_publication_reconcile_ht_schema_change(ht->fd.id, old_schema, new_schema);
+		}
+
 		ts_hypertable_set_schema(ht, alterstmt->newschema);
 	}
 	else
@@ -6075,6 +6094,92 @@ preprocess_execute(ProcessUtilityArgs *args)
 }
 
 /*
+ * Collect the Oids of schemas named by FOR TABLES IN SCHEMA in a
+ * CREATE/ALTER PUBLICATION object list. Mirrors PostgreSQL's schema handling
+ * in ObjectsInPublicationToOids; FOR TABLE / EXCEPT TABLE objects are left to
+ * PostgreSQL, which already expands inheritance children (chunks) itself.
+ */
+static List *
+publication_schema_oids(List *pubobjects)
+{
+	List *schemas = NIL;
+	ListCell *lc;
+
+	foreach (lc, pubobjects)
+	{
+		PublicationObjSpec *pubobj = lfirst(lc);
+		Oid schemaid;
+
+		switch (pubobj->pubobjtype)
+		{
+			case PUBLICATIONOBJ_TABLES_IN_SCHEMA:
+				schemaid = get_namespace_oid(pubobj->name, false);
+				break;
+			case PUBLICATIONOBJ_TABLES_IN_CUR_SCHEMA:
+			{
+				List *search_path = fetch_search_path(false);
+
+				if (search_path == NIL)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_UNDEFINED_SCHEMA),
+							 errmsg("no schema has been selected for CURRENT_SCHEMA")));
+				}
+				schemaid = linitial_oid(search_path);
+				list_free(search_path);
+				break;
+			}
+			default:
+				continue;
+		}
+		schemas = list_append_unique_oid(schemas, schemaid);
+	}
+	return schemas;
+}
+
+/*
+ * Add or remove chunk rows for the schemas named in this publication command;
+ * see ts_chunk_publication_reconcile_schema_chunks for the rationale. For SET,
+ * PostgreSQL has already dropped every chunk row it tracked, so we rebuild for
+ * the full new schema set rather than a difference; only DROP removes chunks.
+ */
+static void
+reconcile_publication_schemas(const char *pubname, List *schema_oids, bool add)
+{
+	Publication *pub = GetPublicationByName(pubname, true);
+	if (pub)
+	{
+		ts_chunk_publication_reconcile_schema_chunks(pub->oid, schema_oids, add);
+	}
+}
+
+/*
+ * Keep chunk membership of a schema publication in sync with the schemas named
+ * by ALTER PUBLICATION ... ADD/DROP/SET TABLES IN SCHEMA. CREATE PUBLICATION is
+ * handled later in process_ddl_event_command_end, where the publication's Oid
+ * is already available.
+ */
+static DDLResult
+process_publication(ProcessUtilityArgs *args)
+{
+	AlterPublicationStmt *stmt = castNode(AlterPublicationStmt, args->parsetree);
+	List *schema_oids;
+
+	/* Let PostgreSQL alter the publication first. */
+	prev_ProcessUtility(args);
+
+	schema_oids = publication_schema_oids(stmt->pubobjects);
+	if (schema_oids == NIL)
+	{
+		return DDL_DONE;
+	}
+
+	reconcile_publication_schemas(stmt->pubname, schema_oids, stmt->action != AP_DropObjects);
+
+	return DDL_DONE;
+}
+
+/*
  * Handle DDL commands before they have been processed by PostgreSQL.
  */
 static DDLResult
@@ -6167,6 +6272,15 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			handler = preprocess_execute;
 			break;
 
+		/* ALTER PUBLICATION is reconciled here; CREATE PUBLICATION is reconciled
+		 * later in process_ddl_event_command_end (where the publication's Oid is
+		 * available). check_read_only stays off to match prior behavior; PG
+		 * rejects publication DDL on read-only standbys itself. */
+		case T_AlterPublicationStmt:
+			check_read_only = false;
+			handler = process_publication;
+			break;
+
 		default:
 			handler = NULL;
 			break;
@@ -6186,6 +6300,25 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 }
 
 /*
+ * Backfill chunk membership for a publication created with FOR TABLES IN
+ * SCHEMA. Runs in the ddl_command_end event trigger, so the publication (and
+ * its Oid) already exists.
+ */
+static void
+process_create_publication_end(Node *parsetree)
+{
+	CreatePublicationStmt *stmt = castNode(CreatePublicationStmt, parsetree);
+	List *schema_oids = publication_schema_oids(stmt->pubobjects);
+
+	if (schema_oids == NIL)
+	{
+		return;
+	}
+
+	reconcile_publication_schemas(stmt->pubname, schema_oids, true);
+}
+
+/*
  * Handle DDL commands after they've been processed by PostgreSQL.
  */
 static void
@@ -6198,6 +6331,9 @@ process_ddl_command_end(CollectedCommand *cmd)
 			break;
 		case T_AlterTableStmt:
 			process_altertable_end(cmd->parsetree, cmd);
+			break;
+		case T_CreatePublicationStmt:
+			process_create_publication_end(cmd->parsetree);
 			break;
 		default:
 			break;
@@ -6462,6 +6598,7 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 		case T_CreateTrigStmt:
 		case T_CreateStmt:
 		case T_IndexStmt:
+		case T_CreatePublicationStmt:
 			foreach (lc, ts_event_trigger_ddl_commands())
 			{
 				process_ddl_command_end(lfirst(lc));
