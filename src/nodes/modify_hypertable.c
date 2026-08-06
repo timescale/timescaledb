@@ -473,7 +473,7 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	 * tuples from the ChunkTupleRouting state below the ModifyTable.
 	 */
 	if ((mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE) &&
-		outerPlanState(mtstate))
+		outerPlanState(mtstate) && state->ctr != NULL)
 	{
 		SharedCounters *counters = state->ctr->counters;
 
