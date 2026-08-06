@@ -478,10 +478,6 @@ SELECT * FROM test_segby ORDER BY time DESC NULLS LAST;
 :PREFIX
 SELECT * FROM test_segby ORDER BY time ASC NULLS FIRST;
 
--- Should not be optimized (using segmentby)
-:PREFIX
-SELECT * FROM test_segby ORDER BY segby, time;
-
 -- Tests for #9445: forbid BatchSortedMerge on nullable orderby columns with no firstlast index
 CREATE TABLE t(time int NOT NULL, device int, val int);
 SELECT create_hypertable('t', 'time', chunk_time_interval => 10000);
@@ -829,15 +825,249 @@ SELECT time, v
 FROM (VALUES (10), (20), (30)) a(dv),
      LATERAL (SELECT time, v FROM t2_noseg WHERE v = a.dv ORDER BY time DESC) b;
 
+-- Tests for BatchSortedMerge over multi-segment data
+-----------------------------------------------------
+
+-- Table with single segmentby and single orderby keys including NULL segmentby
+CREATE TABLE t2_seg(time int NOT NULL, dev int, v int);
+SELECT table_name FROM create_hypertable('t2_seg', 'time', chunk_time_interval => 10000);
+ALTER TABLE t2_seg SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='dev');
+
+INSERT INTO t2_seg (time, dev, v) values
+(1, 1, 30),
+(1, 2, 20),
+(2, 3, 20),
+(3, 1, 30),
+(4, 1, 30),
+(4, 2, 20),
+(6, 3, 20),
+(6, 1, 30),
+(6, 2, 20),
+(8, 1, 30),
+(8, 2, 20),
+(8, 3, 10),
+(1, NULL, 5),
+(6, NULL, 5),
+(8, NULL, 5);
+
+INSERT INTO t2_seg (time, dev, v) values
+(3, 1, 30),
+(3, 2, 20),
+(3, 3, 20),
+(5, 1, 30),
+(5, 2, 20),
+(5, 3, 10),
+(6, 1, 30),
+(6, 1, 30),
+(6, 1, 30),
+(7, 1, 30),
+(7, 2, 20),
+(7, 3, 10),
+(3, NULL, 5),
+(5, NULL, 5),
+(7, NULL, 5);
+
+INSERT INTO t2_seg (time, dev, v) values
+(5, 1, 30),
+(5, 3, 20),
+(5, 2, 1),
+(7, 2, 20),
+(8, 1, 30),
+(8, 2, 1),
+(8, 3, 20),
+(10, 1, 30),
+(11, 1, 40),
+(14, 1, 60),
+(14, 2, 1),
+(14, 3, 20),
+(8, NULL, 5),
+(5, NULL, 5),
+(14, NULL, 5);
+
+INSERT INTO t2_seg (time, dev, v) values
+(9, 1, 30),
+(9, 3, 300),
+(9, 2, 20),
+(9, 2, 10),
+(10, 1, 30),
+(10, 2, 10),
+(10, 3, 20),
+(11, 1, 30),
+(12, 1, 300),
+(13, 1, 60),
+(13, 2, 10),
+(13, 3, 70),
+(9, NULL, 5),
+(10, NULL, 5),
+(13, NULL, 5);
+
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t2_seg') chunk;
+
+-- Should be optimized (segmentby any direction + orderby)
+:PREFIX
+SELECT * FROM test_segby ORDER BY segby, time DESC;
+
+-- Should be optimized (segmentby any direction + orderby reversed)
+:PREFIX
+SELECT * FROM test_segby ORDER BY segby, time;
+
+-- matches (segmentby + orderby) order
+:PREFIX
+SELECT dev, time FROM t2_seg ORDER BY dev, time DESC;
+SELECT dev, time FROM t2_seg ORDER BY dev, time DESC;
+
+-- matches (segmentby + orderby) reverse order
+:PREFIX
+SELECT dev, time FROM t2_seg ORDER BY dev DESC, time;
+SELECT dev, time FROM t2_seg ORDER BY dev DESC, time;
+
+-- Predicates on segmentby, orderby and other columns are dealt with correctly
+
+-- index does not scan d=1
+SELECT dev, time FROM t2_seg WHERE dev > 1 ORDER BY dev, time DESC;
+
+-- filters out batches (1..8) and (3..7) for each segment
+SELECT dev, time FROM t2_seg WHERE time > 8 ORDER BY dev, time DESC;
+
+SELECT dev, time, v FROM t2_seg WHERE v = 30 ORDER BY dev, time DESC;
+
+-- filters out dev=1
+SELECT dev, time, v FROM t2_seg WHERE v = 20 OR v = 5 ORDER BY dev, time DESC;
+
+-- Skips 1st batch of 2nd segment and goes to 3rd segment after 2nd batch of 2nd segment:
+-- case flagged by LLM Fuzzer
+SELECT dev, time FROM t2_seg WHERE v > 1 AND time > 8 AND dev IS NOT NULL ORDER BY dev, time DESC;
+
+-- Rescan with lateral subquery
+SELECT dev, time, v
+FROM (VALUES (20), (30)) a(dv),
+     LATERAL (SELECT dev, time, v FROM t2_seg WHERE v = a.dv ORDER BY dev, time DESC) b;
+
+-- Tests with predicates for reverse order
+-- index does not scan d=3
+SELECT dev, time FROM t2_seg WHERE dev < 3 ORDER BY dev DESC, time;
+
+-- filters out batch (9..13) for each segment
+SELECT dev, time FROM t2_seg WHERE time < 9 ORDER BY dev DESC, time;
+
+SELECT dev, time, v FROM t2_seg WHERE v = 30 ORDER BY dev DESC, time;
+
+-- filters out dev=NULL and dev = 1
+SELECT dev, time, v FROM t2_seg WHERE v = 20 ORDER BY dev DESC, time;
+
+SELECT dev, time FROM t2_seg WHERE v < 30 AND time < 9 ORDER BY dev DESC, time;
+
+-- Rescan with lateral subquery
+SELECT dev, time, v
+FROM (VALUES (20), (5)) a(dv),
+     LATERAL (SELECT dev, time, v FROM t2_seg WHERE v = a.dv ORDER BY dev DESC, time) b;
+
+-- Test with multi-segmentby, multi-orderby table
+CREATE TABLE t2_multi (
+    time timestamptz NOT NULL,
+    x1 integer,
+    x2 text,
+    x3 integer,
+    x4 integer);
+
+SELECT FROM create_hypertable('t2_multi', 'time');
+
+ALTER TABLE t2_multi SET (timescaledb.compress, timescaledb.compress_segmentby='x1, x2', timescaledb.compress_orderby = 'time DESC, x3 ASC');
+
+-- Segments (1,NULL), (1,3), (2,2), (2,4).
+-- Batches (1hr,2)-(8hr,3), (3hr,2) - (7hr,1), (5hr,1)-(11hr,2)
+-- Need to insert more than 10 tuples to use direct compress
+INSERT INTO t2_multi (time, x1, x2, x3, x4) values
+('2000-01-01 02:00:00-00', 1, NULL, 1, 10),
+('2000-01-01 01:00:00-00', 1, NULL, 2, 10),
+('2000-01-01 08:00:00-00', 1, NULL, 3, 10),
+('2000-01-01 08:00:00-00', 1, '3', 2, 20),
+('2000-01-01 04:00:00-00', 1, '3', 1, 20),
+('2000-01-01 01:00:00-00', 1, '3', 2, 20),
+('2000-01-01 04:00:00-00', 2, '2', 2, 30),
+('2000-01-01 08:00:00-00', 2, '2', 3, 30),
+('2000-01-01 01:00:00-00', 2, '2', 2, 30),
+('2000-01-01 01:00:00-00', 2, '4', 2, 40),
+('2000-01-01 02:00:00-00', 2, '4', 2, 40),
+('2000-01-01 08:00:00-00', 2, '4', 3, 40);
+
+INSERT INTO t2_multi (time, x1, x2, x3, x4) values
+('2000-01-01 03:00:00-00', 1, NULL, 2, 10),
+('2000-01-01 07:00:00-00', 1, NULL, 1, 10),
+('2000-01-01 05:00:00-00', 1, NULL, 1, 10),
+('2000-01-01 04:00:00-00', 1, '3', 1, 20),
+('2000-01-01 03:00:00-00', 1, '3', 3, 20),
+('2000-01-01 07:00:00-00', 1, '3', 1, 20),
+('2000-01-01 03:00:00-00', 2, '2', 2, 30),
+('2000-01-01 03:00:00-00', 2, '2', 5, 30),
+('2000-01-01 07:00:00-00', 2, '2', 1, 30),
+('2000-01-01 03:00:00-00', 2, '4', 3, 40),
+('2000-01-01 06:00:00-00', 2, '4', 3, 40),
+('2000-01-01 07:00:00-00', 2, '4', 1, 40);
+
+INSERT INTO t2_multi (time, x1, x2, x3, x4) values
+('2000-01-01 05:00:00-00', 1, NULL, 2, 10),
+('2000-01-01 07:00:00-00', 1, NULL, 1, 10),
+('2000-01-01 11:00:00-00', 1, NULL, 2, 10),
+('2000-01-01 05:00:00-00', 1, '3', 1, 20),
+('2000-01-01 08:00:00-00', 1, '3', 3, 20),
+('2000-01-01 11:00:00-00', 1, '3', 1, 20),
+('2000-01-01 05:00:00-00', 2, '2', 2, 30),
+('2000-01-01 06:00:00-00', 2, '2', 5, 30),
+('2000-01-01 11:00:00-00', 2, '2', 1, 30),
+('2000-01-01 05:00:00-00', 2, '4', 4, 40),
+('2000-01-01 10:00:00-00', 2, '4', 3, 40),
+('2000-01-01 11:00:00-00', 2, '4', 2, 40);
+
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t2_multi') chunk;
+
+set timezone = 'UTC';
+
+-- matches (segmentby + orderby) order, merges on segmentby key x2 + orderby keys
+:PREFIX
+SELECT x2, time, x3 FROM t2_multi ORDER BY x2, time DESC, x3;
+SELECT x2, time, x3 FROM t2_multi ORDER BY x2, time DESC, x3;
+
+-- matches (segmentby + orderby) reverse order, merges on segmentby key x2 + orderby keys
+:PREFIX
+SELECT x2, time, x3 FROM t2_multi ORDER BY x2 DESC, time, x3 DESC;
+SELECT x2, time, x3 FROM t2_multi ORDER BY x2 DESC, time, x3 DESC;
+
+-- matches (segmentby + orderby), merges on segmentby key x2 + orderby time, can use compressed order
+:PREFIX
+SELECT x1, x2, time FROM t2_multi ORDER BY x1, x2, time DESC;
+SELECT x1, x2, time FROM t2_multi ORDER BY x1, x2, time DESC;
+
+-- matches (segmentby + orderby) in reverse, merges on segmentby key x2 + orderby time
+:PREFIX
+SELECT x1, x2, time FROM t2_multi ORDER BY x1 DESC, x2 DESC, time;
+SELECT x1, x2, time FROM t2_multi ORDER BY x1 DESC, x2 DESC, time;
+
+-- Index quals over segmentby
+SELECT x1, x2, time, x3 FROM t2_multi WHERE x1 > 1 ORDER BY x1, x2, time DESC, x3;
+SELECT x1, x2, time, x3 FROM t2_multi WHERE x2 < '4' ORDER BY x1, x2, time DESC, x3;
+
+-- Vector quals over orderby
+SELECT x1, x2, time, x3 FROM t2_multi WHERE time < '2000-01-01 05:00:00-00' ORDER BY x1, x2, time DESC, x3;
+SELECT x1, x2, time, x3 FROM t2_multi WHERE time < '2000-01-01 05:00:00-00' and x3 > 1 ORDER BY x1, x2, time DESC, x3;
+
+-- Filter out segment (1,3)
+SELECT x1, x2, time, x3, x4 FROM t2_multi WHERE x4 <> 20 ORDER BY x1, x2, time DESC, x3;
+-- Filter out segment (1,NULL)
+SELECT x1, x2, time, x3, x4 FROM t2_multi WHERE x4 > 10 ORDER BY x1, x2, time DESC, x3;
+
 drop table test1 cascade;
 drop table test2 cascade;
 drop table test_segby cascade;
 drop table test_nosegby cascade;
 drop table t2 cascade;
 drop table t2_noseg cascade;
+drop table t2_seg cascade;
+drop table t2_multi cascade;
 
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.debug_require_batch_sorted_merge;
 
 RESET enable_seqscan;
 RESET enable_bitmapscan;
+RESET enable_indexscan;

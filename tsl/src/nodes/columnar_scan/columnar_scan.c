@@ -57,6 +57,11 @@ typedef struct SortInfo
 	bool use_batch_sorted_merge;
 	bool reverse;
 
+	/* Which pathkeys are segmentby columns:
+	 * needed for batch sorted merge cost estimation,
+	 * as segmentwise batch sorted merge has 1 pathkeys segment on a heap at a time */
+	Bitmapset *segmentby_pathkey_columns;
+
 	List *decompressed_sort_pathkeys;
 	QualCost decompressed_sort_pathkeys_cost;
 } SortInfo;
@@ -998,12 +1003,14 @@ smoothstep(double x, double start, double end)
  *
  * The algorithm works as follows:
  *
- *   (1) A sort node is placed below the decompress scan node and on top of the scan
+ *   (1) If sort on ("min" or "max" values) does not match compressed sort order,
+ *       a sort node is placed below the decompress scan node and on top of the scan
  *       on the compressed chunk. This sort node uses the min/max values of the 'order by'
  *       columns from the metadata of the batch to get them into an order which can be
  *       used to merge them.
  *
- *       [Scan on compressed chunk] -> [Sort on min/max values] -> [Decompress and merge]
+ *       [Scan on compressed chunk] -> (if needed) [Sort on min/max values] -> [Decompress and
+ * merge]
  *
  *       For example, the batches are sorted on the min value of the 'order by' metadata
  *       column: [0, 3] [0, 5] [3, 7] [6, 10]
@@ -1032,7 +1039,7 @@ smoothstep(double x, double start, double end)
  */
 static void
 cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_info,
-						ColumnarScanPath *dcpath, Path *compressed_path)
+						const SortInfo *sort_info, ColumnarScanPath *dcpath, Path *compressed_path)
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
@@ -1086,6 +1093,12 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 		 segmentby_attno =
 			 bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
 	{
+		/* For segmentwise batch sorted merge we process batches one pathkey segment at a time,
+		 * i.e. we do not keep open batches for those segments */
+		if (bms_is_member(segmentby_attno, sort_info->segmentby_pathkey_columns))
+		{
+			continue;
+		}
 		char *colname = get_attname(compression_info->chunk_rte->relid,
 									segmentby_attno,
 									/* missing_ok = */ false);
@@ -1554,7 +1567,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	if (sort_info->use_batch_sorted_merge && ts_guc_enable_decompression_sorted_merge)
 	{
 		Assert(!sort_info->use_compressed_sort);
-
 		ColumnarScanPath *path_copy =
 			copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
 
@@ -1570,7 +1582,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 		path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 
-		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
+		cost_batch_sorted_merge(root, compression_info, sort_info, path_copy, compressed_path);
 
 		if (ts_guc_debug_require_batch_sorted_merge == DRO_Force)
 		{
@@ -3245,6 +3257,8 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			}
 
 			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
+			sort_info.segmentby_pathkey_columns =
+				bms_add_member(sort_info.segmentby_pathkey_columns, var->varattno);
 		}
 
 		/*
@@ -3264,19 +3278,16 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		if (bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
 		{
 			/*
-			 * If we didn't have any segmentby columns in pathkeys, try batch sorted merge
+			 * If we didn't have all segmentby columns in pathkeys, try batch sorted merge
 			 * instead.
 			 */
-			if (i == 0)
-			{
-				sort_info.use_batch_sorted_merge =
-					match_pathkeys_to_compression_orderby(pathkeys,
-														  chunk_em_exprs,
-														  /* starting_pathkey_offset = */ 0,
-														  compression_info,
-														  /* for_batch_sorted_merge = */ true,
-														  &sort_info.reverse);
-			}
+			sort_info.use_batch_sorted_merge =
+				match_pathkeys_to_compression_orderby(pathkeys,
+													  chunk_em_exprs,
+													  /* starting_pathkey_offset = */ i,
+													  compression_info,
+													  /* for_batch_sorted_merge = */ true,
+													  &sort_info.reverse);
 			return sort_info;
 		}
 	}
@@ -3294,21 +3305,15 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	if (ts_chunk_is_unordered(chunk))
 	{
 		/*
-		 * If compression has no segmentby columns or all segmentby columns in a query are pinned to
-		 * a Const, try batch sorted merge instead.
+		 * try batch sorted merge instead.
 		 */
-		if (compression_info->num_segmentby_columns == 0 ||
-			bms_num_members(compression_info->chunk_const_segmentby) ==
-				compression_info->num_segmentby_columns)
-		{
-			sort_info.use_batch_sorted_merge =
-				match_pathkeys_to_compression_orderby(pathkeys,
-													  chunk_em_exprs,
-													  /* starting_pathkey_offset = */ 0,
-													  compression_info,
-													  /* for_batch_sorted_merge = */ true,
-													  &sort_info.reverse);
-		}
+		sort_info.use_batch_sorted_merge =
+			match_pathkeys_to_compression_orderby(pathkeys,
+												  chunk_em_exprs,
+												  /* starting_pathkey_offset = */ i,
+												  compression_info,
+												  /* for_batch_sorted_merge = */ true,
+												  &sort_info.reverse);
 		return sort_info;
 	}
 

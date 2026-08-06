@@ -111,7 +111,7 @@ select device, sensor, min(time) from metrics group by device, sensor order by 1
 :PREFIX select device, sensor, first(time,time) from metrics group by device, sensor order by 1,2;
 select device, sensor, first(time,time) from metrics group by device, sensor order by 1,2;
 
--- Cannot use compressed sort on unordered chunk when sort keys contain non-segmentby keys
+-- Can use compressed sort order on unordered chunk with segmentwise batch sorted merge
 :PREFIX select device, sensor, time from metrics group by device, sensor, time order by 1,2, time DESC;
 select device, sensor, time from metrics group by device, sensor, time order by 1,2, time DESC;
 
