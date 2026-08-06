@@ -146,3 +146,63 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
     ADD CONSTRAINT continuous_aggs_watermark_mat_hypertable_id_fkey
         FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id) ON DELETE CASCADE;
 -- end rebuild _timescaledb_catalog.continuous_agg --
+
+--
+-- BEGIN repair mismatched dimensional CHECK constraints
+--
+
+-- A chunk merge on TimescaleDB 2.27 or earlier repointed the chunk_constraint
+-- catalog row to the new dimension slice but never renamed the physical CHECK
+-- constraint, so its name kept the original slice id. Since 2.28 the dimensional
+-- CHECK is located purely by the name constraint_<slice_id>, so such a mismatched
+-- CHECK becomes orphaned. A later merge then adds the correctly named CHECK on
+-- top and the chunk ends up with two dimensional CHECKs, where the stale narrower
+-- one rejects otherwise valid rows. Reconcile these chunks here.
+DO $$
+DECLARE
+  r RECORD;
+  orphan_slice_id int;
+BEGIN
+  -- Every dimensional CHECK named constraint_<id> where <id> is not a current
+  -- slice of the chunk.
+  FOR r IN
+    SELECT pg_catalog.format('%I.%I', c.schema_name, c.table_name) AS chunk_table,
+           pc.conrelid, pc.conname AS stale_name, c.id AS chunk_id
+    FROM _timescaledb_catalog.chunk c
+    JOIN pg_catalog.pg_constraint pc
+      ON pc.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
+     AND pc.contype = 'c'
+     AND pc.conname ~ '^constraint_[0-9]+$'
+    WHERE
+      NOT EXISTS (
+        SELECT 1 FROM _timescaledb_catalog.dimension_slice ds
+        WHERE ds.chunk_id = c.id
+          AND ds.id = substring(pc.conname FROM '^constraint_([0-9]+)$')::int)
+  LOOP
+    -- A slice of the chunk that has no correctly named CHECK. If one exists the
+    -- stale CHECK is that slice's constraint under an old name, so rename it.
+    -- Otherwise the stale CHECK is a duplicate of an existing one and is dropped.
+    SELECT ds.id INTO orphan_slice_id
+    FROM _timescaledb_catalog.dimension_slice ds
+    WHERE ds.chunk_id = r.chunk_id
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_constraint pc
+        WHERE pc.conrelid = r.conrelid
+          AND pc.conname = pg_catalog.format('constraint_%s', ds.id)::name)
+    LIMIT 1;
+
+    IF orphan_slice_id IS NULL THEN
+      EXECUTE pg_catalog.format('ALTER TABLE %s DROP CONSTRAINT %I',
+                                r.chunk_table, r.stale_name);
+    ELSE
+      EXECUTE pg_catalog.format('ALTER TABLE %s RENAME CONSTRAINT %I TO %I',
+                                r.chunk_table, r.stale_name,
+                                pg_catalog.format('constraint_%s', orphan_slice_id));
+    END IF;
+  END LOOP;
+END
+$$;
+
+--
+-- END repair mismatched dimensional CHECK constraints
+--
