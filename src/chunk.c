@@ -1024,13 +1024,40 @@ get_hypertable_publication_filters(Oid puboid, const Chunk *chunk, List **column
 	ReleaseSysCache(pubtuple);
 }
 
+/* Synthetic ALTER PUBLICATION ... ADD TABLE for the event triggers to inspect. */
+static AlterPublicationStmt *
+make_chunk_publication_add_stmt(Oid puboid, const Chunk *chunk, List *columns, Node *whereClause)
+{
+	PublicationTable *pubtable = makeNode(PublicationTable);
+	PublicationObjSpec *pubobj = makeNode(PublicationObjSpec);
+	AlterPublicationStmt *stmt = makeNode(AlterPublicationStmt);
+
+	pubtable->relation =
+		makeRangeVar(ts_chunk_get_schema_name(chunk), ts_chunk_get_table_name(chunk), -1);
+	pubtable->whereClause = whereClause;
+	pubtable->columns = columns;
+
+	pubobj->pubobjtype = PUBLICATIONOBJ_TABLE;
+	pubobj->pubtable = pubtable;
+	pubobj->location = -1;
+
+	stmt->pubname = GetPublication(puboid)->name;
+	stmt->pubobjects = list_make1(pubobj);
+	stmt->action = AP_AddObjects;
+
+	return stmt;
+}
+
+/* emit_ddl_events reports the implicit ALTER PUBLICATION to event triggers.
+ * Reconcile callers pass false; they already run inside a user DDL statement. */
 static void
-chunk_add_to_publication(Oid puboid, const Chunk *chunk)
+chunk_add_to_publication(Oid puboid, const Chunk *chunk, bool emit_ddl_events)
 {
 	PublicationRelInfo pri = { 0 };
-	Relation chunk_rel;
 	List *columns = NIL;
 	Node *whereClause = NULL;
+	volatile Relation chunk_rel;
+	volatile bool complete_query_started = false;
 
 	/* publication_add_relation errors on duplicates; the chunk may already be
 	 * an explicit member (user-added or backfilled by an earlier reconcile). */
@@ -1049,13 +1076,47 @@ chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 	pri.columns = columns;
 	pri.whereClause = whereClause;
 
+	const bool emit_events = emit_ddl_events && ts_guc_enable_event_triggers;
+	AlterPublicationStmt *stmt =
+		emit_events ? make_chunk_publication_add_stmt(puboid, chunk, columns, whereClause) : NULL;
+
+	if (emit_events)
+	{
+		complete_query_started = EventTriggerBeginCompleteQuery();
+	}
+
+	PG_TRY();
+	{
+		if (emit_events)
+		{
+			EventTriggerDDLCommandStart((Node *) stmt);
+		}
+
 #if PG19_GE
-	publication_add_relation(puboid, &pri, true, NULL);
+		ObjectAddress pubaddress = publication_add_relation(puboid, &pri, true, NULL);
 #else
-	publication_add_relation(puboid, &pri, true);
+		ObjectAddress pubaddress = publication_add_relation(puboid, &pri, true);
 #endif
 
-	table_close(chunk_rel, AccessShareLock);
+		if (emit_events)
+		{
+			/* An invalid address means the row already existed. */
+			if (OidIsValid(pubaddress.objectId))
+			{
+				EventTriggerCollectSimpleCommand(pubaddress, InvalidObjectAddress, (Node *) stmt);
+			}
+			EventTriggerDDLCommandEnd((Node *) stmt);
+		}
+	}
+	PG_FINALLY();
+	{
+		if (complete_query_started)
+		{
+			EventTriggerEndCompleteQuery();
+		}
+		table_close(chunk_rel, AccessShareLock);
+	}
+	PG_END_TRY();
 }
 
 static void
@@ -1071,11 +1132,20 @@ chunk_add_to_publications(const Chunk *chunk)
 	ListCell *lc;
 	foreach (lc, puboids)
 	{
-		if (list_member_oid(chunk_schema_pubs, lfirst_oid(lc)))
+		Oid puboid = lfirst_oid(lc);
+
+		if (list_member_oid(chunk_schema_pubs, puboid))
 		{
 			continue;
 		}
-		chunk_add_to_publication(lfirst_oid(lc), chunk);
+
+		/* An earlier iteration's ddl_command_end may have dropped this one. */
+		if (!SearchSysCacheExists1(PUBLICATIONOID, ObjectIdGetDatum(puboid)))
+		{
+			continue;
+		}
+
+		chunk_add_to_publication(puboid, chunk, true);
 	}
 }
 
@@ -1144,7 +1214,7 @@ ts_chunk_publication_reconcile_schema_chunks(Oid pubid, List *schema_oids, bool 
 															 chunk->hypertable_relid)),
 														 pubid))
 					{
-						chunk_add_to_publication(pubid, chunk);
+						chunk_add_to_publication(pubid, chunk, false);
 					}
 				}
 				continue;
@@ -1170,7 +1240,7 @@ ts_chunk_publication_reconcile_schema_chunks(Oid pubid, List *schema_oids, bool 
 					{
 						continue;
 					}
-					chunk_add_to_publication(pubid, chunk);
+					chunk_add_to_publication(pubid, chunk, false);
 				}
 				else
 				{
@@ -1236,7 +1306,7 @@ ts_chunk_publication_reconcile_ht_schema_change(int32 hypertable_id, Oid old_sch
 		{
 			if (!list_member_oid(chunk_schema_pubs, lfirst_oid(pc)))
 			{
-				chunk_add_to_publication(lfirst_oid(pc), chunk);
+				chunk_add_to_publication(lfirst_oid(pc), chunk, false);
 			}
 		}
 	}
