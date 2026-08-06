@@ -1,0 +1,1 @@
+Implements: Emit ALTER PUBLICATION ddl_command_start/end events when enable_chunk_auto_publication adds a chunk to a publication
