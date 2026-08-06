@@ -5,6 +5,7 @@ set(TEST_FILES
     alternate_users.sql
     baserel_cache.sql
     chunk_publication.sql
+    chunk_publication_ddl_events.sql
     chunk_utils.sql
     chunks.sql
     cluster.sql
