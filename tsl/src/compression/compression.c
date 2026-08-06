@@ -7,6 +7,7 @@
 #include <access/attmap.h>
 #include <access/attnum.h>
 #include <access/detoast.h>
+#include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/skey.h>
 #include <access/tupdesc.h>
@@ -48,6 +49,7 @@
 #include "debug_assert.h"
 #include "debug_point.h"
 #include "guc.h"
+#include "import/compression_toast.h"
 #include "nodes/modify_hypertable.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
@@ -1778,11 +1780,18 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 	}
 
 	Assert(writer->bistate != NULL);
-	heap_insert(writer->out_rel,
-				compressed_tuple,
-				writer->mycid,
-				writer->insert_options /*=options*/,
-				writer->bistate);
+	if (ts_guc_use_custom_toaster)
+	{
+		compression_heap_insert(writer, compressed_tuple);
+	}
+	else
+	{
+		heap_insert(writer->out_rel,
+					compressed_tuple,
+					writer->mycid,
+					writer->insert_options,
+					writer->bistate);
+	}
 	if (writer->indexstate->ri_NumIndices > 0)
 	{
 		ts_catalog_index_insert(writer->indexstate, compressed_tuple);
@@ -2015,6 +2024,7 @@ bulk_writer_close(BulkWriter *writer)
 	{
 		CatalogCloseIndexes(writer->indexstate);
 	}
+	compression_toast_writer_close(writer);
 	FreeExecutorState(writer->estate);
 }
 

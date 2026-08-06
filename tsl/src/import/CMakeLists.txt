@@ -1,4 +1,4 @@
-set(SOURCES)
+set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/compression_toast.c)
 
 if(USE_UMASH)
   list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/umash.c)

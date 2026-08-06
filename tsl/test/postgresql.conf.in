@@ -31,6 +31,9 @@ log_min_messages='INFO'
 # This breaks isolation tests, not sure why the statements end in
 # the isolation tester output.
 log_statement='all'
+# Include custom toaster in our tests 
+# remove this once we switch the GUC to ON by default
+timescaledb.use_custom_toaster=true
 
 # Some tests use logical entries in WAL
 wal_level = logical
