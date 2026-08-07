@@ -21,6 +21,7 @@
 #include <utils/tuplestore.h>
 
 #include "bgw_policy/policies_v2.h"
+#include "chunk.h"
 #include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -58,7 +59,6 @@ typedef struct CaggRefreshSpiContext
 	int save_nestlevel;
 } CaggRefreshSpiContext;
 
-static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
 static InternalTimeRange get_largest_bucketed_window(Oid timetype, int64 bucket_width);
 static InternalTimeRange
 compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
@@ -84,7 +84,7 @@ static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
 												   const ContinuousAggRefreshContext context,
 												   bool bucketing_refresh_window);
-static Hypertable *
+Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
 {
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
@@ -1143,6 +1143,37 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			refresh_window.end = computed_invalidation_threshold_for_cagg;
 		}
 
+		/*
+		 * Cap the refresh window start at the earliest chunk when the
+		 * hypertable has tiered data but reads are disabled.
+		 *
+		 * Without this cap the refresh window may begin before the
+		 * earliest chunk, causing invalidations in that range to be
+		 * processed and removed. By raising the start to the earliest
+		 * chunk boundary we preserve those earlier invalidations so
+		 * they can be processed later when tiered reads are re-enabled.
+		 *
+		 * We only apply the cap when tiered data exists but reads are
+		 * off, because in that case the refresh cannot see the tiered
+		 * data and would still consume the invalidations. When tiered
+		 * reads are on (or there is no tiered data), no cap is needed.
+		 */
+		if (!ts_guc_enable_osm_reads)
+		{
+			int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(cagg->data.raw_hypertable_id);
+
+			if (osm_chunk_id != INVALID_CHUNK_ID)
+			{
+				int64 earliest_start =
+					invalidation_get_earliest_chunk_start(cagg->data.raw_hypertable_id);
+
+				if (earliest_start > refresh_window.start)
+				{
+					refresh_window.start = earliest_start;
+				}
+			}
+		}
+
 		/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
 		 * case.
 		 *
@@ -1258,7 +1289,17 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	if (refresh_window.start_isnull)
 	{
 		debug_refresh_window(cagg, &refresh_window, "START IS NULL");
-		DimensionSlice *slice = ts_dimension_slice_nth_earliest_slice(time_dim->fd.id, 1);
+		DimensionSlice *slice;
+		// If tiered reads are disabled, we cap the refresh window to the start of the hypertable
+		// Get the earliest *non-osm* slice in this scenario.
+		if (!ts_guc_enable_osm_reads)
+		{
+			slice = ts_dimension_slice_earliest_non_osm_slice(time_dim->fd.id);
+		}
+		else
+		{
+			slice = ts_dimension_slice_nth_earliest_slice(time_dim->fd.id, 1);
+		}
 
 		/* If still there's no MIN slice range start then return no batches */
 		if (NULL == slice || TS_TIME_IS_MIN(slice->fd.range_start, refresh_window.type) ||

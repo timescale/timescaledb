@@ -17,6 +17,7 @@
 /* Default refresh newest first */
 #define DEFAULT_REFRESH_NEWEST_FIRST true
 
+Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern void continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_window,
 										   ContinuousAggRefreshContext context,

@@ -83,6 +83,7 @@ extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 
 
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n);
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_earliest_slice(int32 dimension_id, int n);
+extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_earliest_non_osm_slice(int32 dimension_id);
 extern TSDLLEXPORT int32 ts_dimension_slice_oldest_valid_chunk_for_reorder(
 	int32 job_id, int32 dimension_id, int skip_newest_distinct_buckets);
 extern TSDLLEXPORT List *ts_dimension_slice_get_chunkids_to_compress(
