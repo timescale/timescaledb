@@ -79,6 +79,7 @@
 #include "hypertable_cache.h"
 #include "indexing.h"
 #include "license_guc.h"
+#include "loader/loader.h"
 #include "partition_chunk.h"
 #include "partitioning.h"
 #include "process_utility.h"
@@ -107,6 +108,7 @@ void _process_utility_init(void);
 void _process_utility_fini(void);
 
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
+static TsProcessUtilityRendezvous *process_utility_rendezvous = NULL;
 
 static bool expect_chunk_modification = false;
 static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
@@ -6720,8 +6722,30 @@ process_utility_subxact_abort(SubXactEvent event, SubTransactionId mySubid,
 void
 _process_utility_init(void)
 {
-	prev_ProcessUtility_hook = ProcessUtility_hook;
-	ProcessUtility_hook = timescaledb_ddl_command_start;
+	TsProcessUtilityRendezvous **rendezvous =
+		(TsProcessUtilityRendezvous **) find_rendezvous_variable(RENDEZVOUS_PROCESS_UTILITY_HOOK);
+
+	/*
+	 * Prefer the loader's ProcessUtility slot when available. That keeps
+	 * TimescaleDB last in the hook chain (when listed first in
+	 * shared_preload_libraries) so earlier extensions such as pgaudit can
+	 * establish per-statement state before we run commands like COPY that
+	 * call ExecCheckPermissions without chaining to other ProcessUtility
+	 * hooks.
+	 */
+	if (*rendezvous != NULL)
+	{
+		process_utility_rendezvous = *rendezvous;
+		prev_ProcessUtility_hook = process_utility_rendezvous->prev_hook;
+		process_utility_rendezvous->versioned_hook = timescaledb_ddl_command_start;
+	}
+	else
+	{
+		/* Fallback when the loader rendezvous is absent (should not happen). */
+		prev_ProcessUtility_hook = ProcessUtility_hook;
+		ProcessUtility_hook = timescaledb_ddl_command_start;
+	}
+
 	RegisterXactCallback(process_utility_xact_abort, NULL);
 	RegisterSubXactCallback(process_utility_subxact_abort, NULL);
 }
@@ -6729,7 +6753,16 @@ _process_utility_init(void)
 void
 _process_utility_fini(void)
 {
-	ProcessUtility_hook = prev_ProcessUtility_hook;
+	if (process_utility_rendezvous != NULL)
+	{
+		process_utility_rendezvous->versioned_hook = NULL;
+		process_utility_rendezvous = NULL;
+	}
+	else
+	{
+		ProcessUtility_hook = prev_ProcessUtility_hook;
+	}
+
 	UnregisterXactCallback(process_utility_xact_abort, NULL);
 	UnregisterSubXactCallback(process_utility_subxact_abort, NULL);
 }

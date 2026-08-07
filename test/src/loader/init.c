@@ -6,6 +6,7 @@
 #include <postgres.h>
 
 #include <access/xact.h>
+#include <catalog/namespace.h>
 #include <config.h>
 #ifndef WIN32
 #include <access/parallel.h>
@@ -13,11 +14,17 @@
 #include "compat/compat.h"
 #include "export.h"
 #include "extension.h"
+#include "extension_constants.h"
+#include "loader/loader.h"
 #include <commands/extension.h>
 #include <miscadmin.h>
+#include <nodes/nodes.h>
+#include <nodes/parsenodes.h>
 #include <parser/analyze.h>
+#include <tcop/utility.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
+#include <utils/lsyscache.h>
 
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)
@@ -31,6 +38,9 @@ void ts_license_guc_assign_hook(const char *newval, void *extra);
 
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
+static ProcessUtility_hook_type prev_ProcessUtility_hook;
+static TsProcessUtilityRendezvous *process_utility_rendezvous = NULL;
+
 static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
@@ -40,9 +50,67 @@ cache_invalidate_callback(Datum arg, Oid relid)
 	}
 }
 
+/*
+ * Mock ProcessUtility published through the loader rendezvous so tests can
+ * verify TimescaleDB stays last in the hook chain when another extension
+ * (e.g. timescaledb_osm) installs itself as the head.
+ */
+static void
+mock_process_utility_hook(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
+						  ProcessUtilityContext context, ParamListInfo params,
+						  QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
+{
+	if (nodeTag(pstmt->utilityStmt) == T_DropStmt)
+	{
+		DropStmt *stmt = (DropStmt *) pstmt->utilityStmt;
+
+		if (stmt->removeType == OBJECT_TABLE)
+		{
+			ListCell *lc;
+
+			foreach (lc, stmt->objects)
+			{
+				RangeVar *relation = makeRangeVarFromNameList(lfirst(lc));
+
+				if (relation != NULL)
+				{
+					Oid relid = RangeVarGetRelid(relation, NoLock, true);
+
+					elog(NOTICE,
+						 "mock-%s got DROP TABLE '%s'",
+						 TIMESCALEDB_VERSION_MOD,
+						 get_rel_name(relid));
+				}
+			}
+		}
+	}
+
+	if (prev_ProcessUtility_hook)
+		prev_ProcessUtility_hook(pstmt,
+								 queryString,
+								 readOnlyTree,
+								 context,
+								 params,
+								 queryEnv,
+								 dest,
+								 qc);
+	else
+		standard_ProcessUtility(pstmt,
+								queryString,
+								readOnlyTree,
+								context,
+								params,
+								queryEnv,
+								dest,
+								qc);
+}
+
 void
 _PG_init(void)
 {
+	TsProcessUtilityRendezvous **rendezvous =
+		(TsProcessUtilityRendezvous **) find_rendezvous_variable(RENDEZVOUS_PROCESS_UTILITY_HOOK);
+
 	/*
 	 * Check extension_is loaded to catch certain errors such as calls to
 	 * functions defined on the wrong extension version
@@ -66,6 +134,24 @@ _PG_init(void)
 	}
 #endif
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
+
+	/*
+	 * Register ProcessUtility through the loader rendezvous when available so
+	 * TimescaleDB remains last in the hook chain (matching the real
+	 * extension). Fall back to installing as the head when the rendezvous is
+	 * absent.
+	 */
+	if (*rendezvous != NULL)
+	{
+		process_utility_rendezvous = *rendezvous;
+		prev_ProcessUtility_hook = process_utility_rendezvous->prev_hook;
+		process_utility_rendezvous->versioned_hook = mock_process_utility_hook;
+	}
+	else
+	{
+		prev_ProcessUtility_hook = ProcessUtility_hook;
+		ProcessUtility_hook = mock_process_utility_hook;
+	}
 }
 
 /* mock for extension.c */

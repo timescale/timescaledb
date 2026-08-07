@@ -210,7 +210,8 @@ SELECT count(*) FROM test;
 
 CREATE EXTENSION timescaledb_osm VERSION 'mock-1';
 
--- Test that OSM process utility hook works:  it should see this DROP TABLE.
+-- Test ProcessUtility hook order: OSM (head) must run before TimescaleDB
+-- (loader slot / last). Both should see this DROP TABLE.
 DROP TABLE test;
 
 -- clean up additional database
