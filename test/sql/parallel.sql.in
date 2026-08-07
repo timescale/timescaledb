@@ -167,10 +167,12 @@ RESET max_parallel_workers_per_gather;
 ALTER TABLE :CHUNK1 SET (parallel_workers=0);
 ALTER TABLE :CHUNK2 SET (parallel_workers=2);
 :PREFIX SELECT count(*) FROM "test" WHERE i > 400000 AND length(version()) > 0;
+SELECT count(*) FROM "test" WHERE i > 400000 AND length(version()) > 0;
 
 ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=0);
 :PREFIX SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
+SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
 
 -- Verify result correctness with mixed partial/non-partial subplans.
 -- chunk1 is partial (parallel_workers=2), chunk2 is non-partial (parallel_workers=0).
@@ -239,4 +241,34 @@ RESET max_parallel_workers_per_gather;
 
 -- this won't be parallel query because now() is parallel restricted in PG < 12
 :PREFIX SELECT i FROM "test" WHERE ts < now();
+
+-- test parallel ChunkAppend with InitPlan params (runtime exclusion)
+-- Filter on j (non-partitioning column) so that the planner produces a
+-- parallel-aware ChunkAppend with runtime_exclusion_parent but without
+-- startup_exclusion. Filtering on the partitioning column i would enable
+-- runtime_exclusion_children, making the planner pick Single Copy mode
+-- (non-parallel ChunkAppend) which does not exercise the shared-memory
+-- subplan coordination path.
+SET max_parallel_workers_per_gather = 2;
+SET parallel_tuple_cost = 0;
+SET parallel_setup_cost = 0;
+SET min_parallel_table_scan_size = 0;
+
+-- get the sequential result for comparison
+SET max_parallel_workers_per_gather = 0;
+SELECT count(*) AS expected FROM "test" WHERE j = (SELECT max(j) FROM "test") \gset
+
+-- parallel with leader participation
+SET max_parallel_workers_per_gather = 2;
+SELECT count(*) = :expected AS leader_ok FROM "test" WHERE j = (SELECT max(j) FROM "test");
+
+-- parallel with only workers (leader does not participate)
+SET parallel_leader_participation = off;
+SELECT count(*) = :expected AS workers_ok FROM "test" WHERE j = (SELECT max(j) FROM "test");
+RESET parallel_leader_participation;
+
+RESET max_parallel_workers_per_gather;
+RESET parallel_tuple_cost;
+RESET parallel_setup_cost;
+RESET min_parallel_table_scan_size;
 

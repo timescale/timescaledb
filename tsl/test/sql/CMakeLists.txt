@@ -10,6 +10,7 @@ set(TEST_FILES
     cagg_add_column.sql
     cagg_ddl.sql
     cagg_direct_compress.sql
+    chunk_append_space_runtime_exclusion.sql
     cagg_errors.sql
     cagg_granular_refresh_api.sql
     cagg_invalidation.sql
