@@ -29,6 +29,7 @@ BatchMetadataBuilder *batch_metadata_builder_minmax_create(Oid type, Oid collati
 														   int max_attr_offset);
 
 BatchMetadataBuilder *batch_metadata_builder_bloom1_create(int num_columns, const Oid *type_oids,
+														   const Oid *collation_oids,
 														   const AttrNumber *attnums,
 														   int bloom_attr_offset);
 
@@ -44,12 +45,12 @@ typedef struct Bloom1Hasher
 	int num_columns;
 } Bloom1Hasher;
 
-Bloom1Hasher *bloom1_hasher_create(const Oid *type_oids, int num_columns);
+Bloom1Hasher *bloom1_hasher_create(const Oid *type_oids, const Oid *collation_oids, int num_columns);
 
 /* Shared utilities between metadata builders */
 int batch_metadata_builder_bloom1_varlena_size(void);
 uint64 batch_metadata_builder_bloom1_calculate_hash(PGFunction hash_function, FmgrInfo *finfo,
-													Datum needle);
+													Datum needle, Oid collation);
 void batch_metadata_builder_bloom1_update_bloom_filter_with_hash(void *varlena_ptr, uint64 hash);
 void batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *bloom_varlena,
 																		 int16 bloom_attr_offset,
