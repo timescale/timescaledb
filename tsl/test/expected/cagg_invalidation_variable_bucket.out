@@ -810,13 +810,72 @@ ORDER BY bucket;
          bucket         | cnt 
 ------------------------+-----
  2025-01-01 00:00:00+00 |  92
- 2025-04-01 00:00:00+00 |  91
+ 2025-04-01 00:00:00+00 |  92
 
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_hier_quarterly';
       cagg_name      |      inval_start       |           inval_end           
 ---------------------+------------------------+-------------------------------
  cagg_hier_quarterly | -infinity              | 2024-12-31 23:59:59.999999+00
  cagg_hier_quarterly | 2026-01-01 00:00:00+00 | infinity
+
+-----------------------------------------------------------------------
+-- SECTION 9: Invalidation ending exactly on a bucket start
+-- With a named timezone the buckets start at local midnight, which is
+-- the shape reported in #10296. Both rows are written by one statement
+-- into one chunk so that they form a single invalidation entry.
+-----------------------------------------------------------------------
+CREATE TABLE boundary_data (
+    time TIMESTAMPTZ NOT NULL,
+    value FLOAT
+);
+SELECT create_hypertable('boundary_data', 'time', chunk_time_interval => INTERVAL '1 year');
+      create_hypertable      
+-----------------------------
+ (20,public,boundary_data,t)
+
+CREATE MATERIALIZED VIEW cagg_boundary
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 day'::interval, time, 'Europe/Berlin') AS bucket,
+       count(*) AS cnt
+FROM boundary_data
+GROUP BY 1
+WITH NO DATA;
+INSERT INTO boundary_data
+SELECT ts, 1.0
+FROM generate_series('2024-06-01 00:00:00+02'::timestamptz,
+                     '2024-06-10 12:00:00+02'::timestamptz,
+                     '12 hours'::interval) ts;
+CALL refresh_continuous_aggregate('cagg_boundary', NULL, NULL);
+SELECT bucket, cnt FROM cagg_boundary
+WHERE bucket >= '2024-06-04 00:00:00+02' AND bucket < '2024-06-09 00:00:00+02'
+ORDER BY bucket;
+         bucket         | cnt 
+------------------------+-----
+ 2024-06-03 22:00:00+00 |   2
+ 2024-06-04 22:00:00+00 |   2
+ 2024-06-05 22:00:00+00 |   2
+ 2024-06-06 22:00:00+00 |   2
+ 2024-06-07 22:00:00+00 |   2
+
+-- The later row is local midnight, which is exactly a bucket start
+INSERT INTO boundary_data VALUES ('2024-06-05 09:00:00+02', 111.0),
+                                 ('2024-06-08 00:00:00+02', 222.0);
+SELECT * FROM hyper_inval_log WHERE hypertable = 'boundary_data';
+  hypertable   |      inval_start       |       inval_end        
+---------------+------------------------+------------------------
+ boundary_data | 2024-06-05 07:00:00+00 | 2024-06-07 22:00:00+00
+
+CALL refresh_continuous_aggregate('cagg_boundary', NULL, NULL);
+SELECT bucket, cnt FROM cagg_boundary
+WHERE bucket >= '2024-06-04 00:00:00+02' AND bucket < '2024-06-09 00:00:00+02'
+ORDER BY bucket;
+         bucket         | cnt 
+------------------------+-----
+ 2024-06-03 22:00:00+00 |   2
+ 2024-06-04 22:00:00+00 |   3
+ 2024-06-05 22:00:00+00 |   2
+ 2024-06-06 22:00:00+00 |   2
+ 2024-06-07 22:00:00+00 |   3
 
 DROP MATERIALIZED VIEW cagg_hier_quarterly;
 NOTICE:  drop cascades to 2 other objects
@@ -847,5 +906,8 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_75_chunk
 DROP TABLE hier_data CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 3 other objects
+DROP TABLE boundary_data CASCADE;
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_95_chunk
 DROP VIEW hyper_inval_log;
 DROP VIEW cagg_inval_log;

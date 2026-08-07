@@ -1,0 +1,1 @@
+Fixes: #10296 Fix continuous aggregate refresh skipping the last bucket for variable-sized buckets

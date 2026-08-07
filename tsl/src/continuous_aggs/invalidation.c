@@ -507,6 +507,12 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 
 	if (bucket_function->bucket_fixed_interval == false)
 	{
+		if (inv->greatest_modified_value != INVAL_POS_INFINITY &&
+			inv->greatest_modified_value != INVAL_NEG_INFINITY)
+		{
+			inv->greatest_modified_value = int64_saturating_add(inv->greatest_modified_value, 1);
+		}
+
 		ts_compute_circumscribed_bucketed_refresh_window_variable(&inv->lowest_modified_value,
 																  &inv->greatest_modified_value,
 																  bucket_function);

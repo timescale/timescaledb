@@ -612,6 +612,49 @@ ORDER BY bucket;
 
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_hier_quarterly';
 
+-----------------------------------------------------------------------
+-- SECTION 9: Invalidation ending exactly on a bucket start
+-- With a named timezone the buckets start at local midnight, which is
+-- the shape reported in #10296. Both rows are written by one statement
+-- into one chunk so that they form a single invalidation entry.
+-----------------------------------------------------------------------
+
+CREATE TABLE boundary_data (
+    time TIMESTAMPTZ NOT NULL,
+    value FLOAT
+);
+SELECT create_hypertable('boundary_data', 'time', chunk_time_interval => INTERVAL '1 year');
+
+CREATE MATERIALIZED VIEW cagg_boundary
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 day'::interval, time, 'Europe/Berlin') AS bucket,
+       count(*) AS cnt
+FROM boundary_data
+GROUP BY 1
+WITH NO DATA;
+
+INSERT INTO boundary_data
+SELECT ts, 1.0
+FROM generate_series('2024-06-01 00:00:00+02'::timestamptz,
+                     '2024-06-10 12:00:00+02'::timestamptz,
+                     '12 hours'::interval) ts;
+
+CALL refresh_continuous_aggregate('cagg_boundary', NULL, NULL);
+SELECT bucket, cnt FROM cagg_boundary
+WHERE bucket >= '2024-06-04 00:00:00+02' AND bucket < '2024-06-09 00:00:00+02'
+ORDER BY bucket;
+
+-- The later row is local midnight, which is exactly a bucket start
+INSERT INTO boundary_data VALUES ('2024-06-05 09:00:00+02', 111.0),
+                                 ('2024-06-08 00:00:00+02', 222.0);
+
+SELECT * FROM hyper_inval_log WHERE hypertable = 'boundary_data';
+
+CALL refresh_continuous_aggregate('cagg_boundary', NULL, NULL);
+SELECT bucket, cnt FROM cagg_boundary
+WHERE bucket >= '2024-06-04 00:00:00+02' AND bucket < '2024-06-09 00:00:00+02'
+ORDER BY bucket;
+
 DROP MATERIALIZED VIEW cagg_hier_quarterly;
 DROP TABLE monthly_data CASCADE;
 DROP TABLE yearly_data CASCADE;
@@ -622,6 +665,7 @@ DROP TABLE offset_tz_data CASCADE;
 DROP TABLE origin_data CASCADE;
 DROP TABLE origin_tz_data CASCADE;
 DROP TABLE hier_data CASCADE;
+DROP TABLE boundary_data CASCADE;
 
 DROP VIEW hyper_inval_log;
 DROP VIEW cagg_inval_log;
