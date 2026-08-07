@@ -53,7 +53,7 @@ cache_invalidate_callback(Datum arg, Oid relid)
 /*
  * Mock ProcessUtility published through the loader rendezvous so tests can
  * verify TimescaleDB stays last in the hook chain when another extension
- * (e.g. timescaledb_osm) installs itself as the head.
+ * installs itself as the head (see timescaledb_pu_probe and timescaledb_osm).
  */
 static void
 mock_process_utility_hook(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
