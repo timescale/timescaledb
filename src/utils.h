@@ -402,3 +402,7 @@ extern TSDLLEXPORT char *ts_list_to_string(List *list, append_cell_func append);
 extern TSDLLEXPORT List *ts_find_aggrefs(Node *node);
 extern TSDLLEXPORT bool ts_is_time_bucket_function(Expr *node);
 extern TSDLLEXPORT bool ts_get_attnotnull(Oid relid, AttrNumber attno);
+
+extern TransactionId ts_relation_max_modifying_xid(Oid relid);
+extern bool ts_relation_xid_blocks_logical_slot(TransactionId max_xid, NameData *blocking_slot,
+												TransactionId *blocking_catalog_xmin);

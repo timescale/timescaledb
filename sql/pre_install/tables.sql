@@ -37,6 +37,15 @@
 -- chunks.
 -- The unique constraint is table_name +schema_name. The ordering is
 -- important as we want index access when we filter by table_name
+--
+-- NOTE: the 'hypertable' catalog table is marked as a user catalog table to
+-- support logical replication. If it is re-created in an upgrade script, the
+-- script should first call the function below: it aborts the upgrade when
+-- a logical replication slot still has undecoded changes to this table.
+--
+--  SELECT _timescaledb_functions.ensure_catalog_replication(
+--      '_timescaledb_catalog.hypertable'
+--  );
 CREATE SEQUENCE _timescaledb_catalog.hypertable_id_seq MINVALUE 1;
 
 CREATE TABLE _timescaledb_catalog.hypertable (
@@ -116,6 +125,15 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 -- the chunk's hypercube. Tuples that fall within the chunk's
 -- hypercube are stored in the chunk's data table, as given by
 -- 'schema_name' and 'table_name'.
+--
+-- NOTE: the 'chunk' catalog table is marked as a user catalog table to support
+-- logical replication. If it is re-created in an upgrade script, the script
+-- should first call the function below: it aborts the upgrade when a logical
+-- replication slot still has undecoded changes to this table.
+--
+--  SELECT _timescaledb_functions.ensure_catalog_replication(
+--      '_timescaledb_catalog.chunk'
+--  );
 CREATE SEQUENCE _timescaledb_catalog.chunk_id_seq MINVALUE 1;
 
 CREATE TABLE _timescaledb_catalog.chunk (

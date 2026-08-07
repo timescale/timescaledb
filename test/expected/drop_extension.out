@@ -120,3 +120,96 @@ SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
 -------------
  timescaledb
 
+-- A logical replication slot with pending (undecoded) changes to the
+-- TimescaleDB catalog tables (hypertable, chunk) must block both DROP EXTENSION
+-- (process utility hook) and the ensure_catalog_replication() check,
+-- since dropping those user_catalog_tables would make the slot undecodable.
+-- The error detail prints non-deterministic transaction ids, so only show the
+-- primary error message.
+\set VERBOSITY terse
+-- A hypertable and chunk created before any logical replication slot
+CREATE TABLE metrics(time timestamptz NOT NULL, value float8);
+SELECT create_hypertable('metrics', 'time');
+  create_hypertable   
+----------------------
+ (1,public,metrics,t)
+
+INSERT INTO metrics VALUES ('2024-01-01', 1.0);
+SELECT slot_name FROM pg_create_logical_replication_slot('test_slot', 'test_decoding');
+ slot_name 
+-----------
+ test_slot
+
+-- No pending catalog changes yet in the replication slot, the check should pass
+SELECT _timescaledb_functions.ensure_catalog_replication('_timescaledb_catalog.hypertable');
+ ensure_catalog_replication 
+----------------------------
+ 
+
+SELECT _timescaledb_functions.ensure_catalog_replication('_timescaledb_catalog.chunk');
+ ensure_catalog_replication 
+----------------------------
+ 
+
+-- Modify the hypertable catalog table after the slot was created.
+CREATE TABLE metrics2(time timestamptz NOT NULL, value float8);
+SELECT create_hypertable('metrics2', 'time');
+   create_hypertable   
+-----------------------
+ (2,public,metrics2,t)
+
+-- The slot now has pending changes against the hypertable table: both the SQL
+-- function and DROP EXTENSION must error. The chunk table is untouched since
+-- slot creation and still validates.
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.ensure_catalog_replication('_timescaledb_catalog.hypertable');
+ERROR:  cannot modify relation "hypertable" while logical replication slot "test_slot" still has pending changes against it
+DROP EXTENSION timescaledb CASCADE;
+ERROR:  cannot drop extension "timescaledb" while logical replication slot "test_slot" still has pending changes against TimescaleDB catalog table "hypertable"
+\set ON_ERROR_STOP 1
+SELECT _timescaledb_functions.ensure_catalog_replication('_timescaledb_catalog.chunk');
+ ensure_catalog_replication 
+----------------------------
+ 
+
+-- Insert a new chunk -- now the check should fail on the `chunk` catalog
+\set ON_ERROR_STOP 0
+INSERT INTO metrics2 VALUES ('2024-01-01', 1.0);
+SELECT _timescaledb_functions.ensure_catalog_replication('_timescaledb_catalog.chunk');
+ERROR:  cannot modify relation "chunk" while logical replication slot "test_slot" still has pending changes against it
+\set ON_ERROR_STOP 1
+-- A trick to immediately advance the slot's `catalog_xmin`. `catalog_xmin`
+-- advances when the slot sees an `xl_running_xacts` record which is normally
+-- generated automatically, e.g. by the `bgwriter`; here we force it using
+-- `pg_log_standby_snapshot()`
+BEGIN;
+SELECT txid_current() \gset
+SELECT pg_log_standby_snapshot() \gset
+COMMIT;
+SELECT count(*) FROM pg_logical_slot_get_changes('test_slot', NULL, NULL) \gset
+-- The block is now lifted: validation passes for both tables and the extension
+-- can be dropped even though the slot still exists.
+SELECT _timescaledb_functions.ensure_catalog_replication('_timescaledb_catalog.hypertable');
+ ensure_catalog_replication 
+----------------------------
+ 
+
+SELECT _timescaledb_functions.ensure_catalog_replication('_timescaledb_catalog.chunk');
+ ensure_catalog_replication 
+----------------------------
+ 
+
+SET client_min_messages=error;
+DROP EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
+SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
+ extname 
+---------
+
+-- Clean up the slot so the test database can be dropped.
+SELECT pg_drop_replication_slot('test_slot');
+ pg_drop_replication_slot 
+--------------------------
+ 
+
+\set VERBOSITY default
