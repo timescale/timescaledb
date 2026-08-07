@@ -843,3 +843,78 @@ SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged > 9223372036854775805;
      2
 
 RESET timescaledb.enable_chunk_skipping;
+-- Test that a chunk whose range was invalidated is not excluded at execution time
+SET timescaledb.enable_chunk_skipping = on;
+CREATE TABLE chunk_skip_invalid(
+    ts     timestamptz NOT NULL,
+    ranged int
+);
+SELECT * FROM create_hypertable('chunk_skip_invalid', 'ts',
+                         chunk_time_interval => interval '1 day');
+ hypertable_id | schema_name |     table_name     | created 
+---------------+-------------+--------------------+---------
+             8 | public      | chunk_skip_invalid | t
+
+SELECT * FROM enable_chunk_skipping('chunk_skip_invalid', 'ranged');
+ column_stats_id | enabled 
+-----------------+---------
+              21 | t
+
+ALTER TABLE chunk_skip_invalid SET (timescaledb.compress);
+INSERT INTO chunk_skip_invalid VALUES ('2025-01-01', 20);
+INSERT INTO chunk_skip_invalid VALUES ('2025-01-02', 20);
+SELECT count(compress_chunk(c)) FROM show_chunks('chunk_skip_invalid') c;
+ count 
+-------
+     2
+
+-- DML on a compressed chunk makes it partial, which invalidates its ranges
+INSERT INTO chunk_skip_invalid VALUES ('2025-01-01', 9);
+SELECT chunk_id, range_start, range_end, valid FROM _timescaledb_catalog.chunk_column_stats
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'chunk_skip_invalid')
+  AND chunk_id IS NOT NULL ORDER BY 1;
+ chunk_id | range_start | range_end | valid 
+----------+-------------+-----------+-------
+       10 |          20 |        21 | f
+       11 |          20 |        21 | t
+
+-- The chunk with the invalidated range must survive executor startup exclusion
+:PREFIX SELECT * FROM chunk_skip_invalid WHERE ranged = length(substring(version(),1,9));
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on chunk_skip_invalid
+   Chunks excluded during startup: 1
+   ->  Custom Scan (ColumnarScan) on _hyper_8_10_chunk
+         Vectorized Filter: (ranged = length("substring"(version(), 1, 9)))
+         ->  Seq Scan on _hyper_8_10_chunk_compressed
+   ->  Seq Scan on _hyper_8_10_chunk
+         Filter: (ranged = length("substring"(version(), 1, 9)))
+
+:PREFIX UPDATE chunk_skip_invalid SET ranged = 0 WHERE ranged = length(substring(version(),1,9));
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Update on chunk_skip_invalid
+         Update on _hyper_8_10_chunk chunk_skip_invalid_1
+         Update on _hyper_8_11_chunk chunk_skip_invalid
+         ->  Result
+               ->  Custom Scan (ChunkAppend) on chunk_skip_invalid
+                     Chunks excluded during startup: 1
+                     ->  Seq Scan on _hyper_8_10_chunk chunk_skip_invalid_1
+                           Filter: (ranged = length("substring"(version(), 1, 9)))
+
+:PREFIX DELETE FROM chunk_skip_invalid WHERE ranged = length(substring(version(),1,9));
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Delete on chunk_skip_invalid
+         Delete on _hyper_8_10_chunk chunk_skip_invalid_1
+         Delete on _hyper_8_11_chunk chunk_skip_invalid
+         ->  Custom Scan (ChunkAppend) on chunk_skip_invalid
+               Chunks excluded during startup: 1
+               ->  Seq Scan on _hyper_8_10_chunk chunk_skip_invalid_1
+                     Filter: (ranged = length("substring"(version(), 1, 9)))
+
+SELECT count(*) FROM chunk_skip_invalid WHERE ranged = length(substring(version(),1,9));
+ count 
+-------
+     1
+
+RESET timescaledb.enable_chunk_skipping;
