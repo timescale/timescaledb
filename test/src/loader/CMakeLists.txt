@@ -52,6 +52,16 @@ add_library(${PROJECT_NAME}_osm-mock-1 MODULE osm_init.c)
 target_compile_definitions(${PROJECT_NAME}_osm-mock-1
                            PRIVATE OSM_VERSION_MOD="mock-1")
 
+# Standalone ProcessUtility probe (no timescaledb dependency) used to verify
+# that TimescaleDB remains last when a prior hook was installed first.
+add_library(${PROJECT_NAME}_pu_probe MODULE pu_probe.c)
+set_target_properties(${PROJECT_NAME}_pu_probe PROPERTIES OUTPUT_NAME
+                                                          ${PROJECT_NAME}_pu_probe PREFIX "")
+install(
+  TARGETS ${PROJECT_NAME}_pu_probe
+  DESTINATION ${PG_PKGLIBDIR}
+  OPTIONAL)
+
 foreach(MOCK_VERSION mock-1)
   set_target_properties(
     ${PROJECT_NAME}_osm-${MOCK_VERSION}

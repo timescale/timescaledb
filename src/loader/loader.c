@@ -41,7 +41,9 @@
  *
  *   1. _PG_init starts up cluster-wide background worker stuff, and sets the
  *      post_parse_analyze_hook (a postgres-defined hook which is called after
- *      every statement is parsed) to our function post_analyze_hook
+ *      every statement is parsed) to our function post_analyze_hook. It also
+ *      installs a ProcessUtility hook that stays at the end of the hook chain
+ *      when timescaledb is listed first in shared_preload_libraries.
  *   2. When a command is run with timescale not loaded, post_analyze_hook:
  *        a. Gets the extension version.
  *        b. Loads the versioned extension.
@@ -50,6 +52,10 @@
  *           post_analyze_hook, but may not be our function, for instance, if
  *           another extension is loaded).
  *        d. Calls the prev_post_parse_analyze_hook.
+ *   3. The versioned extension publishes its ProcessUtility handler through a
+ *      rendezvous variable instead of becoming the head of the ProcessUtility
+ *      chain. That keeps TimescaleDB last so earlier hooks (e.g. pgaudit) can
+ *      set up per-statement state before we execute commands such as COPY.
  *
  * Some notes on design:
  *
@@ -98,6 +104,8 @@ int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
 static shmem_request_hook_type prev_shmem_request_hook;
+static ProcessUtility_hook_type prev_ProcessUtility_hook;
+static TsProcessUtilityRendezvous process_utility_rendezvous = { 0 };
 
 typedef struct TsExtension
 {
@@ -662,6 +670,47 @@ timescaledb_shmem_request_hook(void)
 #endif
 }
 
+/*
+ * Loader ProcessUtility hook.
+ *
+ * Installed at shared_preload time so later-preloaded extensions (and their
+ * hooks) run before TimescaleDB. When the versioned extension is loaded it
+ * publishes its handler through process_utility_rendezvous; until then we
+ * simply chain to the previous hook.
+ */
+static void
+loader_ProcessUtility(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
+					  ProcessUtilityContext context, ParamListInfo params,
+					  QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
+{
+	ProcessUtility_hook_type versioned_hook = process_utility_rendezvous.versioned_hook;
+
+	if (versioned_hook)
+	{
+		versioned_hook(pstmt, queryString, readOnlyTree, context, params, queryEnv, dest, qc);
+		return;
+	}
+
+	if (prev_ProcessUtility_hook)
+		prev_ProcessUtility_hook(pstmt,
+								 queryString,
+								 readOnlyTree,
+								 context,
+								 params,
+								 queryEnv,
+								 dest,
+								 qc);
+	else
+		standard_ProcessUtility(pstmt,
+								queryString,
+								readOnlyTree,
+								context,
+								params,
+								queryEnv,
+								dest,
+								qc);
+}
+
 static void
 extension_mark_loader_present()
 {
@@ -730,6 +779,22 @@ _PG_init(void)
 
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = timescaledb_shmem_request_hook;
+
+	/*
+	 * Install ProcessUtility at preload time so TimescaleDB stays last in the
+	 * hook chain when listed first in shared_preload_libraries. Other
+	 * extensions loaded later become the head and call us; the versioned
+	 * extension publishes its handler through the rendezvous below.
+	 */
+	prev_ProcessUtility_hook = ProcessUtility_hook;
+	process_utility_rendezvous.prev_hook = prev_ProcessUtility_hook;
+	process_utility_rendezvous.versioned_hook = NULL;
+	ProcessUtility_hook = loader_ProcessUtility;
+	{
+		void **pu_ptr = find_rendezvous_variable(RENDEZVOUS_PROCESS_UTILITY_HOOK);
+
+		*pu_ptr = &process_utility_rendezvous;
+	}
 }
 
 inline static void
