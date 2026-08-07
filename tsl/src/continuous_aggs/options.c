@@ -211,6 +211,18 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 
 		Assert(mat_ht != NULL);
 
+		/*
+		 * Flipping the real-time view definition rewrites the user view and
+		 * reads the direct view (both AccessShareLock, taken in
+		 * cagg_flip_realtime_view_definition).
+		 */
+		ts_continuous_agg_lock_relations(agg,
+										 AccessShareLock, /* user_view */
+										 NoLock,		  /* mat_hypertable */
+										 NoLock,		  /* partial_view */
+										 AccessShareLock, /* direct_view */
+										 NULL);			  /* waitpoint_prefix */
+
 		cagg_flip_realtime_view_definition(agg, mat_ht);
 		cagg_update_materialized_only(agg, materialized_only);
 		ts_cache_release(&hcache);
@@ -238,6 +250,20 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		Hypertable *mat_ht =
 			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
 		Assert(mat_ht != NULL);
+
+		/*
+		 * Enabling compression locks the mat hypertable (AccessExclusiveLock,
+		 * in tsl_process_compress_table) and reads the partial view to derive the
+		 * default compression settings (AccessShareLock, in cagg_get_compression_params).
+		 * Take locks beforehand to keep the order consistent with DROP and the
+		 * other ALTER operations.
+		 */
+		ts_continuous_agg_lock_relations(agg,
+										 NoLock,			  /* user_view */
+										 AccessExclusiveLock, /* mat_hypertable */
+										 AccessShareLock,	  /* partial_view */
+										 NoLock,			  /* direct_view */
+										 NULL);				  /* waitpoint_prefix */
 
 		cagg_alter_compression(agg, mat_ht, compression_options);
 		ts_cache_release(&hcache);
