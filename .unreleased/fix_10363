@@ -1,0 +1,1 @@
+Fixes: #10363 Fix gapfill with window agg of constant
