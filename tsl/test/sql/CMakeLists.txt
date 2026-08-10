@@ -217,7 +217,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES privilege_maintain.sql)
+  list(APPEND TEST_FILES privilege_maintain.sql skip_scan_bugs.sql)
   list(APPEND TEST_TEMPLATES merge_append_partially_compressed.sql.in)
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES vector_agg_expr_debug.sql)
