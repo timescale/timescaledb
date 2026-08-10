@@ -1,0 +1,1 @@
+Fixes: #10189 Fix UDF named time_bucket causing XX000
