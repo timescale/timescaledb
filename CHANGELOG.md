@@ -2,6 +2,25 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.29.1 (2026-08-04)
+
+This release contains performance improvements and bug fixes since the 2.29.0 release and fixes for security vulnerabilities (#10360, #10379, #10386). You can check the [security advisory](https://github.com/timescale/timescaledb/security/advisories/GHSA-hcfx-29v5-2rcw) for more information on the vulnerability and the platforms that are affected. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#10327](https://github.com/timescale/timescaledb/pull/10327) Assertion failure in `add_dimension()` when the hypertable argument is `NULL`
+* [#10339](https://github.com/timescale/timescaledb/pull/10339) Fix crash when deleting from a compressed continuous aggregate source
+* [#10340](https://github.com/timescale/timescaledb/pull/10340) Validate `max_batches` in `compact_chunk()`
+* [#10352](https://github.com/timescale/timescaledb/pull/10352) Reset inherited column and constraint flags on chunks during `attach_chunk()`
+* [#10360](https://github.com/timescale/timescaledb/pull/10360) Fix decompressor crashes with malformed compressed data
+* [#10369](https://github.com/timescale/timescaledb/pull/10369) Fix typo in error message about `MERGE` support on compressed hypertables
+* [#10379](https://github.com/timescale/timescaledb/pull/10379) Read hypertable max time value with an ordered scan
+* [#10386](https://github.com/timescale/timescaledb/pull/10386) Add missing permission checks to internal chunk functions
+
+**Thanks**
+* @JoongHyuk-Shin for reporting and fixing `NULL` handling in `add_dimension()`
+* @igor2x for reporting a typo in a `MERGE` support error message
+* @mdisec for reporting issues with compressed data validation during decompression
+
 ## 2.29.0 (2026-07-28)
 
 This release contains performance improvements and bug fixes since the 2.28.3 release. We recommend that you upgrade at the next available opportunity.

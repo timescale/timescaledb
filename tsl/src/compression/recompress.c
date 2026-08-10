@@ -685,7 +685,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 
 		bool done_with_segment = false;
 		bool tuples_for_recompression = false;
-		enum Batch_match_result result;
+		enum Batch_match_result result = Tuple_match;
 
 		/* For full segmentwise decompress/compress we decompress all batches in
 		 * the current segment (i.e. treat each batch as a match) */

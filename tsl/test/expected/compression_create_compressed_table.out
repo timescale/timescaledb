@@ -63,3 +63,75 @@ SELECT count(*) FROM "_timescaledb_internal"."_hyper_1_1_chunk";
 -------
      2
 
+-- A non-owner must not be able to attach a compressed chunk
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    '"_timescaledb_internal"."_hyper_1_1_chunk"'::TEXT::REGCLASS,
+    '"_timescaledb_internal"."custom_compressed_chunk"'::TEXT::REGCLASS,
+    8192,
+    8192,
+    16384,
+    8192,
+    8192,
+    16384,
+    1,
+    1
+);
+ERROR:  must be owner of hypertable "metrics"
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- test create_compressed_chunk column/column type validation
+CREATE TABLE selfref(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('selfref', 'time');
+  create_hypertable   
+----------------------
+ (2,public,selfref,t)
+
+ALTER TABLE selfref SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO selfref VALUES ('2025-01-01', 'dev1', 1.0);
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    ch, ch,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+) FROM show_chunks('selfref') ch;
+ERROR:  relation "_hyper_2_2_chunk" is not a valid compressed chunk
+\set ON_ERROR_STOP 1
+-- create_compressed_chunk must reject a table where a segmentby column type does not match
+CREATE TABLE badtype(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('badtype', 'time');
+  create_hypertable   
+----------------------
+ (3,public,badtype,t)
+
+ALTER TABLE badtype SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO badtype VALUES ('2025-01-01', 'dev1', 1.0);
+SELECT ch AS "BADTYPE_CHUNK" FROM show_chunks('badtype') ch LIMIT 1 \gset
+-- segmentby column "device" has the wrong type (varchar instead of text)
+CREATE TABLE _timescaledb_internal.badtype_compressed(_ts_meta_count int4, device varchar(3));
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'BADTYPE_CHUNK'::regclass, '_timescaledb_internal.badtype_compressed'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "badtype_compressed" is not a valid compressed chunk
+\set ON_ERROR_STOP 1
+-- create_compressed_chunk must reject a table where a metadata column type does not match
+CREATE TABLE badcount(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('badcount', 'time');
+   create_hypertable   
+-----------------------
+ (4,public,badcount,t)
+
+ALTER TABLE badcount SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+INSERT INTO badcount VALUES ('2025-01-01', 'dev1', 1.0);
+SELECT ch AS "BADCOUNT_CHUNK" FROM show_chunks('badcount') ch LIMIT 1 \gset
+-- metadata column "_ts_meta_count" has the wrong type (text instead of int4)
+CREATE TABLE _timescaledb_internal.badcount_compressed(_ts_meta_count text, device text);
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.create_compressed_chunk(
+    :'BADCOUNT_CHUNK'::regclass, '_timescaledb_internal.badcount_compressed'::regclass,
+    8192, 8192, 16384, 8192, 8192, 16384, 1, 1
+);
+ERROR:  relation "badcount_compressed" is not a valid compressed chunk
+\set ON_ERROR_STOP 1

@@ -2185,7 +2185,7 @@ ts_hypertable_set_compress_interval(Hypertable *ht, int64 compress_interval)
  * defined for the type so in that case the expression extracts the timestamp from the UUID.
  */
 static const char *
-get_expr_for_dim_max(const char *colname, Oid timetype)
+get_expr_for_dim_time(const char *colname, Oid timetype)
 {
 	if (timetype == UUIDOID)
 	{
@@ -2194,7 +2194,7 @@ get_expr_for_dim_max(const char *colname, Oid timetype)
 		initStringInfo(&expr);
 		appendStringInfo(&expr,
 						 "%s.uuid_timestamp(%s)",
-						 ts_extension_schema_name(),
+						 quote_identifier(ts_extension_schema_name()),
 						 quote_identifier(colname));
 		return expr.data;
 	}
@@ -2226,17 +2226,14 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 
 	/*
 	 * Query for the last bucket in the materialized hypertable.
-	 * Since this might be run as part of a parallel operation
-	 * we cannot use SET search_path here to lock down the
-	 * search_path and instead have to fully schema-qualify
-	 * everything.
 	 */
 	initStringInfo(&command);
 	appendStringInfo(&command,
-					 "SELECT pg_catalog.max(%s) FROM %s.%s",
-					 get_expr_for_dim_max(NameStr(dim->fd.column_name), timetype),
+					 "SELECT %s FROM %s.%s ORDER BY %s DESC LIMIT 1",
+					 get_expr_for_dim_time(NameStr(dim->fd.column_name), timetype),
 					 quote_identifier(NameStr(ht->fd.schema_name)),
-					 quote_identifier(NameStr(ht->fd.table_name)));
+					 quote_identifier(NameStr(ht->fd.table_name)),
+					 quote_identifier(NameStr(dim->fd.column_name)));
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 	{
@@ -2244,6 +2241,10 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	}
 
 	int64 max_value;
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	PG_TRY();
 	{
@@ -2261,19 +2262,32 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		 * first extract the timestamptz so the result type is timestamptz instead. */
 		Oid result_type = timetype == UUIDOID ? TIMESTAMPTZOID : timetype;
 
-		Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
-			   "partition types for result (%d) and dimension (%d) do not match",
-			   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
-			   ts_dimension_get_partition_type(dim));
-		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
-
-		if (isnull)
+		/* An empty hypertable returns no rows, which we treat as a NULL result. */
+		if (SPI_processed == 0)
 		{
-			*isnull = max_isnull;
-		}
+			if (isnull)
+			{
+				*isnull = true;
+			}
 
-		max_value = max_isnull ? ts_time_get_min(result_type) :
-								 ts_time_value_to_internal(maxdat, result_type);
+			max_value = ts_time_get_min(result_type);
+		}
+		else
+		{
+			Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
+				   "partition types for result (%d) and dimension (%d) do not match",
+				   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
+				   ts_dimension_get_partition_type(dim));
+			maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
+
+			if (isnull)
+			{
+				*isnull = max_isnull;
+			}
+
+			max_value = max_isnull ? ts_time_get_min(result_type) :
+									 ts_time_value_to_internal(maxdat, result_type);
+		}
 	}
 	PG_CATCH();
 	{
@@ -2281,6 +2295,9 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
@@ -2544,6 +2561,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 					   quote_identifier(NameStr(ht->fd.schema_name)),
 					   quote_identifier(NameStr(ht->fd.table_name))));
 	}
+
+	/* Only the hypertable owner may update the OSM chunk range */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 	/*
 	 * range_start, range_end arguments must be converted to internal representation
 	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
@@ -2707,6 +2727,9 @@ ts_lock_osm_chunk_dimension_slice(PG_FUNCTION_ARGS)
 					   quote_identifier(NameStr(ht->fd.schema_name)),
 					   quote_identifier(NameStr(ht->fd.table_name))));
 	}
+
+	/* Only the hypertable owner may lock the OSM chunk dimension slice */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
 	/*
 	 * Lock the OSM chunk's dimension slice tuple FOR UPDATE. The row lock is

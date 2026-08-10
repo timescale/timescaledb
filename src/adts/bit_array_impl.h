@@ -85,8 +85,10 @@ bit_array_num_buckets(const BitArray *array)
 static inline uint64
 bit_array_num_bits(const BitArray *array)
 {
-	return (BITS_PER_BUCKET * (array->buckets.num_elements - UINT64CONST(1))) +
-		   array->bits_used_in_last_bucket;
+	return array->buckets.num_elements == 0 ?
+			   0 :
+			   (BITS_PER_BUCKET * (array->buckets.num_elements - UINT64CONST(1))) +
+				   array->bits_used_in_last_bucket;
 }
 
 static inline uint64 *
@@ -250,6 +252,15 @@ bit_array_iterator_init(BitArrayIterator *iter, const BitArray *array)
 	};
 }
 
+static inline uint64
+bit_array_iter_position(const BitArrayIterator *iter)
+{
+	Assert(iter->current_bucket >= 0);
+	return iter->current_bucket < 0 ?
+			   0 :
+			   (BITS_PER_BUCKET * iter->current_bucket) + iter->bits_used_in_current_bucket;
+}
+
 pg_attribute_always_inline static uint64
 bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 {
@@ -302,7 +313,7 @@ bit_array_iterator_init_rev(BitArrayIterator *iter, const BitArray *array)
 {
 	*iter = (BitArrayIterator){
 		.array = array,
-		.current_bucket = array->buckets.num_elements - 1,
+		.current_bucket = array->buckets.num_elements == 0 ? 0 : array->buckets.num_elements - 1,
 		.bits_used_in_current_bucket = array->bits_used_in_last_bucket,
 	};
 }

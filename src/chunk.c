@@ -12,6 +12,7 @@
 #include <access/tableam.h>
 #include <access/tupdesc.h>
 #include <access/xact.h>
+#include <catalog/dependency.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_attribute.h>
@@ -1031,6 +1032,15 @@ chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 	List *columns = NIL;
 	Node *whereClause = NULL;
 
+	/* publication_add_relation errors on duplicates; the chunk may already be
+	 * an explicit member (user-added or backfilled by an earlier reconcile). */
+	if (SearchSysCacheExists2(PUBLICATIONRELMAP,
+							  ObjectIdGetDatum(chunk->fd.relid),
+							  ObjectIdGetDatum(puboid)))
+	{
+		return;
+	}
+
 	get_hypertable_publication_filters(puboid, chunk, &columns, &whereClause);
 
 	chunk_rel = table_open(chunk->fd.relid, AccessShareLock);
@@ -1051,14 +1061,184 @@ chunk_add_to_publication(Oid puboid, const Chunk *chunk)
 static void
 chunk_add_to_publications(const Chunk *chunk)
 {
-	List *puboids;
+	Oid ht_nspid = get_rel_namespace(chunk->hypertable_relid);
+	Oid chunk_nspid = get_rel_namespace(chunk->fd.relid);
+	List *puboids = list_concat_unique_oid(GetRelationIncludedPublications(chunk->hypertable_relid),
+										   GetSchemaPublications(ht_nspid));
+	/* If the chunk lives in a published schema, PostgreSQL already covers it
+	 * via the schema publication; skip the redundant explicit row. */
+	List *chunk_schema_pubs = GetSchemaPublications(chunk_nspid);
 	ListCell *lc;
-
-	puboids = GetRelationIncludedPublications(chunk->hypertable_relid);
 	foreach (lc, puboids)
 	{
-		Oid puboid = lfirst_oid(lc);
-		chunk_add_to_publication(puboid, chunk);
+		if (list_member_oid(chunk_schema_pubs, lfirst_oid(lc)))
+		{
+			continue;
+		}
+		chunk_add_to_publication(lfirst_oid(lc), chunk);
+	}
+}
+
+static void
+chunk_remove_from_publication(Oid puboid, const Chunk *chunk)
+{
+	ObjectAddress obj;
+	Oid prid = GetSysCacheOid2(PUBLICATIONRELMAP,
+							   Anum_pg_publication_rel_oid,
+							   ObjectIdGetDatum(chunk->fd.relid),
+							   ObjectIdGetDatum(puboid));
+	if (!OidIsValid(prid))
+	{
+		return;
+	}
+
+	/* No core PG object depends on a pg_publication_rel row, so RESTRICT is
+	 * sufficient and matches PG's own AlterPublication convention. */
+	ObjectAddressSet(obj, PublicationRelRelationId, prid);
+	performDeletion(&obj, DROP_RESTRICT, 0);
+}
+
+/*
+ * Add or remove the chunks of every hypertable whose root table lives in the
+ * given schemas to/from a publication. Schema publications miss chunks
+ * (chunks live in _timescaledb_internal, not the hypertable's schema);
+ * FOR TABLE / FOR ALL TABLES are handled by PostgreSQL, which expands
+ * inheritance children itself.
+ *
+ * Honors enable_chunk_auto_publication: when off, the whole reconciliation is
+ * skipped. This is consistent with the opt-in design of the feature - if the
+ * user disables the GUC after chunks were auto-published, they own any cleanup
+ * (a subsequent ALTER PUBLICATION ... DROP TABLES IN SCHEMA will not remove
+ * the previously backfilled chunk rows in that case). Drop the publication or
+ * re-enable the GUC before such an ALTER to have the rows removed here.
+ */
+void
+ts_chunk_publication_reconcile_schema_chunks(Oid pubid, List *schema_oids, bool add)
+{
+	if (!ts_guc_enable_chunk_auto_publication)
+	{
+		return;
+	}
+
+	Cache *hcache = ts_hypertable_cache_pin();
+	ListCell *sc;
+	foreach (sc, schema_oids)
+	{
+		Oid published_schema = lfirst_oid(sc);
+		ListCell *rc;
+		foreach (rc, GetSchemaPublicationRelations(published_schema, PUBLICATION_PART_ROOT))
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, lfirst_oid(rc), CACHE_FLAG_MISSING_OK);
+			if (ht == NULL)
+			{
+				/* The scanned schema may hold chunks placed there via
+				 * associated_schema_name rather than hypertable roots. On DROP such a
+				 * chunk loses this publication's native schema coverage; if its
+				 * hypertable's schema is still covered, keep the chunk published with
+				 * an explicit row (the mirror image of the add-path guard). */
+				if (!add)
+				{
+					Chunk *chunk = ts_chunk_get_by_relid(lfirst_oid(rc), false);
+					if (chunk != NULL && list_member_oid(GetSchemaPublications(get_rel_namespace(
+															 chunk->hypertable_relid)),
+														 pubid))
+					{
+						chunk_add_to_publication(pubid, chunk);
+					}
+				}
+				continue;
+			}
+			ListCell *cc;
+			foreach (cc, ts_chunk_get_by_hypertable_id(ht->fd.id))
+			{
+				Chunk *chunk = lfirst(cc);
+				/* OSM chunks are foreign tables; publication_add_relation would fail. */
+				if (IS_OSM_CHUNK(chunk))
+				{
+					continue;
+				}
+				/*
+				 * Skip adding an explicit row for a chunk that lives in a schema this
+				 * publication already covers natively: the explicit row would be
+				 * redundant and would survive a DROP that removes the schema mapping.
+				 */
+				if (add)
+				{
+					if (list_member_oid(GetSchemaPublications(get_rel_namespace(chunk->fd.relid)),
+										pubid))
+					{
+						continue;
+					}
+					chunk_add_to_publication(pubid, chunk);
+				}
+				else
+				{
+					chunk_remove_from_publication(pubid, chunk);
+				}
+			}
+		}
+	}
+	ts_cache_release(&hcache);
+}
+
+/*
+ * Reconcile chunk publication membership when a hypertable's schema changes
+ * (ALTER TABLE ... SET SCHEMA). Chunks live in _timescaledb_internal and do not
+ * move with the root table, so PostgreSQL's schema publication membership
+ * (which follows the root table's schema) leaves chunk rows behind: chunks that
+ * were backfilled for the old schema's publications must be removed, and they
+ * must be added for the new schema's publications. Existing chunks are handled
+ * here; chunks created later are covered by the per-chunk create hook.
+ */
+void
+ts_chunk_publication_reconcile_ht_schema_change(int32 hypertable_id, Oid old_schema, Oid new_schema)
+{
+	ListCell *cc;
+	List *old_pubs;
+	List *new_pubs;
+
+	if (!ts_guc_enable_chunk_auto_publication)
+	{
+		return;
+	}
+
+	if (old_schema == new_schema)
+	{
+		return;
+	}
+
+	/* The old/new schema publication lists are the same for every chunk. */
+	old_pubs = GetSchemaPublications(old_schema);
+	new_pubs = GetSchemaPublications(new_schema);
+
+	foreach (cc, ts_chunk_get_by_hypertable_id(hypertable_id))
+	{
+		Chunk *chunk = lfirst(cc);
+		ListCell *pc;
+
+		/* OSM chunks are foreign tables; publication_add_relation would fail. */
+		if (IS_OSM_CHUNK(chunk))
+		{
+			continue;
+		}
+
+		foreach (pc, old_pubs)
+		{
+			chunk_remove_from_publication(lfirst_oid(pc), chunk);
+		}
+
+		/* A chunk whose schema is already covered natively by a new-schema
+		 * publication needs no explicit row (it would survive a later DROP
+		 * that removes the schema mapping). */
+		List *chunk_schema_pubs = GetSchemaPublications(get_rel_namespace(chunk->fd.relid));
+		foreach (pc, new_pubs)
+		{
+			if (!list_member_oid(chunk_schema_pubs, lfirst_oid(pc)))
+			{
+				chunk_add_to_publication(lfirst_oid(pc), chunk);
+			}
+		}
 	}
 }
 
@@ -4073,6 +4253,10 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 															   CurrentMemoryContext,
 															   true);
 	Assert(ch != NULL);
+
+	/* Only the hypertable owner may drop a chunk */
+	ts_hypertable_permissions_check(ch->hypertable_relid, GetUserId());
+
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 
 	/* do not drop any chunk dependencies */
@@ -5288,6 +5472,9 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, hypertable_relid, true);
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+
+	/* Only the hypertable owner may drop the OSM chunk */
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
 	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
 

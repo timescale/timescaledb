@@ -1,0 +1,1 @@
+Fixes: #10128 Include hypertable chunks in publications created with FOR TABLES IN SCHEMA

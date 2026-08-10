@@ -842,6 +842,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 	hcache = ts_hypertable_cache_pin();
 	compresschunkcxt_init(&cxt, hcache, chunk->hypertable_relid, chunk_relid);
 

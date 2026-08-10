@@ -234,3 +234,35 @@ explain (buffers off, costs off)
 SELECT * FROM complex_pushdown WHERE
 blm1 = blm2 and segby in (1,2,3);
 
+-- NullTest over a minmax-pushdown column
+CREATE TABLE sparse_isnull(ts timestamptz NOT NULL, v int)
+WITH (
+    tsdb.hypertable,
+    tsdb.partition_column = 'ts',
+    tsdb.compress,
+    tsdb.orderby = 'ts, v'
+);
+
+INSERT INTO sparse_isnull VALUES ('2024-01-01', NULL), ('2024-01-02', 1);
+SELECT count(compress_chunk(c)) FROM show_chunks('sparse_isnull') c;
+
+-- IS NULL is not pushed to the compressed scan
+explain (buffers off, costs off)
+SELECT * FROM sparse_isnull WHERE (v > 0) IS NULL;
+
+SELECT * FROM sparse_isnull WHERE (v > 0) IS NULL;
+
+-- IS NOT NULL is not pushed to the compressed scan
+explain (buffers off, costs off)
+SELECT * FROM sparse_isnull WHERE (v > 0) IS NOT NULL;
+
+SELECT * FROM sparse_isnull WHERE (v > 0) IS NOT NULL;
+
+-- plain minmax range pushdown
+explain (buffers off, costs off)
+SELECT * FROM sparse_isnull WHERE v > 0;
+
+SELECT * FROM sparse_isnull WHERE v > 0;
+
+DROP TABLE sparse_isnull;
+
