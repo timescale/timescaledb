@@ -1,0 +1,2 @@
+Fixes: #10423 Compressed SkipScan should not drop uncompressed part with sort keys unmatched to distint keys.
+Thanks: @borisborelly for reporting incorrect result with COUNT(DISTINCT) due to SkipScan dropping uncompressed part.
