@@ -1205,7 +1205,14 @@ build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo, List 
 		{
 			if (top_pathkeys && !pathkeys_contained_in(top_pathkeys, child->pathkeys))
 			{
-				continue;
+				/* A child that cannot satisfy the required pathkeys must not be
+				 * silently dropped, as that would lose the rows it produces on a
+				 * partially compressed chunk where the heap and compressed
+				 * branches have different pathkeys. Abandon the SkipScan attempt
+				 * entirely so the unmodified paths are used instead. */
+				if (new_paths)
+					pfree(new_paths);
+				return NIL;
 			}
 
 			SkipScanPath *skip_path = skip_scan_path_create(root, child, dpinfo);
