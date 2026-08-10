@@ -2049,6 +2049,21 @@ GROUP BY 1;
                    4 |           0 |         2 |          5
                    5 |           0 |         2 |          5
 
+-- test window function with aggregate of constant
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(1.0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | first_value 
+---------------------+-------------
+                   0 |         1.0
+                   1 |         1.0
+                   2 |         1.0
+                   3 |         1.0
+                   4 |         1.0
+                   5 |         1.0
+
 -- test window functions with PARTITION BY
 SELECT
   time_bucket_gapfill(1,time,0,5) as time,
