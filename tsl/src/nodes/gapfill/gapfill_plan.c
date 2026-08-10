@@ -557,7 +557,8 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 					}
 				}
 
-				if (contain_var_clause(linitial(context.call.window->args)))
+				if (contain_var_clause(linitial(context.call.window->args)) ||
+					contain_agg_clause(linitial(context.call.window->args)))
 				{
 					add_column_to_pathtarget(pt_path,
 											 linitial(context.call.window->args),
@@ -911,7 +912,8 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 								}
 							}
 
-							if (contain_var_clause(linitial(context.call.window->args)))
+							if (contain_var_clause(linitial(context.call.window->args)) ||
+								contain_agg_clause(linitial(context.call.window->args)))
 							{
 								add_column_to_pathtarget(pt,
 														 linitial(context.call.window->args),
