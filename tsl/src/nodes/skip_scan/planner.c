@@ -1203,17 +1203,15 @@ build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo, List 
 		Path *child = lfirst(lc);
 		if (IsA(child, IndexPath) || ts_is_columnar_scan_path(child))
 		{
-			if (top_pathkeys && !pathkeys_contained_in(top_pathkeys, child->pathkeys))
+			if (!top_pathkeys || pathkeys_contained_in(top_pathkeys, child->pathkeys))
 			{
-				continue;
-			}
+				SkipScanPath *skip_path = skip_scan_path_create(root, child, dpinfo);
 
-			SkipScanPath *skip_path = skip_scan_path_create(root, child, dpinfo);
-
-			if (skip_path)
-			{
-				child = (Path *) skip_path;
-				has_skip_path = true;
+				if (skip_path)
+				{
+					child = (Path *) skip_path;
+					has_skip_path = true;
+				}
 			}
 		}
 
