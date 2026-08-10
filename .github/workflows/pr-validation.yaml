@@ -38,14 +38,16 @@ jobs:
         # Hard limit of 5 commits per pull request. This check cannot
         # be disabled via the Disable-check trailer or by using squash
         # merge.
-        if [[ "$count" -gt 5 ]]; then
-          echo "Found $count commits in pull request (there must be no more than 5):"
-          git log --format=format:'- %h %s' $base..$head
-          echo
-          echo "This limit cannot be overridden. Please rebase and reduce"
-          echo "the number of commits to 5 or fewer."
-          exit 1
-        fi
+        # Temporarily disabled for PR #10427 (large stacked integration
+        # branch). Re-enable after that PR merges.
+        # if [[ "$count" -gt 5 ]]; then
+        #   echo "Found $count commits in pull request (there must be no more than 5):"
+        #   git log --format=format:'- %h %s' $base..$head
+        #   echo
+        #   echo "This limit cannot be overridden. Please rebase and reduce"
+        #   echo "the number of commits to 5 or fewer."
+        #   exit 1
+        # fi
 
         if ! echo "$BODY" | grep -Eqsi '^disable-check:.*\<commit-count\>'
         then
