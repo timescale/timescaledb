@@ -470,7 +470,6 @@ bloom1_hash_values(void *hasher_, const NullableDatum *values)
 static void
 bloom1_update_row(void *builder_, TupleTableSlot *slot)
 {
-	/* LOOK HERE */
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
 	Bloom1Hasher *hasher = &builder->hasher.functions;
 	int num_columns = hasher->num_columns;

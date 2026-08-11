@@ -574,6 +574,8 @@ ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
 extern void
 ts_chunk_insert_state_destroy(ChunkInsertState *state, bool single_chunk_insert)
 {
+	/* LOOK HERE */
+
 	/*
 	 * Check if we need to mark the chunk as partial.
 	 * We need to change chunk status to partial in the following cases:
