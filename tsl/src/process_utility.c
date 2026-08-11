@@ -140,12 +140,12 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 						 "valid column.")));
 	}
 
-	if (!IS_VALID_GRANULAR_REFRESH_COLUMN(getBaseType(get_atttype(ht->main_table_relid, attno))))
+	if (!ts_tenant_type_is_supported(getBaseType(get_atttype(ht->main_table_relid, attno))))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("invalid granular refresh column type"),
-				 errhint("timescaledb.granular_refresh_column must be a timestamp, date, integer, "
+				 errhint("timescaledb.granular_refresh_column must be a date, integer, "
 						 "UUID or string type.")));
 	}
 

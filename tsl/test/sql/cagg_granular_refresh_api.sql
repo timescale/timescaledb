@@ -12,7 +12,7 @@ SET timezone TO 'UTC';
 -- ALTER TABLE <hypertable> SET (timescaledb.granular_refresh_*)
 ----------------------------------------------------------------------
 
-CREATE TABLE metrics (time timestamptz NOT NULL, device_id integer, value float8);
+CREATE TABLE metrics (time timestamptz NOT NULL, device_id integer, value float8, device_ts timestamptz);
 SELECT create_hypertable('metrics', 'time', chunk_time_interval => '1 day'::interval);
 
 -- Not configured by default
@@ -32,10 +32,16 @@ ALTER TABLE metrics SET (
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
 );
--- Error: column type is not supported (must be timestamp, date, integer, UUID
--- or a string type).
+-- Error: column type is not supported (must be date, integer, UUID or a string
+-- type).
 ALTER TABLE metrics SET (
     timescaledb.granular_refresh_column = 'value',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+-- Error: timestamptz is not supported.
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'device_ts',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
 );

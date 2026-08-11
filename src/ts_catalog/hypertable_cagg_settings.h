@@ -10,8 +10,6 @@
 #include "export.h"
 #include "ts_catalog/catalog.h"
 
-#define IS_VALID_GRANULAR_REFRESH_COLUMN(type) (IS_VALID_TIME_TYPE(type) || IS_STRING_TYPE(type))
-
 /* Whether typid is allowed as a granular-refresh tracking column. */
 extern TSDLLEXPORT bool ts_tenant_type_is_supported(Oid typid);
 
