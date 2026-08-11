@@ -102,6 +102,28 @@ ORDER BY key_len;
        5 |  20
      100 |  10
 
+-- A NULL tenant is unstorable and trips the generation INVALID (status 1).  The
+-- whole transaction is skipped, so nentries stays 0 even though 'named' is storable.
+INSERT INTO conditions VALUES
+  ('2020-05-01 00:00+00', 'named', 40),
+  ('2020-05-01 00:00+00', NULL, 50);
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::regclass);
+ nentries | status 
+----------+--------
+        0 |      1
+
+-- Both groups materialize via the fall back.
+CALL refresh_continuous_aggregate('cond_daily', '2020-05-01 00:00+00', '2020-05-02 00:00+00');
+SELECT sensor_id, avg
+FROM cond_daily
+WHERE bucket = '2020-05-01 00:00+00'
+ORDER BY sensor_id NULLS LAST;
+ sensor_id | avg 
+-----------+-----
+ named     |  40
+           |  50
+
 -- ============================================================================
 -- Tracking not configured: a hypertable with no granular refresh
 -- configuration skips the collection hook and granular filter entirely, so
@@ -159,9 +181,9 @@ WHERE hypertable_id = (
                     0
 
 DROP MATERIALIZED VIEW cond_untracked_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_10_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_12_chunk
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to 4 other objects
+NOTICE:  drop cascades to 5 other objects
 DROP TABLE conditions_untracked;
 DROP TABLE conditions;
 -- ============================================================================

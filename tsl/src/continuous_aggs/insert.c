@@ -489,6 +489,7 @@ record_tenant_invalidation(const ContinuousAggsCacheInvalEntry *cache_entry, Rel
 	tenant_datum = heap_getattr(tuple, cache_entry->tenant_col.attno, tupdesc, &isnull);
 	if (isnull)
 	{
+		tenant_buffer_unencodable = true;
 		return;
 	}
 
