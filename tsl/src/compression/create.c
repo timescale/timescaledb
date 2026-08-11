@@ -975,6 +975,48 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 		List *column_defs = build_columndefs(settings, src_chunk->fd.relid);
 		table_id = compression_table_create(src_chunk, column_defs, tablespace_oid, settings);
 	}
+	else
+	{
+		/*
+		 * An existing table was supplied as the compressed chunk. Make sure it
+		 * has every column the settings require, otherwise a later query over
+		 * the chunk fails when a missing column is looked up.
+		 */
+		List *column_defs = build_columndefs(settings, src_chunk->fd.relid);
+		ListCell *lc;
+		foreach (lc, column_defs)
+		{
+			ColumnDef *coldef = lfirst_node(ColumnDef, lc);
+			AttrNumber attno = get_attnum(table_id, coldef->colname);
+			if (attno == InvalidAttrNumber)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("relation \"%s\" is not a valid compressed chunk",
+								get_rel_name(table_id)),
+						 errdetail("Column \"%s\" is missing.", coldef->colname)));
+			}
+
+			/*
+			 * The expected type is encoded in the column definition: segmentby
+			 * columns keep their original type, the data columns are compressed
+			 * data, and the metadata columns have their fixed types.
+			 */
+			Oid expected_typid = typenameTypeId(NULL, coldef->typeName);
+			Oid actual_typid = get_atttype(table_id, attno);
+			if (actual_typid != expected_typid)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("relation \"%s\" is not a valid compressed chunk",
+								get_rel_name(table_id)),
+						 errdetail("Column \"%s\" has type %s but %s was expected.",
+								   coldef->colname,
+								   format_type_be(actual_typid),
+								   format_type_be(expected_typid))));
+			}
+		}
+	}
 
 	if (!OidIsValid(table_id))
 	{
