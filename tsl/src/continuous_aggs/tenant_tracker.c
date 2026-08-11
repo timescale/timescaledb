@@ -323,7 +323,7 @@ tenant_tracker_apply(TenantGeneration *generation, uint32 hash, const char *key,
 		/* See the published payload before reading the rest of the entry. */
 		pg_read_barrier(); /* for key_len */
 
-		if (entry_matches(entry, hash, key, found_len))
+		if (entry_matches(entry, hash, key, key_len))
 		{
 			atomic_min_ts(&entry->min_ts, min_ts);
 			atomic_max_ts(&entry->max_ts, max_ts);
