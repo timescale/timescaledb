@@ -284,3 +284,95 @@ SELECT sensor_id, avg FROM dm_daily ORDER BY sensor_id;
 DROP MATERIALIZED VIEW dm_daily;
 DROP TABLE dm;
 DROP DOMAIN sensor_id_dom;
+
+-- ============================================================================
+-- Length-qualified string tenant columns: char(n) and varchar(n).
+--
+-- These are the only supported tenant types carrying a typmod, and the refresh
+-- decodes it.
+--
+-- char(n) additionally blank-pads: a 3-char tenant in char(10) is stored, and
+-- encoded by the type's output function, as 10 bytes.  Tenants shorter than n
+-- are used below on purpose so the padding round-trips through the tracker key
+-- and back through the decode cast.
+--
+-- A decode that truncated or lost the padding would match no rows
+-- ============================================================================
+CREATE TABLE bp(time timestamptz NOT NULL, sensor_id char(10), value float);
+SELECT create_hypertable('bp', 'time');
+ALTER TABLE bp SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW bp_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM bp
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW bp_daily SET (timescaledb.enable_granular_refresh = true);
+
+CALL refresh_continuous_aggregate('bp_daily', NULL, '2025-05-01 00:00+00');
+
+-- 'aaa' and 'cc' are shorter than char(10) and so are blank-padded; 'bbbbbbbbbb'
+-- is exactly 10 with no padding.
+INSERT INTO bp VALUES
+  ('2020-01-01 00:00+00', 'aaa', 10),
+  ('2020-01-01 00:00+00', 'bbbbbbbbbb', 20),
+  ('2020-01-01 00:00+00', 'cc', 30);
+CALL refresh_continuous_aggregate('bp_daily', NULL, '2025-05-01 00:00+00');
+
+-- Modify only the blank-padded tenant 'aaa'.
+INSERT INTO bp VALUES ('2020-01-01 00:00+00', 'aaa', 50);
+SET client_min_messages TO LOG;
+-- Granular: exactly tenant 'aaa' is rewritten (deleted 1 + inserted 1).  A
+-- truncating decode would report 0 and 0 here.
+CALL refresh_continuous_aggregate('bp_daily', NULL, '2025-05-01 00:00+00');
+RESET client_min_messages;
+
+-- 'aaa' averages (10+50)/2 = 30; the untouched tenants keep 20 and 30.
+SELECT sensor_id, octet_length(sensor_id) AS stored_bytes, avg
+FROM bp_daily
+ORDER BY sensor_id;
+
+DROP MATERIALIZED VIEW bp_daily;
+DROP TABLE bp;
+
+-- varchar(n): same typmod loss, but `::character varying` is unlimited and
+-- varchar does not pad, so tenants of differing lengths round-trip as-is.
+CREATE TABLE vc(time timestamptz NOT NULL, sensor_id varchar(10), value float);
+SELECT create_hypertable('vc', 'time');
+ALTER TABLE vc SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW vc_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM vc
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW vc_daily SET (timescaledb.enable_granular_refresh = true);
+
+CALL refresh_continuous_aggregate('vc_daily', NULL, '2025-05-01 00:00+00');
+
+INSERT INTO vc VALUES
+  ('2020-01-01 00:00+00', 'aaa', 10),
+  ('2020-01-01 00:00+00', 'bbbbbbbbbb', 20);
+CALL refresh_continuous_aggregate('vc_daily', NULL, '2025-05-01 00:00+00');
+
+INSERT INTO vc VALUES ('2020-01-01 00:00+00', 'aaa', 50);
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('vc_daily', NULL, '2025-05-01 00:00+00');
+RESET client_min_messages;
+
+SELECT sensor_id, octet_length(sensor_id) AS stored_bytes, avg
+FROM vc_daily
+ORDER BY sensor_id;
+
+DROP MATERIALIZED VIEW vc_daily;
+DROP TABLE vc;
