@@ -484,13 +484,20 @@ continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const Continuous
 							NameStr(cagg->data.user_view_name))));
 		}
 
+		Oid tenant_typid;
+		int32 tenant_typmod;
+		Oid tenant_collid;
+
 		refresh->tenant_column = pstrdup(tenant_column);
-		/* Decode to the base type (through domains): matches the base-type encode
-		 * in record_tenant_invalidation, and keeps the cast resolvable under the
-		 * materialization's restricted search_path (a domain's unqualified name
-		 * would not resolve there). */
-		refresh->tenant_coltype =
-			format_type_be(getBaseType(get_atttype(refresh->cagg_ht->main_table_relid, attno)));
+		/* Keep the typmod: without it format_type renders char(10) as bare
+		 * "character", which re-parses as char(1) and truncates every tenant key. */
+		get_atttypetypmodcoll(refresh->cagg_ht->main_table_relid,
+							  attno,
+							  &tenant_typid,
+							  &tenant_typmod,
+							  &tenant_collid);
+		tenant_typid = getBaseTypeAndTypmod(tenant_typid, &tenant_typmod);
+		refresh->tenant_coltype = format_type_with_typemod(tenant_typid, tenant_typmod);
 	}
 }
 
