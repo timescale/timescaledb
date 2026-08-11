@@ -14,13 +14,14 @@
 -- now - 1 day), so everything uses fixed 2020 timestamps.
 
 SET timezone TO 'UTC';
-SET timescaledb.current_timestamp_mock = '2021-01-10 00:00:00+00';
+
+SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_lookback \gset
 
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
     timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = '2 years',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
 );
 
@@ -68,7 +69,7 @@ CREATE TABLE conditions2(time timestamptz NOT NULL, sensor_id text, value float)
 SELECT create_hypertable('conditions2', 'time');
 ALTER TABLE conditions2 SET (
     timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = '2 years',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
 );
 CREATE MATERIALIZED VIEW cond2_daily
