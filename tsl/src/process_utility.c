@@ -7,6 +7,7 @@
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
+#include <catalog/pg_type.h>
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <nodes/makefuncs.h>
@@ -18,6 +19,7 @@
 #include "bgw_policy/policies_v2.h"
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
+#include "continuous_aggs/tenant_tracker.h"
 #include "dimension.h"
 #include "guc.h"
 #include "hypertable.h"
@@ -140,13 +142,36 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 						 "valid column.")));
 	}
 
-	if (!ts_tenant_type_is_supported(getBaseType(get_atttype(ht->main_table_relid, attno))))
+	Oid tenant_typid;
+	int32 tenant_typmod;
+	Oid tenant_collid;
+
+	get_atttypetypmodcoll(ht->main_table_relid,
+						  attno,
+						  &tenant_typid,
+						  &tenant_typmod,
+						  &tenant_collid);
+	tenant_typid = getBaseTypeAndTypmod(tenant_typid, &tenant_typmod);
+
+	if (!ts_tenant_type_is_supported(tenant_typid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("invalid granular refresh column type"),
 				 errhint("timescaledb.granular_refresh_column must be a date, integer, UUID, "
 						 "or string type.")));
+	}
+
+	/* character(n) blank-pads every value to exactly n bytes, so for n over the
+	 * tracker's key limit no tenant is ever storable. */
+	if (tenant_typid == BPCHAROID && tenant_typmod > VARHDRSZ &&
+		tenant_typmod - VARHDRSZ > TENANT_TRACKER_KEY_MAXLEN)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("granular refresh column \"%s\" is wider than the %d byte tenant key limit",
+						colname,
+						TENANT_TRACKER_KEY_MAXLEN)));
 	}
 
 	int64 start_offset =

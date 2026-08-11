@@ -331,3 +331,67 @@ ERROR:  invalid granular refresh column type
 ------------+-------------------------+-------------------------------+-----------------------------
 
 DROP TABLE events;
+-- Error: character(n) wider than the tenant key limit.  char(n) blank-pads every
+-- value to exactly n bytes regardless of the value's own length, so for n over
+-- the 64 byte key limit no tenant is ever storable and tracking could never
+-- engage.  Rejected up front rather than silently never working.
+CREATE TABLE char_widths (time timestamptz NOT NULL, wide char(100), over char(65),
+                          at_limit char(64), unpadded varchar(100), value float8);
+SELECT create_hypertable('char_widths', 'time', chunk_time_interval => '1 day'::interval);
+WARNING:  column type "character varying" used for "unpadded" does not follow best practices
+     create_hypertable     
+---------------------------
+ (11,public,char_widths,t)
+
+\set ON_ERROR_STOP 0
+ALTER TABLE char_widths SET (
+    timescaledb.granular_refresh_column = 'wide',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+ERROR:  granular refresh column "wide" is wider than the 64 byte tenant key limit
+-- One byte over is still rejected.
+ALTER TABLE char_widths SET (
+    timescaledb.granular_refresh_column = 'over',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+ERROR:  granular refresh column "over" is wider than the 64 byte tenant key limit
+\set ON_ERROR_STOP 1
+:GRC 'char_widths';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+
+-- varchar(n) of any declared width is accepted: it does not pad, so a key is
+-- only oversized when a value actually is, which the tracker handles by falling
+-- back at insert time.
+CREATE TABLE vc_width (time timestamptz NOT NULL, sensor varchar(100), value float8);
+SELECT create_hypertable('vc_width', 'time', chunk_time_interval => '1 day'::interval);
+WARNING:  column type "character varying" used for "sensor" does not follow best practices
+   create_hypertable    
+------------------------
+ (12,public,vc_width,t)
+
+ALTER TABLE vc_width SET (
+    timescaledb.granular_refresh_column = 'sensor',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+:GRC 'vc_width';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ vc_width   | sensor                  | 30 days                       | 1 day
+
+-- Exactly at the limit is accepted.
+ALTER TABLE char_widths SET (
+    timescaledb.granular_refresh_column = 'at_limit',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+:GRC 'char_widths';
+ table_name  | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------+-------------------------+-------------------------------+-----------------------------
+ char_widths | at_limit                | 30 days                       | 1 day
+
+DROP TABLE char_widths;
+DROP TABLE vc_width;
