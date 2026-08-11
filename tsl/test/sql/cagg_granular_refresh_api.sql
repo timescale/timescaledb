@@ -268,3 +268,49 @@ ALTER TABLE events SET (
 :GRC 'events';
 
 DROP TABLE events;
+
+-- Error: character(n) wider than the tenant key limit.  char(n) blank-pads every
+-- value to exactly n bytes regardless of the value's own length, so for n over
+-- the 64 byte key limit no tenant is ever storable and tracking could never
+-- engage.  Rejected up front rather than silently never working.
+CREATE TABLE char_widths (time timestamptz NOT NULL, wide char(100), over char(65),
+                          at_limit char(64), unpadded varchar(100), value float8);
+SELECT create_hypertable('char_widths', 'time', chunk_time_interval => '1 day'::interval);
+
+\set ON_ERROR_STOP 0
+ALTER TABLE char_widths SET (
+    timescaledb.granular_refresh_column = 'wide',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+-- One byte over is still rejected.
+ALTER TABLE char_widths SET (
+    timescaledb.granular_refresh_column = 'over',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+\set ON_ERROR_STOP 1
+:GRC 'char_widths';
+
+-- varchar(n) of any declared width is accepted: it does not pad, so a key is
+-- only oversized when a value actually is, which the tracker handles by falling
+-- back at insert time.
+CREATE TABLE vc_width (time timestamptz NOT NULL, sensor varchar(100), value float8);
+SELECT create_hypertable('vc_width', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE vc_width SET (
+    timescaledb.granular_refresh_column = 'sensor',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+:GRC 'vc_width';
+
+-- Exactly at the limit is accepted.
+ALTER TABLE char_widths SET (
+    timescaledb.granular_refresh_column = 'at_limit',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+:GRC 'char_widths';
+
+DROP TABLE char_widths;
+DROP TABLE vc_width;
