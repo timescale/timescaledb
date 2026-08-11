@@ -77,7 +77,7 @@
  *   the drained buffer stays readable until the next flush reuses it.
  *
  * ACCESS PATHS
- *   Write ts_tenant_tracker_update (DML commit path):
+ *   Write ts_tenant_tracker_begin_batch / ts_tenant_tracker_apply_one (DML commit path):
  *     1. Pin the active gen: read active_gen -> fetch_add(num_writers) -> RE-READ active_gen;
  *        if it changed, fetch_sub and retry (pin-then-verify, so a concurrent flush's
  *        drain-wait cannot miss this writer).
@@ -323,7 +323,7 @@ tenant_tracker_apply(TenantGeneration *generation, uint32 hash, const char *key,
 		/* See the published payload before reading the rest of the entry. */
 		pg_read_barrier(); /* for key_len */
 
-		if (entry_matches(entry, hash, key, found_len))
+		if (entry_matches(entry, hash, key, key_len))
 		{
 			atomic_min_ts(&entry->min_ts, min_ts);
 			atomic_max_ts(&entry->max_ts, max_ts);
@@ -378,69 +378,6 @@ tenant_tracker_apply(TenantGeneration *generation, uint32 hash, const char *key,
 	return false;
 }
 
-bool
-ts_tenant_tracker_update(TenantTracking *tracking, const char *key, uint16 key_len,
-						 TimestampTz min_ts, TimestampTz max_ts)
-{
-	uint32 hash = 0;
-	uint32 gen;
-	TenantGeneration *generation;
-	bool result;
-
-	if (key_len > 0 && key_len <= TENANT_TRACKER_KEY_MAXLEN)
-	{
-		hash = hash_bytes((const unsigned char *) key, key_len);
-	}
-
-	/*
-	 * Pin the active generation: bump num_writers, then re-read active_gen.  If
-	 * a flush swapped generations between the two, back the count out and retry
-	 * so the flush's drain wait cannot miss us.
-	 */
-retry_generation:
-	/* we read the active_gen here. Need a read barrier (see tenant_tracker_flush)
-	 * pg_atomic_fetch_add_u32 is a read/write barrier.
-	 * so we don't an explicit read barrier
-	 */
-	gen = pg_atomic_read_u32(&tracking->active_gen);
-	generation = &tracking->generations[gen];
-	pg_atomic_fetch_add_u32(&generation->num_writers, 1);
-
-	/* we could have a situation where
-	 * 1. Writer W1: reads active_gen == 1.
-	 * 2. (writer stalls)
-	 * 3. Flush flips active_gen =0
-	 * 4. Flush: wait loop reads A.num_writers --> sees 0 writers --> proceeds.
-	 * 5. Flush: drains A and returns.
-	 * 6. Writer resumes and updates num_writers for generation =1 . But flush has moved on to
-	 * gen=0. So we need a check here to verify that we are still at the correct generation
-	 */
-
-	if (pg_atomic_read_u32(&tracking->active_gen) != gen)
-	{
-		pg_atomic_fetch_sub_u32(&generation->num_writers, 1);
-		goto retry_generation;
-	}
-
-	if (pg_atomic_read_u32(&generation->status) == TENANT_TRACKER_INVALID)
-	{
-		result = false;
-	}
-	else if (key_len == 0 || key_len > TENANT_TRACKER_KEY_MAXLEN)
-	{
-		/* Cannot store this tenant exactly -> stop tracking this generation. */
-		pg_atomic_write_u32(&generation->status, TENANT_TRACKER_INVALID);
-		result = false;
-	}
-	else
-	{
-		result = tenant_tracker_apply(generation, hash, key, key_len, min_ts, max_ts);
-	}
-
-	pg_atomic_fetch_sub_u32(&generation->num_writers, 1); /* write barrier for num_writers */
-	return result;
-}
-
 TenantGeneration *
 ts_tenant_tracker_begin_batch(TenantTracking *tracking, int32 *seqnum, int64 *late_threshold_start,
 							  int64 *late_threshold_end)
@@ -450,8 +387,10 @@ ts_tenant_tracker_begin_batch(TenantTracking *tracking, int32 *seqnum, int64 *la
 
 	Assert(seqnum != NULL);
 
-	/* Pin the active generation ONCE for the whole batch (see
-	 * ts_tenant_tracker_update for the pin-then-verify rationale). */
+	/* Pin the active generation ONCE for the whole batch: bump num_writers,
+	 * then re-read active_gen; if a flush swapped generations between the
+	 * two, back the count out and retry (pin-then-verify), so the flush's
+	 * drain wait cannot miss this writer. */
 retry_generation:
 	gen = pg_atomic_read_u32(&tracking->active_gen);
 	generation = &tracking->generations[gen];
@@ -511,7 +450,7 @@ ts_tenant_tracker_mark_invalid(TenantTracking *tracking)
 	uint32 gen;
 	TenantGeneration *generation;
 
-	/* Pin the active generation the same way ts_tenant_tracker_update does. */
+	/* Pin the active generation the same way ts_tenant_tracker_begin_batch does. */
 retry_generation:
 	gen = pg_atomic_read_u32(&tracking->active_gen);
 	generation = &tracking->generations[gen];
