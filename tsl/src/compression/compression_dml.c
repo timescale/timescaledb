@@ -1158,6 +1158,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		if (index_rel && num_heap_scankeys)
 		{
 			/* filter tuple based on compress_orderby columns */
+			/* LOOK HERE */
 			valid = false;
 			valid = HeapKeyTest(compressed_tuple,
 								RelationGetDescr(in_rel),
