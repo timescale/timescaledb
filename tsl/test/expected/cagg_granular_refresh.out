@@ -1448,3 +1448,69 @@ NOTICE:  drop cascades to 3 other objects
 DROP MATERIALIZED VIEW m_ng2;
 NOTICE:  drop cascades to 2 other objects
 DROP TABLE metrics;
+-- ============================================================================
+-- (e) Tracker hash collisions: two distinct tenants must stay distinct.
+--
+-- The tracker's lock-free probe rejects a slot on hash, key length and bytes.
+-- If it compares against the STORED entry's length instead of the length of the
+-- key being looked up, the length test degenerates to `x == x` and a stored key
+-- that is a strict prefix of the looked-up key false-matches on a 32-bit hash
+-- collision.  The longer tenant then never gets its own entry -- its range is
+-- silently merged into the shorter tenant's, and nothing marks the generation
+-- INVALID, so the refresh does not fall back: the longer tenant is simply never
+-- re-materialized.
+-- ============================================================================
+CREATE TABLE collide(time timestamptz NOT NULL, tenant text, value float);
+SELECT create_hypertable('collide', 'time');
+   create_hypertable   
+-----------------------
+ (37,public,collide,t)
+
+ALTER TABLE collide SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+CREATE MATERIALIZED VIEW coll_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, tenant, count(*) AS cnt
+  FROM collide GROUP BY bucket, tenant WITH NO DATA;
+ALTER MATERIALIZED VIEW coll_daily SET (timescaledb.enable_granular_refresh = true);
+-- The fixture: 't1' and 't1uLGQQa' collide in the same hash the tracker uses
+-- (hashtext() is hash_any() over the text bytes, as is hash_bytes()), and 't1'
+-- is a strict prefix of 't1uLGQQa'.  Asserting it here keeps the fixture honest:
+-- if this stops reporting true the keys must be recomputed, otherwise the test
+-- below would pass without exercising the collision at all.
+SELECT hashtext('t1') = hashtext('t1uLGQQa') AS hash_collides,
+       't1uLGQQa' LIKE 't1%' AS short_key_is_prefix;
+ hash_collides | short_key_is_prefix 
+---------------+---------------------
+ t             | t
+
+-- Materialize once so the invalidation threshold moves up and the late 2020
+-- inserts below actually log invalidations.
+INSERT INTO collide VALUES ('2024-06-01 00:00+00', 'seed', 1);
+CALL refresh_continuous_aggregate('coll_daily', NULL, '2024-07-01 00:00+00');
+-- verify tenant tracking works correctly even if there is hash collision 
+-- Separate transactions so the SHORT key is drained into the tracker generation
+-- first; the fast-path probe for the long key then walks over the stored short
+-- key.  Both rows land in the same bucket, so a mix-up shows up in the result.
+BEGIN;
+INSERT INTO collide VALUES ('2020-03-01 00:00+00', 't1', 1);
+COMMIT;
+BEGIN;
+INSERT INTO collide VALUES ('2020-03-01 06:00+00', 't1uLGQQa', 2);
+COMMIT;
+CALL refresh_continuous_aggregate('coll_daily', '2020-03-01 00:00+00', '2020-03-02 00:00+00');
+-- Both tenants are tracked separately, so both are materialized.  
+SELECT bucket, tenant, cnt FROM coll_daily
+WHERE bucket = '2020-03-01 00:00+00'
+ORDER BY tenant;
+            bucket            |  tenant  | cnt 
+------------------------------+----------+-----
+ Sun Mar 01 00:00:00 2020 UTC | t1       |   1
+ Sun Mar 01 00:00:00 2020 UTC | t1uLGQQa |   1
+
+DROP MATERIALIZED VIEW coll_daily;
+NOTICE:  drop cascades to 2 other objects
+DROP TABLE collide;
