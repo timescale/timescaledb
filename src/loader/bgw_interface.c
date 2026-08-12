@@ -23,7 +23,7 @@
  * the current TimescaleDB version. This check happens in bgw/bgw_launcher.c When
  * ts_bgw_loader_api_version is updated, check the compatibility in bgw/bgw_launcher.c as well
  */
-const int32 ts_bgw_loader_api_version = 4;
+const int32 ts_bgw_loader_api_version = 5;
 
 TS_FUNCTION_INFO_V1(ts_bgw_worker_reserve);
 TS_FUNCTION_INFO_V1(ts_bgw_worker_release);

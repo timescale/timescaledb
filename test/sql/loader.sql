@@ -208,10 +208,23 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 SET max_parallel_workers_per_gather = 1;
 SELECT count(*) FROM test;
 
-CREATE EXTENSION timescaledb_osm VERSION 'mock-1';
+-- Distinguishing ProcessUtility order test: load a no-dependency probe
+-- *before* the versioned TimescaleDB mock. Without the loader slot, late
+-- TimescaleDB init becomes the global head and the probe would run second.
+DROP EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+LOAD '$libdir/timescaledb_pu_probe';
+CREATE EXTENSION timescaledb VERSION 'mock-2';
+CREATE TABLE pu_probe_test(i int);
+DROP TABLE pu_probe_test;
 
--- Test that OSM process utility hook works:  it should see this DROP TABLE.
-DROP TABLE test;
+-- OSM (requires timescaledb) still ends up as an outer head after TimescaleDB
+-- is already loaded. Use a fresh backend so the probe from above is not still
+-- ProcessUtility head.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE EXTENSION timescaledb_osm VERSION 'mock-1';
+CREATE TABLE osm_hook_test(i int);
+DROP TABLE osm_hook_test;
 
 -- clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER

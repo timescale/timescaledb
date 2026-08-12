@@ -1,0 +1,1 @@
+Fixes: #7667 Audit TimescaleDB COPY with pgaudit when shared_preload_libraries = 'timescaledb,pgaudit'; restart PostgreSQL after upgrading

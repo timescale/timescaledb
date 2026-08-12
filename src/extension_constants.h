@@ -46,3 +46,4 @@ typedef enum TsExtensionSchemas
 extern const char *const ts_extension_schema_names[];
 
 #define RENDEZVOUS_BGW_LOADER_API_VERSION MAKE_EXTOPTION("bgw_loader_api_version")
+#define RENDEZVOUS_PROCESS_UTILITY_HOOK MAKE_EXTOPTION("process_utility_hook")
