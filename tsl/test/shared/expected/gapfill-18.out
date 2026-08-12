@@ -316,7 +316,7 @@ SELECT
   first(min(time),min(time)) OVER ()
 FROM :METRICS
 GROUP BY 1;
-ERROR:  window functions with multiple column references not supported
+ERROR:  window function arguments after the first must be constants
 -- test with unsupported operator
 SELECT
   time_bucket_gapfill(1,time)
@@ -2064,6 +2064,39 @@ GROUP BY 1;
                    4 |         1.0
                    5 |         1.0
 
+-- test window function with aggregate of constant across multiple windows
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(time)) OVER (ORDER BY time_bucket_gapfill(1,time,0,5)),
+  first_value(min(1.0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | first_value | first_value 
+---------------------+-------------+-------------
+                   0 |           0 |         1.0
+                   1 |           0 |         1.0
+                   2 |           0 |         1.0
+                   3 |           0 |         1.0
+                   4 |           0 |         1.0
+                   5 |           0 |         1.0
+
+\set ON_ERROR_STOP 0
+-- test window function with aggregate in secondary arg
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  lag(min(time), 1, min(0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+ERROR:  window function arguments after the first must be constants
+-- test window function with aggregate in secondary arg across multiple windows
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(time)) OVER (ORDER BY time_bucket_gapfill(1,time,0,5)),
+  lag(min(time), 1, min(0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+ERROR:  window function arguments after the first must be constants
+\set ON_ERROR_STOP 1
 -- test window functions with PARTITION BY
 SELECT
   time_bucket_gapfill(1,time,0,5) as time,

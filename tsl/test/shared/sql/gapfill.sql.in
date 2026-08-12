@@ -928,6 +928,31 @@ SELECT
 FROM (VALUES (0),(2),(5)) v(time)
 GROUP BY 1;
 
+-- test window function with aggregate of constant across multiple windows
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(time)) OVER (ORDER BY time_bucket_gapfill(1,time,0,5)),
+  first_value(min(1.0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+
+\set ON_ERROR_STOP 0
+-- test window function with aggregate in secondary arg
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  lag(min(time), 1, min(0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+
+-- test window function with aggregate in secondary arg across multiple windows
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(time)) OVER (ORDER BY time_bucket_gapfill(1,time,0,5)),
+  lag(min(time), 1, min(0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+\set ON_ERROR_STOP 1
+
 -- test window functions with PARTITION BY
 SELECT
   time_bucket_gapfill(1,time,0,5) as time,

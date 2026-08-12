@@ -1,0 +1,1 @@
+Fixes: #10446 Reject non-constant secondary window args
