@@ -65,3 +65,4 @@ extern HeapTuple create_cagg_invalidation_tup(const TupleDesc tupdesc, int32 cag
 extern bool invalidation_hypertable_has_invalidations(int32 hyper_id);
 extern bool invalidation_cagg_has_invalidations(ContinuousAgg *cagg);
 extern bool invalidation_cagg_has_pending_mat_ranges(ContinuousAgg *cagg);
+extern int64 invalidation_get_earliest_chunk_start(int32 raw_hypertable_id);
