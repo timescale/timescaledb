@@ -64,6 +64,13 @@ step "v_insert" { INSERT INTO conditions VALUES ('2026-07-01 00:00+00', 'sensor_
 # Cancels while it is parked at the waitpoint.
 session "K"
 step "k_cancel" { CALL cancelpids(); }
+# Empty synchronization step. The ("v_insert") marker only delays the
+# *reporting* of k_cancel's completion, never the *launch* of the next
+# permutation step, so without this wp_pc_release races V's unwind. k_noop is
+# in the same session, so it cannot be launched until k_cancel is reported
+# complete. See PostgreSQL src/test/isolation/README, "Dealing with race
+# conditions".
+step "k_noop" { }
 
 # An unrelated writer + refresh flushes all tenant tracking entries
 # The refresh window excludes the cancelled backend's  
@@ -107,4 +114,4 @@ step "r_check_tracking2"
     ORDER BY tenant_id, seqnum;
 }
 
-permutation "wp_pc_enable" "v_register_pid" "v_insert"("wp_pc_enable") "k_cancel"("v_insert") "wp_pc_release" "r_anchor_insert"("wp_pc_release") "r_refresh" "r_check_conditions" "r_check_tracking" "r_refresh2" "r_check_cagg" "r_check_tracking2" "r_anchor_insert" "r_refresh2" "r_refresh2" "r_check_tracking2"
+permutation "wp_pc_enable" "v_register_pid" "v_insert"("wp_pc_enable") "k_cancel"("v_insert") "k_noop" "wp_pc_release" "r_anchor_insert"("wp_pc_release") "r_refresh" "r_check_conditions" "r_check_tracking" "r_refresh2" "r_check_cagg" "r_check_tracking2" "r_anchor_insert" "r_refresh2" "r_refresh2" "r_check_tracking2"
