@@ -180,6 +180,11 @@ SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_ord ORDER BY time, grp US
 ----
  t
 
+SELECT count(x) >= 0 AS ok FROM (SELECT gg FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l) x;  -- deferred scan on the inner side of a lateral join, rescanned per outer row
+ ok 
+----
+ t
+
 RESET timescaledb.debug_require_deferred_chunk_scan;
 SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
 -- queries not currently supported with deferredchunkscan
@@ -295,6 +300,11 @@ SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics UNION ALL SELECT * FROM m
  t
 
 SELECT count(x) >= 0 AS ok FROM (SELECT generate_series(1, device) FROM metrics ORDER BY time LIMIT 1) x;  -- set-returning function in target list
+ ok 
+----
+ t
+
+SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_regular r, LATERAL (SELECT * FROM metrics m WHERE m.device = r.x ORDER BY time LIMIT 1) l LIMIT 1) x;  -- lateral correlation in WHERE (outer ref becomes a Param)
  ok 
 ----
  t
@@ -981,6 +991,15 @@ SELECT time, ARRAY(SELECT x FROM metrics_regular ORDER BY x) AS a FROM metrics O
  Wed Jan 01 01:00:00 2020 PST | {1}
  Wed Jan 01 02:00:00 2020 PST | {1}
 
+-- lateral join: the deferred scan sits on the inner side of a nestloop and is
+-- rescanned for each outer row, so the diff catches a stale rescan result
+SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l ORDER BY g;
+ g | gg | value 
+---+----+-------
+ 1 |  1 |     0
+ 2 |  2 |     0
+ 3 |  3 |     0
+
 RESET timescaledb.debug_require_deferred_chunk_scan;
 -- Node output must match the expanded plan: run with the node on then off and diff.
 \o :TEST_RESULTS_OPTIMIZED
@@ -1040,6 +1059,9 @@ SELECT time, (SELECT count(*) FROM metrics_regular) AS c FROM metrics ORDER BY t
 SELECT time, device, (SELECT count(*) FROM metrics_regular r WHERE r.x = metrics.device) AS m FROM metrics ORDER BY time LIMIT 5;  -- correlated scalar subquery (SubPlan)
 SELECT time, EXISTS(SELECT 1 FROM metrics_regular r WHERE r.x = metrics.device) AS e FROM metrics ORDER BY time LIMIT 5;  -- correlated EXISTS
 SELECT time, ARRAY(SELECT x FROM metrics_regular ORDER BY x) AS a FROM metrics ORDER BY time LIMIT 3;  -- ARRAY subquery
+-- lateral join: the deferred scan sits on the inner side of a nestloop and is
+-- rescanned for each outer row, so the diff catches a stale rescan result
+SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l ORDER BY g;
 \o
 SET timescaledb.enable_deferred_chunk_scan TO off;
 \o :TEST_RESULTS_UNOPTIMIZED
@@ -1099,6 +1121,9 @@ SELECT time, (SELECT count(*) FROM metrics_regular) AS c FROM metrics ORDER BY t
 SELECT time, device, (SELECT count(*) FROM metrics_regular r WHERE r.x = metrics.device) AS m FROM metrics ORDER BY time LIMIT 5;  -- correlated scalar subquery (SubPlan)
 SELECT time, EXISTS(SELECT 1 FROM metrics_regular r WHERE r.x = metrics.device) AS e FROM metrics ORDER BY time LIMIT 5;  -- correlated EXISTS
 SELECT time, ARRAY(SELECT x FROM metrics_regular ORDER BY x) AS a FROM metrics ORDER BY time LIMIT 3;  -- ARRAY subquery
+-- lateral join: the deferred scan sits on the inner side of a nestloop and is
+-- rescanned for each outer row, so the diff catches a stale rescan result
+SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l ORDER BY g;
 \o
 SET timescaledb.enable_deferred_chunk_scan TO on;
 :DIFF_CMD

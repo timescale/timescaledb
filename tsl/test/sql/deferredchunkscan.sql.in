@@ -89,6 +89,7 @@ SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics ORDER BY time, device LIM
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_ord ORDER BY time DESC, device LIMIT 3) x;  -- multi-key, leading DESC
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_ord ORDER BY time, value DESC NULLS LAST LIMIT 3) x;  -- NULLS ordering on trailing key
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_ord ORDER BY time, grp USING ~<~ LIMIT 3) x;  -- USING operator on trailing key
+SELECT count(x) >= 0 AS ok FROM (SELECT gg FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l) x;  -- deferred scan on the inner side of a lateral join, rescanned per outer row
 RESET timescaledb.debug_require_deferred_chunk_scan;
 
 SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
@@ -119,6 +120,7 @@ SELECT count(x) >= 0 AS ok FROM (SELECT row_number() OVER () FROM metrics LIMIT 
 SELECT count(x) >= 0 AS ok FROM (SELECT DISTINCT device FROM metrics LIMIT 1) x;  -- DISTINCT
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics UNION ALL SELECT * FROM metrics LIMIT 1) x;  -- set operation
 SELECT count(x) >= 0 AS ok FROM (SELECT generate_series(1, device) FROM metrics ORDER BY time LIMIT 1) x;  -- set-returning function in target list
+SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_regular r, LATERAL (SELECT * FROM metrics m WHERE m.device = r.x ORDER BY time LIMIT 1) l LIMIT 1) x;  -- lateral correlation in WHERE (outer ref becomes a Param)
 
 -- an ordering or limit the node can't satisfy
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics ORDER BY time FETCH FIRST 1 ROW WITH TIES) x;  -- WITH TIES
