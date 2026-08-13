@@ -1340,8 +1340,10 @@ COPY copy_t FROM STDIN; --ok
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO OFF;
 COPY copy_t FROM STDIN; --fail - would be affected by RLS.
+\.
 SET row_security TO ON;
 COPY copy_t FROM STDIN; --fail - COPY FROM not supported by RLS.
+\.
 
 -- Check COPY FROM as user with permissions and BYPASSRLS
 SET SESSION AUTHORIZATION regress_rls_exempt_user;
@@ -1357,8 +1359,10 @@ COPY copy_t FROM STDIN; --ok
 SET SESSION AUTHORIZATION regress_rls_carol;
 SET row_security TO OFF;
 COPY copy_t FROM STDIN; --fail - permission denied.
+\.
 SET row_security TO ON;
 COPY copy_t FROM STDIN; --fail - permission denied.
+\.
 
 RESET SESSION AUTHORIZATION;
 DROP TABLE copy_t;

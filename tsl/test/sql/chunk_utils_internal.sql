@@ -967,6 +967,7 @@ INSERT INTO :COMPRESSED_CHUNK SELECT;
 UPDATE :COMPRESSED_CHUNK SET device = 'dev3' WHERE device = 'dev1';
 DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
 COPY :COMPRESSED_CHUNK FROM STDIN;
+\.
 \set ON_ERROR_STOP 1
 
 -- TEST: OSM chunks should NOT be added to publications
