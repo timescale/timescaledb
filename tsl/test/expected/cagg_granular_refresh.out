@@ -363,6 +363,9 @@ CREATE MATERIALIZED VIEW cond_daily
   FROM conditions
   GROUP BY bucket, sensor_id
   WITH NO DATA;
+--insert some data and do a prime refresh to clear off [-inf, +inf] invalidations
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', NULL, '2026-01-07 00:00:00');
 ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
 -- fresh row to force the refresh to drain the tracker
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
@@ -386,8 +389,55 @@ ORDER BY hypertable_id, tenant_id, seqnum;
             11 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
             11 | sensor_z  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
 
+-- Check invalidations, we should have 2 separate invalidations with seqnum 2
+-- for sensor_a (sensor_z invalidation has been consumed by the refresh above)
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'cond_daily' and seqnum = 2)
+ORDER BY 1, 2;
+ materialization_id | lowest_modified_value | greatest_modified_value | seqnum 
+--------------------+-----------------------+-------------------------+--------
+                 12 |      1577836800000000 |        1577923199999999 |      2
+                 12 |      1578009600000000 |        1578095999999999 |      2
+
+--Refresh Jan1 2020 bucket, that would clear one invalidation for sensor_a but leave the other.
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-02 00:00+00');
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'cond_daily' and seqnum = 2)
+ORDER BY 1, 2;
+ materialization_id | lowest_modified_value | greatest_modified_value | seqnum 
+--------------------+-----------------------+-------------------------+--------
+                 12 |      1578009600000000 |        1578095999999999 |      2
+
+--Because we don't cut and clean up trackings, we should still see full tracking for
+--sensor_a stays ([Jan 1 - Jan 3]).
+--(Sensor_z tracking has been consumed but not garbage-collected yet)
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+ hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
+---------------+-----------+------------------------------+------------------------------+--------
+            11 | sensor_a  | Wed Jan 01 00:00:00 2020 UTC | Fri Jan 03 00:00:00 2020 UTC |      2
+            11 | sensor_z  | Thu Jan 02 00:00:00 2025 UTC | Thu Jan 02 00:00:00 2025 UTC |      2
+
+--now refresh all Jan 2020, we should see only one row updated, because only one invalidation
+--for Jan 3 bucket remains, despite the tracking is still [Jan1 - Jan3], That is,
+--although we don't clean up trackings, we should not redo the Jan 1 refresh
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-30 00:00+00');
+LOG:  statement: CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-30 00:00+00');
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_12"
+LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_12"
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
 DROP TABLE conditions;
 -- Test upd 2: UPDATE that changes only the time column (tenant unchanged) must
 -- widen the tracked [min,max] to span the old and new time.
@@ -751,7 +801,7 @@ WHERE hypertable_id = (
              0
 
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_53_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_54_chunk
 DROP TABLE conditions;
 -- Test copy: plain COPY into the hypertable.
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
@@ -796,7 +846,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
             25 | sensor_z  | Wed Jan 01 00:00:00 2025 UTC | Wed Jan 01 00:00:00 2025 UTC |      1
 
 DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_57_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_58_chunk
 DROP TABLE conditions;
 -- Test: TRUNCATE must always force a full (non-granular) refresh over the
 -- truncated range.
