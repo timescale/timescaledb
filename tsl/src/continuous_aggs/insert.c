@@ -726,6 +726,14 @@ tenant_local_htab_write(void)
 		seq_entry->late_threshold_start = window_start;
 		seq_entry->late_threshold_end = window_end;
 
+		/* Fail while this generation is pinned, so a test can exercise what
+		 * happens to num_writers when a writer does not reach end_batch. */
+		DEBUG_ERROR_INJECTION("tenant_tracker_fail_in_pin");
+
+		/* Park while the generation is pinned, so a test can terminate the
+		 * writer before it reaches end_batch. */
+		DEBUG_WAITPOINT("tenant_tracker_in_pin");
+
 		hash_seq_init(&hash_seq, tenant_local_htab);
 		while ((entry = hash_seq_search(&hash_seq)) != NULL)
 		{
