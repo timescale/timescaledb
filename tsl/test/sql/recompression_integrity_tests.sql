@@ -221,5 +221,34 @@ SELECT * FROM recomp_guc_test ORDER BY time, device;
 RESET timescaledb.enable_in_memory_recompression;
 DROP TABLE recomp_guc_test CASCADE;
 
+-- Test Case 7: In-memory recompression after an orderby direction change (#10058)
+-- Changing compress_orderby's direction between compress_chunk() and
+-- compress_chunk(recompress := true) must re-sort the data, not just relabel
+-- it: an ordered scan with LIMIT trusts the compressed batches' min/max
+-- metadata to skip a full sort, so stale physical ordering surfaces directly
+-- in query results, not only in internal metadata.
+DROP TABLE IF EXISTS recomp_orderby_change_test CASCADE;
+CREATE TABLE recomp_orderby_change_test(started_at int NOT NULL, vehicle_id int NOT NULL);
+SELECT create_hypertable('recomp_orderby_change_test', 'started_at');
+
+INSERT INTO recomp_orderby_change_test SELECT i, 0 FROM generate_series(0, 9) i;
+
+ALTER TABLE recomp_orderby_change_test SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'started_at',
+    timescaledb.compress_segmentby = 'vehicle_id'
+);
+
+SELECT compress_chunk(ch) FROM show_chunks('recomp_orderby_change_test') ch;
+
+-- Reverse the orderby direction, then recompress in-memory.
+ALTER TABLE recomp_orderby_change_test SET (timescaledb.compress_orderby = 'started_at DESC');
+SELECT compress_chunk(ch, recompress => true) FROM show_chunks('recomp_orderby_change_test') ch;
+
+-- Must reflect the new DESC orderby, not the stale ASC physical order.
+SELECT started_at FROM recomp_orderby_change_test ORDER BY started_at DESC LIMIT 3;
+
+DROP TABLE recomp_orderby_change_test CASCADE;
+
 
 
