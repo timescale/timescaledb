@@ -51,6 +51,29 @@ typedef struct CompressionInfo
 	int32 chunk_status;
 } CompressionInfo;
 
+typedef struct SortInfo
+{
+	List *required_compressed_pathkeys;
+
+	/* Pathkey equivalence class members satisfying compressed sort order,
+	 * needed to create leading/trailing orderby metadata pathkeys,
+	 * also needed for batch sorted merge heap comparison setup */
+	List *required_pathkey_ems;
+
+	bool needs_orderby_metadata;
+	bool use_compressed_sort; /* sort can be pushed below ColumnarScan */
+	bool use_batch_sorted_merge;
+	bool reverse;
+
+	/* Segmentby columns which are in pathkey equivalence classes:
+	 * needed for batch sorted merge cost estimation,
+	 * as segmentwise batch sorted merge has 1 pathkeys segment on a heap at a time */
+	Bitmapset *segmentby_pathkey_columns;
+
+	List *decompressed_sort_pathkeys;
+	QualCost decompressed_sort_pathkeys_cost;
+} SortInfo;
+
 typedef struct ColumnarScanPath
 {
 	CustomPath custom_path;
@@ -76,6 +99,7 @@ typedef struct ColumnarScanPath
 
 } ColumnarScanPath;
 
+bool is_var_notnull(const CompressionInfo *compression_info, Var *var);
 void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
 									 const Chunk *chunk);
 

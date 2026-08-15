@@ -1053,6 +1053,86 @@ SET enable_partitionwise_aggregate = off;
 + on
  
   device | count 
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+                           Filter: ((device = 'd1'::text) AND (sensor = 'B'::text))
+
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+                           Filter: ((device = 'd1'::text) AND (sensor = 'B'::text))
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (value < '5'::double precision)
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+                           Filter: (_ts_meta_v2_min_value < '5'::double precision)
+
+02:30
+d1|B|02:30
+d1|B|00:30
+02:30
+d1|B|02:30
+d1|B|00:30
 SET timescaledb.enable_columnarindexscan = on;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -6602,13 +6682,13 @@ EXPLAIN (costs off) SELECT min(seq), max(seq) FROM agg_order;
  Result
    InitPlan 1
      ->  Limit
-           ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+           ->  Custom Scan (ColumnarIndexScan) on _hyper_5_6_chunk
                  ->  Sort
                        Sort Key: _hyper_5_6_chunk_compressed._ts_meta_v2_first_seq
                        ->  Seq Scan on _hyper_5_6_chunk_compressed
    InitPlan 2
      ->  Limit
-           ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk _hyper_5_6_chunk_1
+           ->  Custom Scan (ColumnarIndexScan) on _hyper_5_6_chunk _hyper_5_6_chunk_1
                  ->  Sort
                        Sort Key: _hyper_5_6_chunk_compressed_1._ts_meta_v2_last_seq DESC
                        ->  Seq Scan on _hyper_5_6_chunk_compressed _hyper_5_6_chunk_compressed_1
@@ -6663,14 +6743,14 @@ EXPLAIN (costs off) SELECT first(seq, seq), last(seq, seq) FROM agg_order;
    InitPlan 1
      ->  Limit
            ->  Result
-                 ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+                 ->  Custom Scan (ColumnarIndexScan) on _hyper_5_6_chunk
                        ->  Sort
                              Sort Key: _hyper_5_6_chunk_compressed._ts_meta_v2_last_seq DESC
                              ->  Seq Scan on _hyper_5_6_chunk_compressed
    InitPlan 2
      ->  Limit
            ->  Result
-                 ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk _hyper_5_6_chunk_1
+                 ->  Custom Scan (ColumnarIndexScan) on _hyper_5_6_chunk _hyper_5_6_chunk_1
                        ->  Sort
                              Sort Key: _hyper_5_6_chunk_compressed_1._ts_meta_v2_first_seq
                              ->  Seq Scan on _hyper_5_6_chunk_compressed _hyper_5_6_chunk_compressed_1
@@ -6687,7 +6767,7 @@ EXPLAIN (costs off) SELECT first(seq::oid, seq) FROM agg_order;
    InitPlan 1
      ->  Limit
            ->  Result
-                 ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+                 ->  Custom Scan (ColumnarIndexScan) on _hyper_5_6_chunk
                        ->  Sort
                              Sort Key: _hyper_5_6_chunk_compressed._ts_meta_v2_first_seq
                              ->  Seq Scan on _hyper_5_6_chunk_compressed

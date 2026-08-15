@@ -665,9 +665,11 @@ SELECT t.dttm FROM test t WHERE t.dttm > '2023-05-25T14:23:12' ORDER BY t.dttm;
 
 -- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
 SET enable_sort TO OFF;
+SET timescaledb.enable_columnarindexscan TO OFF;
 set timescaledb.debug_require_batch_sorted_merge = 'require';
 :PREFIX
 SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
+RESET timescaledb.enable_columnarindexscan;
 RESET enable_sort;
 
 drop table test cascade;

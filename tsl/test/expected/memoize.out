@@ -249,10 +249,10 @@ LIMIT 10000
                      ->  Custom Scan (ChunkAppend) on metrics_compressed m2 (actual rows=1.00 loops=27)
                            Order: m2."time" DESC
                            Hypertables excluded during runtime: 0
-                           ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk m2_1 (actual rows=1.00 loops=27)
+                           ->  Custom Scan (ColumnarIndexScan) on _hyper_3_15_chunk m2_1 (actual rows=1.00 loops=27)
                                  ->  Index Scan using _hyper_3_15_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_15_chunk_compressed _hyper_3_15_chunk_compressed_1 (actual rows=1.00 loops=27)
                                        Index Cond: (device_id = m1.device_id)
-                           ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk m2_2 (never executed)
+                           ->  Custom Scan (ColumnarIndexScan) on _hyper_3_14_chunk m2_2 (never executed)
                                  ->  Index Scan using _hyper_3_14_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_14_chunk_compressed _hyper_3_14_chunk_compressed_1 (never executed)
                                        Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
@@ -345,43 +345,37 @@ LIMIT 10000
                            Chunks excluded during runtime: 6
                            ->  Merge Append (actual rows=1.00 loops=27)
                                  Sort Key: m2."time" DESC
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk m2_1 (actual rows=1.00 loops=8)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_24_chunk m2_1 (actual rows=1.00 loops=8)
                                        ->  Index Scan using _hyper_4_24_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_24_chunk_compressed _hyper_4_24_chunk_compressed_1 (actual rows=1.00 loops=8)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk m2_2 (actual rows=1.00 loops=10)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_23_chunk m2_2 (actual rows=1.00 loops=10)
                                        ->  Index Scan using _hyper_4_23_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_23_chunk_compressed _hyper_4_23_chunk_compressed_1 (actual rows=1.00 loops=10)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk m2_3 (actual rows=1.00 loops=9)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_22_chunk m2_3 (actual rows=1.00 loops=9)
                                        ->  Index Scan using _hyper_4_22_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_22_chunk_compressed _hyper_4_22_chunk_compressed_1 (actual rows=1.00 loops=9)
                                              Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk m2_4 (never executed)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_21_chunk m2_4 (never executed)
                                        ->  Index Scan using _hyper_4_21_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_21_chunk_compressed _hyper_4_21_chunk_compressed_1 (never executed)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk m2_5 (never executed)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_20_chunk m2_5 (never executed)
                                        ->  Index Scan using _hyper_4_20_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_20_chunk_compressed _hyper_4_20_chunk_compressed_1 (never executed)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk m2_6 (never executed)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_19_chunk m2_6 (never executed)
                                        ->  Index Scan using _hyper_4_19_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_19_chunk_compressed _hyper_4_19_chunk_compressed_1 (never executed)
                                              Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk m2_7 (never executed)
-                                       ->  Sort (never executed)
-                                             Sort Key: _hyper_4_18_chunk_compressed_1._ts_meta_v2_first_time DESC, _hyper_4_18_chunk_compressed_1._ts_meta_v2_last_time DESC
-                                             ->  Seq Scan on _hyper_4_18_chunk_compressed _hyper_4_18_chunk_compressed_1 (never executed)
-                                                   Filter: (m1.device_id = device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk m2_8 (never executed)
-                                       ->  Sort (never executed)
-                                             Sort Key: _hyper_4_17_chunk_compressed_1._ts_meta_v2_first_time DESC, _hyper_4_17_chunk_compressed_1._ts_meta_v2_last_time DESC
-                                             ->  Seq Scan on _hyper_4_17_chunk_compressed _hyper_4_17_chunk_compressed_1 (never executed)
-                                                   Filter: (m1.device_id = device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk m2_9 (never executed)
-                                       ->  Sort (never executed)
-                                             Sort Key: _hyper_4_16_chunk_compressed_1._ts_meta_v2_first_time DESC, _hyper_4_16_chunk_compressed_1._ts_meta_v2_last_time DESC
-                                             ->  Seq Scan on _hyper_4_16_chunk_compressed _hyper_4_16_chunk_compressed_1 (never executed)
-                                                   Filter: (m1.device_id = device_id)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_18_chunk m2_7 (never executed)
+                                       ->  Index Scan using _hyper_4_18_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_18_chunk_compressed _hyper_4_18_chunk_compressed_1 (never executed)
+                                             Index Cond: (device_id = m1.device_id)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_17_chunk m2_8 (never executed)
+                                       ->  Index Scan using _hyper_4_17_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_17_chunk_compressed _hyper_4_17_chunk_compressed_1 (never executed)
+                                             Index Cond: (device_id = m1.device_id)
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_4_16_chunk m2_9 (never executed)
+                                       ->  Index Scan using _hyper_4_16_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_16_chunk_compressed _hyper_4_16_chunk_compressed_1 (never executed)
+                                             Index Cond: (device_id = m1.device_id)
 
 -- get results for all the queries
 -- run queries with and without memoize

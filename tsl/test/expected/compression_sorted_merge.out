@@ -1468,6 +1468,7 @@ SELECT t.dttm FROM test t WHERE t.dttm > '2023-05-25T14:23:12' ORDER BY t.dttm;
 
 -- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
 SET enable_sort TO OFF;
+SET timescaledb.enable_columnarindexscan TO OFF;
 set timescaledb.debug_require_batch_sorted_merge = 'require';
 :PREFIX
 SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
@@ -1492,6 +1493,7 @@ SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
                            ->  Seq Scan on _timescaledb_internal._hyper_7_12_chunk_compressed (actual rows=32.00 loops=1)
                                  Output: _hyper_7_12_chunk_compressed._ts_meta_count, _hyper_7_12_chunk_compressed.otherid, _hyper_7_12_chunk_compressed.valuefk, _hyper_7_12_chunk_compressed.otherfk, _hyper_7_12_chunk_compressed.id, _hyper_7_12_chunk_compressed._ts_meta_min_1, _hyper_7_12_chunk_compressed._ts_meta_max_1, _hyper_7_12_chunk_compressed._ts_meta_v2_first_dttm, _hyper_7_12_chunk_compressed._ts_meta_v2_last_dttm, _hyper_7_12_chunk_compressed.dttm, _hyper_7_12_chunk_compressed.measure
 
+RESET timescaledb.enable_columnarindexscan;
 RESET enable_sort;
 drop table test cascade;
 -- Test issue #9922: wrong sort order for Batch Sorted Merge with multikey minmax index

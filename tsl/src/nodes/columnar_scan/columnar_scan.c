@@ -37,6 +37,7 @@
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
+#include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/qual_pushdown.h"
@@ -49,29 +50,6 @@ static CustomPathMethods columnar_scan_path_methods = {
 	.CustomName = "ColumnarScan",
 	.PlanCustomPath = columnar_scan_plan_create,
 };
-
-typedef struct SortInfo
-{
-	List *required_compressed_pathkeys;
-
-	/* Pathkey equivalence class members satisfying compressed sort order,
-	 * needed to create leading/trailing orderby metadata pathkeys,
-	 * also needed for batch sorted merge heap comparison setup */
-	List *required_pathkey_ems;
-
-	bool needs_orderby_metadata;
-	bool use_compressed_sort; /* sort can be pushed below ColumnarScan */
-	bool use_batch_sorted_merge;
-	bool reverse;
-
-	/* Segmentby columns which are in pathkey equivalence classes:
-	 * needed for batch sorted merge cost estimation,
-	 * as segmentwise batch sorted merge has 1 pathkeys segment on a heap at a time */
-	Bitmapset *segmentby_pathkey_columns;
-
-	List *decompressed_sort_pathkeys;
-	QualCost decompressed_sort_pathkeys_cost;
-} SortInfo;
 
 static RangeTblEntry *columnar_scan_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse);
 static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
@@ -1577,6 +1555,22 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		}
 	}
 
+	/* ColumnarIndexScan always preferable over ColumnarScan, so it replaces the other paths */
+	if (!add_uncompressed_part)
+	{
+		Path *metadata_path = columnar_index_scan_path(root,
+													   chunk_rel,
+													   compressed_path,
+													   sort_info,
+													   compression_info,
+													   all_quals_pushed_down,
+													   root->limit_tuples);
+		if (metadata_path != NULL)
+		{
+			return list_make1(metadata_path);
+		}
+	}
+
 	Path *chunk_path_no_sort = (Path *)
 		columnar_scan_path_create(root, compression_info, compressed_path, all_quals_pushed_down);
 	List *decompressed_paths = list_make1(chunk_path_no_sort);
@@ -2981,7 +2975,7 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 	return segmentby_columns;
 }
 
-static bool
+bool
 is_var_notnull(const CompressionInfo *compression_info, Var *var)
 {
 	bool notnull = false;
