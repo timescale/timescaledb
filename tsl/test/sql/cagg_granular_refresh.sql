@@ -317,6 +317,11 @@ CREATE MATERIALIZED VIEW cond_daily
   FROM conditions
   GROUP BY bucket, sensor_id
   WITH NO DATA;
+
+--insert some data and do a prime refresh to clear off [-inf, +inf] invalidations
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', NULL, '2026-01-07 00:00:00');
+
 ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
 
 -- fresh row to force the refresh to drain the tracker
@@ -337,6 +342,40 @@ WHERE hypertable_id = (
     SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
     WHERE user_view_name = 'cond_daily')
 ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- Check invalidations, we should have 2 separate invalidations with seqnum 2
+-- for sensor_a (sensor_z invalidation has been consumed by the refresh above)
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'cond_daily' and seqnum = 2)
+ORDER BY 1, 2;
+
+--Refresh Jan1 2020 bucket, that would clear one invalidation for sensor_a but leave the other.
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-02 00:00+00');
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'cond_daily' and seqnum = 2)
+ORDER BY 1, 2;
+
+--Because we don't cut and clean up trackings, we should still see full tracking for
+--sensor_a stays ([Jan 1 - Jan 3]).
+--(Sensor_z tracking has been consumed but not garbage-collected yet)
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+--now refresh all Jan 2020, we should see only one row updated, because only one invalidation
+--for Jan 3 bucket remains, despite the tracking is still [Jan1 - Jan3], That is,
+--although we don't clean up trackings, we should not redo the Jan 1 refresh
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-30 00:00+00');
+RESET client_min_messages;
+
 
 DROP MATERIALIZED VIEW cond_daily;
 DROP TABLE conditions;
