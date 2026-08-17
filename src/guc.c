@@ -95,7 +95,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_hypertable_expansion_for_dml = true;
-TSDLLEXPORT bool ts_guc_enable_deferred_chunk_scan = true;
+TSDLLEXPORT bool ts_guc_enable_deferred_chunk_append = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
@@ -781,11 +781,11 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deferred_chunk_scan"),
-							 "Enable DeferredChunkScan for LIMIT queries",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deferred_chunk_append"),
+							 "Enable DeferredChunkAppend for LIMIT queries",
 							 "Custom scan node for hypertables that iterates chunks at "
 							 "execution instead of expanding every chunk at plan time.",
-							 &ts_guc_enable_deferred_chunk_scan,
+							 &ts_guc_enable_deferred_chunk_append,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1728,11 +1728,10 @@ _guc_init(void)
 
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_deferred_chunk_scan"),
 							 /* short_desc= */
-							 "ensure that DeferredChunkScan is used or not",
+							 "ensure that DeferredChunkAppend is used or not",
 							 /* long_desc= */
 							 "this is for debugging purposes, to check whether a query uses the "
-							 "DeferredChunkScan node without depending on version-specific EXPLAIN "
-							 "output",
+							 "DeferredChunkAppend node without depending on EXPLAIN output",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_deferred_chunk_scan,
 							 /* bootValue= */ DRO_Allow,
 							 /* options = */ debug_require_options,
