@@ -56,7 +56,7 @@
 #include "dimension_slice.h"
 #include "guc.h"
 #include "hypertable.h"
-#include "nodes/deferred_chunk_scan/deferred_chunk_scan.h"
+#include "nodes/deferred_chunk_append/deferred_chunk_append.h"
 #include "scan_iterator.h"
 #include "ts_catalog/catalog.h"
 #include "utils.h"
@@ -75,9 +75,9 @@ typedef enum
 	DCS_PRIV_LIMIT,		  /* rows to push into each per-chunk query, 0 = none */
 	DCS_PRIV_DESCENDING,  /* 1 if chunk enumeration runs in descending dimension order */
 	DCS_PRIV_COUNT
-} DeferredChunkScanPrivIndex;
+} DeferredChunkAppendPrivIndex;
 
-typedef struct DeferredChunkScanState
+typedef struct DeferredChunkAppendState
 {
 	CustomScanState css;
 
@@ -109,19 +109,19 @@ typedef struct DeferredChunkScanState
 	uint64 cur_nrows;
 	uint64 cur_row;
 	TupleTableSlot *scan_slot; /* virtual tuple in hypertable row type, before projection */
-} DeferredChunkScanState;
+} DeferredChunkAppendState;
 
 /* DestReceiver that copies each fetched row into the scan's chunk_mcxt. */
-typedef struct DeferredChunkScanDest
+typedef struct DeferredChunkAppendDest
 {
 	DestReceiver pub;
-	DeferredChunkScanState *state;
-} DeferredChunkScanDest;
+	DeferredChunkAppendState *state;
+} DeferredChunkAppendDest;
 
 static bool
 dcs_receive_slot(TupleTableSlot *slot, DestReceiver *self)
 {
-	DeferredChunkScanState *state = ((DeferredChunkScanDest *) self)->state;
+	DeferredChunkAppendState *state = ((DeferredChunkAppendDest *) self)->state;
 	MemoryContext old = MemoryContextSwitchTo(state->chunk_mcxt);
 	state->cur_tuples[state->cur_nrows++] = ExecCopySlotHeapTuple(slot);
 	MemoryContextSwitchTo(old);
@@ -138,9 +138,9 @@ dcs_dest_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 }
 
 static DestReceiver *
-dcs_create_dest(DeferredChunkScanState *state)
+dcs_create_dest(DeferredChunkAppendState *state)
 {
-	DeferredChunkScanDest *dest = palloc0(sizeof(DeferredChunkScanDest));
+	DeferredChunkAppendDest *dest = palloc0(sizeof(DeferredChunkAppendDest));
 	dest->pub.receiveSlot = dcs_receive_slot;
 	dest->pub.rStartup = dcs_dest_startup;
 	dest->pub.rShutdown = dcs_dest_noop;
@@ -161,17 +161,17 @@ static void deferred_chunk_scan_rescan(CustomScanState *node);
 static void deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es);
 
 static CustomPathMethods deferred_chunk_scan_path_methods = {
-	.CustomName = "DeferredChunkScan",
+	.CustomName = "DeferredChunkAppend",
 	.PlanCustomPath = deferred_chunk_scan_plan_create,
 };
 
 static CustomScanMethods deferred_chunk_scan_plan_methods = {
-	.CustomName = "DeferredChunkScan",
+	.CustomName = "DeferredChunkAppend",
 	.CreateCustomScanState = deferred_chunk_scan_state_create,
 };
 
 static CustomExecMethods deferred_chunk_scan_exec_methods = {
-	.CustomName = "DeferredChunkScan",
+	.CustomName = "DeferredChunkAppend",
 	.BeginCustomScan = deferred_chunk_scan_begin,
 	.ExecCustomScan = deferred_chunk_scan_exec,
 	.EndCustomScan = deferred_chunk_scan_end,
@@ -319,7 +319,7 @@ deferred_chunk_scan_quals_supported(Node *quals, Index rtindex, Bitmapset *dimen
 static bool
 deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
 {
-	if (!ts_guc_enable_optimizations || !ts_guc_enable_deferred_chunk_scan || ht == NULL)
+	if (!ts_guc_enable_optimizations || !ts_guc_enable_deferred_chunk_append || ht == NULL)
 	{
 		return false;
 	}
@@ -462,14 +462,14 @@ ts_should_deferred_chunk_scan(const Query *query, const Hypertable *ht)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("DeferredChunkScan not used when required by the "
+				 errmsg("DeferredChunkAppend not used when required by the "
 						"debug_require_deferred_chunk_scan GUC")));
 	}
 	if (used && ts_guc_debug_require_deferred_chunk_scan == DRO_Forbid)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("DeferredChunkScan used when forbidden by the "
+				 errmsg("DeferredChunkAppend used when forbidden by the "
 						"debug_require_deferred_chunk_scan GUC")));
 	}
 #endif
@@ -683,8 +683,8 @@ deferred_chunk_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *
 static Node *
 deferred_chunk_scan_state_create(CustomScan *cscan)
 {
-	DeferredChunkScanState *state =
-		(DeferredChunkScanState *) newNode(sizeof(DeferredChunkScanState), T_CustomScanState);
+	DeferredChunkAppendState *state =
+		(DeferredChunkAppendState *) newNode(sizeof(DeferredChunkAppendState), T_CustomScanState);
 
 	state->css.methods = &deferred_chunk_scan_exec_methods;
 
@@ -707,7 +707,7 @@ deferred_chunk_scan_state_create(CustomScan *cscan)
  * Determine which columns to fetch from this scan's output targetlist
  */
 static void
-compute_fetch_columns(DeferredChunkScanState *state, CustomScanState *node)
+compute_fetch_columns(DeferredChunkAppendState *state, CustomScanState *node)
 {
 	Scan *scan = (Scan *) node->ss.ps.plan;
 	TupleDesc desc = RelationGetDescr(node->ss.ss_currentRelation);
@@ -758,7 +758,7 @@ dcs_close_qd(QueryDesc *qd)
 
 /* Shut down every executor still open (current chunk plus any kept for EXPLAIN). */
 static void
-dcs_close_all_qds(DeferredChunkScanState *state)
+dcs_close_all_qds(DeferredChunkAppendState *state)
 {
 	if (state->cur_qd != NULL)
 	{
@@ -775,7 +775,7 @@ dcs_close_all_qds(DeferredChunkScanState *state)
 
 /* Reset the scan position to the start */
 static void
-deferred_chunk_scan_reset(DeferredChunkScanState *state)
+deferred_chunk_scan_reset(DeferredChunkAppendState *state)
 {
 	dcs_close_all_qds(state);
 	state->cur_nrows = 0;
@@ -791,12 +791,12 @@ deferred_chunk_scan_reset(DeferredChunkScanState *state)
 static void
 deferred_chunk_scan_begin(CustomScanState *node, EState *estate, int eflags)
 {
-	DeferredChunkScanState *state = (DeferredChunkScanState *) node;
+	DeferredChunkAppendState *state = (DeferredChunkAppendState *) node;
 	Oid ht_relid = RelationGetRelid(node->ss.ss_currentRelation);
 
 	compute_fetch_columns(state, node);
 	state->chunk_mcxt = AllocSetContextCreate(estate->es_query_cxt,
-											  "DeferredChunkScan chunk",
+											  "DeferredChunkAppend chunk",
 											  ALLOCSET_DEFAULT_SIZES);
 	state->dest = dcs_create_dest(state);
 	deferred_chunk_scan_reset(state);
@@ -832,7 +832,7 @@ deferred_chunk_scan_begin(CustomScanState *node, EState *estate, int eflags)
  * Build the per-chunk query.
  */
 static char *
-deferred_chunk_scan_chunk_sql(DeferredChunkScanState *state, Oid reloid)
+deferred_chunk_scan_chunk_sql(DeferredChunkAppendState *state, Oid reloid)
 {
 	TupleDesc desc = RelationGetDescr(state->css.ss.ss_currentRelation);
 	char *qualified = quote_qualified_identifier(get_namespace_name(get_rel_namespace(reloid)),
@@ -866,7 +866,7 @@ deferred_chunk_scan_chunk_sql(DeferredChunkScanState *state, Oid reloid)
  * In ordered mode we scan dimension slices ordered by range_start.
  */
 static Oid
-next_chunk_reloid_ordered(DeferredChunkScanState *state)
+next_chunk_reloid_ordered(DeferredChunkAppendState *state)
 {
 	/* A slice's chunk may have been dropped since the slice was read; skip such
 	 * slices and keep going so a mid-scan drop can't truncate the result. Only
@@ -923,7 +923,7 @@ next_chunk_reloid_ordered(DeferredChunkScanState *state)
  * is convenient to use that index to iterate over the chunks.
  */
 static Oid
-next_chunk_reloid_unordered(DeferredChunkScanState *state)
+next_chunk_reloid_unordered(DeferredChunkAppendState *state)
 {
 	ScanIterator it = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	it.ctx.index =
@@ -995,7 +995,7 @@ next_chunk_reloid_unordered(DeferredChunkScanState *state)
 
 /* Next chunk relation to scan, or InvalidOid when exhausted. */
 static Oid
-next_chunk_reloid(DeferredChunkScanState *state)
+next_chunk_reloid(DeferredChunkAppendState *state)
 {
 	return state->ordered ? next_chunk_reloid_ordered(state) : next_chunk_reloid_unordered(state);
 }
@@ -1005,7 +1005,7 @@ next_chunk_reloid(DeferredChunkScanState *state)
  * there are no more chunks.
  */
 static bool
-open_next_chunk(DeferredChunkScanState *state)
+open_next_chunk(DeferredChunkAppendState *state)
 {
 	EState *estate = state->css.ss.ps.state;
 	Oid reloid;
@@ -1076,7 +1076,7 @@ open_next_chunk(DeferredChunkScanState *state)
 /* Current chunk exhausted: under ANALYZE keep its executor (for EXPLAIN), else
  * shut it down. */
 static void
-close_current_chunk(DeferredChunkScanState *state)
+close_current_chunk(DeferredChunkAppendState *state)
 {
 	QueryDesc *qd = state->cur_qd;
 	ExecutorFinish(qd);
@@ -1095,7 +1095,7 @@ close_current_chunk(DeferredChunkScanState *state)
 /* Make the next row of the current chunk available in cur_tuples, refilling the
  * batch and advancing to the next chunk as needed. False when fully exhausted. */
 static bool
-next_chunk_row(DeferredChunkScanState *state)
+next_chunk_row(DeferredChunkAppendState *state)
 {
 	for (;;)
 	{
@@ -1125,7 +1125,7 @@ next_chunk_row(DeferredChunkScanState *state)
 static TupleTableSlot *
 deferred_chunk_scan_next(ScanState *ss)
 {
-	DeferredChunkScanState *state = (DeferredChunkScanState *) ss;
+	DeferredChunkAppendState *state = (DeferredChunkAppendState *) ss;
 
 	if (!next_chunk_row(state))
 	{
@@ -1173,7 +1173,7 @@ deferred_chunk_scan_exec(CustomScanState *node)
 static void
 deferred_chunk_scan_end(CustomScanState *node)
 {
-	DeferredChunkScanState *state = (DeferredChunkScanState *) node;
+	DeferredChunkAppendState *state = (DeferredChunkAppendState *) node;
 
 	dcs_close_all_qds(state);
 	if (state->scan_slot != NULL)
@@ -1191,7 +1191,7 @@ deferred_chunk_scan_end(CustomScanState *node)
 static void
 deferred_chunk_scan_rescan(CustomScanState *node)
 {
-	deferred_chunk_scan_reset((DeferredChunkScanState *) node);
+	deferred_chunk_scan_reset((DeferredChunkAppendState *) node);
 }
 
 /* Show the ORDER BY key (ordered mode) and, under ANALYZE, the number of chunks
@@ -1199,7 +1199,7 @@ deferred_chunk_scan_rescan(CustomScanState *node)
 static void
 deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	DeferredChunkScanState *state = (DeferredChunkScanState *) node;
+	DeferredChunkAppendState *state = (DeferredChunkAppendState *) node;
 
 	if (state->ordered)
 	{
