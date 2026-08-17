@@ -144,6 +144,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     scheduler_fixed.sql
     cagg_granular_refresh_errors.sql
     cagg_granular_refresh_config.sql
+    cagg_granular_refresh_writer_gap.sql
     cagg_policy_concurrent.sql
     cagg_policy_incremental.sql
     cagg_refresh_cleanup.sql

@@ -1,0 +1,89 @@
+Parsed test spec with 8 sessions
+
+starting permutation: p_insert p_refresh p_insert2 wp_enable v_register_pid v_insert k_cancel k_noop wp_release r_refresh v2_check v2_tracking
+step p_insert: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+step p_refresh: CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
+step p_insert2: INSERT INTO conditions VALUES ('2020-01-04 00:00+00', 'sensor_c', 3);
+step wp_enable: SELECT debug_waitpoint_enable('tenant_tracker_in_pin');
+debug_waitpoint_enable
+----------------------
+                      
+
+step v_register_pid: INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+step v_insert: INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_b', 2); <waiting ...>
+step k_cancel: CALL cancelpids(); <waiting ...>
+step v_insert: <... completed>
+ERROR:  canceling statement due to user request
+step k_cancel: <... completed>
+step k_noop: 
+step wp_release: SELECT debug_waitpoint_release('tenant_tracker_in_pin');
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
+step v2_check: SELECT sensor_id, count(*) FROM conditions GROUP BY sensor_id ORDER BY sensor_id;
+sensor_id|count
+---------+-----
+sensor_a |    1
+sensor_c |    1
+
+step v2_tracking: 
+    SELECT tenant_id, seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY seqnum, tenant_id;
+
+tenant_id|seqnum
+---------+------
+sensor_a |     1
+sensor_c |     2
+
+
+starting permutation: p_insert p_refresh p_insert2 wp_enable vk_register_pid vk_insert t_terminate t_noop wp_release r_refresh v2_check v2_tracking
+step p_insert: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+step p_refresh: CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
+step p_insert2: INSERT INTO conditions VALUES ('2020-01-04 00:00+00', 'sensor_c', 3);
+step wp_enable: SELECT debug_waitpoint_enable('tenant_tracker_in_pin');
+debug_waitpoint_enable
+----------------------
+                      
+
+step vk_register_pid: INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+step vk_insert: INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_b', 2); <waiting ...>
+step t_terminate: CALL terminatepids(); <waiting ...>
+step vk_insert: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step t_terminate: <... completed>
+step t_noop: 
+step wp_release: SELECT debug_waitpoint_release('tenant_tracker_in_pin');
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
+step v2_check: SELECT sensor_id, count(*) FROM conditions GROUP BY sensor_id ORDER BY sensor_id;
+sensor_id|count
+---------+-----
+sensor_a |    1
+sensor_c |    1
+
+step v2_tracking: 
+    SELECT tenant_id, seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY seqnum, tenant_id;
+
+tenant_id|seqnum
+---------+------
+sensor_a |     1
+sensor_c |     2
+

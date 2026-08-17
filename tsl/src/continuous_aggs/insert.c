@@ -136,6 +136,16 @@ static HTAB *continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
 static HTAB *tenant_local_htab = NULL;
 static bool tenant_buffer_unencodable = false;
 
+/*
+ * Generation this backend currently pins, or NULL.  A flush will not drain a
+ * generation while its num_writers is non-zero, so a writer that fails between
+ * begin_batch and end_batch would stall every later flush.  The abort handler
+ * releases whatever this points at, which covers both an ERROR unwinding out of
+ * the drain and a FATAL exit (ShutdownPostgres, called during process cleanup,
+ * aborts the open transaction before shared memory is detached).
+ */
+static TenantGeneration *pinned_generation = NULL;
+
 /* Backend-lifetime resolved-tracker cache (see TenantTrackerCacheEntry). */
 static HTAB *tenant_tracker_resolved_htab = NULL;
 
@@ -694,8 +704,10 @@ tenant_local_htab_write(void)
 		/*
 		 * The tracker was resolved (and cached) in the DML path by
 		 * resolve_tenant_tracker, so the drain only reads the backend-local cache
-		 * here -- no attach, lookup, allocation, catalog scan, or PG_TRY, and thus
-		 * nothing that can throw at pre-commit.  A NULL entry means tracking is
+		 * here -- no attach, lookup, allocation or catalog scan.  Errors are still
+		 * possible (a debug build injects one below, and a cancel can arrive), so
+		 * the pin taken further down is released by the abort handler rather than
+		 * relying on this staying throw-free.  A NULL entry means tracking is
 		 * disabled for this hypertable; a missing entry means nothing was buffered
 		 * for it (shouldn't happen), both -> skip (untracked, seqnum 0).
 		 */
@@ -722,9 +734,18 @@ tenant_local_htab_write(void)
 		 * Reading it under the pin means every backend draining into this
 		 * generation gates on the same [window_start, window_end). */
 		generation = ts_tenant_tracker_begin_batch(tracking, &seqnum, &window_start, &window_end);
+		pinned_generation = generation;
 		seq_entry->seqnum = seqnum;
 		seq_entry->late_threshold_start = window_start;
 		seq_entry->late_threshold_end = window_end;
+
+		/* Fail while this generation is pinned, so a test can exercise what
+		 * happens to num_writers when a writer does not reach end_batch. */
+		DEBUG_ERROR_INJECTION("tenant_tracker_fail_in_pin");
+
+		/* Park while the generation is pinned, so a test can terminate the
+		 * writer before it reaches end_batch. */
+		DEBUG_WAITPOINT("tenant_tracker_in_pin");
 
 		hash_seq_init(&hash_seq, tenant_local_htab);
 		while ((entry = hash_seq_search(&hash_seq)) != NULL)
@@ -751,6 +772,7 @@ tenant_local_htab_write(void)
 			}
 		}
 		ts_tenant_tracker_end_batch(generation);
+		pinned_generation = NULL;
 	}
 
 	list_free(hypertable_ids);
@@ -964,11 +986,20 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 			DEBUG_WAITPOINT("tenant_tracker_after_precommit_drain");
 			break;
 		}
+		case XACT_EVENT_ABORT:
+		case XACT_EVENT_PARALLEL_ABORT:
+			/* A writer that did not reach end_batch still holds its generation
+			 * pinned; release it before the backend goes away*/
+			if (pinned_generation != NULL)
+			{
+				ts_tenant_tracker_end_batch(pinned_generation);
+				pinned_generation = NULL;
+			}
+			cache_inval_cleanup();
+			break;
 		case XACT_EVENT_PREPARE:
 		case XACT_EVENT_COMMIT:
 		case XACT_EVENT_PARALLEL_COMMIT:
-		case XACT_EVENT_ABORT:
-		case XACT_EVENT_PARALLEL_ABORT:
 			cache_inval_cleanup();
 			break;
 		default:

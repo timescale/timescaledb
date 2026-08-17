@@ -52,6 +52,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_granular_refresh_cleanup_races.spec
     cagg_granular_refresh_seqnum_race.spec
     cagg_granular_refresh_precommit_abort.spec
+    cagg_granular_refresh_writer_gap.spec
     cagg_hierarchical_concurrent_refresh.spec
     cagg_incremental_concurrent.spec
     cagg_refresh_cleanup_register.spec
