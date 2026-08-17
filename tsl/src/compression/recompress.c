@@ -2405,6 +2405,7 @@ create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, Li
 		{
 			int num_columns = list_length(columns);
 			Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+			Oid collation_oids[MAX_BLOOM_FILTER_COLUMNS];
 			AttrNumber attnums[MAX_BLOOM_FILTER_COLUMNS];
 			int col_idx = 0;
 
@@ -2413,6 +2414,7 @@ create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, Li
 				AttrNumber attno = get_attnum(chunk_relid, colname);
 				attnums[col_idx] = attno;
 				type_oids[col_idx] = TupleDescAttr(tupdesc, attno - 1)->atttypid;
+				collation_oids[col_idx] = TupleDescAttr(tupdesc, attno - 1)->attcollation;
 				col_idx++;
 			}
 
@@ -2426,6 +2428,7 @@ create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, Li
 			builders = lappend(builders,
 							   batch_metadata_builder_bloom1_create(num_columns,
 																	type_oids,
+																	collation_oids,
 																	attnums,
 																	bloom_offset));
 		}

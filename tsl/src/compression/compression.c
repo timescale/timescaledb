@@ -845,6 +845,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			}
 
 			Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+			Oid collation_oids[MAX_BLOOM_FILTER_COLUMNS];
 			AttrNumber attnums[MAX_BLOOM_FILTER_COLUMNS];
 			int col_idx = 0;
 			ListCell *name_cell;
@@ -855,6 +856,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 				Ensure(AttributeNumberIsValid(attnum), "could not find column '%s'", col_name);
 				attnums[col_idx] = attnum;
 				type_oids[col_idx] = get_atttype(settings->fd.relid, attnum);
+				collation_oids[col_idx] = get_attcollation(settings->fd.relid, attnum);
 				col_idx++;
 			}
 
@@ -870,6 +872,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			metadata_builders = lappend(metadata_builders,
 										batch_metadata_builder_bloom1_create(num_columns,
 																			 type_oids,
+																			 collation_oids,
 																			 attnums,
 																			 bloom_attr_offset));
 		}
@@ -948,12 +951,14 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 				if (AttributeNumberIsValid(bloom_attr_number))
 				{
 					Oid type_oid = attr->atttypid;
+					Oid collation_oid = attr->attcollation;
 					AttrNumber attnum = attr->attnum;
 					const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
 					metadata_builders =
 						lappend(metadata_builders,
 								batch_metadata_builder_bloom1_create(1,
 																	 &type_oid,
+																	 &collation_oid,
 																	 &attnum,
 																	 bloom_attr_offset));
 				}
