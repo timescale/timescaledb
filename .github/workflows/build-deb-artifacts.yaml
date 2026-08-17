@@ -58,7 +58,8 @@ jobs:
           gh workflow run "${WORKFLOW_FILE}" \
             -R "${WORKFLOW_REPO}" \
             -f version="${VERSION}" \
-            -f commit="${GITHUB_SHA}" \
+            -f github_sha="${GITHUB_SHA}" \
+            -f github_ref="${GITHUB_REF}" \
             -f skip-dev-guards=true \
             -f matrix-mode=slim \
             -f upload-artifacts=true \
