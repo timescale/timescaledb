@@ -1034,6 +1034,8 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 		ts_compression_settings_update(settings);
 	}
 
+	ts_compressed_relation_record_dependency(src_chunk->fd.relid, table_id);
+
 	ts_chunk_set_compressed(src_chunk);
 
 	return table_id;
