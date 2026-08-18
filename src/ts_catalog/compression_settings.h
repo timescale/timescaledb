@@ -147,6 +147,8 @@ TSDLLEXPORT void ts_compression_settings_free(CompressionSettings *settings);
 TSDLLEXPORT bool ts_relation_is_compressed_chunk_relation(Oid relid);
 TSDLLEXPORT Oid ts_relation_get_uncompressed_relid(Oid compress_relid);
 TSDLLEXPORT Oid ts_relation_get_compressed_relid(Oid relid);
+TSDLLEXPORT void ts_compressed_relation_record_dependency(Oid relid, Oid compress_relid);
+TSDLLEXPORT void ts_compressed_relation_drop_dependency(Oid compress_relid);
 
 TSDLLEXPORT CompressionSettings *ts_compression_settings_materialize(const CompressionSettings *src,
 																	 Oid relid, Oid compress_relid);
