@@ -1882,6 +1882,7 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 
 	LockRelationOid(uncompressed_chunk->fd.relid, AccessExclusiveLock);
 	LockRelationOid(compressed_relid, AccessExclusiveLock);
+	ts_compressed_relation_drop_dependency(compressed_relid);
 	ts_chunk_drop_by_relid(compressed_relid, DROP_RESTRICT, -1);
 	if (ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_UNORDERED))
 	{

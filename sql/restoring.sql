@@ -41,6 +41,9 @@ BEGIN
     -- re-point foreign key check triggers recreated by restore at ours
     PERFORM _timescaledb_functions.restore_fk_check_triggers();
 
+    -- record the pg_depend links which are not part of a dump
+    PERFORM _timescaledb_functions.restore_compressed_relation_dependencies();
+
     RETURN true;
 END
 $BODY$
