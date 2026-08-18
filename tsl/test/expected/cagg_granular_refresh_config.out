@@ -1,0 +1,227 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Tests for late arrival tracking window. Verify tracked entries match config.
+-- TEST 0: listing the tracker map before anything here is tracked.  Nothing in
+-- this database has granular refresh enabled yet, so the map holds no entry for
+-- it and the listing comes back empty
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT count(*) AS entries_for_this_database
+FROM _timescaledb_functions.tenant_tracking_map()
+WHERE database_id = (SELECT oid FROM pg_database WHERE datname = current_database());
+ entries_for_this_database 
+---------------------------
+                         0
+
+SELECT count(*) >= 0 AS listing_the_whole_map_succeeds
+FROM _timescaledb_functions.tenant_tracking_map();
+ listing_the_whole_map_succeeds 
+--------------------------------
+ t
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SET timezone TO 'UTC';
+-- Anchor the start offset to a fixed date safely before all the fixed 2020
+-- fixture dates below, computed relative to today so the window keeps
+-- covering them regardless of when this test actually runs.
+SELECT (CURRENT_DATE - DATE '2019-01-01') AS granular_refresh_lookback_days,
+       (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_lookback \gset
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+    create_hypertable    
+-------------------------
+ (1,public,conditions,t)
+
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+-- TEST 1: the tracking window is computed and pinned on the tracker.
+--
+-- The first INSERT creates the tracker and seeds its window.  The window
+-- width is deterministic (granular_refresh_start_offset -
+-- granular_refresh_end_offset); exact bounds depend on now(), so we assert
+-- only the width and that the window is non-empty.
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+SELECT late_threshold_end - late_threshold_start =
+         (EXTRACT(EPOCH FROM (:granular_refresh_lookback_days - 1) * INTERVAL '1 day') * 1000000)::int8
+           AS window_width_matches,
+       late_threshold_start < late_threshold_end                     AS window_nonempty
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions');
+ window_width_matches | window_nonempty 
+----------------------+-----------------
+ t                    | t
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+-- TEST 1b: integer-time hypertables (smallint/int/bigint) use the integer_now()
+-- watermark for the window, with the configured offsets interpreted as plain
+-- integers.  metrics_now() is a constant 1000, and offsets are 900/100, so the
+-- seeded window is exactly [100, 900).
+CREATE TABLE metrics(t bigint NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('metrics', 't', chunk_time_interval => 100);
+  create_hypertable   
+----------------------
+ (3,public,metrics,t)
+
+CREATE OR REPLACE FUNCTION metrics_now() RETURNS bigint LANGUAGE SQL STABLE AS
+  $$ SELECT 1000::bigint $$;
+SELECT set_integer_now_func('metrics', 'metrics_now');
+ set_integer_now_func 
+----------------------
+ 
+
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = 900,
+    timescaledb.granular_refresh_end_offset = 100
+);
+CREATE MATERIALIZED VIEW metrics_by_bucket
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket(100, t) AS bucket, sensor_id, avg(value)
+  FROM metrics
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW metrics_by_bucket SET (timescaledb.enable_granular_refresh = true);
+INSERT INTO metrics VALUES (100, 'sensor_a', 1);
+SELECT late_threshold_start AS window_start,
+       late_threshold_end   AS window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics');
+ window_start | window_end 
+--------------+------------
+          100 |        900
+
+DROP MATERIALIZED VIEW metrics_by_bucket;
+DROP TABLE metrics;
+-- TEST 2: only late-arriving data (inside the window) is tracked; recent data
+-- (newer than now - 1 day) is gated out at the commit drain, so its tenant
+-- never enters the tracker.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+    create_hypertable    
+-------------------------
+ (5,public,conditions,t)
+
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+-- sensor_a / sensor_b: old (2020) => inside the late window => tracked.
+-- sensor_recent: at now() => outside the window => NOT tracked.
+INSERT INTO conditions VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 1),
+  ('2020-01-02 00:00+00', 'sensor_b', 2);
+INSERT INTO conditions VALUES (now(), 'sensor_recent', 3);
+-- Refresh only the recent (2025+) region: it has work to do (so the flush
+-- runs and drains the tracker), but the 2020 tracking rows do not overlap the
+-- refresh window, so they are persisted and NOT consumed -- letting us observe
+-- exactly which tenants were tracked.
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+-- Expect sensor_a and sensor_b (late), never sensor_recent (gated out).
+SELECT tenant_id
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+  AND tenant_id IS NOT NULL
+ORDER BY tenant_id;
+ tenant_id 
+-----------
+ sensor_a
+ sensor_b
+
+DROP MATERIALIZED VIEW cond_daily;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_6_chunk
+DROP TABLE conditions;
+-- TEST 3: the tracker map lists the hypertables present in the per-tenant
+-- invalidation tracker.  The map is process-global, so restrict it to this
+-- database; and trackers are never freed, so the hypertables dropped above are
+-- still in the map by id -- joining the catalog leaves just the live ones.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+    create_hypertable    
+-------------------------
+ (7,public,conditions,t)
+
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+-- The map spans databases, so listing it is superuser-only.
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.tenant_tracking_map();
+ERROR:  insufficient privilege to list hypertables in the per-tenant invalidation tracker
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- No tracker for this hypertable until the first INSERT commits.
+SELECT count(*) AS entries_before
+FROM _timescaledb_functions.tenant_tracking_map() m
+JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
+WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database());
+ entries_before 
+----------------
+              0
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Now 'conditions' is in the map, with a tracker behind it.
+SELECT h.table_name, m.is_tracked
+FROM _timescaledb_functions.tenant_tracking_map() m
+JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
+WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
+ORDER BY h.table_name;
+ table_name | is_tracked 
+------------+------------
+ conditions | t
+
+-- Entries for hypertables dropped earlier in this test outlive them.
+SELECT count(*) > 0 AS dropped_hypertables_still_listed
+FROM _timescaledb_functions.tenant_tracking_map() m
+WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
+  AND NOT EXISTS (SELECT 1 FROM _timescaledb_catalog.hypertable h WHERE h.id = m.hypertable_id);
+ dropped_hypertables_still_listed 
+----------------------------------
+ t
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+-- TEST 4: per-hypertable tracker state is restricted to the hypertable owner.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+    create_hypertable    
+-------------------------
+ (9,public,conditions,t)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT seq_num FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions');
+ERROR:  must be owner of hypertable "conditions"
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+DROP TABLE conditions;

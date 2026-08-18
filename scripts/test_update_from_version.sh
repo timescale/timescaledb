@@ -53,7 +53,12 @@ SINGLESTEP_SKIP=(
 # Updates starting before 2.15 carry a fixture that the 2.28.0 and 2.28.1 update
 # scripts can't migrate (int->bigint view change); the 2.28.2 update script handles
 # it, so step from 2.27.2 straight to 2.28.2 when updating from <2.15.
-if [ "$(echo "${FROM_VERSION}" | awk -F. '{print $2}')" -lt 15 ]; then
+FROM_MINOR="$(echo "${FROM_VERSION}" | awk -F. '{print $2}')"
+if [ "${FROM_MINOR}" -lt 15 ]; then
+  SINGLESTEP_SKIP+=("2.27.2--2.28.0" "2.27.2--2.28.1")
+fi
+
+if [ "${FROM_MINOR}" -ge 26 ]; then
   SINGLESTEP_SKIP+=("2.27.2--2.28.0" "2.27.2--2.28.1")
 fi
 
@@ -142,13 +147,52 @@ echo "Creating updated database"
   run_sql_file test/sql/updates/pre.testing.sql
   run_sql_file test/sql/updates/setup.${TEST_VERSION}.sql
   run_sql "CHECKPOINT;" >> "${OUTPUT_DIR}/updated.log"
+  # Checking locks requires loader version 2.29.0+
+  CHECK_LOCKS=""
+  if [ "$(echo "${FROM_VERSION}" | awk -F. '{print $2}')" -ge 29 ]; then
+    CHECK_LOCKS=1
+  fi
   if [ "${UPDATE_MODE}" = singlestep ]; then
     singlestep_update
+  elif [ -n "${CHECK_LOCKS}" ]; then
+    # Run update inside transaction and dump locks it holds
+    psql -X -d updated -v ON_ERROR_STOP=1 > "${OUTPUT_DIR}/update_locks.log" 2>&1 <<SQL
+BEGIN;
+ALTER EXTENSION timescaledb UPDATE TO "${TO_VERSION}";
+\pset pager off
+-- Count distinct relations locked per schema so a relation locked in several
+-- modes (e.g. chunk) is counted once instead of once per lock mode.
+SELECT coalesce(n.nspname, '(dropped/rebuilt relation)') AS schema,
+       count(DISTINCT l.relation) AS relations
+FROM pg_locks l
+LEFT JOIN pg_class c ON c.oid = l.relation
+LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE l.pid = pg_backend_pid()
+  AND l.locktype = 'relation'
+GROUP BY 1
+ORDER BY relations DESC;
+COMMIT;
+SQL
+    LOCKS_HELD=$(awk -F'|' '/\|/ && $2 ~ /^ *[0-9]+ *$/ {s+=$2} END {print s}' "${OUTPUT_DIR}/update_locks.log")
+    INTERNAL_LOCKS=$(awk -F'|' '$1 ~ /_timescaledb_internal/ {gsub(/ /,"",$2); print $2}' "${OUTPUT_DIR}/update_locks.log")
   else
     run_sql "ALTER EXTENSION timescaledb UPDATE TO \"${TO_VERSION}\";"
   fi
   run_sql_file test/sql/updates/setup.check.sql
 } > "${OUTPUT_DIR}/updated.log" 2>&1
+
+if [ -n "${CHECK_LOCKS}" ] && [ "${UPDATE_MODE}" != singlestep ]; then
+  echo "Locks held by the update transaction (${FROM_VERSION} -> ${TO_VERSION}): ${LOCKS_HELD:-n/a} (_timescaledb_internal: ${INTERNAL_LOCKS:-0})"
+
+  if [ "${LOCKS_HELD:-0}" -gt 150 ]; then
+    echo "ERROR: update transaction locked ${LOCKS_HELD} relations, exceeding the limit of 150"
+    exit 1
+  fi
+  if [ "${INTERNAL_LOCKS:-0}" -gt 50 ]; then
+    echo "ERROR: update transaction locked ${INTERNAL_LOCKS} relations in _timescaledb_internal, exceeding the limit of 50"
+    exit 1
+  fi
+fi
 
 echo "Creating restored database"
 {

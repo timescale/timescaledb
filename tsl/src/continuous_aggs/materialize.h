@@ -41,4 +41,6 @@ void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousA
 										   SchemaAndName partial_view,
 										   SchemaAndName materialization_table,
 										   const NameData *time_column_name,
-										   InternalTimeRange materialization_range);
+										   InternalTimeRange materialization_range,
+										   const char *tenant_column, const char *tenant_coltype,
+										   int32 raw_hypertable_id, int32 tenant_seqnum);

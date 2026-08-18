@@ -127,6 +127,21 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	 */
 	required_outer = rel->lateral_relids;
 
+	/*
+	 * Consider TID scans.
+	 *
+	 * If create_tidscan_paths returns true, then a TID scan path is forced.
+	 * This happens when rel->baserestrictinfo contains CurrentOfExpr, because
+	 * the executor can't handle any other type of path for such queries.
+	 * Hence, we return without adding any other paths.
+	 */
+#if PG18_GE
+	if (create_tidscan_paths(root, rel))
+		return;
+#else
+	create_tidscan_paths(root, rel);
+#endif
+
 	/* Consider sequential scan */
 	add_path(rel, create_seqscan_path(root, rel, required_outer, 0));
 
@@ -136,9 +151,6 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Consider index scans */
 	create_index_paths(root, rel);
-
-	/* Consider TID scans */
-	create_tidscan_paths(root, rel);
 }
 
 /* copied from allpaths.c */
@@ -842,6 +854,13 @@ set_foreign_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* ... but do not let it set the rows estimate to zero */
 	rel->rows = clamp_row_est(rel->rows);
+
+	/*
+	 * Also, make sure rel->tuples is not insane relative to rel->rows.
+	 * Notably, this ensures sanity if pg_class.reltuples contains -1 and the
+	 * FDW doesn't do anything to replace that.
+	 */
+	rel->tuples = Max(rel->tuples, rel->rows);
 }
 
 /* copied from allpaths.c */

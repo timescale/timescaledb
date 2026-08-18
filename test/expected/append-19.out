@@ -10,6 +10,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
 SET timescaledb.enable_now_constify TO false;
+SET timescaledb.enable_deferred_chunk_scan TO false;
 -- disable memoize node to avoid flaky results
 SET enable_memoize TO 'off';
 -- disable index only scans to avoid some flaky results
