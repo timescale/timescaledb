@@ -20,6 +20,7 @@
 #include <catalog/pg_operator.h>
 #include <catalog/pg_type.h>
 #include <commands/explain.h>
+#include <executor/execdesc.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
 #include <miscadmin.h>
@@ -34,13 +35,11 @@
 #include <rewrite/rewriteManip.h>
 #include <storage/lockdefs.h>
 #include <tcop/dest.h>
-#include <tcop/pquery.h>
 #include <tcop/tcopprot.h>
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
 #include <utils/guc.h>
 #include <utils/lsyscache.h>
-#include <utils/portal.h>
 #include <utils/rel.h>
 #include <utils/ruleutils.h>
 #include <utils/snapmgr.h>
@@ -62,7 +61,7 @@
 #include "ts_catalog/catalog.h"
 #include "utils.h"
 
-/* Rows fetched per PortalRunFetch when there is no pushed LIMIT to bound it. */
+/* Rows fetched per batch when there is no pushed LIMIT to bound it. */
 #define DCS_FETCH_MAX_BATCH_SIZE 1000
 
 /*
@@ -99,8 +98,10 @@ typedef struct DeferredChunkScanState
 	bool have_last;					/* whether the last_* resume key is set */
 	int chunks_scanned;				/* chunks opened so far (EXPLAIN counter) */
 
-	int batch_size;			  /* rows per PortalRunFetch */
-	Portal cur_portal;		  /* open portal for the current chunk, or NULL */
+	int batch_size;			  /* rows per ExecutorRun batch */
+	QueryDesc *cur_qd;		  /* executor for the current chunk, or NULL */
+	List *chunk_qds;		  /* under ANALYZE, every visited chunk's executor, kept
+							   * alive so EXPLAIN can print its actual plan */
 	DestReceiver *dest;		  /* receiver that copies fetched rows into chunk_mcxt */
 	MemoryContext chunk_mcxt; /* holds the current batch's tuples */
 	HeapTuple *cur_tuples;	  /* current batch (batch_size long), in chunk_mcxt */
@@ -743,15 +744,40 @@ compute_fetch_columns(DeferredChunkScanState *state, CustomScanState *node)
 	}
 }
 
+/* Shut down and free a per-chunk executor. */
+static void
+dcs_close_qd(QueryDesc *qd)
+{
+	if (!qd->estate->es_finished)
+	{
+		ExecutorFinish(qd);
+	}
+	ExecutorEnd(qd);
+	FreeQueryDesc(qd);
+}
+
+/* Shut down every executor still open (current chunk plus any kept for EXPLAIN). */
+static void
+dcs_close_all_qds(DeferredChunkScanState *state)
+{
+	if (state->cur_qd != NULL)
+	{
+		dcs_close_qd(state->cur_qd);
+		state->cur_qd = NULL;
+	}
+	ListCell *lc;
+	foreach (lc, state->chunk_qds)
+	{
+		dcs_close_qd((QueryDesc *) lfirst(lc));
+	}
+	state->chunk_qds = NIL;
+}
+
 /* Reset the scan position to the start */
 static void
 deferred_chunk_scan_reset(DeferredChunkScanState *state)
 {
-	if (state->cur_portal != NULL)
-	{
-		PortalDrop(state->cur_portal, false);
-		state->cur_portal = NULL;
-	}
+	dcs_close_all_qds(state);
 	state->cur_nrows = 0;
 	state->cur_row = 0;
 	state->have_last = false;
@@ -975,12 +1001,13 @@ next_chunk_reloid(DeferredChunkScanState *state)
 }
 
 /*
- * Open a Portal for the next chunk's per-chunk query. Returns false when there
- * are no more chunks.
+ * Start an executor for the next chunk's per-chunk query. Returns false when
+ * there are no more chunks.
  */
 static bool
 open_next_chunk(DeferredChunkScanState *state)
 {
+	EState *estate = state->css.ss.ps.state;
 	Oid reloid;
 
 	/*
@@ -1019,25 +1046,53 @@ open_next_chunk(DeferredChunkScanState *state)
 		pg_plan_query_compat(query, sql, CURSOR_OPT_FAST_PLAN | CURSOR_OPT_NO_SCROLL, NULL, NULL);
 	AtEOXact_GUC(false, save_nestlevel);
 
-	Portal portal = CreateNewPortal();
-	portal->visible = false;
-	PortalDefineQuery(portal, NULL, sql, CMDTAG_SELECT, list_make1(plan), NULL);
-	PortalStart(portal, NULL, 0, GetActiveSnapshot());
-	state->cur_portal = portal;
+	/* Use QueryDesc directly so we can control es_instrument. Allocate it in the
+	 * query context so it outlives the chunk. */
+	MemoryContext old = MemoryContextSwitchTo(estate->es_query_cxt);
+	QueryDesc *qd = CreateQueryDesc(plan,
+									sql,
+									GetActiveSnapshot(),
+									InvalidSnapshot,
+									state->dest,
+									NULL,
+									NULL,
+									estate->es_instrument);
+	ExecutorStart(qd, 0);
+	MemoryContextSwitchTo(old);
+	state->cur_qd = qd;
 
 	/* Per-chunk result row type is the same for every chunk; capture it once. */
 	if (state->cur_tupdesc == NULL)
 	{
-		MemoryContext old = MemoryContextSwitchTo(state->css.ss.ps.state->es_query_cxt);
-		state->cur_tupdesc = CreateTupleDescCopy(portal->tupDesc);
+		old = MemoryContextSwitchTo(estate->es_query_cxt);
+		state->cur_tupdesc = CreateTupleDescCopy(qd->tupDesc);
 		MemoryContextSwitchTo(old);
 	}
 
-	pfree(sql);
+	/* sql backs qd->sourceText for the executor's lifetime, so don't free it here. */
 	return true;
 }
 
-/* Make the next row of the current chunk available in fetch_slot, refilling the
+/* Current chunk exhausted: under ANALYZE keep its executor (for EXPLAIN), else
+ * shut it down. */
+static void
+close_current_chunk(DeferredChunkScanState *state)
+{
+	QueryDesc *qd = state->cur_qd;
+	ExecutorFinish(qd);
+
+	if (qd->instrument_options != 0)
+	{
+		state->chunk_qds = lappend(state->chunk_qds, qd);
+	}
+	else
+	{
+		dcs_close_qd(qd);
+	}
+	state->cur_qd = NULL;
+}
+
+/* Make the next row of the current chunk available in cur_tuples, refilling the
  * batch and advancing to the next chunk as needed. False when fully exhausted. */
 static bool
 next_chunk_row(DeferredChunkScanState *state)
@@ -1048,7 +1103,7 @@ next_chunk_row(DeferredChunkScanState *state)
 		{
 			return true; /* buffered row available */
 		}
-		if (state->cur_portal == NULL && !open_next_chunk(state))
+		if (state->cur_qd == NULL && !open_next_chunk(state))
 		{
 			return false; /* no more chunks */
 		}
@@ -1058,12 +1113,11 @@ next_chunk_row(DeferredChunkScanState *state)
 			MemoryContextAlloc(state->chunk_mcxt, sizeof(HeapTuple) * state->batch_size);
 		state->cur_nrows = 0;
 		state->cur_row = 0;
-		PortalRunFetch(state->cur_portal, FETCH_FORWARD, state->batch_size, state->dest);
+		ExecutorRun_compat(state->cur_qd, ForwardScanDirection, state->batch_size, false);
 		if (state->cur_nrows == 0)
 		{
-			/* Chunk exhausted: drop the portal and move to the next chunk. */
-			PortalDrop(state->cur_portal, false);
-			state->cur_portal = NULL;
+			/* Chunk exhausted: close its executor and move to the next chunk. */
+			close_current_chunk(state);
 		}
 	}
 }
@@ -1121,11 +1175,7 @@ deferred_chunk_scan_end(CustomScanState *node)
 {
 	DeferredChunkScanState *state = (DeferredChunkScanState *) node;
 
-	if (state->cur_portal != NULL)
-	{
-		PortalDrop(state->cur_portal, false);
-		state->cur_portal = NULL;
-	}
+	dcs_close_all_qds(state);
 	if (state->scan_slot != NULL)
 	{
 		ExecDropSingleTupleTableSlot(state->scan_slot);
@@ -1144,8 +1194,8 @@ deferred_chunk_scan_rescan(CustomScanState *node)
 	deferred_chunk_scan_reset((DeferredChunkScanState *) node);
 }
 
-/* Show the ORDER BY key (ordered mode) and, under ANALYZE, how many chunks the
- * LIMIT visited. */
+/* Show the ORDER BY key (ordered mode) and, under ANALYZE, the number of chunks
+ * the LIMIT visited followed by each chunk's actual per-chunk plan. */
 static void
 deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
@@ -1159,10 +1209,27 @@ deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState
 	{
 		ExplainPropertyText("Filter", state->where_clause, es);
 	}
-	/* Under ANALYZE, how many chunks the LIMIT actually made us visit. */
-	if (es->analyze)
+	if (!es->analyze)
 	{
-		ExplainPropertyInteger("Chunks Visited", NULL, state->chunks_scanned, es);
+		return;
+	}
+
+	ExplainPropertyInteger("Chunks Visited", NULL, state->chunks_scanned, es);
+
+	/*
+	 * ExplainPrintPlan overwrites the range table and deparse state on es.
+	 * Use a copy of es so we don't clobber the caller's state.
+	 */
+	ExplainState chunk_es = *es;
+
+	ListCell *lc;
+	foreach (lc, state->chunk_qds)
+	{
+		ExplainPrintPlan(&chunk_es, (QueryDesc *) lfirst(lc));
+	}
+	if (state->cur_qd != NULL)
+	{
+		ExplainPrintPlan(&chunk_es, state->cur_qd);
 	}
 }
 

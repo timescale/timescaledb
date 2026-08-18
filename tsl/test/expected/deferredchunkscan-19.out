@@ -180,6 +180,11 @@ SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_ord ORDER BY time, grp US
 ----
  t
 
+SELECT count(x) >= 0 AS ok FROM (SELECT gg FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l) x;  -- deferred scan on the inner side of a lateral join, rescanned per outer row
+ ok 
+----
+ t
+
 RESET timescaledb.debug_require_deferred_chunk_scan;
 SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
 -- queries not currently supported with deferredchunkscan
@@ -295,6 +300,11 @@ SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics UNION ALL SELECT * FROM m
  t
 
 SELECT count(x) >= 0 AS ok FROM (SELECT generate_series(1, device) FROM metrics ORDER BY time LIMIT 1) x;  -- set-returning function in target list
+ ok 
+----
+ t
+
+SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics_regular r, LATERAL (SELECT * FROM metrics m WHERE m.device = r.x ORDER BY time LIMIT 1) l LIMIT 1) x;  -- lateral correlation in WHERE (outer ref becomes a Param)
  ok 
 ----
  t
@@ -981,6 +991,15 @@ SELECT time, ARRAY(SELECT x FROM metrics_regular ORDER BY x) AS a FROM metrics O
  Wed Jan 01 01:00:00 2020 PST | {1}
  Wed Jan 01 02:00:00 2020 PST | {1}
 
+-- lateral join: the deferred scan sits on the inner side of a nestloop and is
+-- rescanned for each outer row, so the diff catches a stale rescan result
+SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l ORDER BY g;
+ g | gg | value 
+---+----+-------
+ 1 |  1 |     0
+ 2 |  2 |     0
+ 3 |  3 |     0
+
 RESET timescaledb.debug_require_deferred_chunk_scan;
 -- Node output must match the expanded plan: run with the node on then off and diff.
 \o :TEST_RESULTS_OPTIMIZED
@@ -1040,6 +1059,9 @@ SELECT time, (SELECT count(*) FROM metrics_regular) AS c FROM metrics ORDER BY t
 SELECT time, device, (SELECT count(*) FROM metrics_regular r WHERE r.x = metrics.device) AS m FROM metrics ORDER BY time LIMIT 5;  -- correlated scalar subquery (SubPlan)
 SELECT time, EXISTS(SELECT 1 FROM metrics_regular r WHERE r.x = metrics.device) AS e FROM metrics ORDER BY time LIMIT 5;  -- correlated EXISTS
 SELECT time, ARRAY(SELECT x FROM metrics_regular ORDER BY x) AS a FROM metrics ORDER BY time LIMIT 3;  -- ARRAY subquery
+-- lateral join: the deferred scan sits on the inner side of a nestloop and is
+-- rescanned for each outer row, so the diff catches a stale rescan result
+SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l ORDER BY g;
 \o
 SET timescaledb.enable_deferred_chunk_scan TO off;
 \o :TEST_RESULTS_UNOPTIMIZED
@@ -1099,6 +1121,118 @@ SELECT time, (SELECT count(*) FROM metrics_regular) AS c FROM metrics ORDER BY t
 SELECT time, device, (SELECT count(*) FROM metrics_regular r WHERE r.x = metrics.device) AS m FROM metrics ORDER BY time LIMIT 5;  -- correlated scalar subquery (SubPlan)
 SELECT time, EXISTS(SELECT 1 FROM metrics_regular r WHERE r.x = metrics.device) AS e FROM metrics ORDER BY time LIMIT 5;  -- correlated EXISTS
 SELECT time, ARRAY(SELECT x FROM metrics_regular ORDER BY x) AS a FROM metrics ORDER BY time LIMIT 3;  -- ARRAY subquery
+-- lateral join: the deferred scan sits on the inner side of a nestloop and is
+-- rescanned for each outer row, so the diff catches a stale rescan result
+SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l ORDER BY g;
 \o
 SET timescaledb.enable_deferred_chunk_scan TO on;
 :DIFF_CMD
+-- EXPLAIN ANALYZE prints the actual per-chunk plan for every chunk the LIMIT visited.
+SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics LIMIT 3;  -- stops in the first non-empty chunk
+--- QUERY PLAN ---
+ Limit (actual rows=3.00 loops=1)
+   ->  Custom Scan (DeferredChunkScan) on metrics (actual rows=3.00 loops=1)
+         Chunks Visited: 3
+         ->  Limit (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_1_7_chunk (actual rows=0.00 loops=1)
+         ->  Limit (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_1_6_chunk (actual rows=0.00 loops=1)
+         ->  Limit (actual rows=3.00 loops=1)
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=3.00 loops=1)
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics LIMIT 6;  -- spills into a second non-empty chunk
+--- QUERY PLAN ---
+ Limit (actual rows=6.00 loops=1)
+   ->  Custom Scan (DeferredChunkScan) on metrics (actual rows=6.00 loops=1)
+         Chunks Visited: 4
+         ->  Limit (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_1_7_chunk (actual rows=0.00 loops=1)
+         ->  Limit (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_1_6_chunk (actual rows=0.00 loops=1)
+         ->  Limit (actual rows=4.00 loops=1)
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=4.00 loops=1)
+         ->  Limit (actual rows=4.00 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=4.00 loops=1)
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics ORDER BY time DESC LIMIT 3;  -- ordered: per-chunk plan carries the ORDER BY
+--- QUERY PLAN ---
+ Limit (actual rows=3.00 loops=1)
+   ->  Custom Scan (DeferredChunkScan) on metrics (actual rows=3.00 loops=1)
+         Order: "time" DESC
+         Chunks Visited: 2
+         ->  Limit (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_7_chunk_metrics_time_idx on _hyper_1_7_chunk (actual rows=0.00 loops=1)
+         ->  Limit (actual rows=3.00 loops=1)
+               ->  Index Scan using _hyper_1_5_chunk_metrics_time_idx on _hyper_1_5_chunk (actual rows=3.00 loops=1)
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_compressed LIMIT 3;  -- compressed chunk
+--- QUERY PLAN ---
+ Limit (actual rows=3.00 loops=1)
+   ->  Custom Scan (DeferredChunkScan) on metrics_compressed (actual rows=3.00 loops=1)
+         Chunks Visited: 1
+         ->  Limit (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_12_chunk (actual rows=3.00 loops=1)
+                     ->  Seq Scan on _hyper_2_12_chunk_compressed (actual rows=3.00 loops=1)
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_compressed ORDER BY time DESC LIMIT 3;  -- compressed + ordered: per-chunk Sort
+--- QUERY PLAN ---
+ Limit (actual rows=3.00 loops=1)
+   ->  Custom Scan (DeferredChunkScan) on metrics_compressed (actual rows=3.00 loops=1)
+         Order: "time" DESC
+         Chunks Visited: 1
+         ->  Limit (actual rows=3.00 loops=1)
+               ->  Sort (actual rows=3.00 loops=1)
+                     Sort Key: _hyper_2_12_chunk."time" DESC
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_12_chunk (actual rows=4.00 loops=1)
+                           ->  Seq Scan on _hyper_2_12_chunk_compressed (actual rows=4.00 loops=1)
+
+-- make the first-visited chunk partially compressed, then scan it
+INSERT INTO metrics_compressed (time, device, value) VALUES ('2020-01-05 06:00', 9, 99);
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_compressed LIMIT 4;  -- partial chunk: compressed and uncompressed parts
+--- QUERY PLAN ---
+ Limit (actual rows=4.00 loops=1)
+   ->  Custom Scan (DeferredChunkScan) on metrics_compressed (actual rows=4.00 loops=1)
+         Chunks Visited: 1
+         ->  Limit (actual rows=4.00 loops=1)
+               ->  Append (actual rows=4.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_12_chunk (actual rows=4.00 loops=1)
+                           ->  Seq Scan on _hyper_2_12_chunk_compressed (actual rows=4.00 loops=1)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_compressed ORDER BY time DESC LIMIT 3;  -- partial chunk + ordered: per-chunk Merge Append
+--- QUERY PLAN ---
+ Limit (actual rows=3.00 loops=1)
+   ->  Custom Scan (DeferredChunkScan) on metrics_compressed (actual rows=3.00 loops=1)
+         Order: "time" DESC
+         Chunks Visited: 1
+         ->  Limit (actual rows=3.00 loops=1)
+               ->  Merge Append (actual rows=3.00 loops=1)
+                     Sort Key: _hyper_2_12_chunk."time" DESC
+                     ->  Sort (actual rows=2.00 loops=1)
+                           Sort Key: _hyper_2_12_chunk."time" DESC
+                           Sort Method: quicksort 
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_12_chunk (actual rows=4.00 loops=1)
+                                 ->  Seq Scan on _hyper_2_12_chunk_compressed (actual rows=4.00 loops=1)
+                     ->  Index Scan using _hyper_2_12_chunk_metrics_compressed_time_idx on _hyper_2_12_chunk (actual rows=1.00 loops=1)
+
+-- a correlated target-list subplan is explained after the per-chunk plans and must resolve against the outer range table
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT value, (SELECT count(*) FROM metrics_regular r WHERE r.time < m.time) FROM metrics m ORDER BY time LIMIT 3;
+--- QUERY PLAN ---
+ Limit (actual rows=3.00 loops=1)
+   ->  Result (actual rows=3.00 loops=1)
+         ->  Custom Scan (DeferredChunkScan) on metrics m (actual rows=3.00 loops=1)
+               Order: "time"
+               Chunks Visited: 2
+               ->  Limit (actual rows=0.00 loops=1)
+                     ->  Index Scan Backward using _hyper_1_6_chunk_metrics_time_idx on _hyper_1_6_chunk (actual rows=0.00 loops=1)
+               ->  Limit (actual rows=3.00 loops=1)
+                     ->  Index Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+         SubPlan expr_1
+           ->  Aggregate (actual rows=1.00 loops=3)
+                 ->  Seq Scan on metrics_regular r (actual rows=0.00 loops=3)
+                       Filter: ("time" < m."time")
+                       Rows Removed by Filter: 1
+
+RESET timescaledb.debug_require_deferred_chunk_scan;

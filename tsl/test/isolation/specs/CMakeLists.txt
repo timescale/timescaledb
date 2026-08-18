@@ -48,10 +48,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_concurrent_register.spec
     cagg_concurrent_policy_register.spec
     cagg_concurrent_refresh_invalidation_cutting.spec
-    cagg_granular_refresh.spec
-    cagg_granular_refresh_cleanup_races.spec
-    cagg_granular_refresh_seqnum_race.spec
-    cagg_granular_refresh_precommit_abort.spec
     cagg_hierarchical_concurrent_refresh.spec
     cagg_incremental_concurrent.spec
     cagg_refresh_cleanup_register.spec
@@ -74,6 +70,16 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     attach_chunk_isolation.spec)
 
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
+if(TMP_ENABLE_GRANULAR_REFRESH_TESTS AND CMAKE_BUILD_TYPE MATCHES Debug)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_granular_refresh.spec
+    cagg_granular_refresh_cleanup_races.spec
+    cagg_granular_refresh_seqnum_race.spec
+    cagg_granular_refresh_precommit_abort.spec)
+endif()
 
 # need to generate MODULE name for the .spec files
 foreach(TEMP_FILE ${TEST_TEMPLATES_MODULE})
