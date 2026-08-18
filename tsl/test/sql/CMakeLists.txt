@@ -123,6 +123,23 @@ if(NOT APPLE)
   list(APPEND TEST_FILES direct_compress_copy.sql)
 endif()
 
+if(TMP_ENABLE_GRANULAR_REFRESH_TESTS)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_granular_refresh.sql
+    cagg_granular_refresh_api.sql
+    cagg_granular_refresh_coltypes.sql
+    cagg_granular_refresh_fallback.sql
+    cagg_granular_refresh_garbage_collector.sql)
+
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
+         cagg_granular_refresh_config.sql)
+
+  endif()
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
