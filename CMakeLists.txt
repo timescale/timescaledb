@@ -343,8 +343,8 @@ endif()
 
 find_package(Git)
 
-# If we have git installed, check if we're building from a repository. The actual
-# commit hashes are rechecked at build time.
+# If we have git installed, check if we're building from a repository. The
+# actual commit hashes are rechecked at build time.
 if(GIT_FOUND)
   execute_process(
     COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
