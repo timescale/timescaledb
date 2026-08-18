@@ -101,11 +101,6 @@ if(USE_UMASH)
   add_compile_definitions(TS_USE_UMASH)
 endif()
 
-option(
-  TMP_ENABLE_GRANULAR_REFRESH_TESTS
-  "TODO: the granular refresh tests are disabled because of a shared memory leak"
-  OFF)
-
 add_subdirectory(bgw_policy)
 add_subdirectory(compression)
 add_subdirectory(continuous_aggs)
