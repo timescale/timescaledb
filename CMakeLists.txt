@@ -343,6 +343,16 @@ endif()
 
 find_package(Git)
 
+# If we have git installed, check if we're building from a repository. The actual
+# commit hashes are rechecked at build time.
+if(GIT_FOUND)
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    RESULT_VARIABLE GIT_COMMIT_INFO_FOUND
+    OUTPUT_QUIET ERROR_QUIET)
+endif()
+
 # Check PostgreSQL version
 execute_process(
   COMMAND ${PG_CONFIG} --version
