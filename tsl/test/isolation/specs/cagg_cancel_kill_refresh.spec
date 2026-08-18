@@ -45,9 +45,12 @@ setup
         pid INTEGER NOT NULL PRIMARY KEY
     );
 
-    -- Signal cancel to registered backends. The isolation tester's
-    -- (blocked_step) annotation synchronizes step completion, so no polling
-    -- on pg_stat_activity is required here.
+    -- Signal cancel to registered backends. No polling on pg_stat_activity is
+    -- required here: the (blocked_step) marker holds this step's completion
+    -- report until the signalled refresh is reported done, and the k1_noop
+    -- step that follows it in every permutation keeps the next step from being
+    -- launched until then. See the "empty step" idiom in the PostgreSQL
+    -- src/test/isolation/README, "Dealing with race conditions".
     CREATE OR REPLACE PROCEDURE cancelpids() AS
     $$
     BEGIN
@@ -204,6 +207,12 @@ step "k1_cancel"
 {
     CALL cancelpids();
 }
+# Empty synchronization step. Markers only delay the *reporting* of a step's
+# completion, never the *launch* of the next one, so without this the
+# waitpoint-release step races the cancelled backend's unwind. Since k1_noop
+# runs in the same session as k1_cancel, it cannot be launched until k1_cancel
+# is reported complete, which in turn waits on the cancelled refresh.
+step "k1_noop" { }
 
 # Session for killing via pg_terminate_backend
 session "T1"
@@ -211,6 +220,8 @@ step "t1_terminate"
 {
     CALL terminatepids();
 }
+# Same rationale as k1_noop.
+step "t1_noop" { }
 
 # Session to view registered ranges
 session "S1"
@@ -244,33 +255,33 @@ step "r2_refresh_nonoverlap"
 #
 
 # Cancel after registration
-permutation "wp0_enable" "r1_register_pid" "r1_refresh"("wp0_enable") "s1_registered_ranges" "k1_cancel"("r1_refresh") "wp0_release" "s1_registered_ranges"
+permutation "wp0_enable" "r1_register_pid" "r1_refresh"("wp0_enable") "s1_registered_ranges" "k1_cancel"("r1_refresh") "k1_noop" "wp0_release" "s1_registered_ranges"
 
 # Cancel after txn 1
-permutation "wp1_enable" "r1_register_pid" "r1_refresh"("wp1_enable") "s1_registered_ranges" "k1_cancel"("r1_refresh") "wp1_release" "s1_registered_ranges"
+permutation "wp1_enable" "r1_register_pid" "r1_refresh"("wp1_enable") "s1_registered_ranges" "k1_cancel"("r1_refresh") "k1_noop" "wp1_release" "s1_registered_ranges"
 
 # Cancel after txn 2
-permutation "wp2_enable" "r1_register_pid" "r1_refresh"("wp2_enable") "s1_registered_ranges" "k1_cancel"("r1_refresh") "wp2_release" "s1_registered_ranges"
+permutation "wp2_enable" "r1_register_pid" "r1_refresh"("wp2_enable") "s1_registered_ranges" "k1_cancel"("r1_refresh") "k1_noop" "wp2_release" "s1_registered_ranges"
 
 # Cancel after txn 3
-permutation "wp3_enable" "r1_register_pid" "r1_refresh"("wp3_enable") "s1_registered_ranges" "k1_cancel"("r1_refresh") "wp3_release" "s1_registered_ranges"
+permutation "wp3_enable" "r1_register_pid" "r1_refresh"("wp3_enable") "s1_registered_ranges" "k1_cancel"("r1_refresh") "k1_noop" "wp3_release" "s1_registered_ranges"
 
 #
 # pg_terminate_backend — ranges are NOT cleared since the PID is immediately killed. A follow-up refresh should detect and clean up orphaned entries.
 #
 
 # Terminate after registration (txn 0). Follow-up refresh cleans registered ranges
-permutation "wp0_enable" "tr1_register_pid" "tr1_refresh"("wp0_enable") "s1_registered_ranges" "t1_terminate"("tr1_refresh") "wp0_release" "s1_registered_ranges" "r2_refresh" "s1_registered_ranges"
+permutation "wp0_enable" "tr1_register_pid" "tr1_refresh"("wp0_enable") "s1_registered_ranges" "t1_terminate"("tr1_refresh") "t1_noop" "wp0_release" "s1_registered_ranges" "r2_refresh" "s1_registered_ranges"
 
 # Terminate after txn 1. Follow-up refresh cleans registered ranges
-permutation "wp1_enable" "tr2_register_pid" "tr2_refresh"("wp1_enable") "s1_registered_ranges" "t1_terminate"("tr2_refresh") "wp1_release" "s1_registered_ranges" "r2_refresh" "s1_registered_ranges"
+permutation "wp1_enable" "tr2_register_pid" "tr2_refresh"("wp1_enable") "s1_registered_ranges" "t1_terminate"("tr2_refresh") "t1_noop" "wp1_release" "s1_registered_ranges" "r2_refresh" "s1_registered_ranges"
 
 # Terminate after txn 2. Follow-up refresh cleans registered ranges
-permutation "wp2_enable" "tr3_register_pid" "tr3_refresh"("wp2_enable") "s1_registered_ranges" "t1_terminate"("tr3_refresh") "wp2_release" "s1_registered_ranges" "r2_refresh" "s1_registered_ranges"
+permutation "wp2_enable" "tr3_register_pid" "tr3_refresh"("wp2_enable") "s1_registered_ranges" "t1_terminate"("tr3_refresh") "t1_noop" "wp2_release" "s1_registered_ranges" "r2_refresh" "s1_registered_ranges"
 
 # Terminate after txn 3. Follow-up refresh cleans registered ranges
-permutation "wp3_enable" "tr4_register_pid" "tr4_refresh"("wp3_enable") "s1_registered_ranges" "t1_terminate"("tr4_refresh") "wp3_release" "s1_registered_ranges" "r2_refresh" "s1_registered_ranges"
+permutation "wp3_enable" "tr4_register_pid" "tr4_refresh"("wp3_enable") "s1_registered_ranges" "t1_terminate"("tr4_refresh") "t1_noop" "wp3_release" "s1_registered_ranges" "r2_refresh" "s1_registered_ranges"
 
 # A non-overlapping follow-up refresh should also clean up orphaned registered ranges
 #
-permutation "wp2_enable" "tr5_register_pid" "tr5_refresh"("wp2_enable") "s1_registered_ranges" "t1_terminate"("tr5_refresh") "wp2_release" "s1_registered_ranges" "r2_refresh_nonoverlap" "s1_registered_ranges"
+permutation "wp2_enable" "tr5_register_pid" "tr5_refresh"("wp2_enable") "s1_registered_ranges" "t1_terminate"("tr5_refresh") "t1_noop" "wp2_release" "s1_registered_ranges" "r2_refresh_nonoverlap" "s1_registered_ranges"

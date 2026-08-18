@@ -93,6 +93,13 @@ session "K1"
 step "K1_terminate" {
     CALL terminate_r1();
 }
+# Empty synchronization step. The ("R1_refresh") marker only delays the
+# *reporting* of K1_terminate's completion, never the *launch* of the next
+# permutation step, so without this the following steps race R1's unwind.
+# K1_noop is in the same session, so it cannot be launched until K1_terminate
+# is reported complete. See PostgreSQL src/test/isolation/README,
+# "Dealing with race conditions".
+step "K1_noop" { }
 
 # Refresh sessions
 session "R2"
@@ -240,4 +247,4 @@ permutation "P1_add_policy" "WP_after_register_enable" "P1_run_policy" "check_jo
 # Stale registration cleanup by concurrent refreshes.
 # Kill a backend during refresh to end up with a pid left behind. Later two concurrent refreshes run, only one removes the stale pid.
 # backend R1 is killed, we can no longer use this for later permutations
-permutation "WP_before_txn2_commit_enable" "R1_refresh" "check_jobs" "K1_terminate"("R1_refresh") "WP_before_txn2_commit_disable" "L1_lock" "R2_refresh"("L1_lock") "R3_refresh"("R2_refresh") "L1_unlock"(R2_refresh, R3_refresh) "check_jobs"
+permutation "WP_before_txn2_commit_enable" "R1_refresh" "check_jobs" "K1_terminate"("R1_refresh") "K1_noop" "WP_before_txn2_commit_disable" "L1_lock" "R2_refresh"("L1_lock") "R3_refresh"("R2_refresh") "L1_unlock"(R2_refresh, R3_refresh) "check_jobs"
