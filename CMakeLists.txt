@@ -349,8 +349,11 @@ if(GIT_FOUND)
   execute_process(
     COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    RESULT_VARIABLE GIT_COMMIT_INFO_FOUND
+    RESULT_VARIABLE _git_rev_parse_result
     OUTPUT_QUIET ERROR_QUIET)
+  if(_git_rev_parse_result EQUAL 0)
+    set(GIT_COMMIT_INFO_FOUND TRUE)
+  endif()
 endif()
 
 # Check PostgreSQL version
