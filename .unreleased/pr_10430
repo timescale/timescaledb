@@ -1,1 +1,0 @@
-Fixes: #10430 Should not attach SkipScan to mismatched IndexScan under MergeAppend.
