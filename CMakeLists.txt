@@ -129,7 +129,9 @@ if((NOT DEFINED CMAKE_C_COMPILER) AND (NOT DEFINED ENV{CC}))
         STATUS
           "Using ${PG_CCACHE_FOUND} as C compiler launcher based on pg_config CC"
       )
-      set(CMAKE_C_COMPILER_LAUNCHER ${PG_CCACHE_FOUND})
+      set(CMAKE_C_COMPILER_LAUNCHER
+          ${CMAKE_COMMAND} -E env CCACHE_BASEDIR=${CMAKE_SOURCE_DIR}
+          ${PG_CCACHE_FOUND})
     endif()
     set(PG_CC ${PG_CC_LIST})
   else()
