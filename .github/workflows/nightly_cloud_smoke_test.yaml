@@ -76,6 +76,10 @@ jobs:
       - name: Checkout TimescaleDB
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Replace unreliable Azure APT mirror
+        run: |
+          sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
       - name: Install Linux Dependencies
         # we want the right version of Postgres for handling any dump file
         timeout-minutes: 15
