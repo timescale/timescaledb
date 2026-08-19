@@ -63,6 +63,16 @@ typedef struct MaterializationContext
 	TimeRange materialization_range;
 	InternalTimeRange internal_materialization_range;
 	int nargs;
+	/*
+	 * Tenant-scoped materialization: when tenant_column is non-NULL, only rows
+	 * whose tenant_column matches a tracked tenant (for raw_hypertable_id /
+	 * tenant_seqnum, overlapping this range) are re-materialized.
+	 */
+	bool tenant_scoped;
+	const char *tenant_column;	/* cagg group-by column used as the tenant key */
+	const char *tenant_coltype; /* its SQL type name, for the decode cast */
+	int32 raw_hypertable_id;
+	int32 tenant_seqnum;
 } MaterializationContext;
 
 typedef char *(*MaterializationCreateStatement)(MaterializationContext *context);
@@ -132,13 +142,22 @@ static void free_materialization_plans(MaterializationContext *context);
 static void update_watermark(MaterializationContext *context);
 static void execute_materializations(MaterializationContext *context);
 
+/*
+ * Extra bind parameters appended for a tenant-scoped INSERT/DELETE on top of
+ * the base $1/$2 time range: $3 raw hypertable id, $4 seqnum, $5/$6 the
+ * internal (int8) range used by the tracking-overlap subquery.
+ */
+#define MAT_TENANT_EXTRA_NARGS 4
+
 /* API to update materializations from refresh code */
 void
 continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
 									  SchemaAndName partial_view,
 									  SchemaAndName materialization_table,
 									  const NameData *time_column_name,
-									  InternalTimeRange materialization_range)
+									  InternalTimeRange materialization_range,
+									  const char *tenant_column, const char *tenant_coltype,
+									  int32 raw_hypertable_id, int32 tenant_seqnum)
 {
 	MaterializationContext context = {
 		.mat_ht = mat_ht,
@@ -148,6 +167,12 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 		.time_column_name = (NameData *) time_column_name,
 		.materialization_range = internal_time_range_to_time_range(materialization_range),
 		.internal_materialization_range = materialization_range,
+		/* tenant_column non-NULL means this range is materialized tenant-scoped. */
+		.tenant_scoped = (tenant_column != NULL),
+		.tenant_column = tenant_column,
+		.tenant_coltype = tenant_coltype,
+		.raw_hypertable_id = raw_hypertable_id,
+		.tenant_seqnum = tenant_seqnum,
 	};
 
 	/* Lock down search_path */
@@ -162,8 +187,10 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 		materialization_range.start = materialization_range.end;
 	}
 
-	/* Then insert the materializations */
+	/* Then insert the materializations. Keep both range representations in sync
+	 * (the tenant-scoping subquery compares against the internal int8 range). */
 	context.materialization_range = internal_time_range_to_time_range(materialization_range);
+	context.internal_materialization_range = materialization_range;
 	execute_materializations(&context);
 
 	/* Restore search_path */
@@ -425,6 +452,44 @@ has_direct_compress_on_cagg_refresh_enabled(MaterializationContext *context)
 		   TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht);
 }
 
+/*
+ * Build the tenant-scoping predicate, or "" when not tenant-scoped.
+ *
+ * Restricts to rows whose tenant column matches a tracked tenant for this
+ * (raw hypertable, seqnum) whose tracked range overlaps the materialization
+ * range. The tracked tenant_id text holds the canonical text form of the tenant
+ * key, so it is cast back to the column type; the column (alias.<col>) is left
+ * bare so an index on it can be used. Params: $1/$2 are the time range (outer),
+ * $3 = raw hypertable id, $4 = seqnum, $5/$6 = the internal (int8) range.
+ *
+ * The tenant list is wrapped in ARRAY() to keep the predicate a qual on the
+ * tenant column. The planner can then push it into the aggregating partial view,
+ * since the tenant column is a grouping key there, and use it as an index
+ * condition. IN (subquery) instead becomes a semi-join, and a join cannot cross
+ * an aggregate, so every tenant in the window would be aggregated first.
+ */
+static char *
+build_tenant_predicate(MaterializationContext *context, const char *alias)
+{
+	StringInfoData buf;
+
+	if (!context->tenant_scoped)
+	{
+		return "";
+	}
+
+	initStringInfo(&buf);
+	appendStringInfo(&buf,
+					 " AND %s.%s = ANY (ARRAY(SELECT tt.tenant_id::%s "
+					 "FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt "
+					 "WHERE tt.hypertable_id = $3 AND tt.seqnum = $4 "
+					 "AND tt.min_timestamp < $6 AND tt.max_timestamp >= $5))",
+					 alias,
+					 quote_identifier(context->tenant_column),
+					 context->tenant_coltype);
+	return buf.data;
+}
+
 /* Create INSERT statement */
 static char *
 create_materialization_insert_statement(MaterializationContext *context)
@@ -440,13 +505,14 @@ create_materialization_insert_statement(MaterializationContext *context)
 	initStringInfo(&query);
 	appendStringInfo(&query,
 					 "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
-					 "WHERE I.%s >= $1 AND I.%s < $2 %s;",
+					 "WHERE I.%s >= $1 AND I.%s < $2 %s %s;",
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),
 					 quote_identifier(NameStr(*context->partial_view.schema)),
 					 quote_identifier(NameStr(*context->partial_view.name)),
 					 quote_identifier(NameStr(*context->time_column_name)),
 					 quote_identifier(NameStr(*context->time_column_name)),
+					 build_tenant_predicate(context, "I"),
 					 orderby);
 	return query.data;
 }
@@ -459,11 +525,12 @@ create_materialization_delete_statement(MaterializationContext *context)
 	initStringInfo(&query);
 	appendStringInfo(&query,
 					 "DELETE FROM %s.%s AS D "
-					 "WHERE D.%s >= $1 AND D.%s < $2;",
+					 "WHERE D.%s >= $1 AND D.%s < $2 %s;",
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),
 					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)));
+					 quote_identifier(NameStr(*context->time_column_name)),
+					 build_tenant_predicate(context, "D"));
 	return query.data;
 }
 
@@ -601,7 +668,24 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 	argtypes[0] = context->materialization_range.type;
 	argtypes[1] = context->materialization_range.type;
 
+	/* Tenant-scoped INSERT/DELETE add: $3 raw ht id, $4 seqnum, $5/$6 int8 range. */
+	if (context->tenant_scoped)
+	{
+		argtypes[2] = INT4OID;
+		argtypes[3] = INT4OID;
+		argtypes[4] = INT8OID;
+		argtypes[5] = INT8OID;
+	}
+
 	return argtypes;
+}
+
+/* number of bind-parameters: tenant-scoped statements have an extra MAT_TENANT_EXTRA_NARGS. */
+static int
+materialization_plan_nargs(const MaterializationContext *context,
+						   const MaterializationPlan *materialization)
+{
+	return materialization->nargs + (context->tenant_scoped ? MAT_TENANT_EXTRA_NARGS : 0);
 }
 
 static MaterializationPlan *
@@ -615,11 +699,11 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 	if (materialization->plan == NULL)
 	{
 		char *query = materialization->create_statement(context);
-		Oid *argtypes =
-			create_materialization_plan_argtypes(context, plan_type, materialization->nargs);
+		int nargs = materialization_plan_nargs(context, materialization);
+		Oid *argtypes = create_materialization_plan_argtypes(context, plan_type, nargs);
 
 		elog(DEBUG2, "%s: %s", __func__, query);
-		materialization->plan = SPI_prepare(query, materialization->nargs, argtypes);
+		materialization->plan = SPI_prepare(query, nargs, argtypes);
 		if (materialization->plan == NULL)
 		{
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);
@@ -641,15 +725,29 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 	(*values)[1] = context->materialization_range.end;
 	(*nulls)[0] = false;
 	(*nulls)[1] = false;
+
+	/* Tenant-scoped INSERT/DELETE add: $3 raw ht id, $4 seqnum, $5/$6 int8 range. */
+	if (context->tenant_scoped)
+	{
+		(*values)[2] = Int32GetDatum(context->raw_hypertable_id);
+		(*values)[3] = Int32GetDatum(context->tenant_seqnum);
+		(*values)[4] = Int64GetDatum(context->internal_materialization_range.start);
+		(*values)[5] = Int64GetDatum(context->internal_materialization_range.end);
+		(*nulls)[2] = false;
+		(*nulls)[3] = false;
+		(*nulls)[4] = false;
+		(*nulls)[5] = false;
+	}
 }
 
 static uint64
 execute_materialization_plan(MaterializationContext *context, MaterializationPlanType plan_type)
 {
 	MaterializationPlan *materialization = create_materialization_plan(context, plan_type);
+	int nargs = materialization_plan_nargs(context, materialization);
 
-	Datum *values = (Datum *) palloc(materialization->nargs * sizeof(Datum));
-	char *nulls = (char *) palloc(materialization->nargs * sizeof(char));
+	Datum *values = (Datum *) palloc(nargs * sizeof(Datum));
+	char *nulls = (char *) palloc(nargs * sizeof(char));
 
 	create_materialization_plan_args(context, plan_type, &values, &nulls);
 
@@ -788,8 +886,11 @@ execute_materializations(MaterializationContext *context)
 
 	PG_TRY();
 	{
-		/* MERGE statement is supported only for non-compressed CAggs */
-		if (ts_guc_enable_merge_on_cagg_refresh &&
+		/*
+		 * MERGE is supported only for non-compressed CAggs, and not for
+		 * tenant-scoped ranges
+		 */
+		if (ts_guc_enable_merge_on_cagg_refresh && !context->tenant_scoped &&
 			!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
 		{
 			/* Fallback to INSERT materializations if there are no rows to change on it */

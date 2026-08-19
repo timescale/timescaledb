@@ -127,7 +127,9 @@ jobs:
     - name: Revert code changes
       if: steps.check.outputs.should_run == 'true'
       run: |
-        git checkout base -- $CODE_PATHS
+        set -eu
+
+        git checkout $(git merge-base base @) -- $CODE_PATHS
         git status
 
     - name: Build TimescaleDB

@@ -34,6 +34,7 @@
 #include "loader/function_telemetry.h"
 #include "loader/loader.h"
 #include "loader/lwlocks.h"
+#include "loader/tenant_tracker_shmem.h"
 #include "loader/ts_stats_handles.h"
 
 /*
@@ -639,6 +640,7 @@ timescaledb_shmem_startup_hook(void)
 	ts_bgw_counter_shmem_startup();
 	ts_bgw_message_queue_shmem_startup();
 	ts_lwlocks_shmem_startup();
+	ts_tenant_tracker_shmem_startup();
 	ts_function_telemetry_shmem_startup();
 #if PG17_LT
 	ts_stats_shmem_startup();
@@ -656,6 +658,7 @@ timescaledb_shmem_request_hook(void)
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
 	ts_lwlocks_shmem_alloc();
+	ts_tenant_tracker_shmem_alloc();
 	ts_function_telemetry_shmem_alloc();
 #if PG17_LT
 	ts_stats_shmem_request();

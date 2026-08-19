@@ -22,6 +22,7 @@ SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed res
 set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;
 set enable_nestloop to off;
+set timescaledb.enable_deferred_chunk_scan to off;
 
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME

@@ -48,22 +48,29 @@ env:
 jobs:
   config:
     runs-on: ubuntu-latest
-    env:
-        key: ${{ secrets.ANTHROPIC_API_KEY }}
     outputs:
-      pg_latest: ${{ steps.setter.outputs.PG18_LATEST
-        && fromJson(steps.setter.outputs.PG18_LATEST)
-        || '' }}
+      have_key: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
+      should_run: >-
+        ${{ github.event_name != 'pull_request'
+          || (!contains(github.event.pull_request.labels.*.name, 'skip-ci')
+            && steps.filter.outputs.src == 'true') }}
+
     steps:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
     - name: Read configuration
-      if: env.key
       id: setter
       run: python .github/gh_config_reader.py
 
+    - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      id: filter
+      with:
+        filters: .github/filters.yaml
+
   fuzzer:
-    if: needs.config.outputs.pg_latest
+    if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
     runs-on: timescaledb-runner-arm64
     needs: config
@@ -181,7 +188,7 @@ jobs:
         make -C build install
 
     - name: Install Claude Code
-      run: npm install -g @anthropic-ai/claude-code@2.1.104
+      run: npm install -g @anthropic-ai/claude-code@2.1.215
 
     - name: LLM Fuzzing
       id: llm-fuzzing
@@ -201,7 +208,7 @@ jobs:
         rc=0
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 15.00 --dangerously-skip-permissions \
-          --model opus[1m] --effort high \
+          --model claude-opus-4-6[1m] --effort high \
           "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
           > ${{ runner.temp }}/claude-execution-output.json || rc=$?
 

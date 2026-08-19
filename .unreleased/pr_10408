@@ -1,0 +1,1 @@
+Fixes: #10408 Verify columns and their types in create_compressed_chunk
