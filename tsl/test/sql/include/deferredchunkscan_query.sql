@@ -58,3 +58,7 @@ SELECT time, (SELECT count(*) FROM metrics_regular) AS c FROM metrics ORDER BY t
 SELECT time, device, (SELECT count(*) FROM metrics_regular r WHERE r.x = metrics.device) AS m FROM metrics ORDER BY time LIMIT 5;  -- correlated scalar subquery (SubPlan)
 SELECT time, EXISTS(SELECT 1 FROM metrics_regular r WHERE r.x = metrics.device) AS e FROM metrics ORDER BY time LIMIT 5;  -- correlated EXISTS
 SELECT time, ARRAY(SELECT x FROM metrics_regular ORDER BY x) AS a FROM metrics ORDER BY time LIMIT 3;  -- ARRAY subquery
+
+-- lateral join: the deferred scan sits on the inner side of a nestloop and is
+-- rescanned for each outer row, so the diff catches a stale rescan result
+SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, value FROM metrics ORDER BY time LIMIT 1) l ORDER BY g;

@@ -2,6 +2,21 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.29.2 (2026-08-18)
+
+This release contains bug fixes since the 2.29.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#10189](https://github.com/timescale/timescaledb/pull/10189) Fix user-defined functions named `time_bucket` causing SQLSTATE `XX000`
+* [#10363](https://github.com/timescale/timescaledb/pull/10363) Fix `time_bucket_gapfill()` with window aggregates over constants
+* [#10416](https://github.com/timescale/timescaledb/pull/10416) Repair mismatched dimensional `CHECK` constraints
+* [#10423](https://github.com/timescale/timescaledb/pull/10423) Fix compressed `SkipScan` dropping uncompressed rows when sort keys do not match distinct keys
+* [#10430](https://github.com/timescale/timescaledb/pull/10430) Do not attach `SkipScan` to mismatched `IndexScan` paths under `MergeAppend`
+* [#9921](https://github.com/timescale/timescaledb/pull/9921) Fix wrong results for `IS NULL` predicates with min/max sparse-index pushdown
+
+**Thanks**
+* @borisborelly for reporting incorrect results with `COUNT(DISTINCT)` due to `SkipScan` dropping uncompressed rows.
+
 ## 2.29.1 (2026-08-04)
 
 This release contains performance improvements and bug fixes since the 2.29.0 release and fixes for security vulnerabilities (#10360, #10379, #10386). You can check the [security advisory](https://github.com/timescale/timescaledb/security/advisories/GHSA-hcfx-29v5-2rcw) for more information on the vulnerability and the platforms that are affected. We recommend that you upgrade at the next available opportunity.

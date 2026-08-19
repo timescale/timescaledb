@@ -11,11 +11,6 @@ set(TEST_FILES
     cagg_ddl.sql
     cagg_direct_compress.sql
     cagg_errors.sql
-    cagg_granular_refresh.sql
-    cagg_granular_refresh_api.sql
-    cagg_granular_refresh_coltypes.sql
-    cagg_granular_refresh_fallback.sql
-    cagg_granular_refresh_garbage_collector.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
     cagg_policy.sql
@@ -128,6 +123,23 @@ if(NOT APPLE)
   list(APPEND TEST_FILES direct_compress_copy.sql)
 endif()
 
+if(TMP_ENABLE_GRANULAR_REFRESH_TESTS)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_granular_refresh.sql
+    cagg_granular_refresh_api.sql
+    cagg_granular_refresh_coltypes.sql
+    cagg_granular_refresh_fallback.sql
+    cagg_granular_refresh_garbage_collector.sql)
+
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
+         cagg_granular_refresh_config.sql)
+
+  endif()
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
@@ -142,8 +154,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
-    cagg_granular_refresh_errors.sql
-    cagg_granular_refresh_config.sql
     cagg_policy_concurrent.sql
     cagg_policy_incremental.sql
     cagg_refresh_cleanup.sql

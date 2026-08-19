@@ -180,6 +180,15 @@ table_tuple_update_compat(Relation rel, ItemPointer otid, TupleTableSlot *slot, 
 	pg_plan_query(querytree, query_string, cursorOptions, boundParams, es)
 #endif
 
+/* The 'execute_once' argument was removed in PG18, see 3eea7a0c97e. */
+#if PG18_GE
+#define ExecutorRun_compat(query_desc, direction, count, execute_once)                             \
+	ExecutorRun(query_desc, direction, count)
+#else
+#define ExecutorRun_compat(query_desc, direction, count, execute_once)                             \
+	ExecutorRun(query_desc, direction, count, execute_once)
+#endif
+
 /*
  * PG19 added a "flags" argument to MakeTupleTableSlot(). Provide a wrapper with
  * the new signature that drops the flags on earlier versions.
