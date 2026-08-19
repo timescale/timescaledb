@@ -104,6 +104,11 @@ jobs:
     env:
       LLVM_VER: 17
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
