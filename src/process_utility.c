@@ -92,6 +92,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
+#include "ts_stats/ts_stats_record.h"
 #include "tss_callbacks.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
@@ -1656,6 +1657,8 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	ts_compression_settings_delete(chunk_relid);
 	ts_chunk_rewrite_delete(chunk_relid, false);
 	performDeletion(&objaddr, stmt->behavior, 0);
+
+	ts_stats_chunk_evict(chunk_relid);
 }
 
 /* Block drop compressed chunks directly and drop corresponding compressed chunks if
