@@ -216,3 +216,25 @@ drop schema test_ops cascade;
 drop table t10130 cascade;
 
 RESET enable_seqscan;
+
+
+-- Sort transform must not create a wrong join EC.
+create table a(ts timestamptz not null, k int);
+create table b(ts timestamptz not null, k int);
+select create_hypertable('a','ts', chunk_time_interval => interval '1 day');
+select create_hypertable('b','ts', chunk_time_interval => interval '1 day');
+insert into a select '2024-08-01'::timestamptz + (g * interval '1 hour'),   1 from generate_series(0, 23) g;
+insert into b select '2024-08-01'::timestamptz + (g * interval '30 minutes'), 1 from generate_series(0, 47) g;
+
+
+select sum(c)
+from
+  (select time_bucket('1 hour', a.ts) bb, count(*) c
+   from a
+   join b on time_bucket('1 hour', a.ts) = time_bucket('1 hour', b.ts)
+       and a.k = b.k
+   group by bb) z
+;
+
+drop table a;
+drop table b;
