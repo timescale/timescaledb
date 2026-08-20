@@ -3770,13 +3770,10 @@ GROUP BY 1,2 ORDER BY 2,1;
                            ->  Seq Scan on _hyper_X_X_chunk m1_1
                                  Filter: (("time" < (InitPlan expr_2).col1) AND ("time" >= (SubPlan expr_1)))
                                  SubPlan expr_1
-                                   ->  Result
-                                         InitPlan minmax_1
-                                           ->  Limit
-                                                 ->  Custom Scan (ChunkAppend) on metrics_tstz m2
-                                                       Order: m2."time"
-                                                       ->  Index Scan Backward using _hyper_X_X_chunk_metrics_tstz_time_idx on _hyper_X_X_chunk m2_1
-                                                             Filter: (device_id = m1_1.device_id)
+                                   ->  Aggregate
+                                         ->  Custom Scan (ChunkAppend) on metrics_tstz m2
+                                               ->  Seq Scan on _hyper_X_X_chunk m2_1
+                                                     Filter: (device_id = m1_1.device_id)
 
 \set ON_ERROR_STOP 0
 SELECT
