@@ -9,6 +9,7 @@
  * Specialized for each supported data type.
  */
 
+#include <port.h>
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
 #define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
 
@@ -129,6 +130,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	}
 
 	uint64 *restrict validity_bitmap = NULL;
+	ELEMENT_TYPE last_value = decompressed_values[n_total - 1];
 	if (has_nulls)
 	{
 		/*
@@ -160,6 +162,8 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
 
 		int current_notnull_element = n_notnull - 1;
+		last_value = decompressed_values[current_notnull_element];
+
 		for (int i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
@@ -178,6 +182,9 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 
 		Assert(current_notnull_element == -1);
 	}
+
+	/* the last value in the header must match with the last that we returned */
+	CheckCompressedData(last_value == (ELEMENT_TYPE) gorilla_data->header->last_value);
 
 	/* Return the result. */
 	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);

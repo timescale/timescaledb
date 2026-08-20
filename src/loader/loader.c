@@ -34,6 +34,7 @@
 #include "loader/function_telemetry.h"
 #include "loader/loader.h"
 #include "loader/lwlocks.h"
+#include "loader/tenant_tracker_shmem.h"
 #include "loader/ts_stats_handles.h"
 
 /*
@@ -393,6 +394,27 @@ should_load_on_create_extension(Node const *const utility_stmt, TsExtension cons
 }
 
 static bool
+should_load_on_transaction(Node const *const utility_stmt)
+{
+	TransactionStmt *stmt = (TransactionStmt *) utility_stmt;
+
+	/*
+	 * Do not load the extension just to open a transaction. This lets ALTER
+	 * EXTENSION ... UPDATE run as the first extension-touching command inside
+	 * a transaction block instead of failing because BEGIN already loaded the
+	 * old version.
+	 */
+	switch (stmt->kind)
+	{
+		case TRANS_STMT_BEGIN:
+		case TRANS_STMT_START:
+			return false;
+		default:
+			return true;
+	}
+}
+
+static bool
 load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 {
 	switch (nodeTag(utility_stmt))
@@ -403,6 +425,8 @@ load_utility_cmd(Node const *const utility_stmt, TsExtension const *const ext)
 			return should_load_on_alter_extension(utility_stmt, ext);
 		case T_CreateExtensionStmt:
 			return should_load_on_create_extension(utility_stmt, ext);
+		case T_TransactionStmt:
+			return should_load_on_transaction(utility_stmt);
 		case T_DropStmt:
 			return !drop_statement_drops_extension((DropStmt *) utility_stmt, ext);
 		default:
@@ -616,6 +640,7 @@ timescaledb_shmem_startup_hook(void)
 	ts_bgw_counter_shmem_startup();
 	ts_bgw_message_queue_shmem_startup();
 	ts_lwlocks_shmem_startup();
+	ts_tenant_tracker_shmem_startup();
 	ts_function_telemetry_shmem_startup();
 #if PG17_LT
 	ts_stats_shmem_startup();
@@ -633,6 +658,7 @@ timescaledb_shmem_request_hook(void)
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
 	ts_lwlocks_shmem_alloc();
+	ts_tenant_tracker_shmem_alloc();
 	ts_function_telemetry_shmem_alloc();
 #if PG17_LT
 	ts_stats_shmem_request();

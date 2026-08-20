@@ -193,6 +193,11 @@ group by cint2 order by cint2 limit 10
 
 select round(stddev(cint4)), count(cint4), sum(cint4), round(avg(cint4)) from aggfns;
 
+-- Stable function in CASE condition
+select count(*) from aggfns where s = (case when ctstz > now() then 1 else 2 end);
+
+select count(*) from aggfns where cint2 = (case when ctstz > now() then 1 else 2 end);
+
 
 -- Test edge cases for various batch sizes and the filter matching around batch
 -- end.

@@ -213,6 +213,9 @@ extern TSDLLEXPORT void ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior,
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, Oid time_type, Oid arg_type,
 												 bool older_newer);
+extern TSDLLEXPORT int ts_chunk_drop_chunks_by_boundary(Oid relid, Datum older_than,
+														Oid older_than_type,
+														bool use_creation_time);
 extern TSDLLEXPORT Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
 									 const char *table_name, Oid chunk_table_relid, bool *created);
@@ -230,6 +233,11 @@ extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_chunk_status_text(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_chunk_get_by_hypertable_id(int32 hypertable_id);
+extern TSDLLEXPORT void ts_chunk_publication_reconcile_schema_chunks(Oid pubid, List *schema_oids,
+																	 bool add);
+extern TSDLLEXPORT void ts_chunk_publication_reconcile_ht_schema_change(int32 hypertable_id,
+																		Oid old_schema,
+																		Oid new_schema);
 
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 

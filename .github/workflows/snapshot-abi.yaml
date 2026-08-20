@@ -25,7 +25,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -55,6 +55,10 @@ jobs:
             abi_min: ${{ fromJson(needs.config.outputs.pg18_abi_min) }}
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
 
     - name: Install Linux Dependencies
       timeout-minutes: 15
@@ -66,7 +70,7 @@ jobs:
           libtest-most-perl pkgconf icu-devtools clang-14 llvm-14 llvm-14-dev llvm-14-tools cmake
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Download Postgres ${{ matrix.pg }}
       run: |

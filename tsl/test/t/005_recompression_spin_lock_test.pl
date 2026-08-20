@@ -111,9 +111,10 @@ $s1->query_safe("SET timescaledb.enable_recompress_waiting TO on;");
 # We use session 3 to set up debug waitpoints
 # Begin txns in all sessions
 
-$s1->query_safe("BEGIN;");
-$s2->query_safe("BEGIN;");
-$s3->query_safe("BEGIN;");
+# use SELECT to trigger extension load
+$s1->query_safe("BEGIN; SELECT;");
+$s2->query_safe("BEGIN; SELECT;");
+$s3->query_safe("BEGIN; SELECT;");
 
 # We enable the debug_waitpoint after the latch and release it after s2 aborts
 # This allows s1 to successfully acquire the lock the second time around
@@ -149,6 +150,12 @@ $s2->query_safe("ABORT");
 # Release the debug waitpoint so that recompression succeeds
 $s3->query_safe(
 	"SELECT debug_waitpoint_release('chunk_recompress_after_latch');");
+
+# Session 1 re-acquires the lock asynchronously after the waitpoint is
+# released, so poll until it shows up before asserting.
+$node->poll_query_until('postgres',
+	"SELECT count(*) > 0 FROM pg_locks WHERE relation::regclass::text LIKE '%hyper_1_%chunk' AND granted AND mode = 'ExclusiveLock';"
+) or die "timed out waiting for ExclusiveLock on uncompressed chunk";
 
 # Verify ExclusiveLock on uncompressed chunk
 $result = $node->safe_psql('postgres',

@@ -15,8 +15,6 @@ name: Sanitizer test
 
 env:
   name: "Sanitizer"
-  PG_SRC_DIR: "pgbuild"
-  PG_INSTALL_DIR: "postgresql"
   extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
   llvm_config: "llvm-config-15"
   CLANG: "clang-15"
@@ -63,7 +61,7 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -81,6 +79,11 @@ jobs:
         os: ["ubuntu-22.04"]
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
@@ -89,7 +92,7 @@ jobs:
           libtest-most-perl jq ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -104,62 +107,78 @@ jobs:
       run: |
         mkdir ${{ github.workspace }}/sanitizer_logs
 
-    # we cache the build directory instead of the install directory here
-    # because extension installation will write files to install directory
-    # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ matrix.pg }}
-      id: cache-postgresql
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+    - name: Restore PostgreSQL ${{ matrix.pg }} Cache
+      id: restore-postgresql-cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}\
-          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+        path: |
+          install
+          pg
+        key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
-    - name: Build PostgreSQL ${{ matrix.pg }} if not in cache
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+    - name: Build PostgreSQL ${{ matrix.pg }}
+      if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
       run: |
+        set -xeu
+
         wget -q --tries=6 --waitretry=15 -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
-        mkdir -p ~/$PG_SRC_DIR
-        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        mkdir -p pg build-pg install
+        tar --extract --file postgresql.tar.bz2 --directory pg --strip-components 1
+
         # Add instrumentation to the Postgres memory contexts. For more details, see
         # https://github.com/timescale/eng-database/wiki/Using-Address-Sanitizer#adding-more-instrumentation
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         if [ ${PG_MAJOR} -lt 18 ]; then
-          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
+          patch -F5 -p1 -d pg < test/postgres-asan-instrumentation.patch
         else
-          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG18GE.patch
+          patch -F5 -p1 -d pg < test/postgres-asan-instrumentation-PG18GE.patch
         fi
-        cd ~/$PG_SRC_DIR
-        ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
+
+        cd build-pg
+
+        ../pg/configure --prefix="$(readlink -f ../install)" --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
-        make -j$(getconf _NPROCESSORS_ONLN)
+        make -j $(getconf _NPROCESSORS_ONLN)
         for ext in ${EXTENSIONS}; do
-          make -j$(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
+          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
-    - name: Upload config.log
-      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: config.log for PostgreSQL ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        path: ~/${{ env.PG_SRC_DIR }}/config.log
-
-    - name: Install PostgreSQL ${{ matrix.pg }}
-      run: |
-        cd ~/$PG_SRC_DIR
         make install
         for ext in ${EXTENSIONS}; do
           make -C contrib/${ext} install
         done
-        ~/$PG_INSTALL_DIR/bin/pg_config --version
+        make install-tests
+
+    - name: Save PostgreSQL ${{ matrix.pg }} Cache
+      if: steps.restore-postgresql-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          install
+          pg
+        key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+
+    - name: Upload config.log
+      if: always() && steps.restore-postgresql-cache.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: config.log for PostgreSQL ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
+        path: build-pg/config.log
+
+    - name: Set up PATH
+      run: |
+        set -xeu
+
+        echo "$(readlink -f install/bin)" >> "${GITHUB_PATH}"
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
-          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON \
+        ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
+          -DPG_SOURCE_DIR=$(readlink -f pg) \
+          -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON \
           -DTEST_GROUP_SIZE=5 -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)" -DTEST_TIMEOUT=240
-        make -j$(getconf _NPROCESSORS_ONLN) -C build
+        make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
     - name: make installcheck
@@ -167,13 +186,29 @@ jobs:
         set -o pipefail
         # IGNORE some test since they fail under ASAN.
         make -k -C build installcheck IGNORES="${IGNORES}" \
-          PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
+          | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
+
+        # TAP tests do not produce regression.diffs. Append prove's failure
+        # summary from installcheck.log plus, for each failing test, the failed
+        # assertions
+        sed -n '/^Test Summary Report/,/^Result:/p' installcheck.log >> regression.log 2>/dev/null || true
+        for t in $(grep -hoE 't/[^ ]+\.pl[[:space:]]+\(Wstat' installcheck.log 2>/dev/null | sed -E 's#t/(.+)\.pl.*#\1#'); do
+          echo "=== regress_log_$t ===" >> regression.log
+          find . -name "regress_log_$t" -exec awk '
+            FNR==1 { blk=0 }
+            { sub(/^\[[0-9:.]+\]\([0-9.]+s\) /, "") }
+            /^ok |^not ok |^# Looks like|^# Running:|^1\.\.|^Bail out/ { blk=0 }
+            /^#   Failed test/ { blk=1 }
+            blk { print }
+          ' {} + >> regression.log || true
+        done
+
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
@@ -181,7 +216,7 @@ jobs:
           # print OOM killer information
           sudo journalctl --system -q --facility=kern --grep "Killed process" || true
         fi
-        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >> $GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
@@ -204,19 +239,18 @@ jobs:
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        sudo coredumpctl gdb <<<"
+        sudo coredumpctl debug --debugger=gdb --debugger-arguments='' <<<"
           set verbose on
           set trace-commands on
           show debug-file-directory
           printf "'"'"query = '%s'\n\n"'"'", debug_query_string
-          frame function ExceptionalCondition
-          printf "'"'"condition = '%s'\n"'"'", conditionName
-          up 1
-          l
+          bt full
+          frame function __sanitizer::Die
+          up 4
+          list
           info args
           info locals
-          bt full
-        " 2>&1 | tee stacktrace.log
+        " 2>&1 | tee -a stacktrace.log
         ./scripts/bundle_coredumps.sh
 
     - name: Show sanitizer logs

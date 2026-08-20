@@ -43,6 +43,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        touch /etc/apt/apt-mirrors.txt
+        sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
     - name: Add repositories
       timeout-minutes: 15
       run: |
@@ -62,7 +67,7 @@ jobs:
           timescaledb-2-postgresql-${{ matrix.pg }} timescaledb-tools
         timescaledb-tune --quiet --yes
 
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Get version of latest release
       id: versions
@@ -93,7 +98,7 @@ jobs:
         " | tee -a $GITHUB_OUTPUT
 
     - name: Checkout the sources for version ${{ steps.installation.outputs.commit_tag }}
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         ref: ${{ steps.installation.outputs.commit_hash }}
 

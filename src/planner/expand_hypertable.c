@@ -1247,7 +1247,7 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk const *chunk)
 	}
 
 	/*
-	 * DimensionRetrictInfo strategy should only be one BTGreaterStrategyNumber
+	 * DimensionRestrictInfo strategy should only be one BTGreaterStrategyNumber
 	 * or BTGreaterEqualStrategyNumber on the lower boundary and
 	 * BTLessStrategyNumber or BTLessEqualStrategyNumber on the upper boundary.
 	 *

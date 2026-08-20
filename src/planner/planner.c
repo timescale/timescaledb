@@ -50,9 +50,11 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
+#include "import/plancat.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "nodes/deferred_chunk_scan/deferred_chunk_scan.h"
 #include "nodes/modify_hypertable.h"
 #include "partitioning.h"
 #include "planner/planner.h"
@@ -824,7 +826,7 @@ get_parent_rte(const PlannerInfo *root, Index rti)
  * related metadata: like chunk_status and pointer to hypertable entry.
  * It is okay to cache a pointer to the hypertable, since this cache is
  * confined to the lifetime of the query and not used across queries.
- * If the parent reolid is known, the caller can specify it to avoid the costly
+ * If the parent relid is known, the caller can specify it to avoid the costly
  * lookup. Otherwise pass InvalidOid.
  */
 static BaserelInfoEntry *
@@ -1088,13 +1090,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				/*
 				 * Do not try to do ordered append if the OSM chunk range is noncontiguous
 				 */
-				if (ht && ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID)
+				if (ht && ts_hypertable_has_noncontiguous_osm_chunk(ht))
 				{
-					if (ts_flags_are_set_32(ht->fd.status,
-											HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS))
-					{
-						return false;
-					}
+					return false;
 				}
 
 				/*
@@ -1497,6 +1495,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	reltype = ts_classify_relation(root, rel, &ht);
 
 	/*
+	 * Attach DeferredChunkScan path for the (unexpanded) hypertable.
+	 */
+	if (reltype == TS_REL_HYPERTABLE && ht && ts_get_private_reloptinfo(rel)->deferred_chunk_scan)
+	{
+		ts_deferred_chunk_scan_add_path(root, rel, ht);
+		if (prev_set_rel_pathlist_hook != NULL)
+		{
+			(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+		}
+		return;
+	}
+
+	/*
 	 * Check for unexpanded hypertable.
 	 *
 	 * We're going to expand all hypertables in the query when this hook is
@@ -1617,10 +1628,23 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			Assert(!IS_DUMMY_REL(rel));
 
 			/*
+			 * Postgres skips building rel->indexlist for a relation it
+			 * considers an inheritance parent. But useless-join and self-join
+			 * elimination need a populated indexlist to prove this relation is
+			 * unique.
+			 */
+			if (ts_guc_enable_optimizations && inhparent)
+			{
+				ts_build_indexlist(root, rel);
+			}
+
+			/*
 			 * Mark hypertable RTEs we'd like to expand ourselves. We do this
 			 * for hypertables participating SELECT, UPDATE and DELETE,
 			 * including the target relation. The support for expanding target
 			 * relation of MERGE is not implemented at the moment.
+			 *
+			 * For DeferredChunkScan we don't expand during planning.
 			 *
 			 * The hypertables that are not expanded by our custom code here
 			 * fall back to the standard Postgres inheritance hierarchy
@@ -1629,8 +1653,13 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * `inhparent` goes to false in two cases: a hypertable without
 			 * chunks or a SELECT FROM ONLY hypertable.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL)
+			bool use_deferred_chunk_scan = inhparent && ts_should_deferred_chunk_scan(query, ht);
+			if (use_deferred_chunk_scan)
+			{
+				rte->inh = false;
+			}
+			else if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
+					 inhparent && rte->ctename == NULL)
 			{
 				if (rel->relid != (Index) query->resultRelation)
 				{
@@ -1642,7 +1671,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 				}
 			}
 
-			ts_create_private_reloptinfo(rel);
+			ts_create_private_reloptinfo(rel)->deferred_chunk_scan = use_deferred_chunk_scan;
 
 			if (ts_guc_enable_optimizations)
 			{

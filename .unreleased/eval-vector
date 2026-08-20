@@ -1,0 +1,1 @@
+Fixes: #9920 Fix the "XX000: failed to evaluate runtime constant in vectorized filter" error in some queries that use stable functions in `WHERE` clause and the columnar aggregation pipeline.

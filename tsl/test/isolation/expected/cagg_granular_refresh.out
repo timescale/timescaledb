@@ -1,0 +1,55 @@
+Parsed test spec with 5 sessions
+
+starting permutation: wp_attach_enable s1_insert s2_insert wp_attach_release v_refresh v_check
+step wp_attach_enable: SELECT debug_waitpoint_enable('tenant_tracker_drain_before_attach');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_insert: INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1); <waiting ...>
+step s2_insert: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2); <waiting ...>
+step wp_attach_release: SELECT debug_waitpoint_release('tenant_tracker_drain_before_attach');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_insert: <... completed>
+step s2_insert: <... completed>
+step v_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
+step v_check: 
+    SELECT sensor_id, bucket, avg
+    FROM cond_daily
+    ORDER BY sensor_id, bucket;
+
+sensor_id|bucket                      |avg
+---------+----------------------------+---
+sensor_a |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b |Thu Jan 02 00:00:00 2020 UTC|  2
+
+
+starting permutation: s1_insert wp_flush_enable r_refresh s2_insert wp_flush_release v_refresh v_check
+step s1_insert: INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+step wp_flush_enable: SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step r_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01'); <waiting ...>
+step s2_insert: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2);
+step wp_flush_release: SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: <... completed>
+step v_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
+step v_check: 
+    SELECT sensor_id, bucket, avg
+    FROM cond_daily
+    ORDER BY sensor_id, bucket;
+
+sensor_id|bucket                      |avg
+---------+----------------------------+---
+sensor_a |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b |Thu Jan 02 00:00:00 2020 UTC|  2
+

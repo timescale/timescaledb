@@ -16,8 +16,8 @@ jobs:
           || (steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: filter
         with:
           filters: .github/filters.yaml
@@ -41,6 +41,11 @@ jobs:
       OUTPUT_DIR: ${{ github.workspace }}/pg_upgrade_test
 
     steps:
+      - name: Replace unreliable Azure APT mirror
+        run: |
+          sudo touch /etc/apt/apt-mirrors.txt
+          sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
       - name: Install Linux Dependencies
         timeout-minutes: 15
         run: |
@@ -66,7 +71,7 @@ jobs:
             timescaledb-2-postgresql-${{ matrix.pg_version_new }}
 
       - name: Checkout TimescaleDB
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build and install TimescaleDB on PostgreSQL ${{ matrix.pg_version_old}}
         env:

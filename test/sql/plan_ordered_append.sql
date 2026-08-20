@@ -22,6 +22,9 @@ SELECT format('\! diff -u --label "Unoptimized result" --label "Optimized result
 \set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 \set PREFIX_NO_ANALYZE 'EXPLAIN (buffers off, costs off)'
 
+-- not interested in deferred chunk scan for this test
+SET timescaledb.enable_deferred_chunk_scan = 'off';
+
 \ir :TEST_LOAD_NAME
 \ir :TEST_QUERY_NAME
 

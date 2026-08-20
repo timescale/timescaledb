@@ -37,6 +37,11 @@ jobs:
             runner: "cloud-image-runner-ubuntu-24-arm64"
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        touch /etc/apt/apt-mirrors.txt
+        sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
     - name: Add repositories
       timeout-minutes: 15
       run: |
@@ -51,7 +56,6 @@ jobs:
         else
           wget --quiet --tries=6 --waitretry=15 -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
         fi
-
 
     - name: Install timescaledb
       timeout-minutes: 15
@@ -70,7 +74,7 @@ jobs:
       run: |
         dpkg -L timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}
 
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Get version of latest release
       id: versions

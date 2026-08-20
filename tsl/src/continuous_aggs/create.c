@@ -172,6 +172,10 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 
 	nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)] = true;
 
+	/* Granular refresh is disabled by default; enabled later via the API. */
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] =
+		BoolGetDatum(false);
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
@@ -552,7 +556,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  * CREATE VIEW mcagg ...
  * AS  select a, min(b)+max(d) from foo group by a,timebucket(a);
  *
- * Step 1. create a materialiation table which stores the partials for the
+ * Step 1. create a materialization table which stores the partials for the
  * aggregates and the grouping columns + internal columns.
  * So we have a table like _materialization_hypertable
  * with columns:
@@ -575,7 +579,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  * group by <internal-columns> , a , timebucket(a);
  *
  * Notes: ViewStmt->query is the raw parse tree
- * panquery is the output of running parse_anlayze( ViewStmt->query)
+ * panquery is the output of running parse_analyze( ViewStmt->query)
 
  * Since 1.7, we support real time aggregation.
  * If real time aggregation is off i.e. materialized only, the mcagg view is as described in Step 2.
@@ -625,7 +629,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	{
 		matpartcol_interval = bucket_info->htpartcol_interval_len;
 
-		/* Apply the factor just for non-Hierachical CAggs */
+		/* Apply the factor just for non-Hierarchical CAggs */
 		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 		{
 			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;

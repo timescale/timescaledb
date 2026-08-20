@@ -171,6 +171,24 @@ table_tuple_update_compat(Relation rel, ItemPointer otid, TupleTableSlot *slot, 
 #endif
 }
 
+/* 'es' argument was added in PG19, see c83ac02ec73 */
+#if PG19_LT
+#define pg_plan_query_compat(querytree, query_string, cursorOptions, boundParams, es)              \
+	pg_plan_query(querytree, query_string, cursorOptions, boundParams)
+#else
+#define pg_plan_query_compat(querytree, query_string, cursorOptions, boundParams, es)              \
+	pg_plan_query(querytree, query_string, cursorOptions, boundParams, es)
+#endif
+
+/* The 'execute_once' argument was removed in PG18, see 3eea7a0c97e. */
+#if PG18_GE
+#define ExecutorRun_compat(query_desc, direction, count, execute_once)                             \
+	ExecutorRun(query_desc, direction, count)
+#else
+#define ExecutorRun_compat(query_desc, direction, count, execute_once)                             \
+	ExecutorRun(query_desc, direction, count, execute_once)
+#endif
+
 /*
  * PG19 added a "flags" argument to MakeTupleTableSlot(). Provide a wrapper with
  * the new signature that drops the flags on earlier versions.
@@ -727,6 +745,8 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 #define COMPARE_LT BTLessStrategyNumber
 #define COMPARE_GT BTGreaterStrategyNumber
 #define pk_cmptype pk_strategy
+#define get_opfamily_member_for_cmptype(opfamily, lefttype, righttype, cmptype)                    \
+	get_opfamily_member(opfamily, lefttype, righttype, cmptype)
 #endif
 
 /* PG18 adds is_merge_delete param to ExecBR{Delete|Update}Triggers function.

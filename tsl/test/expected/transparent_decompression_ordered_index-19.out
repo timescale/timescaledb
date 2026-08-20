@@ -8,6 +8,7 @@ SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
 SELECT format('\! diff -u -- %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') AS "DIFF_CMD" \gset
 -- disable memoize node to avoid flaky results
 SET enable_memoize TO 'off';
+SET timescaledb.enable_deferred_chunk_scan TO off;
 -- Testing Index Scan backwards ----
 -- We want more than 1 segment in atleast 1 of the chunks
 CREATE TABLE metrics_ordered_idx (
@@ -1138,7 +1139,7 @@ ORDER BY "time", mt.device_id limit 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    ->  Nested Loop (actual rows=5.00 loops=1)
-         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (nd.node = mt.device_id))
          Rows Removed by Join Filter: 1488
          ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1493.00 loops=1)
                Order: mt."time", mt.device_id
@@ -1183,7 +1184,7 @@ ORDER BY "time", mt.device_id limit 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    ->  Nested Loop (actual rows=5.00 loops=1)
-         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (nd.node = mt.device_id))
          Rows Removed by Join Filter: 1488
          ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1493.00 loops=1)
                Order: mt."time", mt.device_id
