@@ -31,16 +31,14 @@
 void
 compression_toast_tuple_externalize(BulkWriter *writer, ToastTupleContext *ttc, int attribute)
 {
-	Datum *value = &ttc->ttc_values[attribute];
-	Datum old_value = *value;
+	Datum	   *value = &ttc->ttc_values[attribute];
+	Datum		old_value = *value;
 	ToastAttrInfo *attr = &ttc->ttc_attr[attribute];
 
 	attr->tai_colflags |= TOASTCOL_IGNORE;
 	*value = compression_toast_save_datum_multi(writer, old_value, attr->tai_oldexternal);
 	if ((attr->tai_colflags & TOASTCOL_NEEDS_FREE) != 0)
-	{
 		pfree(DatumGetPointer(old_value));
-	}
 	attr->tai_colflags |= TOASTCOL_NEEDS_FREE;
 	ttc->ttc_flags |= (TOAST_NEEDS_CHANGE | TOAST_NEEDS_FREE);
 }

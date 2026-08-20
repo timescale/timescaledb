@@ -61,22 +61,24 @@ compression_toast_save_datum_multi(BulkWriter *writer, Datum value, struct varle
 {
 	Relation rel = writer->out_rel;
 	int options = writer->insert_options;
-	TupleDesc toasttupDesc;
-	Datum t_values[3];
-	bool t_isnull[3];
-	CommandId mycid = GetCurrentCommandId(true);
+	TupleDesc	toasttupDesc;
+	Datum		t_values[3];
+	bool		t_isnull[3];
+	CommandId	mycid = GetCurrentCommandId(true);
 	struct varlena *result;
 	struct varatt_external toast_pointer;
 	union
 	{
 		struct varlena hdr;
-		char data[TOAST_MAX_CHUNK_SIZE + VARHDRSZ];
-		int32 align_it;
-	} chunk_data = { 0 };
-	int32 chunk_size;
-	char *data_p;
-	int32 data_todo;
-	Pointer dval = DatumGetPointer(value);
+		/* this is to make the union big enough for a chunk: */
+		char		data[TOAST_MAX_CHUNK_SIZE + VARHDRSZ];
+		/* ensure union is aligned well enough: */
+		int32		align_it;
+	}			chunk_data = {0};	/* silence compiler warning */
+	int32		chunk_size;
+	char	   *data_p;
+	int32		data_todo;
+	Pointer		dval = DatumGetPointer(value);
 	int nchunks;
 	int32 *chunk_seqs;
 	HeapTuple *toasttups;
@@ -106,20 +108,32 @@ compression_toast_save_datum_multi(BulkWriter *writer, Datum value, struct varle
 	}
 	toasttupDesc = writer->toast_rel->rd_att;
 
+	/*
+	 * Get the data pointer and length, and compute va_rawsize and va_extinfo.
+	 *
+	 * va_rawsize is the size of the equivalent fully uncompressed datum, so
+	 * we have to adjust for short headers.
+	 *
+	 * va_extinfo stored the actual size of the data payload in the toast
+	 * records and the compression method in first 2 bits if data is
+	 * compressed.
+	 */
 	if (VARATT_IS_SHORT(dval))
 	{
 		data_p = VARDATA_SHORT(dval);
 		data_todo = VARSIZE_SHORT(dval) - VARHDRSZ_SHORT;
-		toast_pointer.va_rawsize = data_todo + VARHDRSZ;
+		toast_pointer.va_rawsize = data_todo + VARHDRSZ;	/* as if not short */
 		toast_pointer.va_extinfo = data_todo;
 	}
 	else if (VARATT_IS_COMPRESSED(dval))
 	{
 		data_p = VARDATA(dval);
 		data_todo = VARSIZE(dval) - VARHDRSZ;
+		/* rawsize in a compressed datum is just the size of the payload */
 		toast_pointer.va_rawsize = VARDATA_COMPRESSED_GET_EXTSIZE(dval) + VARHDRSZ;
-		VARATT_EXTERNAL_SET_SIZE_AND_COMPRESS_METHOD(toast_pointer,
-													 data_todo,
+
+		/* set external size and compression method */
+		VARATT_EXTERNAL_SET_SIZE_AND_COMPRESS_METHOD(toast_pointer, data_todo,
 													 VARDATA_COMPRESSED_GET_COMPRESS_METHOD(dval));
 		/*
 		 * VARATT_EXTERNAL_IS_COMPRESSED() compares va_extinfo (uint32)
@@ -144,14 +158,18 @@ compression_toast_save_datum_multi(BulkWriter *writer, Datum value, struct varle
 		toast_pointer.va_extinfo = data_todo;
 	}
 
+	/*
+	 * Insert the correct table OID into the result TOAST pointer.
+	 *
+	 * Normally this is the actual OID of the target toast table, but during
+	 * table-rewriting operations such as CLUSTER, we have to insert the OID
+	 * of the table's real permanent toast table instead.  rd_toastoid is set
+	 * if we have to substitute such an OID.
+	 */
 	if (OidIsValid(rel->rd_toastoid))
-	{
 		toast_pointer.va_toastrelid = rel->rd_toastoid;
-	}
 	else
-	{
 		toast_pointer.va_toastrelid = RelationGetRelid(writer->toast_rel);
-	}
 
 	/*
 	 * The compressed-row insert path never runs under a toast-table-preserving
@@ -166,7 +184,9 @@ compression_toast_save_datum_multi(BulkWriter *writer, Datum value, struct varle
 		GetNewOidWithIndex(writer->toast_rel,
 						   RelationGetRelid(writer->toast_indexes[writer->toast_valid_index]),
 						   (AttrNumber) 1);
-
+	/*
+	 * Initialize constant parts of the tuple data
+	 */
 	t_values[0] = ObjectIdGetDatum(toast_pointer.va_valueid);
 	t_isnull[0] = false;
 	t_isnull[1] = false;
@@ -257,6 +277,9 @@ compression_toast_save_datum_multi(BulkWriter *writer, Datum value, struct varle
 		ExecDropSingleTupleTableSlot(slots[i]);
 	}
 
+	/*
+	 * Create the TOAST pointer value that we'll return
+	 */
 	result = (struct varlena *) palloc(TOAST_POINTER_SIZE);
 	SET_VARTAG_EXTERNAL(result, VARTAG_ONDISK);
 	memcpy(VARDATA_EXTERNAL(result), &toast_pointer, sizeof(toast_pointer));
@@ -270,6 +293,8 @@ compression_toast_save_datum_multi(BulkWriter *writer, Datum value, struct varle
  * toast_save_datum() in keeping the lock until commit (NoLock here), so a
  * concurrent reindex on the toast relation waits for this transaction rather
  * than racing it.
+ *
+ * This is not a forked/mirrored function.
  */
 void
 compression_toast_writer_close(BulkWriter *writer)
