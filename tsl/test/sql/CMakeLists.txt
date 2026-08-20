@@ -11,7 +11,6 @@ set(TEST_FILES
     cagg_ddl.sql
     cagg_direct_compress.sql
     cagg_errors.sql
-    cagg_granular_refresh_api.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
     cagg_policy.sql
@@ -124,11 +123,27 @@ if(NOT APPLE)
   list(APPEND TEST_FILES direct_compress_copy.sql)
 endif()
 
+if(TMP_ENABLE_GRANULAR_REFRESH_TESTS)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_granular_refresh.sql
+    cagg_granular_refresh_api.sql
+    cagg_granular_refresh_coltypes.sql
+    cagg_granular_refresh_fallback.sql
+    cagg_granular_refresh_garbage_collector.sql)
+
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
+         cagg_granular_refresh_config.sql)
+
+  endif()
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
-    attach_chunk.sql
     bgw_custom.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
@@ -208,7 +223,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_qual_default.sql
     vacuum.sql)
 
-  list(APPEND TEST_TEMPLATES compression_update_delete.sql.in
+  list(APPEND TEST_TEMPLATES attach_chunk.sql.in
+       compression_update_delete.sql.in deferredchunkscan.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
@@ -217,7 +233,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES privilege_maintain.sql)
+  list(APPEND TEST_FILES privilege_maintain.sql skip_scan_bugs.sql)
   list(APPEND TEST_TEMPLATES merge_append_partially_compressed.sql.in)
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES vector_agg_expr_debug.sql)
@@ -234,6 +250,10 @@ endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
   list(APPEND TEST_FILES constraints_not_valid.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "19"))
+  list(APPEND TEST_FILES upsert_do_select.sql repack.sql)
 endif()
 
 set(SOLO_TESTS

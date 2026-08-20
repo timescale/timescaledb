@@ -328,6 +328,11 @@ DEALLOCATE P8;
 \qecho no transformation
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10 + floor(random())::int, time) > 10 AND time_bucket(10 + floor(random())::int, time) < 100 AND time < 150 ORDER BY time;
 
+\qecho user-defined function named time_bucket should not trigger internal error
+CREATE FUNCTION time_bucket(int, text) RETURNS text AS $$ BEGIN RETURN left($2, $1); END $$ LANGUAGE plpgsql;
+SELECT count(*) FROM hyper WHERE time_bucket(1, 'foo') < 'z';
+DROP FUNCTION time_bucket(int, text);
+
 \qecho exclude chunks based on time column with partitioning function. This
 \qecho transparently applies the time partitioning function on the time
 \qecho value to be able to exclude chunks (similar to a closed dimension).

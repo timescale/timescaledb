@@ -323,6 +323,9 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 			Int64GetDatum(fd->schema_change_timestamp);
 	}
 
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] =
+		BoolGetDatum(fd->granular_refresh_enabled);
+
 	return heap_form_tuple(desc, values, nulls);
 }
 
@@ -385,6 +388,9 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		fd->schema_change_timestamp = DatumGetInt64(
 			values[AttrNumberGetAttrOffset(Anum_continuous_agg_schema_change_timestamp)]);
 	}
+
+	fd->granular_refresh_enabled =
+		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)]);
 
 	if (should_free)
 	{
@@ -586,6 +592,7 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 
 	all_caggs_info.mat_hypertable_ids = NIL;
 	all_caggs_info.bucket_functions = NIL;
+	all_caggs_info.granular_refresh_enabled = NIL;
 
 	Assert(list_length(caggs) > 0);
 
@@ -598,6 +605,10 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 
 		all_caggs_info.mat_hypertable_ids =
 			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
+
+		all_caggs_info.granular_refresh_enabled =
+			lappend_int(all_caggs_info.granular_refresh_enabled,
+						cagg->data.granular_refresh_enabled);
 	}
 	return all_caggs_info;
 }

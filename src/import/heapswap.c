@@ -258,6 +258,14 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 		swap_allvisible = relform1->relallvisible;
 		relform1->relallvisible = relform2->relallvisible;
 		relform2->relallvisible = swap_allvisible;
+
+#if PG18_GE
+		int32 swap_allfrozen;
+
+		swap_allfrozen = relform1->relallfrozen;
+		relform1->relallfrozen = relform2->relallfrozen;
+		relform2->relallfrozen = swap_allfrozen;
+#endif
 	}
 
 	/*

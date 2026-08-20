@@ -98,6 +98,7 @@ columnar_scan_state_create(CustomScan *cscan)
 	Assert(list_length(chunk_state->decompression_map) ==
 		   list_length(chunk_state->is_segmentby_column));
 
+	chunk_state->done_fetching_batches = false;
 	return (Node *) chunk_state;
 }
 
@@ -201,6 +202,7 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	Plan *compressed_scan = linitial(cscan->custom_plans);
 	Assert(list_length(cscan->custom_plans) == 1);
 
+	chunk_state->done_fetching_batches = false;
 	ts_stats_compression_acc_init(&dcontext->observ_acc);
 
 	PlanState *ps = &node->ss.ps;
@@ -451,12 +453,13 @@ columnar_scan_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunction
 
 	bqfuncs->pop(bq, dcontext);
 
-	while (bqfuncs->needs_next_batch(bq))
+	while (!chunk_state->done_fetching_batches && bqfuncs->needs_next_batch(bq))
 	{
 		TupleTableSlot *subslot = ExecProcNode(linitial(chunk_state->csstate.custom_ps));
 		if (TupIsNull(subslot))
 		{
 			/* Won't have more compressed tuples. */
+			chunk_state->done_fetching_batches = true;
 			break;
 		}
 
@@ -491,6 +494,7 @@ static void
 columnar_scan_rescan(CustomScanState *node)
 {
 	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
+	chunk_state->done_fetching_batches = false;
 	BatchQueue *bq = chunk_state->batch_queue;
 
 	bq->funcs->reset(bq);

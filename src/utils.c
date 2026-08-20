@@ -47,6 +47,7 @@
 #include "chunk.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
+#include "func_cache.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "time_utils.h"
@@ -2186,10 +2187,13 @@ ts_find_aggrefs(Node *node)
 bool
 ts_is_time_bucket_function(Expr *node)
 {
-	if (IsA(node, FuncExpr) &&
-		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
+	if (IsA(node, FuncExpr))
 	{
-		return true;
+		FuncInfo *finfo = ts_func_cache_get_bucketing_func(castNode(FuncExpr, node)->funcid);
+		if (finfo != NULL && strncmp(finfo->funcname, "time_bucket", NAMEDATALEN) == 0)
+		{
+			return true;
+		}
 	}
 
 	return false;

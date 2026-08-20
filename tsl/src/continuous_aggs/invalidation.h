@@ -23,6 +23,13 @@ typedef struct Invalidation
 	int64 greatest_modified_value;
 	bool is_modified;
 	ItemPointerData tid;
+	/*
+	 * Per-hypertable granular-tracking sequence number, used to match up with granular
+	 * tracking in the continuous aggregate invalidation log.
+	 * Stored as a nullable column on disk but loaded as 0 here for null, meaning
+	 * "no associated granular tracking".
+	 */
+	int32 seqnum;
 } Invalidation;
 
 #define INVAL_NEG_INFINITY PG_INT64_MIN
@@ -37,7 +44,7 @@ typedef struct InvalidationStore
 typedef struct Hypertable Hypertable;
 
 extern void invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end);
-extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end);
+extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end, int32 seqnum);
 extern void continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 end);
 extern void continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);
@@ -46,6 +53,8 @@ extern void invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype
 extern void invalidation_process_cagg_log(const ContinuousAgg *cagg,
 										  const InternalTimeRange *refresh_window);
 
+extern void invalidation_garbage_collect_tenant_tracking(const ContinuousAgg *cagg);
+
 extern InvalidationStore *collect_and_delete_cagg_invalidations_in_window(
 	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window, bool force);
 
@@ -53,8 +62,9 @@ extern void invalidation_store_free(InvalidationStore *store);
 extern void
 invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 										 const ContinuousAggBucketFunction *bucket_function);
-extern HeapTuple create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start,
-										 int64 end);
+extern HeapTuple create_cagg_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id,
+											  int64 start, int64 end, int32 seqnum);
 extern bool invalidation_hypertable_has_invalidations(int32 hyper_id);
 extern bool invalidation_cagg_has_invalidations(ContinuousAgg *cagg);
 extern bool invalidation_cagg_has_pending_mat_ranges(ContinuousAgg *cagg);
+extern int32 invalidation_max_seqnum_for_hypertable(int32 hypertable_id);

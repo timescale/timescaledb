@@ -32,11 +32,14 @@
 #include "materialize.h"
 #include "process_utility.h"
 #include "refresh.h"
+#include "tenant_tracker.h"
 #include "time_bucket.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
+#include "ts_catalog/continuous_aggs_tenant_tracking.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
 
 #define CAGG_REFRESH_LOG_LEVEL                                                                     \
 	(context.callctx == CAGG_REFRESH_POLICY || context.callctx == CAGG_REFRESH_POLICY_BATCHED ?    \
@@ -50,6 +53,10 @@ typedef struct ContinuousAggRefreshState
 	InternalTimeRange refresh_window;
 	SchemaAndName partial_view;
 	bool bucketing_refresh_window;
+	/* Granular tenant tracking column name and sql type */
+	const char *tenant_column;
+	const char *tenant_coltype;
+	int32 raw_hypertable_id;
 } ContinuousAggRefreshState;
 
 typedef struct CaggRefreshSpiContext
@@ -68,13 +75,15 @@ static void continuous_agg_refresh_init(ContinuousAggRefreshState *refresh,
 										const InternalTimeRange *refresh_window,
 										bool bucketing_refresh_window);
 static void continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
-										   const InternalTimeRange *bucketed_refresh_window);
+										   const InternalTimeRange *bucketed_refresh_window,
+										   int32 seqnum);
 static void log_refresh_window(int elevel, const ContinuousAgg *cagg,
 							   const InternalTimeRange *refresh_window,
 							   ContinuousAggRefreshContext context);
 static void continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh_window,
 												   const ContinuousAggRefreshContext context,
-												   const long iteration, void *arg1_refresh);
+												   const long iteration, int32 seqnum,
+												   void *arg1_refresh);
 static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
@@ -446,6 +455,50 @@ continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const Continuous
 	refresh->bucketing_refresh_window = bucketing_refresh_window;
 	refresh->partial_view.schema = &refresh->cagg.data.partial_view_schema;
 	refresh->partial_view.name = &refresh->cagg.data.partial_view_name;
+	refresh->raw_hypertable_id = cagg->data.raw_hypertable_id;
+
+	/*
+	 * When the cagg has granular refresh enabled, resolve its tenant-tracking
+	 * column and capture the column's attno and type for the tenant-scoped
+	 * materialization predicate. Bail out if the configured column does not
+	 * exist. TODO: more comprehensive validation once the config API lands.
+	 */
+	const char *tenant_column = NULL;
+	if (cagg->data.granular_refresh_enabled)
+	{
+		ts_hypertable_cagg_settings_get_tenant_tracking_column(cagg->data.raw_hypertable_id,
+															   &tenant_column);
+	}
+	if (tenant_column != NULL)
+	{
+		AttrNumber attno = get_attnum(refresh->cagg_ht->main_table_relid, tenant_column);
+
+		if (attno == InvalidAttrNumber)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("granular tracking column \"%s\" does not exist in continuous "
+							"aggregate "
+							"\"%s\"",
+							tenant_column,
+							NameStr(cagg->data.user_view_name))));
+		}
+
+		Oid tenant_typid;
+		int32 tenant_typmod;
+		Oid tenant_collid;
+
+		refresh->tenant_column = pstrdup(tenant_column);
+		/* Keep the typmod: without it format_type renders char(10) as bare
+		 * "character", which re-parses as char(1) and truncates every tenant key. */
+		get_atttypetypmodcoll(refresh->cagg_ht->main_table_relid,
+							  attno,
+							  &tenant_typid,
+							  &tenant_typmod,
+							  &tenant_collid);
+		tenant_typid = getBaseTypeAndTypmod(tenant_typid, &tenant_typmod);
+		refresh->tenant_coltype = format_type_with_typemod(tenant_typid, tenant_typmod);
+	}
 }
 
 /*
@@ -456,22 +509,66 @@ continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const Continuous
  */
 static void
 continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
-							   const InternalTimeRange *bucketed_refresh_window)
+							   const InternalTimeRange *bucketed_refresh_window, int32 seqnum)
 {
 	SchemaAndName cagg_hypertable_name = {
 		.schema = &refresh->cagg_ht->fd.schema_name,
 		.name = &refresh->cagg_ht->fd.table_name,
 	};
 	const Dimension *time_dim = hyperspace_get_open_dimension(refresh->cagg_ht->space, 0);
+	const char *tenant_column = NULL;
 
 	Assert(time_dim != NULL);
+
+	/*
+	 * Materialize this range tenant-scoped only when the cagg is configured for
+	 * tenant tracking, the invalidation carries a real seqnum (> 0), and at least
+	 * one tracking row exists for that seqnum. Otherwise (including forced
+	 * refresh, which uses seqnum 0) re-materialize the whole range.
+	 *
+	 * Only caggs configured for tenant tracking emit the DEBUG1 log recording
+	 * which path was taken (and, for a full refresh, why the granular path was not
+	 * used); regular cagg refreshes stay quiet.
+	 */
+	if (refresh->tenant_column != NULL)
+	{
+		const char *strategy;
+
+		if (seqnum == 0)
+		{
+			strategy = "full refresh (untracked invalidation, seqnum 0)";
+		}
+		else if (!ts_cagg_tenant_tracking_exists(refresh->raw_hypertable_id, seqnum))
+		{
+			strategy = "full refresh (no tenant tracking rows for this seqnum)";
+		}
+		else
+		{
+			tenant_column = refresh->tenant_column;
+			strategy = "granular tenant-scoped refresh";
+		}
+
+		elog(DEBUG1,
+			 "Continuous aggregate \"%s\": %s on [%s, %s] (seqnum %d)",
+			 NameStr(refresh->cagg.data.user_view_name),
+			 strategy,
+			 ts_internal_to_time_string(bucketed_refresh_window->start,
+										bucketed_refresh_window->type),
+			 ts_internal_to_time_string(bucketed_refresh_window->end,
+										bucketed_refresh_window->type),
+			 seqnum);
+	}
 
 	continuous_agg_update_materialization(refresh->cagg_ht,
 										  &refresh->cagg,
 										  refresh->partial_view,
 										  cagg_hypertable_name,
 										  &time_dim->fd.column_name,
-										  *bucketed_refresh_window);
+										  *bucketed_refresh_window,
+										  tenant_column,
+										  refresh->tenant_coltype,
+										  refresh->raw_hypertable_id,
+										  seqnum);
 }
 
 static void
@@ -504,18 +601,18 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 typedef void (*scan_refresh_ranges_funct_t)(const InternalTimeRange *bucketed_refresh_window,
 											const ContinuousAggRefreshContext context,
 											const long iteration, /* 0 is first range */
-											void *arg1);
+											int32 seqnum, void *arg1);
 
 static void
 continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh_window,
 									   const ContinuousAggRefreshContext context,
-									   const long iteration, void *arg1_refresh)
+									   const long iteration, int32 seqnum, void *arg1_refresh)
 {
 	const ContinuousAggRefreshState *refresh = (const ContinuousAggRefreshState *) arg1_refresh;
 	(void) iteration;
 
 	log_refresh_window(CAGG_REFRESH_LOG_LEVEL, &refresh->cagg, bucketed_refresh_window, context);
-	continuous_agg_refresh_execute(refresh, bucketed_refresh_window);
+	continuous_agg_refresh_execute(refresh, bucketed_refresh_window, seqnum);
 }
 
 static long
@@ -545,6 +642,13 @@ continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
 			slot,
 			Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
 			&isnull);
+		/* seqnum is nullable; SQL NULL means untracked, treated as 0. */
+		bool seqnum_isnull;
+		Datum seqnum_datum =
+			slot_getattr(slot,
+						 Anum_continuous_aggs_materialization_invalidation_log_seqnum,
+						 &seqnum_isnull);
+		int32 seqnum = seqnum_isnull ? 0 : DatumGetInt32(seqnum_datum);
 
 		InternalTimeRange invalidation = {
 			.type = refresh_window->type,
@@ -565,7 +669,7 @@ continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
 			bucketed_refresh_window =
 				compute_circumscribed_bucketed_refresh_window(&invalidation, cagg->bucket_function);
 		}
-		(*exec_func)(&bucketed_refresh_window, context, count, func_arg1);
+		(*exec_func)(&bucketed_refresh_window, context, count, seqnum, func_arg1);
 
 		count++;
 	}
@@ -849,6 +953,50 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+/*
+ * Transaction 2, Step 1: drain the in-memory per-tenant invalidation tracker
+ * and persist it into _timescaledb_catalog.continuous_aggs_tenant_tracking,
+ * stamped with the new seqnum.
+ *
+ * If the tracker was INVALID (spike/overflow), nothing is written for its
+ * seqnum. With no tracking rows for that seqnum, the refresh falls back to the
+ * full invalidation log.
+ *
+ * Runs under the per-cagg serialization lock (ts_lock_continuous_agg_tuple), so
+ * the rows are persisted with a single batched insert to keep the lock hold
+ * time short.
+ * PERF TODO: the batch still forms and inserts one tuple at a time; consider
+ * heap_multi_insert for very large snapshots.
+ */
+static void
+flush_tenant_tracking(const ContinuousAgg *cagg)
+{
+	/* Tenants are tracked by the raw (user) hypertable that received the DML. */
+	TenantTracking *tracking = ts_tenant_tracker_lookup(cagg->data.raw_hypertable_id);
+	int64 late_window_start, late_window_end;
+
+	if (tracking == NULL)
+	{
+		return;
+	}
+
+	ts_hypertable_cagg_settings_get_tenant_tracking_window(cagg->data.raw_hypertable_id,
+														   &late_window_start,
+														   &late_window_end);
+
+	/* Heap inserts require an active snapshot, which this point in the refresh
+	 * transaction has not pushed yet.  The flush drains the in-memory tracker and
+	 * persists the drained tenants straight into the catalog (nothing for an
+	 * invalid generation), reading shared memory in place with no intermediate
+	 * copies. */
+	PushActiveSnapshot(GetTransactionSnapshot());
+	ts_tenant_tracker_flush(tracking,
+							cagg->data.raw_hypertable_id,
+							late_window_start,
+							late_window_end);
+	PopActiveSnapshot();
+}
+
 static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const InternalTimeRange *refresh_window,
@@ -862,6 +1010,26 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	Ensure(found,
 		   "continuous aggregate with mat_hypertable_id %d not found",
 		   cagg->data.mat_hypertable_id);
+
+	/* Transaction 2, Step 1: drain the per-tenant invalidation tracker while we
+	 * hold the per-cagg serialization lock taken just above. The lock above ensures that
+	 * only 1 refresh will ever attempt to flush tracking entries.
+	 * NOTE: when we support multiple caggs with granular refresh, we have to modify the
+	 * locking. Not safe for 2 different caggs to attempt to flush entries for the SAME
+	 * hypertable.
+	 */
+	/*
+	 * Only a cagg that has opted into granular refresh drains/flushes the shared
+	 * per-hypertable tracker and takes the seqnum-aware invalidation path. For
+	 * every other cagg the whole refresh runs the plain (full) path: no flush,
+	 * seqnum-agnostic invalidation processing, and no tenant-tracking cleanup
+	 * below.
+	 */
+	if (cagg->data.granular_refresh_enabled)
+	{
+		flush_tenant_tracking(cagg);
+	}
+
 	invalidation_process_cagg_log(cagg, refresh_window);
 
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn2");
@@ -892,9 +1060,19 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   context,
 										   bucketing_refresh_window);
 		invalidation_store_free(invalidations);
+
+		/*
+		 * We used to clean up tenant trackings here, which caused a race
+		 * demonstrated in cagg_granular_refresh_cleanup_races. This waitpoint
+		 * allows a refresh to park here while another refresh flush a new batch
+		 * of trackings into the tenant_trackings table, causing the race.
+		 * With the garbage collector approach we no longer
+		 * clean up trackings here, so the races are fixed.
+		 */
+		DEBUG_WAITPOINT("cagg_refresh_before_tenant_tracking_cleanup");
 	}
 
-	return invalidations != NULL;
+	return (invalidations != NULL);
 }
 
 static void
@@ -1157,6 +1335,22 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			  invalidation_threshold == ts_time_get_min(refresh_window.type)))
 		{
 			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+
+			/*
+			 * Reclaim tracking rows no invalidation can reach any more. Runs after
+			 * the move, so this cagg's log alone settles which seqnums are still
+			 * referenced, and while the invalidation-threshold tuple lock taken
+			 * above still serializes this transaction against other refreshes of
+			 * the same hypertable.
+			 *
+			 * Once per refresh rather than once per batch: every batch would repeat
+			 * the same scan, and the first batch's move has already drained the
+			 * hypertable log, so later batches find nothing new to reclaim.
+			 */
+			if (context.processing_batch <= 1)
+			{
+				invalidation_garbage_collect_tenant_tracking(cagg);
+			}
 
 			DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn1");
 			/* Commit and Start a new transaction */

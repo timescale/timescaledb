@@ -327,6 +327,7 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
   schema_change_timestamp bigint,
+  granular_refresh_enabled bool NOT NULL DEFAULT FALSE,
   -- table constraints
   CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
   CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),
@@ -391,7 +392,9 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 CREATE TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (
   hypertable_id integer NOT NULL,
   lowest_modified_value bigint NOT NULL,
-  greatest_modified_value bigint NOT NULL
+  greatest_modified_value bigint NOT NULL,
+  -- Granular sequence number. NULL when tenant tracking does not apply
+  seqnum integer
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_hypertable_invalidation_log', '');
@@ -403,6 +406,8 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_l
   materialization_id integer,
   lowest_modified_value bigint NOT NULL,
   greatest_modified_value bigint NOT NULL,
+  -- Granular sequence number. NULL when tenant tracking does not apply
+  seqnum integer,
   -- table constraints
   CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
 );
@@ -415,9 +420,7 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx ON _timescaled
 CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
   materialization_id integer,
   lowest_modified_value bigint NOT NULL,
-  greatest_modified_value bigint NOT NULL,
-  -- table constraints
-  CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+  greatest_modified_value bigint NOT NULL
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_ranges', '');

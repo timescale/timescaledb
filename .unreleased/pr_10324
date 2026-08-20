@@ -1,2 +1,0 @@
-Fixes: #10324 Fix stale index entries after rebuild_sparse_index() on compressed chunks
-Thanks: @tureba for reporting and fixing stale sparse-index entries after rebuild

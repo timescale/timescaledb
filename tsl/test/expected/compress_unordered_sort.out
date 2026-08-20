@@ -369,10 +369,8 @@ SET timescaledb.debug_require_batch_sorted_merge = 'force';
  GroupAggregate
    Group Key: _hyper_1_1_chunk."time"
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Sort
-               Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
-               ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
-                     Index Cond: ((device = 'd1'::text) AND (sensor = 'A'::text))
+         ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
+               Index Cond: ((device = 'd1'::text) AND (sensor = 'A'::text))
 
 select time, avg(value) from metrics  where device = 'd1' and sensor='A' group by time order by time DESC;
              time             |  avg  

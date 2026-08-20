@@ -14,7 +14,7 @@ jobs:
       - name: Install prerequisites
         run: pip install cmakelang
       - name: Checkout source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run format on CMake files
         run: |
           git reset --hard
@@ -29,7 +29,7 @@ jobs:
       - name: Install prerequisites
         run: sudo apt install perltidy
       - name: Checkout source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check trailing whitespace
         if: always()
         run: |
@@ -50,7 +50,7 @@ jobs:
         run: |
           pip install yamllint
       - name: Checkout source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run yamllint
         run: |
           find . -type f \( -name "*.yaml" -or -name "*.yml" \) -print -exec yamllint {} \+
@@ -63,7 +63,7 @@ jobs:
       ACTIONLINT_SHA256: 325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6
     steps:
       - name: Checkout source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install actionlint
         run: |
           wget -q --tries=6 --waitretry=15 -O actionlint.tar.gz \
@@ -90,7 +90,7 @@ jobs:
         run: |
           pip install codespell
       - name: Checkout source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run codespell
         run: |
           find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.yml" -or -name "*.sh" -or -name "*.cmake" -or -name "*.py" -or -name "*.pl" -or -name "CMakeLists.txt" \) \
@@ -104,6 +104,11 @@ jobs:
     env:
       LLVM_VER: 17
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
@@ -116,7 +121,7 @@ jobs:
 
         sudo apt-get install clang-format-${LLVM_VER}
     - name: Checkout source
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Check trailing whitespace
       if: always()
       run: |
@@ -163,7 +168,7 @@ jobs:
         sudo update-alternatives --set clang /usr/bin/clang-${LLVM_VER}
 
     - name: Checkout source
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Read configuration
       id: config
@@ -181,7 +186,7 @@ jobs:
 
     - name: Restore PostgreSQL Cache
       id: restore-postgresql
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: install
         key: ${{ steps.cache-key.outputs.key }}
@@ -201,7 +206,7 @@ jobs:
 
     - name: Save PostgreSQL Cache
       if: steps.restore-postgresql.outputs.cache-matched-key == ''
-      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: install
         key: ${{ steps.cache-key.outputs.key }}
@@ -239,7 +244,7 @@ jobs:
           pip list --user
 
       - name: Checkout source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run prospector
         run: |
@@ -263,7 +268,7 @@ jobs:
         sudo apt-get install -y postgresql-server-dev-18
     - name: Checkout source
       if: always()
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Check license
       if: always()
       run: ./scripts/check_license_all.sh

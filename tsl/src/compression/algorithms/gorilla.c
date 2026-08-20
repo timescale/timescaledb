@@ -122,6 +122,11 @@ typedef struct GorillaDecompressionIterator
 	uint8 prev_leading_zeroes;
 	uint8 prev_xor_bits_used;
 	bool has_nulls;
+
+	/* for validating the last_value set in the header
+	 * and cross check with the iterator */
+	uint64 last_value_to_return;
+	uint64 last_returned_value;
 } GorillaDecompressionIterator;
 
 /********************
@@ -519,6 +524,44 @@ gorilla_compressor_finish(GorillaCompressor *compressor)
  ***  DecompressionIterator  ***
  *******************************/
 
+static inline uint32
+decompression_iterator_items_seen(const GorillaDecompressionIterator *iter)
+{
+	if (iter->has_nulls)
+	{
+		return iter->nulls.num_elements_returned;
+	}
+	else
+	{
+		return iter->tag0s.num_elements_returned;
+	}
+}
+
+static inline uint32
+decompression_iterator_item_count(const GorillaDecompressionIterator *iter)
+{
+	if (iter->has_nulls)
+	{
+		return iter->nulls.num_elements;
+	}
+	else
+	{
+		return iter->tag0s.num_elements;
+	}
+}
+
+static inline uint32
+decompression_iterator_values_seen(const GorillaDecompressionIterator *iter)
+{
+	return iter->tag0s.num_elements_returned;
+}
+
+static inline uint32
+decompression_iterator_value_count(const GorillaDecompressionIterator *iter)
+{
+	return iter->tag0s.num_elements;
+}
+
 inline static void
 bytes_attach_bit_array_and_advance(BitArray *dst, StringInfo si, uint32 num_buckets,
 								   uint8 bits_in_last_bucket)
@@ -560,11 +603,29 @@ compressed_gorilla_data_init_from_stringinfo(CompressedGorillaData *expanded, St
 	if (has_nulls)
 	{
 		expanded->nulls = bytes_deserialize_simple8b_and_advance(si);
+		CheckCompressedData(expanded->nulls->num_elements >=
+							expanded->num_bits_used_per_xor->num_elements);
+		CheckCompressedData(expanded->nulls->num_elements >= expanded->tag0s->num_elements);
+		CheckCompressedData(expanded->nulls->num_elements >= expanded->tag1s->num_elements);
 	}
 	else
 	{
 		expanded->nulls = NULL;
 	}
+
+	/* XOR bit count must be reasonable */
+	uint64 xor_bit_count = bit_array_num_bits(&expanded->xors);
+	CheckCompressedData(xor_bit_count <= expanded->tag0s->num_elements * 64);
+
+	/* leading zeros have a fixed size and we need at least one item */
+	uint64 num_leading_zeros_bits = bit_array_num_bits(&expanded->leading_zeros);
+	CheckCompressedData(num_leading_zeros_bits >= BITS_PER_LEADING_ZEROS &&
+						num_leading_zeros_bits % BITS_PER_LEADING_ZEROS == 0 &&
+						num_leading_zeros_bits <=
+							expanded->tag0s->num_elements * BITS_PER_LEADING_ZEROS);
+
+	/* tag bits must be reasonable too */
+	CheckCompressedData(expanded->tag0s->num_elements >= expanded->tag1s->num_elements);
 }
 
 static void
@@ -672,6 +733,14 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 		/* Could slightly improve performance here by not returning a tail of non-null bits */
 		if (null.is_done)
 		{
+			/* make sure we exhausted all items before  */
+			CheckCompressedData(decompression_iterator_items_seen(iter) ==
+								decompression_iterator_item_count(iter));
+			/* and also that we returned all values */
+			CheckCompressedData(decompression_iterator_values_seen(iter) ==
+								decompression_iterator_value_count(iter));
+			/* the last_value in the header must match with the last that we returned */
+			CheckCompressedData(iter->last_returned_value == iter->gorilla_data.header->last_value);
 			return (DecompressResultInternal){
 				.is_done = true,
 			};
@@ -689,6 +758,14 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 	/* if we don't have a null bitset, this will determine when we're done */
 	if (tag0.is_done)
 	{
+		/* make sure we exhausted all items before  */
+		CheckCompressedData(decompression_iterator_items_seen(iter) ==
+							decompression_iterator_item_count(iter));
+		/* and also that we returned all values */
+		CheckCompressedData(decompression_iterator_values_seen(iter) ==
+							decompression_iterator_value_count(iter));
+		/* the last_value in the header must match with the last that we returned */
+		CheckCompressedData(iter->last_returned_value == iter->gorilla_data.header->last_value);
 		CheckCompressedData(!iter->has_nulls);
 		return (DecompressResultInternal){
 			.is_done = true,
@@ -702,11 +779,15 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 		};
 	}
 
+	/* tag0 is a single bit, if not 0 then it has to be 1 */
+	CheckCompressedData(tag0.val == 1);
+
 	tag1 = simple8brle_decompression_iterator_try_next_forward(&iter->tag1s);
 	CheckCompressedData(!tag1.is_done);
 
 	if (tag1.val != 0)
 	{
+		CheckCompressedData(tag1.val == 1);
 		Simple8bRleDecompressResult num_xor_bits;
 		/* get new xor sizes */
 		iter->prev_leading_zeroes =
@@ -736,6 +817,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 	xor = bit_array_iter_next(&iter->xors, iter->prev_xor_bits_used);
 	xor <<= 64 - (iter->prev_leading_zeroes + iter->prev_xor_bits_used);
 	iter->prev_val ^= xor;
+	iter->last_returned_value = iter->prev_val;
 
 	return (DecompressResultInternal){
 		.val = iter->prev_val,
@@ -799,9 +881,34 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 	iter->prev_leading_zeroes =
 		bit_array_iter_next_rev(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
 	num_xor_bits = simple8brle_decompression_iterator_try_next_reverse(&iter->num_bits_used);
-	Assert(!num_xor_bits.is_done);
+	CheckCompressedData(!num_xor_bits.is_done);
 	iter->prev_xor_bits_used = num_xor_bits.val;
 	iter->prev_val = iter->gorilla_data.header->last_value;
+
+	/* on reverse iteration the `last_value` in the header is critical for
+	 * the rest of the decoding. when we receive malformed data we can only
+	 * cross reference the result with the first value
+	 */
+	{
+		GorillaDecompressionIterator forward_iter;
+		forward_iter.base.compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;
+		forward_iter.base.forward = true;
+		forward_iter.base.element_type = element_type;
+		forward_iter.base.try_next = gorilla_decompression_iterator_try_next_forward;
+		compressed_gorilla_data_init_from_datum(&forward_iter.gorilla_data, gorilla_compressed);
+		gorilla_iterator_init_from_expanded_forward(&forward_iter, element_type);
+		/* find the first non-null value */
+		DecompressResultInternal first_val =
+			gorilla_decompression_iterator_try_next_forward_internal(&forward_iter);
+		int32 n = 0;
+		while (first_val.is_done == false && first_val.is_null)
+		{
+			CheckCompressedData(n++ < GLOBAL_MAX_ROWS_PER_COMPRESSION);
+			first_val = gorilla_decompression_iterator_try_next_forward_internal(&forward_iter);
+		}
+		CheckCompressedData(!first_val.is_done);
+		iter->last_value_to_return = first_val.val;
+	}
 	return &iter->base;
 }
 
@@ -820,6 +927,14 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 
 		if (null.is_done)
 		{
+			/* make sure we exhausted all items before  */
+			CheckCompressedData(decompression_iterator_items_seen(iter) ==
+								decompression_iterator_item_count(iter));
+			/* and also that we returned all values */
+			CheckCompressedData(decompression_iterator_values_seen(iter) ==
+								decompression_iterator_value_count(iter));
+			/* the last element must match the expected value */
+			CheckCompressedData(iter->last_returned_value == iter->last_value_to_return);
 			return (DecompressResultInternal){
 				.is_done = true,
 			};
@@ -839,6 +954,14 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 	/* if we don't have a null bitset, this will determine when we're done */
 	if (tag0.is_done)
 	{
+		/* make sure we exhausted all items before  */
+		CheckCompressedData(decompression_iterator_items_seen(iter) ==
+							decompression_iterator_item_count(iter));
+		/* and also that we returned all values */
+		CheckCompressedData(decompression_iterator_values_seen(iter) ==
+							decompression_iterator_value_count(iter));
+		/* the last element must match the expected value */
+		CheckCompressedData(iter->last_returned_value == iter->last_value_to_return);
 		return (DecompressResultInternal){
 			.is_done = true,
 		};
@@ -851,6 +974,16 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 		};
 	}
 
+	/* tag0 is a single bit, if not 0 then it has to be 1 */
+	CheckCompressedData(tag0.val == 1);
+
+	/* make sure we are in a valid state */
+	tag1 = simple8brle_decompression_iterator_try_next_reverse(&iter->tag1s);
+	CheckCompressedData(!tag1.is_done);
+
+	/* check that we have this much to read */
+	CheckCompressedData(iter->prev_leading_zeroes + iter->prev_xor_bits_used > 0);
+	CheckCompressedData(bit_array_iter_position(&iter->xors) >= iter->prev_xor_bits_used);
 	xor = bit_array_iter_next_rev(&iter->xors, iter->prev_xor_bits_used);
 
 	if (iter->prev_leading_zeroes + iter->prev_xor_bits_used < 64)
@@ -859,10 +992,9 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 	}
 	iter->prev_val ^= xor;
 
-	tag1 = simple8brle_decompression_iterator_try_next_reverse(&iter->tag1s);
-
 	if (tag1.val != 0)
 	{
+		CheckCompressedData(tag1.val == 1);
 		/* get new xor sizes */
 		Simple8bRleDecompressResult num_xor_bits =
 			simple8brle_decompression_iterator_try_next_reverse(&iter->num_bits_used);
@@ -875,12 +1007,19 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 		}
 		else
 		{
+			/* make sure we have enough bits to read for the leading zeros */
+			CheckCompressedData(bit_array_iter_position(&iter->leading_zeros) >=
+								BITS_PER_LEADING_ZEROS);
 			iter->prev_xor_bits_used = num_xor_bits.val;
 			iter->prev_leading_zeroes =
 				bit_array_iter_next_rev(&iter->leading_zeros, BITS_PER_LEADING_ZEROS);
+
+			/* more than 64 bits of data doesn't make sense */
+			CheckCompressedData(iter->prev_leading_zeroes + iter->prev_xor_bits_used <= 64);
 		}
 	}
 
+	iter->last_returned_value = val;
 	return (DecompressResultInternal){
 		.val = val,
 	};

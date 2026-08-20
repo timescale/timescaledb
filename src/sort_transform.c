@@ -295,7 +295,8 @@ ts_sort_transform_expr(Expr *orig_expr)
  */
 
 static EquivalenceClass *
-sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids)
+sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids,
+				  Index desired_ec_relid)
 {
 	EquivalenceClass *newec = NULL;
 	bool propagate_to_children = false;
@@ -318,6 +319,19 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
 	{
 		ec_mem = (EquivalenceMember *) lfirst(lc_member);
 #endif
+
+		/*
+		 * We must only process the EMs that belong to our relation. The EMs
+		 * from other relations are not relevant for ordering, and furthermore
+		 * we can create an incorrect join EC by transforming, for example,
+		 * "time_bucket(a.ts) = time_bucket(b.ts)" into "a.ts = b.ts".
+		 */
+		EquivalenceMember *top_em = ec_mem->em_parent ? ec_mem->em_parent : ec_mem;
+		if (!bms_is_member(desired_ec_relid, top_em->em_relids))
+		{
+			continue;
+		}
+
 		Expr *transformed_expr = ts_sort_transform_expr(ec_mem->em_expr);
 
 		if (transformed_expr != ec_mem->em_expr)
@@ -544,7 +558,7 @@ sort_transform_compute_pathkeys(PlannerInfo *root, RelOptInfo *rel)
 	/*
 	 * Try to apply the transformation.
 	 */
-	transformed = sort_transform_ec(root, last_pk_eclass, child_relids);
+	transformed = sort_transform_ec(root, last_pk_eclass, child_relids, desired_ec_relid);
 
 	if (transformed == NULL)
 	{

@@ -167,8 +167,9 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("The MERGE command with UPDATE/DELETE merge actions is not support on "
-							"compressed hypertables")));
+					 errmsg(
+						 "The MERGE command with UPDATE/DELETE merge actions is not supported on "
+						 "compressed hypertables")));
 		}
 	}
 }
