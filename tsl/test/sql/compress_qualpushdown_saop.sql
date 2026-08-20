@@ -197,16 +197,16 @@ select * from saop where segmentby = '1' or (with_bloom = stable_lower('1') and 
 
 
 -- Some joins.
+create table arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10);
+vacuum analyze arrays;
+
 explain (analyze, buffers off, costs off, timing off, summary off)
-with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where segmentby = any(a);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
-with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where with_minmax = any(a);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
-with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where with_bloom = any(a);
 
 
