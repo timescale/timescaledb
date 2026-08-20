@@ -471,6 +471,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		path->cpath.custom_paths = nested_children;
 	}
 
+#if PG18_GE
+	int disabled_nodes = 0;
+#endif
 	foreach (lc, path->cpath.custom_paths)
 	{
 		Path *child = lfirst(lc);
@@ -485,11 +488,17 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		{
 			total_cost += child->total_cost;
 			rows += child->rows;
+#if PG18_GE
+			disabled_nodes += child->disabled_nodes;
+#endif
 		}
 	}
 
 	path->cpath.path.rows = rows;
 	path->cpath.path.total_cost = total_cost;
+#if PG18_GE
+	path->cpath.path.disabled_nodes = disabled_nodes;
+#endif
 
 	if (path->cpath.custom_paths != NIL)
 	{
