@@ -982,7 +982,10 @@ INSERT INTO ht_pub_test VALUES ('2023-01-01 01:00', 1, 10.5);
 -- Create publication
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.enable_chunk_auto_publication = true;
+-- This suite runs at wal_level = replica, so hide the warning about that
+SET client_min_messages TO error;
 CREATE PUBLICATION test_pub_osm FOR TABLE ht_pub_test;
+RESET client_min_messages;
 
 -- Verify: 1 normal chunk in publication
 SELECT schemaname, tablename
@@ -1040,7 +1043,10 @@ WHERE hypertable_id IN (SELECT id FROM _timescaledb_catalog.hypertable
                         WHERE table_name = 'ht_pub_test')
 ORDER BY relid::text COLLATE "C";
 
+-- This suite runs at wal_level = replica, so hide the warning about that
+SET client_min_messages TO error;
 CREATE PUBLICATION test_pub_osm FOR TABLES IN SCHEMA pub_osm_schema;
+RESET client_min_messages;
 
 -- Only normal chunks should appear; OSM chunk is skipped.
 SELECT schemaname, tablename

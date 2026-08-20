@@ -1,4 +1,8 @@
-set(SOURCES)
+set(SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/access/common/toast_internals.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/access/heap/heapam.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/access/heap/heaptoast.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/access/table/toast_helper.c)
 
 if(USE_UMASH)
   list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/umash.c)

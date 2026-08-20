@@ -1,5 +1,5 @@
 set(PROVE_TEST_FILES 001_job_crash_log.pl 002_logrepl_decomp_marker.pl
-                     004_truncate_or_delete_spin_lock.pl)
+                     004_truncate_or_delete_spin_lock.pl 007_custom_toaster.pl)
 
 set(PROVE_DEBUG_TEST_FILES 003_mvcc_cagg.pl 005_recompression_spin_lock_test.pl)
 if(TMP_ENABLE_GRANULAR_REFRESH_TESTS)
