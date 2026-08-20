@@ -535,6 +535,15 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table'
 CREATE TABLE non_ht (time bigint, temp float);
 SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table');
 
+-- TEST error have to be hypertable owner to drop the OSM chunk
+SELECT _timescaledb_functions.drop_osm_chunk('ht_try');
+
+-- TEST error have to be hypertable owner to update the OSM chunk range
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', NULL::timestamptz, NULL::timestamptz);
+
+-- TEST error have to be hypertable owner to lock the OSM chunk dimension slice
+SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('ht_try');
+
 -- TEST drop OSM chunk
 \c :TEST_DBNAME :ROLE_4
 -- We need the OSM chunk for other tests so we run the test in a single
@@ -958,6 +967,7 @@ INSERT INTO :COMPRESSED_CHUNK SELECT;
 UPDATE :COMPRESSED_CHUNK SET device = 'dev3' WHERE device = 'dev1';
 DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
 COPY :COMPRESSED_CHUNK FROM STDIN;
+\.
 \set ON_ERROR_STOP 1
 
 -- TEST: OSM chunks should NOT be added to publications
@@ -1016,6 +1026,30 @@ FROM pg_publication_tables
 WHERE pubname = 'test_pub_osm'
 ORDER BY schemaname, tablename;
 
+-- Backfill path: recreating the publication as FOR TABLES IN SCHEMA must
+-- backfill the existing normal chunks but skip the OSM chunk.
+SET timescaledb.enable_chunk_auto_publication = true;
+DROP PUBLICATION test_pub_osm;
+CREATE SCHEMA pub_osm_schema;
+ALTER TABLE public.ht_pub_test SET SCHEMA pub_osm_schema;
+
+-- Show that the hypertable has both normal and OSM chunks before backfill
+SELECT relid::text AS table_name, osm_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id IN (SELECT id FROM _timescaledb_catalog.hypertable
+                        WHERE table_name = 'ht_pub_test')
+ORDER BY relid::text COLLATE "C";
+
+CREATE PUBLICATION test_pub_osm FOR TABLES IN SCHEMA pub_osm_schema;
+
+-- Only normal chunks should appear; OSM chunk is skipped.
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+ALTER TABLE pub_osm_schema.ht_pub_test SET SCHEMA public;
+DROP SCHEMA pub_osm_schema;
+
 -- Cleanup
 DROP PUBLICATION test_pub_osm CASCADE;
 \c :TEST_DBNAME :ROLE_4
@@ -1037,3 +1071,17 @@ SELECT _timescaledb_functions.freeze_chunk(chunk) FROM show_chunks('metrics') ch
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
 ROLLBACK;
 \set ON_ERROR_STOP 1
+
+-- A non-owner must not be able to freeze or unfreeze a chunk
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE freeze_perm(time timestamptz NOT NULL);
+SELECT create_hypertable('freeze_perm', 'time');
+INSERT INTO freeze_perm VALUES ('2025-01-01');
+SELECT ch AS "FREEZECHUNK" FROM show_chunks('freeze_perm') ch \gset
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.freeze_chunk(:'FREEZECHUNK');
+SELECT _timescaledb_functions.unfreeze_chunk(:'FREEZECHUNK');
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE freeze_perm;

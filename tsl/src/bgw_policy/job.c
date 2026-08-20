@@ -300,10 +300,10 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 		log_retention_boundary(LOG, &policy_data, "applying retention policy to hypertable");
 	}
 
-	chunk_invoke_drop_chunks(policy_data.object_relid,
-							 policy_data.boundary,
-							 policy_data.boundary_type,
-							 policy_data.use_creation_time);
+	ts_chunk_drop_chunks_by_boundary(policy_data.object_relid,
+									 policy_data.boundary,
+									 policy_data.boundary_type,
+									 policy_data.use_creation_time);
 
 	return true;
 }

@@ -1,1 +1,0 @@
-Implements: #9732 Speed up some queries with small LIMIT by switching to row-by-row query execution pipeline

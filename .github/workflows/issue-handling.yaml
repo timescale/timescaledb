@@ -46,7 +46,7 @@ jobs:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     steps:
       - name: Post to Security Channel
-        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
           channel-id: '${{ secrets.SLACK_CHANNEL_SECURITY }}'
           payload: |
@@ -100,6 +100,11 @@ jobs:
     runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
     steps:
+      - name: Replace unreliable Azure APT mirror
+        run: |
+          sudo touch /etc/apt/apt-mirrors.txt
+          sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
       - name: Install Linux Dependencies
         timeout-minutes: 15
         run: |

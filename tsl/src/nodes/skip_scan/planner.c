@@ -615,10 +615,13 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			{
 				continue;
 			}
-			/* Need to check sortedness for inputs of Distinct aggs, so we'll keep track of the
-			 * input pathkeys  */
-			top_pathkeys = subpath->pathkeys;
 		}
+		/* Need to check that subpath pathkeys match pathkeys of subpath children:
+		 * relevant for MergeAppend/ChunkAppend as we don't add SortPath over mismatched IndexPath
+		 * but will add Sort node later, and we don't want SkipScan to go over mismatched IndexScan.
+		 * Also relevant for distinct aggregate AggPath pathkeys matching its input pathkeys.
+		 */
+		top_pathkeys = subpath->pathkeys;
 
 		/* If path is a ProjectionPath we strip it off for processing
 		 * but also add a ProjectionPath on top of the SKipScanPaths
@@ -1203,17 +1206,15 @@ build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo, List 
 		Path *child = lfirst(lc);
 		if (IsA(child, IndexPath) || ts_is_columnar_scan_path(child))
 		{
-			if (top_pathkeys && !pathkeys_contained_in(top_pathkeys, child->pathkeys))
+			if (!top_pathkeys || pathkeys_contained_in(top_pathkeys, child->pathkeys))
 			{
-				continue;
-			}
+				SkipScanPath *skip_path = skip_scan_path_create(root, child, dpinfo);
 
-			SkipScanPath *skip_path = skip_scan_path_create(root, child, dpinfo);
-
-			if (skip_path)
-			{
-				child = (Path *) skip_path;
-				has_skip_path = true;
+				if (skip_path)
+				{
+					child = (Path *) skip_path;
+					has_skip_path = true;
+				}
 			}
 		}
 

@@ -3733,3 +3733,53 @@ ROLLBACK;
 ROLLBACK
 DROP TABLE crash_test;
 DROP TABLE
+-- direct batch delete when the time column is in neither segmentby nor orderby
+SET timescaledb.auto_sparse_indexes = off;
+SET
+CREATE TABLE cagg_inval_no_minmax(time timestamptz NOT NULL, gauge int, value float)
+  WITH (tsdb.hypertable, tsdb.segmentby='time',tsdb.orderby='value');
+NOTICE:  using column "time" as partitioning column
+HINT:  Use "timescaledb.partition_column" to specify a different column to use as partitioning column.
+CREATE TABLE
+SELECT segmentby, orderby, index FROM _timescaledb_catalog.compression_settings WHERE relid = 'cagg_inval_no_minmax'::regclass;
+ segmentby | orderby |                                                            index                                                            
+-----------+---------+-----------------------------------------------------------------------------------------------------------------------------
+ {time}    | {value} | [{"type": "minmax", "column": "value", "source": "orderby"}, {"type": "firstlast", "column": "value", "source": "orderby"}]
+
+INSERT INTO cagg_inval_no_minmax
+SELECT '2025-01-01 00:00:00+00'::timestamptz + (i * interval '5 minutes'), i % 2, random()
+FROM generate_series(1, 50) i;
+INSERT 0 50
+CREATE MATERIALIZED VIEW cagg_inval_no_minmax_cagg
+  WITH (tsdb.continuous) AS
+  SELECT time_bucket('1 hour', time), gauge FROM cagg_inval_no_minmax GROUP BY 1, 2;
+NOTICE:  refreshing continuous aggregate "cagg_inval_no_minmax_cagg"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+CREATE MATERIALIZED VIEW
+-- Enable compression with segmentby only (time in neither segmentby nor orderby).
+ALTER TABLE cagg_inval_no_minmax SET (timescaledb.compress, timescaledb.compress_segmentby = 'gauge');
+NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
+ALTER TABLE
+SELECT segmentby, orderby, index FROM _timescaledb_catalog.compression_settings WHERE relid = 'cagg_inval_no_minmax'::regclass;
+ segmentby | orderby |                                                            index                                                            
+-----------+---------+-----------------------------------------------------------------------------------------------------------------------------
+ {gauge}   | {value} | [{"type": "minmax", "column": "value", "source": "orderby"}, {"type": "firstlast", "column": "value", "source": "orderby"}]
+
+SELECT count(compress_chunk(c)) FROM show_chunks('cagg_inval_no_minmax') c;
+ count 
+-------
+     1
+
+\set ON_ERROR_STOP 0
+DELETE FROM cagg_inval_no_minmax WHERE gauge = 1;
+ERROR:  cannot perform direct batch delete on hypertable with continuous aggregates when time column is not segmentby or orderby
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM cagg_inval_no_minmax WHERE gauge = 1;
+ count 
+-------
+    25
+
+RESET timescaledb.auto_sparse_indexes;
+RESET

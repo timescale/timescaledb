@@ -11,7 +11,7 @@
 #include "extension.h"
 #include "launcher_interface.h"
 
-#define MIN_LOADER_API_VERSION 4
+#define MIN_LOADER_API_VERSION 5
 
 extern bool
 ts_bgw_worker_reserve(void)

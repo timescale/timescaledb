@@ -8,6 +8,7 @@
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <executor/spi.h>
 #include <extension.h>
 #include <fmgr.h>
 #include <funcapi.h>
@@ -33,11 +34,13 @@
 #include "cache.h"
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
+#include "debug_point.h"
 #include "guc.h"
 #include "invalidation.h"
 #include "refresh.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_tenant_tracking.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 
 /*
@@ -122,11 +125,12 @@ typedef enum ContinuousAggTableType
 static Relation open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
-static bool insert_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation);
-static bool write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
-									 ItemPointer update_tid);
+static bool insert_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation);
+static bool write_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
+										  ItemPointer update_tid);
 static void invalidation_entry_set(Invalidation *inner_range, int32 hyper_id,
-								   int64 lowest_modified_value, int64 greatest_modified_value);
+								   int64 lowest_modified_value, int64 greatest_modified_value,
+								   int32 seqnum);
 static void invalidation_entry_reset(Invalidation *entry);
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
@@ -135,10 +139,10 @@ invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleI
 static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
 											  const ContinuousAggBucketFunction *bucket_function);
-static bool invalidations_can_be_merged(const Invalidation *a, const Invalidation *b);
-static bool invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry);
-static void insert_new_cagg_invalidation(const HypertableInvalidationState *state,
-										 const Invalidation *entry, int32 cagg_hyper_id);
+static bool invalidations_can_be_merged(const Invalidation *a, const Invalidation *b,
+										bool seqnum_aware);
+static bool invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry,
+										 bool seqnum_aware);
 static void move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *state);
 static void cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hyper_id,
 													   LOCKMODE lockmode, int64 window_end);
@@ -186,7 +190,8 @@ hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id, LOCKMO
 }
 
 HeapTuple
-create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
+create_cagg_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end,
+							 int32 seqnum)
 {
 	Datum values[Natts_continuous_aggs_materialization_invalidation_log] = { 0 };
 	bool isnull[Natts_continuous_aggs_materialization_invalidation_log] = { false };
@@ -200,31 +205,43 @@ create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 star
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value)] =
 		Int64GetDatum(end);
+	/* seqnum 0 means "no associated granular tracking" and is stored as SQL NULL. */
+	if (seqnum == 0)
+	{
+		isnull[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_materialization_invalidation_log_seqnum)] = true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_materialization_invalidation_log_seqnum)] = Int32GetDatum(seqnum);
+	}
 
 	return heap_form_tuple(tupdesc, values, isnull);
 }
 
 /*
  * Add an entry to the continuous aggregate invalidation log.
+ * This is called to manually invalidate a whole range of data for continuous aggregates,
+ * bypassing DMLs (and hypertable_invalidation_log). Therefore the invalidation does not
+ * have an associated granular tracking.
  */
 void
 invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end)
 {
 	Relation rel = open_cagg_table(CAGG_INVALIDATION_LOG, RowExclusiveLock);
-	CatalogSecurityContext sec_ctx;
-	HeapTuple tuple;
+	Invalidation invalidation;
 
 	Assert(start <= end);
-	tuple = create_invalidation_tup(RelationGetDescr(rel), cagg_hyper_id, start, end);
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_only(rel, tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(tuple);
+	/* Manual cagg invalidation has no associated granular tracking, so seqnum 0
+	 * (stored as NULL). */
+	invalidation_entry_set(&invalidation, cagg_hyper_id, start, end, 0);
+	insert_cagg_invalidation_entry(rel, &invalidation);
 	table_close(rel, NoLock);
 }
 
 void
-invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
+invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end, int32 seqnum)
 {
 	Relation rel = open_cagg_table(HYPER_INVALIDATION_LOG, RowExclusiveLock);
 	CatalogSecurityContext sec_ctx;
@@ -240,6 +257,17 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value)] =
 		Int64GetDatum(end);
+	/* seqnum 0 means untracked and is stored as SQL NULL. */
+	if (seqnum == 0)
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_hypertable_invalidation_log_seqnum)] =
+			true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_hypertable_invalidation_log_seqnum)] =
+			Int32GetDatum(seqnum);
+	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
@@ -270,7 +298,9 @@ continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 en
 {
 	Assert(raw_ht != NULL);
 
-	invalidation_hyper_log_add_entry(raw_ht->fd.id, start, end);
+	/* TODO: stamp the proper per-hypertable tenant-tracking seqnum once the
+	 * tracker flush is wired up; 0 means untracked (stored as NULL). */
+	invalidation_hyper_log_add_entry(raw_ht->fd.id, start, end, 0);
 }
 
 void
@@ -298,8 +328,8 @@ IsValidInvalidation(const Invalidation *invalidation)
 }
 
 static bool
-write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
-						 ItemPointer update_tid)
+write_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation,
+							  ItemPointer update_tid)
 {
 	CatalogSecurityContext sec_ctx;
 	HeapTuple tup;
@@ -309,10 +339,11 @@ write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation
 		return false;
 	}
 
-	tup = create_invalidation_tup(RelationGetDescr(cagg_log_rel),
-								  invalidation->hyper_id,
-								  invalidation->lowest_modified_value,
-								  invalidation->greatest_modified_value);
+	tup = create_cagg_invalidation_tup(RelationGetDescr(cagg_log_rel),
+									   invalidation->hyper_id,
+									   invalidation->lowest_modified_value,
+									   invalidation->greatest_modified_value,
+									   invalidation->seqnum);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	if (ItemPointerIsValid(update_tid))
 	{
@@ -329,19 +360,20 @@ write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation
 }
 
 static bool
-insert_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation)
+insert_cagg_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation)
 {
-	return write_invalidation_entry(cagg_log_rel, invalidation, NULL);
+	return write_cagg_invalidation_entry(cagg_log_rel, invalidation, NULL);
 }
 
 static void
 invalidation_entry_set(Invalidation *inner_range, int32 hyper_id, int64 lowest_modified_value,
-					   int64 greatest_modified_value)
+					   int64 greatest_modified_value, int32 seqnum)
 {
 	MemSet(inner_range, 0, sizeof(*inner_range));
 	inner_range->hyper_id = hyper_id;
 	inner_range->lowest_modified_value = lowest_modified_value;
 	inner_range->greatest_modified_value = greatest_modified_value;
+	inner_range->seqnum = seqnum;
 }
 
 /*
@@ -399,13 +431,15 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 			invalidation_entry_set(&lower_range,
 								   cagg_hyper_id,
 								   invalidation->lowest_modified_value,
-								   refresh_window->start - 1);
+								   refresh_window->start - 1,
+								   invalidation->seqnum);
 			invalidation_entry_set(inner_range,
 								   cagg_hyper_id,
 								   refresh_window->start,
 								   /* Refresh window not exclusive at end */
 								   MIN(refresh_window->end - 1,
-									   invalidation->greatest_modified_value));
+									   invalidation->greatest_modified_value),
+								   invalidation->seqnum);
 			result = INVAL_CUT;
 		}
 
@@ -431,12 +465,14 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 			invalidation_entry_set(&upper_range,
 								   cagg_hyper_id,
 								   refresh_window->end,
-								   invalidation->greatest_modified_value);
+								   invalidation->greatest_modified_value,
+								   invalidation->seqnum);
 			invalidation_entry_set(inner_range,
 								   cagg_hyper_id,
 								   MAX(invalidation->lowest_modified_value, refresh_window->start),
 								   /* Refresh window exclusive at end */
-								   refresh_window->end - 1);
+								   refresh_window->end - 1,
+								   invalidation->seqnum);
 			result = INVAL_CUT;
 		}
 	}
@@ -453,17 +489,17 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 
 		if (IsValidInvalidation(&lower_range))
 		{
-			write_invalidation_entry(state->cagg_log_rel,
-									 &lower_range,
-									 ItemPointerIsValid(&tid) ? &tid : NULL);
+			write_cagg_invalidation_entry(state->cagg_log_rel,
+										  &lower_range,
+										  ItemPointerIsValid(&tid) ? &tid : NULL);
 			ItemPointerSetInvalid(&tid); /* TID consumed — upper must be a fresh insert */
 		}
 
 		if (IsValidInvalidation(&upper_range))
 		{
-			write_invalidation_entry(state->cagg_log_rel,
-									 &upper_range,
-									 ItemPointerIsValid(&tid) ? &tid : NULL);
+			write_cagg_invalidation_entry(state->cagg_log_rel,
+										  &upper_range,
+										  ItemPointerIsValid(&tid) ? &tid : NULL);
 		}
 	}
 
@@ -577,36 +613,56 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 }
 
 /*
- * Macro to set an Invalidation from a tuple. The tuple can either have the
- * format of the hypertable invalidation log or the continuous aggregate
- * invalidation log (as determined by the type parameter).
+ * Set an Invalidation from a tuple of either the hypertable invalidation log or
+ * the continuous aggregate invalidation log.
+ *
+ * Both logs share the same physical column layout -- (id, lowest_modified_value,
+ * greatest_modified_value, seqnum) -- so the same attribute offsets apply to
+ * both; we use the hypertable-log Anums here for both. The tuple is read with
+ * heap_deform_tuple() rather than GETSTRUCT() because seqnum is nullable. seqnum
+ * is mapped to 0 (untracked) when SQL NULL.
  */
-#define INVALIDATION_ENTRY_SET(entry, ti, hypertable_id, type)                                     \
-	do                                                                                             \
-	{                                                                                              \
-		bool should_free;                                                                          \
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);                    \
-		type form;                                                                                 \
-		form = (type) GETSTRUCT(tuple);                                                            \
-		(entry)->hyper_id = form->hypertable_id;                                                   \
-		(entry)->lowest_modified_value = form->lowest_modified_value;                              \
-		(entry)->greatest_modified_value = form->greatest_modified_value;                          \
-		(entry)->is_modified = false;                                                              \
-		ItemPointerCopy(&tuple->t_self, &(entry)->tid);                                            \
-                                                                                                   \
-		if (should_free)                                                                           \
-			heap_freetuple(tuple);                                                                 \
-	} while (0);
+static void
+invalidation_entry_set_from_tuple(Invalidation *entry, const TupleInfo *ti)
+{
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	Datum values[Natts_continuous_aggs_hypertable_invalidation_log];
+	bool nulls[Natts_continuous_aggs_hypertable_invalidation_log] = { false };
+
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
+
+	entry->hyper_id = DatumGetInt32(values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id)]);
+	entry->lowest_modified_value = DatumGetInt64(values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value)]);
+	entry->greatest_modified_value = DatumGetInt64(values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value)]);
+	/* seqnum is nullable: SQL NULL means untracked, mapped to 0. */
+	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_hypertable_invalidation_log_seqnum)])
+	{
+		entry->seqnum = 0;
+	}
+	else
+	{
+		entry->seqnum = DatumGetInt32(values[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_hypertable_invalidation_log_seqnum)]);
+	}
+	entry->is_modified = false;
+	ItemPointerCopy(&tuple->t_self, &entry->tid);
+
+	if (should_free)
+	{
+		heap_freetuple(tuple);
+	}
+}
 
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 											   int32 hyper_id, Oid dimtype,
 											   const ContinuousAggBucketFunction *bucket_function)
 {
-	INVALIDATION_ENTRY_SET(entry,
-						   ti,
-						   hypertable_id,
-						   Form_continuous_aggs_hypertable_invalidation_log);
+	invalidation_entry_set_from_tuple(entry, ti);
 	/* Since hypertable invalidations are moved to the continuous aggregate
 	 * invalidation log, a different hypertable ID must be set (the ID of the
 	 * materialized hypertable). */
@@ -618,10 +674,7 @@ static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
 											  const ContinuousAggBucketFunction *bucket_function)
 {
-	INVALIDATION_ENTRY_SET(entry,
-						   ti,
-						   materialization_id,
-						   Form_continuous_aggs_materialization_invalidation_log);
+	invalidation_entry_set_from_tuple(entry, ti);
 
 	/* It isn't strictly necessary to expand the invalidation to bucket
 	 * boundaries here since all invalidations were already expanded when
@@ -641,8 +694,23 @@ invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleIn
  * can be merged.
  */
 static bool
-invalidations_can_be_merged(const Invalidation *a, const Invalidation *b)
+invalidations_can_be_merged(const Invalidation *a, const Invalidation *b, bool seqnum_aware)
 {
+	/*
+	 * Only merge invalidations carrying the same granular-tracking seqnum, so a
+	 * merged entry still maps to a single tenant-tracking seqnum. (seqnum 0 means
+	 * "no associated trackings")
+	 *
+	 * Non-tracking caggs have their entries stamped seqnum 0 on the hyper->mat move,
+	 * so this check is currently redundant for them -- but keep it explicit while cases
+	 * like disabling granular refresh on a cagg that still has tracked entries are
+	 * being worked out.  It can be removed once those are settled.
+	 */
+	if (seqnum_aware && a->seqnum != b->seqnum)
+	{
+		return false;
+	}
+
 	/* To account for adjacency, expand one window 1 step in each
 	 * direction. This makes adjacent invalidations overlapping. */
 	int64 a_start = int64_saturating_sub(a->lowest_modified_value, 1);
@@ -673,7 +741,7 @@ invalidations_can_be_merged(const Invalidation *a, const Invalidation *b)
  *
  */
 static bool
-invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
+invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry, bool seqnum_aware)
 {
 	if (!IsValidInvalidation(newentry))
 	{
@@ -681,7 +749,7 @@ invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 	}
 
 	/* Quick exit if no overlap */
-	if (!invalidations_can_be_merged(entry, newentry))
+	if (!invalidations_can_be_merged(entry, newentry, seqnum_aware))
 	{
 		return false;
 	}
@@ -694,23 +762,6 @@ invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 	}
 
 	return true;
-}
-
-static void
-insert_new_cagg_invalidation(const HypertableInvalidationState *state, const Invalidation *entry,
-							 int32 cagg_hyper_id)
-{
-	CatalogSecurityContext sec_ctx;
-	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
-	HeapTuple tuple = create_invalidation_tup(tupdesc,
-											  cagg_hyper_id,
-											  entry->lowest_modified_value,
-											  entry->greatest_modified_value);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_only(state->cagg_log_rel, tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(tuple);
 }
 
 /*
@@ -732,7 +783,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 	const ContinuousAggInfo *all_caggs = state->all_caggs;
 	int32 hyper_id = state->hypertable_id;
 	int32 last_cagg_hyper_id;
-	ListCell *lc1, *lc2;
+	ListCell *lc1, *lc2, *lc3;
 
 	last_cagg_hyper_id = llast_int(all_caggs->mat_hypertable_ids);
 
@@ -747,10 +798,16 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 	 * the cagg invalidation log. This creates better locality for scanning
 	 * the invalidations later.
 	 */
-	forboth (lc1, all_caggs->mat_hypertable_ids, lc2, all_caggs->bucket_functions)
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_functions,
+			  lc3,
+			  all_caggs->granular_refresh_enabled)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
 		const ContinuousAggBucketFunction *bucket_function = lfirst(lc2);
+		bool granular_refresh_enabled = lfirst_int(lc3);
 
 		Invalidation mergedentry;
 		ScanIterator iterator;
@@ -775,14 +832,24 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 														   state->dimtype,
 														   bucket_function);
 
+			/* A cagg that does not do granular refresh carries no granular
+			 * seqnum: stamp its copies untracked (0) so its mat log never gates
+			 * on a seqnum. */
+			if (!granular_refresh_enabled)
+			{
+				logentry.seqnum = 0;
+			}
+
 			if (!IsValidInvalidation(&mergedentry))
 			{
 				mergedentry = logentry;
 				mergedentry.hyper_id = cagg_hyper_id;
 			}
-			else if (!invalidation_entry_try_merge(&mergedentry, &logentry))
+			else if (!invalidation_entry_try_merge(&mergedentry,
+												   &logentry,
+												   granular_refresh_enabled))
 			{
-				insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
+				insert_cagg_invalidation_entry(state->cagg_log_rel, &mergedentry);
 				mergedentry = logentry;
 			}
 
@@ -807,7 +874,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 		/* Handle the last merged invalidation */
 		if (IsValidInvalidation(&mergedentry))
 		{
-			insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
+			insert_cagg_invalidation_entry(state->cagg_log_rel, &mergedentry);
 		}
 	}
 }
@@ -864,7 +931,7 @@ cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 			 * entry, update it to reflect the expanded range. */
 			if (entry->is_modified)
 			{
-				write_invalidation_entry(state->cagg_log_rel, entry, &tid);
+				write_cagg_invalidation_entry(state->cagg_log_rel, entry, &tid);
 			}
 			break;
 		case INVAL_CUT:
@@ -895,9 +962,11 @@ cut_cagg_invalidation_and_compute_inner_range(const ContinuousAggInvalidationSta
 		inner_range = new_inner_range;
 	}
 	else if (IsValidInvalidation(&new_inner_range) &&
-			 !invalidation_entry_try_merge(&inner_range, &new_inner_range))
+			 !invalidation_entry_try_merge(&inner_range,
+										   &new_inner_range,
+										   state->cagg->data.granular_refresh_enabled))
 	{
-		insert_invalidation_entry(state->cagg_log_rel, &inner_range);
+		insert_cagg_invalidation_entry(state->cagg_log_rel, &inner_range);
 		inner_range = new_inner_range;
 	}
 
@@ -1002,7 +1071,9 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 		{
 			mergedentry = logentry;
 		}
-		else if (invalidation_entry_try_merge(&mergedentry, &logentry))
+		else if (invalidation_entry_try_merge(&mergedentry,
+											  &logentry,
+											  state->cagg->data.granular_refresh_enabled))
 		{
 			/*
 			 * The previous and current invalidation were merged into
@@ -1035,7 +1106,7 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 	}
 
 	/* Write the last (merged) inner range back to the cagg invalidation log */
-	insert_invalidation_entry(state->cagg_log_rel, &inner_range);
+	insert_cagg_invalidation_entry(state->cagg_log_rel, &inner_range);
 }
 
 static void
@@ -1077,6 +1148,138 @@ hypertable_invalidation_state_cleanup(const HypertableInvalidationState *state)
 	table_close(state->cagg_log_rel, NoLock);
 	UnregisterSnapshot(state->snapshot);
 	MemoryContextDelete(state->per_tuple_mctx);
+}
+
+/*
+ * How many of the newest generations the collector leaves alone, counted down
+ * from the highest seqnum the tracking table holds.
+ */
+#define TRACKING_CLEANUP_HEADROOM 1
+
+/*
+ * Reclaim tenant-tracking rows that has no associated invalidations (i.e.,
+ * invalidations with the same seqnum)
+ *
+ * An invalidation can still land after its seqnum looked dead -- a DML that
+ * started in an older generation and commits later. Its tracking rows are gone
+ * by then, so that range takes a full refresh instead of a granular one.
+ *
+ * TODO: this assumes a single granular-tracking cagg per hypertable, so the
+ * refreshing cagg's own log settles liveness for the per-hypertable tracking
+ * rows. With several such caggs liveness has to be established across all of
+ * their logs -- otherwise this cagg's GC deletes rows a sibling still needs.
+ */
+void
+invalidation_garbage_collect_tenant_tracking(const ContinuousAgg *cagg)
+{
+	/*
+	 * The headroom bound keeps the top of the seqnum range out of the result even
+	 * when it looks dead. A DML publishes its tenant hint at pre-commit, so a
+	 * flush can persist tracking rows for a generation whose invalidation has not
+	 * committed yet. Leaving headroom at the top gives those invalidations time to land.
+	 *
+	 * The bound is the tracking table's own highest seqnum, which the planner
+	 * answers with one more index lookup, rather than the tracker's in-memory
+	 * generation.
+	 */
+	const char *sql =
+		"SELECT d.seqnum FROM ("
+		"  SELECT DISTINCT seqnum"
+		"    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking"
+		"   WHERE hypertable_id = $1) d"
+		" WHERE d.seqnum <= (SELECT max(seqnum)"
+		"    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking"
+		"   WHERE hypertable_id = $1) - $3"
+		" AND NOT EXISTS ("
+		"  SELECT 1"
+		"    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log"
+		"   WHERE materialization_id = $2 AND seqnum = d.seqnum)"
+		" AND NOT EXISTS ("
+		"  SELECT 1"
+		"    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log"
+		"   WHERE hypertable_id = $1 AND seqnum = d.seqnum)";
+	Oid argtypes[3] = { INT4OID, INT4OID, INT4OID };
+	Datum args[3];
+	int32 hypertable_id = cagg->data.raw_hypertable_id;
+	MemoryContext caller_cxt = CurrentMemoryContext;
+	int32 *dead;
+	uint64 ndead;
+	uint64 i;
+
+	/*
+	 * Only a cagg doing granular refresh has tracking rows to reclaim, and only
+	 * its own log can keep them alive. A cagg that does not opt in has its
+	 * entries stamped seqnum 0, which no tracking row carries.
+	 */
+	if (!cagg->data.granular_refresh_enabled)
+	{
+		return;
+	}
+
+	args[0] = Int32GetDatum(hypertable_id);
+	args[1] = Int32GetDatum(cagg->data.mat_hypertable_id);
+	args[2] = Int32GetDatum(TRACKING_CLEANUP_HEADROOM);
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+	{
+		elog(ERROR, "could not connect to SPI to reclaim tenant tracking");
+	}
+
+	/*
+	 * read_only = false so SPI advances the command counter and takes a fresh
+	 * snapshot. This is required, not incidental: the caller has just moved the
+	 * hypertable log into this cagg's log in the very same transaction, and we want
+	 * to include those invalidations in determining a seqnum's liveness.
+	 *
+	 * A seqnum of 0 or NULL in the log matches nothing here, which is right: no
+	 * tracking row carries either, so neither can keep one alive.
+	 */
+	if (SPI_execute_with_args(sql, 3, argtypes, args, NULL, false /* read_only */, 0) !=
+		SPI_OK_SELECT)
+	{
+		elog(ERROR, "could not scan for reclaimable tenant tracking");
+	}
+
+	ndead = SPI_processed;
+	dead = (ndead > 0) ? (int32 *) MemoryContextAlloc(caller_cxt, ndead * sizeof(int32)) : NULL;
+
+	/* Copy out before the result is released. seqnum is NOT NULL. */
+	for (i = 0; i < ndead; i++)
+	{
+		bool isnull;
+		Datum datum = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
+
+		Assert(!isnull);
+		dead[i] = DatumGetInt32(datum);
+	}
+
+	SPI_finish();
+
+	/*
+	 * Deletes go through the catalog API, a whole seqnum
+	 * at a time.
+	 */
+	for (i = 0; i < ndead; i++)
+	{
+		ts_cagg_tenant_tracking_delete_by_seqnum_only(hypertable_id, dead[i]);
+	}
+
+	if (ndead > 0)
+	{
+		/* Publish the whole reclamation to later commands in a single step. */
+		CommandCounterIncrement();
+	}
+
+	elog(DEBUG1,
+		 "Continuous aggregate \"%s\": reclaimed tenant tracking for " UINT64_FORMAT
+		 " generation(s)",
+		 NameStr(cagg->data.user_view_name),
+		 ndead);
+
+	if (dead != NULL)
+	{
+		pfree(dead);
+	}
 }
 
 /*
@@ -1171,10 +1374,12 @@ collect_and_delete_cagg_invalidations_in_window(const ContinuousAgg *cagg,
 		table_close(rel, AccessShareLock);
 
 		int64 inclusive_end = ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
-		HeapTuple forced_tuple = create_invalidation_tup(tupdesc,
-														 cagg->data.mat_hypertable_id,
-														 refresh_window->start,
-														 inclusive_end);
+		/* Forced refresh is not tenant-tracked: seqnum 0 -> NULL. */
+		HeapTuple forced_tuple = create_cagg_invalidation_tup(tupdesc,
+															  cagg->data.mat_hypertable_id,
+															  refresh_window->start,
+															  inclusive_end,
+															  0);
 		tupstore = tuplestore_begin_heap(false, false, work_mem);
 		tuplestore_puttuple(tupstore, forced_tuple);
 		heap_freetuple(forced_tuple);
@@ -1325,4 +1530,121 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 	ts_scan_iterator_close(&iterator);
 
 	return found;
+}
+
+/*
+ * Max non-NULL seqnum among rows of `table` whose index-key column `id_attno`
+ * equals `id_value`, read via `index`.
+ */
+static int32
+scan_max_seqnum(CatalogTable table, int index, AttrNumber id_attno, int32 id_value,
+				AttrNumber seqnum_attno)
+{
+	int32 max_seqnum = 0;
+	ScanIterator iterator = ts_scan_iterator_create(table, AccessShareLock, CurrentMemoryContext);
+
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), table, index);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   id_attno,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(id_value));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		Datum datum;
+
+		/* Debug-only: throw mid-scan (relation ref + buffer pin + snapshot held) to
+		 * exercise the tenant-tracker resolver's subtransaction cleanup of
+		 * resource-owner resources on a catalog-scan OOM. */
+		DEBUG_ERROR_INJECTION("tenant_tracker_seqnum_scan_oom");
+
+		datum = slot_getattr(ti->slot, seqnum_attno, &isnull);
+
+		if (!isnull)
+		{
+			int32 seqnum = DatumGetInt32(datum);
+
+			if (seqnum > max_seqnum)
+			{
+				max_seqnum = seqnum;
+			}
+		}
+	}
+
+	ts_scan_iterator_close(&iterator);
+
+	return max_seqnum;
+}
+
+/*
+ * Highest seqnum durably recorded for a hypertable's granular tracking, used to
+ * seed the in-memory tracker's seqnum on first touch after a (re)start so new
+ * seqnums do not collide with pre-restart ones.
+ *
+ * Scans all three durable sources -- the hypertable invalidation log, the
+ * materialization invalidation log of each granular-refresh-enabled cagg, and the
+ * tenant-tracking catalog -- and takes the max.
+ *
+ * Note that because we cannot assume any relative ordering of seqnums across the
+ * three sources. An invalidations of seqnum X can be processed and stored in the cagg
+ * invalidation log before an invalidation of seqnum X-1 is persisted in the hypertable
+ * invalidation log. This is because the flusher, which increases seqnum, only waits for
+ * tracking writers to finish writing, rather than wait for the DML txn to finish.
+ * Similarly, trackings of seqnum X can be flushed either before or
+ * after its association validation (of the same seqnum X) is persisted in the hypertable
+ * invalidation log.
+ */
+int32
+invalidation_max_seqnum_for_hypertable(int32 hypertable_id)
+{
+	int32 max_seqnum;
+	int32 tenant_max;
+	ListCell *lc;
+	List *caggs;
+
+	max_seqnum = scan_max_seqnum(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
+								 CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_IDX,
+								 Anum_continuous_aggs_hypertable_invalidation_log_idx_hypertable_id,
+								 hypertable_id,
+								 Anum_continuous_aggs_hypertable_invalidation_log_seqnum);
+
+	caggs = ts_continuous_aggs_find_by_raw_table_id(hypertable_id);
+	foreach (lc, caggs)
+	{
+		ContinuousAgg *cagg = lfirst(lc);
+
+		/* TODO: Revisit this after we decided on how we handle seqnums for caggs that opt out of
+		   granular refresh while its hypertable has a tracking column. Also related to this is how
+		   we handle seqnums in cagg invalidation logs when we disable and re-enable granular
+		   refresh for a cagg. */
+
+		if (!cagg->data.granular_refresh_enabled)
+		{
+			continue;
+		}
+
+		int32 mat_max = scan_max_seqnum(
+			CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+			CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX,
+			Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id,
+			cagg->data.mat_hypertable_id,
+			Anum_continuous_aggs_materialization_invalidation_log_seqnum);
+
+		if (mat_max > max_seqnum)
+		{
+			max_seqnum = mat_max;
+		}
+	}
+	list_free(caggs);
+
+	tenant_max = ts_cagg_tenant_tracking_max_seqnum(hypertable_id);
+	if (tenant_max > max_seqnum)
+	{
+		max_seqnum = tenant_max;
+	}
+
+	return max_seqnum;
 }

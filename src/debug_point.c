@@ -355,3 +355,40 @@ ts_debug_point_raise_error_oneshot(const char *name)
 			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
 			 errmsg("error injected at debug point '%s'", point.name)));
 }
+
+/*
+ * Report whether a debug point is enabled, without raising an error.
+ *
+ * This uses the same advisory-lock probe as ts_debug_point_raise_error_if_enabled()
+ * (the point is enabled when another session holds the ExclusiveLock, or this
+ * session enabled it itself), but returns the verdict as a bool so callers can
+ * branch into a simulated failure path instead of being forced to ereport.
+ */
+bool
+ts_debug_point_is_enabled(const char *name)
+{
+	DebugPoint point;
+	LockAcquireResult lock_acquire_result;
+
+	debug_point_init(&point, name);
+
+	lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, true);
+	switch (lock_acquire_result)
+	{
+		case LOCKACQUIRE_OK:
+			/* ShareLock granted means no other session holds ExclusiveLock; the
+			 * point is enabled only if this session itself enabled it. */
+			LockRelease(&point.tag, ShareLock, true);
+			return LockHeldByMeCompat(&point.tag, ExclusiveLock, false);
+		case LOCKACQUIRE_ALREADY_HELD:
+		case LOCKACQUIRE_ALREADY_CLEAR:
+			LockRelease(&point.tag, ShareLock, true);
+			return false;
+		case LOCKACQUIRE_NOT_AVAIL:
+			/* Another session holds the ExclusiveLock: the point is enabled. */
+			return true;
+	}
+
+	pg_unreachable();
+	return false;
+}

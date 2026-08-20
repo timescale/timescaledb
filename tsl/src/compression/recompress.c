@@ -289,7 +289,12 @@ tsl_compact_chunk(PG_FUNCTION_ARGS)
 	}
 
 	int max_batches = PG_GETARG_INT32(1);
-	Assert(max_batches >= 0);
+	if (max_batches < 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("max_batches must be greater than or equal to 0")));
+	}
 
 	uncompressed_relid = compact_chunk_impl(chunk, max_batches);
 
@@ -680,7 +685,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 
 		bool done_with_segment = false;
 		bool tuples_for_recompression = false;
-		enum Batch_match_result result;
+		enum Batch_match_result result = Tuple_match;
 
 		/* For full segmentwise decompress/compress we decompress all batches in
 		 * the current segment (i.e. treat each batch as a match) */

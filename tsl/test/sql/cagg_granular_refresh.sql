@@ -1,0 +1,1219 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Functional test for granular (per-tenant) continuous aggregate refresh.
+-- Tracking is configured per hypertable and each cagg opts in.
+-- On INSERT, each row's <tenant column, time> is recorded in the shared-memory
+-- tenant tracker and flushed to _timescaledb_catalog.continuous_aggs_tenant_tracking
+-- during the refresh. The refresh then materializes only the tracked tenants
+-- and leaves the tracking rows to be reclaimed once nothing references their seqnum
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock = '2025-01-10 00:00:00+00';
+
+-- Anchor the start offset to a fixed date safely before all the fixed 2020
+-- fixture dates below, computed relative to today so the window keeps
+-- covering them regardless of when this test actually runs.
+SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_lookback \gset
+
+CREATE VIEW hyper_invlog_view AS
+SELECT hypertable_id as "hyper_id",
+       CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype) THEN '-infinity'::timestamptz
+            WHEN lowest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype) THEN 'infinity'::timestamptz
+            ELSE _timescaledb_functions.to_timestamp(lowest_modified_value) END as "start",
+       CASE WHEN greatest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype) THEN '-infinity'::timestamptz
+            WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype) THEN 'infinity'::timestamptz
+            ELSE _timescaledb_functions.to_timestamp(greatest_modified_value) END as "end",
+       seqnum
+       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+       ORDER BY 1,2,3;
+
+-- Same as _timescaledb_catalog.continuous_aggs_tenant_tracking, but with
+-- min/max_timestamp rendered as timestamps instead of raw internal int8s.
+-- tenant_id is stored as text, so it is shown directly.
+CREATE VIEW continuous_aggs_tenant_tracking_view AS
+SELECT hypertable_id,
+       tenant_id,
+       _timescaledb_functions.to_timestamp(min_timestamp) AS min_timestamp,
+       _timescaledb_functions.to_timestamp(max_timestamp) AS max_timestamp,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking;
+
+-- Per-cagg materialization invalidation log with cagg name + seqnum, timestamps
+-- rendered readable (+/-infinity sentinels mapped instead of erroring). A NULL
+-- seqnum means "untracked": every non-granular cagg's entries are NULL.
+CREATE VIEW mat_invlog_view AS
+SELECT ca.user_view_name AS cagg,
+       CASE WHEN il.lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype) THEN '-infinity'::timestamptz
+            WHEN il.lowest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype) THEN 'infinity'::timestamptz
+            ELSE _timescaledb_functions.to_timestamp(il.lowest_modified_value) END AS "start",
+       CASE WHEN il.greatest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype) THEN '-infinity'::timestamptz
+            WHEN il.greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype) THEN 'infinity'::timestamptz
+            ELSE _timescaledb_functions.to_timestamp(il.greatest_modified_value) END AS "end",
+       il.seqnum
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log il
+JOIN _timescaledb_catalog.continuous_agg ca
+  ON ca.mat_hypertable_id = il.materialization_id
+ORDER BY 1, 2, 4;
+
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+CALL refresh_continuous_aggregate('cond_daily', NULL, '2025-05-01 00:00+00');
+
+-- sensor_a gets two days, sensor_b a single day. Explicit +00 offsets keep the
+-- stored internal time values timezone-independent.
+INSERT INTO conditions VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 1),
+  ('2020-01-02 00:00+00', 'sensor_a', 2),
+  ('2020-01-01 00:00+00', 'sensor_b', 3);
+SELECT chunk_name, range_start, range_end FROM timescaledb_information.chunks ORDER BY 2;
+-- see seqnum in the hypertable invalidation logs
+SELECT * FROM hyper_invlog_view;
+
+CALL refresh_continuous_aggregate('cond_daily', NULL, '2025-05-01 00:00+00');
+
+-- The granular refresh materialized each tracked tenant's buckets.
+SELECT sensor_id, bucket, avg
+FROM cond_daily
+ORDER BY sensor_id, bucket;
+
+-- Tracking rows are still present; nothing has reclaimed them yet
+SELECT count(*) AS remaining_tracking_rows
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily');
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- TEST: If transaction rollback, tracking rows don't make it into the
+-- catalog table. Note that this is true for normal rollback, when the txn
+-- does not get to the precommit hook that write trackings.
+
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_a', 1);
+
+-- sensor_b is inserted in a transaction that rolls back; sensor_c in one that
+-- commits.  The aborted transaction must leave nothing behind.
+BEGIN;
+INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2);
+ROLLBACK;
+
+INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_c', 3);
+INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_d', 3);
+
+-- Run a refresh so trackings are flushed to the tracking table
+-- should not see sensor_b, only sensor_a , sensor_c and sensor_d committed.
+-- sensor_a tracking stays although its invalidation has been consumed.
+-- Later, when all trackings of seqnum 1 are consumed, all of them will
+-- be reclaimed in a later refresh.
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- A refresh to consume all invalidations of seqnum 1 (also increases seqnum so seqnum 1
+-- will gets cleanup in the next refresh).
+-- Insert some dummy rows before the refresh so the new seqnum show up in the tracking table
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_a', 1);
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+--should still see all the trackings of seqnum 1 and 2
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+--the following refresh will cleanup all seqnum 1 tracking rows
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00','2020-01-03 00:00+00');
+--all trackings of seqnum 1 should be cleaned up, only seqnum 2 and 3 remain
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- TEST : Per-tenant tracking across multiple hypertables.
+--
+-- Each hypertable has its own tracker, keyed by hypertable id.  A granular
+-- refresh of one cagg must re-materialize only its own changed tenants and must
+-- not leak data between hypertables.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE TABLE readings(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('readings', 'time');
+ALTER TABLE readings SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+CREATE MATERIALIZED VIEW read_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM readings
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW read_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- Phase 1: both hypertables get the same sensor names but distinct values.
+INSERT INTO conditions VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 10),
+  ('2020-01-01 00:00+00', 'sensor_b', 20);
+INSERT INTO readings VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 100),
+  ('2020-01-01 00:00+00', 'sensor_b', 200);
+
+-- insert into 2025 so that refresh will have work to do
+-- and will  write out the other tracking entries
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_a', 10);
+INSERT INTO readings VALUES ('2025-01-01 00:00+00', 'sensor_a', 10);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+CALL refresh_continuous_aggregate('read_daily', '2025-01-01 00:00+00', NULL);
+
+SELECT * FROM continuous_aggs_tenant_tracking_view
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP MATERIALIZED VIEW read_daily;
+DROP TABLE conditions;
+DROP TABLE readings;
+
+-- TEST: UPDATE and DELETE tenant tracking.
+--
+-- UPDATE that changes the tenant column must track both the old and
+-- new tenant
+-- a DELETE must track the deleted row's tenant.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- Move the invalidation threshold past the 2020 rows below, so that inserting
+-- them is late-arriving and logs invalidations.
+CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
+
+-- sensor_a/sensor_c: old (2020) rows that will be updated/deleted below.
+INSERT INTO conditions VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 1),
+  ('2020-01-01 00:00+00', 'sensor_c', 3);
+
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+
+-- Should see trackings for sensor_a, sensor_c because
+-- the above refresh consumed the invalidations but didn't clean up
+-- the trackings (left for garbage collection in the following refresh)
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- UPDATE sensor_a's tenant to sensor_b: must track both the old (sensor_a)
+-- and new (sensor_b) tenant, with a new seqnum
+UPDATE conditions SET sensor_id = 'sensor_b' WHERE sensor_id = 'sensor_a';
+-- Note that this refresh doesn't clean up tracking with seqnum 1 because of the
+-- cleanup headroom, so we still see them here
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- TEST DELETE sensor_c's row: must track sensor_c (the deleted row's tenant).
+DELETE FROM conditions WHERE sensor_id = 'sensor_c';
+
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+--(the above refresh garbage-collected trackings of seqnum 1, so we don't see them)
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- TEST : more update scenarios
+-- Test upd 1:  2 UPDATES to same tenant column. should see single entry in tracker
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+
+--insert some data and do a prime refresh to clear off [-inf, +inf] invalidations
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', NULL, '2026-01-07 00:00:00');
+
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- fresh row to force the refresh to drain the tracker
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- UPDATE the tenant row
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_a', 3);
+UPDATE conditions SET value = 99 WHERE sensor_id = 'sensor_a' and time = '2020-01-01 00:00+00';
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect exactly one row for sensor_a .
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- Check invalidations, we should have 2 separate invalidations with seqnum 2
+-- for sensor_a (sensor_z invalidation has been consumed by the refresh above)
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'cond_daily' and seqnum = 2)
+ORDER BY 1, 2;
+
+--Refresh Jan1 2020 bucket, that would clear one invalidation for sensor_a but leave the other.
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-02 00:00+00');
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'cond_daily' and seqnum = 2)
+ORDER BY 1, 2;
+
+--Because we don't cut and clean up trackings, we should still see full tracking for
+--sensor_a stays ([Jan 1 - Jan 3]).
+--(Sensor_z tracking has been consumed but not garbage-collected yet)
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+--now refresh all Jan 2020, we should see only one row updated, because only one invalidation
+--for Jan 3 bucket remains, despite the tracking is still [Jan1 - Jan3], That is,
+--although we don't clean up trackings, we should not redo the Jan 1 refresh
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-30 00:00+00');
+RESET client_min_messages;
+
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test upd 2: UPDATE that changes only the time column (tenant unchanged) must
+-- widen the tracked [min,max] to span the old and new time.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- baseline: min = max = 2020-01-01 for sensor_a
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- Move sensor_a's row to 2020-01-01 10:00 (same chunk, tenant unchanged).  The old
+-- tuple (2020-01-01) and new tuple (2020-01-05) fold into one entry for
+-- sensor_a whose window now spans both.
+UPDATE conditions SET time = '2020-01-01 10:00+00' WHERE sensor_id = 'sensor_a';
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect a new row for sensor_a
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test upd 3: UPDATE that changes both the tenant and time columns must track
+-- the old tenant (at the old time) and the new tenant (at the new time) as
+-- two distinct entries.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_a', 1);
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- baseline: sensor_a at 2020-01-03
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- sensor_a -> sensor_b, 2020-01-03 -> 2020-01-03 00:01 : old and new tuple have
+-- different keys and seqnum, i.e 2 tracker entries.
+UPDATE conditions SET sensor_id = 'sensor_b', time = '2020-01-03 00:01+00'
+  WHERE sensor_id = 'sensor_a';
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect sensor_a and sensor_b entry (Sensor_b due to update with new seqnum)
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test:UPDATE/DELETE across multiple tenants in a single statement.
+-- Every distinct old/new tenant touched by the statement must be tracked,
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- sensor_a/b/c: UPDATEd below (renamed to sensor_x).
+-- sensor_d/e: DELETEd below.
+BEGIN;
+INSERT INTO conditions VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 1),
+  ('2020-01-01 00:00+00', 'sensor_b', 2),
+  ('2020-01-01 00:00+00', 'sensor_c', 3),
+  ('2020-01-01 00:00+00', 'sensor_d', 4),
+  ('2020-01-01 00:00+00', 'sensor_e', 5);
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+COMMIT;
+
+-- refresh drains the tracker; its entries remain in the catalog until garbage collected
+-- by a later refresh.
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- baseline: sensor_a through sensor_e, all tracked from the bulk INSERT.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- UPDATE: sensor_a/b/c all renamed to sensor_x in one statement --
+-- three old-tenant writes (a, b, c) plus one shared new-tenant write (x).
+UPDATE conditions SET sensor_id = 'sensor_x'
+  WHERE sensor_id IN ('sensor_a', 'sensor_b', 'sensor_c');
+
+-- DELETE: sensor_d and sensor_e removed in one statement.
+DELETE FROM conditions WHERE sensor_id IN ('sensor_d', 'sensor_e');
+
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect sensor_a, sensor_b, sensor_c (old tenants from the bulk UPDATE),
+-- sensor_x (new tenant, one entry folding all three rows), sensor_d and
+-- sensor_e (from the bulk DELETE).
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, seqnum, tenant_id;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test: UPSERT (INSERT ... ON CONFLICT DO UPDATE) must still track the
+-- tenant when the conflict fires and the row is updated in place.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float,
+  UNIQUE (time, sensor_id));
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- No conflict yet --
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1)
+  ON CONFLICT (time, sensor_id) DO UPDATE SET value = excluded.value;
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- baseline: sensor_a tracked once, from the no-conflict INSERT.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- Same (time, sensor_id) key -- this time it conflicts and takes the
+-- DO UPDATE branch
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 99)
+  ON CONFLICT (time, sensor_id) DO UPDATE SET value = excluded.value;
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect a new row for sensor_a (next seqnum) from the ON CONFLICT DO UPDATE.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test: mixed-op single transaction.  INSERT + UPDATE + DELETE touching
+-- overlapping tenants inside one transaction must all fold into the shared
+-- per-txn buffer and drain together under a single seqnum.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- sensor_b: pre-existing row, committed before the mixed transaction below;
+-- it will be deleted inside that transaction.
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_b', 2);
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- baseline: sensor_b tracked from the prior INSERT.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- One transaction: INSERT sensor_a, UPDATE it (same tenant/time -- dedups),
+-- and DELETE sensor_b -- all in the same per-txn buffer, drained together.
+BEGIN;
+INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+UPDATE conditions SET value = 100 WHERE sensor_id = 'sensor_a';
+DELETE FROM conditions WHERE sensor_id = 'sensor_b';
+COMMIT;
+
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect exactly one new entry for sensor_a (INSERT + UPDATE dedup to a
+-- single tracked row) and one new entry for sensor_b (from the DELETE),
+-- both sharing the same seqnum since they drained from the same transaction.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test 11: hypertable with no tenant column at all.  UPDATE/DELETE (and
+-- no tenant tracking data
+CREATE TABLE conditions(time timestamptz NOT NULL, value float);
+SELECT create_hypertable('conditions', 'time');
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, avg(value)
+  FROM conditions
+  GROUP BY bucket
+  WITH NO DATA;
+
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 1);
+UPDATE conditions SET value = 99 WHERE time = '2020-01-01 00:00+00';
+DELETE FROM conditions WHERE time = '2020-01-01 00:00+00';
+
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect no tracking rows at all for this hypertable.
+SELECT count(*) AS tracking_rows
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily');
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test copy: plain COPY into the hypertable.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- One COPY batch, three distinct tenants, all in the late (2020) window.
+COPY conditions FROM STDIN WITH (DELIMITER ',');
+2020-01-01 00:00+00,sensor_a,1
+2020-01-01 00:00+00,sensor_b,2
+2020-01-01 00:00+00,sensor_c,3
+\.
+-- A second COPY batch where the same tenant appears multiple times: must
+-- fold into one [min,max] entry, not one row per COPY line.
+COPY conditions FROM STDIN WITH (DELIMITER ',');
+2020-01-05 00:00+00,sensor_c,4
+2020-01-02 00:00+00,sensor_d,5
+2020-01-04 00:00+00,sensor_d,6
+2020-01-03 00:00+00,sensor_d,7
+\.
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Expect all 4 tenants tracked from the single COPY batch.
+-- sensor_c and sensor_d have wider min-max
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test: TRUNCATE must always force a full (non-granular) refresh over the
+-- truncated range.
+-- TRUNCATE adds its invalidation entry with seqnum=0,
+-- so a stale tracking row for one tenant must not narrow the post-truncate
+-- refresh to just that tenant and leave a different, untracked tenant's
+-- now-stale bucket behind.
+--
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- sensor_c: materialized up front
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_c', 3);
+CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
+
+-- sensor_a: late data, tracked; deliberately left un-consumed (the refresh
+-- below only covers 2025+, which doesn't overlap 2020, so the tracking row
+-- persists).
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+-- see shared memory tracker entries --
+SELECT seq_num, active_generation, nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::regclass);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- Baseline: sensor_c's bucket is materialized; sensor_a has a stale tracking
+-- row (never materialized, since no refresh has covered its window yet).
+SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+-- TRUNCATE wipes out both sensor_a's and sensor_c's rows.  The tenant
+-- tracker is never touched -- sensor_a's stale tracking row survives.
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_b', 1);
+TRUNCATE conditions;
+
+-- no entry in tracker from TRUNCATE, but we should have 1 for sensor_b
+SELECT seq_num, active_generation, nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::regclass);
+-- but we have an entry in hypertable invalidation log from truncate
+SELECT * FROM hyper_invlog_view;
+CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', NULL);
+
+-- Full refresh clears every stale bucket, so cond_daily is empty again.
+SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
+-- Tracking rows with seqnum 1 (sensor_c) are garbage-collected by the refresh above.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- Test: oversized tenant value (> TENANT_TRACKER_KEY_MAXLEN = 64 bytes)
+-- introduced via UPDATE.  This should invalidate the shared mem contents
+-- and revert to a full refresh
+-- TODO: do not write out any invalid marker entries.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+INSERT INTO conditions VALUES ('2020-01-01 01:00+00', 'sensor_a', 1);
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+-- baseline: sensor_a tracked normally.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+--another insert for sensor_b for 2020-01-01. should see tracker entry after
+-- refresh.
+INSERT INTO conditions VALUES ('2020-01-01 01:00+00', 'sensor_b', 1);
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+-- has only sensor_z
+SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
+
+-- we now have a new seqnum. first insert has valid entry in shared mem.
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_x', 0);
+SELECT seq_num, active_generation, nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::regclass);
+UPDATE conditions SET sensor_id = repeat('x', 100) WHERE sensor_id = 'sensor_a';
+-- UPDATE gives sensor_a's row a new tenant value 100 bytes long -- the new
+-- tuple's tenant can't be encoded.
+UPDATE conditions SET sensor_id = repeat('x', 100) WHERE sensor_id = 'sensor_a';
+INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
+--status should be 1 now. i.e shared mem contents is invalid
+-- insert happens after mem is invalidated. So should not record new entry
+-- so nentries should stay at 1.
+SELECT seq_num, active_generation, nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::regclass);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+-- has only sensor_z+sensor_x.
+-- sensor_a+ sensor_b are in 2020. we should see tracking entries
+SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
+
+-- no invalid marker for seq_num=3
+-- tracking entry in 2020 for sensor_b; seqnum 1 is garbage-collected.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+
+--refresh from 2020 so that we can see sensor_a . falls back to full refresh
+CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+
+-- tracking rows remain until garbage collected by a later refresh.
+SELECT *
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY hypertable_id, tenant_id, seqnum;
+-- sensor_z, sensor_x, sensor_b and sensor_a renamed as xxxxx should be visible
+SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+-- Test:  a invalid generation whose validly-tracked invalidations
+-- span TWO refresh windows. each window falls back to full refresh
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day');
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, count(*) as cnt
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- Establish an active generation and materialize an initial window.  sensor_a's
+-- 2025-01-01 row will later be the anchor that lets the oversized UPDATE trip
+-- the generation INVALID.
+INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_a', 1);
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', '2025-02-01 00:00+00');
+
+-- Two VALID inserts (sensor_b) at widely separated times land in the SAME
+-- generation, so both invalidation-log entries are tagged with that
+-- generation's seqnum ...
+INSERT INTO conditions VALUES ('2024-01-05 00:00+00', 'sensor_b', 10);
+INSERT INTO conditions VALUES ('2024-01-20 00:00+00', 'sensor_b', 20);
+-- valid entries in shared mem for both inserts
+SELECT seq_num, active_generation, nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::regclass);
+-- ... then an oversized UPDATE of the existing sensor_a row trips that
+-- generation INVALID (its old tuple anchors the hypertable so the force-INVALID
+-- check runs).  The generation is discarded at the next flush, so the seqnum
+-- shared by the 01-05 and 01-20 entries ends up with NO tracking rows.
+UPDATE conditions SET sensor_id = repeat('x', 100) WHERE sensor_id = 'sensor_a';
+-- status is now 1 . so shared mem is invalid
+SELECT seq_num, active_generation, nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::regclass);
+
+-- Refresh window 1 covers 01-05 but not 01-20.  Full-refresh fallback (no rows
+-- for the dead seqnum) recomputes the 01-05 bucket; the 01-20 entry is left in
+-- the cagg log for a later refresh.
+CALL refresh_continuous_aggregate('cond_daily', '2024-01-01 00:00+00', '2024-01-10 00:00+00');
+
+--The dead generation's tracking row is still present until garbage collected
+--by a later refresh.
+SELECT count(*) AS tracking_rows
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily');
+
+-- 01-05 bucket is refreshed
+SELECT bucket, sensor_id, cnt FROM cond_daily
+WHERE bucket < '2025-01-01 00:00+00'
+ORDER BY sensor_id, bucket;
+
+-- we have new seqnum and new entry in shared mem for 01-20 for sensor_b
+INSERT INTO conditions VALUES ('2024-01-01 01:00+00', 'sensor_c', 20);
+INSERT INTO conditions VALUES ('2024-01-20 01:00+00', 'sensor_b', 20);
+-- Refresh window 2 covers 01-20 (the leftover dead-seqnum entry), which falls
+-- back to a full refresh. Refresh 2024-01-01 range again.
+-- This will write out tracker and inv entries for us to inspect.
+CALL refresh_continuous_aggregate('cond_daily', '2024-01-01 00:00+00', '2024-01-10 00:00+00');
+SELECT * FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+ORDER BY 1, 2, seqnum;
+
+--picks up sensor_c now. But not changes to sensor_b.
+SELECT bucket, sensor_id, cnt FROM cond_daily
+WHERE bucket < '2025-01-01 00:00+00'
+ORDER BY sensor_id, bucket;
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'cond_daily')
+ORDER BY 1, 2, seqnum;
+
+-- verify that update for sensor_b picked up all ranges with and without valid seqnum
+CALL refresh_continuous_aggregate('cond_daily', '2024-01-10 00:00+00', '2024-01-30 00:00+00');
+
+-- 01-20 bucket is correct; the whole range has been materialized across the two refreshes.
+SELECT bucket, sensor_id, cnt FROM cond_daily
+WHERE bucket < '2025-01-01 00:00+00'
+ORDER BY sensor_id, bucket;
+
+--compare against raw query
+SELECT time_bucket('1 day', time) AS bucket, sensor_id, count(*)
+FROM conditions
+WHERE time < '2025-01-01 00:00+00'
+GROUP BY bucket, sensor_id
+ORDER BY sensor_id, bucket;
+
+-- Tracking rows still present until later refresh garbage collects them.
+SELECT count(*) AS tracking_rows
+FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily');
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+
+-- ============================================================================
+-- Gating: a mix of granular and non-granular caggs on one hypertable
+-- ============================================================================
+-- metrics has three caggs on the same hypertable: m_gran opts into granular
+-- refresh; m_ng1 and m_ng2 do not. Demonstrates that only the granular cagg
+-- drains the tracker and carries seqnums through the invalidation logs, while
+-- the non-granular caggs behave like ordinary full-range caggs.
+
+CREATE TABLE metrics(time timestamptz NOT NULL, tenant text, value float);
+SELECT create_hypertable('metrics', 'time');
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW m_gran
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, tenant, count(*) AS cnt
+  FROM metrics GROUP BY bucket, tenant WITH NO DATA;
+CREATE MATERIALIZED VIEW m_ng1
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, tenant, count(*) AS cnt
+  FROM metrics GROUP BY bucket, tenant WITH NO DATA;
+CREATE MATERIALIZED VIEW m_ng2
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, tenant, count(*) AS cnt
+  FROM metrics GROUP BY bucket, tenant WITH NO DATA;
+-- Only m_gran opts in.
+ALTER MATERIALIZED VIEW m_gran SET (timescaledb.enable_granular_refresh = true);
+
+-- Baseline: three tenants over two buckets, then materialize all three caggs so
+-- the logs and tracker start clean.
+INSERT INTO metrics VALUES
+  ('2020-03-01 00:00+00', 'A', 1), ('2020-03-01 00:00+00', 'B', 1), ('2020-03-01 00:00+00', 'C', 1),
+  ('2020-03-02 00:00+00', 'A', 1), ('2020-03-02 00:00+00', 'B', 1), ('2020-03-02 00:00+00', 'C', 1);
+CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng2',  NULL, '2025-05-01 00:00+00');
+
+-- Clean start: the hypertable invalidation log is empty. The materialization
+-- log still shows two +/-infinity "outside the refreshed window" residual
+-- entries per cagg (NULL seqnum)
+SELECT * FROM hyper_invlog_view;
+SELECT * FROM mat_invlog_view;
+
+-- ----------------------------------------------------------------------------
+-- (a) Refreshing a non-granular cagg does NOT flush the tracker.
+-- ----------------------------------------------------------------------------
+-- Late-arriving row for tenant A only; this creates the tracker and records A.
+INSERT INTO metrics VALUES ('2020-03-01 12:00+00', 'A', 2);
+
+-- Tracker exists with one tenant; nothing flushed to the catalog yet.
+SELECT seq_num, nentries, status FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics'::regclass);
+SELECT count(*) AS tracking_rows FROM continuous_aggs_tenant_tracking_view
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'metrics');
+
+-- Refresh a NON-granular cagg. It must not flush: seqnum and nentries stay put.
+CALL refresh_continuous_aggregate('m_ng1', NULL, '2019-05-01 00:00+00');
+SELECT seq_num, nentries, status FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics'::regclass);
+
+-- Refresh the granular cagg. This flushes: the seqnum is bumped and the active
+-- generation is drained (nentries back to 0).
+CALL refresh_continuous_aggregate('m_gran', NULL, '2019-05-01 00:00+00');
+SELECT seq_num, nentries, status FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics'::regclass);
+SELECT * FROM continuous_aggs_tenant_tracking_view;
+
+
+-- Reset to a clean slate (drain every cagg's mat log and the tracker).
+CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng2',  NULL, '2025-05-01 00:00+00');
+SELECT * FROM mat_invlog_view;
+
+-- ----------------------------------------------------------------------------
+-- (b) Moving invalidations: the granular cagg preserves seqnum; the
+--     non-granular caggs get seqnum forced to 0 (stored as NULL).
+-- ----------------------------------------------------------------------------
+-- Late row for tenant B in a fresh bucket, stamped with the current seqnum.
+INSERT INTO metrics VALUES ('2020-07-01 00:00+00', 'B', 1);
+SELECT * FROM hyper_invlog_view;
+
+-- Trigger the hyper->cagg move WITHOUT consuming this entry: refresh a
+-- non-granular cagg over an earlier, already-materialized, non-overlapping
+-- window. The move copies the entry into every cagg's mat log.
+CALL refresh_continuous_aggregate('m_ng1', '2020-03-01 00:00+00', '2020-04-01 00:00+00');
+
+-- m_gran's copy keeps the seqnum; m_ng1/m_ng2 copies have NULL seqnum.
+SELECT * FROM mat_invlog_view;
+
+-- ----------------------------------------------------------------------------
+-- (c) Merge behavior: non-granular merges adjacent invalidations; the granular
+--     cagg keeps invalidations with different seqnums separate.
+-- ----------------------------------------------------------------------------
+-- Reset to a clean slate again.
+CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng2',  NULL, '2025-05-01 00:00+00');
+SELECT * FROM mat_invlog_view;
+
+-- Accumulate two ADJACENT buckets in the mat logs. The granular refresh
+-- between the two inserts flushes and empties the hyper log,
+-- and it also bumps the seqnum so m_gran's two copies get different seqnums (5
+-- and 6).  Note that because the hypertable invalidation logs are moved in 2
+-- separate passes by 2 refreshes, they are not merged although they are adjacent
+-- and their seqnums are both NULL for the non-granular caggs.
+-- Refresh windows stay off these buckets so the entries are not consumed.
+
+INSERT INTO metrics VALUES ('2020-08-01 00:00+00', 'B', 1);
+CALL refresh_continuous_aggregate('m_gran', '2020-03-01 00:00+00', '2020-04-01 00:00+00');
+INSERT INTO metrics VALUES ('2020-08-02 00:00+00', 'B', 1);
+CALL refresh_continuous_aggregate('m_gran', '2020-03-01 00:00+00', '2020-04-01 00:00+00');
+
+SELECT * FROM mat_invlog_view;
+
+-- The two adjacent invalidations will get consumed by a refresh over a window
+-- covering both. The merge decision becomes visible in the materialization row
+-- counts (one delete+insert cycle logged per invalidation range that survives
+-- merging):
+--   m_gran  -> seqnums 5 and 6 kept separate -> TWO ranges  -> two insert lines
+--   m_ng1   -> both entries are NULL seqnum, merged into one -> ONE insert line
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('m_gran', '2020-08-01 00:00+00', '2020-08-03 00:00+00');
+CALL refresh_continuous_aggregate('m_ng1',  '2020-08-01 00:00+00', '2020-08-03 00:00+00');
+RESET client_min_messages;
+
+-- Reset before the next case
+CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng2',  NULL, '2025-05-01 00:00+00');
+
+-- ----------------------------------------------------------------------------
+-- (d) Refresh scope: for the same invalidated range, the non-granular cagg
+--     re-materializes every tenant, while the granular cagg re-materializes only
+--     the touched tenant. Row counts are logged at LOG.
+-- ----------------------------------------------------------------------------
+
+-- Fresh region: three tenants across three buckets, fully materialized.
+INSERT INTO metrics VALUES
+  ('2020-12-01 00:00+00', 'A', 1), ('2020-12-01 00:00+00', 'B', 1), ('2020-12-01 00:00+00', 'C', 1),
+  ('2020-12-02 00:00+00', 'A', 1), ('2020-12-02 00:00+00', 'B', 1), ('2020-12-02 00:00+00', 'C', 1),
+  ('2020-12-03 00:00+00', 'A', 1), ('2020-12-03 00:00+00', 'B', 1), ('2020-12-03 00:00+00', 'C', 1);
+CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
+CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
+
+-- Late change touching ONLY tenant A, in one already-materialized bucket.
+INSERT INTO metrics VALUES ('2020-12-02 06:00+00', 'A', 9);
+
+SET client_min_messages TO LOG;
+-- Granular: only tenant A's touched bucket is rewritten (1 delete+insert).
+CALL refresh_continuous_aggregate('m_gran', '2020-12-01 00:00+00', '2020-12-04 00:00+00');
+-- Non-granular: the invalidated bucket is rewritten for every tenant (3 delete+insert).
+CALL refresh_continuous_aggregate('m_ng1', '2020-12-01 00:00+00', '2020-12-04 00:00+00');
+RESET client_min_messages;
+
+-- Both caggs end up with identical, correct contents for the 2020-12 region.
+SELECT bucket, tenant, cnt FROM m_gran
+WHERE bucket >= '2020-12-01 00:00+00' AND bucket < '2020-12-04 00:00+00'
+ORDER BY tenant, bucket;
+SELECT bucket, tenant, cnt FROM m_ng1
+WHERE bucket >= '2020-12-01 00:00+00' AND bucket < '2020-12-04 00:00+00'
+ORDER BY tenant, bucket;
+
+DROP MATERIALIZED VIEW m_gran;
+DROP MATERIALIZED VIEW m_ng1;
+DROP MATERIALIZED VIEW m_ng2;
+DROP TABLE metrics;
+
+
+-- ============================================================================
+-- (e) Tracker hash collisions: two distinct tenants must stay distinct.
+--
+-- The tracker's lock-free probe rejects a slot on hash, key length and bytes.
+-- If it compares against the STORED entry's length instead of the length of the
+-- key being looked up, the length test degenerates to `x == x` and a stored key
+-- that is a strict prefix of the looked-up key false-matches on a 32-bit hash
+-- collision.  The longer tenant then never gets its own entry -- its range is
+-- silently merged into the shorter tenant's, and nothing marks the generation
+-- INVALID, so the refresh does not fall back: the longer tenant is simply never
+-- re-materialized.
+-- ============================================================================
+CREATE TABLE collide(time timestamptz NOT NULL, tenant text, value float);
+SELECT create_hypertable('collide', 'time');
+ALTER TABLE collide SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW coll_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, tenant, count(*) AS cnt
+  FROM collide GROUP BY bucket, tenant WITH NO DATA;
+ALTER MATERIALIZED VIEW coll_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- The fixture: 't1' and 't1uLGQQa' collide in the same hash the tracker uses
+-- (hashtext() is hash_any() over the text bytes, as is hash_bytes()), and 't1'
+-- is a strict prefix of 't1uLGQQa'.  Asserting it here keeps the fixture honest:
+-- if this stops reporting true the keys must be recomputed, otherwise the test
+-- below would pass without exercising the collision at all.
+SELECT hashtext('t1') = hashtext('t1uLGQQa') AS hash_collides,
+       't1uLGQQa' LIKE 't1%' AS short_key_is_prefix;
+
+-- Materialize once so the invalidation threshold moves up and the late 2020
+-- inserts below actually log invalidations.
+INSERT INTO collide VALUES ('2024-06-01 00:00+00', 'seed', 1);
+CALL refresh_continuous_aggregate('coll_daily', NULL, '2024-07-01 00:00+00');
+
+-- verify tenant tracking works correctly even if there is hash collision
+-- Separate transactions so the SHORT key is drained into the tracker generation
+-- first; the fast-path probe for the long key then walks over the stored short
+-- key.  Both rows land in the same bucket, so a mix-up shows up in the result.
+BEGIN;
+INSERT INTO collide VALUES ('2020-03-01 00:00+00', 't1', 1);
+COMMIT;
+BEGIN;
+INSERT INTO collide VALUES ('2020-03-01 06:00+00', 't1uLGQQa', 2);
+COMMIT;
+
+CALL refresh_continuous_aggregate('coll_daily', '2020-03-01 00:00+00', '2020-03-02 00:00+00');
+
+-- Both tenants are tracked separately, so both are materialized.
+SELECT bucket, tenant, cnt FROM coll_daily
+WHERE bucket = '2020-03-01 00:00+00'
+ORDER BY tenant;
+
+DROP MATERIALIZED VIEW coll_daily;
+DROP TABLE collide;

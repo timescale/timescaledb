@@ -2049,6 +2049,21 @@ GROUP BY 1;
                    4 |           0 |         2 |          5
                    5 |           0 |         2 |          5
 
+-- test window function with aggregate of constant
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(1.0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill | first_value 
+---------------------+-------------
+                   0 |         1.0
+                   1 |         1.0
+                   2 |         1.0
+                   3 |         1.0
+                   4 |         1.0
+                   5 |         1.0
+
 -- test window functions with PARTITION BY
 SELECT
   time_bucket_gapfill(1,time,0,5) as time,
@@ -3615,12 +3630,20 @@ ORDER BY 1,2;
    ->  Nested Loop
          ->  Values Scan on "*VALUES*"
          ->  Custom Scan (GapFill)
-               InitPlan 1 (returns $2)
-                 ->  Aggregate
-                       ->  Seq Scan on _hyper_X_X_chunk m2
-               InitPlan 2 (returns $4)
-                 ->  Aggregate
-                       ->  Seq Scan on _hyper_X_X_chunk m2_1
+               InitPlan 2 (returns $2)
+                 ->  Result
+                       InitPlan 1 (returns $1)
+                         ->  Limit
+                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2
+                                     Order: "time"
+                                     Filter: (("time" IS NOT NULL))
+               InitPlan 4 (returns $4)
+                 ->  Result
+                       InitPlan 3 (returns $3)
+                         ->  Limit
+                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_1
+                                     Order: "time" DESC
+                                     Filter: (("time" IS NOT NULL))
                ->  GroupAggregate
                      Group Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
                      ->  Sort
@@ -3689,12 +3712,20 @@ ORDER BY 1,2;
    ->  Nested Loop
          ->  Values Scan on "*VALUES*"
          ->  Custom Scan (GapFill)
-               InitPlan 2 (returns $3)
-                 ->  Aggregate
-                       ->  Seq Scan on _hyper_X_X_chunk m2_2
-               InitPlan 3 (returns $5)
-                 ->  Aggregate
-                       ->  Seq Scan on _hyper_X_X_chunk m2_3
+               InitPlan 3 (returns $3)
+                 ->  Result
+                       InitPlan 2 (returns $2)
+                         ->  Limit
+                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_2
+                                     Order: "time"
+                                     Filter: (("time" IS NOT NULL))
+               InitPlan 5 (returns $5)
+                 ->  Result
+                       InitPlan 4 (returns $4)
+                         ->  Limit
+                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_3
+                                     Order: "time" DESC
+                                     Filter: (("time" IS NOT NULL))
                ->  Group
                      Group Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
                      ->  Sort
@@ -3720,9 +3751,13 @@ AND time < (select max(time) from  metrics_tstz m2)
 GROUP BY 1,2 ORDER BY 2,1;
 --- QUERY PLAN ---
  Custom Scan (GapFill)
-   InitPlan 2 (returns $3)
-     ->  Aggregate
-           ->  Seq Scan on _hyper_X_X_chunk m2_2
+   InitPlan 3 (returns $3)
+     ->  Result
+           InitPlan 2 (returns $2)
+             ->  Limit
+                   ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_2
+                         Order: "time" DESC
+                         Filter: (("time" IS NOT NULL))
    ->  GroupAggregate
          Group Key: m1.device_id, (time_bucket_gapfill('@ 20 mins'::interval, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
          ->  Sort

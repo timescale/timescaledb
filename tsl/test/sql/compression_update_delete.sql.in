@@ -1974,3 +1974,25 @@ ROLLBACK;
 
 DROP TABLE crash_test;
 
+-- direct batch delete when the time column is in neither segmentby nor orderby
+SET timescaledb.auto_sparse_indexes = off;
+CREATE TABLE cagg_inval_no_minmax(time timestamptz NOT NULL, gauge int, value float)
+  WITH (tsdb.hypertable, tsdb.segmentby='time',tsdb.orderby='value');
+SELECT segmentby, orderby, index FROM _timescaledb_catalog.compression_settings WHERE relid = 'cagg_inval_no_minmax'::regclass;
+INSERT INTO cagg_inval_no_minmax
+SELECT '2025-01-01 00:00:00+00'::timestamptz + (i * interval '5 minutes'), i % 2, random()
+FROM generate_series(1, 50) i;
+CREATE MATERIALIZED VIEW cagg_inval_no_minmax_cagg
+  WITH (tsdb.continuous) AS
+  SELECT time_bucket('1 hour', time), gauge FROM cagg_inval_no_minmax GROUP BY 1, 2;
+-- Enable compression with segmentby only (time in neither segmentby nor orderby).
+ALTER TABLE cagg_inval_no_minmax SET (timescaledb.compress, timescaledb.compress_segmentby = 'gauge');
+SELECT segmentby, orderby, index FROM _timescaledb_catalog.compression_settings WHERE relid = 'cagg_inval_no_minmax'::regclass;
+SELECT count(compress_chunk(c)) FROM show_chunks('cagg_inval_no_minmax') c;
+\set ON_ERROR_STOP 0
+DELETE FROM cagg_inval_no_minmax WHERE gauge = 1;
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM cagg_inval_no_minmax WHERE gauge = 1;
+RESET timescaledb.auto_sparse_indexes;
+
+

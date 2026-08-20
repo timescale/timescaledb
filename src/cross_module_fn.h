@@ -189,6 +189,9 @@ typedef struct CrossModuleFunctions
 	PGFunction attach_chunk;
 
 	PGFunction estimate_compressed_batch_size;
+
+	PGFunction hypertable_get_tenant_tracking_info;
+	PGFunction tenant_tracking_map;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

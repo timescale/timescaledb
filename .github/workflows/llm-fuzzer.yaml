@@ -48,22 +48,29 @@ env:
 jobs:
   config:
     runs-on: ubuntu-latest
-    env:
-        key: ${{ secrets.ANTHROPIC_API_KEY }}
     outputs:
-      pg_latest: ${{ steps.setter.outputs.PG18_LATEST
-        && fromJson(steps.setter.outputs.PG18_LATEST)
-        || '' }}
+      have_key: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
+      should_run: >-
+        ${{ github.event_name != 'pull_request'
+          || (!contains(github.event.pull_request.labels.*.name, 'skip-ci')
+            && steps.filter.outputs.src == 'true') }}
+
     steps:
     - name: Checkout source code
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
     - name: Read configuration
-      if: env.key
       id: setter
       run: python .github/gh_config_reader.py
 
+    - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      id: filter
+      with:
+        filters: .github/filters.yaml
+
   fuzzer:
-    if: needs.config.outputs.pg_latest
+    if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
     runs-on: timescaledb-runner-arm64
     needs: config
@@ -79,17 +86,24 @@ jobs:
             display_name: "Internal Program Errors"
           - oracle: "optimizations"
             display_name: "Optimizations ON-OFF"
+          - oracle: "hypertable"
+            display_name: "Hypertable ON-OFF"
 
     steps:
+    - name: Replace unreliable Azure APT mirror
+      run: |
+        sudo touch /etc/apt/apt-mirrors.txt
+        sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
         sudo apt-get update
-        sudo apt-get install ccache cmake flex bison systemd-coredump gdb \
-          jq postgresql-client ${{ env.extra_packages }}
+        sudo apt-get install ccache cmake flex bison icu-devtools systemd-coredump \
+          gdb jq postgresql-client ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 200
 
@@ -118,7 +132,7 @@ jobs:
     # leading to a tainted cache
     - name: Restore PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       id: cache-postgresql
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "llm-fuzzer-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
@@ -149,7 +163,7 @@ jobs:
 
     - name: Save PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
@@ -179,7 +193,7 @@ jobs:
         make -C build install
 
     - name: Install Claude Code
-      run: npm install -g @anthropic-ai/claude-code@2.1.104
+      run: npm install -g @anthropic-ai/claude-code@2.1.215
 
     - name: LLM Fuzzing
       id: llm-fuzzing
@@ -199,7 +213,7 @@ jobs:
         rc=0
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 15.00 --dangerously-skip-permissions \
-          --model opus[1m] --effort high \
+          --model claude-opus-4-6[1m] --effort high \
           "$(envsubst < .github/workflows/llm-fuzzer/prompt.txt)" \
           > ${{ runner.temp }}/claude-execution-output.json || rc=$?
 
@@ -258,7 +272,7 @@ jobs:
 
     - name: Restore clean PostgreSQL build
       if: steps.repro.outputs.found == 'true'
-      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
@@ -313,6 +327,14 @@ jobs:
 
         printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
         cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
+
+        PSQLRC=oracle-psqlrc
+        export PSQLRC
+        echo "
+          \set QUIET on
+          \set ON_ERROR_STOP on
+          set client_min_messages = error;
+        " > "${PSQLRC}"
 
         .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh restricted-repro.sql &> repro_result.txt
 

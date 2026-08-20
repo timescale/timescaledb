@@ -26,6 +26,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost TO 0;
+SET timescaledb.enable_deferred_chunk_scan TO false;
 EXPLAIN (buffers off, costs off) SELECT first(i, j) FROM "test";
 --- QUERY PLAN ---
  Finalize Aggregate
