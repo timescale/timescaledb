@@ -79,6 +79,9 @@ static SortInfo build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo
 
 static Bitmapset *find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info);
 
+static EquivalenceMember *ts_find_highest_order_em_for_rel(EquivalenceClass *ec,
+														   const CompressionInfo *info);
+
 static EquivalenceClass *
 append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortInfo *sort_info,
 					 Var *var, Oid sortop, bool nulls_first)
@@ -296,8 +299,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
 			{
 				pk = lfirst(lc);
-				EquivalenceMember *chunk_em = ts_find_em_for_rel(pk->pk_eclass, info->chunk_rel);
-
+				EquivalenceMember *chunk_em = ts_find_highest_order_em_for_rel(pk->pk_eclass, info);
 				Assert(chunk_em);
 				expr = chunk_em->em_expr;
 				/*
@@ -2289,6 +2291,7 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		(TimescaleDBPrivate *) info->compressed_rel->fdw_private;
 	Assert(compressed_fdw_private != NULL);
 
+	bool found = false;
 	EquivalenceMember *cur_em;
 #if PG18_GE
 	/* Use specialized iterator to include child ems.
@@ -2310,7 +2313,6 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		Expr *child_expr;
 		Relids new_relids;
 		Var *var;
-		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
 		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
 		 * uncompressed chunk */
@@ -2415,11 +2417,10 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 			 */
 			compressed_fdw_private->compressed_ec_em_pairs =
 				lappend(compressed_fdw_private->compressed_ec_em_pairs, list_make2(cur_ec, em));
-
-			return true;
+			found = true;
 		}
 	}
-	return false;
+	return found;
 }
 
 static void
@@ -3109,6 +3110,72 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 	return true;
 }
 
+/* Choose equivalent expression higher in the compressed index sort order,
+ * i.e. appearing the earliest in segmentby or orderby,
+ * to deterministically store the best sorting possibilities in SortInfo.
+ */
+static EquivalenceMember *
+ts_find_highest_order_em_for_rel(EquivalenceClass *ec, const CompressionInfo *info)
+{
+	List *emembers = ts_find_em_for_rel(ec, info->chunk_rel);
+	if (!emembers)
+	{
+		return NULL;
+	}
+	EquivalenceMember *result = (EquivalenceMember *) linitial(emembers);
+	if (list_length(emembers) == 1)
+	{
+		return result;
+	}
+
+	/* have several equivalencies, need to choose the one with highest order */
+	/* Start with index beyond sorted columns */
+	int sort_idx = info->num_segmentby_columns + info->num_orderby_columns + 1;
+	int current_idx;
+	for (int i = 0; i < list_length(emembers); i++)
+	{
+		EquivalenceMember *chunk_em = list_nth(emembers, i);
+		if (!chunk_em)
+		{
+			continue;
+		}
+		Node *node = strip_implicit_coercions((Node *) chunk_em->em_expr);
+
+		if (node == NULL || !IsA(node, Var))
+		{
+			continue;
+		}
+		Var *var = castNode(Var, node);
+
+		if (var->varattno <= 0)
+		{
+			continue;
+		}
+
+		char *column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
+		current_idx = ts_array_position(info->settings->fd.segmentby, column_name);
+		if (!current_idx)
+		{
+			current_idx = ts_array_position(info->settings->fd.orderby, column_name);
+			if (!current_idx)
+			{
+				current_idx = info->num_segmentby_columns + info->num_orderby_columns + 1;
+			}
+			else
+			{
+				current_idx += info->num_segmentby_columns;
+			}
+		}
+		if (current_idx < sort_idx)
+		{
+			sort_idx = current_idx;
+			result = chunk_em;
+		}
+	}
+
+	return result;
+}
+
 /*
  * Check if we can push down the sort below the ColumnarScan node and fill
  * SortInfo accordingly
@@ -3155,8 +3222,12 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		Expr *em_expr = NULL;
 		if (!ec->ec_has_volatile)
 		{
-			em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, compression_info->chunk_rel);
-
+			EquivalenceMember *chunk_em =
+				ts_find_highest_order_em_for_rel(pk->pk_eclass, compression_info);
+			if (chunk_em)
+			{
+				em_expr = chunk_em->em_expr;
+			}
 			/*
 			 * We can't sort the ColumnarScan on a set-returning function. It is
 			 * expanded by a ProjectSet node above the scan, so treat it as no
