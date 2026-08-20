@@ -191,37 +191,6 @@ ts_cagg_tenant_tracking_insert_end(CaggTenantTrackingInserter *inserter)
 	pfree(inserter);
 }
 
-/*
- * Insert the "invalid" marker row <null, null, null, seqnum>, signalling that
- * tenant tracking for this seqnum is incomplete and the refresh must fall back
- * to the full invalidation log.
- */
-TSDLLEXPORT void
-ts_cagg_tenant_tracking_insert_invalid_marker(int32 hypertable_id, int32 seqnum)
-{
-	Catalog *catalog = ts_catalog_get();
-	Relation rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_TENANT_TRACKING),
-							  RowExclusiveLock);
-	TupleDesc desc = RelationGetDescr(rel);
-	Datum values[Natts_continuous_aggs_tenant_tracking] = { 0 };
-	bool nulls[Natts_continuous_aggs_tenant_tracking] = { false };
-	CatalogSecurityContext sec_ctx;
-
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_hypertable_id)] =
-		Int32GetDatum(hypertable_id);
-	nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_tenant_id)] = true;
-	nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_min_timestamp)] = true;
-	nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_max_timestamp)] = true;
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_tenant_tracking_seqnum)] =
-		Int32GetDatum(seqnum);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
-
-	table_close(rel, NoLock);
-}
-
 TSDLLEXPORT bool
 ts_cagg_tenant_tracking_exists(int32 hypertable_id, int32 seqnum)
 {
@@ -246,16 +215,11 @@ ts_cagg_tenant_tracking_exists(int32 hypertable_id, int32 seqnum)
 
 	ts_scanner_foreach(&iterator)
 	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool isnull;
-
-		/* A real tracking row has a non-NULL tenant_id; invalid markers do not count. */
-		slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_tenant_id, &isnull);
-		if (!isnull)
-		{
-			found = true;
-			break;
-		}
+		/* Any tracking row for this seqnum means refresh recorded tenant info
+		 * during the last flush. An invalid generation writes no rows,
+		 * so its seqnum has none and the refresh falls back to the full log. */
+		found = true;
+		break;
 	}
 	ts_scan_iterator_close(&iterator);
 
@@ -279,4 +243,65 @@ ts_cagg_tenant_tracking_delete_by_hypertable_id(int32 hypertable_id)
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 	ts_scan_iterator_close(&iterator);
+}
+
+/*
+ * Delete every tracking row of one (hypertable, seqnum) pair, without advancing
+ * the command counter (mirrors ts_cagg_tenant_tracking_insert_only). A caller
+ * reclaiming several seqnums publishes once when it is done.
+ */
+TSDLLEXPORT void
+ts_cagg_tenant_tracking_delete_by_seqnum_only(int32 hypertable_id, int32 seqnum)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_TENANT_TRACKING,
+													RowExclusiveLock,
+													CurrentMemoryContext);
+
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_aggs_tenant_tracking_idx_seqnum,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(seqnum));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
+/*
+ * Highest seqnum among a hypertable's tenant-tracking rows, or 0 if it has none.
+ *
+ * The index is (hypertable_id, seqnum), so a backward scan on the hypertable_id
+ * equality returns the largest seqnum first -- take it and stop (limit 1).
+ * seqnum is NOT NULL here, so the first row is the true max.
+ */
+TSDLLEXPORT int32
+ts_cagg_tenant_tracking_max_seqnum(int32 hypertable_id)
+{
+	int32 max_seqnum = 0;
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_TENANT_TRACKING,
+													AccessShareLock,
+													CurrentMemoryContext);
+	/*init_scan_by_hypertable_id specifies the index used, which is (hypertable_id, seqnum) */
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	iterator.ctx.scandirection = BackwardScanDirection;
+	iterator.ctx.limit = 1;
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		Datum datum = slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_seqnum, &isnull);
+
+		Assert(!isnull); /* seqnum is NOT NULL in this catalog */
+		max_seqnum = DatumGetInt32(datum);
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return max_seqnum;
 }

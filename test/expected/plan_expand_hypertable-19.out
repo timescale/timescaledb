@@ -2262,6 +2262,15 @@ no transformation
          ->  Seq Scan on _hyper_1_15_chunk
                Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
 
+\qecho user-defined function named time_bucket should not trigger internal error
+user-defined function named time_bucket should not trigger internal error
+CREATE FUNCTION time_bucket(int, text) RETURNS text AS $$ BEGIN RETURN left($2, $1); END $$ LANGUAGE plpgsql;
+SELECT count(*) FROM hyper WHERE time_bucket(1, 'foo') < 'z';
+ count 
+-------
+  1002
+
+DROP FUNCTION time_bucket(int, text);
 \qecho exclude chunks based on time column with partitioning function. This
 exclude chunks based on time column with partitioning function. This
 \qecho transparently applies the time partitioning function on the time

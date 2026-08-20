@@ -24,6 +24,7 @@
 #include "scan_iterator.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
 #include "with_clause/alter_table_with_clause.h"
 #include "with_clause/create_materialized_view_with_clause.h"
 
@@ -77,10 +78,137 @@ cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 	ts_scan_iterator_close(&iterator);
 }
 
+static void
+cagg_update_granular_refresh_enabled(ContinuousAgg *agg, bool granular_refresh_enabled)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_PKEY);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_agg_pkey_mat_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(agg->data.mat_hypertable_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool nulls[Natts_continuous_agg];
+		Datum values[Natts_continuous_agg];
+		bool doReplace[Natts_continuous_agg] = { false };
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		HeapTuple new_tuple;
+		TupleDesc tupdesc = ts_scan_iterator_tupledesc(&iterator);
+
+		heap_deform_tuple(tuple, tupdesc, values, nulls);
+
+		doReplace[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] = true;
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_granular_refresh_enabled)] =
+			BoolGetDatum(granular_refresh_enabled);
+
+		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
+
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+		{
+			heap_freetuple(tuple);
+		}
+
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
+/*
+ * Validate that granular refresh can be enabled for this continuous aggregate.
+ * Granular refresh reuses the configuration on the raw hypertable, so that
+ * hypertable must have a granular_refresh_column configured, and that column
+ * must be one of the continuous aggregate's grouping columns.
+ */
+static void
+validate_granular_refresh_enable(ContinuousAgg *agg, Hypertable *mat_ht)
+{
+	FormData_hypertable_cagg_settings settings;
+
+	if (!ts_hypertable_cagg_settings_get(agg->data.raw_hypertable_id, &settings))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("granular refresh is not configured on the hypertable"),
+				 errhint("Configure granular refresh on the hypertable first using "
+						 "ALTER TABLE ... SET (timescaledb.granular_refresh_column = ...).")));
+	}
+
+	const char *refresh_column = NameStr(settings.granular_refresh_column);
+	List *grp_colnames = cagg_find_groupingcols(agg, mat_ht);
+	bool found = false;
+	ListCell *lc;
+
+	/* TODO: Column aliases are rejected even if they are one of the grouping columns */
+	foreach (lc, grp_colnames)
+	{
+		if (strcmp((char *) lfirst(lc), refresh_column) == 0)
+		{
+			found = true;
+			break;
+		}
+	}
+
+	if (!found)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("granular refresh column \"%s\" is not a grouping column of the "
+						"continuous aggregate",
+						refresh_column),
+				 errhint("The continuous aggregate must group by the granular refresh column.")));
+	}
+
+	/*
+	 * If we turns on granular refresh for this continuous aggregate, ensure that no other
+	 * continuous aggregate on the same raw hypertable has granular refresh enabled.
+	 * For now we only support one continuous aggregate with granular refresh enabled
+	 * per raw hypertable.
+	 */
+	List *caggs = ts_continuous_aggs_find_by_raw_table_id(agg->data.raw_hypertable_id);
+
+	foreach (lc, caggs)
+	{
+		const ContinuousAgg *other = lfirst(lc);
+
+		if (other->data.mat_hypertable_id == agg->data.mat_hypertable_id)
+		{
+			continue;
+		}
+
+		if (other->data.granular_refresh_enabled)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("granular refresh is already enabled for continuous aggregate \"%s\"",
+							NameStr(other->data.user_view_name)),
+					 errdetail("A hypertable can have at most one continuous aggregate with "
+							   "granular refresh enabled.")));
+		}
+	}
+
+	list_free(caggs);
+}
+
+/*
+ * ALTER MATERIALIZED VIEW <cagg> SET (timescaledb.enable_granular_refresh = true)
+ *
+ * Enables granular refresh for a continuous aggregate that already opted in
+ * its raw hypertable via ALTER TABLE ... SET (timescaledb.granular_refresh_column = ...).
+ * Only enabling is supported: disabling is not.
+ */
 void
 continuous_agg_set_granular_refresh_enabled(ContinuousAgg *agg, bool enabled)
 {
-	/* Only enabling is supported for now */
 	if (!enabled)
 	{
 		ereport(ERROR,
@@ -89,11 +217,18 @@ continuous_agg_set_granular_refresh_enabled(ContinuousAgg *agg, bool enabled)
 						"supported")));
 	}
 
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("granular refresh is not implemented yet"),
-			 errhint("Granular refresh of continuous aggregates is a feature under "
-					 "development.")));
+	if (agg->data.granular_refresh_enabled)
+	{
+		return;
+	}
+
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+	Assert(mat_ht != NULL);
+
+	validate_granular_refresh_enable(agg, mat_ht);
+	cagg_update_granular_refresh_enabled(agg, true);
+	ts_cache_release(&hcache);
 }
 
 /* get the compression parameters for cagg. The parameters are

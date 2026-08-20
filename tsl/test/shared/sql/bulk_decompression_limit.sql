@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timescaledb.enable_deferred_chunk_scan TO off;
+
 -- Test the behavior of bulk decompression in various queries with small LIMIT.
 -- Eventually we expect the row-by-row decompression to be preferred in some
 -- queries, but at the moment this is not implemented.

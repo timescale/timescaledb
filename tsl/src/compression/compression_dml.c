@@ -1389,10 +1389,23 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 				int64 batch_max =
 					ts_time_value_to_internal(max_time_datum, invalidation_ctx->time_type_oid);
 
+				/*
+				 * The batch is dropped without being decompressed, so the
+				 * per-row tenant values never materialize and this range goes
+				 * in without tenant coverage -- the refresh has to fall back to
+				 * a full one for it.
+				 *
+				 * TODO: when the tenant tracking column is a segmentby column
+				 * every row in the batch shares one tenant value, which is
+				 * available here in decompressor.compressed_datums.  Record
+				 * (tenant, batch_min, batch_max) in that case and keep the
+				 * granular refresh.
+				 */
 				continuous_agg_invalidate_range(invalidation_ctx->hypertable_id,
 												invalidation_ctx->chunk_relid,
 												batch_min,
-												batch_max);
+												batch_max,
+												true /* tenants_unknown */);
 			}
 		}
 		else

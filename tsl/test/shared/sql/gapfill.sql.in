@@ -921,6 +921,13 @@ SELECT
 FROM (VALUES (0),(2),(5)) v(time)
 GROUP BY 1;
 
+-- test window function with aggregate of constant
+SELECT
+  time_bucket_gapfill(1,time,0,5),
+  first_value(min(1.0)) OVER ()
+FROM (VALUES (0),(2),(5)) v(time)
+GROUP BY 1;
+
 -- test window functions with PARTITION BY
 SELECT
   time_bucket_gapfill(1,time,0,5) as time,

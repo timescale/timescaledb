@@ -71,6 +71,16 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
+if(TMP_ENABLE_GRANULAR_REFRESH_TESTS AND CMAKE_BUILD_TYPE MATCHES Debug)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_granular_refresh.spec
+    cagg_granular_refresh_cleanup_races.spec
+    cagg_granular_refresh_seqnum_race.spec
+    cagg_granular_refresh_precommit_abort.spec)
+endif()
+
 # need to generate MODULE name for the .spec files
 foreach(TEMP_FILE ${TEST_TEMPLATES_MODULE})
   get_filename_component(TEMPLATE ${TEMP_FILE} NAME_WE)

@@ -71,6 +71,8 @@
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_tenant_tracking.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
 #include "ts_catalog/metadata.h"
 #include "utils.h"
 
@@ -670,6 +672,12 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	 * hypertable
 	 */
 	ts_chunk_column_stats_delete_by_hypertable_id(hypertable_id);
+
+	/* Also remove the granular refresh settings and tracking rows, if any. The
+	 * FK cascades do not apply here since catalog tuples are deleted directly
+	 * via the heap. */
+	ts_hypertable_cagg_settings_delete(hypertable_id);
+	ts_cagg_tenant_tracking_delete_by_hypertable_id(hypertable_id);
 
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
@@ -1287,6 +1295,14 @@ bool
 ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode)
 {
 	return find_inheritance_children(table_relid, lockmode) != NIL;
+}
+
+/* True when the hypertable has a tiered (OSM) chunk with a non-contiguous range. */
+bool
+ts_hypertable_has_noncontiguous_osm_chunk(const Hypertable *ht)
+{
+	return ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID &&
+		   ts_flags_are_set_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 }
 
 static void
