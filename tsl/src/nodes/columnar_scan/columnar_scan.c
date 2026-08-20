@@ -22,6 +22,7 @@
 #include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/selfuncs.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 

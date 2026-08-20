@@ -36,7 +36,8 @@
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
-#include "plancat.h"
+
+#include "import/optimizer/plancat.h"
 
 /*
  * Copied verbatim from build_index_tlist() in
