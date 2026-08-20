@@ -542,18 +542,19 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 
 				/*
 				 * check arguments past first argument dont have Vars
+				 * or aggregates
 				 */
 				for (lc_arg =
 						 lnext(context.call.window->args, list_head(context.call.window->args));
 					 lc_arg != NULL;
 					 lc_arg = lnext(context.call.window->args, lc_arg))
 				{
-					if (contain_var_clause(lfirst(lc_arg)))
+					if (contain_var_clause(lfirst(lc_arg)) || contain_agg_clause(lfirst(lc_arg)))
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("window functions with multiple column "
-										"references not supported")));
+								 errmsg("window function arguments after the first must be "
+										"constants")));
 					}
 				}
 
@@ -892,22 +893,25 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 						else if (context.call.window->args != NIL)
 						{
 							ListCell *lc_arg;
+
 							if (list_length(context.call.window->args) > 1)
 							{
 								/*
-								 * check arguments past first argument dont have Vars
+								 * check arguments past first argument dont
+								 * have Vars or Aggregates
 								 */
 								for (lc_arg = lnext(context.call.window->args,
 													list_head(context.call.window->args));
 									 lc_arg != NULL;
 									 lc_arg = lnext(context.call.window->args, lc_arg))
 								{
-									if (contain_var_clause(lfirst(lc_arg)))
+									if (contain_var_clause(lfirst(lc_arg)) ||
+										contain_agg_clause(lfirst(lc_arg)))
 									{
 										ereport(ERROR,
 												(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-												 errmsg("window functions with multiple column "
-														"references not supported")));
+												 errmsg("window function arguments after the first "
+														"must be constants")));
 									}
 								}
 							}
