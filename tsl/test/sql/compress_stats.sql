@@ -154,3 +154,6 @@ SELECT * FROM observ; -- see view definition above
 DROP VIEW observ;
 DROP VIEW observ_main_view;
 DROP TABLE t;
+
+-- Dropping the hypertable also removes the statistics of its chunks
+SELECT count(*) FROM _timescaledb_functions.chunk_statistics();
