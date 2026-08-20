@@ -13,6 +13,7 @@ create function stable_lower(x text) returns text as 'lower' language internal s
 -- a lower() function that is volatile
 create function volatile_lower(x text) returns text as 'lower' language internal volatile;
 set max_parallel_workers_per_gather = 0;
+set enable_material = 0;
 -- On PG18 the btree indexes have support for scalar array operations, which
 -- leads to different query plans. We don't care about index scan in particular
 -- in this test, so switch it off to avoid versioned references.
@@ -702,90 +703,84 @@ with arrays as (select array[segmentby] a from saop group by segmentby order by 
 select * from saop, arrays where segmentby = any(a);
 --- QUERY PLAN ---
  Nested Loop (actual rows=43480.00 loops=1)
-   Join Filter: (saop.segmentby = ANY (arrays.a))
+   Join Filter: (saop.segmentby = ANY ((ARRAY[saop_1.segmentby])))
    Rows Removed by Join Filter: 956530
-   ->  Append (actual rows=100001.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=50001.00 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=69.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=50000.00 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=69.00 loops=1)
-   ->  Materialize (actual rows=10.00 loops=100001)
-         ->  Subquery Scan on arrays (actual rows=10.00 loops=1)
-               ->  Limit (actual rows=10.00 loops=1)
-                     ->  Sort (actual rows=10.00 loops=1)
-                           Sort Key: saop_1.segmentby
-                           Sort Method: top-N heapsort 
-                           ->  Finalize HashAggregate (actual rows=23.00 loops=1)
-                                 Group Key: saop_1.segmentby
-                                 ->  Append (actual rows=46.00 loops=1)
-                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
-                                             Group Key: segmentby
-                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
-                                                   ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1 (actual rows=69.00 loops=1)
-                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
-                                             Group Key: segmentby
-                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
-                                                   ->  Seq Scan on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1 (actual rows=69.00 loops=1)
+   ->  Limit (actual rows=10.00 loops=1)
+         ->  Sort (actual rows=10.00 loops=1)
+               Sort Key: saop_1.segmentby
+               Sort Method: top-N heapsort 
+               ->  Finalize HashAggregate (actual rows=23.00 loops=1)
+                     Group Key: saop_1.segmentby
+                     ->  Append (actual rows=46.00 loops=1)
+                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: segmentby
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
+                                       ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1 (actual rows=69.00 loops=1)
+                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: segmentby
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
+                                       ->  Seq Scan on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1 (actual rows=69.00 loops=1)
+   ->  Append (actual rows=100001.00 loops=10)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=50001.00 loops=10)
+               ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=69.00 loops=10)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=50000.00 loops=10)
+               ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=69.00 loops=10)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where with_minmax = any(a);
 --- QUERY PLAN ---
  Nested Loop (actual rows=34482.00 loops=1)
-   Join Filter: (saop.with_minmax = ANY (arrays.a))
+   Join Filter: (saop.with_minmax = ANY ((ARRAY[saop_1.segmentby])))
    Rows Removed by Join Filter: 965528
-   ->  Append (actual rows=100001.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=50001.00 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=69.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=50000.00 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=69.00 loops=1)
-   ->  Materialize (actual rows=10.00 loops=100001)
-         ->  Subquery Scan on arrays (actual rows=10.00 loops=1)
-               ->  Limit (actual rows=10.00 loops=1)
-                     ->  Sort (actual rows=10.00 loops=1)
-                           Sort Key: saop_1.segmentby
-                           Sort Method: top-N heapsort 
-                           ->  Finalize HashAggregate (actual rows=23.00 loops=1)
-                                 Group Key: saop_1.segmentby
-                                 ->  Append (actual rows=46.00 loops=1)
-                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
-                                             Group Key: segmentby
-                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
-                                                   ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1 (actual rows=69.00 loops=1)
-                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
-                                             Group Key: segmentby
-                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
-                                                   ->  Seq Scan on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1 (actual rows=69.00 loops=1)
+   ->  Limit (actual rows=10.00 loops=1)
+         ->  Sort (actual rows=10.00 loops=1)
+               Sort Key: saop_1.segmentby
+               Sort Method: top-N heapsort 
+               ->  Finalize HashAggregate (actual rows=23.00 loops=1)
+                     Group Key: saop_1.segmentby
+                     ->  Append (actual rows=46.00 loops=1)
+                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: segmentby
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
+                                       ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1 (actual rows=69.00 loops=1)
+                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: segmentby
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
+                                       ->  Seq Scan on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1 (actual rows=69.00 loops=1)
+   ->  Append (actual rows=100001.00 loops=10)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=50001.00 loops=10)
+               ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=69.00 loops=10)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=50000.00 loops=10)
+               ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=69.00 loops=10)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where with_bloom = any(a);
 --- QUERY PLAN ---
  Nested Loop (actual rows=474.00 loops=1)
-   Join Filter: (saop.with_bloom = ANY (arrays.a))
+   Join Filter: (saop.with_bloom = ANY ((ARRAY[saop_1.segmentby])))
    Rows Removed by Join Filter: 999536
-   ->  Append (actual rows=100001.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=50001.00 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=69.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=50000.00 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=69.00 loops=1)
-   ->  Materialize (actual rows=10.00 loops=100001)
-         ->  Subquery Scan on arrays (actual rows=10.00 loops=1)
-               ->  Limit (actual rows=10.00 loops=1)
-                     ->  Sort (actual rows=10.00 loops=1)
-                           Sort Key: saop_1.segmentby
-                           Sort Method: top-N heapsort 
-                           ->  Finalize HashAggregate (actual rows=23.00 loops=1)
-                                 Group Key: saop_1.segmentby
-                                 ->  Append (actual rows=46.00 loops=1)
-                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
-                                             Group Key: segmentby
-                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
-                                                   ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1 (actual rows=69.00 loops=1)
-                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
-                                             Group Key: segmentby
-                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
-                                                   ->  Seq Scan on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1 (actual rows=69.00 loops=1)
+   ->  Limit (actual rows=10.00 loops=1)
+         ->  Sort (actual rows=10.00 loops=1)
+               Sort Key: saop_1.segmentby
+               Sort Method: top-N heapsort 
+               ->  Finalize HashAggregate (actual rows=23.00 loops=1)
+                     Group Key: saop_1.segmentby
+                     ->  Append (actual rows=46.00 loops=1)
+                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: segmentby
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
+                                       ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1 (actual rows=69.00 loops=1)
+                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: segmentby
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
+                                       ->  Seq Scan on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1 (actual rows=69.00 loops=1)
+   ->  Append (actual rows=100001.00 loops=10)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=50001.00 loops=10)
+               ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=69.00 loops=10)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=50000.00 loops=10)
+               ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=69.00 loops=10)
 
 -- Array parameter of prepared statements.
 prepare array_param as select * from saop where with_bloom = any($1);
@@ -914,6 +909,7 @@ select * from saop where segmentby = '3';
          ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=69.00 loops=1)
 
 reset timescaledb.enable_columnar_scan_filter_pushdown;
+reset enable_material;
 reset max_parallel_workers_per_gather;
 reset enable_indexscan;
 reset enable_bitmapscan;
