@@ -252,17 +252,20 @@ SET enable_indexscan = OFF;
    ->  Merge Left Join
          Merge Cond: (test.i = _hyper_1_1_chunk_1.i)
          ->  Limit
-               ->  Result
-                     One-Time Filter: (length(version()) > 0)
-                     ->  Custom Scan (ChunkAppend) on test
-                           Order: test.i
-                           Chunks excluded during startup: 0
+               ->  Gather Merge
+                     Workers Planned: 2
+                     ->  Sort
+                           Sort Key: test.i
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Index Scan Backward using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk
-                           ->  Result
-                                 One-Time Filter: (length(version()) > 0)
-                                 ->  Index Scan Backward using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk
+                                 ->  Parallel Custom Scan (ChunkAppend) on test
+                                       Chunks excluded during startup: 0
+                                       ->  Result
+                                             One-Time Filter: (length(version()) > 0)
+                                             ->  Parallel Seq Scan on _hyper_1_1_chunk
+                                       ->  Result
+                                             One-Time Filter: (length(version()) > 0)
+                                             ->  Parallel Seq Scan on _hyper_1_2_chunk
          ->  Materialize
                ->  Limit
                      ->  Gather Merge
