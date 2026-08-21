@@ -1257,6 +1257,7 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 
 	tsl_compressor_close(old_compressor, old_bulk_writer);
 
+	ts_compressed_relation_drop_dependency(old_compressed_relid);
 	ts_chunk_drop_by_relid(old_compressed_relid, DROP_RESTRICT, -1);
 
 	tuplesort_performsort(new_compressor.sort_state);

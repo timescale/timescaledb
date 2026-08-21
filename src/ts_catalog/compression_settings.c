@@ -4,12 +4,18 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/xact.h>
+#include <catalog/dependency.h>
+#include <catalog/objectaddress.h>
+#include <catalog/pg_class.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_type.h>
 #include <parser/parse_func.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 
+#include "export.h"
 #include "foreach_ptr.h"
 #include "jsonb_utils.h"
 #include "scan_iterator.h"
@@ -495,6 +501,94 @@ ts_relation_is_compressed_chunk_relation(Oid compress_relid)
 	ts_scan_iterator_close(&iterator);
 
 	return found;
+}
+
+/*
+ * Link the compressed relation to its chunk in pg_depend. Replaces any
+ * previous link.
+ */
+TSDLLEXPORT void
+ts_compressed_relation_record_dependency(Oid relid, Oid compress_relid)
+{
+	ObjectAddress compressed, chunk;
+
+	Assert(OidIsValid(relid) && OidIsValid(compress_relid));
+
+	ts_compressed_relation_drop_dependency(compress_relid);
+
+	ObjectAddressSet(compressed, RelationRelationId, compress_relid);
+	ObjectAddressSet(chunk, RelationRelationId, relid);
+	recordDependencyOn(&compressed, &chunk, DEPENDENCY_INTERNAL);
+}
+
+/*
+ * Record the links for all compressed relations in the catalog. Returns the
+ * number of links recorded.
+ */
+TS_FUNCTION_INFO_V1(ts_compressed_relation_restore_dependencies);
+
+Datum
+ts_compressed_relation_restore_dependencies(PG_FUNCTION_ARGS)
+{
+	List *relids = NIL;
+	List *compress_relids = NIL;
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_SETTINGS, AccessShareLock, CurrentMemoryContext);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		Datum compress_relid =
+			slot_getattr(ti->slot, Anum_compression_settings_compress_relid, &isnull);
+
+		/* Settings of a hypertable have no compressed relation */
+		if (isnull)
+		{
+			continue;
+		}
+
+		Datum relid = slot_getattr(ti->slot, Anum_compression_settings_relid, &isnull);
+		Assert(!isnull);
+
+		/* Skip settings left behind by a relation that is already gone */
+		if (!SearchSysCacheExists1(RELOID, relid) || !SearchSysCacheExists1(RELOID, compress_relid))
+		{
+			continue;
+		}
+
+		relids = lappend_oid(relids, DatumGetObjectId(relid));
+		compress_relids = lappend_oid(compress_relids, DatumGetObjectId(compress_relid));
+	}
+
+	/* Record the links after the scan so we don't modify catalogs mid-scan */
+	ListCell *lc1, *lc2;
+	forboth (lc1, relids, lc2, compress_relids)
+	{
+		ts_compressed_relation_record_dependency(lfirst_oid(lc1), lfirst_oid(lc2));
+	}
+
+	PG_RETURN_INT32(list_length(relids));
+}
+
+/*
+ * Remove the link so the compressed relation can be dropped on its own.
+ */
+TSDLLEXPORT void
+ts_compressed_relation_drop_dependency(Oid compress_relid)
+{
+	Assert(OidIsValid(compress_relid));
+
+	long deleted = deleteDependencyRecordsForClass(RelationRelationId,
+												   compress_relid,
+												   RelationRelationId,
+												   DEPENDENCY_INTERNAL);
+
+	/* Make the delete visible to the drop that follows */
+	if (deleted > 0)
+	{
+		CommandCounterIncrement();
+	}
 }
 
 /*

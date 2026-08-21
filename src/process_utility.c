@@ -1653,6 +1653,8 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	/* Called for the compressed relation as well, which is linked to its chunk */
+	ts_compressed_relation_drop_dependency(chunk_relid);
 	ts_compression_settings_delete(chunk_relid);
 	ts_chunk_rewrite_delete(chunk_relid, false);
 	performDeletion(&objaddr, stmt->behavior, 0);
@@ -1712,6 +1714,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 				if (OidIsValid(compressed_relid))
 				{
 					LockRelationOid(compressed_relid, AccessExclusiveLock);
+					ts_compressed_relation_drop_dependency(compressed_relid);
 					ts_chunk_drop_by_relid(compressed_relid, stmt->behavior, DEBUG1);
 				}
 			}
