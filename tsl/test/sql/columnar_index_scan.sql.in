@@ -66,6 +66,41 @@ SET timescaledb.enable_columnarindexscan = on;
 -- compare optimized vs non-optimized results
 :DIFF_CMD
 
+-- ORDER BY/LIMIT should use ColumnarIndexScan without rewriting to an aggregate.
+\set PREFIX 'EXPLAIN (costs off)'
+SET timescaledb.enable_deferred_chunk_scan = off;
+SET timescaledb.enable_columnarindexscan = on;
+:PREFIX SELECT time FROM metrics ORDER BY time DESC LIMIT 1;
+:PREFIX SELECT time_bucket('1h',time) FROM metrics ORDER BY time DESC LIMIT 1;
+:PREFIX SELECT to_char(time, 'HH24:MI') FROM metrics ORDER BY time DESC LIMIT 1;
+:PREFIX SELECT to_char(time, 'HH24:MI') FROM metrics WHERE device = 'd1' AND sensor = 'B' ORDER BY time DESC LIMIT 1;
+:PREFIX SELECT time FROM metrics ORDER BY time ASC LIMIT 1;
+:PREFIX SELECT time_bucket('1h',time) FROM metrics ORDER BY time ASC LIMIT 1;
+:PREFIX SELECT to_char(time, 'HH24:MI') FROM metrics ORDER BY time ASC LIMIT 1;
+:PREFIX SELECT to_char(time, 'HH24:MI') FROM metrics WHERE device = 'd1' AND sensor = 'B' ORDER BY time ASC LIMIT 1;
+-- A filter on a compressed data column requires decompression/recheck.
+:PREFIX SELECT format('%s|%s|%s', device, sensor, to_char(time, 'HH24:MI')) AS "d1|B|00:30"
+FROM metrics WHERE value < 5 ORDER BY time DESC LIMIT 1;
+SET timescaledb.enable_columnarindexscan = off;
+SELECT to_char(time, 'HH24:MI') AS latest_time FROM metrics ORDER BY time DESC LIMIT 1 \gset
+\echo :latest_time
+SELECT format('%s|%s|%s', device, sensor, to_char(time, 'HH24:MI')) AS filtered_latest
+FROM metrics WHERE device = 'd1' AND sensor = 'B' ORDER BY time DESC LIMIT 1 \gset
+\echo :filtered_latest
+SELECT format('%s|%s|%s', device, sensor, to_char(time, 'HH24:MI')) AS compressed_filter_latest
+FROM metrics WHERE value < 5 ORDER BY time DESC LIMIT 1 \gset
+\echo :compressed_filter_latest
+SET timescaledb.enable_columnarindexscan = on;
+SELECT to_char(time, 'HH24:MI') AS latest_time FROM metrics ORDER BY time DESC LIMIT 1 \gset
+\echo :latest_time
+SELECT format('%s|%s|%s', device, sensor, to_char(time, 'HH24:MI')) AS filtered_latest
+FROM metrics WHERE device = 'd1' AND sensor = 'B' ORDER BY time DESC LIMIT 1 \gset
+\echo :filtered_latest
+SELECT format('%s|%s|%s', device, sensor, to_char(time, 'HH24:MI')) AS compressed_filter_latest
+FROM metrics WHERE value < 5 ORDER BY time DESC LIMIT 1 \gset
+\echo :compressed_filter_latest
+RESET timescaledb.enable_deferred_chunk_scan;
+
 -- make initial chunk partial
 INSERT INTO metrics VALUES
 ('2025-01-01 00:00:00 PST', 'd1', 'A', 1.0, 1.1, 11.0),
@@ -240,4 +275,3 @@ SET timescaledb.enable_columnarindexscan = on;
 
 -- compare optimized vs non-optimized results
 :DIFF_CMD
-

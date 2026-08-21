@@ -35,6 +35,7 @@
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
+#include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/qual_pushdown.h"
@@ -78,6 +79,7 @@ static SortInfo build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo
 							   const CompressionInfo *info, List *pathkeys);
 
 static Bitmapset *find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info);
+static bool is_var_notnull(const CompressionInfo *compression_info, Var *var);
 
 static EquivalenceClass *
 append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortInfo *sort_info,
@@ -1274,6 +1276,181 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	return sorted_path;
 }
 
+static bool
+columnar_index_scan_query_supported(PlannerInfo *root)
+{
+	Query *query = root->parse;
+
+	if (!ts_guc_enable_optimizations || !ts_guc_enable_columnarindexscan)
+	{
+		return false;
+	}
+
+	if (root->limit_tuples <= 0 || root->limit_tuples > 1)
+	{
+		return false;
+	}
+
+	if (query->commandType != CMD_SELECT || query->limitCount == NULL ||
+		query->limitOffset != NULL || query->hasAggs || query->groupClause || query->groupingSets ||
+		query->hasWindowFuncs || query->distinctClause || query->setOperations ||
+		query->havingQual || query->hasModifyingCTE || query->rowMarks || query->hasTargetSRFs)
+	{
+		return false;
+	}
+
+	if (query->sortClause == NIL || query->jointree == NULL ||
+		list_length(query->jointree->fromlist) != 1 ||
+		!IsA(linitial(query->jointree->fromlist), RangeTblRef))
+	{
+		return false;
+	}
+
+	if (query->limitOption != LIMIT_OPTION_COUNT)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+static AttrNumber
+columnar_index_scan_metadata_attno(const CompressionInfo *info, const SortInfo *sort_info, Var *var)
+{
+	if ((Index) var->varno != info->chunk_rel->relid || var->varattno <= 0)
+	{
+		return InvalidAttrNumber;
+	}
+
+	char *col_name = get_attname(info->chunk_rte->relid, var->varattno, false);
+	if (ts_array_is_member(info->settings->fd.segmentby, col_name))
+	{
+		return get_attnum(info->compressed_rte->relid, col_name);
+	}
+
+	int16 orderby_pos = ts_array_position(info->settings->fd.orderby, col_name);
+	if (orderby_pos == 0)
+	{
+		return InvalidAttrNumber;
+	}
+
+	/*
+	 * Min/max sparse metadata is enough to reconstruct the boundary value for
+	 * the first orderby column. For nullable orderby columns, NULL ordering can
+	 * make the row boundary differ from min/max, so stay conservative.
+	 */
+	if (orderby_sparse_kind(info->settings, orderby_pos) == ORDERBY_SPARSE_MINMAX &&
+		(orderby_pos != 1 || !is_var_notnull(info, var)))
+	{
+		return InvalidAttrNumber;
+	}
+
+	AttrNumber lower_attno;
+	AttrNumber upper_attno;
+	orderby_sparse_metadata_attnos(info->settings,
+								   info->compressed_rte->relid,
+								   orderby_pos,
+								   &lower_attno,
+								   &upper_attno);
+
+	bool first_in_compression_order = !sort_info->reverse;
+	bool orderby_desc = ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_pos);
+	return first_in_compression_order == orderby_desc ? upper_attno : lower_attno;
+}
+
+static bool
+columnar_index_scan_output_map(const CompressionInfo *info, const SortInfo *sort_info,
+							   List **output_map)
+{
+	Bitmapset *attrs_needed = NULL;
+	List *map = NIL;
+
+	pull_varattnos((Node *) info->chunk_rel->reltarget->exprs,
+				   info->chunk_rel->relid,
+				   &attrs_needed);
+
+	int bit = -1;
+	while ((bit = bms_next_member(attrs_needed, bit)) >= 0)
+	{
+		AttrNumber chunk_attno = bit + FirstLowInvalidHeapAttributeNumber;
+		if (chunk_attno <= 0)
+		{
+			return false;
+		}
+
+		Var var = { .xpr.type = T_Var, .varno = info->chunk_rel->relid, .varattno = chunk_attno };
+		AttrNumber compressed_attno = columnar_index_scan_metadata_attno(info, sort_info, &var);
+		if (compressed_attno == InvalidAttrNumber)
+		{
+			return false;
+		}
+
+		map = lappend_int(map, chunk_attno);
+		map = lappend_int(map, compressed_attno);
+	}
+
+	*output_map = map;
+	return true;
+}
+
+static Path *
+columnar_index_scan_compressed_path(PlannerInfo *root, RelOptInfo *compressed_rel,
+									Path *compressed_path, const SortInfo *sort_info,
+									double limit_tuples)
+{
+	if ((!sort_info->use_compressed_sort && !sort_info->use_batch_sorted_merge) ||
+		sort_info->required_compressed_pathkeys == NIL || compressed_path->parallel_workers > 0 ||
+		!bms_is_empty(PATH_REQ_OUTER(compressed_path)))
+	{
+		return NULL;
+	}
+
+	if (pathkeys_contained_in(sort_info->required_compressed_pathkeys, compressed_path->pathkeys))
+	{
+		return compressed_path;
+	}
+
+	return (Path *) create_sort_path(root,
+									 compressed_rel,
+									 compressed_path,
+									 sort_info->required_compressed_pathkeys,
+									 limit_tuples);
+}
+
+static Path *
+columnar_index_scan_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *compressed_path,
+						 const SortInfo *sort_info, const CompressionInfo *compression_info,
+						 bool all_quals_pushed_down, double limit_tuples)
+{
+	if (chunk_rel->baserestrictinfo != NIL && !all_quals_pushed_down)
+	{
+		return NULL;
+	}
+
+	List *metadata_output_map = NIL;
+	if (!columnar_index_scan_output_map(compression_info, sort_info, &metadata_output_map))
+	{
+		return NULL;
+	}
+
+	Path *metadata_compressed_path =
+		columnar_index_scan_compressed_path(root,
+											compression_info->compressed_rel,
+											compressed_path,
+											sort_info,
+											limit_tuples);
+	if (metadata_compressed_path == NULL)
+	{
+		return NULL;
+	}
+
+	return columnar_index_scan_path_create(metadata_compressed_path,
+										   chunk_rel,
+										   root->query_pathkeys,
+										   metadata_output_map,
+										   limit_tuples);
+}
+
 static List *build_on_single_compressed_path(
 	PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel, Path *compressed_path,
 	bool add_uncompressed_part, List *uncompressed_table_pathlist, const SortInfo *sort_info,
@@ -1698,6 +1875,21 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 
 	if (!add_uncompressed_part)
 	{
+		if (columnar_index_scan_query_supported(root))
+		{
+			Path *metadata_path = columnar_index_scan_path(root,
+														   chunk_rel,
+														   compressed_path,
+														   sort_info,
+														   compression_info,
+														   all_quals_pushed_down,
+														   root->limit_tuples);
+			if (metadata_path != NULL)
+			{
+				decompressed_paths = lappend(decompressed_paths, metadata_path);
+			}
+		}
+
 		/*
 		 * If the chunk has only the compressed part, we're done.
 		 */
