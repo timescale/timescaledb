@@ -1854,8 +1854,15 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	}
 
 	Relation index_rel = index_open(index_oid, lockmode);
+	/* Sort info (in particular each orderby column's ASC/DESC operator) must
+	 * come from new_settings: it is the only one of the two settings objects
+	 * guaranteed to reflect the orderby the caller just resolved (e.g. after
+	 * an ALTER TABLE ... SET (timescaledb.compress_orderby = ...) changed
+	 * direction). recompress_ctx's segmentby scankeys and firstlast index
+	 * attnos are unused on this path (perform_recompression() never reads
+	 * them), so passing new_settings here does not affect them. */
 	RecompressContext *recompress_ctx =
-		compress_chunk_populate_recompress_ctx(settings,
+		compress_chunk_populate_recompress_ctx(new_settings,
 											   uncompressed_chunk_rel,
 											   compressed_chunk_rel,
 											   index_rel,
