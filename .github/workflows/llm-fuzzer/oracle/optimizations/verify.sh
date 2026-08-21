@@ -17,8 +17,9 @@
 #
 # The output of an admissible repro script:
 #
-# Must be sufficiently ordered to prevent false positives (i.e. ORDER BY, no
-# ties).
+# Must be sufficiently ordered to prevent false positives: use ORDER BY, avoid
+# ties in output, avoid non-deterministic constructs like LIMIT without ORDER BY,
+# and so on. A stable divergence is still not a bug if the query is underdefined.
 #
 # Must not depend on floating point precision or numeric stability.
 #
