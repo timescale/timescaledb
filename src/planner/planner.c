@@ -1019,27 +1019,48 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
-	if (path->param_info != NULL && ordered)
+	if (!ts_guc_enable_chunk_append)
+	{
+		return false;
+	}
+
+	if ((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
+		bms_num_members(root->all_baserels) > 1)
 	{
 		/*
-		 * Ordered ChunkAppend might create MergeAppend path for individual
-		 * chunks when we have space partitioning or partial chunks. MergeAppend
-		 * paths cannot be parameterized. Refuse to use parameterized ordered
-		 * ChunkAppend altogether, because the more precise conditions are
-		 * difficult to check.
+		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved.
 		 */
 		return false;
 	}
 
-	if (
-		/*
-		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
-		 */
-		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
-		 bms_num_members(root->all_baserels) > 1) ||
-		!ts_guc_enable_chunk_append)
+	if (path->param_info != NULL)
 	{
-		return false;
+		if (ordered)
+		{
+			/*
+			 * Ordered ChunkAppend might create MergeAppend path for individual
+			 * chunks when we have space partitioning or partial chunks. MergeAppend
+			 * paths cannot be parameterized. Refuse to use parameterized ordered
+			 * ChunkAppend altogether, because the more precise conditions are
+			 * difficult to check.
+			 */
+			return false;
+		}
+
+		if (path->param_info->ppi_clauses != NIL)
+		{
+			/*
+			 * If we have any parameterized clauses, we can apply runtime chunk
+			 * exclusion.
+			 */
+			return true;
+		}
+
+		/*
+		 * The path can be parameterized but not have any parameterized clauses,
+		 * effectively if it's a cross join written as LATERAL. Check the other
+		 * conditions for chunk append in this case.
+		 */
 	}
 
 	switch (nodeTag(path))
