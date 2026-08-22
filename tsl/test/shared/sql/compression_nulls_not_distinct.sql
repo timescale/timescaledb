@@ -30,5 +30,20 @@ INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', 'd2', NULL, 1);
 -- should insert without error, no conflict
 INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', 'd2', 'l1', 1);
 
+-- test that this is correctly handled when using table scan
+-- see https://github.com/timescale/timescaledb/issues/10057
+SELECT count(compress_chunk(c)) FROM show_chunks('nulls_not_distinct') c;
+set timescaledb.enable_dml_decompression_tuple_filtering to off;
+
+-- should not insert a duplicate, conflict with existing (NULL, 'l1') row
+\set ON_ERROR_STOP 0
+INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', NULL, 'l1', 1);
+INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', 'd2', NULL, 1);
+\set ON_ERROR_STOP 1
+
+-- should insert without error, no conflict
+INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.15', 'd2', 'l1', 1);
+
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE nulls_not_distinct;
