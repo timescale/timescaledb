@@ -18,7 +18,7 @@
 
 #include "compat/compat.h"
 
-#include "createplan.h"
+#include "import/createplan.h"
 
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>

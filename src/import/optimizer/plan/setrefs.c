@@ -16,7 +16,7 @@
  */
 #include <postgres.h>
 
-#include "setrefs.h"
+#include "import/setrefs.h"
 
 #include <nodes/makefuncs.h>
 #include <optimizer/tlist.h>
