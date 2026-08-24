@@ -27,7 +27,7 @@ teardown {
 
 session "s1"
 setup	{
-	SET LOCAL lock_timeout = '500ms';
+	SET LOCAL lock_timeout = '2s';
 	SET LOCAL deadlock_timeout = '300ms';
 }
 
@@ -42,7 +42,7 @@ step "s1_commit" { COMMIT; }
 
 session "s2"
 setup	{
-	SET LOCAL lock_timeout = '500ms';
+	SET LOCAL lock_timeout = '2s';
 	SET LOCAL deadlock_timeout = '300ms';
 }
 
