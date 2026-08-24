@@ -26,11 +26,13 @@ static void
 ts_show_expression(Node *node, const char *qlabel, PlanState *planstate, List *ancestors,
 				   bool useprefix, ExplainState *es)
 {
-	List *context;
-	char *exprstr;
+	List	   *context;
+	char	   *exprstr;
 
 	/* Set up deparsing context */
-	context = set_deparse_context_plan(es->deparse_cxt, planstate->plan, ancestors);
+	context = set_deparse_context_plan(es->deparse_cxt,
+									   planstate->plan,
+									   ancestors);
 
 	/* Deparse the expression */
 	exprstr = deparse_expression(node, context, useprefix, false);
@@ -46,7 +48,7 @@ static void
 ts_show_qual(List *qual, const char *qlabel, PlanState *planstate, List *ancestors, bool useprefix,
 			 ExplainState *es)
 {
-	Node *node;
+	Node	   *node;
 
 	/* No work if empty qual */
 	if (qual == NIL)
@@ -66,7 +68,7 @@ void
 ts_show_scan_qual(List *qual, const char *qlabel, PlanState *planstate, List *ancestors,
 				  ExplainState *es)
 {
-	bool useprefix;
+	bool		useprefix;
 
 	useprefix = (IsA(planstate->plan, SubqueryScan) || es->verbose);
 	ts_show_qual(qual, qlabel, planstate, ancestors, useprefix, es);
@@ -80,8 +82,8 @@ ts_show_scan_qual(List *qual, const char *qlabel, PlanState *planstate, List *an
 void
 ts_show_instrumentation_count(const char *qlabel, int which, PlanState *planstate, ExplainState *es)
 {
-	double nfiltered;
-	double nloops;
+	double		nfiltered;
+	double		nloops;
 
 	if (!es->analyze || !planstate->instrument)
 		return;
