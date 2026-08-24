@@ -10,7 +10,7 @@ Below you will find some guidelines on how to import a function.
 
 * If you have to call a static function from Postgres unmodified, copy it here.
 
-* If you have to slightly modify a public Postgres function, copy it here and
+* If you have to slightly modify the logic of a public Postgres function, copy it here and
 rename it. Having two functions named the same but doing different things creates confusion.
 
 * The `.c` source file that contains a copy must have the same relative path to `src/import` as the Postgres
