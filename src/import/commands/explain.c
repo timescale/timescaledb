@@ -11,7 +11,7 @@
  * directory for a copy of the PostgreSQL License.
  */
 
-#include "ts_explain.h"
+#include "explain.h"
 
 #include <commands/explain.h>
 #include <nodes/makefuncs.h>

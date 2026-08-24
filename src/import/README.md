@@ -13,11 +13,15 @@ Below you will find some guidelines on how to import a function.
 * If you have to slightly modify a public Postgres function, copy it here and
 rename it. Having two functions named the same but doing different things creates confusion.
 
-* The file that contains a copy must have the same relative path to `src/import` as the Postgres
-file to the `src/backend`.
+* The `.c` source file that contains a copy must have the same relative path to `src/import` as the Postgres
+`.c` file to the `src/backend`.
 
 * When copying multiple functions from the same file, they must have the same
 relative order as in the Postgres file.
+
+* The header files in Postgres have different layout from the source files. Since
+they mostly contain just function declarations, it's not necessary to follow the
+precise Postgres names or relative paths for header files.
 
 * Do not introduce any formatting or linter differences to the copies. The files in this directory
 are excluded from additional linter checks at the CMake level.

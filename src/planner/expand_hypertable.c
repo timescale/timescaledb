@@ -61,7 +61,7 @@
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
 #include "import/planner.h"
-#include "import/ts_inherit.h"
+#include "import/optimizer/inherit.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 #include "time_utils.h"

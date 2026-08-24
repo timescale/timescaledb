@@ -43,7 +43,7 @@
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
-#include "heapswap.h"
+#include "cluster.h"
 
 /**
  * The code in this file is imported from PostgreSQL and slightly modified to:
