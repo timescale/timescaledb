@@ -1,0 +1,30 @@
+Sometimes we need to call some Postgres code in a way that is not accessible through its public interface.
+Often, we resort to making a copy of this Postgres code in our tree. The `src/import` directories
+are where most of this copied code lives. We actually use two import directories, one in the Apache and 
+one in the TSL part of the extension, depending on where the copied function is needed.
+Below you will find some guidelines on how to import a function.
+
+### How to Copy Functions from Postgres
+
+* Prefer not to copy functions at all, because this creates maintenance burden.
+
+* If you have to call a static function from Postgres unmodified, copy it here.
+
+* If you have to slightly modify a public Postgres function, copy it here and
+rename it. Having two functions named the same but doing different things creates confusion.
+
+* The file that contains a copy must have the same relative path to `src/import` as the Postgres
+file to the `src/backend`.
+
+* The files are added to build in `src/CMakeFiles.txt`, that is, one level above this directory,
+for some obscure CMake reasons.
+
+* When copying multiple functions from the same file, they must have the same
+relative order as in the Postgres file.
+
+* Do not introduce any formatting or linter differences to the copies. The files in this directory
+are excluded from additional linter checks at the CMake level.
+
+* You can mechanically compare this directory to the Postgres source by using a
+diff tool of your choice, for example, `meld pg/src/backend ts/src/import`. Follow the rules above to
+keep this comparison approach viable.
