@@ -478,10 +478,6 @@ SELECT * FROM test_segby ORDER BY time DESC NULLS LAST;
 :PREFIX
 SELECT * FROM test_segby ORDER BY time ASC NULLS FIRST;
 
--- Should not be optimized (using segmentby)
-:PREFIX
-SELECT * FROM test_segby ORDER BY segby, time;
-
 -- Tests for #9445: forbid BatchSortedMerge on nullable orderby columns with no firstlast index
 CREATE TABLE t(time int NOT NULL, device int, val int);
 SELECT create_hypertable('t', 'time', chunk_time_interval => 10000);
@@ -829,6 +825,17 @@ SELECT time, v
 FROM (VALUES (10), (20), (30)) a(dv),
      LATERAL (SELECT time, v FROM t2_noseg WHERE v = a.dv ORDER BY time DESC) b;
 
+-- BatchSortedMerge over multi-segment data
+-----------------------------------------------------
+
+-- Should be optimized (segmentby any direction + orderby)
+:PREFIX
+SELECT * FROM test_segby ORDER BY segby, time DESC;
+
+-- Should be optimized (segmentby any direction + orderby reversed)
+:PREFIX
+SELECT * FROM test_segby ORDER BY segby, time;
+
 drop table test1 cascade;
 drop table test2 cascade;
 drop table test_segby cascade;
@@ -841,3 +848,4 @@ RESET timescaledb.debug_require_batch_sorted_merge;
 
 RESET enable_seqscan;
 RESET enable_bitmapscan;
+RESET enable_indexscan;
