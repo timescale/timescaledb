@@ -16,9 +16,6 @@ rename it. Having two functions named the same but doing different things create
 * The file that contains a copy must have the same relative path to `src/import` as the Postgres
 file to the `src/backend`.
 
-* The files are added to build in `src/CMakeFiles.txt`, that is, one level above this directory,
-for some obscure CMake reasons.
-
 * When copying multiple functions from the same file, they must have the same
 relative order as in the Postgres file.
 
