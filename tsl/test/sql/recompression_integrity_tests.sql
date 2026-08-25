@@ -221,5 +221,21 @@ SELECT * FROM recomp_guc_test ORDER BY time, device;
 RESET timescaledb.enable_in_memory_recompression;
 DROP TABLE recomp_guc_test CASCADE;
 
+-- Test Case 7: Orderby direction change
+CREATE TABLE rideshare_trips(started_at int NOT NULL, vehicle_id int NOT NULL);
+SELECT create_hypertable('rideshare_trips', 'started_at');
+INSERT INTO rideshare_trips SELECT i, 0 FROM generate_series(0, 9) i;
+ALTER TABLE rideshare_trips SET (timescaledb.compress,
+                                 timescaledb.compress_orderby = 'started_at',
+                                 timescaledb.compress_segmentby = 'vehicle_id');
+SELECT compress_chunk(c) FROM show_chunks('rideshare_trips') c;
+
+ALTER TABLE rideshare_trips SET (timescaledb.compress_orderby = 'started_at DESC');
+SELECT compress_chunk(c, recompress => true) FROM show_chunks('rideshare_trips') c;
+
+-- Should return 9, 8, 7 on the first recompression, not after a second one
+SELECT started_at FROM rideshare_trips ORDER BY started_at DESC LIMIT 3;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
+DROP TABLE IF EXISTS rideshare_trips CASCADE;
 
 
