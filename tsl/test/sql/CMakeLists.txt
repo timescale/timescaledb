@@ -62,6 +62,7 @@ set(TEST_FILES
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_unordered.sql
+    compression_sorted_merge_segmentwise.sql
     compression_trigger.sql
     compression_uuid.sql
     create_table_with.sql
