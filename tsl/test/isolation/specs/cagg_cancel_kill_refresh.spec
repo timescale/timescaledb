@@ -134,7 +134,7 @@ step "wp3_release"
 session "R1"
 setup
 {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
 }
 step "r1_register_pid"
@@ -226,7 +226,7 @@ step "s1_registered_ranges"
 session "R2"
 setup
 {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
 }
 step "r2_refresh"

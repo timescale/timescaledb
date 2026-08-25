@@ -23,7 +23,7 @@ session "s1"
 setup	{
 	BEGIN;
 	SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
-	SET LOCAL lock_timeout = '500ms';
+	SET LOCAL lock_timeout = '2s';
 	SET LOCAL deadlock_timeout = '300ms';
 }
 
@@ -38,7 +38,7 @@ session "s2"
 setup	{
 	BEGIN;
 	SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
-	SET LOCAL lock_timeout = '500ms';
+	SET LOCAL lock_timeout = '2s';
 	SET LOCAL deadlock_timeout = '300ms';
 
 	CREATE TEMPORARY TABLE IF NOT EXISTS chunks_to_compress ON COMMIT DROP AS

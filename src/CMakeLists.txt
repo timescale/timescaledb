@@ -131,13 +131,14 @@ add_subdirectory(ts_stats)
 # file properties if the target was added in the same directory, so just move it
 # all here.
 set(IMPORTED_SOURCES
-    import/allpaths.c
-    import/createplan.c
+    import/utils/adt/selfuncs.c
+    import/optimizer/path/allpaths.c
+    import/optimizer/plan/createplan.c
     import/heapswap.c
-    import/list.c
-    import/plancat.c
+    import/nodes/list.c
+    import/optimizer/util/plancat.c
     import/planner.c
-    import/setrefs.c
+    import/optimizer/plan/setrefs.c
     import/ts_explain.c
     import/ts_inherit.c)
 set_source_files_properties(${IMPORTED_SOURCES} PROPERTIES SKIP_LINTING ON)
