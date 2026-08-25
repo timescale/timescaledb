@@ -112,7 +112,7 @@ jobs:
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
-        gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+        gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421 || gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys 15CF4D18AF4F7421
         gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
 
         . /etc/os-release
@@ -153,7 +153,7 @@ jobs:
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
-        gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+        gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421 || gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys 15CF4D18AF4F7421
         gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
 
         . /etc/os-release
