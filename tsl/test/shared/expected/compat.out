@@ -64,12 +64,6 @@ ERROR:  invalid Oid
 SELECT _timescaledb_internal.get_create_command(NULL);
 WARNING:  function _timescaledb_internal.get_create_command(name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  hypertable "<NULL>" not found
-SELECT pg_typeof(_timescaledb_internal.get_git_commit());
-WARNING:  function _timescaledb_internal.get_git_commit() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- pg_typeof 
------------
- record
-
 SELECT pg_typeof(_timescaledb_internal.get_os_info());
 WARNING:  function _timescaledb_internal.get_os_info() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  pg_typeof 
