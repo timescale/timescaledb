@@ -1657,15 +1657,11 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 									  RelationGetRelid(compressed_chunk_rel),
 									  RelationGetRelid(uncompressed_chunk_rel));
 
-	tuplesortstate = tuplesort_begin_heap(RelationGetDescr(uncompressed_chunk_rel),
-										  recompress_ctx->n_keys,
-										  recompress_ctx->sort_keys,
-										  recompress_ctx->sort_operators,
-										  recompress_ctx->sort_collations,
-										  recompress_ctx->nulls_first,
-										  maintenance_work_mem,
-										  NULL,
-										  false);
+	/*
+	 * Need to sort with the new settings
+	 */
+	tuplesortstate =
+		compression_create_tuplesort_state(new_settings, uncompressed_chunk_rel, false);
 
 	row_compressor_init(&row_compressor,
 						new_settings,
