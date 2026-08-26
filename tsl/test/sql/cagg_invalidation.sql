@@ -1279,4 +1279,84 @@ WHERE materialization_id = (SELECT mat_hypertable_id
 
 DROP MATERIALIZED VIEW tenant_copy_daily;
 DROP TABLE tenant_copy;
+
+----------------------------------------------
+-- Test MERGE invalidations
+-- https://github.com/timescale/timescaledb/issues/10463
+----------------------------------------------
+-- MERGE UPDATE and DELETE on hypertables should
+-- generate continuous aggregate invalidations
+-- just like regular UPDATE and DELETE.
+CREATE TABLE merge_conditions (time bigint NOT NULL, device int, temp float);
+SELECT create_hypertable('merge_conditions', 'time', chunk_time_interval => 10);
+
+CREATE OR REPLACE FUNCTION merge_bigint_now()
+RETURNS bigint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)
+    FROM merge_conditions
+$$;
+
+SELECT set_integer_now_func('merge_conditions', 'merge_bigint_now');
+
+CREATE MATERIALIZED VIEW merge_cond_10
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket(BIGINT '10', time) AS bucket, device, avg(temp) AS avg_temp
+FROM merge_conditions
+GROUP BY 1,2 WITH NO DATA;
+
+SELECT raw_hypertable_id AS merge_raw_id, mat_hypertable_id AS merge_cagg_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'merge_cond_10' \gset
+
+-- Seed data and refresh to set the invalidation threshold
+INSERT INTO merge_conditions VALUES (1, 1, 10.0), (15, 1, 20.0), (25, 1, 30.0);
+CALL refresh_continuous_aggregate('merge_cond_10', NULL, NULL);
+
+-- Verify baseline materialized data
+SELECT * FROM merge_cond_10 ORDER BY 1, 2;
+
+-- No invalidations should exist yet
+SELECT hyper_id, start, "end" FROM hyper_invals
+WHERE hyper_id = :merge_raw_id;
+
+-- Create staging table and MERGE UPDATE a value
+CREATE TABLE merge_staging (time bigint NOT NULL, device int, temp float);
+INSERT INTO merge_staging VALUES (1, 1, 99.0);
+
+MERGE INTO merge_conditions AS t
+USING merge_staging AS s
+ON t.time = s.time AND t.device = s.device
+WHEN MATCHED THEN UPDATE SET temp = s.temp;
+
+-- Should see invalidation entry for the MERGE UPDATE
+SELECT hyper_id, start, "end" FROM hyper_invals
+WHERE hyper_id = :merge_raw_id;
+
+-- Refresh and verify the cagg reflects the update
+CALL refresh_continuous_aggregate('merge_cond_10', NULL, NULL);
+SELECT * FROM merge_cond_10 ORDER BY 1, 2;
+
+-- Now test MERGE DELETE
+DELETE FROM merge_staging;
+INSERT INTO merge_staging VALUES (15, 1, 20.0);
+
+MERGE INTO merge_conditions AS t
+USING merge_staging AS s
+ON t.time = s.time AND t.device = s.device
+WHEN MATCHED THEN DELETE;
+
+-- Should see invalidation entry for the MERGE DELETE
+SELECT hyper_id, start, "end" FROM hyper_invals
+WHERE hyper_id = :merge_raw_id;
+
+-- Refresh and verify the deleted row is gone from the cagg
+CALL refresh_continuous_aggregate('merge_cond_10', NULL, NULL);
+SELECT * FROM merge_cond_10 ORDER BY 1, 2;
+
+DROP TABLE merge_staging;
+DROP MATERIALIZED VIEW merge_cond_10;
+DROP TABLE merge_conditions;
 RESET timezone;
