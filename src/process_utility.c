@@ -92,6 +92,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
 #include "tss_callbacks.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
@@ -113,6 +114,7 @@ static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPL
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
+static bool is_granular_refresh_tracking_column(Hypertable *ht, const char *colname);
 static void ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc,
 									Oid newrole_oid);
 
@@ -2413,6 +2415,14 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	Dimension *dim;
 	bool is_cagg = false;
 
+	if (ht && is_granular_refresh_tracking_column(ht, stmt->subname))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot rename granular refresh column \"%s\"", stmt->subname),
+				 errhint("Renaming the timescaledb.granular_refresh_column is not supported.")));
+	}
+
 	if (!ht)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
@@ -3316,6 +3326,23 @@ process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 	}
 }
 
+/*
+ * Whether colname is this hypertable's granular refresh tracking column.
+ * Unlike a column referenced by an existing continuous aggregate's view,
+ * there is no pg_depend entry blocking DDL on this column on its own when no
+ * continuous aggregate has been created yet, so callers must check
+ * explicitly before allowing DDL that would invalidate tracking.
+ */
+static bool
+is_granular_refresh_tracking_column(Hypertable *ht, const char *colname)
+{
+	const char *tracking_column_name;
+
+	return ts_hypertable_cagg_settings_get_tenant_tracking_column(ht->fd.id,
+																  &tracking_column_name) &&
+		   strncmp(tracking_column_name, colname, NAMEDATALEN) == 0;
+}
+
 static void
 process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 {
@@ -3334,6 +3361,20 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
 		}
+	}
+
+	/*
+	 * The granular refresh tracking column can't be dropped either. Unlike a
+	 * column referenced by an existing continuous aggregate's view, there is
+	 * no pg_depend entry to block this on its own when no continuous
+	 * aggregate has been created yet.
+	 */
+	if (is_granular_refresh_tracking_column(ht, cmd->name))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot drop granular refresh column \"%s\"", cmd->name),
+				 errhint("Dropping the timescaledb.granular_refresh_column is not supported.")));
 	}
 
 	/* Delete dimension range entries on this column, if any.  */
@@ -4534,6 +4575,21 @@ process_alter_column_type_start(ParseState *pstate, Hypertable *ht, AlterTableCm
 								 " Disable the stats using disable_column_stats function"
 								 " before changing the type")));
 		}
+	}
+
+	/*
+	 * The granular refresh tracking column's type can't be changed at all.
+	 * Unlike a column referenced by an existing continuous aggregate's view,
+	 * there is no pg_depend entry to block this on its own when no
+	 * continuous aggregate has been created yet.
+	 */
+	if (is_granular_refresh_tracking_column(ht, cmd->name))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot change the type of granular refresh column \"%s\"", cmd->name),
+				 errhint("Changing the type of the timescaledb.granular_refresh_column is not "
+						 "supported.")));
 	}
 }
 

@@ -125,6 +125,31 @@ ERROR:  granular refresh is already configured on hypertable "metrics"
 ------------+-------------------------+-------------------------------+-----------------------------
  metrics    | device_id               | 2 months 30 days              | 5 days
 
+-- Error: once configured, ALTER subcommands on the tracking column
+-- are restricted: ALTER...TYPE, RENAME, and DROP are blocked.
+-- Unlike a column referenced by an existing continuous aggregate's view,
+-- there is no pg_depend entry blocking this on its own when no continuous
+-- aggregate has been created yet.
+\set ON_ERROR_STOP 0
+ALTER TABLE metrics ALTER COLUMN device_id TYPE bigint;
+ERROR:  cannot change the type of granular refresh column "device_id"
+ALTER TABLE metrics RENAME COLUMN device_id TO device_id_renamed;
+ERROR:  cannot rename granular refresh column "device_id"
+ALTER TABLE metrics DROP COLUMN device_id;
+ERROR:  cannot drop granular refresh column "device_id"
+\set ON_ERROR_STOP 1
+:GRC 'metrics';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ metrics    | device_id               | 2 months 30 days              | 5 days
+
+-- Other ALTER COLUMN subcommands are not restricted
+ALTER TABLE metrics ALTER COLUMN device_id SET NOT NULL;
+ALTER TABLE metrics ALTER COLUMN device_id DROP NOT NULL;
+-- Unrelated columns on the same hypertable remain fully alterable.
+ALTER TABLE metrics ALTER COLUMN value TYPE numeric;
+ALTER TABLE metrics RENAME COLUMN value TO reading;
+ALTER TABLE metrics DROP COLUMN reading;
 -- Integer-time hypertable: offsets are interpreted as integers.
 CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
 SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
