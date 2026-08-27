@@ -57,7 +57,7 @@ typedef struct ColumnarScanPath
 	const CompressionInfo *info;
 
 	List *required_compressed_pathkeys;
-	bool needs_sequence_num;
+	bool needs_orderby_metadata;
 	bool reverse;
 	bool batch_sorted_merge;
 	bool enable_bulk_decompression;

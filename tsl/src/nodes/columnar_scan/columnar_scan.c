@@ -53,7 +53,7 @@ typedef struct SortInfo
 {
 	List *required_compressed_pathkeys;
 	List *required_eq_classes;
-	bool needs_sequence_num;
+	bool needs_orderby_metadata;
 	bool use_compressed_sort; /* sort can be pushed below ColumnarScan */
 	bool use_batch_sorted_merge;
 	bool reverse;
@@ -78,7 +78,7 @@ static ColumnarScanPath *columnar_scan_path_create(PlannerInfo *root, const Comp
 
 static void columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 										  const Chunk *chunk, RelOptInfo *chunk_rel,
-										  bool needs_sequence_num);
+										  bool needs_orderby_metadata);
 
 static SortInfo build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 							   const CompressionInfo *info, List *pathkeys);
@@ -247,7 +247,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 	 * If pathkeys contains non-segmentby columns the rest of the ordering
 	 * requirements will be satisfied by ordering by the batch metadata columns.
 	 */
-	if (info->has_seq_num && sort_info->needs_sequence_num)
+	if (sort_info->needs_orderby_metadata && info->has_seq_num)
 	{
 		/* TODO: split up legacy sequence number path and non-sequence number path into dedicated
 		 * functions. */
@@ -287,7 +287,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 
 		required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 	}
-	else if (sort_info->needs_sequence_num || sort_info->use_batch_sorted_merge)
+	else if (sort_info->needs_orderby_metadata || sort_info->use_batch_sorted_merge)
 	{
 		/* If there are no segmentby pathkeys, start from the beginning of the list */
 		if (info->num_segmentby_columns == 0)
@@ -1358,7 +1358,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 								  compression_info,
 								  chunk,
 								  chunk_rel,
-								  sort_info.needs_sequence_num);
+								  sort_info.needs_orderby_metadata);
 
 	if (sort_info.use_compressed_sort || sort_info.use_batch_sorted_merge)
 	{
@@ -1616,7 +1616,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			 */
 			ColumnarScanPath *path = (ColumnarScanPath *) chunk_path_no_sort;
 			path->reverse = sort_info->reverse;
-			path->needs_sequence_num = sort_info->needs_sequence_num;
+			path->needs_orderby_metadata = sort_info->needs_orderby_metadata;
 			path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 			path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 
@@ -1633,7 +1633,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			ColumnarScanPath *path_copy =
 				copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
 			path_copy->reverse = sort_info->reverse;
-			path_copy->needs_sequence_num = sort_info->needs_sequence_num;
+			path_copy->needs_orderby_metadata = sort_info->needs_orderby_metadata;
 			path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 			path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 
@@ -1934,7 +1934,7 @@ compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compress
  */
 static void
 compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info,
-							   bool needs_sequence_num)
+							   bool needs_orderby_metadata)
 {
 	bool have_whole_row_var = false;
 	Bitmapset *attrs_used = NULL;
@@ -2020,7 +2020,7 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 											&attrs_used);
 
 	/* add the sequence number or orderby metadata columns if we try to order by them*/
-	if (needs_sequence_num)
+	if (needs_orderby_metadata)
 	{
 		if (info->has_seq_num)
 		{
@@ -3313,10 +3313,10 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	}
 
 	/*
-	 * Pathkeys includes columns past segmentby columns, so we need sequence_num
+	 * Pathkeys includes columns past segmentby columns, so we need the orderby
 	 * in the targetlist for ordering.
 	 */
-	sort_info.needs_sequence_num = true;
+	sort_info.needs_orderby_metadata = true;
 
 	/*
 	 * loop over the rest of pathkeys
