@@ -2486,7 +2486,7 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
  */
 static void
 columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk,
-							  RelOptInfo *chunk_rel, bool needs_sequence_num)
+							  RelOptInfo *chunk_rel, bool needs_orderby_metadata)
 {
 	Index compressed_index = root->simple_rel_array_size;
 
@@ -2554,7 +2554,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	}
 	table_close(r, NoLock);
 
-	compressed_rel_setup_reltarget(compressed_rel, info, needs_sequence_num);
+	compressed_rel_setup_reltarget(compressed_rel, info, needs_orderby_metadata);
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
 	compressed_rel_setup_joininfo(compressed_rel, info);
