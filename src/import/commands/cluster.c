@@ -43,7 +43,7 @@
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
-#include "heapswap.h"
+#include "cluster.h"
 
 /**
  * The code in this file is imported from PostgreSQL and slightly modified to:
@@ -86,14 +86,17 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 					   bool is_internal, TransactionId frozenXid, MultiXactId cutoffMulti,
 					   Oid *mapped_tables)
 {
-	Relation relRelation;
-	HeapTuple reltup1, reltup2;
-	Form_pg_class relform1, relform2;
-	RelFileNumber relfilenumber1, relfilenumber2;
+	Relation	relRelation;
+	HeapTuple	reltup1,
+				reltup2;
+	Form_pg_class relform1,
+				relform2;
+	RelFileNumber relfilenumber1,
+				relfilenumber2;
 	RelFileNumber swaptemp;
-
-	char swptmpchr;
-	Oid relam1, relam2;
+	char		swptmpchr;
+	Oid			relam1,
+				relam2;
 
 	/* We need writable copies of both pg_class tuples. */
 	relRelation = table_open(RelationRelationId, RowExclusiveLock);
@@ -113,7 +116,8 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 	relam1 = relform1->relam;
 	relam2 = relform2->relam;
 
-	if (RelFileNumberIsValid(relfilenumber1) && RelFileNumberIsValid(relfilenumber2))
+	if (RelFileNumberIsValid(relfilenumber1) &&
+		RelFileNumberIsValid(relfilenumber2))
 	{
 		/*
 		 * Normal non-mapped relations: swap relfilenumbers, reltablespaces,
@@ -151,9 +155,9 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 		 * Mapped-relation case.  Here we have to swap the relation mappings
 		 * instead of modifying the pg_class columns.  Both must be mapped.
 		 */
-		if (RelFileNumberIsValid(relfilenumber1) || RelFileNumberIsValid(relfilenumber2))
-			elog(ERROR,
-				 "cannot swap mapped relation \"%s\" with non-mapped relation",
+		if (RelFileNumberIsValid(relfilenumber1) ||
+			RelFileNumberIsValid(relfilenumber2))
+			elog(ERROR, "cannot swap mapped relation \"%s\" with non-mapped relation",
 				 NameStr(relform1->relname));
 
 		/*
@@ -164,20 +168,17 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 		 * are non-user-facing emergency backstop.
 		 */
 		if (relform1->reltablespace != relform2->reltablespace)
-			elog(ERROR,
-				 "cannot change tablespace of mapped relation \"%s\"",
+			elog(ERROR, "cannot change tablespace of mapped relation \"%s\"",
 				 NameStr(relform1->relname));
 		if (relform1->relpersistence != relform2->relpersistence)
-			elog(ERROR,
-				 "cannot change persistence of mapped relation \"%s\"",
+			elog(ERROR, "cannot change persistence of mapped relation \"%s\"",
 				 NameStr(relform1->relname));
 		if (relform1->relam != relform2->relam)
-			elog(ERROR,
-				 "cannot change access method of mapped relation \"%s\"",
+			elog(ERROR, "cannot change access method of mapped relation \"%s\"",
 				 NameStr(relform1->relname));
-		if (!swap_toast_by_content && (relform1->reltoastrelid || relform2->reltoastrelid))
-			elog(ERROR,
-				 "cannot swap toast by links for mapped relation \"%s\"",
+		if (!swap_toast_by_content &&
+			(relform1->reltoastrelid || relform2->reltoastrelid))
+			elog(ERROR, "cannot swap toast by links for mapped relation \"%s\"",
 				 NameStr(relform1->relname));
 
 		/*
@@ -185,16 +186,12 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 		 */
 		relfilenumber1 = RelationMapOidToFilenumber(r1, relform1->relisshared);
 		if (!RelFileNumberIsValid(relfilenumber1))
-			elog(ERROR,
-				 "could not find relation mapping for relation \"%s\", OID %u",
-				 NameStr(relform1->relname),
-				 r1);
+			elog(ERROR, "could not find relation mapping for relation \"%s\", OID %u",
+				 NameStr(relform1->relname), r1);
 		relfilenumber2 = RelationMapOidToFilenumber(r2, relform2->relisshared);
 		if (!RelFileNumberIsValid(relfilenumber2))
-			elog(ERROR,
-				 "could not find relation mapping for relation \"%s\", OID %u",
-				 NameStr(relform2->relname),
-				 r2);
+			elog(ERROR, "could not find relation mapping for relation \"%s\", OID %u",
+				 NameStr(relform2->relname), r2);
 
 		/*
 		 * Send replacement mappings to relmapper.  Note these won't actually
@@ -236,16 +233,17 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 	/* set rel1's frozen Xid and minimum MultiXid */
 	if (relform1->relkind != RELKIND_INDEX)
 	{
-		Assert(!TransactionIdIsValid(frozenXid) || TransactionIdIsNormal(frozenXid));
+		Assert(!TransactionIdIsValid(frozenXid) ||
+			   TransactionIdIsNormal(frozenXid));
 		relform1->relfrozenxid = frozenXid;
 		relform1->relminmxid = cutoffMulti;
 	}
 
 	/* swap size statistics too, since new rel has freshly-updated stats */
 	{
-		int32 swap_pages;
-		float4 swap_tuples;
-		int32 swap_allvisible;
+		int32		swap_pages;
+		float4		swap_tuples;
+		int32		swap_allvisible;
 
 		swap_pages = relform1->relpages;
 		relform1->relpages = relform2->relpages;
@@ -282,8 +280,10 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 		CatalogIndexState indstate;
 
 		indstate = CatalogOpenIndexes(relRelation);
-		CatalogTupleUpdateWithInfo(relRelation, &reltup1->t_self, reltup1, indstate);
-		CatalogTupleUpdateWithInfo(relRelation, &reltup2->t_self, reltup2, indstate);
+		CatalogTupleUpdateWithInfo(relRelation, &reltup1->t_self, reltup1,
+								   indstate);
+		CatalogTupleUpdateWithInfo(relRelation, &reltup2->t_self, reltup2,
+								   indstate);
 		CatalogCloseIndexes(indstate);
 	}
 	else
@@ -300,16 +300,20 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 	 */
 	if (relam1 != relam2)
 	{
-		if (changeDependencyFor(RelationRelationId, r1, AccessMethodRelationId, relam1, relam2) !=
-			1)
-			elog(ERROR,
-				 "could not change access method dependency for relation \"%s.%s\"",
+		if (changeDependencyFor(RelationRelationId,
+								r1,
+								AccessMethodRelationId,
+								relam1,
+								relam2) != 1)
+			elog(ERROR, "could not change access method dependency for relation \"%s.%s\"",
 				 get_namespace_name(get_rel_namespace(r1)),
 				 get_rel_name(r1));
-		if (changeDependencyFor(RelationRelationId, r2, AccessMethodRelationId, relam2, relam1) !=
-			1)
-			elog(ERROR,
-				 "could not change access method dependency for relation \"%s.%s\"",
+		if (changeDependencyFor(RelationRelationId,
+								r2,
+								AccessMethodRelationId,
+								relam2,
+								relam1) != 1)
+			elog(ERROR, "could not change access method dependency for relation \"%s.%s\"",
 				 get_namespace_name(get_rel_namespace(r2)),
 				 get_rel_name(r2));
 	}
@@ -318,8 +322,10 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 	 * Post alter hook for modified relations. The change to r2 is always
 	 * internal, but r1 depends on the invocation context.
 	 */
-	InvokeObjectPostAlterHookArg(RelationRelationId, r1, 0, InvalidOid, is_internal);
-	InvokeObjectPostAlterHookArg(RelationRelationId, r2, 0, InvalidOid, true);
+	InvokeObjectPostAlterHookArg(RelationRelationId, r1, 0,
+								 InvalidOid, is_internal);
+	InvokeObjectPostAlterHookArg(RelationRelationId, r2, 0,
+								 InvalidOid, true);
 
 	/*
 	 * If we have toast tables associated with the relations being swapped,
@@ -360,8 +366,9 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 			 * something more selective than deleteDependencyRecordsFor() to
 			 * get rid of just the link we want.
 			 */
-			ObjectAddress baseobject, toastobject;
-			long count;
+			ObjectAddress baseobject,
+						toastobject;
+			long		count;
 
 			/*
 			 * We disallow this case for system catalogs, to avoid the
@@ -375,17 +382,21 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 			/* Delete old dependencies */
 			if (relform1->reltoastrelid)
 			{
-				count =
-					deleteDependencyRecordsFor(RelationRelationId, relform1->reltoastrelid, false);
+				count = deleteDependencyRecordsFor(RelationRelationId,
+												   relform1->reltoastrelid,
+												   false);
 				if (count != 1)
-					elog(ERROR, "expected one dependency record for TOAST table, found %ld", count);
+					elog(ERROR, "expected one dependency record for TOAST table, found %ld",
+						 count);
 			}
 			if (relform2->reltoastrelid)
 			{
-				count =
-					deleteDependencyRecordsFor(RelationRelationId, relform2->reltoastrelid, false);
+				count = deleteDependencyRecordsFor(RelationRelationId,
+												   relform2->reltoastrelid,
+												   false);
 				if (count != 1)
-					elog(ERROR, "expected one dependency record for TOAST table, found %ld", count);
+					elog(ERROR, "expected one dependency record for TOAST table, found %ld",
+						 count);
 			}
 
 			/* Register new dependencies */
@@ -398,14 +409,16 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 			{
 				baseobject.objectId = r1;
 				toastobject.objectId = relform1->reltoastrelid;
-				recordDependencyOn(&toastobject, &baseobject, DEPENDENCY_INTERNAL);
+				recordDependencyOn(&toastobject, &baseobject,
+								   DEPENDENCY_INTERNAL);
 			}
 
 			if (relform2->reltoastrelid)
 			{
 				baseobject.objectId = r2;
 				toastobject.objectId = relform2->reltoastrelid;
-				recordDependencyOn(&toastobject, &baseobject, DEPENDENCY_INTERNAL);
+				recordDependencyOn(&toastobject, &baseobject,
+								   DEPENDENCY_INTERNAL);
 			}
 		}
 	}
@@ -415,14 +428,18 @@ ts_swap_relation_files(Oid r1, Oid r2, bool target_is_pg_class, bool swap_toast_
 	 * valid index. The swap can actually be safely done only if the relations
 	 * have indexes.
 	 */
-	if (swap_toast_by_content && relform1->relkind == RELKIND_TOASTVALUE &&
+	if (swap_toast_by_content &&
+		relform1->relkind == RELKIND_TOASTVALUE &&
 		relform2->relkind == RELKIND_TOASTVALUE)
 	{
-		Oid toastIndex1, toastIndex2;
+		Oid			toastIndex1,
+					toastIndex2;
 
 		/* Get valid index for each relation */
-		toastIndex1 = toast_get_valid_index(r1, AccessExclusiveLock);
-		toastIndex2 = toast_get_valid_index(r2, AccessExclusiveLock);
+		toastIndex1 = toast_get_valid_index(r1,
+											AccessExclusiveLock);
+		toastIndex2 = toast_get_valid_index(r2,
+											AccessExclusiveLock);
 
 		ts_swap_relation_files(toastIndex1,
 							   toastIndex2,
@@ -475,11 +492,13 @@ ts_finish_heap_swap(Oid OIDOldHeap, Oid OIDNewHeap, bool is_system_catalog,
 					char newrelpersistence)
 {
 	ObjectAddress object;
-	Oid mapped_tables[4];
-	int i;
+	Oid			mapped_tables[4];
+
+	int			i;
 
 	/* Report that we are now swapping relation files */
-	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_SWAP_REL_FILES);
+	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE,
+								 PROGRESS_CLUSTER_PHASE_SWAP_REL_FILES);
 
 	/* Zero out possible results from swapped_relation_files */
 	memset(mapped_tables, 0, sizeof(mapped_tables));
@@ -556,7 +575,8 @@ ts_finish_heap_swap(Oid OIDOldHeap, Oid OIDNewHeap, bool is_system_catalog,
 	}
 
 	/* Report that we are now doing clean up */
-	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_FINAL_CLEANUP);
+	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE,
+								 PROGRESS_CLUSTER_PHASE_FINAL_CLEANUP);
 
 	/*
 	 * If the relation being rebuilt is pg_class, swap_relation_files()
@@ -572,8 +592,8 @@ ts_finish_heap_swap(Oid OIDOldHeap, Oid OIDNewHeap, bool is_system_catalog,
 	 */
 	if (OIDOldHeap == RelationRelationId)
 	{
-		Relation relRelation;
-		HeapTuple reltup;
+		Relation	relRelation;
+		HeapTuple	reltup;
 		Form_pg_class relform;
 
 		relRelation = table_open(RelationRelationId, RowExclusiveLock);
@@ -625,26 +645,31 @@ ts_finish_heap_swap(Oid OIDOldHeap, Oid OIDNewHeap, bool is_system_catalog,
 	 */
 	if (!swap_toast_by_content)
 	{
-		Relation newrel;
+		Relation	newrel;
 
 		newrel = table_open(OIDOldHeap, NoLock);
 
 		if (OidIsValid(newrel->rd_rel->reltoastrelid))
 		{
-			Oid toastidx;
-			char NewToastName[NAMEDATALEN];
+			Oid			toastidx;
+			char		NewToastName[NAMEDATALEN];
 
 			/* Get the associated valid index to be renamed */
-			toastidx = toast_get_valid_index(newrel->rd_rel->reltoastrelid, NoLock);
+			toastidx = toast_get_valid_index(newrel->rd_rel->reltoastrelid,
+											 NoLock);
 
 			/* rename the toast table ... */
-			snprintf(NewToastName, NAMEDATALEN, "pg_toast_%u", OIDOldHeap);
-			RenameRelationInternal(newrel->rd_rel->reltoastrelid, NewToastName, true, false);
+			snprintf(NewToastName, NAMEDATALEN, "pg_toast_%u",
+					 OIDOldHeap);
+			RenameRelationInternal(newrel->rd_rel->reltoastrelid,
+								   NewToastName, true, false);
 
 			/* ... and its valid index too. */
-			snprintf(NewToastName, NAMEDATALEN, "pg_toast_%u_index", OIDOldHeap);
+			snprintf(NewToastName, NAMEDATALEN, "pg_toast_%u_index",
+					 OIDOldHeap);
 
-			RenameRelationInternal(toastidx, NewToastName, true, true);
+			RenameRelationInternal(toastidx,
+								   NewToastName, true, true);
 
 			/*
 			 * Reset the relrewrite for the toast. The command-counter
@@ -660,7 +685,7 @@ ts_finish_heap_swap(Oid OIDOldHeap, Oid OIDNewHeap, bool is_system_catalog,
 	/* if it's not a catalog table, clear any missing attribute settings */
 	if (!is_system_catalog)
 	{
-		Relation newrel;
+		Relation	newrel;
 
 		newrel = table_open(OIDOldHeap, NoLock);
 		RelationClearMissing(newrel);

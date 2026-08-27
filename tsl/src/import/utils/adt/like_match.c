@@ -65,7 +65,7 @@ MatchText(const char *t, int tlen, const char *p, int plen)
 		}
 		else if (*p == '%')
 		{
-			char firstpat;
+			char		firstpat;
 
 			/*
 			 * % processing is essentially a search for a text position at
@@ -95,7 +95,7 @@ MatchText(const char *t, int tlen, const char *p, int plen)
 					NextByte(p, plen);
 				}
 				else
-					break; /* Reached a non-wildcard pattern char */
+					break;		/* Reached a non-wildcard pattern char */
 			}
 
 			/*
@@ -132,7 +132,7 @@ MatchText(const char *t, int tlen, const char *p, int plen)
 					/* Since this function recurses, it could be driven to stack overflow */
 					check_stack_depth();
 
-					int matched = MatchText(t, tlen, p, plen);
+					int			matched = MatchText(t, tlen, p, plen);
 
 					if (matched != LIKE_FALSE)
 						return matched; /* TRUE or ABORT */
@@ -177,7 +177,7 @@ MatchText(const char *t, int tlen, const char *p, int plen)
 	}
 
 	if (tlen > 0)
-		return LIKE_FALSE; /* end of pattern, but not of text */
+		return LIKE_FALSE;		/* end of pattern, but not of text */
 
 	/*
 	 * End of text, but perhaps not of pattern.  Match iff the remaining
