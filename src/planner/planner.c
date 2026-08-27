@@ -50,7 +50,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
-#include "import/plancat.h"
+#include "import/optimizer/plancat.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
