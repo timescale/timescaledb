@@ -104,6 +104,14 @@ jobs:
         touch /etc/apt/apt-mirrors.txt
         sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
 
+    - name: Configure apt retries and timeout
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::By-Hash "yes";' >> /etc/apt/apt.conf.d/99retries
+
     # /__e/node16/bin/node (used by actions/checkout@v4) needs 64-bit libraries
     - name: Install 64-bit libraries for GitHub actions
       timeout-minutes: 15

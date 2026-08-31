@@ -63,7 +63,7 @@
 #include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable_cache.h"
-#include "import/heapswap.h"
+#include "import/commands/cluster.h"
 #include "indexing.h"
 #include "reorder.h"
 #include "ts_catalog/compression_settings.h"
