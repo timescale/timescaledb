@@ -39,7 +39,7 @@
 #include "debug_point.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
-#include "import/heapswap.h"
+#include "import/commands/cluster.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_rewrite.h"
 #include "ts_catalog/compression_chunk_size.h"

@@ -10,7 +10,7 @@ SELECT format('\! diff -u %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_C
 SET work_mem TO '50MB';
 SET enable_incremental_sort TO off;
 SET timezone TO 'America/Los_Angeles';
-SET timescaledb.enable_deferred_chunk_scan TO off;
+SET timescaledb.enable_deferred_chunk_append TO off;
 -- disable memoize node to avoid flaky results
 SET enable_memoize TO 'off';
 CREATE TABLE metrics (

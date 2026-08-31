@@ -353,14 +353,13 @@ compact
       1
 
 step s2_update: <... completed>
-ERROR:  could not update/delete compressed data due to concurrent modification
 step s1_show_status: 
     SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
     FROM show_chunks('metrics') chunk;
 
-status                
-----------------------
-{COMPRESSED,UNORDERED}
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
 
 step s1_count: 
     SELECT count(*) FROM metrics;
@@ -398,21 +397,20 @@ compact
       1
 
 step s2_delete: <... completed>
-ERROR:  could not update/delete compressed data due to concurrent modification
 step s1_show_status: 
     SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
     FROM show_chunks('metrics') chunk;
 
-status                
-----------------------
-{COMPRESSED,UNORDERED}
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
 
 step s1_count: 
     SELECT count(*) FROM metrics;
 
 count
 -----
- 4000
+ 3999
 
 
 starting permutation: s3_wp_enable_after_delete s1_compact s2_begin_rr s2_update s3_wp_release_after_delete s2_commit s1_show_status s1_count
@@ -515,4 +513,72 @@ step s1_count:
 count
 -----
  4000
+
+
+starting permutation: s3_wp_enable_after_delete s3_wp_enable_dml_batch s1_compact_rescan s2_update_rescan s3_wp_release_dml_batch s3_wp_release_after_delete s2_check_rescan_update s1_rescan_status s1_rescan_count
+step s3_wp_enable_after_delete: 
+    SELECT debug_waitpoint_enable('compact_chunk_after_batch_delete');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s3_wp_enable_dml_batch: 
+    SELECT debug_waitpoint_enable('decompress_batches_after_batch');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_compact_rescan: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics_dml_rescan') chunk;
+ <waiting ...>
+step s2_update_rescan: 
+    UPDATE metrics_dml_rescan SET value = value + 0.001 WHERE device = 'd1';
+ <waiting ...>
+step s3_wp_release_dml_batch: 
+    SELECT debug_waitpoint_release('decompress_batches_after_batch');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s3_wp_release_after_delete: 
+    SELECT debug_waitpoint_release('compact_chunk_after_batch_delete');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_compact_rescan: <... completed>
+compact
+-------
+      1
+
+step s2_update_rescan: <... completed>
+step s2_check_rescan_update: 
+    SELECT count(*) AS total,
+           count(*) FILTER (WHERE value != round(value::numeric, 0)
+                             AND value != round(value::numeric, 1)) AS updated
+    FROM metrics_dml_rescan;
+
+total|updated
+-----+-------
+ 4500|   4500
+
+step s1_rescan_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics_dml_rescan') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_rescan_count: 
+    SELECT count(*) FROM metrics_dml_rescan;
+
+count
+-----
+ 4500
 
