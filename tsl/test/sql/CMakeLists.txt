@@ -132,7 +132,8 @@ if(TMP_ENABLE_GRANULAR_REFRESH_TESTS)
     cagg_granular_refresh_api.sql
     cagg_granular_refresh_coltypes.sql
     cagg_granular_refresh_fallback.sql
-    cagg_granular_refresh_garbage_collector.sql)
+    cagg_granular_refresh_garbage_collector.sql
+    cagg_granular_refresh_hierarchical.sql)
 
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
