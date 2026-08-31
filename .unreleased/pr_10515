@@ -1,0 +1,1 @@
+Fixes: #10515 Fix RLS checks after dropping hypertable columns
