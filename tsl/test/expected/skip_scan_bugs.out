@@ -27,6 +27,7 @@ FROM generate_series(1, 20) s,
 -- steer the planner to the index-based plan shape
 SET enable_seqscan = off;
 SET enable_bitmapscan = off;
+SET max_parallel_workers_per_gather = 0;
 -- Make sure SkipScan is used on compressed part
 -- and IndexScan with sort keys different from distinct keys but matching the predicate
 -- is used for uncompressed part
@@ -228,5 +229,229 @@ RESET timescaledb.debug_skip_scan_info;
 drop table t_10429 cascade;
 RESET datestyle;
 RESET timezone;
+-- Fix #10409: skip on the correct index column in case of equivalent distinct columns
+CREATE TABLE zone_reports (reported_zone int4, assigned_zone int4, sensor_group int4 NOT NULL);
+CREATE INDEX ON zone_reports (assigned_zone, sensor_group, reported_zone);
+INSERT INTO zone_reports SELECT v % 4, v % 4, v % 40 FROM generate_series(1, 200000) AS v;
+ANALYZE zone_reports;
+-- Should use SkipScan on (assigned_zone, sensor_group) and return correct result
+SET timescaledb.debug_skip_scan_info  TO true;
+SELECT DISTINCT ON (reported_zone, sensor_group) * FROM zone_reports WHERE reported_zone = assigned_zone;
+INFO:  SkipScan used on zone_reports_assigned_zone_sensor_group_reported_zone_idx(assigned_zone NOT NULL, sensor_group NOT NULL)
+ reported_zone | assigned_zone | sensor_group 
+---------------+---------------+--------------
+             0 |             0 |            0
+             0 |             0 |            4
+             0 |             0 |            8
+             0 |             0 |           12
+             0 |             0 |           16
+             0 |             0 |           20
+             0 |             0 |           24
+             0 |             0 |           28
+             0 |             0 |           32
+             0 |             0 |           36
+             1 |             1 |            1
+             1 |             1 |            5
+             1 |             1 |            9
+             1 |             1 |           13
+             1 |             1 |           17
+             1 |             1 |           21
+             1 |             1 |           25
+             1 |             1 |           29
+             1 |             1 |           33
+             1 |             1 |           37
+             2 |             2 |            2
+             2 |             2 |            6
+             2 |             2 |           10
+             2 |             2 |           14
+             2 |             2 |           18
+             2 |             2 |           22
+             2 |             2 |           26
+             2 |             2 |           30
+             2 |             2 |           34
+             2 |             2 |           38
+             3 |             3 |            3
+             3 |             3 |            7
+             3 |             3 |           11
+             3 |             3 |           15
+             3 |             3 |           19
+             3 |             3 |           23
+             3 |             3 |           27
+             3 |             3 |           31
+             3 |             3 |           35
+             3 |             3 |           39
+
+RESET timescaledb.debug_skip_scan_info;
+-- Cannot use SkipScan as  "assigned_zone" is not in indexscan output
+SET timescaledb.debug_skip_scan_info  TO true;
+SELECT DISTINCT ON (reported_zone, sensor_group) reported_zone, sensor_group FROM zone_reports WHERE reported_zone = assigned_zone AND assigned_zone < 4;
+ reported_zone | sensor_group 
+---------------+--------------
+             0 |            0
+             0 |            4
+             0 |            8
+             0 |           12
+             0 |           16
+             0 |           20
+             0 |           24
+             0 |           28
+             0 |           32
+             0 |           36
+             1 |            1
+             1 |            5
+             1 |            9
+             1 |           13
+             1 |           17
+             1 |           21
+             1 |           25
+             1 |           29
+             1 |           33
+             1 |           37
+             2 |            2
+             2 |            6
+             2 |           10
+             2 |           14
+             2 |           18
+             2 |           22
+             2 |           26
+             2 |           30
+             2 |           34
+             2 |           38
+             3 |            3
+             3 |            7
+             3 |           11
+             3 |           15
+             3 |           19
+             3 |           23
+             3 |           27
+             3 |           31
+             3 |           35
+             3 |           39
+
+RESET timescaledb.debug_skip_scan_info;
+-- Cannot use SkipScan as "assigned_zone" is not in indexscan output
+SET timescaledb.debug_skip_scan_info  TO true;
+SELECT count(DISTINCT reported_zone) FROM zone_reports WHERE reported_zone = assigned_zone;
+ count 
+-------
+     4
+
+RESET timescaledb.debug_skip_scan_info;
+-- Can use SkipScan as "assigned_zone" is produced by indexscan
+SET timescaledb.debug_skip_scan_info  TO true;
+SELECT DISTINCT ON (reported_zone, sensor_group) assigned_zone + 1, sensor_group FROM zone_reports WHERE reported_zone = assigned_zone AND assigned_zone < 4;
+INFO:  SkipScan used on zone_reports_assigned_zone_sensor_group_reported_zone_idx(assigned_zone NOT NULL, sensor_group NOT NULL)
+ ?column? | sensor_group 
+----------+--------------
+        1 |            0
+        1 |            4
+        1 |            8
+        1 |           12
+        1 |           16
+        1 |           20
+        1 |           24
+        1 |           28
+        1 |           32
+        1 |           36
+        2 |            1
+        2 |            5
+        2 |            9
+        2 |           13
+        2 |           17
+        2 |           21
+        2 |           25
+        2 |           29
+        2 |           33
+        2 |           37
+        3 |            2
+        3 |            6
+        3 |           10
+        3 |           14
+        3 |           18
+        3 |           22
+        3 |           26
+        3 |           30
+        3 |           34
+        3 |           38
+        4 |            3
+        4 |            7
+        4 |           11
+        4 |           15
+        4 |           19
+        4 |           23
+        4 |           27
+        4 |           31
+        4 |           35
+        4 |           39
+
+RESET timescaledb.debug_skip_scan_info;
+-- Test coverage for distinct PathKeys usage
+-- No SkipScan for volatile keys
+:PREFIX SELECT DISTINCT random() FROM zone_reports;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: random()
+   ->  Index Only Scan using zone_reports_assigned_zone_sensor_group_reported_zone_idx on zone_reports
+
+-- No SkipScan over Filter aggregates
+:PREFIX SELECT count(DISTINCT assigned_zone) FILTER (WHERE sensor_group >5) AS result FROM zone_reports;
+--- QUERY PLAN ---
+ Aggregate
+   ->  Index Only Scan using zone_reports_assigned_zone_sensor_group_reported_zone_idx on zone_reports
+
+-- Tests for hypertable and compressed data
+SELECT table_name FROM create_hypertable('zone_reports', 'sensor_group', chunk_time_interval => 20, create_default_indexes => false, migrate_data => true);
+NOTICE:  migrating data to chunks
+  table_name  
+--------------
+ zone_reports
+
+-- Can use SkipScan
+SET timescaledb.debug_skip_scan_info  TO true;
+SELECT DISTINCT ON (reported_zone) * FROM zone_reports WHERE reported_zone = assigned_zone;
+INFO:  SkipScan used on _hyper_3_4_chunk_zone_reports_assigned_zone_sensor_group_report(assigned_zone NOT NULL)
+INFO:  SkipScan used on _hyper_3_5_chunk_zone_reports_assigned_zone_sensor_group_report(assigned_zone NOT NULL)
+ reported_zone | assigned_zone | sensor_group 
+---------------+---------------+--------------
+             0 |             0 |            0
+             1 |             1 |           21
+             2 |             2 |            2
+             3 |             3 |           23
+
+RESET timescaledb.debug_skip_scan_info;
+ALTER TABLE zone_reports SET (timescaledb.compress, timescaledb.compress_orderby='sensor_group', timescaledb.compress_segmentby='assigned_zone,reported_zone');
+SELECT count(compress_chunk(ch)) FROM show_chunks('zone_reports') ch;
+ count 
+-------
+     2
+
+-- Can use SkipScan as both equivalent columns are segmentby
+SET timescaledb.debug_skip_scan_info  TO true;
+SELECT DISTINCT ON (reported_zone) * FROM zone_reports WHERE reported_zone = assigned_zone;
+INFO:  SkipScan used on _hyper_3_4_chunk_compressed_assigned_zone_reported_zone__ts_idx(assigned_zone NOT NULL)
+INFO:  SkipScan used on _hyper_3_5_chunk_compressed_assigned_zone_reported_zone__ts_idx(assigned_zone NOT NULL)
+ reported_zone | assigned_zone | sensor_group 
+---------------+---------------+--------------
+             0 |             0 |            0
+             1 |             1 |           21
+             2 |             2 |            2
+             3 |             3 |           23
+
+RESET timescaledb.debug_skip_scan_info;
+-- Can use SkipScan as the equivalent column with highest sort order is segmentby
+SET timescaledb.debug_skip_scan_info  TO true;
+SELECT DISTINCT ON (assigned_zone) * FROM zone_reports WHERE sensor_group = assigned_zone;
+INFO:  SkipScan used on _hyper_3_4_chunk_compressed_assigned_zone_reported_zone__ts_idx(assigned_zone NOT NULL)
+INFO:  SkipScan used on _hyper_3_5_chunk_compressed_assigned_zone_reported_zone__ts_idx(assigned_zone NOT NULL)
+ reported_zone | assigned_zone | sensor_group 
+---------------+---------------+--------------
+             0 |             0 |            0
+             1 |             1 |            1
+             2 |             2 |            2
+             3 |             3 |            3
+
+RESET timescaledb.debug_skip_scan_info;
+drop table zone_reports;
 RESET enable_seqscan;
 RESET enable_bitmapscan;
+RESET max_parallel_workers_per_gather;

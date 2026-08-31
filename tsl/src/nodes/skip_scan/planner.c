@@ -86,9 +86,10 @@ typedef struct SkipScanPath
 typedef struct DistinctPathInfo
 {
 	UpperRelationKind stage; /* What kind of Upper distinct path we are dealing with */
+	RelOptInfo *input_rel;	 /* Input into distinct */
 	Path *unique_path;		 /* If not NULL, valid Upper distinct path */
-	List *
-		distinct_expr; /* If not NULL, list of valid distinct expressions for Upper distinct path */
+	List *distinct_pathkeys; /* If not NULL, list of valid distinct pathkeys for Upper distinct path
+							  */
 } DistinctPathInfo;
 
 static int get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno);
@@ -98,7 +99,7 @@ static bool build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *i
 							bool build_eqop);
 static List *build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo,
 						   List *top_pathkeys);
-static Var *get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path,
+static Var *get_distinct_var(PlannerInfo *root, PathKey *pk, IndexPath *index_path,
 							 Path *child_path, SkipKeyInfo *skinfo);
 static TargetEntry *tlist_member_match_var(Var *var, List *targetlist);
 
@@ -297,132 +298,70 @@ static CustomPathMethods skip_scan_path_methods = {
 	.PlanCustomPath = skip_scan_plan_create,
 };
 
-static Expr *
-get_distint_clause_expr(PlannerInfo *root, SortGroupClause *distinct_clause)
-{
-	Node *expr = get_sortgroupclause_expr(distinct_clause, root->parse->targetList);
-
-	/* we ignore any columns that can be constified to allow for cases like DISTINCT 'abc',
-	 * column */
-	if (IsA(estimate_expression_value(root, expr), Const))
-	{
-		return NULL;
-	}
-
-	/* We ignore binary-compatible relabeling */
-	Expr *tlexpr = (Expr *) expr;
-	while (tlexpr && IsA(tlexpr, RelabelType))
-	{
-		tlexpr = ((RelabelType *) tlexpr)->arg;
-	}
-
-	if (!IsA(tlexpr, Var))
-	{
-		return NULL;
-	}
-
-	return tlexpr;
-}
-
-/* We can get upper path Distinct expression once for upper path,
+/* We can validate upper path Distinct pathkeys once for upper path,
  * rather than repeat this check for each child path of an upper path input
  */
-static List *
-get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
+static bool
+check_and_add_distinct_pathkeys(PlannerInfo *root, List *pathkeys, DistinctPathInfo *dpinfo)
 {
+	if (!pathkeys)
+	{
+		return false;
+	}
+
 	ListCell *lc;
-	Expr *tlexpr = NULL;
-	List *result = NULL;
 
-	if (stage == UPPERREL_DISTINCT && root->parse->distinctClause)
+	/* Special checks for distinct aggregates:
+	 * all aggregates should be distinct and over the same expression */
+	if (dpinfo->stage == UPPERREL_GROUP_AGG)
 	{
-		/* Obtain Distinct key from the target list, we ruled out numkeys > 1 cases before.
-		 * Examples of queries with 1 Distinct key but multiple target entries:
-		 * SELECT dev, dev FROM t; SELECT 1, dev FROM t; SELECT dev, time FROM t WHERE time = 100;
-		 */
-		SortGroupClause *distinct_clause = NULL;
-		foreach (lc, root->processed_distinctClause)
+		/* There should be distinct aggregates and all aggregates should be distinct */
+		if (!root->numOrderedAggs || !root->agginfos ||
+			root->numOrderedAggs != list_length(root->agginfos))
 		{
-			distinct_clause = (SortGroupClause *) lfirst(lc);
-			tlexpr = get_distint_clause_expr(root, distinct_clause);
-			if (tlexpr)
+			return false;
+		}
+		foreach (lc, root->agginfos)
+		{
+			AggInfo *agginfo = lfirst(lc);
+			ListCell *la;
+			foreach (la, agginfo->aggrefs)
 			{
-				result = lappend(result, tlexpr);
-			}
-			else
-			{
-				return NULL;
+				Aggref *agg = lfirst(la);
+				/* Only distinct aggs with 1 presorted argument are eligible,
+				 * and if all distinct aggregates have presorted inputs
+				 * it means they share the same input which may be eligible for SkipScan */
+				if (!agg->aggdistinct || !agg->aggpresorted || list_length(agg->args) > 1 ||
+					agg->aggfilter)
+				{
+					return false;
+				}
 			}
 		}
 	}
-	else if (stage == UPPERREL_GROUP_AGG)
+
+	/* All pathkey expressions should be reducible to Vars */
+	foreach (lc, pathkeys)
 	{
-		/* Find all non-nested Aggref in the query target list */
-		List *aggrefs = ts_find_aggrefs((Node *) root->parse->targetList);
-		foreach (lc, aggrefs)
+		PathKey *pk = lfirst(lc);
+		if (pk->pk_eclass->ec_has_volatile)
 		{
-			Aggref *agg = lfirst_node(Aggref, lc);
-			/* Only distinct aggs with 1 sorted argument are eligible*/
-			if (agg->aggdistinct && agg->aggpresorted && list_length(agg->args) == 1)
+			return false;
+		}
+		List *chunk_emembers = ts_find_em_for_rel(pk->pk_eclass, dpinfo->input_rel);
+		for (int i = 0; i < list_length(chunk_emembers); i++)
+		{
+			EquivalenceMember *chunk_em = list_nth(chunk_emembers, i);
+
+			Node *node = strip_implicit_coercions((Node *) chunk_em->em_expr);
+			if (node == NULL || !IsA(node, Var))
 			{
-				TargetEntry *tle = (TargetEntry *) linitial(agg->args);
-
-				Expr *expr = tle->expr;
-				/* We ignore binary-compatible relabeling */
-				while (expr && IsA(expr, RelabelType))
-				{
-					expr = ((RelabelType *) expr)->arg;
-				}
-
-				/* Distinct agg over a Const is OK */
-				if (IsA(estimate_expression_value(root, (Node *) expr), Const))
-				{
-					continue;
-				}
-
-				/* Don't support no-var arguments */
-				if (!IsA(expr, Var))
-				{
-					return NULL;
-				}
-
-				/* Don't support multiple distinct aggs over different columns */
-				if (tlexpr && !tlist_member_match_var((Var *) tlexpr, agg->args))
-				{
-					return NULL;
-				}
-
-				/* If Distinct agg path has a groupby column, it needs to match Distinct agg column
-				 */
-				if (root->processed_groupClause)
-				{
-					/* Should have bailed out on gby exprs > 1 earlier
-					 * Only 1-key SkipScan is supported for distinct aggregates
-					 */
-					Assert(list_length(root->processed_groupClause) == 1);
-					SortGroupClause *sortcl =
-						(SortGroupClause *) linitial(root->processed_groupClause);
-					Expr *gbykey = (Expr *) get_sortgroupclause_expr(sortcl, root->processed_tlist);
-					if (!equal(gbykey, expr))
-					{
-						return NULL;
-					}
-				}
-
-				/* Found a valid distinct agg over a valid Var */
-				if (!tlexpr)
-				{
-					tlexpr = expr;
-					result = lappend(result, tlexpr);
-				}
-			}
-			else
-			{
-				return NULL;
+				return false;
 			}
 		}
 	}
-	return result;
+	dpinfo->distinct_pathkeys = pathkeys;
+	return true;
 }
 
 static void
@@ -462,6 +401,10 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 				}
 
 				Assert(unique->numkeys >= 1);
+				if (!check_and_add_distinct_pathkeys(root, root->distinct_pathkeys, dpinfo))
+				{
+					return;
+				}
 				dpinfo->unique_path = (Path *) unique;
 				break;
 			}
@@ -496,6 +439,10 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 					return;
 				}
 
+				if (!check_and_add_distinct_pathkeys(root, unique->subpath->pathkeys, dpinfo))
+				{
+					return;
+				}
 				dpinfo->unique_path = (Path *) lfirst_node(AggPath, lc);
 				break;
 			}
@@ -508,14 +455,6 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 
 	if (!dpinfo->unique_path)
 	{
-		return;
-	}
-
-	/* Check if we have valid distinct expression to source from the underlying index */
-	dpinfo->distinct_expr = get_upper_distinct_expr(root, dpinfo->stage);
-	if (!dpinfo->distinct_expr)
-	{
-		dpinfo->unique_path = NULL;
 		return;
 	}
 
@@ -579,8 +518,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 {
 	DistinctPathInfo dpinfo = {
 		.stage = stage,
+		.input_rel = input_rel,
 		.unique_path = NULL,
-		.distinct_expr = NULL,
+		.distinct_pathkeys = NULL,
 	};
 
 	obtain_upper_distinct_path(root, output_rel, &dpinfo);
@@ -915,6 +855,18 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		return NULL;
 	}
 
+	/* Cannot use SkipScan if compressed IndexPath doesn't match required compressed pathkeys order:
+	 * we will not add SortPath to IndexPath in case of mismatch but will add Sort node at
+	 * execution, so need to check for mismatched IndexPath directly under ColumnarScanPath. */
+	if (ts_is_columnar_scan_path(child_path))
+	{
+		ColumnarScanPath *dcpath = (ColumnarScanPath *) child_path;
+		if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, index_path->path.pathkeys))
+		{
+			return NULL;
+		}
+	}
+
 	/* orderbyops are not compatible with skipscan */
 	if (index_path->indexorderbys != NIL)
 	{
@@ -937,14 +889,13 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 
 	ListCell *lc;
 	int sk_no = 0;
-	int num_skipkeys = list_length(dpinfo->distinct_expr);
-	foreach (lc, dpinfo->distinct_expr)
+	int num_skipkeys = list_length(dpinfo->distinct_pathkeys);
+	foreach (lc, dpinfo->distinct_pathkeys)
 	{
-		Expr *dexpr = (Expr *) lfirst(lc);
-
+		PathKey *pk = lfirst(lc);
 		/* Placeholder for skip key attributes */
 		SkipKeyInfo *skinfo = palloc(sizeof(SkipKeyInfo));
-		Var *dvar = get_distinct_var(root, dexpr, index_path, child_path, skinfo);
+		Var *dvar = get_distinct_var(root, pk, index_path, child_path, skinfo);
 		if (!dvar)
 		{
 			pfree(skinfo);
@@ -1123,71 +1074,101 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 
 /* Extract the Var to use for the SkipScan and do attno mapping if required. */
 static Var *
-get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *child_path,
+get_distinct_var(PlannerInfo *root, PathKey *pk, IndexPath *index_path, Path *child_path,
 				 SkipKeyInfo *skinfo)
 {
 	RelOptInfo *chunk_rel = child_path->parent;
 	RelOptInfo *indexed_rel = index_path->path.parent;
 
-	Assert(tlexpr && IsA(tlexpr, Var));
-	Var *var = castNode(Var, tlexpr);
-
-	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
-
-	/*
-	 * Check whether a skip var is declared NOT NULL. It's enough to check
-	 * hypertable for NOT NULL, because the NOT NULL constraint will be
-	 * propagated to and checked on all chunks. Postgres doesn't set
-	 * RelOptInfo.notnullattnums for hypertable because it's an inheritance
-	 * parent, so check it against the catalog.
-	 */
-	skinfo->notnull = ts_get_attnotnull(ht_rte->relid, var->varattno);
-
-	/* If we are dealing with a hypertable Var extracted from distinctClause will point to
-	 * the parent hypertable while the IndexPath will be on a Chunk.
-	 * For a normal PG table they point to the same relation and we are done here. */
-	if ((Index) var->varno == chunk_rel->relid)
-	{
-		/* Get attribute number for distinct column on a normal PG table */
-		skinfo->indexed_column_attno = var->varattno;
-		return var;
-	}
-
 	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 	RangeTblEntry *indexed_rte =
 		(indexed_rel == chunk_rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));
 
-	/* Check for hypertable */
-	if (!ts_is_hypertable(ht_rte->relid) ||
-		!bms_is_member(var->varno, chunk_rel->top_parent_relids))
+	/* Loop through equivalent vars for this path key
+	 * to settle on the var which will be earliest in the index i.e. of highest index order */
+	List *chunk_emembers = ts_find_em_for_rel(pk->pk_eclass, chunk_rel);
+	SkipKeyInfo result_skinfo = { 0 };
+	Var *result_var = NULL;
+	for (int i = 0; i < list_length(chunk_emembers); i++)
+	{
+		EquivalenceMember *chunk_em = list_nth(chunk_emembers, i);
+
+		Node *node = strip_implicit_coercions((Node *) chunk_em->em_expr);
+		Assert(node && IsA(node, Var));
+		Var *var = castNode(Var, node);
+		AttrNumber indexed_column_attno = var->varattno;
+
+		/* Get attribute number for distinct column on a compressed chunk */
+		if (ts_is_columnar_scan_path(child_path))
+		{
+			/* distinct column has to be a segmentby column */
+			ColumnarScanPath *dcpath = (ColumnarScanPath *) child_path;
+			/* If another equivalent column is segmentby it's guaranteed to have higher sort order
+			 * than this one, keep checking */
+			if (!bms_is_member(var->varattno, dcpath->info->chunk_segmentby_attnos))
+			{
+				continue;
+			}
+			char *attname = get_attname(chunk_rte->relid, var->varattno, false);
+			indexed_column_attno = get_attnum(indexed_rte->relid, attname);
+		}
+
+		/*
+		 * Skipscan is not applicable for the following case:
+		 * We might have a path with an index that produces the correct pathkeys for the target
+		 * ordering without actually including all the columns of the ORDER BY. If the path uses an
+		 * index that does not include the distinct column, we cannot use it for skipscan and have
+		 * to discard this path from skipscan generation. This happens, for instance, when we have
+		 * an order by clause (like ORDER BY a, b) with constraints in the WHERE clause (like WHERE
+		 * a = <constant>) . "a" can now be removed from the Pathkeys (since it is a constant) and
+		 * the query can be satisfied by using an index on just column "b".
+		 *
+		 * Example query:
+		 * SELECT DISTINCT ON (a) * FROM test WHERE a in (2) ORDER BY a ASC, time DESC;
+		 * Since a is always 2 due to the WHERE clause we can create the correct ordering for the
+		 * ORDER BY with an index that does not include the a column and only includes the time
+		 * column.
+		 */
+		int idx_key = get_idx_key(index_path->indexinfo, indexed_column_attno);
+		if (idx_key < 0)
+		{
+			continue;
+		}
+
+		if (result_skinfo.scankey_attno == 0 || idx_key + 1 < result_skinfo.scankey_attno)
+		{
+			result_skinfo.distinct_attno = var->varattno;
+			result_skinfo.indexed_column_attno = indexed_column_attno;
+			result_skinfo.scankey_attno = idx_key + 1;
+			result_var = var;
+		}
+	}
+	if (!result_var)
 	{
 		return NULL;
 	}
 
-	char *attname = get_attname(ht_rte->relid, var->varattno, false);
-	var = copyObject(var);
-	var->varattno = get_attnum(chunk_rte->relid, attname);
-
-	/* Get attribute number for distinct column on a compressed chunk */
-	if (ts_is_columnar_scan_path(child_path))
+	/* If child path is ordered on a column which is not produced by it, we cannot use SkipScan.
+	 *
+	 * Example: "SELECT DISTINCT ON (a, c) a, c FROM t WHERE a = b ORDER BY a, c"
+	 * with index on t(b,c,a): ordered on "b" but "b" is not produced by indexscan of "t" so
+	 * SkipScan does not have a comparison value for skip qual.
+	 */
+	if (!list_member(child_path->pathtarget->exprs, result_var))
 	{
-		/* distinct column has to be a segmentby column */
-		ColumnarScanPath *dcpath = (ColumnarScanPath *) child_path;
-		if (!bms_is_member(var->varattno, dcpath->info->chunk_segmentby_attnos))
-		{
-			return NULL;
-		}
-		skinfo->indexed_column_attno = get_attnum(indexed_rte->relid, attname);
-	}
-	/* Get attribute number for distinct column on an uncompressed chunk */
-	else
-	{
-		skinfo->indexed_column_attno = var->varattno;
+		return NULL;
 	}
 
-	var->varno = chunk_rel->relid;
+	skinfo->distinct_attno = result_skinfo.distinct_attno;
+	skinfo->indexed_column_attno = result_skinfo.indexed_column_attno;
+	skinfo->scankey_attno = result_skinfo.scankey_attno;
 
-	return var;
+	/*
+	 * Check whether a distinct var is declared NOT NULL.
+	 */
+	skinfo->notnull = ts_get_attnotnull(chunk_rte->relid, result_var->varattno);
+
+	return result_var;
 }
 
 /*
@@ -1241,31 +1222,7 @@ build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, V
 	TypeCacheEntry *tce = lookup_type_cache(column_type, 0);
 	bool need_coerce = false;
 
-	/*
-	 * Skipscan is not applicable for the following case:
-	 * We might have a path with an index that produces the correct pathkeys for the target ordering
-	 * without actually including all the columns of the ORDER BY. If the path uses an index that
-	 * does not include the distinct column, we cannot use it for skipscan and have to discard this
-	 * path from skipscan generation. This happens, for instance, when we have an order by clause
-	 * (like ORDER BY a, b) with constraints in the WHERE clause (like WHERE a = <constant>) . "a"
-	 * can now be removed from the Pathkeys (since it is a constant) and the query can be satisfied
-	 * by using an index on just column "b".
-	 *
-	 * Example query:
-	 * SELECT DISTINCT ON (a) * FROM test WHERE a in (2) ORDER BY a ASC, time DESC;
-	 * Since a is always 2 due to the WHERE clause we can create the correct ordering for the
-	 * ORDER BY with an index that does not include the a column and only includes the time column.
-	 */
-	int idx_key = get_idx_key(index_path->indexinfo, skinfo->indexed_column_attno);
-	if (idx_key < 0)
-	{
-		return false;
-	}
-
-	/* sk_attno of the skip qual */
-	skinfo->scankey_attno = idx_key + 1;
-
-	skinfo->distinct_attno = var->varattno;
+	int idx_key = skinfo->scankey_attno - 1;
 	skinfo->distinct_by_val = tce->typbyval;
 	skinfo->distinct_typ_len = tce->typlen;
 
