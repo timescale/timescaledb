@@ -26,7 +26,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost TO 0;
-SET timescaledb.enable_deferred_chunk_scan TO false;
+SET timescaledb.enable_deferred_chunk_append TO false;
 EXPLAIN (buffers off, costs off) SELECT first(i, j) FROM "test";
 --- QUERY PLAN ---
  Finalize Aggregate
@@ -252,17 +252,20 @@ SET enable_indexscan = OFF;
    ->  Merge Left Join
          Merge Cond: (test.i = _hyper_1_1_chunk_1.i)
          ->  Limit
-               ->  Result
-                     One-Time Filter: (length(version()) > 0)
-                     ->  Custom Scan (ChunkAppend) on test
-                           Order: test.i
-                           Chunks excluded during startup: 0
+               ->  Gather Merge
+                     Workers Planned: 2
+                     ->  Sort
+                           Sort Key: test.i
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Index Scan Backward using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk
-                           ->  Result
-                                 One-Time Filter: (length(version()) > 0)
-                                 ->  Index Scan Backward using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk
+                                 ->  Parallel Custom Scan (ChunkAppend) on test
+                                       Chunks excluded during startup: 0
+                                       ->  Result
+                                             One-Time Filter: (length(version()) > 0)
+                                             ->  Parallel Seq Scan on _hyper_1_1_chunk
+                                       ->  Result
+                                             One-Time Filter: (length(version()) > 0)
+                                             ->  Parallel Seq Scan on _hyper_1_2_chunk
          ->  Materialize
                ->  Limit
                      ->  Gather Merge

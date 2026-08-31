@@ -208,3 +208,7 @@ $$;
 --
 -- END repair mismatched dimensional CHECK constraints
 --
+
+-- Remove the user_catalog_table option from the catalog tables.
+ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
+ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);

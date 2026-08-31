@@ -12,7 +12,7 @@ SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized resul
 \gset
 
 SET timescaledb.enable_now_constify TO false;
-SET timescaledb.enable_deferred_chunk_scan TO false;
+SET timescaledb.enable_deferred_chunk_append TO false;
 
 -- disable memoize node to avoid flaky results
 SET enable_memoize TO 'off';
