@@ -345,7 +345,7 @@ debug_waitpoint_release
 
 step P1_run_policy: <... completed>
 
-starting permutation: WP_before_txn2_commit_enable R1_refresh check_jobs K1_terminate WP_before_txn2_commit_disable L1_lock R2_refresh R3_refresh L1_unlock check_jobs
+starting permutation: WP_before_txn2_commit_enable R1_refresh check_jobs K1_terminate K1_noop WP_before_txn2_commit_disable L1_lock R2_refresh R3_refresh L1_unlock check_jobs
 step WP_before_txn2_commit_enable: SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
 debug_waitpoint_enable
 ----------------------
@@ -376,12 +376,13 @@ server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 
+step K1_terminate: <... completed>
+step K1_noop: 
 step WP_before_txn2_commit_disable: SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
 debug_waitpoint_release
 -----------------------
                        
 
-step K1_terminate: <... completed>
 step L1_lock: 
     BEGIN;
     LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges

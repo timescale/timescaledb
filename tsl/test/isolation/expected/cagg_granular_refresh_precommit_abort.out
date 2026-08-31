@@ -1,6 +1,6 @@
 Parsed test spec with 4 sessions
 
-starting permutation: wp_pc_enable v_register_pid v_insert k_cancel wp_pc_release r_anchor_insert r_refresh r_check_conditions r_check_tracking r_refresh2 r_check_cagg r_check_tracking2 r_anchor_insert r_refresh2 r_refresh2 r_check_tracking2
+starting permutation: wp_pc_enable v_register_pid v_insert k_cancel k_noop wp_pc_release r_anchor_insert r_refresh r_check_conditions r_check_tracking r_refresh2 r_check_cagg r_check_tracking2 r_anchor_insert r_refresh2 r_refresh2 r_check_tracking2
 step wp_pc_enable: SELECT debug_waitpoint_enable('tenant_tracker_after_precommit_drain');
 debug_waitpoint_enable
 ----------------------
@@ -11,12 +11,13 @@ step v_insert: INSERT INTO conditions VALUES ('2026-07-01 00:00+00', 'sensor_vic
 step k_cancel: CALL cancelpids(); <waiting ...>
 step v_insert: <... completed>
 ERROR:  canceling statement due to user request
+step k_cancel: <... completed>
+step k_noop: 
 step wp_pc_release: SELECT debug_waitpoint_release('tenant_tracker_after_precommit_drain');
 debug_waitpoint_release
 -----------------------
                        
 
-step k_cancel: <... completed>
 step r_anchor_insert: INSERT INTO conditions VALUES ('2026-07-15 00:00+00', 'sensor_anchor', 0);
 step r_refresh: CALL refresh_continuous_aggregate('cond_daily', '2026-07-15 00:00+00', NULL);
 step r_check_conditions: 
