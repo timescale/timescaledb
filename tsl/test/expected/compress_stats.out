@@ -542,3 +542,30 @@ SELECT count(*) FROM _timescaledb_functions.chunk_statistics();
 -[ RECORD 1 ]
 count | 0
 
+-- DROP OWNED BY removes the statistics of the owned hypertable's chunks
+CREATE TABLE t(ts timestamptz, a int, seg int);
+SELECT create_hypertable('t', by_range('ts', interval '1 day'));
+-[ RECORD 1 ]-----+------
+create_hypertable | (2,t)
+
+ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_segmentby = 'seg');
+INSERT INTO t SELECT ts, 1, 1 FROM generate_series('2024-01-01'::timestamptz, '2024-01-03', interval '1 hour') ts;
+SELECT count(compress_chunk(c)) FROM show_chunks('t') c;
+-[ RECORD 1 ]
+count | 3
+
+SELECT count(*) FROM t WHERE a = 5;
+-[ RECORD 1 ]
+count | 0
+
+SELECT count(*) FROM _timescaledb_functions.chunk_statistics();
+-[ RECORD 1 ]
+count | 3
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER TABLE t OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+DROP OWNED BY :ROLE_DEFAULT_PERM_USER_2;
+SELECT count(*) FROM _timescaledb_functions.chunk_statistics();
+-[ RECORD 1 ]
+count | 0
+

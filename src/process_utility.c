@@ -6440,6 +6440,7 @@ process_drop_table(EventTriggerDropObject *obj)
 	 */
 	ts_compression_settings_delete_any(table->relid);
 	ts_chunk_rewrite_delete(table->relid, false);
+	ts_stats_chunk_evict(table->relid);
 }
 
 static void
