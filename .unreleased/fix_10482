@@ -1,1 +1,0 @@
-Fixes: #10524 Shared memory leak in the chunk stats subsystem when databases are dropped
