@@ -12,11 +12,13 @@
 #include <storage/lwlock.h>
 
 /*
- * See more details in ts_stats_segment.c these declaration are only for the fallback
- * implementation of the per-database DSM segment for PG 15-16.
+ * See more details in ts_stats_segment.c. These declarations are for the
+ * registry of per-database DSM segments keyed by database OID. We cannot use
+ * the DSM registry (GetNamedDSMSegment) for this, because it pins the named
+ * segments forever and offers no way to remove them, so segments of dropped
+ * databases would leak.
  */
 
-#if PG17_LT
 #define TS_STATS_MAX_DATABASES 1024
 
 /* Segment types */
@@ -38,4 +40,3 @@ typedef struct TsObservHandleTable
 
 void ts_stats_shmem_request(void);
 void ts_stats_shmem_startup(void);
-#endif /* PG17_LT */
