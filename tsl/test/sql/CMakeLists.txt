@@ -62,6 +62,7 @@ set(TEST_FILES
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_unordered.sql
+    compression_sorted_merge_segmentwise.sql
     compression_trigger.sql
     compression_uuid.sql
     create_table_with.sql
@@ -224,7 +225,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vacuum.sql)
 
   list(APPEND TEST_TEMPLATES attach_chunk.sql.in
-       compression_update_delete.sql.in deferredchunkscan.sql.in
+       compression_update_delete.sql.in deferredchunkappend.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)

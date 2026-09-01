@@ -10,7 +10,7 @@ SELECT format('\! diff -u %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_C
 SET work_mem TO '50MB';
 SET enable_incremental_sort TO off;
 SET timezone TO 'America/Los_Angeles';
-SET timescaledb.enable_deferred_chunk_scan TO off;
+SET timescaledb.enable_deferred_chunk_append TO off;
 -- disable memoize node to avoid flaky results
 SET enable_memoize TO 'off';
 CREATE TABLE metrics (
@@ -304,25 +304,18 @@ ORDER BY time,
     device_id
 ;
 --- QUERY PLAN ---
- Result (actual rows=3456.00 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics (actual rows=3456.00 loops=1)
-         Order: metrics."time", metrics.device_id
-         ->  Sort (actual rows=1440.00 loops=1)
-               Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
-               Sort Method: quicksort 
+ Sort (actual rows=3456.00 loops=1)
+   Sort Key: metrics."time", metrics.device_id
+   Sort Method: quicksort 
+   ->  Result (actual rows=3456.00 loops=1)
+         ->  Append (actual rows=3456.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1440.00 loops=1)
                      ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=2.00 loops=1)
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
                            Rows Removed by Filter: 3
-         ->  Sort (actual rows=1344.00 loops=1)
-               Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id
-               Sort Method: quicksort 
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=1344.00 loops=1)
                      Filter: (device_id = ANY ('{1,2}'::integer[]))
                      Rows Removed by Filter: 2016
-         ->  Sort (actual rows=672.00 loops=1)
-               Sort Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id
-               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=672.00 loops=1)
                      ->  Seq Scan on _hyper_1_3_chunk_compressed (actual rows=2.00 loops=1)
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
@@ -404,15 +397,11 @@ WHERE v3 > 10.0
 ORDER BY time,
     device_id;
 --- QUERY PLAN ---
- Custom Scan (ChunkAppend) on public.metrics (actual rows=0.00 loops=1)
+ Sort (actual rows=0.00 loops=1)
    Output: metrics."time", metrics.device_id, metrics.device_id_peer, metrics.v0, metrics.v1, metrics.v2, metrics.v3
-   Order: metrics."time", metrics.device_id
-   Startup Exclusion: false
-   Runtime Exclusion: false
-   ->  Sort (actual rows=0.00 loops=1)
-         Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.device_id_peer, _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
-         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
-         Sort Method: quicksort 
+   Sort Key: metrics."time", metrics.device_id
+   Sort Method: quicksort 
+   ->  Append (actual rows=0.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.device_id_peer, _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                Vectorized Filter: (_hyper_1_1_chunk.v3 > '10'::double precision)
@@ -421,18 +410,10 @@ ORDER BY time,
                Bulk Decompression: true
                ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=5.00 loops=1)
                      Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed.device_id_peer, _hyper_1_1_chunk_compressed._ts_meta_min_3, _hyper_1_1_chunk_compressed._ts_meta_max_3, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_v0, _hyper_1_1_chunk_compressed._ts_meta_v2_last_v0, _hyper_1_1_chunk_compressed.v0, _hyper_1_1_chunk_compressed._ts_meta_min_2, _hyper_1_1_chunk_compressed._ts_meta_max_2, _hyper_1_1_chunk_compressed._ts_meta_v2_first_v1, _hyper_1_1_chunk_compressed._ts_meta_v2_last_v1, _hyper_1_1_chunk_compressed.v1, _hyper_1_1_chunk_compressed.v2, _hyper_1_1_chunk_compressed.v3
-   ->  Sort (actual rows=0.00 loops=1)
-         Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.device_id_peer, _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
-         Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id
-         Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=0.00 loops=1)
                Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.device_id_peer, _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                Filter: (_hyper_1_2_chunk.v3 > '10'::double precision)
                Rows Removed by Filter: 3360
-   ->  Sort (actual rows=0.00 loops=1)
-         Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.device_id_peer, _hyper_1_3_chunk.v0, _hyper_1_3_chunk.v1, _hyper_1_3_chunk.v2, _hyper_1_3_chunk.v3
-         Sort Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id
-         Sort Method: quicksort 
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=0.00 loops=1)
                Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device_id, _hyper_1_3_chunk.device_id_peer, _hyper_1_3_chunk.v0, _hyper_1_3_chunk.v1, _hyper_1_3_chunk.v2, _hyper_1_3_chunk.v3
                Vectorized Filter: (_hyper_1_3_chunk.v3 > '10'::double precision)
@@ -3091,51 +3072,29 @@ ORDER BY time,
     device_id
 ;
 --- QUERY PLAN ---
- Result (actual rows=3456.00 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=3456.00 loops=1)
-         Order: metrics_space."time", metrics_space.device_id
-         ->  Merge Append (actual rows=1440.00 loops=1)
-               Sort Key: metrics_space."time", metrics_space.device_id
-               ->  Sort (actual rows=720.00 loops=1)
-                     Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk (actual rows=720.00 loops=1)
-                           ->  Seq Scan on _hyper_2_4_chunk_compressed (actual rows=1.00 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-               ->  Sort (actual rows=720.00 loops=1)
-                     Sort Key: _hyper_2_5_chunk."time", _hyper_2_5_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk (actual rows=720.00 loops=1)
-                           ->  Seq Scan on _hyper_2_5_chunk_compressed (actual rows=1.00 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 2
-         ->  Merge Append (actual rows=1344.00 loops=1)
-               Sort Key: metrics_space."time", metrics_space.device_id
-               ->  Sort (actual rows=672.00 loops=1)
-                     Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_2_7_chunk (actual rows=672.00 loops=1)
+ Sort (actual rows=3456.00 loops=1)
+   Sort Key: metrics_space."time", metrics_space.device_id
+   Sort Method: quicksort 
+   ->  Result (actual rows=3456.00 loops=1)
+         ->  Append (actual rows=3456.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk (actual rows=720.00 loops=1)
+                     ->  Seq Scan on _hyper_2_4_chunk_compressed (actual rows=1.00 loops=1)
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
-               ->  Sort (actual rows=672.00 loops=1)
-                     Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=672.00 loops=1)
-                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-         ->  Merge Append (actual rows=672.00 loops=1)
-               Sort Key: metrics_space."time", metrics_space.device_id
-               ->  Sort (actual rows=336.00 loops=1)
-                     Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk (actual rows=336.00 loops=1)
-                           ->  Seq Scan on _hyper_2_10_chunk_compressed (actual rows=1.00 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-               ->  Sort (actual rows=336.00 loops=1)
-                     Sort Key: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk (actual rows=336.00 loops=1)
-                           ->  Seq Scan on _hyper_2_11_chunk_compressed (actual rows=1.00 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 2
+               ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk (actual rows=720.00 loops=1)
+                     ->  Seq Scan on _hyper_2_5_chunk_compressed (actual rows=1.00 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           Rows Removed by Filter: 2
+               ->  Seq Scan on _hyper_2_7_chunk (actual rows=672.00 loops=1)
+                     Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=672.00 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk (actual rows=336.00 loops=1)
+                     ->  Seq Scan on _hyper_2_10_chunk_compressed (actual rows=1.00 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+               ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk (actual rows=336.00 loops=1)
+                     ->  Seq Scan on _hyper_2_11_chunk_compressed (actual rows=1.00 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           Rows Removed by Filter: 2
 
 -- test constraints not present in targetlist
 :PREFIX
@@ -3204,109 +3163,67 @@ WHERE v3 > 10.0
 ORDER BY time,
     device_id;
 --- QUERY PLAN ---
- Custom Scan (ChunkAppend) on public.metrics_space (actual rows=0.00 loops=1)
+ Sort (actual rows=0.00 loops=1)
    Output: metrics_space."time", metrics_space.device_id, metrics_space.device_id_peer, metrics_space.v0, metrics_space.v1, metrics_space.v2, metrics_space.v3
-   Order: metrics_space."time", metrics_space.device_id
-   Startup Exclusion: false
-   Runtime Exclusion: false
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time", metrics_space.device_id
-         ->  Sort (actual rows=0.00 loops=1)
+   Sort Key: metrics_space."time", metrics_space.device_id
+   Sort Method: quicksort 
+   ->  Append (actual rows=0.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_4_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id, _hyper_2_4_chunk.device_id_peer, _hyper_2_4_chunk.v0, _hyper_2_4_chunk.v1, _hyper_2_4_chunk.v2, _hyper_2_4_chunk.v3
-               Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_4_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id, _hyper_2_4_chunk.device_id_peer, _hyper_2_4_chunk.v0, _hyper_2_4_chunk.v1, _hyper_2_4_chunk.v2, _hyper_2_4_chunk.v3
-                     Vectorized Filter: (_hyper_2_4_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 720
-                     Batches Removed by Filter: 1
-                     Bulk Decompression: true
-                     ->  Seq Scan on _timescaledb_internal._hyper_2_4_chunk_compressed (actual rows=1.00 loops=1)
-                           Output: _hyper_2_4_chunk_compressed._ts_meta_count, _hyper_2_4_chunk_compressed.device_id, _hyper_2_4_chunk_compressed.device_id_peer, _hyper_2_4_chunk_compressed._ts_meta_min_3, _hyper_2_4_chunk_compressed._ts_meta_max_3, _hyper_2_4_chunk_compressed._ts_meta_v2_first_time, _hyper_2_4_chunk_compressed._ts_meta_v2_last_time, _hyper_2_4_chunk_compressed."time", _hyper_2_4_chunk_compressed._ts_meta_min_1, _hyper_2_4_chunk_compressed._ts_meta_max_1, _hyper_2_4_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_4_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_4_chunk_compressed.v0, _hyper_2_4_chunk_compressed._ts_meta_min_2, _hyper_2_4_chunk_compressed._ts_meta_max_2, _hyper_2_4_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_4_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_4_chunk_compressed.v1, _hyper_2_4_chunk_compressed.v2, _hyper_2_4_chunk_compressed.v3
-         ->  Sort (actual rows=0.00 loops=1)
+               Vectorized Filter: (_hyper_2_4_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 720
+               Batches Removed by Filter: 1
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal._hyper_2_4_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_2_4_chunk_compressed._ts_meta_count, _hyper_2_4_chunk_compressed.device_id, _hyper_2_4_chunk_compressed.device_id_peer, _hyper_2_4_chunk_compressed._ts_meta_min_3, _hyper_2_4_chunk_compressed._ts_meta_max_3, _hyper_2_4_chunk_compressed._ts_meta_v2_first_time, _hyper_2_4_chunk_compressed._ts_meta_v2_last_time, _hyper_2_4_chunk_compressed."time", _hyper_2_4_chunk_compressed._ts_meta_min_1, _hyper_2_4_chunk_compressed._ts_meta_max_1, _hyper_2_4_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_4_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_4_chunk_compressed.v0, _hyper_2_4_chunk_compressed._ts_meta_min_2, _hyper_2_4_chunk_compressed._ts_meta_max_2, _hyper_2_4_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_4_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_4_chunk_compressed.v1, _hyper_2_4_chunk_compressed.v2, _hyper_2_4_chunk_compressed.v3
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_5_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_5_chunk."time", _hyper_2_5_chunk.device_id, _hyper_2_5_chunk.device_id_peer, _hyper_2_5_chunk.v0, _hyper_2_5_chunk.v1, _hyper_2_5_chunk.v2, _hyper_2_5_chunk.v3
-               Sort Key: _hyper_2_5_chunk."time", _hyper_2_5_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_5_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_5_chunk."time", _hyper_2_5_chunk.device_id, _hyper_2_5_chunk.device_id_peer, _hyper_2_5_chunk.v0, _hyper_2_5_chunk.v1, _hyper_2_5_chunk.v2, _hyper_2_5_chunk.v3
-                     Vectorized Filter: (_hyper_2_5_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 2160
-                     Batches Removed by Filter: 3
-                     Bulk Decompression: true
-                     ->  Seq Scan on _timescaledb_internal._hyper_2_5_chunk_compressed (actual rows=3.00 loops=1)
-                           Output: _hyper_2_5_chunk_compressed._ts_meta_count, _hyper_2_5_chunk_compressed.device_id, _hyper_2_5_chunk_compressed.device_id_peer, _hyper_2_5_chunk_compressed._ts_meta_min_3, _hyper_2_5_chunk_compressed._ts_meta_max_3, _hyper_2_5_chunk_compressed._ts_meta_v2_first_time, _hyper_2_5_chunk_compressed._ts_meta_v2_last_time, _hyper_2_5_chunk_compressed."time", _hyper_2_5_chunk_compressed._ts_meta_min_1, _hyper_2_5_chunk_compressed._ts_meta_max_1, _hyper_2_5_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_5_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_5_chunk_compressed.v0, _hyper_2_5_chunk_compressed._ts_meta_min_2, _hyper_2_5_chunk_compressed._ts_meta_max_2, _hyper_2_5_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_5_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_5_chunk_compressed.v1, _hyper_2_5_chunk_compressed.v2, _hyper_2_5_chunk_compressed.v3
-         ->  Sort (actual rows=0.00 loops=1)
+               Vectorized Filter: (_hyper_2_5_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 2160
+               Batches Removed by Filter: 3
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal._hyper_2_5_chunk_compressed (actual rows=3.00 loops=1)
+                     Output: _hyper_2_5_chunk_compressed._ts_meta_count, _hyper_2_5_chunk_compressed.device_id, _hyper_2_5_chunk_compressed.device_id_peer, _hyper_2_5_chunk_compressed._ts_meta_min_3, _hyper_2_5_chunk_compressed._ts_meta_max_3, _hyper_2_5_chunk_compressed._ts_meta_v2_first_time, _hyper_2_5_chunk_compressed._ts_meta_v2_last_time, _hyper_2_5_chunk_compressed."time", _hyper_2_5_chunk_compressed._ts_meta_min_1, _hyper_2_5_chunk_compressed._ts_meta_max_1, _hyper_2_5_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_5_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_5_chunk_compressed.v0, _hyper_2_5_chunk_compressed._ts_meta_min_2, _hyper_2_5_chunk_compressed._ts_meta_max_2, _hyper_2_5_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_5_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_5_chunk_compressed.v1, _hyper_2_5_chunk_compressed.v2, _hyper_2_5_chunk_compressed.v3
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_6_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_6_chunk."time", _hyper_2_6_chunk.device_id, _hyper_2_6_chunk.device_id_peer, _hyper_2_6_chunk.v0, _hyper_2_6_chunk.v1, _hyper_2_6_chunk.v2, _hyper_2_6_chunk.v3
-               Sort Key: _hyper_2_6_chunk."time", _hyper_2_6_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_6_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_6_chunk."time", _hyper_2_6_chunk.device_id, _hyper_2_6_chunk.device_id_peer, _hyper_2_6_chunk.v0, _hyper_2_6_chunk.v1, _hyper_2_6_chunk.v2, _hyper_2_6_chunk.v3
-                     Vectorized Filter: (_hyper_2_6_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 720
-                     Batches Removed by Filter: 1
-                     Bulk Decompression: true
-                     ->  Seq Scan on _timescaledb_internal._hyper_2_6_chunk_compressed (actual rows=1.00 loops=1)
-                           Output: _hyper_2_6_chunk_compressed._ts_meta_count, _hyper_2_6_chunk_compressed.device_id, _hyper_2_6_chunk_compressed.device_id_peer, _hyper_2_6_chunk_compressed._ts_meta_min_3, _hyper_2_6_chunk_compressed._ts_meta_max_3, _hyper_2_6_chunk_compressed._ts_meta_v2_first_time, _hyper_2_6_chunk_compressed._ts_meta_v2_last_time, _hyper_2_6_chunk_compressed."time", _hyper_2_6_chunk_compressed._ts_meta_min_1, _hyper_2_6_chunk_compressed._ts_meta_max_1, _hyper_2_6_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_6_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_6_chunk_compressed.v0, _hyper_2_6_chunk_compressed._ts_meta_min_2, _hyper_2_6_chunk_compressed._ts_meta_max_2, _hyper_2_6_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_6_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_6_chunk_compressed.v1, _hyper_2_6_chunk_compressed.v2, _hyper_2_6_chunk_compressed.v3
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time", metrics_space.device_id
-         ->  Sort (actual rows=0.00 loops=1)
+               Vectorized Filter: (_hyper_2_6_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 720
+               Batches Removed by Filter: 1
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal._hyper_2_6_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_2_6_chunk_compressed._ts_meta_count, _hyper_2_6_chunk_compressed.device_id, _hyper_2_6_chunk_compressed.device_id_peer, _hyper_2_6_chunk_compressed._ts_meta_min_3, _hyper_2_6_chunk_compressed._ts_meta_max_3, _hyper_2_6_chunk_compressed._ts_meta_v2_first_time, _hyper_2_6_chunk_compressed._ts_meta_v2_last_time, _hyper_2_6_chunk_compressed."time", _hyper_2_6_chunk_compressed._ts_meta_min_1, _hyper_2_6_chunk_compressed._ts_meta_max_1, _hyper_2_6_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_6_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_6_chunk_compressed.v0, _hyper_2_6_chunk_compressed._ts_meta_min_2, _hyper_2_6_chunk_compressed._ts_meta_max_2, _hyper_2_6_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_6_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_6_chunk_compressed.v1, _hyper_2_6_chunk_compressed.v2, _hyper_2_6_chunk_compressed.v3
+         ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id, _hyper_2_7_chunk.device_id_peer, _hyper_2_7_chunk.v0, _hyper_2_7_chunk.v1, _hyper_2_7_chunk.v2, _hyper_2_7_chunk.v3
-               Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id, _hyper_2_7_chunk.device_id_peer, _hyper_2_7_chunk.v0, _hyper_2_7_chunk.v1, _hyper_2_7_chunk.v2, _hyper_2_7_chunk.v3
-                     Filter: (_hyper_2_7_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 672
-         ->  Sort (actual rows=0.00 loops=1)
+               Filter: (_hyper_2_7_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 672
+         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
-               Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
-                     Filter: (_hyper_2_8_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 2016
-         ->  Sort (actual rows=0.00 loops=1)
+               Filter: (_hyper_2_8_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 2016
+         ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
-               Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
-                     Filter: (_hyper_2_9_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 672
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time", metrics_space.device_id
-         ->  Sort (actual rows=0.00 loops=1)
+               Filter: (_hyper_2_9_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 672
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_10_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id, _hyper_2_10_chunk.device_id_peer, _hyper_2_10_chunk.v0, _hyper_2_10_chunk.v1, _hyper_2_10_chunk.v2, _hyper_2_10_chunk.v3
-               Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_10_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id, _hyper_2_10_chunk.device_id_peer, _hyper_2_10_chunk.v0, _hyper_2_10_chunk.v1, _hyper_2_10_chunk.v2, _hyper_2_10_chunk.v3
-                     Vectorized Filter: (_hyper_2_10_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 336
-                     Batches Removed by Filter: 1
-                     Bulk Decompression: true
-                     ->  Seq Scan on _timescaledb_internal._hyper_2_10_chunk_compressed (actual rows=1.00 loops=1)
-                           Output: _hyper_2_10_chunk_compressed._ts_meta_count, _hyper_2_10_chunk_compressed.device_id, _hyper_2_10_chunk_compressed.device_id_peer, _hyper_2_10_chunk_compressed._ts_meta_min_3, _hyper_2_10_chunk_compressed._ts_meta_max_3, _hyper_2_10_chunk_compressed._ts_meta_v2_first_time, _hyper_2_10_chunk_compressed._ts_meta_v2_last_time, _hyper_2_10_chunk_compressed."time", _hyper_2_10_chunk_compressed._ts_meta_min_1, _hyper_2_10_chunk_compressed._ts_meta_max_1, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_10_chunk_compressed.v0, _hyper_2_10_chunk_compressed._ts_meta_min_2, _hyper_2_10_chunk_compressed._ts_meta_max_2, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_10_chunk_compressed.v1, _hyper_2_10_chunk_compressed.v2, _hyper_2_10_chunk_compressed.v3
-         ->  Sort (actual rows=0.00 loops=1)
+               Vectorized Filter: (_hyper_2_10_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 336
+               Batches Removed by Filter: 1
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal._hyper_2_10_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_2_10_chunk_compressed._ts_meta_count, _hyper_2_10_chunk_compressed.device_id, _hyper_2_10_chunk_compressed.device_id_peer, _hyper_2_10_chunk_compressed._ts_meta_min_3, _hyper_2_10_chunk_compressed._ts_meta_max_3, _hyper_2_10_chunk_compressed._ts_meta_v2_first_time, _hyper_2_10_chunk_compressed._ts_meta_v2_last_time, _hyper_2_10_chunk_compressed."time", _hyper_2_10_chunk_compressed._ts_meta_min_1, _hyper_2_10_chunk_compressed._ts_meta_max_1, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_10_chunk_compressed.v0, _hyper_2_10_chunk_compressed._ts_meta_min_2, _hyper_2_10_chunk_compressed._ts_meta_max_2, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_10_chunk_compressed.v1, _hyper_2_10_chunk_compressed.v2, _hyper_2_10_chunk_compressed.v3
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_11_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
-               Sort Key: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_11_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
-                     Vectorized Filter: (_hyper_2_11_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 1008
-                     Batches Removed by Filter: 3
-                     Bulk Decompression: true
-                     ->  Seq Scan on _timescaledb_internal._hyper_2_11_chunk_compressed (actual rows=3.00 loops=1)
-                           Output: _hyper_2_11_chunk_compressed._ts_meta_count, _hyper_2_11_chunk_compressed.device_id, _hyper_2_11_chunk_compressed.device_id_peer, _hyper_2_11_chunk_compressed._ts_meta_min_3, _hyper_2_11_chunk_compressed._ts_meta_max_3, _hyper_2_11_chunk_compressed._ts_meta_v2_first_time, _hyper_2_11_chunk_compressed._ts_meta_v2_last_time, _hyper_2_11_chunk_compressed."time", _hyper_2_11_chunk_compressed._ts_meta_min_1, _hyper_2_11_chunk_compressed._ts_meta_max_1, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_11_chunk_compressed.v0, _hyper_2_11_chunk_compressed._ts_meta_min_2, _hyper_2_11_chunk_compressed._ts_meta_max_2, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_11_chunk_compressed.v1, _hyper_2_11_chunk_compressed.v2, _hyper_2_11_chunk_compressed.v3
-         ->  Sort (actual rows=0.00 loops=1)
+               Vectorized Filter: (_hyper_2_11_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 1008
+               Batches Removed by Filter: 3
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal._hyper_2_11_chunk_compressed (actual rows=3.00 loops=1)
+                     Output: _hyper_2_11_chunk_compressed._ts_meta_count, _hyper_2_11_chunk_compressed.device_id, _hyper_2_11_chunk_compressed.device_id_peer, _hyper_2_11_chunk_compressed._ts_meta_min_3, _hyper_2_11_chunk_compressed._ts_meta_max_3, _hyper_2_11_chunk_compressed._ts_meta_v2_first_time, _hyper_2_11_chunk_compressed._ts_meta_v2_last_time, _hyper_2_11_chunk_compressed."time", _hyper_2_11_chunk_compressed._ts_meta_min_1, _hyper_2_11_chunk_compressed._ts_meta_max_1, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_11_chunk_compressed.v0, _hyper_2_11_chunk_compressed._ts_meta_min_2, _hyper_2_11_chunk_compressed._ts_meta_max_2, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_11_chunk_compressed.v1, _hyper_2_11_chunk_compressed.v2, _hyper_2_11_chunk_compressed.v3
+         ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=0.00 loops=1)
                Output: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id, _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.v0, _hyper_2_12_chunk.v1, _hyper_2_12_chunk.v2, _hyper_2_12_chunk.v3
-               Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=0.00 loops=1)
-                     Output: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id, _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.v0, _hyper_2_12_chunk.v1, _hyper_2_12_chunk.v2, _hyper_2_12_chunk.v3
-                     Filter: (_hyper_2_12_chunk.v3 > '10'::double precision)
-                     Rows Removed by Filter: 336
+               Filter: (_hyper_2_12_chunk.v3 > '10'::double precision)
+               Rows Removed by Filter: 336
 
 -- device_id constraint should be pushed down
 :PREFIX
@@ -4814,68 +4731,40 @@ WHERE time > '2000-01-08'
 ORDER BY time,
     device_id;
 --- QUERY PLAN ---
- Custom Scan (ChunkAppend) on public.metrics_space (actual rows=3915.00 loops=1)
+ Sort (actual rows=3915.00 loops=1)
    Output: metrics_space."time", metrics_space.device_id, metrics_space.device_id_peer, metrics_space.v0, metrics_space.v1, metrics_space.v2, metrics_space.v3
-   Order: metrics_space."time", metrics_space.device_id
-   Startup Exclusion: false
-   Runtime Exclusion: false
-   ->  Merge Append (actual rows=2235.00 loops=1)
-         Sort Key: metrics_space."time", metrics_space.device_id
-         ->  Sort (actual rows=447.00 loops=1)
+   Sort Key: metrics_space."time", metrics_space.device_id
+   Sort Method: quicksort 
+   ->  Append (actual rows=3915.00 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk (actual rows=447.00 loops=1)
                Output: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id, _hyper_2_7_chunk.device_id_peer, _hyper_2_7_chunk.v0, _hyper_2_7_chunk.v1, _hyper_2_7_chunk.v2, _hyper_2_7_chunk.v3
-               Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_2_7_chunk (actual rows=447.00 loops=1)
-                     Output: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id, _hyper_2_7_chunk.device_id_peer, _hyper_2_7_chunk.v0, _hyper_2_7_chunk.v1, _hyper_2_7_chunk.v2, _hyper_2_7_chunk.v3
-                     Filter: (_hyper_2_7_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 225
-         ->  Sort (actual rows=1341.00 loops=1)
+               Filter: (_hyper_2_7_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 225
+         ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk (actual rows=1341.00 loops=1)
                Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
-               Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_2_8_chunk (actual rows=1341.00 loops=1)
-                     Output: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id, _hyper_2_8_chunk.device_id_peer, _hyper_2_8_chunk.v0, _hyper_2_8_chunk.v1, _hyper_2_8_chunk.v2, _hyper_2_8_chunk.v3
-                     Filter: (_hyper_2_8_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 675
-         ->  Sort (actual rows=447.00 loops=1)
+               Filter: (_hyper_2_8_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 675
+         ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=447.00 loops=1)
                Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
-               Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_2_9_chunk (actual rows=447.00 loops=1)
-                     Output: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id, _hyper_2_9_chunk.device_id_peer, _hyper_2_9_chunk.v0, _hyper_2_9_chunk.v1, _hyper_2_9_chunk.v2, _hyper_2_9_chunk.v3
-                     Filter: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 225
-   ->  Merge Append (actual rows=1680.00 loops=1)
-         Sort Key: metrics_space."time", metrics_space.device_id
-         ->  Sort (actual rows=336.00 loops=1)
+               Filter: (_hyper_2_9_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 225
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_10_chunk (actual rows=336.00 loops=1)
                Output: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id, _hyper_2_10_chunk.device_id_peer, _hyper_2_10_chunk.v0, _hyper_2_10_chunk.v1, _hyper_2_10_chunk.v2, _hyper_2_10_chunk.v3
-               Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_10_chunk (actual rows=336.00 loops=1)
-                     Output: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id, _hyper_2_10_chunk.device_id_peer, _hyper_2_10_chunk.v0, _hyper_2_10_chunk.v1, _hyper_2_10_chunk.v2, _hyper_2_10_chunk.v3
-                     Vectorized Filter: (_hyper_2_10_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     Bulk Decompression: true
-                     ->  Seq Scan on _timescaledb_internal._hyper_2_10_chunk_compressed (actual rows=1.00 loops=1)
-                           Output: _hyper_2_10_chunk_compressed._ts_meta_count, _hyper_2_10_chunk_compressed.device_id, _hyper_2_10_chunk_compressed.device_id_peer, _hyper_2_10_chunk_compressed._ts_meta_min_3, _hyper_2_10_chunk_compressed._ts_meta_max_3, _hyper_2_10_chunk_compressed._ts_meta_v2_first_time, _hyper_2_10_chunk_compressed._ts_meta_v2_last_time, _hyper_2_10_chunk_compressed."time", _hyper_2_10_chunk_compressed._ts_meta_min_1, _hyper_2_10_chunk_compressed._ts_meta_max_1, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_10_chunk_compressed.v0, _hyper_2_10_chunk_compressed._ts_meta_min_2, _hyper_2_10_chunk_compressed._ts_meta_max_2, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_10_chunk_compressed.v1, _hyper_2_10_chunk_compressed.v2, _hyper_2_10_chunk_compressed.v3
-                           Filter: (_hyper_2_10_chunk_compressed._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sort (actual rows=1008.00 loops=1)
+               Vectorized Filter: (_hyper_2_10_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal._hyper_2_10_chunk_compressed (actual rows=1.00 loops=1)
+                     Output: _hyper_2_10_chunk_compressed._ts_meta_count, _hyper_2_10_chunk_compressed.device_id, _hyper_2_10_chunk_compressed.device_id_peer, _hyper_2_10_chunk_compressed._ts_meta_min_3, _hyper_2_10_chunk_compressed._ts_meta_max_3, _hyper_2_10_chunk_compressed._ts_meta_v2_first_time, _hyper_2_10_chunk_compressed._ts_meta_v2_last_time, _hyper_2_10_chunk_compressed."time", _hyper_2_10_chunk_compressed._ts_meta_min_1, _hyper_2_10_chunk_compressed._ts_meta_max_1, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_10_chunk_compressed.v0, _hyper_2_10_chunk_compressed._ts_meta_min_2, _hyper_2_10_chunk_compressed._ts_meta_max_2, _hyper_2_10_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_10_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_10_chunk_compressed.v1, _hyper_2_10_chunk_compressed.v2, _hyper_2_10_chunk_compressed.v3
+                     Filter: (_hyper_2_10_chunk_compressed._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_11_chunk (actual rows=1008.00 loops=1)
                Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
-               Sort Key: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_2_11_chunk (actual rows=1008.00 loops=1)
-                     Output: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id, _hyper_2_11_chunk.device_id_peer, _hyper_2_11_chunk.v0, _hyper_2_11_chunk.v1, _hyper_2_11_chunk.v2, _hyper_2_11_chunk.v3
-                     Vectorized Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     Bulk Decompression: true
-                     ->  Seq Scan on _timescaledb_internal._hyper_2_11_chunk_compressed (actual rows=3.00 loops=1)
-                           Output: _hyper_2_11_chunk_compressed._ts_meta_count, _hyper_2_11_chunk_compressed.device_id, _hyper_2_11_chunk_compressed.device_id_peer, _hyper_2_11_chunk_compressed._ts_meta_min_3, _hyper_2_11_chunk_compressed._ts_meta_max_3, _hyper_2_11_chunk_compressed._ts_meta_v2_first_time, _hyper_2_11_chunk_compressed._ts_meta_v2_last_time, _hyper_2_11_chunk_compressed."time", _hyper_2_11_chunk_compressed._ts_meta_min_1, _hyper_2_11_chunk_compressed._ts_meta_max_1, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_11_chunk_compressed.v0, _hyper_2_11_chunk_compressed._ts_meta_min_2, _hyper_2_11_chunk_compressed._ts_meta_max_2, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_11_chunk_compressed.v1, _hyper_2_11_chunk_compressed.v2, _hyper_2_11_chunk_compressed.v3
-                           Filter: (_hyper_2_11_chunk_compressed._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sort (actual rows=336.00 loops=1)
+               Vectorized Filter: (_hyper_2_11_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal._hyper_2_11_chunk_compressed (actual rows=3.00 loops=1)
+                     Output: _hyper_2_11_chunk_compressed._ts_meta_count, _hyper_2_11_chunk_compressed.device_id, _hyper_2_11_chunk_compressed.device_id_peer, _hyper_2_11_chunk_compressed._ts_meta_min_3, _hyper_2_11_chunk_compressed._ts_meta_max_3, _hyper_2_11_chunk_compressed._ts_meta_v2_first_time, _hyper_2_11_chunk_compressed._ts_meta_v2_last_time, _hyper_2_11_chunk_compressed."time", _hyper_2_11_chunk_compressed._ts_meta_min_1, _hyper_2_11_chunk_compressed._ts_meta_max_1, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v0, _hyper_2_11_chunk_compressed.v0, _hyper_2_11_chunk_compressed._ts_meta_min_2, _hyper_2_11_chunk_compressed._ts_meta_max_2, _hyper_2_11_chunk_compressed._ts_meta_v2_first_v1, _hyper_2_11_chunk_compressed._ts_meta_v2_last_v1, _hyper_2_11_chunk_compressed.v1, _hyper_2_11_chunk_compressed.v2, _hyper_2_11_chunk_compressed.v3
+                     Filter: (_hyper_2_11_chunk_compressed._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=336.00 loops=1)
                Output: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id, _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.v0, _hyper_2_12_chunk.v1, _hyper_2_12_chunk.v2, _hyper_2_12_chunk.v3
-               Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=336.00 loops=1)
-                     Output: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id, _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.v0, _hyper_2_12_chunk.v1, _hyper_2_12_chunk.v2, _hyper_2_12_chunk.v3
-                     Filter: (_hyper_2_12_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Filter: (_hyper_2_12_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 
 RESET enable_sort;
 -- should produce ordered path
@@ -5282,49 +5171,29 @@ WHERE time > '2000-01-08'
 ORDER BY time,
     device_id;
 --- QUERY PLAN ---
- Custom Scan (ChunkAppend) on metrics_space (actual rows=3915.00 loops=1)
-   Order: metrics_space."time", metrics_space.device_id
-   ->  Merge Append (actual rows=2235.00 loops=1)
-         Sort Key: metrics_space."time", metrics_space.device_id
-         ->  Sort (actual rows=447.00 loops=1)
-               Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _hyper_2_7_chunk (actual rows=447.00 loops=1)
-                     Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 225
-         ->  Sort (actual rows=1341.00 loops=1)
-               Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _hyper_2_8_chunk (actual rows=1341.00 loops=1)
-                     Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 675
-         ->  Sort (actual rows=447.00 loops=1)
-               Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _hyper_2_9_chunk (actual rows=447.00 loops=1)
-                     Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 225
-   ->  Merge Append (actual rows=1680.00 loops=1)
-         Sort Key: metrics_space."time", metrics_space.device_id
-         ->  Sort (actual rows=336.00 loops=1)
-               Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk (actual rows=336.00 loops=1)
-                     Vectorized Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on _hyper_2_10_chunk_compressed (actual rows=1.00 loops=1)
-                           Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sort (actual rows=1008.00 loops=1)
-               Sort Key: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id
-               Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk (actual rows=1008.00 loops=1)
-                     Vectorized Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on _hyper_2_11_chunk_compressed (actual rows=3.00 loops=1)
-                           Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Sort (actual rows=336.00 loops=1)
-               Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-               Sort Method: quicksort 
-               ->  Seq Scan on _hyper_2_12_chunk (actual rows=336.00 loops=1)
-                     Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+ Sort (actual rows=3915.00 loops=1)
+   Sort Key: metrics_space."time", metrics_space.device_id
+   Sort Method: quicksort 
+   ->  Append (actual rows=3915.00 loops=1)
+         ->  Seq Scan on _hyper_2_7_chunk (actual rows=447.00 loops=1)
+               Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 225
+         ->  Seq Scan on _hyper_2_8_chunk (actual rows=1341.00 loops=1)
+               Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 675
+         ->  Seq Scan on _hyper_2_9_chunk (actual rows=447.00 loops=1)
+               Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               Rows Removed by Filter: 225
+         ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk (actual rows=336.00 loops=1)
+               Vectorized Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_2_10_chunk_compressed (actual rows=1.00 loops=1)
+                     Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk (actual rows=1008.00 loops=1)
+               Vectorized Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_2_11_chunk_compressed (actual rows=3.00 loops=1)
+                     Filter: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_2_12_chunk (actual rows=336.00 loops=1)
+               Filter: ("time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 
 RESET enable_sort;
 -- test runtime exclusion

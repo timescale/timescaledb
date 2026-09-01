@@ -25,7 +25,7 @@
 #include <parser/parsetree.h>
 #include <utils/rel.h>
 
-#include "ts_inherit.h"
+#include "import/optimizer/inherit.h"
 #include "compat/compat.h"
 
 /* copied verbatim from optimizer/util/inherit.c at REL_18_3 */

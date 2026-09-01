@@ -32,7 +32,8 @@
 
 #include <math.h>
 
-#include "allpaths.h"
+#include "import/allpaths.h"
+
 #include "chunk.h"
 #include "compat/compat.h"
 #include "cross_module_fn.h"
@@ -295,7 +296,7 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *r
 	 * delete or modify paths added by the core code.
 	 */
 	if (set_rel_pathlist_hook)
-		(*set_rel_pathlist_hook)(root, rel, rti, rte);
+		(*set_rel_pathlist_hook) (root, rel, rti, rte);
 
 	/*
 	 * If this is a baserel, we should normally consider gathering any partial
@@ -387,7 +388,7 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 
 			/*
 			 * Currently, parallel workers can't access the leader's temporary
-			 * tables.  We could possibly relax this if the wrote all of its
+			 * tables.  We could possibly relax this if we wrote all of its
 			 * local buffers at the start of the query and made no changes
 			 * thereafter (maybe we could allow hint bit changes), and if we
 			 * taught the workers to read them.  Writing a large number of
@@ -404,7 +405,7 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 			 */
 			if (rte->tablesample != NULL)
 			{
-				char proparallel = func_parallel(rte->tablesample->tsmhandler);
+				char		proparallel = func_parallel(rte->tablesample->tsmhandler);
 
 				if (proparallel != PROPARALLEL_SAFE)
 					return;
@@ -460,7 +461,7 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 			 * doesn't currently seem worth expending extra effort to do so.)
 			 */
 			{
-				Query *subquery = castNode(Query, rte->subquery);
+				Query	   *subquery = castNode(Query, rte->subquery);
 
 				if (limit_needed(subquery))
 					return;

@@ -64,7 +64,8 @@ body:
       label: What happened?
       description: |
         Tell us what happened and also what you would have expected to
-        happen instead.
+        happen instead. Do not add any LLM-generated root cause analysis
+        or fix ideas to this field, keep the text short and to the point.
       placeholder: "Describe the bug"
     validations:
       required: true
@@ -149,7 +150,8 @@ body:
       description: |
         Please try to provide step-by-step instructions how to
         reproduce the issue. If possible, provide scripts that we can
-        run to trigger the bug.
+        run to trigger the bug. Do not add any LLM-generated root cause analysis
+        or fix ideas to this field, keep the text short and to the point.
       render: bash
     validations:
       required: true
