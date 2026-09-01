@@ -1,2 +1,0 @@
-Fixes: #10535 Fix chunk merging with default sparse indexes
-Thanks: @esdanieljaegers for reporting the issue and providing steps for reproduction
