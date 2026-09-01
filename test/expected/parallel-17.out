@@ -327,12 +327,12 @@ SELECT * FROM (SELECT * FROM "test" WHERE i >= 999000 ORDER BY i) AS t1 JOIN (SE
  999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400080 | 400080.1 | Wed Dec 31 16:06:40.08 1969
  999000 | 999000.1 | Wed Dec 31 16:16:39 1969 | 400090 | 400090.1 | Wed Dec 31 16:06:40.09 1969
 
--- Test parallel ChunkAppend reinit
-SET enable_material = off;
+-- Test rescan of a parallel ChunkAppend on the inner side of a join.
+SET max_parallel_workers_per_gather = 4;
+SET parallel_tuple_cost = 0;
 SET min_parallel_table_scan_size = 0;
 SET min_parallel_index_scan_size = 0;
-SET enable_hashjoin = 'off';
-SET enable_nestloop = 'off';
+SET enable_material = off;
 CREATE TABLE sensor_data(
       time timestamptz NOT NULL,
       sensor_id integer NOT NULL);
@@ -352,141 +352,108 @@ SELECT time, 100 as sensor_id
 FROM
 generate_series('2000-01-01 00:00:30', '2022-01-01 00:00:30', INTERVAL '1 year') AS g1(time)
 ORDER BY time;
-:PREFIX SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
+CREATE TABLE monitoring_sites(site_id int);
+INSERT INTO monitoring_sites VALUES (1),(2),(3);
+ANALYZE monitoring_sites;
+:PREFIX
+SELECT count(*) FROM monitoring_sites m JOIN sensor_data s ON (TRUE)
+WHERE s.time > '2020-01-01 00:00:30'::text::timestamptz AND s.sensor_id > 50;
 --- QUERY PLAN ---
- Incremental Sort
-   Sort Key: s2."time", s1."time", s1.sensor_id, s2.sensor_id
-   Presorted Key: s2."time"
+ Aggregate
    ->  Nested Loop
-         ->  Custom Scan (ChunkAppend) on sensor_data s2
-               Order: s2."time"
-               ->  Index Scan Backward using _hyper_2_83_chunk_sensor_data_time_idx on _hyper_2_83_chunk s2_1
-                     Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
-               ->  Index Scan Backward using _hyper_2_84_chunk_sensor_data_time_idx on _hyper_2_84_chunk s2_2
-               ->  Index Scan Backward using _hyper_2_85_chunk_sensor_data_time_idx on _hyper_2_85_chunk s2_3
-               ->  Index Scan Backward using _hyper_2_86_chunk_sensor_data_time_idx on _hyper_2_86_chunk s2_4
-               ->  Index Scan Backward using _hyper_2_87_chunk_sensor_data_time_idx on _hyper_2_87_chunk s2_5
-                     Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+         ->  Gather
+               Workers Planned: 1
+               ->  Parallel Seq Scan on monitoring_sites m
          ->  Gather
                Workers Planned: 4
-               ->  Parallel Custom Scan (ChunkAppend) on sensor_data s1
+               ->  Parallel Custom Scan (ChunkAppend) on sensor_data s
                      Chunks excluded during startup: 80
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_83_chunk s1_1
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_83_chunk s_1
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_83_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_84_chunk s1_2
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_84_chunk s_2
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_84_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_85_chunk s1_3
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_85_chunk s_3
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_85_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_86_chunk s1_4
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_86_chunk s_4
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_86_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_87_chunk s1_5
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_87_chunk s_5
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_87_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_88_chunk s1_6
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_88_chunk s_6
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_88_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_89_chunk s1_7
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_89_chunk s_7
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_89_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_90_chunk s1_8
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_90_chunk s_8
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_90_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_91_chunk s1_9
+                     ->  Parallel Bitmap Heap Scan on _hyper_2_91_chunk s_9
                            Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
                            Filter: (sensor_id > 50)
                            ->  Bitmap Index Scan on _hyper_2_91_chunk_sensor_data_time_idx
                                  Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
 
--- Check query result
-SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
-             time             | sensor_id |             time             | sensor_id 
-------------------------------+-----------+------------------------------+-----------
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
- Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+SELECT count(*) FROM monitoring_sites m JOIN sensor_data s ON (TRUE)
+WHERE s.time > '2020-01-01 00:00:30'::text::timestamptz AND s.sensor_id > 50;
+ count 
+-------
+     6
 
--- Ensure the same result is produced if only the parallel workers have to produce them (i.e., the pstate is reinitialized properly)
+-- Same result when only the workers execute the subplans.
 SET parallel_leader_participation = off;
-SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
-             time             | sensor_id |             time             | sensor_id 
-------------------------------+-----------+------------------------------+-----------
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
- Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+SELECT count(*) FROM monitoring_sites m JOIN sensor_data s ON (TRUE)
+WHERE s.time > '2020-01-01 00:00:30'::text::timestamptz AND s.sensor_id > 50;
+ count 
+-------
+     6
 
 RESET parallel_leader_participation;
--- Ensure the same query result is produced by a sequencial query
-SET max_parallel_workers_per_gather TO 0;
+-- Same result from a sequential query.
+SET max_parallel_workers_per_gather = 0;
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
  set_config 
 ------------
  off
 
-SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
-             time             | sensor_id |             time             | sensor_id 
-------------------------------+-----------+------------------------------+-----------
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Apr 01 00:00:30 2020 PDT |         2
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Wed Jul 01 00:00:30 2020 PDT |         2
- Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
- Fri Jan 01 00:00:30 2021 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
- Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         1
- Sat Jan 01 00:00:30 2022 PST |       100 | Thu Oct 01 00:00:30 2020 PDT |         2
+SELECT count(*) FROM monitoring_sites m JOIN sensor_data s ON (TRUE)
+WHERE s.time > '2020-01-01 00:00:30'::text::timestamptz AND s.sensor_id > 50;
+ count 
+-------
+     6
 
-RESET enable_material;
-RESET min_parallel_table_scan_size;
-RESET min_parallel_index_scan_size;
-RESET enable_hashjoin;
-RESET enable_nestloop;
-RESET parallel_tuple_cost;
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
  set_config 
 ------------
  on
 
+DROP TABLE monitoring_sites;
+DROP TABLE sensor_data;
+RESET max_parallel_workers_per_gather;
+RESET parallel_tuple_cost;
+RESET min_parallel_table_scan_size;
+RESET min_parallel_index_scan_size;
+RESET enable_material;
 -- test worker assignment
 -- first chunk should have 1 worker and second chunk should have 2
 SET max_parallel_workers_per_gather TO 2;
