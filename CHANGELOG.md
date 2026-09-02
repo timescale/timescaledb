@@ -12,7 +12,7 @@ Blazing fast `LIMIT` queries with the newly introduced `DeferredChunkAppend`. Th
 **Features**
 * [#10147](https://github.com/timescale/timescaledb/pull/10147) Support segmentwise batch sorted merge for overlapping batches
 * [#10292](https://github.com/timescale/timescaledb/pull/10292) Add `DeferredChunkAppend` custom scan
-* [#10354](https://github.com/timescale/timescaledb/pull/10354) Handle `TM_Updated` in compressed DML scan
+* [#10354](https://github.com/timescale/timescaledb/pull/10354) Adds DML support for concurrent compaction
 * [#10388](https://github.com/timescale/timescaledb/pull/10388) Add custom toaster for compression
 
 **Bugfixes**
