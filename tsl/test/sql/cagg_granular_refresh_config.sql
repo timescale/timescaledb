@@ -198,3 +198,92 @@ SELECT seq_num FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 DROP TABLE conditions;
+
+-- TEST 5: A DML transaction touching multiple tenant_ids can end up producing
+-- an invalidation that spans across thhe granular refresh window, while 
+-- the trackings of a subset of the tenant_ids can fall completely outside
+-- and the rest inside the window. As such, the invalidation is currently written
+-- with a non-null seqnum, while those trackings outside the window is skipped.
+-- Consequently, when refresh the invalidations, only a subset of the tenant_ids
+-- are refreshed, resulting in missing/staled data in the cagg.
+-- current_time is mocked so that now() is fixed, 
+-- so the window opens at W = 2025-01-07 12:00, with one tenant
+-- on each side of it:
+--
+--        t1 = 10:00             W = 12:00          t2 = 14:00
+--   ---------|-----------------[|-----------------|---------->
+--        tenant 'x'         window opens      tenant 'y'
+--   \______________ one chunk, one transaction _______________/
+SET timezone = 'UTC';
+SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00';
+
+CREATE TABLE metrics(time timestamptz NOT NULL, tenant text NOT NULL, value float);
+SELECT create_hypertable('metrics', 'time', chunk_time_interval => INTERVAL '1 day');
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = '3 days',
+    timescaledb.granular_refresh_end_offset = '1 hour'
+);
+
+INSERT INTO metrics VALUES ('2025-01-07 10:00:00+00', 'x', 10),
+                           ('2025-01-07 14:00:00+00', 'y', 20);
+
+CREATE MATERIALIZED VIEW metrics_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, tenant, avg(value)
+  FROM metrics
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+
+--Initial refresh to set invalidation threshold forward.
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+ALTER MATERIALIZED VIEW metrics_hourly SET (timescaledb.enable_granular_refresh = true);
+
+--Check current cagg content
+SELECT tenant, bucket, avg FROM metrics_hourly ORDER BY tenant, bucket;
+
+-- Insert values for both x and y, where y's time falls into the the granular threshold window
+-- but x's time is outside to the left of the window
+BEGIN;
+INSERT INTO metrics VALUES ('2025-01-07 10:00:00+00', 'x', 30);
+INSERT INTO metrics VALUES ('2025-01-07 14:00:00+00', 'y', 40);
+COMMIT;
+
+-- Invalidation log show 1 invalidation entry for the insert transaction,
+-- straddling the left boundary of the granular threshold.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+ORDER BY lowest_modified_value;
+
+--Refresh the range that covers the newly inserted rows. This also flush the corresponding
+--trackings
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+
+-- Check the content of the trackings, we can see
+-- 'x' lies wholly below the granular window, so its tracking was not written
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+-- Query the raw data
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM metrics
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+--check the cagg content, we see that the row for x does not match
+--the result from the raw table above. 
+SELECT tenant, bucket, avg FROM metrics_hourly ORDER BY tenant, bucket;
+
+DROP MATERIALIZED VIEW metrics_hourly;
+DROP TABLE metrics;
+RESET timezone;
