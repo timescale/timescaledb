@@ -1162,61 +1162,28 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		List *sort_collations = NIL;
 		List *sort_nulls = NIL;
 
-		ListCell *lc;
-		foreach (lc, dcpath->custom_path.path.pathkeys)
+		Assert(dcpath->required_pathkey_ems && list_length(dcpath->custom_path.path.pathkeys) ==
+												   list_length(dcpath->required_pathkey_ems));
+		for (int i = 0; i < list_length(dcpath->custom_path.path.pathkeys); i++)
 		{
-			PathKey *pk = lfirst(lc);
-			EquivalenceClass *ec = pk->pk_eclass;
+			PathKey *pk = (PathKey *) list_nth(dcpath->custom_path.path.pathkeys, i);
+			List *ems = (List *) list_nth(dcpath->required_pathkey_ems, i);
 
-			/*
-			 * Find the equivalence member that belongs to decompressed relation.
-			 */
-			EquivalenceMember *em;
+			/* Find EM on the compressed chunk matching decompressed target */
 			bool found = false;
-#if PG18_GE
-			/* In PG18, iterating over child ems requires you to
-			 * use child relids with a special iterator. Here we gather
-			 * them by collecting them from childmembers array.
-			 *
-			 * https://github.com/postgres/postgres/commit/d69d45a5
-			 */
-			EquivalenceMemberIterator it;
-
-			setup_eclass_member_iterator(&it, ec, dcpath->custom_path.path.parent->relids);
-			while ((em = eclass_member_iterator_next(&it)) != NULL)
+			ListCell *lm;
+			foreach (lm, ems)
 			{
-#else
-			ListCell *membercell;
-			foreach (membercell, ec->ec_members)
-			{
-				em = lfirst(membercell);
-#endif
-				if (em->em_is_const)
-				{
-					continue;
-				}
-
-				int em_relid;
-				if (!bms_get_singleton_member(em->em_relids, &em_relid))
-				{
-					continue;
-				}
-
-				if ((Index) em_relid != dcpath->info->chunk_rel->relid)
-				{
-					continue;
-				}
+				EquivalenceMember *em = (EquivalenceMember *) lfirst(lm);
 
 				/*
 				 * The equivalence member expression might be a monotonous
 				 * expression of the decompressed relation Var, so recurse to
 				 * find it.
 				 */
-				Var *var = find_var_subexpression(em->em_expr, em_relid);
+				Var *var = find_var_subexpression(em->em_expr, dcpath->info->chunk_rel->relid);
 				Ensure(var != NULL,
 					   "non-Var pathkey not expected for compressed batch sorted merge");
-
-				Assert((Index) var->varno == (Index) em_relid);
 
 				/*
 				 * Convert its varattno which is the varattno of the
@@ -1225,7 +1192,10 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				 */
 				const int decompressed_scan_attno =
 					context.uncompressed_attno_info[var->varattno].custom_scan_attno;
-				Assert(decompressed_scan_attno > 0);
+				if (decompressed_scan_attno <= 0)
+				{
+					continue;
+				}
 
 				/*
 				 * Look up the correct sort operator from the PathKey's slightly
@@ -1249,7 +1219,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				sort_collations = lappend_oid(sort_collations, var->varcollid);
 				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
 				sort_ops = lappend_oid(sort_ops, sortop);
-
 				found = true;
 				break;
 			}
