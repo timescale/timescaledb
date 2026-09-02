@@ -28,7 +28,6 @@
 #include "compression/create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
-#include "import/createplan.h"
 #include "import/list.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/transform.h"
@@ -37,6 +36,7 @@
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg/exec.h"
+#include "planner/planner.h"
 #include "ts_catalog/array_utils.h"
 #include "vector_predicates.h"
 
@@ -1263,23 +1263,13 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	/*
 	 * Add a sort if the compressed scan is not ordered appropriately.
 	 */
-	if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
-	{
-		List *compressed_pks = dcpath->required_compressed_pathkeys;
-		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
-												compressed_pks,
-												bms_make_singleton(compressed_scan->scanrelid));
-
-		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ -1.0);
-
-		decompress_plan->custom_plans = list_make1(sort);
-	}
-	else
-	{
-		decompress_plan->custom_plans = custom_plans;
-	}
-
-	Assert(list_length(custom_plans) == 1);
+	decompress_plan->custom_plans =
+		list_make1(add_sort_if_needed(root,
+									   (Plan *) compressed_scan,
+									   compressed_path,
+									   dcpath->required_compressed_pathkeys,
+									   /* reqColIdx = */ NULL,
+									   /* limit_tuples = */ -1.0));
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on

@@ -50,6 +50,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
+#include "import/createplan.h"
 #include "import/optimizer/plancat.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
@@ -2176,6 +2177,45 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
 			subq->groupClause = fill_missing_groupclause(new_groupclause, subq_groupclause_copy);
 		}
 	}
+}
+
+/*
+ * Add Sort over a given plan if it's not sufficiently ordered.
+ */
+Plan *
+add_sort_if_needed(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
+					const AttrNumber *reqColIdx, double limit_tuples)
+{
+	int numsortkeys;
+	AttrNumber *sortColIdx;
+	Oid *sortOperators;
+	Oid *collations;
+	bool *nullsFirst;
+
+	/* Compute sort column info, and adjust the child's tlist as needed */
+	plan = ts_prepare_sort_from_pathkeys(plan,
+										 pathkeys,
+										 path->parent->relids,
+										 reqColIdx,
+										 true,
+										 &numsortkeys,
+										 &sortColIdx,
+										 &sortOperators,
+										 &collations,
+										 &nullsFirst);
+
+	/* Now, insert a Sort node if child isn't sufficiently ordered */
+	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
+	{
+		Sort *sort;
+
+		Assert(!IsA(plan, Sort));
+		sort = ts_make_sort(plan, numsortkeys, sortColIdx, sortOperators, collations, nullsFirst);
+		ts_label_sort_with_costsize(root, sort, limit_tuples);
+		plan = (Plan *) sort;
+	}
+
+	return plan;
 }
 
 void

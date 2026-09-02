@@ -2,8 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Some primitive tests that show cost of DecompressChunk node so that we can
+-- Some primitive tests that show cost of ColumnarScan node so that we can
 -- monitor the changes.
+
+set timescaledb.enable_deferred_chunk_append to off;
 
 create table costtab(ts int, s text, c text, ti text, fi float);
 select create_hypertable('costtab', 'ts');
@@ -212,3 +214,25 @@ reset timescaledb.restoring;
 
 explain (costs off)
 select * from lastmax where ts = 500;
+
+
+-- Cost of an ordered ChunkAppend that has to sort a child.
+truncate estimate_count;
+insert into estimate_count
+select t, d, 1
+from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
+  generate_series(1, 100) d;
+
+select count(compress_chunk(c)) from show_chunks('estimate_count') c;
+
+vacuum analyze estimate_count;
+
+set enable_indexscan to off;
+
+explain (buffers off)
+select * from estimate_count order by time limit 5;
+
+reset enable_indexscan;
+
+
+reset timescaledb.enable_deferred_chunk_append;

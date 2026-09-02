@@ -54,6 +54,9 @@ extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte)
 extern TSDLLEXPORT void ts_rte_mark_compressed_relation(RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_contains_external_param(Node *node);
 extern TSDLLEXPORT bool ts_contains_join_param(Node *node);
+extern TSDLLEXPORT Plan *add_sort_if_needed(PlannerInfo *root, Plan *plan, Path *path,
+											 List *pathkeys, const AttrNumber *reqColIdx,
+											 double limit_tuples);
 
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)

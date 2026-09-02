@@ -1,8 +1,9 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Some primitive tests that show cost of DecompressChunk node so that we can
+-- Some primitive tests that show cost of ColumnarScan node so that we can
 -- monitor the changes.
+set timescaledb.enable_deferred_chunk_append to off;
 create table costtab(ts int, s text, c text, ti text, fi float);
 select create_hypertable('costtab', 'ts');
   create_hypertable   
@@ -343,3 +344,44 @@ select * from lastmax where ts = 500;
    ->  Seq Scan on _hyper_4_14_chunk_compressed
          Filter: ((_ts_meta_v2_first_ts <= 500) AND (_ts_meta_v2_last_ts >= 500))
 
+-- Cost of an ordered ChunkAppend that has to sort a child.
+truncate estimate_count;
+insert into estimate_count
+select t, d, 1
+from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
+  generate_series(1, 100) d;
+select count(compress_chunk(c)) from show_chunks('estimate_count') c;
+ count 
+-------
+     2
+
+-- Decompress the first chunk and drop its index, so that it has no path
+-- producing the required order.
+select count(decompress_chunk(c)) from (select min(c) c from show_chunks('estimate_count') c) x;
+ count 
+-------
+     1
+
+select format('drop index %I.%I', schemaname, indexname)
+from pg_indexes
+where tablename = (select relname from pg_class
+    where oid = (select min(x) from show_chunks('estimate_count') x))
+\gexec
+drop index _timescaledb_internal._hyper_2_15_chunk_estimate_count_time_idx
+vacuum analyze estimate_count;
+set timescaledb.enable_deferred_chunk_append to off;
+explain (buffers off)
+select * from estimate_count order by time limit 5;
+--- QUERY PLAN ---
+ Limit  (cost=0.00..0.08 rows=5 width=20)
+   ->  Custom Scan (ChunkAppend) on estimate_count  (cost=0.00..105.00 rows=6400 width=20)
+         Order: estimate_count."time"
+         ->  Sort  (cost=211.30..227.30 rows=6400 width=20)
+               Sort Key: _hyper_2_15_chunk."time"
+               ->  Seq Scan on _hyper_2_15_chunk  (cost=0.00..105.00 rows=6400 width=20)
+         ->  Sort  (cost=348.27..380.52 rows=12900 width=20)
+               Sort Key: _hyper_2_16_chunk."time"
+               ->  Custom Scan (ColumnarScan) on _hyper_2_16_chunk  (cost=1.34..134.00 rows=12900 width=20)
+                     ->  Seq Scan on _hyper_2_16_chunk_compressed  (cost=0.00..5.00 rows=100 width=88)
+
+reset timescaledb.enable_deferred_chunk_append;

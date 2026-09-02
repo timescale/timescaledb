@@ -503,40 +503,6 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys,
 }
 
 /*
- * make_sort_from_pathkeys
- *	  Create sort plan to sort according to given pathkeys
- *
- *	  'lefttree' is the node which yields input tuples
- *	  'pathkeys' is the list of pathkeys by which the result is to be sorted
- *	  'relids' is the set of relations required by prepare_sort_from_pathkeys()
- */
-Sort *
-ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids)
-{
-	int			numsortkeys;
-	AttrNumber *sortColIdx;
-	Oid		   *sortOperators;
-	Oid		   *collations;
-	bool	   *nullsFirst;
-
-	/* Compute sort column info, and adjust lefttree as needed */
-	lefttree = ts_prepare_sort_from_pathkeys(lefttree, pathkeys,
-										  relids,
-										  NULL,
-										  false,
-										  &numsortkeys,
-										  &sortColIdx,
-										  &sortOperators,
-										  &collations,
-										  &nullsFirst);
-
-	/* Now build the Sort node */
-	return ts_make_sort(lefttree, numsortkeys,
-					 sortColIdx, sortOperators,
-					 collations, nullsFirst);
-}
-
-/*
  * make_result
  *	  Build a Result plan node
  */
