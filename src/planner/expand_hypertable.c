@@ -1155,26 +1155,15 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	if (rel->fdw_private != NULL && should_order_append(root, rel, ht, &order_attno, &reverse))
 	{
 		TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
-		List **nested_oids = NULL;
 
 		priv->appends_ordered = true;
 		priv->order_attno = order_attno;
-
-		/*
-		 * for space partitioning we need extra information about the
-		 * time slices of the chunks
-		 */
-		if (ht->space->num_dimensions > 1)
-		{
-			nested_oids = &priv->nested_oids;
-		}
 
 		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
 															  ht,
 															  include_osm,
 															  NULL,
 															  reverse,
-															  nested_oids,
 															  num_chunks);
 	}
 

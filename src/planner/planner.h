@@ -32,7 +32,6 @@ typedef struct TimescaleDBPrivate
 	bool appends_ordered;
 	/* attno of the time dimension in the parent table if appends are ordered */
 	int order_attno;
-	List *nested_oids;
 	List *chunk_oids;
 
 	/* Cached chunk data for the chunk relinfo. */
