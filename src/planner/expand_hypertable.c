@@ -1103,8 +1103,6 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
  * If appends are returned in order appends_ordered on rel->fdw_private is set to true.
  * To make verifying pathkeys easier in set_rel_pathlist the hypertable attno of the column
  * ordered by is stored in rel->fdw_private.
- * If the hypertable uses space partitioning the nested oids are stored in nested_oids
- * on rel->fdw_private when appends are ordered.
  */
 static Chunk **
 get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
