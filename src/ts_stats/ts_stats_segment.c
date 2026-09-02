@@ -13,24 +13,15 @@
 #include <storage/lwlock.h>
 #include <utils/timestamp.h>
 
-#if PG17_GE
-#include <storage/dsm_registry.h>
-#else
 #include "../loader/ts_stats_handles.h"
 #include <storage/dsm.h>
 #include <storage/shmem.h>
-#endif
 
 /*
  * One-time init.
  */
 static void
-#if PG19_GE
-/* PG19 added an extra argument to the GetNamedDSMSegment init callback. */
-ts_stats_chunk_init_segment(void *ptr, void *arg)
-#else
 ts_stats_chunk_init_segment(void *ptr)
-#endif
 {
 	TsStatsChunkSegment *seg = (TsStatsChunkSegment *) ptr;
 	uint32 num_slots = (uint32) ts_guc_stats_max_chunks;
@@ -73,50 +64,14 @@ ts_stats_chunk_segment_reset(TsStatsChunkSegment *seg)
  */
 static TsStatsChunkSegment *cached_segment = NULL;
 
-/* GetNamedDSMSegment was introduced in PG 17, so we need separate
- * logic for older versions. */
-#if PG17_GE
-
-TsStatsChunkSegment *
-ts_get_stats_chunk_segment(void)
-{
-	if (!IS_STATS_CHUNKS_ENABLED())
-	{
-		return NULL;
-	}
-
-	if (likely(cached_segment != NULL))
-	{
-		return cached_segment;
-	}
-
-	Size seg_size = ts_stats_chunk_segment_size((uint32) ts_guc_stats_max_chunks);
-
-	char name[64];
-	snprintf(name, sizeof(name), "ts_stats_chunk_db_%u", MyDatabaseId);
-
-	bool found;
-#if PG19_GE
-	cached_segment = GetNamedDSMSegment(name, seg_size, ts_stats_chunk_init_segment, &found, NULL);
-#else
-	cached_segment = GetNamedDSMSegment(name, seg_size, ts_stats_chunk_init_segment, &found);
-#endif
-
-	if (cached_segment != NULL && cached_segment->magic != TS_STATS_SHMEM_MAGIC)
-	{
-		elog(WARNING,
-			 "ts_stats_chunk: segment for database %u has unexpected magic, disabling",
-			 MyDatabaseId);
-		cached_segment = NULL;
-	}
-	return cached_segment;
-}
-
-#else /* PG17_LT */
-
-/* The below section is about handling older PostgreSQL version, before PG 17.
- * The memory segments for each database are registered in a global handle table.
- * When the handle table is full, we sweep through the entries and remove the
+/*
+ * The memory segments for each database are registered in a global handle
+ * table, created by the loader. We cannot use the DSM registry
+ * (GetNamedDSMSegment) here, because it pins the named segments forever and
+ * offers no way to remove them, so the segments of dropped databases would
+ * leak.
+ *
+ * When a new segment is created, we sweep through the entries and remove the
  * segments for the databases that have been dropped. If there are more than
  * TS_STATS_MAX_DATABASES databases, or if the segment creation fails for any
  * reason, we disable stats tracking for the current database.
@@ -213,6 +168,14 @@ ts_stats_chunk_sweep_stale(TsObservHandleTable *tbl)
 static TsStatsChunkSegment *
 ts_stats_chunk_create_segment(TsObservHandleTable *tbl)
 {
+	/*
+	 * A new segment is needed, which usually means that this backend
+	 * connected to a freshly created database. Take this opportunity to
+	 * remove the segments of the databases that have been dropped, so that
+	 * they don't accumulate.
+	 */
+	ts_stats_chunk_sweep_stale(tbl);
+
 	Size seg_size = ts_stats_chunk_segment_size((uint32) ts_guc_stats_max_chunks);
 
 	dsm_segment *local_seg = dsm_create(seg_size, 0);
@@ -226,11 +189,7 @@ ts_stats_chunk_create_segment(TsObservHandleTable *tbl)
 	dsm_handle local_handle = dsm_segment_handle(local_seg);
 
 	TsStatsChunkSegment *obs = dsm_segment_address(local_seg);
-#if PG19_GE
-	ts_stats_chunk_init_segment(obs, NULL);
-#else
 	ts_stats_chunk_init_segment(obs);
-#endif
 
 	LWLockAcquire(&tbl->lock, LW_EXCLUSIVE);
 
@@ -253,15 +212,7 @@ ts_stats_chunk_create_segment(TsObservHandleTable *tbl)
 		return dsm_segment_address(winner_seg);
 	}
 
-	/* Find a free slot, with one sweep retry. */
 	entry = ts_stats_chunk_find_free_entry(tbl);
-	if (entry == NULL)
-	{
-		LWLockRelease(&tbl->lock);
-		ts_stats_chunk_sweep_stale(tbl);
-		LWLockAcquire(&tbl->lock, LW_EXCLUSIVE);
-		entry = ts_stats_chunk_find_free_entry(tbl);
-	}
 
 	/* Table full. */
 	if (entry == NULL)
@@ -270,7 +221,7 @@ ts_stats_chunk_create_segment(TsObservHandleTable *tbl)
 		dsm_unpin_segment(local_handle);
 		dsm_detach(local_seg);
 		elog(LOG,
-			 "ts_stats_chunk: handle table full after sweep, chunk statistics disabled "
+			 "ts_stats_chunk: handle table full, chunk statistics disabled "
 			 "for database %u",
 			 MyDatabaseId);
 		return NULL;
@@ -351,8 +302,6 @@ ts_get_stats_chunk_segment(void)
 	cached_segment = ts_stats_chunk_create_segment(tbl);
 	return cached_segment;
 }
-
-#endif /* PG17_GE */
 
 /*
  * Knuth's multiplicative hash. The constant 0x9E3779B9 = floor(2^32 / phi).
