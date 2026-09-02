@@ -1162,100 +1162,52 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		List *sort_collations = NIL;
 		List *sort_nulls = NIL;
 
-		ListCell *lc;
-		foreach (lc, dcpath->custom_path.path.pathkeys)
+		Assert(dcpath->pathkey_ems &&
+			   list_length(dcpath->custom_path.path.pathkeys) == list_length(dcpath->pathkey_ems));
+		for (int i = 0; i < list_length(dcpath->custom_path.path.pathkeys); i++)
 		{
-			PathKey *pk = lfirst(lc);
-			EquivalenceClass *ec = pk->pk_eclass;
+			PathKey *pk = (PathKey *) list_nth(dcpath->custom_path.path.pathkeys, i);
+			EquivalenceMember *em = (EquivalenceMember *) list_nth(dcpath->pathkey_ems, i);
 
 			/*
-			 * Find the equivalence member that belongs to decompressed relation.
+			 * The equivalence member expression might be a monotonous
+			 * expression of the decompressed relation Var, so recurse to
+			 * find it.
 			 */
-			EquivalenceMember *em;
-			bool found = false;
-#if PG18_GE
-			/* In PG18, iterating over child ems requires you to
-			 * use child relids with a special iterator. Here we gather
-			 * them by collecting them from childmembers array.
-			 *
-			 * https://github.com/postgres/postgres/commit/d69d45a5
+			Var *var = find_var_subexpression(em->em_expr, dcpath->info->chunk_rel->relid);
+			Ensure(var != NULL, "non-Var pathkey not expected for compressed batch sorted merge");
+
+			/*
+			 * Convert its varattno which is the varattno of the
+			 * uncompressed chunk tuple, to the decompressed scan tuple
+			 * varattno.
 			 */
-			EquivalenceMemberIterator it;
-
-			setup_eclass_member_iterator(&it, ec, dcpath->custom_path.path.parent->relids);
-			while ((em = eclass_member_iterator_next(&it)) != NULL)
-			{
-#else
-			ListCell *membercell;
-			foreach (membercell, ec->ec_members)
-			{
-				em = lfirst(membercell);
-#endif
-				if (em->em_is_const)
-				{
-					continue;
-				}
-
-				int em_relid;
-				if (!bms_get_singleton_member(em->em_relids, &em_relid))
-				{
-					continue;
-				}
-
-				if ((Index) em_relid != dcpath->info->chunk_rel->relid)
-				{
-					continue;
-				}
-
-				/*
-				 * The equivalence member expression might be a monotonous
-				 * expression of the decompressed relation Var, so recurse to
-				 * find it.
-				 */
-				Var *var = find_var_subexpression(em->em_expr, em_relid);
-				Ensure(var != NULL,
-					   "non-Var pathkey not expected for compressed batch sorted merge");
-
-				Assert((Index) var->varno == (Index) em_relid);
-
-				/*
-				 * Convert its varattno which is the varattno of the
-				 * uncompressed chunk tuple, to the decompressed scan tuple
-				 * varattno.
-				 */
-				const int decompressed_scan_attno =
-					context.uncompressed_attno_info[var->varattno].custom_scan_attno;
-				Assert(decompressed_scan_attno > 0);
-
-				/*
-				 * Look up the correct sort operator from the PathKey's slightly
-				 * abstracted representation.
-				 */
-				Oid sortop = get_opfamily_member(pk->pk_opfamily,
-												 var->vartype,
-												 var->vartype,
-												 pk->pk_cmptype);
-				if (!OidIsValid(sortop)) /* should not happen */
-				{
-					elog(ERROR,
-						 "missing operator %d(%u,%u) in opfamily %u",
-						 pk->pk_cmptype,
-						 var->vartype,
-						 var->vartype,
-						 pk->pk_opfamily);
-				}
-
-				sort_col_idx = lappend_oid(sort_col_idx, decompressed_scan_attno);
-				sort_collations = lappend_oid(sort_collations, var->varcollid);
-				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
-				sort_ops = lappend_oid(sort_ops, sortop);
-
-				found = true;
-				break;
-			}
-			Ensure(found,
+			const int decompressed_scan_attno =
+				context.uncompressed_attno_info[var->varattno].custom_scan_attno;
+			Ensure(decompressed_scan_attno > 0,
 				   "could not find matching decompressed chunk column for batch sorted merge "
 				   "pathkey");
+
+			/*
+			 * Look up the correct sort operator from the PathKey's slightly
+			 * abstracted representation.
+			 */
+			Oid sortop =
+				get_opfamily_member(pk->pk_opfamily, var->vartype, var->vartype, pk->pk_cmptype);
+			if (!OidIsValid(sortop)) /* should not happen */
+			{
+				elog(ERROR,
+					 "missing operator %d(%u,%u) in opfamily %u",
+					 pk->pk_cmptype,
+					 var->vartype,
+					 var->vartype,
+					 pk->pk_opfamily);
+			}
+
+			sort_col_idx = lappend_oid(sort_col_idx, decompressed_scan_attno);
+			sort_collations = lappend_oid(sort_collations, var->varcollid);
+			sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
+			sort_ops = lappend_oid(sort_ops, sortop);
 		}
 		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
 	}

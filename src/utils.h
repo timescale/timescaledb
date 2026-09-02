@@ -140,7 +140,7 @@ extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index 
 													   bool missing_ok);
 
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
-extern TSDLLEXPORT EquivalenceMember *ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
+extern TSDLLEXPORT List *ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 extern TSDLLEXPORT bool ts_has_owner_privs(Oid userid, Oid ownerid);

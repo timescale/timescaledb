@@ -70,6 +70,10 @@ typedef struct ColumnarScanPath
 	 * for example with ColumnarIndexScan.
 	 */
 	bool all_quals_pushed_down;
+
+	/* pathkey equivalence class members matching compressed sort order on the chunk */
+	List *pathkey_ems;
+
 } ColumnarScanPath;
 
 void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
