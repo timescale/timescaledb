@@ -2,44 +2,38 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
-## 2.30.0 (2026-09-02)
+## 2.30.0 (2026-09-08)
 
 This release contains performance improvements and bug fixes since the 2.29.2 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.30.0**
-* 
-
-**Backward-Incompatible Changes**
+Blazing fast `LIMIT 1` queries with the newly introduce `DeferredChunkScan`. The custom node reduces planning significantly by not expanding chunks on the columnstore and the rowstore. 
+This addition, in combination with the optimization to `FIRST` and `LAST` sparse indexes, solves last point problems highly efficient and quick.
+For example, the query to discover "When was this sensor active the time?" used to be expensive, now it return in milliseconds.
+The true power of the custom node starts to show with increasing amount of chunks, see [more elaborate benchmarks](https://github.com/timescale/timescaledb/pull/10292).
 
 **Features**
 * [#10147](https://github.com/timescale/timescaledb/pull/10147) Support segmentwise batch sorted merge for overlapping batches
-* [#10279](https://github.com/timescale/timescaledb/pull/10279) Support ON CONFLICT DO SELECT with hypertables
-* [#10291](https://github.com/timescale/timescaledb/pull/10291) Add support for REPACK
-* [#10292](https://github.com/timescale/timescaledb/pull/10292) Add DeferredChunkAppend custom scan
-* [#10354](https://github.com/timescale/timescaledb/pull/10354) Handle TM_Updated in compressed DML scan
-* [#10357](https://github.com/timescale/timescaledb/pull/10357) Updates on cagg and invalidations catalogs to support granular refresh
+* [#10279](https://github.com/timescale/timescaledb/pull/10279) Support `ON CONFLICT DO SELECT` with hypertables
+* [#10291](https://github.com/timescale/timescaledb/pull/10291) Add support for `REPACK`
+* [#10292](https://github.com/timescale/timescaledb/pull/10292) Add `DeferredChunkAppend` custom scan
+* [#10354](https://github.com/timescale/timescaledb/pull/10354) Handle `TM_Updated` in compressed DML scan
 * [#10388](https://github.com/timescale/timescaledb/pull/10388) Add custom toaster for compression
-* [#10427](https://github.com/timescale/timescaledb/pull/10427) Granular refresh for continuous aggregates
-* [#10443](https://github.com/timescale/timescaledb/pull/10443) Support granular refresh with direct compress
 
 **Bugfixes**
 * [#10058](https://github.com/timescale/timescaledb/pull/10058) Apply new sortkeys for in-memory recompression
-* [#10128](https://github.com/timescale/timescaledb/pull/10128) Include hypertable chunks in publications created with FOR TABLES IN SCHEMA
+* [#10128](https://github.com/timescale/timescaledb/pull/10128) Include hypertable chunks in publications created with `FOR TABLES IN SCHEMA`
 * [#10325](https://github.com/timescale/timescaledb/pull/10325) Avoid test errors when building from a source archive without a git repository
-* [#10408](https://github.com/timescale/timescaledb/pull/10408) Verify columns and their types in create_compressed_chunk
-* [#10515](https://github.com/timescale/timescaledb/pull/10515) Fix RLS checks after dropping hypertable columns
+* [#10408](https://github.com/timescale/timescaledb/pull/10408) Verify columns and their types in `create_compressed_chunk`
+* [#10515](https://github.com/timescale/timescaledb/pull/10515) Fix row level security checks after dropping hypertable columns
 * [#9905](https://github.com/timescale/timescaledb/pull/9905) Potentially incorrect result of a join when the join clause contains `time_bucket`
-* [#9920](https://github.com/timescale/timescaledb/pull/9920) Fix the "XX000: failed to evaluate runtime constant in vectorized filter" error in some queries that use stable functions in `WHERE` clause and the columnar aggregation pipeline.
-* Remove user_catalog_table option from catalog tables
-
-**New Settings**
+* [#9920](https://github.com/timescale/timescaledb/pull/9920) Fix the "XX000: failed to evaluate runtime constant in vectorized filter" error in some queries that use stable functions in `WHERE` clause and the columnar aggregation pipeline
+* [#10513](https://github.com/timescale/timescaledb/pull/10513) Remove `user_catalog_table` option from catalog tables
 
 **GUCs**
-* `debug_require_deferred_chunk_scan`
-* `direct_compress_insert_tuple_sort_limit`
-* `enable_deferred_chunk_append`
-* `enable_foreign_key_propagation`
-* `use_custom_toaster`
+* `enable_deferred_chunk_append`: Custom scan node for hypertables that iterates chunks at execution instead of expanding every chunk at plan time. Default: true.
+* `enable_foreign_key_propagation`: Adjust foreign key lookup queries to target whole hypertable. Default: true.
+* `use_custom_toaster`: Use a custom TOAST writer for compressed row inserts. Default: false.
 
 **Thanks**
 * @tureba for reporting the problem with building from a source archive without a git repository
