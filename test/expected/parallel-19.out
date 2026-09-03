@@ -456,13 +456,13 @@ PREPARE initplan_filter AS
 --- QUERY PLAN ---
  Aggregate
    InitPlan expr_1
-     ->  Result
-           InitPlan minmax_1
-             ->  Limit
-                   ->  Custom Scan (ChunkAppend) on test test_1
-                         Order: test_1.i DESC
-                         ->  Index Scan using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1
-                         ->  Index Scan using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1
+     ->  Finalize Aggregate
+           ->  Gather
+                 Workers Planned: 2
+                 ->  Partial Aggregate
+                       ->  Parallel Append
+                             ->  Parallel Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                             ->  Parallel Seq Scan on _hyper_1_2_chunk _hyper_1_2_chunk_1
    ->  Gather
          Workers Planned: 2
          ->  Parallel Custom Scan (ChunkAppend) on test
