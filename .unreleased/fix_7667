@@ -1,0 +1,1 @@
+Fixes: #7667 Fix crash during COPY into hypertable when pgAudit is enabled
