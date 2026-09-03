@@ -457,21 +457,21 @@ PREPARE initplan_filter AS
 :PREFIX EXECUTE initplan_filter;
 --- QUERY PLAN ---
  Aggregate
-   InitPlan 2
-     ->  Result
-           InitPlan 1
-             ->  Limit
-                   ->  Custom Scan (ChunkAppend) on test test_1
-                         Order: test_1.i DESC
-                         ->  Index Scan using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1
-                         ->  Index Scan using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1
+   InitPlan 1
+     ->  Finalize Aggregate
+           ->  Gather
+                 Workers Planned: 2
+                 ->  Partial Aggregate
+                       ->  Parallel Append
+                             ->  Parallel Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                             ->  Parallel Seq Scan on _hyper_1_2_chunk _hyper_1_2_chunk_1
    ->  Gather
          Workers Planned: 2
          ->  Parallel Custom Scan (ChunkAppend) on test
                ->  Parallel Seq Scan on _hyper_1_1_chunk
-                     Filter: (i = (InitPlan 2).col1)
+                     Filter: (i = (InitPlan 1).col1)
                ->  Parallel Seq Scan on _hyper_1_2_chunk
-                     Filter: (i = (InitPlan 2).col1)
+                     Filter: (i = (InitPlan 1).col1)
 
 EXECUTE initplan_filter;
  count_correct 
