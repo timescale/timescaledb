@@ -1135,4 +1135,16 @@ SELECT chunk_schema, chunk_name FROM timescaledb_information.chunks WHERE hypert
 -- Cleanup
 DROP PUBLICATION test_pub_guc CASCADE;
 DROP TABLE test_hypertable CASCADE;
+-- Test 10: A publication covering all tables must not block deletes from the
+-- policy chunk stats table. Postgres only allows deletes from a published table
+-- if it has a replica identity, which this table gets from its primary key.
+CREATE PUBLICATION test_pub_catalog FOR ALL TABLES;
+SELECT conname FROM pg_constraint
+WHERE conrelid = '_timescaledb_internal.bgw_policy_chunk_stats'::regclass AND contype = 'p';
+                  conname                   
+--------------------------------------------
+ bgw_policy_chunk_stats_job_id_chunk_id_key
+
+DELETE FROM _timescaledb_internal.bgw_policy_chunk_stats WHERE job_id = -1;
+DROP PUBLICATION test_pub_catalog;
 RESET client_min_messages;

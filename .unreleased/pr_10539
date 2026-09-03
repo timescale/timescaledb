@@ -1,0 +1,2 @@
+Fixes: #10539 Allow deletes from the policy chunk stats table when the database publishes all tables
+Thanks: @AlexFavre for reporting a failed extension update when a publication for all tables exists
