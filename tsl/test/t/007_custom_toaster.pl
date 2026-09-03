@@ -148,7 +148,7 @@ is($node->safe_psql('postgres', 'SHOW wal_level'),
 # has the same column names on every supported PG version, unlike
 # pg_stat_checkpointer (whose columns differ between PG17 and PG18). Read it
 # after the restart above, whose shutdown checkpoint advances it.
-my $redo_lsn_query    = q[SELECT redo_lsn FROM pg_control_checkpoint()];
+my $redo_lsn_query = q[SELECT redo_lsn FROM pg_control_checkpoint()];
 my $redo_lsn_at_start = $node->safe_psql('postgres', $redo_lsn_query);
 
 my $replica_counts = compress_and_count_toast_wal('metrics_replica');
