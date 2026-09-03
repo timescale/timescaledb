@@ -155,6 +155,20 @@ typedef struct BulkWriter
 	CommandId mycid;
 	BulkInsertState bistate;
 	int insert_options; /* heap insert options */
+	/*
+	 * Use custom toaster which uses bulk inserts for toasting values.
+	 */
+	bool use_custom_toaster;
+	/*
+	 * Toast relation/indexes for compression_toast_save_datum_multi(),
+	 * opened lazily on first use and closed by
+	 * compression_toast_writer_close(). NULL/0 if never toasted.
+	 */
+	Relation toast_rel;
+	Relation *toast_indexes;
+	int num_toast_indexes;
+	int toast_valid_index;
+	BulkInsertState toast_bistate;
 } BulkWriter;
 
 typedef struct RowDecompressor

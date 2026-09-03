@@ -31,9 +31,14 @@ log_min_messages='INFO'
 # This breaks isolation tests, not sure why the statements end in
 # the isolation tester output.
 log_statement='all'
+# Include custom toaster in our tests
+# remove this once we switch the GUC to ON by default
+timescaledb.use_custom_toaster=true
 
-# Some tests use logical entries in WAL
-wal_level = logical
+# The custom toaster above only runs below wal_level = logical, so keep this at
+# replica to get it covered. Tests that need logical decoding set wal_level
+# themselves.
+wal_level = replica
 
 # It is necessary to have at least 2 more workers than `max_worker_processes`
 # in order to test failures starting bgworkers.
