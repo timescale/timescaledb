@@ -88,6 +88,8 @@ jobs:
             display_name: "Optimizations ON-OFF"
           - oracle: "hypertable"
             display_name: "Hypertable ON-OFF"
+          - oracle: "columnstore"
+            display_name: "Columnstore vs Rowstore"
 
     steps:
     - name: Replace unreliable Azure APT mirror
