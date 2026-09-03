@@ -4321,18 +4321,24 @@ DROP TABLE r1;
 --
 SET SESSION AUTHORIZATION regress_rls_alice;
 SET row_security = on;
-CREATE TABLE r1 (a int);
+-- New chunks omit dropped hypertable columns, so their WCOs need remapped attnos.
+CREATE TABLE r1 (scratch text, a int);
 SELECT public.create_hypertable('r1', 'a', chunk_time_interval=>2);
       create_hypertable       
 ------------------------------
  (29,regress_rls_schema,r1,t)
 
+ALTER TABLE r1 DROP COLUMN scratch;
 CREATE POLICY p1 ON r1 FOR SELECT USING (false);
-CREATE POLICY p2 ON r1 FOR INSERT WITH CHECK (true);
+CREATE POLICY p2 ON r1 FOR INSERT
+    WITH CHECK (a > 0 AND a IN (SELECT generate_series(1, 100)));
 ALTER TABLE r1 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r1 FORCE ROW LEVEL SECURITY;
 -- Works fine
 INSERT INTO r1 VALUES (10), (20);
+-- Error
+INSERT INTO r1 VALUES (-10);
+ERROR:  new row violates row-level security policy for table "r1"
 -- No error, but no rows
 TABLE r1;
  a 
