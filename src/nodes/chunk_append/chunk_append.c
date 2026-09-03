@@ -100,6 +100,9 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *patht
 			cost_sort(&sort_path,
 					  /* root = */ NULL,
 					  pathkeys,
+#if PG18_GE
+					  child->disabled_nodes,
+#endif
 					  child->total_cost,
 					  child->rows,
 					  child->pathtarget->width,
