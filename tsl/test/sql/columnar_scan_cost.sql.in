@@ -5,8 +5,6 @@
 -- Some primitive tests that show cost of ColumnarScan node so that we can
 -- monitor the changes.
 
-set timescaledb.enable_deferred_chunk_append to off;
-
 create table costtab(ts int, s text, c text, ti text, fi float);
 select create_hypertable('costtab', 'ts');
 alter table costtab set (timescaledb.compress, timescaledb.compress_segmentby = 's',
@@ -227,6 +225,7 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 
 vacuum analyze estimate_count;
 
+set timescaledb.enable_deferred_chunk_append to off;
 set enable_indexscan to off;
 
 explain (buffers off)
