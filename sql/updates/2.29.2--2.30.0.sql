@@ -67,7 +67,6 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges
     DROP CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey;
 
-ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg;
 
 CREATE TABLE _timescaledb_catalog._tmp_continuous_agg AS
     SELECT
@@ -86,6 +85,7 @@ CREATE TABLE _timescaledb_catalog._tmp_continuous_agg AS
         _timescaledb_catalog.continuous_agg
     ORDER BY
         mat_hypertable_id;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg;
 
 DROP TABLE _timescaledb_catalog.continuous_agg;
 
