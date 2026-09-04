@@ -52,6 +52,22 @@ extern TenantTracking *ts_tenant_tracker_get_or_attach(int32 hypertable_id,
 													   int64 late_threshold_end, int32 init_seqnum);
 
 /*
+ * Queue this database's tracker for hypertable_id to be freed (and its map
+ * entry dropped) at XACT_EVENT_COMMIT.  The caller must already hold
+ * AccessExclusiveLock on the raw hypertable; that lock is released only after
+ * the commit callback has run, so no writer can re-enter the tracker between
+ * the caller's catalog change and the free.
+ *
+ * The free is deferred because shared-memory frees are not transactional: doing
+ * it inline in a DDL that later rolls back would restore the catalog while the
+ * tracker stayed gone.  See the definition for the full contract.
+ */
+extern void ts_tenant_tracker_remove_at_commit(int32 hypertable_id);
+
+extern void _tenant_tracker_init(void);
+extern void _tenant_tracker_fini(void);
+
+/*
  * Streaming batch drain: pin the active generation ONCE, apply many tenants
  * (no intermediate array or copy), then unpin.  Always pair begin with end.
  * returned handle is pinned generation; treat it as opaque and pass it to
