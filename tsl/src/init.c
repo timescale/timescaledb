@@ -35,6 +35,7 @@
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/rewrite_with_caggs.h"
+#include "continuous_aggs/tenant_tracker.h"
 #include "continuous_aggs/tenant_tracker_function.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
@@ -207,6 +208,7 @@ static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
 	_continuous_aggs_cache_inval_fini();
+	_tenant_tracker_fini();
 }
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -220,6 +222,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
+	_tenant_tracker_init();
 	_columnar_index_scan_init();
 	_columnar_scan_init();
 	_skip_scan_init();
