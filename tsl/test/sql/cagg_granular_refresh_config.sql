@@ -504,3 +504,155 @@ DROP MATERIALIZED VIEW metrics_daily;
 DROP MATERIALIZED VIEW metrics_hourly;
 DROP TABLE metrics;
 RESET timezone;
+
+-- TEST 6: offsets that results in start > end late window, despite passing 
+-- the offset check in the API. When that happen, the window is treated as
+-- empty, so trackings are not written and invalidations has NULL seqnum
+
+-- Part 1: a month against days. No DST and no timezone involved: this inverts
+-- every February, because '1 month' is assumed to be 30 days when validated
+-- by the API at definition, but resolves to 28/29 at runtime.
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock = '2025-03-15 12:00:00+00';
+
+-- window_start = now() - '1 month' = 2025-02-15 12:00 (28 days back)
+-- window_end   = now() - '29 days' = 2025-02-14 12:00 (29 days back)
+CREATE TABLE crossed(time timestamptz NOT NULL, tenant text NOT NULL, value float);
+
+SELECT create_hypertable('crossed', 'time', chunk_time_interval => INTERVAL '30 days');
+ALTER TABLE crossed SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = '1 month',
+    timescaledb.granular_refresh_end_offset = '29 days'
+);
+
+SELECT '2025-03-15 12:00:00+00'::timestamptz - INTERVAL '1 month' AS window_start,
+       '2025-03-15 12:00:00+00'::timestamptz - INTERVAL '29 days'  AS window_end,
+       ('2025-03-15 12:00:00+00'::timestamptz - INTERVAL '1 month') >
+       ('2025-03-15 12:00:00+00'::timestamptz - INTERVAL '29 days') AS is_crossed;
+
+INSERT INTO crossed VALUES ('2025-02-14 10:00:00+00', 'a', 1),
+                           ('2025-02-15 14:00:00+00', 'b', 2);
+
+CREATE MATERIALIZED VIEW crossed_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, tenant, avg(value)
+  FROM crossed
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+
+CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-15 12:00:00+00');
+ALTER MATERIALIZED VIEW crossed_hourly SET (timescaledb.enable_granular_refresh = true);
+
+-- One transaction, one chunk, one tenant on either side of the crossed bounds.
+-- The first tracked write seeds the tracker, which is where the crossed window
+-- is noticed and reported.
+SET client_min_messages TO LOG;
+BEGIN;
+INSERT INTO crossed VALUES ('2025-02-14 10:00:00+00', 'a', 3);
+INSERT INTO crossed VALUES ('2025-02-15 14:00:00+00', 'b', 4);
+COMMIT;
+RESET client_min_messages;
+
+-- A single untracked invalidation, not a split.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'crossed_hourly')
+ORDER BY lowest_modified_value;
+
+CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-15 12:00:00+00');
+
+-- Nothing is tracked while the window is empty.
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'crossed_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+--cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM crossed_hourly ORDER BY tenant;
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM crossed
+GROUP BY 1, 2
+ORDER BY 1;
+
+DROP MATERIALIZED VIEW crossed_hourly;
+DROP TABLE crossed;
+
+-- Part 2: DST spring forward. 2025-03-09 02:00 EST becomes 03:00 EDT, so that
+-- calendar day is 23 hours long and '1 day' subtracts less than a pure-hours
+-- offset just under it.
+SET timezone TO 'America/New_York';
+-- 07:30 UTC = 03:30 EDT, half an hour after the jump.
+SET timescaledb.current_timestamp_mock = '2025-03-09 07:30:00+00';
+
+-- window_start = now() - '1 day'           = 2025-03-08 08:30 UTC (23 h back)
+-- window_end   = now() - '23 hours 30 min' = 2025-03-08 08:00 UTC (23.5 h back)
+CREATE TABLE crossed(time timestamptz NOT NULL, tenant text NOT NULL, value float);
+SELECT create_hypertable('crossed', 'time', chunk_time_interval => INTERVAL '1 day');
+ALTER TABLE crossed SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = '1 day',
+    timescaledb.granular_refresh_end_offset = '23 hours 30 minutes'
+);
+
+SELECT '2025-03-09 07:30:00+00'::timestamptz - INTERVAL '1 day' AS window_start,
+       '2025-03-09 07:30:00+00'::timestamptz - INTERVAL '23 hours 30 minutes' AS window_end,
+       ('2025-03-09 07:30:00+00'::timestamptz - INTERVAL '1 day') >
+       ('2025-03-09 07:30:00+00'::timestamptz - INTERVAL '23 hours 30 minutes') AS is_crossed;
+
+INSERT INTO crossed VALUES ('2025-03-08 07:30:00+00', 'a', 1),
+                           ('2025-03-08 09:00:00+00', 'b', 2);
+
+CREATE MATERIALIZED VIEW crossed_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, tenant, avg(value)
+  FROM crossed
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+
+CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-09 07:00:00+00');
+ALTER MATERIALIZED VIEW crossed_hourly SET (timescaledb.enable_granular_refresh = true);
+
+SET client_min_messages TO LOG;
+BEGIN;
+INSERT INTO crossed VALUES ('2025-03-08 07:30:00+00', 'a', 3);
+INSERT INTO crossed VALUES ('2025-03-08 09:00:00+00', 'b', 4);
+COMMIT;
+RESET client_min_messages;
+
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'crossed_hourly')
+ORDER BY lowest_modified_value;
+
+CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-09 07:00:00+00');
+
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'crossed_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+--cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM crossed_hourly ORDER BY tenant;
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM crossed
+GROUP BY 1, 2
+ORDER BY 1;
+
+DROP MATERIALIZED VIEW crossed_hourly;
+DROP TABLE crossed;
+RESET timezone;
