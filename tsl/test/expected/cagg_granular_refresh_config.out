@@ -225,3 +225,578 @@ ERROR:  must be owner of hypertable "conditions"
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 DROP TABLE conditions;
+-- TEST 5: A DML transaction touching multiple tenant_ids can end up producing
+-- an invalidation that spans across the granular refresh window, while
+-- the trackings of a subset of the tenant_ids can fall completely outside
+-- and the rest inside the window. As such, the invalidation should be splitted
+-- into 2: one invalidation outside the window with seqnum = 0,
+-- and one insidde with the current seqnum.
+-- When refresh happens later, the data outside the window is refresh fully,
+-- while those inside gets a granular refresh. There should be no missing
+-- or stale data in the cagg after the refresh.
+-- current_time is mocked so that now() is fixed,
+-- so the window opens at W = 2025-01-07 12:00, with one tenant
+-- on each side of it:
+--
+--        t1 = 10:00             W = 12:00          t2 = 14:00
+--   ---------|-----------------[|-----------------|---------->
+--        tenant 'x'         window opens      tenant 'y'
+--   \______________ one chunk, one transaction _______________/
+SET timezone = 'UTC';
+SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00';
+CREATE TABLE metrics(time timestamptz NOT NULL, tenant text NOT NULL, value float);
+SELECT create_hypertable('metrics', 'time', chunk_time_interval => INTERVAL '30 days');
+   create_hypertable   
+-----------------------
+ (10,public,metrics,t)
+
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = '3 days',
+    timescaledb.granular_refresh_end_offset = '1 hour'
+);
+INSERT INTO metrics VALUES ('2025-01-07 10:00:00+00', 'x', 10),
+                           ('2025-01-07 14:00:00+00', 'y', 20);
+CREATE MATERIALIZED VIEW metrics_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, tenant, avg(value)
+  FROM metrics
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+--Initial refresh to set invalidation threshold forward.
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+ALTER MATERIALIZED VIEW metrics_hourly SET (timescaledb.enable_granular_refresh = true);
+--Check current cagg content
+SELECT tenant, bucket, avg FROM metrics_hourly ORDER BY tenant, bucket;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ x      | Tue Jan 07 10:00:00 2025 UTC |  10
+ y      | Tue Jan 07 14:00:00 2025 UTC |  20
+
+-- Insert values for both x and y, where y's time falls into the the granular threshold window
+-- but x's time is outside to the left of the window
+BEGIN;
+INSERT INTO metrics VALUES ('2025-01-07 10:00:00+00', 'x', 30);
+INSERT INTO metrics VALUES ('2025-01-07 14:00:00+00', 'y', 40);
+COMMIT;
+-- Invalidation log show 2 invalidation entries for the insert transaction,
+-- one outside the window with seqnum 0, one inside with seqnum 1
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |              greatest               | seqnum 
+------------------------------+-------------------------------------+--------
+ Tue Jan 07 10:00:00 2025 UTC | Tue Jan 07 11:59:59.999999 2025 UTC |       
+ Tue Jan 07 12:00:00 2025 UTC | Tue Jan 07 14:00:00 2025 UTC        |      1
+
+--Refresh the range that covers the newly inserted rows. This also flush the corresponding
+--trackings.
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+-- Check the content of the trackings, we can see
+-- 'x' lies wholly below the granular window, so its tracking was not written
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+ tenant_id | seqnum 
+-----------+--------
+ y         |      1
+
+-- Query the raw data
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM metrics
+GROUP BY 1, 2
+ORDER BY 1, 2;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ x      | Tue Jan 07 10:00:00 2025 UTC |  20
+ y      | Tue Jan 07 14:00:00 2025 UTC |  30
+
+--check the cagg content, should match the raw data query above
+SELECT tenant, bucket, avg FROM metrics_hourly ORDER BY tenant, bucket;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ x      | Tue Jan 07 10:00:00 2025 UTC |  20
+ y      | Tue Jan 07 14:00:00 2025 UTC |  30
+
+-- Tenant trackings straddling the boundary are not cut like invalidations.
+-- That works because a refresh is lead by the invalidation range.
+-- In the test below, 'z' writes on both sides of the late arriving window in
+-- one transaction, so it overlaps the window and is tracked as a single
+-- tracking of [09:00,16:00].
+-- Its invalidation is splitted into 2: one outside the window with segnum null,
+-- one inside with nonzero seqnum. As such, the data outside the window will
+-- be refresh with a full refresh, while the one inside the window has granular
+-- refresh.
+BEGIN;
+INSERT INTO metrics VALUES ('2025-01-07 09:00:00+00', 'z', 10);
+INSERT INTO metrics VALUES ('2025-01-07 16:00:00+00', 'z', 20);
+COMMIT;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name =  'metrics_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |              greatest               | seqnum 
+------------------------------+-------------------------------------+--------
+ Tue Jan 07 09:00:00 2025 UTC | Tue Jan 07 11:59:59.999999 2025 UTC |       
+ Tue Jan 07 12:00:00 2025 UTC | Tue Jan 07 16:00:00 2025 UTC        |      2
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+-- The tracking row spans the window's left boundary, not splitted like the invalidation
+SELECT tenant_id, seqnum,
+       _timescaledb_functions.to_timestamp(min_timestamp) AS min_ts,
+       _timescaledb_functions.to_timestamp(max_timestamp) AS max_ts
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+  AND tenant_id = 'z';
+ tenant_id | seqnum |            min_ts            |            max_ts            
+-----------+--------+------------------------------+------------------------------
+ z         |      2 | Tue Jan 07 09:00:00 2025 UTC | Tue Jan 07 16:00:00 2025 UTC
+
+--cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant = 'z' ORDER BY bucket;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ z      | Tue Jan 07 09:00:00 2025 UTC |  10
+ z      | Tue Jan 07 16:00:00 2025 UTC |  20
+
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM metrics
+WHERE tenant = 'z'
+GROUP BY 1, 2
+ORDER BY 2;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ z      | Tue Jan 07 09:00:00 2025 UTC |  10
+ z      | Tue Jan 07 16:00:00 2025 UTC |  20
+
+-----------------------------------------------------------------------
+-- Also test the invalidation split at the window's right edge,
+-- WE = now() - 1 hour = 2025-01-10 11:00.
+-- This first insert add more data to the right, so a refresh after that
+-- move invalidation threshold further right, pass the region we want
+-- to test (otherwise we won't observe invalidations being written)
+INSERT INTO metrics VALUES ('2025-01-10 10:00:00+00', 'p', 10),
+                           ('2025-01-10 11:35:00+00', 'q', 20);
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('p','q') ORDER BY tenant;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ p      | Fri Jan 10 10:00:00 2025 UTC |  10
+ q      | Fri Jan 10 11:00:00 2025 UTC |  20
+
+-- insert data for p and q, with q falling to the right of the late window
+BEGIN;
+INSERT INTO metrics VALUES ('2025-01-10 10:00:00+00', 'p', 30);
+INSERT INTO metrics VALUES ('2025-01-10 11:30:00+00', 'q', 40);
+COMMIT;
+-- Split at the right edge: the part below keeps the seqnum, the part above is
+-- untracked.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |              greatest               | seqnum 
+------------------------------+-------------------------------------+--------
+ Fri Jan 10 10:00:00 2025 UTC | Fri Jan 10 10:59:59.999999 2025 UTC |      4
+ Fri Jan 10 11:00:00 2025 UTC | Fri Jan 10 11:30:00 2025 UTC        |       
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+--cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('p','q') ORDER BY tenant;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ p      | Fri Jan 10 10:00:00 2025 UTC |  20
+ q      | Fri Jan 10 11:00:00 2025 UTC |  30
+
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM metrics
+WHERE tenant IN ('p','q')
+GROUP BY 1, 2
+ORDER BY 1;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ p      | Fri Jan 10 10:00:00 2025 UTC |  20
+ q      | Fri Jan 10 11:00:00 2025 UTC |  30
+
+-----------------------------------------------------------------------
+-- Every split above lands on a bucket boundary, because the mocked now() puts W
+-- on the hour and the buckets are hourly. Now mock a different time so
+-- the boundary falls mid-bucket. Both halves of the split then expand to 
+-- bucket boundary when they are moved to the materialization log, and overlap
+-- each other by one bucket. That bucket is refreshed twice,
+-- once fully and once tenant-scoped. The result is still correct, though
+-- the tenant-scoped refresh on that bucket is wasted.
+--
+CREATE MATERIALIZED VIEW metrics_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, tenant, avg(value)
+  FROM metrics
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+-- Moving now() half an hour puts W at 2025-01-07 12:30, inside the 12:00 bucket.
+-- A writer gates on the window stored on its generation, which is only replaced
+-- when a flush activates the next one, so the insert and refresh below are what
+-- install the moved window.
+SET timescaledb.current_timestamp_mock = '2025-01-10 12:30:00+00';
+--refresh to move invalidation threshold forward
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-30 12:00:00+00');
+--print the bucket that contain now()
+SELECT '2025-01-10 12:30:00+00'::timestamptz - INTERVAL '3 days' AS window_start,
+       time_bucket('1 hour', '2025-01-10 12:30:00+00'::timestamptz - INTERVAL '3 days')
+         AS containing_bucket;
+         window_start         |      containing_bucket       
+------------------------------+------------------------------
+ Tue Jan 07 12:30:00 2025 UTC | Tue Jan 07 12:00:00 2025 UTC
+
+SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('m','n') ORDER BY tenant;
+ tenant | bucket | avg 
+--------+--------+-----
+
+-- m sits below W and n above it
+BEGIN;
+INSERT INTO metrics VALUES ('2025-01-07 11:10:00+00', 'm', 30);
+INSERT INTO metrics VALUES ('2025-01-07 12:50:00+00', 'n', 40);
+COMMIT;
+-- Raw ranges, split at 12:30, i.e. in the middle of a bucket.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |              greatest               | seqnum 
+------------------------------+-------------------------------------+--------
+ Tue Jan 07 11:10:00 2025 UTC | Tue Jan 07 12:29:59.999999 2025 UTC |       
+ Tue Jan 07 12:30:00 2025 UTC | Tue Jan 07 12:50:00 2025 UTC        |      9
+
+-- Refreshing the other cagg to move invalidations from hypertable inval. log to 
+-- cagg invalidation log, expanding both halves to bucket
+-- boundaries in metrics_hourly's log without consuming them.
+CALL refresh_continuous_aggregate('metrics_daily', '2020-01-01', '2025-01-10 12:30:00+00');
+-- The two halves now overlap at the 12:00 bucket, one untracked and one carrying
+-- the seqnum: that bucket gets a full pass and a tenant-scoped pass.
+SELECT CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+            THEN '-infinity'::timestamptz
+            ELSE _timescaledb_functions.to_timestamp(lowest_modified_value) END AS lowest,
+       CASE WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+            THEN 'infinity'::timestamptz
+            ELSE _timescaledb_functions.to_timestamp(greatest_modified_value) END AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+ORDER BY lowest_modified_value, seqnum;
+            lowest            |              greatest               | seqnum 
+------------------------------+-------------------------------------+--------
+ -infinity                    | Tue Dec 31 23:59:59.999999 2019 UTC |       
+ Tue Jan 07 11:00:00 2025 UTC | Tue Jan 07 12:59:59.999999 2025 UTC |       
+ Tue Jan 07 12:00:00 2025 UTC | Tue Jan 07 12:59:59.999999 2025 UTC |      9
+ Sun Jan 12 04:00:00 2025 UTC | infinity                            |       
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:30:00+00');
+-- m is recomputed by the full pass over the bucket, n by the tenant-scoped pass
+-- over the same bucket. Both should match the raw data.
+SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('m','n') ORDER BY tenant;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ m      | Tue Jan 07 11:00:00 2025 UTC |  30
+ n      | Tue Jan 07 12:00:00 2025 UTC |  40
+
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM metrics
+WHERE tenant IN ('m','n')
+GROUP BY 1, 2
+ORDER BY 1;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ m      | Tue Jan 07 11:00:00 2025 UTC |  30
+ n      | Tue Jan 07 12:00:00 2025 UTC |  40
+
+-----------------------------------------------------------------------
+-- One transaction reaching past both edges at once: rows before the window
+-- start, inside it, and at or after the window end. They share a chunk, so the
+-- whole thing is one invalidation spanning the window. The invalidation is
+-- splitted at both boundary, and three log rows come out.
+-- With W = 2025-01-07 12:30 and WE = 2025-01-10 11:30:
+--
+--   'before' 01-07 11:00   W    'inside' 01-08 12:00    WE   'after' 01-10 11:45
+--   ---------|------------[|---------|------------------|)---------|---------->
+--
+-- Only 'inside' overlaps the window, so it is the only tenant recorded; the two
+-- untracked pieces are what bring 'before' and 'after' back up to date.
+SELECT tenant, bucket, avg FROM metrics_hourly
+WHERE tenant IN ('before','inside','after') ORDER BY tenant;
+ tenant | bucket | avg 
+--------+--------+-----
+
+BEGIN;
+INSERT INTO metrics VALUES ('2025-01-07 11:00:00+00', 'before', 3);
+INSERT INTO metrics VALUES ('2025-01-08 12:00:00+00', 'inside', 4);
+INSERT INTO metrics VALUES ('2025-01-10 11:45:00+00', 'after',  5);
+COMMIT;
+-- Three rows: untracked below W, the seqnum in the middle, untracked from WE up.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |              greatest               | seqnum 
+------------------------------+-------------------------------------+--------
+ Tue Jan 07 11:00:00 2025 UTC | Tue Jan 07 12:29:59.999999 2025 UTC |       
+ Tue Jan 07 12:30:00 2025 UTC | Fri Jan 10 11:29:59.999999 2025 UTC |     10
+ Fri Jan 10 11:30:00 2025 UTC | Fri Jan 10 11:45:00 2025 UTC        |       
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:30:00+00');
+-- 'before' and 'after' are outside the window, so neither was tracked.
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metrics_hourly')
+  AND tenant_id IN ('before','inside','after')
+ORDER BY seqnum, tenant_id;
+ tenant_id | seqnum 
+-----------+--------
+ inside    |     10
+
+--cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM metrics_hourly
+WHERE tenant IN ('before','inside','after') ORDER BY tenant;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ after  | Fri Jan 10 11:00:00 2025 UTC |   5
+ before | Tue Jan 07 11:00:00 2025 UTC |   3
+ inside | Wed Jan 08 12:00:00 2025 UTC |   4
+
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM metrics
+WHERE tenant IN ('before','inside','after')
+GROUP BY 1, 2
+ORDER BY 1;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ after  | Fri Jan 10 11:00:00 2025 UTC |   5
+ before | Tue Jan 07 11:00:00 2025 UTC |   3
+ inside | Wed Jan 08 12:00:00 2025 UTC |   4
+
+DROP MATERIALIZED VIEW metrics_daily;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_10_chunk
+DROP MATERIALIZED VIEW metrics_hourly;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_9_chunk
+DROP TABLE metrics;
+RESET timezone;
+-- TEST 6: offsets that results in start > end late window, despite passing 
+-- the offset check in the API. When that happen, the window is treated as
+-- empty, so trackings are not written and invalidations has NULL seqnum
+-- Part 1: a month against days. No DST and no timezone involved: this inverts
+-- every February, because '1 month' is assumed to be 30 days when validated
+-- by the API at definition, but resolves to 28/29 at runtime.
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock = '2025-03-15 12:00:00+00';
+-- window_start = now() - '1 month' = 2025-02-15 12:00 (28 days back)
+-- window_end   = now() - '29 days' = 2025-02-14 12:00 (29 days back)
+CREATE TABLE crossed(time timestamptz NOT NULL, tenant text NOT NULL, value float);
+SELECT create_hypertable('crossed', 'time', chunk_time_interval => INTERVAL '30 days');
+   create_hypertable   
+-----------------------
+ (13,public,crossed,t)
+
+ALTER TABLE crossed SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = '1 month',
+    timescaledb.granular_refresh_end_offset = '29 days'
+);
+SELECT '2025-03-15 12:00:00+00'::timestamptz - INTERVAL '1 month' AS window_start,
+       '2025-03-15 12:00:00+00'::timestamptz - INTERVAL '29 days'  AS window_end,
+       ('2025-03-15 12:00:00+00'::timestamptz - INTERVAL '1 month') >
+       ('2025-03-15 12:00:00+00'::timestamptz - INTERVAL '29 days') AS is_crossed;
+         window_start         |          window_end          | is_crossed 
+------------------------------+------------------------------+------------
+ Sat Feb 15 12:00:00 2025 UTC | Fri Feb 14 12:00:00 2025 UTC | t
+
+INSERT INTO crossed VALUES ('2025-02-14 10:00:00+00', 'a', 1),
+                           ('2025-02-15 14:00:00+00', 'b', 2);
+CREATE MATERIALIZED VIEW crossed_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, tenant, avg(value)
+  FROM crossed
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-15 12:00:00+00');
+ALTER MATERIALIZED VIEW crossed_hourly SET (timescaledb.enable_granular_refresh = true);
+-- One transaction, one chunk, one tenant on either side of the crossed bounds.
+-- The first tracked write seeds the tracker, which is where the crossed window
+-- is noticed and reported.
+SET client_min_messages TO LOG;
+BEGIN;
+LOG:  statement: BEGIN;
+INSERT INTO crossed VALUES ('2025-02-14 10:00:00+00', 'a', 3);
+LOG:  statement: INSERT INTO crossed VALUES ('2025-02-14 10:00:00+00', 'a', 3);
+LOG:  per-tenant tracking window for hypertable 13 is empty
+INSERT INTO crossed VALUES ('2025-02-15 14:00:00+00', 'b', 4);
+LOG:  statement: INSERT INTO crossed VALUES ('2025-02-15 14:00:00+00', 'b', 4);
+COMMIT;
+LOG:  statement: COMMIT;
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+-- A single untracked invalidation, not a split.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'crossed_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |           greatest           | seqnum 
+------------------------------+------------------------------+--------
+ Fri Feb 14 10:00:00 2025 UTC | Sat Feb 15 14:00:00 2025 UTC |       
+
+CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-15 12:00:00+00');
+-- Nothing is tracked while the window is empty.
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'crossed_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+ tenant_id | seqnum 
+-----------+--------
+
+--cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM crossed_hourly ORDER BY tenant;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ a      | Fri Feb 14 10:00:00 2025 UTC |   2
+ b      | Sat Feb 15 14:00:00 2025 UTC |   3
+
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM crossed
+GROUP BY 1, 2
+ORDER BY 1;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ a      | Fri Feb 14 10:00:00 2025 UTC |   2
+ b      | Sat Feb 15 14:00:00 2025 UTC |   3
+
+DROP MATERIALIZED VIEW crossed_hourly;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_12_chunk
+DROP TABLE crossed;
+-- Part 2: DST spring forward. 2025-03-09 02:00 EST becomes 03:00 EDT, so that
+-- calendar day is 23 hours long and '1 day' subtracts less than a pure-hours
+-- offset just under it.
+SET timezone TO 'America/New_York';
+-- 07:30 UTC = 03:30 EDT, half an hour after the jump.
+SET timescaledb.current_timestamp_mock = '2025-03-09 07:30:00+00';
+-- window_start = now() - '1 day'           = 2025-03-08 08:30 UTC (23 h back)
+-- window_end   = now() - '23 hours 30 min' = 2025-03-08 08:00 UTC (23.5 h back)
+CREATE TABLE crossed(time timestamptz NOT NULL, tenant text NOT NULL, value float);
+SELECT create_hypertable('crossed', 'time', chunk_time_interval => INTERVAL '1 day');
+   create_hypertable   
+-----------------------
+ (15,public,crossed,t)
+
+ALTER TABLE crossed SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = '1 day',
+    timescaledb.granular_refresh_end_offset = '23 hours 30 minutes'
+);
+SELECT '2025-03-09 07:30:00+00'::timestamptz - INTERVAL '1 day' AS window_start,
+       '2025-03-09 07:30:00+00'::timestamptz - INTERVAL '23 hours 30 minutes' AS window_end,
+       ('2025-03-09 07:30:00+00'::timestamptz - INTERVAL '1 day') >
+       ('2025-03-09 07:30:00+00'::timestamptz - INTERVAL '23 hours 30 minutes') AS is_crossed;
+         window_start         |          window_end          | is_crossed 
+------------------------------+------------------------------+------------
+ Sat Mar 08 03:30:00 2025 EST | Sat Mar 08 03:00:00 2025 EST | t
+
+INSERT INTO crossed VALUES ('2025-03-08 07:30:00+00', 'a', 1),
+                           ('2025-03-08 09:00:00+00', 'b', 2);
+CREATE MATERIALIZED VIEW crossed_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, tenant, avg(value)
+  FROM crossed
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-09 07:00:00+00');
+ALTER MATERIALIZED VIEW crossed_hourly SET (timescaledb.enable_granular_refresh = true);
+SET client_min_messages TO LOG;
+BEGIN;
+LOG:  statement: BEGIN;
+INSERT INTO crossed VALUES ('2025-03-08 07:30:00+00', 'a', 3);
+LOG:  statement: INSERT INTO crossed VALUES ('2025-03-08 07:30:00+00', 'a', 3);
+LOG:  per-tenant tracking window for hypertable 15 is empty
+INSERT INTO crossed VALUES ('2025-03-08 09:00:00+00', 'b', 4);
+LOG:  statement: INSERT INTO crossed VALUES ('2025-03-08 09:00:00+00', 'b', 4);
+COMMIT;
+LOG:  statement: COMMIT;
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'crossed_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |           greatest           | seqnum 
+------------------------------+------------------------------+--------
+ Sat Mar 08 02:30:00 2025 EST | Sat Mar 08 04:00:00 2025 EST |       
+
+CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-09 07:00:00+00');
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'crossed_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+ tenant_id | seqnum 
+-----------+--------
+
+--cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM crossed_hourly ORDER BY tenant;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ a      | Sat Mar 08 02:00:00 2025 EST |   2
+ b      | Sat Mar 08 04:00:00 2025 EST |   3
+
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM crossed
+GROUP BY 1, 2
+ORDER BY 1;
+ tenant |            bucket            | avg 
+--------+------------------------------+-----
+ a      | Sat Mar 08 02:00:00 2025 EST |   2
+ b      | Sat Mar 08 04:00:00 2025 EST |   3
+
+DROP MATERIALIZED VIEW crossed_hourly;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_14_chunk
+DROP TABLE crossed;
+RESET timezone;
