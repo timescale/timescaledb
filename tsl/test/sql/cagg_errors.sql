@@ -289,6 +289,9 @@ FOR EACH ROW EXECUTE FUNCTION not_allowed();
 
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'false');
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
+\set VERBOSITY sqlstate
+ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.continuous = false);
+\set VERBOSITY default
 ALTER MATERIALIZED VIEW mat_with_test ALTER timec DROP default;
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse

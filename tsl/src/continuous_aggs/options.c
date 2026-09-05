@@ -330,7 +330,9 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 {
 	if (!with_clause_options[CreateMaterializedViewFlagContinuous].is_default)
 	{
-		elog(ERROR, "cannot disable continuous aggregates");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot disable continuous aggregates")));
 	}
 
 	if (!with_clause_options[CreateMaterializedViewFlagMaterializedOnly].is_default)
