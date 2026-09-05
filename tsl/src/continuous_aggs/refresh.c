@@ -89,10 +89,13 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InvalidationStore *invalidations,
 											   const ContinuousAggRefreshContext context,
 											   bool bucketing_refresh_window);
-static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
-												   const InternalTimeRange *refresh_window,
-												   const ContinuousAggRefreshContext context,
-												   bool bucketing_refresh_window);
+static ContinuousAgg *
+process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
+											const InternalTimeRange *refresh_window);
+static bool process_cagg_invalidations_and_refresh_txn3(const ContinuousAgg *cagg,
+														const InternalTimeRange *refresh_window,
+														const ContinuousAggRefreshContext context,
+														bool bucketing_refresh_window);
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
 {
@@ -997,19 +1000,18 @@ flush_tenant_tracking(const ContinuousAgg *cagg)
 	PopActiveSnapshot();
 }
 
-static bool
-process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
-									   const InternalTimeRange *refresh_window,
-									   const ContinuousAggRefreshContext context,
-									   bool bucketing_refresh_window)
+static ContinuousAgg *
+process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
+											const InternalTimeRange *refresh_window)
 {
 	/* Lock the continuous aggregate's catalog table entry to protect against concurrent refreshes
 	 * on the same cagg processing the cagg invalidation logs for that CAgg.
 	 */
-	bool found = ts_lock_continuous_agg_tuple(cagg->data.mat_hypertable_id);
-	Ensure(found,
-		   "continuous aggregate with mat_hypertable_id %d not found",
-		   cagg->data.mat_hypertable_id);
+	bool found = ts_lock_continuous_agg_tuple(mat_hypertable_id);
+	Ensure(found, "continuous aggregate with mat_hypertable_id %d not found", mat_hypertable_id);
+
+	/* fetch cagg information again. settings could have changed .e.g. granular refresh */
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_hypertable_id, false);
 
 	/* Transaction 2, Step 1: drain the per-tenant invalidation tracker while we
 	 * hold the per-cagg serialization lock taken just above. The lock above ensures that
@@ -1024,6 +1026,18 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * every other cagg the whole refresh runs the plain (full) path: no flush,
 	 * seqnum-agnostic invalidation processing, and no tenant-tracking cleanup
 	 * below.
+	 *
+	 * For cagg enable->disable->enable path, we don't clean up entries in
+	 * shared mem on cagg granular refresh disable.
+	 * Not flushing leaves the collected tenants in shared memory. The tracker is
+	 * per hypertable, so whichever cagg enables granular refresh next flushes
+	 * them under a single seqnum spanning the whole disabled window: this is safe
+	 * as we can only over-refresh tenants, never under-refresh
+	 *
+	 * The cagg tuple lock coordinates enable/disable DDL with refresh Txn2, but
+	 * only per cagg. With several granular caggs on one hypertable, a refresh of
+	 * cagg1 could flush the shared tracker while DDL disables cagg2.
+	 * NEEDS change when we support multiple caggs with granular refresh.
 	 */
 	if (cagg->data.granular_refresh_enabled)
 	{
@@ -1035,8 +1049,22 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn2");
 	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
 
+	/*
+	 * The per-cagg tuple lock is released here. DDL that enables/disables
+	 * granular refresh for a cagg waits on this lock, so a concurrent refresh
+	 * and cagg-granular-refresh-DDL coordinate on it.
+	 */
 	SPI_commit_and_chain();
 
+	return cagg;
+}
+
+static bool
+process_cagg_invalidations_and_refresh_txn3(const ContinuousAgg *cagg,
+											const InternalTimeRange *refresh_window,
+											const ContinuousAggRefreshContext context,
+											bool bucketing_refresh_window)
+{
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn3");
 	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
 
@@ -1362,12 +1390,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			DEBUG_WAITPOINT(
 				psprintf("cagg_policy_batch_%d_after_txn_1_wait", context.processing_batch));
 
-			cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
-
-			refreshed = process_cagg_invalidations_and_refresh(cagg,
-															   &refresh_window,
-															   context,
-															   bucketing_refresh_window);
+			cagg = process_cagg_invalidations_and_refresh_txn2(mat_id, &refresh_window);
+			refreshed = process_cagg_invalidations_and_refresh_txn3(cagg,
+																	&refresh_window,
+																	context,
+																	bucketing_refresh_window);
 
 			DEBUG_WAITPOINT("after_process_cagg_materializations");
 		}
