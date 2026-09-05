@@ -896,17 +896,18 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 }
 
 /*
- * Find an equivalence class member expression, all of whose Vars, come from
- * the indicated relation.
+ * Find equivalence class member expressions with all of their Vars
+ * coming from the indicated relation.
  *
  * This function has been copied from find_em_expr_for_rel in
  * contrib/postgres_fdw/postgres_fdw.c in postgres source.
  * This function was moved to postgres main in PG13 but was removed
  * again in PG15. So we use our own implementation for PG15+.
  */
-EquivalenceMember *
+List *
 ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
+	List *ems = NULL;
 	EquivalenceMember *em;
 #if PG18_GE
 	/* Use specialized iterator to include child ems.
@@ -930,22 +931,25 @@ ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 		{
 			/*
 			 * If there is more than one equivalence member whose Vars are
-			 * taken entirely from this relation, we'll be content to choose
-			 * any one of those.
+			 * taken entirely from this relation, we'll return a list of those
 			 */
-			return em;
+			ems = lappend(ems, em);
 		}
 	}
 
-	/* We didn't find any suitable equivalence class member */
-	return NULL;
+	return ems;
 }
 
 Expr *
 ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
-	EquivalenceMember *em = ts_find_em_for_rel(ec, rel);
-	return em ? em->em_expr : NULL;
+	List *ems = ts_find_em_for_rel(ec, rel);
+	if (ems)
+	{
+		EquivalenceMember *em = linitial(ems);
+		return (em ? em->em_expr : NULL);
+	}
+	return NULL;
 }
 
 /*
