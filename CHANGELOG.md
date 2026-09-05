@@ -2,6 +2,37 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.30.0 (2026-09-08)
+
+This release contains performance improvements and bug fixes since the 2.29.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.30.0**
+Blazing fast `LIMIT` queries with the newly introduced `DeferredChunkAppend`. This custom node reduces planning significantly by delaying chunk expansion. During planning the hypertable stays unexpanded and only during execution are chunks enumerated on demand. Combined with the optimizations to `FIRST` and `LAST` sparse indexes, this addition executes last-point queries far more efficiently and quickly.  This changes the scaling of the "What is the last reading from this sensor" query from linear with number of chunks to constant if it can be found in the most recent chunk. The true power of the custom node starts to show with increasing amount of chunks, see [more elaborate benchmarks](https://github.com/timescale/timescaledb/pull/10292).
+
+**Features**
+* [#10147](https://github.com/timescale/timescaledb/pull/10147) Support segmentwise batch sorted merge for overlapping batches
+* [#10292](https://github.com/timescale/timescaledb/pull/10292) Add `DeferredChunkAppend` custom scan
+* [#10354](https://github.com/timescale/timescaledb/pull/10354) Adds DML support for concurrent compaction
+* [#10388](https://github.com/timescale/timescaledb/pull/10388) Add custom toaster for compression
+
+**Bugfixes**
+* [#10058](https://github.com/timescale/timescaledb/pull/10058) Apply new sortkeys for in-memory recompression
+* [#10128](https://github.com/timescale/timescaledb/pull/10128) Include hypertable chunks in publications created with `FOR TABLES IN SCHEMA`
+* [#10325](https://github.com/timescale/timescaledb/pull/10325) Avoid test errors when building from a source archive without a git repository
+* [#10408](https://github.com/timescale/timescaledb/pull/10408) Verify columns and their types in `create_compressed_chunk`
+* [#10515](https://github.com/timescale/timescaledb/pull/10515) Fix row level security checks after dropping hypertable columns
+* [#9905](https://github.com/timescale/timescaledb/pull/9905) Potentially incorrect result of a join when the join clause contains `time_bucket`
+* [#9920](https://github.com/timescale/timescaledb/pull/9920) Fix the "XX000: failed to evaluate runtime constant in vectorized filter" error in some queries that use stable functions in `WHERE` clause and the columnar aggregation pipeline
+* [#10513](https://github.com/timescale/timescaledb/pull/10513) Remove `user_catalog_table` option from catalog tables
+
+**GUCs**
+* `enable_deferred_chunk_append`: Custom scan node for hypertables that iterates chunks at execution instead of expanding every chunk at plan time. Default: true.
+* `enable_foreign_key_propagation`: Adjust foreign key lookup queries to target whole hypertable. Default: true.
+* `use_custom_toaster`: Use a custom TOAST writer for compressed row inserts. Default: false.
+
+**Thanks**
+* @tureba for reporting the problem with building from a source archive without a git repository
+
 ## 2.29.2 (2026-08-18)
 
 This release contains bug fixes since the 2.29.1 release. We recommend that you upgrade at the next available opportunity.
