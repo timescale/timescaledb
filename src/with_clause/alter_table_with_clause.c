@@ -69,6 +69,11 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 			.arg_names = {"granular_refresh_end_offset", NULL},
 			 .type_id = TEXTOID,
 		},
+		[AlterTableFlagEnableCaggGranularRefresh] = {
+			.arg_names = {"enable_cagg_granular_refresh", NULL},
+			.type_id = BOOLOID,
+			.default_val = (Datum)false,
+		},
 		[AlterTableFlagDirectCompress] = {
 			.arg_names = {"direct_compress", NULL},
 			.type_id = BOOLOID,

@@ -24,6 +24,7 @@ typedef enum AlterTableFlags
 	AlterTableFlagGranularRefreshColumn,
 	AlterTableFlagGranularRefreshStartOffset,
 	AlterTableFlagGranularRefreshEndOffset,
+	AlterTableFlagEnableCaggGranularRefresh,
 	AlterTableFlagDirectCompress,
 	AlterTableFlagDirectCompressScheduleInterval,
 	AlterTableFlagsMax

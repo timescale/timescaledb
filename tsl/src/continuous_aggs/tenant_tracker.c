@@ -35,8 +35,10 @@
  *   ts_tenant_tracker_get_or_attach() find-or-inserts and, on first insert,
  *   dsa_allocate0 + init_tracker while holding the dshash exclusive lock.  The
  *   dshash lock protects only the MAPPING; the tracker has its own concurrency
- *   and is never moved or freed, so a dsa_pointer stays valid after the
- *   dshash lock is released.
+ *   and is never moved, so a dsa_pointer stays valid after the dshash lock is
+ *   released.  A tracker is freed only by ts_tenant_tracker_remove(), which
+ *   requires the caller to hold AccessExclusiveLock on the hypertable so that no
+ *   backend can be holding such a pointer -- see the comment there.
  *
  * LAYOUT (one tracker per hypertable; per-tracker sizes are compile-time
  *   constants: TENANT_TRACKER_CAPACITY=4096, TENANT_TRACKER_NUM_PARTITIONS=16,
@@ -745,8 +747,10 @@ ts_tenant_tracker_lookup_wstate(int32 hypertable_id, TenantLookupState *state)
 
 	TenantMapKey key = { .database_id = MyDatabaseId, .hypertable_id = hypertable_id };
 
-	/* Hold the dshash lock only to read the dsa_pointer; the tracker itself is
-	 * never moved/freed, so it stays valid after we release. */
+	/* Hold the dshash lock only to read the dsa_pointer; the tracker is never
+	 * moved, so it stays valid after we release.  ts_tenant_tracker_remove() is
+	 * the one thing that can free it, and it cannot run concurrently with a
+	 * caller that reached here through the DML or refresh path. */
 	entry = dshash_find(tracker_map, &key, false /* shared */);
 
 	if (entry == NULL)
@@ -849,9 +853,9 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
 		 * this large allocation on every subsequent commit (a retry/log storm
 		 * that also keeps re-exercising the throwing dshash insert path).  With
 		 * the marker, later inserts find the entry, see the marker, and skip
-		 * tracking.  The marker persists until restart.
-		 * matches the current design where trackers are never freed; tracking for
-		 * this hypertable stays off and the refresh falls back to the full log.
+		 * tracking.  The marker persists until restart, or until
+		 * ts_tenant_tracker_remove() deletes the entry; tracking for this
+		 * hypertable stays off and the refresh falls back to the full log.
 		 */
 
 		entry->tracker = InvalidDsaPointer;
@@ -878,6 +882,72 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
 	dshash_release_lock(tracker_map, entry);
 
 	return (TenantTracking *) dsa_get_address(tracker_area, dp);
+}
+
+/*
+ * Drop the tenant tracking entry for the hypertable and clean
+ * up allocated memory in DSA,
+ *
+ * CALLER CONTRACT -- both parts are required, neither is checked here:
+ *
+ *  1. No backend should be writing or reading from this entry.
+ *     ( Note: every path drops the dshash lock before dereferencing the pointer, so cannot use that
+ * to gain exclusive access). coordinate access by acquiring AccessExclusiveLock on the ht. This
+ *     will ensure that are no writers.
+ *
+ *  2. Do not call this inline in a DDL.  Shared-memory frees are not
+ *     transactional
+ *
+ * Backends that already resolved this tracker cache the raw pointer for their
+ * lifetime (tenant_tracker_resolved_htab in insert.c); they must be invalidated
+ * separately.
+ *
+ * Note: dsa_free returns the pages to the segment's free page manager, so
+ * DSA can reuse it. Memory is not reclaimed by the OS.
+ */
+bool
+ts_tenant_tracker_remove(int32 hypertable_id)
+{
+	TenantMapEntry *entry;
+	dsa_pointer dp;
+
+	if (!tenant_tracker_attach())
+	{
+		return false; /* loader not present -> nothing was ever tracked */
+	}
+
+	TenantMapKey key = { .database_id = MyDatabaseId, .hypertable_id = hypertable_id };
+
+	/* get the entry with Exclusive lock as we are going to delete it*/
+	entry = dshash_find(tracker_map, &key, true /* exclusive */);
+
+	if (entry == NULL)
+	{
+		return false; /* no entry found */
+	}
+
+	/* when we are in this function, we have 0 writers and 0 readers.
+	 * No caggs still have granular refresh enabled.
+	 * We have an exclusive lock on the hypertable. So no writers
+	 * are active. So it is safe to delete the shared mem allocated to
+	 * the hypertable.
+	 * the hash entry is [ ht , <shared mem alloc ptr> ].
+	 * <shared mem alloc ptr> could be NULL, if we ran out of shared memory.
+	 */
+	dp = entry->tracker;
+
+	if (DsaPointerIsValid(dp))
+	{
+		/* Free the alloc-ed mem under the same partition lock that get_or_attach
+		 * allocates under.
+		 */
+		dsa_free(tracker_area, dp);
+	}
+
+	/* this call also releases the exclusive lock we acquired earlier*/
+	dshash_delete_entry(tracker_map, entry);
+
+	return true;
 }
 
 /*
@@ -919,7 +989,7 @@ tenant_tracker_map_scan(TenantTrackerMapEntry *result, int capacity)
 	TenantMapEntry *entry;
 	int nentries = 0;
 
-	dshash_seq_init(&status, tracker_map, false /* exclusive */);
+	dshash_seq_init(&status, tracker_map, false /* shared */);
 
 	while ((entry = (TenantMapEntry *) dshash_seq_next(&status)) != NULL)
 	{
@@ -952,9 +1022,10 @@ tenant_tracker_map_scan(TenantTrackerMapEntry *result, int capacity)
  * tracker layout and the map internals private to this file.
  *
  * Count first, then allocate, then fill: allocation cannot happen inside the
- * scan (see tenant_tracker_map_scan).  Map entries are only ever added and never
- * removed, so the count can only grow between the two scans; the slack covers
- * the usual case, and a listing is a best-effort snapshot anyway -- if more
+ * scan (see tenant_tracker_map_scan).  The count can move either way between
+ * the two scans -- entries are added on first touch and removed by
+ * ts_tenant_tracker_remove() -- so the slack covers growth and a shrink just
+ * fills fewer slots.  A listing is a best-effort snapshot either way: if more
  * entries appear than fit, the extras are simply left out.
  */
 int

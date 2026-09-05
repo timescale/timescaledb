@@ -5731,7 +5731,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 
 	if (ht && (!parse_results[AlterTableFlagGranularRefreshColumn].is_default ||
 			   !parse_results[AlterTableFlagGranularRefreshStartOffset].is_default ||
-			   !parse_results[AlterTableFlagGranularRefreshEndOffset].is_default))
+			   !parse_results[AlterTableFlagGranularRefreshEndOffset].is_default ||
+			   !parse_results[AlterTableFlagEnableCaggGranularRefresh].is_default))
 	{
 		ts_cm_functions->process_granular_refresh_options(ht, parse_results);
 	}
