@@ -3179,6 +3179,7 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		{
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
+			ts_compressed_relation_drop_dependency(compressed_relid);
 			ts_chunk_drop_by_relid(compressed_relid, behavior, DEBUG1);
 		}
 	}

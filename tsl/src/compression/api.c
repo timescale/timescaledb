@@ -692,6 +692,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	 */
 	LockRelationOid(uncompressed_chunk->fd.relid, AccessExclusiveLock);
 	LockRelationOid(compressed_relid, AccessExclusiveLock);
+	ts_compressed_relation_drop_dependency(compressed_relid);
 	ts_chunk_drop_by_relid(compressed_relid, DROP_RESTRICT, -1);
 	ts_cache_release(&hcache);
 	write_logical_replication_msg_decompression_end();
