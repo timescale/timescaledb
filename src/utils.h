@@ -174,16 +174,6 @@ ts_fetch_att(const void *T, bool attbyval, int attlen)
 }
 
 static inline int64
-int64_min(int64 a, int64 b)
-{
-	if (a <= b)
-	{
-		return a;
-	}
-	return b;
-}
-
-static inline int64
 int64_saturating_add(int64 a, int64 b)
 {
 	int64 result;

@@ -49,9 +49,3 @@ batch_array_get_at(const BatchArray *array, int batch_index)
 
 extern void batch_array_clear_at(BatchArray *array, int batch_index);
 extern void batch_array_clear_all(BatchArray *array);
-
-inline static bool
-batch_array_has_active_batches(const BatchArray *array)
-{
-	return bms_num_members(array->unused_batch_states) != array->n_batch_states;
-}
