@@ -784,9 +784,11 @@ ORDER BY device;
          Group Key: m.device
          ->  Nested Loop
                ->  Values Scan on "*VALUES*"
-               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m
-                     ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
-                           Index Cond: (device = "*VALUES*".column1)
+               ->  Custom Scan (ChunkAppend) on metrics m
+                     Order: m.device
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m_1
+                           ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
+                                 Index Cond: (device = "*VALUES*".column1)
 
 -- ordered-set aggregate (not supported)
 :PREFIX SELECT device, percentile_cont(0.5) WITHIN GROUP (ORDER BY value) FROM metrics GROUP BY device ORDER BY device;
@@ -884,9 +886,10 @@ SET enable_partitionwise_aggregate = off;
                ->  Sort
                      Sort Key: (('d'::text || (g.g)::text))
                      ->  Function Scan on generate_series g
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
-                     Index Cond: (device = ('d'::text || (g.g)::text))
+         ->  Custom Scan (ChunkAppend) on metrics
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
+                           Index Cond: (device = ('d'::text || (g.g)::text))
 
 -- HAVING with NOT around Aggref
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING NOT (min(value) > 10) ORDER BY device;
@@ -925,9 +928,11 @@ SET enable_partitionwise_aggregate = off;
    ->  Nested Loop
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m1
                ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2
-               ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
-                     Index Cond: (device = m1.device)
+         ->  Custom Scan (ChunkAppend) on metrics m2
+               Order: m2.device
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2_1
+                     ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
+                           Index Cond: (device = m1.device)
 
 \set PREFIX ''
 \set ECHO errors
@@ -3887,7 +3892,7 @@ ORDER BY device;
          Group Key: m.device
          ->  Nested Loop
                ->  Values Scan on "*VALUES*"
-               ->  Append
+               ->  Custom Scan (ChunkAppend) on metrics m
                      ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m_1
                            ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
                                  Index Cond: (device = "*VALUES*".column1)
@@ -4059,7 +4064,7 @@ SET enable_partitionwise_aggregate = off;
                ->  Sort
                      Sort Key: (('d'::text || (g.g)::text))
                      ->  Function Scan on generate_series g
-         ->  Append
+         ->  Custom Scan (ChunkAppend) on metrics
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
                            Index Cond: (device = ('d'::text || (g.g)::text))
@@ -4126,21 +4131,20 @@ SET enable_partitionwise_aggregate = off;
 --- QUERY PLAN ---
  GroupAggregate
    Group Key: m1.device
-   ->  Merge Join
-         Merge Cond: (m1.device = m2.device)
+   ->  Nested Loop
          ->  Merge Append
                Sort Key: m1.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m1_1
                      ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m1_2
                      ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed
-         ->  Materialize
-               ->  Merge Append
-                     Sort Key: m2.device
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2_1
-                           ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m2_2
-                           ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1
+         ->  Custom Scan (ChunkAppend) on metrics m2
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2_1
+                     ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
+                           Index Cond: (device = m1.device)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m2_2
+                     ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1
+                           Index Cond: (device = m1.device)
 
 \set PREFIX ''
 \set ECHO errors
@@ -5701,7 +5705,7 @@ ORDER BY device;
          Group Key: m.device
          ->  Nested Loop
                ->  Values Scan on "*VALUES*"
-               ->  Append
+               ->  Custom Scan (ChunkAppend) on metrics m
                      ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m_1
                            ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
                                  Index Cond: (device = "*VALUES*".column1)
@@ -5873,7 +5877,7 @@ SET enable_partitionwise_aggregate = off;
                ->  Sort
                      Sort Key: (('d'::text || (g.g)::text))
                      ->  Function Scan on generate_series g
-         ->  Append
+         ->  Custom Scan (ChunkAppend) on metrics
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
                            Index Cond: (device = ('d'::text || (g.g)::text))
@@ -5940,21 +5944,20 @@ SET enable_partitionwise_aggregate = off;
 --- QUERY PLAN ---
  GroupAggregate
    Group Key: m1.device
-   ->  Merge Join
-         Merge Cond: (m1.device = m2.device)
+   ->  Nested Loop
          ->  Merge Append
                Sort Key: m1.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m1_1
                      ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m1_2
                      ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed
-         ->  Materialize
-               ->  Merge Append
-                     Sort Key: m2.device
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2_1
-                           ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m2_2
-                           ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1
+         ->  Custom Scan (ChunkAppend) on metrics m2
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2_1
+                     ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
+                           Index Cond: (device = m1.device)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m2_2
+                     ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1
+                           Index Cond: (device = m1.device)
 
 \set PREFIX ''
 \set ECHO errors
