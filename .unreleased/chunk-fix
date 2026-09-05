@@ -1,0 +1,2 @@
+Fixes: #10499 Potentially wrong query result when hypertable chunks are filtered out at query run time, the filter condition uses an uncorrelated subquery, and the query uses a parallel execution plan
+Thanks: @peterecofit for reporting potentially wrong query result when hypertable chunks are filtered out at query run time
