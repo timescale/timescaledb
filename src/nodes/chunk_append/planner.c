@@ -27,9 +27,7 @@
 #include "nodes/chunk_append/transform.h"
 #include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
-
-static Plan *adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
-							  List *tlist, AttrNumber *sortColIdx);
+#include "planner/planner.h"
 
 static CustomScanMethods chunk_append_plan_methods = {
 	.CustomName = "ChunkAppend",
@@ -47,39 +45,6 @@ void
 _chunk_append_init(void)
 {
 	TryRegisterCustomScanMethods(&chunk_append_plan_methods);
-}
-
-static Plan *
-adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List *tlist,
-				 AttrNumber *sortColIdx)
-{
-	int childSortCols;
-	Oid *sortOperators;
-	Oid *collations;
-	bool *nullsFirst;
-	AttrNumber *childColIdx;
-
-	/* Compute sort column info, and adjust subplan's tlist as needed */
-	plan = ts_prepare_sort_from_pathkeys(plan,
-										 pathkeys,
-										 path->parent->relids,
-										 sortColIdx,
-										 true,
-										 &childSortCols,
-										 &childColIdx,
-										 &sortOperators,
-										 &collations,
-										 &nullsFirst);
-
-	/* inject sort node if child sort order does not match desired order */
-	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
-	{
-		Assert(!IsA(plan, Sort));
-
-		plan = (Plan *)
-			ts_make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
-	}
-	return plan;
 }
 
 Plan *
@@ -240,12 +205,12 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			 */
 			if (!IsA(lfirst(lc_plan), MergeAppend))
 			{
-				lfirst(lc_plan) = adjust_childscan(root,
-												   lfirst(lc_plan),
-												   lfirst(lc_path),
-												   path->path.pathkeys,
-												   orig_tlist,
-												   sortColIdx);
+				lfirst(lc_plan) = add_sort_if_needed(root,
+													  lfirst(lc_plan),
+													  lfirst(lc_path),
+													  path->path.pathkeys,
+													  sortColIdx,
+													  capath->limit_tuples);
 			}
 		}
 	}
