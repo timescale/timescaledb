@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
@@ -73,7 +74,10 @@ ChunkAppendPath *
 ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *pathtarget)
 {
 	ListCell *lc;
-	double total_cost = 0, rows = 0;
+	double startup_cost = 0;
+	double total_cost = 0;
+	double rows = 0;
+	List *pathkeys = ca->cpath.path.pathkeys;
 	ChunkAppendPath *new = palloc(sizeof(ChunkAppendPath));
 	memcpy(new, ca, sizeof(ChunkAppendPath));
 	new->cpath.custom_paths = subpaths;
@@ -84,12 +88,41 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *patht
 	foreach (lc, subpaths)
 	{
 		Path *child = lfirst(lc);
-		total_cost += child->total_cost;
+
+		/*
+		 * cost_append() accounts for the cost of sorting the children separately,
+		 * so here we must follow this logic.
+		 */
+		if (pathkeys != NIL && !pathkeys_contained_in(pathkeys, child->pathkeys))
+		{
+			Path sort_path; /* dummy for result of cost_sort */
+
+			cost_sort(&sort_path,
+					  /* root = */ NULL,
+					  pathkeys,
+#if PG18_GE
+					  child->disabled_nodes,
+#endif
+					  child->total_cost,
+					  child->rows,
+					  child->pathtarget->width,
+					  0.0,
+					  work_mem,
+					  /* limit_tuples = */ -1);
+			startup_cost += sort_path.startup_cost;
+			total_cost += sort_path.total_cost;
+		}
+		else
+		{
+			startup_cost += child->startup_cost;
+			total_cost += child->total_cost;
+		}
 		rows += child->rows;
 #if PG18_GE
 		disabled_nodes += child->disabled_nodes;
 #endif
 	}
+	new->cpath.path.startup_cost = startup_cost;
 	new->cpath.path.total_cost = total_cost;
 	new->cpath.path.rows = rows;
 #if PG18_GE
