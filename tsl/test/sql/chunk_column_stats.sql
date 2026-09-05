@@ -382,3 +382,33 @@ SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged > 9223372036854775805;
 
 
 RESET timescaledb.enable_chunk_skipping;
+
+-- Test that a chunk whose range was invalidated is not excluded at execution time
+SET timescaledb.enable_chunk_skipping = on;
+
+CREATE TABLE chunk_skip_invalid(
+    ts     timestamptz NOT NULL,
+    ranged int
+);
+SELECT * FROM create_hypertable('chunk_skip_invalid', 'ts',
+                         chunk_time_interval => interval '1 day');
+SELECT * FROM enable_chunk_skipping('chunk_skip_invalid', 'ranged');
+ALTER TABLE chunk_skip_invalid SET (timescaledb.compress);
+
+INSERT INTO chunk_skip_invalid VALUES ('2025-01-01', 20);
+INSERT INTO chunk_skip_invalid VALUES ('2025-01-02', 20);
+SELECT count(compress_chunk(c)) FROM show_chunks('chunk_skip_invalid') c;
+
+-- DML on a compressed chunk makes it partial, which invalidates its ranges
+INSERT INTO chunk_skip_invalid VALUES ('2025-01-01', 9);
+SELECT chunk_id, range_start, range_end, valid FROM _timescaledb_catalog.chunk_column_stats
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'chunk_skip_invalid')
+  AND chunk_id IS NOT NULL ORDER BY 1;
+
+-- The chunk with the invalidated range must survive executor startup exclusion
+:PREFIX SELECT * FROM chunk_skip_invalid WHERE ranged = length(substring(version(),1,9));
+:PREFIX UPDATE chunk_skip_invalid SET ranged = 0 WHERE ranged = length(substring(version(),1,9));
+:PREFIX DELETE FROM chunk_skip_invalid WHERE ranged = length(substring(version(),1,9));
+SELECT count(*) FROM chunk_skip_invalid WHERE ranged = length(substring(version(),1,9));
+
+RESET timescaledb.enable_chunk_skipping;
