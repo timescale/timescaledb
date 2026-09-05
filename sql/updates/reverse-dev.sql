@@ -147,3 +147,5 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.tenant_tracking_map();
 
 ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
 ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_relid_from_chunk_relid(IN REGCLASS, OUT REGCLASS, OUT BOOLEAN);

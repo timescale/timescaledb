@@ -98,6 +98,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.hypertable_get_tenant_tracking_info(regclass)
  _timescaledb_functions.hypertable_local_size(name,name)
  _timescaledb_functions.hypertable_osm_range_update(regclass,anyelement,anyelement,boolean)
+ _timescaledb_functions.hypertable_relid_from_chunk_relid(regclass)
  _timescaledb_functions.hypertable_status(regclass)
  _timescaledb_functions.hypertable_status_text(integer)
  _timescaledb_functions.hypertable_status_text(regclass)
