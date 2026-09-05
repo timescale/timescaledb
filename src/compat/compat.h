@@ -522,12 +522,6 @@ murmurhash64(uint64 data)
 	vacuum_is_relation_owner(relid, reltuple, options)
 
 /*
- * 'BackendIdGetProc' was renamed to 'ProcNumberGetProc' in 024c52111757.
- * Also 'backendId' was renamed to 'procNumber'
- */
-#define VirtualTransactionGetProcCompat(vxid) BackendIdGetProc((vxid)->backendId)
-
-/*
  * 'opclassOptions' argument was added in 784162357130.
  * Previously indexInfo->ii_OpclassOptions was used instead.
  * On top of that 'stattargets' argument was added in 6a004f1be87d.
@@ -704,18 +698,6 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys, 0)
-#endif
-
-/* Copied from PG17. We can remove it once we deprecate older versions. */
-#if PG17_LT
-static inline void
-initReadOnlyStringInfo(StringInfo str, char *data, int len)
-{
-	str->data = data;
-	str->len = len;
-	str->maxlen = 0; /* read-only */
-	str->cursor = 0;
-}
 #endif
 
 /*
