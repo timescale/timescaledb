@@ -220,3 +220,27 @@ BEGIN
   END IF;
 END
 $$;
+
+-- Promote the (job_id, chunk_id) unique constraint on the policy chunk stats
+-- table to a primary key to avoid problems with publications.
+ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats
+  DROP CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key,
+  ADD CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key PRIMARY KEY (job_id, chunk_id);
+
+-- Anyone who hit this problem could work around it by pointing the replica identity at
+-- the unique index. Dropping that index leaves the setting behind naming
+-- nothing, so send it back to the new primary key.
+DO $$
+BEGIN
+  IF (SELECT relreplident FROM pg_class
+      WHERE oid = '_timescaledb_internal.bgw_policy_chunk_stats'::regclass) = 'i'
+     AND NOT EXISTS (
+       SELECT FROM pg_index
+       WHERE indrelid = '_timescaledb_internal.bgw_policy_chunk_stats'::regclass
+         AND indisreplident)
+  THEN
+    ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats
+      REPLICA IDENTITY DEFAULT;
+  END IF;
+END
+$$;
