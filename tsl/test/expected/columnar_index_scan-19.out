@@ -942,6 +942,82 @@ SET enable_partitionwise_aggregate = off;
 + on
  
   device | count 
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
+                     Index Cond: ((device = 'd1'::text) AND (sensor = 'B'::text))
+
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_time
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Index Scan Backward using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
+                     Index Cond: ((device = 'd1'::text) AND (sensor = 'B'::text))
+
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk."time" DESC
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     Vectorized Filter: (value < '5'::double precision)
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+                           Filter: (_ts_meta_v2_min_value < '5'::double precision)
+
+02:30
+d1|B|02:30
+d1|B|00:30
+02:30
+d1|B|02:30
+d1|B|00:30
 SET timescaledb.enable_columnarindexscan = on;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
