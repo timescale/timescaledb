@@ -1926,8 +1926,14 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					 * - INSERT actions need chunk tuple routing
 					 * - Compressed chunks need decompression for correct
 					 *   join evaluation of matched vs not-matched rows
+					 * - Continuous aggregates need invalidation for
+					 *   UPDATE/DELETE actions
 					 */
 					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+					if (!need_modify && ht != NULL)
+					{
+						need_modify = ts_hypertable_has_continuous_aggregates(ht->fd.id);
+					}
 					if (!need_modify)
 					{
 						List *firstMergeActionList = linitial(mt->mergeActionLists);
