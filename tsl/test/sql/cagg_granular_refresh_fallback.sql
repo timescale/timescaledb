@@ -262,5 +262,44 @@ SELECT sensor_id, avg
 FROM readings_daily
 ORDER BY sensor_id;
 
+-- ============================================================================
+-- Disabling granular refresh on the cagg: the refresh stops flushing the
+-- tracker, so the range falls back to a full refresh.  DML keeps collecting,
+-- since that follows the hypertable's granular_refresh_column.  Re-enabling
+-- resumes the granular path.
+-- ============================================================================
+ALTER MATERIALIZED VIEW readings_daily SET (timescaledb.enable_granular_refresh = false);
+
+-- Inside the late-arrival window, so this would be tracked if it were enabled.
+INSERT INTO readings VALUES ('2022-07-01 00:00+00', 'while_disabled', 4);
+
+-- Still collected in shared memory.
+SELECT nentries > 0 AS still_collecting
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass);
+
+SELECT seq_num FROM
+  _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass) ;
+
+CALL refresh_continuous_aggregate('readings_daily', NULL, '2023-01-01 00:00+00');
+
+-- No flush, so the seqnum did not advance.
+SELECT seq_num AS seqnum_unchanged
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass);
+
+SELECT seq_num AS seq_before FROM
+  _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass)
+\gset
+
+-- Re-enable: the next refresh flushes again, advancing the seqnum.
+ALTER MATERIALIZED VIEW readings_daily SET (timescaledb.enable_granular_refresh = true);
+INSERT INTO readings VALUES ('2022-08-01 00:00+00', 'after_reenable', 5);
+CALL refresh_continuous_aggregate('readings_daily', NULL, '2023-01-01 00:00+00');
+
+SELECT seq_num > :seq_before AS seqnum_advanced
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass);
+
+-- Every group is materialized correctly across the disable and re-enable.
+SELECT sensor_id, avg FROM readings_daily ORDER BY sensor_id;
+
 DROP MATERIALIZED VIEW readings_daily;
 DROP TABLE readings;

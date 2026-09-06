@@ -1,0 +1,1 @@
+Fixes: #10536 Skip batch size check when direct compress is set as hypertable option

@@ -290,4 +290,112 @@ my $rows = $node->safe_psql('postgres',
 );
 is($rows, 4, 'fallback materialized all buckets (sensor_a x3, sensor_b x1)');
 
+# ===========================================================================
+# Test 3: a cagg that no longer does granular refresh still contributes its
+# materialization log to the reseed.
+#
+# Its log can hold an entry stamped with a live seqnum from when it did, and
+# that seqnum can exist nowhere else: the move drains the hypertable log, and a
+# generation that was INVALID at flush time persists no tracking rows.  Handing
+# that seqnum out again would make those old entries match a later epoch's
+# tracking rows.
+# ===========================================================================
+
+$node->safe_psql(
+	'postgres', q{
+    CREATE TABLE optout(time timestamptz NOT NULL, sensor_id text, value float);
+    SELECT create_hypertable('optout', 'time');
+    ALTER TABLE optout SET (
+        timescaledb.granular_refresh_column = 'sensor_id',
+        timescaledb.granular_refresh_start_offset = '100 years',
+        timescaledb.granular_refresh_end_offset = '1 day');
+});
+$node->safe_psql(
+	'postgres', q{
+    CREATE MATERIALIZED VIEW optout_daily
+        WITH (timescaledb.continuous) AS
+        SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+        FROM optout GROUP BY bucket, sensor_id
+        WITH NO DATA;
+});
+$node->safe_psql('postgres',
+	q{ALTER MATERIALIZED VIEW optout_daily SET (timescaledb.enable_granular_refresh = true)}
+);
+
+my $ooid = $node->safe_psql('postgres',
+	q{SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'optout'}
+);
+
+# Establish the materialization threshold so the inserts below register as
+# seqnum-stamped invalidations.
+$node->safe_psql('postgres',
+	q{CALL refresh_continuous_aggregate('optout_daily', NULL, '2025-05-01 00:00+00')}
+);
+
+# Creates the tracker at seqnum 1.
+$node->safe_psql('postgres',
+	q{INSERT INTO optout VALUES ('2020-03-01 00:00+00','sensor_a',1)});
+
+# A NULL tenant will force generation to INVALID.
+$node->safe_psql(
+	'postgres', q{
+    BEGIN;
+    INSERT INTO optout VALUES ('2020-03-02 00:00+00','sensor_x',2);
+    INSERT INTO optout VALUES ('2020-03-02 06:00+00', NULL, 2);
+    COMMIT;});
+
+# Generation 1 is already INVALID so this records no tenant, but its
+# invalidation entry is still stamped with the live seqnum 1.
+$node->safe_psql('postgres',
+	q{INSERT INTO optout VALUES ('2020-03-03 00:00+00','sensor_b',3)});
+
+# Refresh a window disjoint from the 2020 rows: the move drains the hypertable
+# log into the cagg log, and the flush persists nothing for the INVALID
+# generation in tenant_tracker table, The 2020 entries stay in the cagg log with seqnum=1
+$node->safe_psql('postgres',
+	q{CALL refresh_continuous_aggregate('optout_daily', '2024-01-01 00:00+00', '2024-02-01 00:00+00')}
+);
+
+my $live = $node->safe_psql(
+	'postgres', qq{
+    SELECT coalesce(max(seqnum), 0)
+      FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+     WHERE materialization_id IN (
+         SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+          WHERE raw_hypertable_id = $ooid)});
+is($live, 1, 'cagg log holds the live seqnum 1');
+
+my $ht_log_max = $node->safe_psql(
+	'postgres', qq{
+    SELECT coalesce(max(seqnum), 0)
+      FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+     WHERE hypertable_id = $ooid});
+note("hypertable log max seqnum: '$ht_log_max'");
+
+my $tracking_max = $node->safe_psql(
+	'postgres', qq{
+    SELECT coalesce(max(seqnum), 0)
+      FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+     WHERE hypertable_id = $ooid});
+note("tenant tracking max seqnum: '$tracking_max'");
+
+is($ht_log_max,   0, 'hypertable log was drained by the move');
+is($tracking_max, 0, 'no tracking rows persisted for the INVALID generation');
+
+# Opt the cagg out of granular refresh
+$node->safe_psql('postgres',
+	q{ALTER MATERIALIZED VIEW optout_daily SET (timescaledb.enable_granular_refresh = false)}
+);
+
+$node->restart;
+
+$node->safe_psql('postgres',
+	q{INSERT INTO optout VALUES ('2020-03-04 00:00+00','sensor_c',4)});
+my $optout_seq = $node->safe_psql('postgres',
+	q{SELECT seq_num FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('optout')}
+);
+note("reseeded seqnum with an opted-out cagg: '$optout_seq'");
+is($optout_seq, 2,
+	'reseed counts an opted-out cagg log, so seqnum 1 is not reused');
+
 done_testing();

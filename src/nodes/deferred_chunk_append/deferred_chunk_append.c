@@ -77,40 +77,6 @@ typedef enum
 	DCA_PRIV_COUNT
 } DeferredChunkAppendPrivIndex;
 
-typedef struct DeferredChunkAppendState
-{
-	CustomScanState css;
-
-	bool ordered;
-	bool descending;
-	int push_limit;
-	char *where_clause;
-	char *order_by;
-
-	int num_fetch_attnos;
-	AttrNumber *fetch_attnos;
-
-	int32 hypertable_id;
-	int32 primary_dimension_id;
-	int64 last_range_start;			/* ordered: range_start of the last slice returned */
-	TimestampTz last_creation_time; /* unordered: creation_time of the last chunk returned */
-	int32 last_id;					/* unordered: id of the last chunk (creation_time tiebreak) */
-	bool have_last;					/* whether the last_* resume key is set */
-	int chunks_scanned;				/* chunks opened so far (EXPLAIN counter) */
-
-	int batch_size;			  /* rows per ExecutorRun batch */
-	QueryDesc *cur_qd;		  /* executor for the current chunk, or NULL */
-	List *chunk_qds;		  /* under ANALYZE, every visited chunk's executor, kept
-							   * alive so EXPLAIN can print its actual plan */
-	DestReceiver *dest;		  /* receiver that copies fetched rows into chunk_mcxt */
-	MemoryContext chunk_mcxt; /* holds the current batch's tuples */
-	HeapTuple *cur_tuples;	  /* current batch (batch_size long), in chunk_mcxt */
-	TupleDesc cur_tupdesc;	  /* per-chunk query row type (node-lifetime copy) */
-	uint64 cur_nrows;
-	uint64 cur_row;
-	TupleTableSlot *scan_slot; /* virtual tuple in hypertable row type, before projection */
-} DeferredChunkAppendState;
-
 /* DestReceiver that copies each fetched row into the scan's chunk_mcxt. */
 typedef struct DeferredChunkAppendDest
 {
@@ -782,7 +748,6 @@ deferred_chunk_scan_reset(DeferredChunkAppendState *state)
 	state->cur_nrows = 0;
 	state->cur_row = 0;
 	state->have_last = false;
-	state->chunks_scanned = 0;
 	if (state->chunk_mcxt != NULL)
 	{
 		MemoryContextReset(state->chunk_mcxt);

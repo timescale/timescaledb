@@ -200,35 +200,40 @@ validate_granular_refresh_enable(ContinuousAgg *agg, Hypertable *mat_ht)
 }
 
 /*
- * ALTER MATERIALIZED VIEW <cagg> SET (timescaledb.enable_granular_refresh = true)
+ * ALTER MATERIALIZED VIEW <cagg> SET (timescaledb.enable_granular_refresh = <bool>)
  *
- * Enables granular refresh for a continuous aggregate that already opted in
- * its raw hypertable via ALTER TABLE ... SET (timescaledb.granular_refresh_column = ...).
- * Only enabling is supported: disabling is not.
+ * when granular refresh is disabled, only settings are modified.
+ * Shared memory cleanup can happen only when it is disabled on the hypertable
  */
 void
 continuous_agg_set_granular_refresh_enabled(ContinuousAgg *agg, bool enabled)
 {
-	if (!enabled)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("disabling granular refresh on a continuous aggregate is not "
-						"supported")));
-	}
-
-	if (agg->data.granular_refresh_enabled)
+	if (agg->data.granular_refresh_enabled == enabled)
 	{
 		return;
 	}
 
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
-	Assert(mat_ht != NULL);
+	/* Same lock a refresh takes, so the flag cannot flip mid-refresh. */
+	if (!ts_lock_continuous_agg_tuple(agg->data.mat_hypertable_id))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("continuous aggregate with mat_hypertable_id %d not found",
+						agg->data.mat_hypertable_id)));
+	}
 
-	validate_granular_refresh_enable(agg, mat_ht);
-	cagg_update_granular_refresh_enabled(agg, true);
-	ts_cache_release(&hcache);
+	if (enabled)
+	{
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *mat_ht =
+			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+		Assert(mat_ht != NULL);
+
+		validate_granular_refresh_enable(agg, mat_ht);
+		ts_cache_release(&hcache);
+	}
+
+	cagg_update_granular_refresh_enabled(agg, enabled);
 }
 
 /* get the compression parameters for cagg. The parameters are
