@@ -198,9 +198,31 @@ CREATE UNIQUE INDEX self_join_test_uq ON self_join_test (device, time);
 INSERT INTO self_join_test VALUES ('2021-01-01', 1, 1.0), ('2021-01-02', 2, 2.0);
 ANALYZE self_join_test;
 
-:PREFIX SELECT t1.val
+-- Assert on scan and join counts rather than on the shape of the plan tree.
+-- This is to keep the test stable across versions pg16.15/17.11/18.6 and newer.
+CREATE FUNCTION plan_lines(query text) RETURNS SETOF text
+LANGUAGE plpgsql AS
+$$
+DECLARE
+	ln text;
+BEGIN
+	FOR ln IN EXECUTE 'EXPLAIN (buffers off, costs off) ' || query
+	LOOP
+		RETURN NEXT ln;
+	END LOOP;
+END;
+$$;
+
+SELECT count(*) FILTER (WHERE ln LIKE '%Scan on %') AS scans,
+       count(*) FILTER (WHERE ln ~ 'Nested Loop|Hash Join|Merge Join') AS join_nodes
+FROM plan_lines('SELECT t1.val
+                 FROM self_join_test t1, self_join_test t2
+                 WHERE t1.device = t2.device AND t1.time = t2.time') AS ln;
+
+SELECT t1.val
 FROM self_join_test t1, self_join_test t2
-WHERE t1.device = t2.device AND t1.time = t2.time;
+WHERE t1.device = t2.device AND t1.time = t2.time
+ORDER BY t1.val;
 
 -- test that the same useless-join elimination still fires when the
 -- hypertable is only reached through an inlined view, not referenced
