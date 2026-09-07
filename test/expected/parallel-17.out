@@ -447,13 +447,94 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 ------------
  on
 
+-- initplan filter: no startup exclusion
+SELECT count(*) AS expected_i FROM "test" WHERE i = (SELECT max(i) FROM "test") \gset
+SELECT count(*) AS expected_j FROM "test" WHERE j = (SELECT max(j) FROM "test") \gset
+SET max_parallel_workers_per_gather TO 2;
+SET enable_indexscan = off;
+SET enable_indexonlyscan = off;
+SET enable_bitmapscan = off;
+SET plan_cache_mode = force_generic_plan;
+PREPARE initplan_filter AS
+  SELECT count(*) = :expected_i AS count_correct
+  FROM "test" WHERE i = (SELECT max(i) FROM "test");
+:PREFIX EXECUTE initplan_filter;
+--- QUERY PLAN ---
+ Aggregate
+   InitPlan 1
+     ->  Finalize Aggregate
+           ->  Gather
+                 Workers Planned: 2
+                 ->  Partial Aggregate
+                       ->  Parallel Append
+                             ->  Parallel Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                             ->  Parallel Seq Scan on _hyper_1_2_chunk _hyper_1_2_chunk_1
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Custom Scan (ChunkAppend) on test
+               ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     Filter: (i = (InitPlan 1).col1)
+               ->  Parallel Seq Scan on _hyper_1_2_chunk
+                     Filter: (i = (InitPlan 1).col1)
+
+EXECUTE initplan_filter;
+ count_correct 
+---------------
+ t
+
+SET parallel_leader_participation = off;
+EXECUTE initplan_filter;
+ count_correct 
+---------------
+ t
+
+RESET parallel_leader_participation;
+DEALLOCATE initplan_filter;
+-- same with the filter on a non-partitioning column
+PREPARE initplan_filter_nonpart AS
+  SELECT count(*) = :expected_j AS count_correct
+  FROM "test" WHERE j = (SELECT max(j) FROM "test");
+:PREFIX EXECUTE initplan_filter_nonpart;
+--- QUERY PLAN ---
+ Aggregate
+   InitPlan 1
+     ->  Finalize Aggregate
+           ->  Gather
+                 Workers Planned: 2
+                 ->  Partial Aggregate
+                       ->  Parallel Append
+                             ->  Parallel Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                             ->  Parallel Seq Scan on _hyper_1_2_chunk _hyper_1_2_chunk_1
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Custom Scan (ChunkAppend) on test
+               ->  Parallel Seq Scan on _hyper_1_1_chunk
+                     Filter: (j = (InitPlan 1).col1)
+               ->  Parallel Seq Scan on _hyper_1_2_chunk
+                     Filter: (j = (InitPlan 1).col1)
+
+EXECUTE initplan_filter_nonpart;
+ count_correct 
+---------------
+ t
+
+SET parallel_leader_participation = off;
+EXECUTE initplan_filter_nonpart;
+ count_correct 
+---------------
+ t
+
+RESET parallel_leader_participation;
+DEALLOCATE initplan_filter_nonpart;
+RESET plan_cache_mode;
+RESET enable_indexscan;
+RESET enable_indexonlyscan;
+RESET enable_bitmapscan;
+RESET enable_material;
 DROP TABLE monitoring_sites;
 DROP TABLE sensor_data;
 RESET max_parallel_workers_per_gather;
 RESET parallel_tuple_cost;
-RESET min_parallel_table_scan_size;
-RESET min_parallel_index_scan_size;
-RESET enable_material;
 -- test worker assignment
 -- first chunk should have 1 worker and second chunk should have 2
 SET max_parallel_workers_per_gather TO 2;
