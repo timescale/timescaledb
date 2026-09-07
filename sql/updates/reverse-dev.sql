@@ -147,3 +147,27 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.tenant_tracking_map();
 
 ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
 ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
+
+-- Turn the policy chunk stats primary key back into a unique constraint.
+ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats
+  DROP CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key,
+  ADD CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key UNIQUE (job_id, chunk_id);
+
+-- A replica identity naming the primary key index is left naming nothing once
+-- that index is gone, so point it at the unique constraint instead. The table
+-- has no primary key any more, so DEFAULT would leave it without a replica
+-- identity at all.
+DO $$
+BEGIN
+  IF (SELECT relreplident FROM pg_class
+      WHERE oid = '_timescaledb_internal.bgw_policy_chunk_stats'::regclass) = 'i'
+     AND NOT EXISTS (
+       SELECT FROM pg_index
+       WHERE indrelid = '_timescaledb_internal.bgw_policy_chunk_stats'::regclass
+         AND indisreplident)
+  THEN
+    ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats
+      REPLICA IDENTITY USING INDEX bgw_policy_chunk_stats_job_id_chunk_id_key;
+  END IF;
+END
+$$;
