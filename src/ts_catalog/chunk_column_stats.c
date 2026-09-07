@@ -30,6 +30,7 @@
 #include "dimension_slice.h"
 #include "guc.h"
 #include "hypertable_cache.h"
+#include "time_utils.h"
 #include "ts_catalog/catalog.h"
 
 #include "chunk_column_stats.h"
@@ -611,7 +612,12 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 		compexprs = lappend(compexprs, ge_expr);
 	}
 
-	if (info->range_end != PG_INT64_MAX)
+	/*
+	 * The end of the range is exclusive, so it can be one past the largest
+	 * value the column type can hold. Such a bound is true for every value of
+	 * the type, so skip it instead of converting it and wrapping around.
+	 */
+	if (info->range_end != PG_INT64_MAX && info->range_end <= ts_time_get_max(col_type))
 	{
 		A_Const *end_const = makeNode(A_Const);
 		memcpy(&end_const->val,
@@ -622,14 +628,17 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 		compexprs = lappend(compexprs, lt_expr);
 	}
 
+	if (compexprs == NIL)
+	{
+		return NULL;
+	}
+
 	constr = makeNode(Constraint);
 	constr->contype = CONSTR_CHECK;
 	constr->conname = name ? pstrdup(name) : NULL;
 	constr->deferrable = false;
 	constr->skip_validation = true;
 	constr->initially_valid = true;
-
-	Assert(list_length(compexprs) >= 1);
 
 	if (list_length(compexprs) == 2)
 	{
