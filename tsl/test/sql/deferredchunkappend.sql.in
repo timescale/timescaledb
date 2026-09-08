@@ -289,12 +289,14 @@ SET timescaledb.enable_deferred_chunk_append TO on;
 :DIFF_CMD
 
 -- EXPLAIN ANALYZE prints the actual per-chunk plan for every chunk the LIMIT visited.
+SET enable_material = off;
 SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics LIMIT 3;  -- stops in the first non-empty chunk
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics LIMIT 6;  -- spills into a second non-empty chunk
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics ORDER BY time DESC LIMIT 3;  -- ordered: per-chunk plan carries the ORDER BY
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_compressed LIMIT 3;  -- compressed chunk
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_compressed ORDER BY time DESC LIMIT 3;  -- compressed + ordered: per-chunk Sort
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM generate_series(1,3) g(i) LEFT JOIN LATERAL(SELECT * FROM metrics ORDER BY time DESC LIMIT 3) x ON true;  -- deferred scan on the inner side of a lateral join, rescanned per outer row
 -- make the first-visited chunk partially compressed, then scan it
 INSERT INTO metrics_compressed (time, device, value) VALUES ('2020-01-05 06:00', 9, 99);
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_compressed LIMIT 4;  -- partial chunk: compressed and uncompressed parts
@@ -302,4 +304,5 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM
 -- a correlated target-list subplan is explained after the per-chunk plans and must resolve against the outer range table
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT value, (SELECT count(*) FROM metrics_regular r WHERE r.time < m.time) FROM metrics m ORDER BY time LIMIT 3;
 RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET enable_material;
 

@@ -1237,6 +1237,15 @@ expand_all_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 			 */
 			if (bms_is_member(i, root->all_result_relids))
 			{
+				/*
+				 * Side-effect of setting inh = false, Postgres might have included
+				 * the hypertable into leaf_result_relids in latest PG versions.
+				 * We remove it here because hypertable relation never contains
+				 * any heap tuples. This is compatible with older versions
+				 * which don't contain hypertable leaf result relid (its a no-op).
+				 */
+				root->leaf_result_relids = bms_del_member(root->leaf_result_relids, i);
+
 				distribute_row_identity_vars(root);
 			}
 

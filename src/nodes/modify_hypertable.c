@@ -38,7 +38,9 @@ should_use_direct_compress(ModifyHypertableState *state)
 	ResultRelInfo *resultRelInfo = mtstate->resultRelInfo;
 	Hypertable *ht = state->ctr->hypertable;
 
-	if (!ts_guc_enable_direct_compress_insert && !TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht))
+	bool direct_compress_on_hypertable = TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht);
+
+	if (!ts_guc_enable_direct_compress_insert && !direct_compress_on_hypertable)
 	{
 		return false;
 	}
@@ -100,7 +102,7 @@ should_use_direct_compress(ModifyHypertableState *state)
 	}
 
 	Plan *subplan = mtstate->ps.plan->lefttree;
-	if (subplan->plan_rows < 10)
+	if (!direct_compress_on_hypertable && subplan->plan_rows < 10)
 	{
 		ereport(WARNING, (errmsg("disabling direct compress because of too small batch size")));
 		return false;
