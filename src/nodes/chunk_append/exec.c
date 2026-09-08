@@ -370,9 +370,9 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 		 * chunk_append_initialize_worker. We have to store estate and eflags here that are needed
 		 * for that initialization.
 		 *
-		 * Note: When force_parallel_mode debug GUC is set, a normal sequential ChunkAppend plan can
-		 * run inside a parallel worker. In this case, we have to perform the chunk exclusion right
-		 * away. We distinguish it by that the parallel_aware flag of the plan is not set.
+		 * Note: When debug_parallel_query debug GUC is set, a normal sequential ChunkAppend plan
+		 * can run inside a parallel worker. In this case, we have to perform the chunk exclusion
+		 * right away. We distinguish it by that the parallel_aware flag of the plan is not set.
 		 */
 		state->estate = estate;
 		state->eflags = eflags;

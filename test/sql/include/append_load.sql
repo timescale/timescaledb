@@ -35,18 +35,10 @@ CREATE OR REPLACE PROCEDURE force_parallel(on_or_off bool)
 LANGUAGE PLPGSQL AS
 $$
 BEGIN
-    IF current_setting('server_version_num')::int < 160000 THEN
-        IF on_or_off THEN
-            set force_parallel_mode = 'on';
-        ELSE
-            set force_parallel_mode = 'off';
-        END IF;
+    IF on_or_off THEN
+        set debug_parallel_query = 'on';
     ELSE
-        IF on_or_off THEN
-            set debug_parallel_query = 'on';
-        ELSE
-            set debug_parallel_query = 'off';
-        END IF;
+        set debug_parallel_query = 'off';
     END IF;
 END;
 $$;
