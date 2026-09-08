@@ -970,11 +970,7 @@ DEALLOCATE prep;
                            Index Cond: (dev > NULL::integer)
 
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
@@ -982,11 +978,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
          ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=0.92 loops=13)
                Index Cond: (dev > NULL::integer)
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT count(DISTINCT time) FROM skip_scan_nulls;
@@ -2745,11 +2737,7 @@ DEALLOCATE prep;
                                  Index Cond: (dev > NULL::integer)
 
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
@@ -2768,11 +2756,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=0.92 loops=12)
                      Index Cond: (dev > NULL::integer)
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT count(DISTINCT time) FROM skip_scan_nulls;
@@ -4982,11 +4966,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 
 -- parallel query
 RESET max_parallel_workers_per_gather;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
@@ -5005,11 +4985,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
                ->  Custom Scan (ColumnarScan) on _hyper_2_8_chunk (actual rows=0.92 loops=12)
                      ->  Index Scan using _hyper_2_8_chunk_compressed_dev_val__ts_meta_v2_first_time__idx on _hyper_2_8_chunk_compressed (actual rows=0.92 loops=12)
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE where val IS NULL;
