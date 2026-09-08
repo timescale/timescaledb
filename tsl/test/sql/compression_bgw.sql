@@ -354,7 +354,11 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_name = :'chunk_n
 
 -- index size should decrease due to reindexing (8kB or 16kB)
 VACUUM ANALYZE metrics2;
-SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') as index_size \gset
+
+-- Show the actual index size if its larger than expected
+SELECT :index_size <= 16384 as size_empty,
+CASE WHEN :index_size <= 16384 THEN 0 ELSE :index_size END idx_size;
 DROP TABLE metrics2;
 
 --TEST 8
