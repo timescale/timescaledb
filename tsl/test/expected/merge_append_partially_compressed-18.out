@@ -754,7 +754,6 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS FIRST, x3 DESC NU
                      ->  Seq Scan on _hyper_2_4_chunk (actual rows=1.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
 
-set enable_hashagg to off; -- different on PG13
 :PREFIX
 SELECT x1, x2, max(time) FROM (SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time, x1, x2 LIMIT 10) t
 GROUP BY x1, x2, time ORDER BY time limit 10;
@@ -781,7 +780,6 @@ GROUP BY x1, x2, time ORDER BY time limit 10;
                                        ->  Seq Scan on _hyper_2_4_chunk (actual rows=1.00 loops=1)
                                              Filter: ((x4 % 11) <> 0)
 
-reset enable_hashagg;
 :PREFIX
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4, time LIMIT 10;
 --- QUERY PLAN ---

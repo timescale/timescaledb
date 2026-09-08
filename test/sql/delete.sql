@@ -13,8 +13,6 @@ DELETE FROM "two_Partitions" WHERE series_0 = 100;
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
 
 -- Make sure DELETE isn't optimized if it includes Append plans
--- Need to turn of nestloop to make append appear the same on PG96 and PG10
-set enable_nestloop = 'off';
 
 CREATE OR REPLACE FUNCTION series_val()
 RETURNS integer LANGUAGE PLPGSQL STABLE AS
