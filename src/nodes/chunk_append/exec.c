@@ -383,6 +383,14 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		do_startup_exclusion(state);
 	}
+	else
+	{
+		/*
+		 * No startup exclusion -- all subplans are included.
+		 */
+		state->included_subplans_by_se =
+			bms_add_range(NULL, 0, list_length(state->initial_subplans) - 1);
+	}
 
 	init_subplanstates(state, estate, eflags);
 }
@@ -920,12 +928,23 @@ chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordi
 	List *filtered_ri_clauses = NIL;
 	List *filtered_constraints = NIL;
 
+	/*
+	 * The per-chunk clause lists can be empty if we don't have any chunk-based
+	 * exclusion, that is, only hypertable-based exclusion.
+	 */
+	const bool have_chunk_filters = state->startup_exclusion || state->runtime_exclusion_children;
+
 	for (int plan = 0; plan < list_length(state->initial_subplans); plan++)
 	{
-		if (ts_flags_are_set_32(pstate->subplan_state[plan], CASS_Included))
+		if (!ts_flags_are_set_32(pstate->subplan_state[plan], CASS_Included))
 		{
-			filtered_subplans =
-				lappend(filtered_subplans, list_nth(state->filtered_subplans, plan));
+			continue;
+		}
+
+		filtered_subplans = lappend(filtered_subplans, list_nth(state->filtered_subplans, plan));
+
+		if (have_chunk_filters)
+		{
 			filtered_ri_clauses =
 				lappend(filtered_ri_clauses, list_nth(state->filtered_ri_clauses, plan));
 			filtered_constraints =
@@ -937,8 +956,15 @@ chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordi
 	state->filtered_ri_clauses = filtered_ri_clauses;
 	state->filtered_constraints = filtered_constraints;
 
-	Assert(list_length(state->filtered_subplans) == list_length(state->filtered_ri_clauses));
-	Assert(list_length(state->filtered_ri_clauses) == list_length(state->filtered_constraints));
+	if (have_chunk_filters)
+	{
+		Assert(list_length(state->filtered_subplans) == list_length(state->filtered_ri_clauses));
+		Assert(list_length(state->filtered_ri_clauses) == list_length(state->filtered_constraints));
+	}
+	else
+	{
+		Assert(state->filtered_ri_clauses == NIL && state->filtered_constraints == NIL);
+	}
 
 	state->lock = chunk_append_get_lock_pointer();
 	state->choose_next_subplan = choose_next_subplan_in_worker;

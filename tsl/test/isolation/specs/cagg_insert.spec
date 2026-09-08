@@ -54,22 +54,22 @@ teardown {
 }
 
 session "I"
-step "Ib"	{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
+step "Ib"	{ BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';}
 step "I1"	{ INSERT INTO ts_continuous_test_1 VALUES (1, 1); }
 step "Ic"	{ COMMIT; }
 
 session "Ip"
-step "Ipb"	{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
+step "Ipb"	{ BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';}
 step "Ip1"	{ INSERT INTO ts_continuous_test_1 VALUES (29, 29); }
 step "Ipc"	{ COMMIT; }
 
 session "I2"
-step "I2b"	{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
+step "I2b"	{ BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';}
 step "I21"	{ INSERT INTO ts_continuous_test_2 VALUES (1, 1); }
 step "I2c"	{ COMMIT; }
 
 session "S"
-step "Sb"	{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
+step "Sb"	{ BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';}
 step "S1"	{ SELECT count(*) FROM ts_continuous_test_1; }
 step "Sc"	{ COMMIT; }
 

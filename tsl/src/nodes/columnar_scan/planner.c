@@ -387,16 +387,20 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 			}
 		}
 
-		const bool is_segment = ts_array_is_member(info->settings->fd.segmentby, column_name);
-
-		/*
-		 * Determine if we can use bulk decompression for this column.
-		 */
-		Oid typoid = get_atttype(info->chunk_rte->relid, uncompressed_chunk_attno);
-		const bool bulk_decompression_possible =
-			!is_segment && destination_attno > 0 &&
-			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
-				NULL;
+		bool is_segment = false;
+		bool bulk_decompression_possible = false;
+		if (destination_attno > 0)
+		{
+			is_segment = ts_array_is_member(info->settings->fd.segmentby, column_name);
+			/*
+			 * Determine if we can use bulk decompression for this column.
+			 */
+			Oid typoid = get_atttype(info->chunk_rte->relid, uncompressed_chunk_attno);
+			bulk_decompression_possible =
+				!is_segment &&
+				tsl_get_decompress_all_function(compression_get_default_algorithm(typoid),
+												typoid) != NULL;
+		}
 		bulk_decompression_possible_for_some_columns |= bulk_decompression_possible;
 
 		/*
@@ -1153,14 +1157,11 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		 * Batch sorted merge is done over the decompressed chunk scan tuple, so
 		 * we must match the pathkeys to the decompressed chunk tupdesc.
 		 */
-
 		List *sort_col_idx = NIL;
 		List *sort_ops = NIL;
 		List *sort_collations = NIL;
 		List *sort_nulls = NIL;
 
-		/*
-		 */
 		ListCell *lc;
 		foreach (lc, dcpath->custom_path.path.pathkeys)
 		{
@@ -1252,12 +1253,10 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				found = true;
 				break;
 			}
-
 			Ensure(found,
 				   "could not find matching decompressed chunk column for batch sorted merge "
 				   "pathkey");
 		}
-
 		sort_options = list_make4(sort_col_idx, sort_ops, sort_collations, sort_nulls);
 	}
 

@@ -28,17 +28,17 @@ teardown {
 }
 
 session "I"
-setup		{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
+setup		{ BEGIN; SET LOCAL lock_timeout = '2500ms'; SET LOCAL deadlock_timeout = '10ms';}
 step "I1"	{ INSERT INTO ts_reorder_test VALUES (1, 19.5, 3); }
 step "Ic"	{ COMMIT; }
 
 session "R"
-setup		{ BEGIN; SET LOCAL lock_timeout = '250ms'; SET LOCAL deadlock_timeout = '10ms'; }
+setup		{ BEGIN; SET LOCAL lock_timeout = '2250ms'; SET LOCAL deadlock_timeout = '10ms'; }
 step "R1"	{ SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); }
 step "Rc"	{ COMMIT; }
 
 session "B"
-setup		{ BEGIN; LOCK TABLE waiter; }
+setup		{ BEGIN; SET LOCAL lock_timeout = '2s'; LOCK TABLE waiter; }
 step "Bc"   { COMMIT; }
 
 

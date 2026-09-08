@@ -1275,7 +1275,8 @@ ORDER BY 1, 4;
 SELECT * FROM cagg_matlog_view
 WHERE materialization_id = (SELECT mat_hypertable_id
       FROM _timescaledb_catalog.continuous_agg
-      WHERE user_view_name = 'tenant_copy_daily');
+      WHERE user_view_name = 'tenant_copy_daily')
+ORDER BY 1,2,3,4;
 
 DROP MATERIALIZED VIEW tenant_copy_daily;
 DROP TABLE tenant_copy;

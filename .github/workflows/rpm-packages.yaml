@@ -73,9 +73,16 @@ jobs:
     - name: Get version of latest release
       id: versions
       run: |
-        version=$(wget -q --tries=6 --waitretry=15 https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
-        echo "version=${version}"
-        echo "version=${version}" >>$GITHUB_OUTPUT
+        retry_flags="--tries=9 --wait=20 --random-wait --retry-on-http-error=503,403"
+        version_url="https://api.github.com/repos/timescale/timescaledb/releases/latest"
+        version=$(wget -q ${retry_flags} --header="Authorization: token ${{ github.token }}" ${version_url} -O - | jq -r .tag_name)
+        if [ -z "$version" ]; then
+          echo "ERROR: Failed to get api version from github. This is a CI issue." >>$GITHUB_OUTPUT
+          false
+        else
+          echo "version=${version}"
+          echo "version=${version}" >>$GITHUB_OUTPUT
+        fi
 
     - name: Test Installation
       run: |
@@ -86,6 +93,7 @@ jobs:
         installed_version=$(sudo -u postgres psql -X -t \
           -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
         if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
+          echo "ERROR: Version mismatch: ${{ steps.versions.outputs.version }} != $installed_version" >>$GITHUB_OUTPUT
           false
         fi
 

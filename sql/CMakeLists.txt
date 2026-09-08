@@ -74,7 +74,8 @@ set(MOD_FILES
     updates/2.28.2--2.28.3.sql
     updates/2.28.3--2.29.0.sql
     updates/2.29.0--2.29.1.sql
-    updates/2.29.1--2.29.2.sql)
+    updates/2.29.1--2.29.2.sql
+    updates/2.29.2--2.30.0.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
@@ -94,7 +95,7 @@ set(TSL_MODULE_PATHNAME
 if(NOT GENERATE_DOWNGRADE_SCRIPT)
   message(
     STATUS "Not generating downgrade script: downgrade generation disabled.")
-elseif(NOT GIT_FOUND)
+elseif(NOT GIT_COMMIT_INFO_FOUND)
   message(STATUS "Not generating downgrade script: Git not available.")
 else()
   generate_downgrade_script(

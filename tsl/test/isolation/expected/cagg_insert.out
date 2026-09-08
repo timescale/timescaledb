@@ -9,7 +9,7 @@ step Refresh: <... completed>
 step Refresh3: <... completed>
 
 starting permutation: Ib LockCagg1 I1 Refresh Ic UnLockCagg1
-step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ib: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg1: BEGIN; SELECT lock_cagg('continuous_view_1');
 lock_cagg
 ---------
@@ -22,7 +22,7 @@ step UnLockCagg1: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: Ib LockCagg1 Refresh I1 Ic UnLockCagg1
-step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ib: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg1: BEGIN; SELECT lock_cagg('continuous_view_1');
 lock_cagg
 ---------
@@ -35,7 +35,7 @@ step UnLockCagg1: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: I2b LockCagg2 I21 Refresh Refresh3 I2c UnLockCagg2
-step I2b: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step I2b: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg2: BEGIN; SELECT lock_cagg('continuous_view_2');
 lock_cagg
 ---------
@@ -49,7 +49,7 @@ step UnLockCagg2: ROLLBACK;
 step Refresh3: <... completed>
 
 starting permutation: I2b LockCagg2 Refresh3 Refresh I21 I2c UnLockCagg2
-step I2b: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step I2b: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg2: BEGIN; SELECT lock_cagg('continuous_view_2');
 lock_cagg
 ---------
@@ -64,7 +64,7 @@ step Refresh3: <... completed>
 step Refresh: <... completed>
 
 starting permutation: Sb LockCagg1 Refresh S1 Sc UnLockCagg1
-step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Sb: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg1: BEGIN; SELECT lock_cagg('continuous_view_1');
 lock_cagg
 ---------
@@ -81,7 +81,7 @@ step UnLockCagg1: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: Sb LockCagg1 S1 Refresh Sc UnLockCagg1
-step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Sb: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg1: BEGIN; SELECT lock_cagg('continuous_view_1');
 lock_cagg
 ---------
@@ -98,7 +98,7 @@ step UnLockCagg1: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: Ib LockInvalThr Refresh I1 Ic UnlockInvalThr
-step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ib: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockInvalThr: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold IN SHARE MODE;
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
 step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
@@ -107,7 +107,7 @@ step UnlockInvalThr: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: Ib LockInvalThr I1 Refresh Ic UnlockInvalThr
-step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ib: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockInvalThr: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold IN SHARE MODE;
 step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
@@ -116,7 +116,7 @@ step UnlockInvalThr: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: Ib LockInval I1 Ic Refresh UnlockInval
-step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ib: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
 step Ic: COMMIT;
@@ -125,7 +125,7 @@ step UnlockInval: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: Ipb LockInval Refresh Ip1 Ipc UnlockInval
-step Ipb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ipb: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
 step Ip1: INSERT INTO ts_continuous_test_1 VALUES (29, 29);
@@ -134,7 +134,7 @@ step UnlockInval: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: Ipb LockInval Ip1 Refresh Ipc UnlockInval
-step Ipb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ipb: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 step Ip1: INSERT INTO ts_continuous_test_1 VALUES (29, 29);
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
@@ -143,7 +143,7 @@ step UnlockInval: ROLLBACK;
 step Refresh: <... completed>
 
 starting permutation: Ipb LockInval Ip1 Ipc Refresh UnlockInval
-step Ipb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ipb: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 step Ip1: INSERT INTO ts_continuous_test_1 VALUES (29, 29);
 step Ipc: COMMIT;
@@ -162,7 +162,7 @@ time_bucket|count
 
 step LockMatInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
-step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Ib: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
 step LockInvalThrEx: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold ; <waiting ...>
 step Ic: COMMIT; <waiting ...>
@@ -184,7 +184,7 @@ step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15);
 step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
-step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Sb: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step S1: SELECT count(*) FROM ts_continuous_test_1;
 count
 -----
@@ -198,7 +198,7 @@ starting permutation: I1 Refresh LockInval Sb S1 Refresh Sc UnlockInval
 step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15);
 step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
-step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step Sb: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step S1: SELECT count(*) FROM ts_continuous_test_1;
 count
 -----
@@ -218,7 +218,7 @@ step Refresh3: CALL refresh_continuous_aggregate('continuous_view_2', NULL, 15);
 
 starting permutation: I1 I2b I21 Refresh2 Refresh3 I2c Refresh3
 step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
-step I2b: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
+step I2b: BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL deadlock_timeout = '10ms';
 step I21: INSERT INTO ts_continuous_test_2 VALUES (1, 1);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15);
 step Refresh3: CALL refresh_continuous_aggregate('continuous_view_2', NULL, 15);

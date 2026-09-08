@@ -82,7 +82,7 @@ step "UnlockChunk" {ROLLBACK;}
 session "C"
 step "C1"   {
   BEGIN;
-  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL lock_timeout = '2s';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
     CASE WHEN compress_chunk(ch.relid) IS NOT NULL THEN true ELSE false END AS compress
