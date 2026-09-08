@@ -205,12 +205,12 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			 */
 			if (!IsA(lfirst(lc_plan), MergeAppend))
 			{
-				lfirst(lc_plan) = add_sort_if_needed(root,
-													  lfirst(lc_plan),
-													  lfirst(lc_path),
-													  path->path.pathkeys,
-													  sortColIdx,
-													  capath->limit_tuples);
+				lfirst(lc_plan) = ts_add_sort_if_needed(root,
+														lfirst(lc_plan),
+														lfirst(lc_path),
+														path->path.pathkeys,
+														sortColIdx,
+														capath->limit_tuples);
 			}
 		}
 	}

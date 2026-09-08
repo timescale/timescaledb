@@ -2183,8 +2183,8 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
  * Add Sort over a given plan if it's not sufficiently ordered.
  */
 Plan *
-add_sort_if_needed(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
-					const AttrNumber *reqColIdx, double limit_tuples)
+ts_add_sort_if_needed(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
+					  const AttrNumber *reqColIdx, double limit_tuples)
 {
 	int numsortkeys;
 	AttrNumber *sortColIdx;

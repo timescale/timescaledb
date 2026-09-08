@@ -1264,12 +1264,12 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	 * Add a sort if the compressed scan is not ordered appropriately.
 	 */
 	decompress_plan->custom_plans =
-		list_make1(add_sort_if_needed(root,
-									   (Plan *) compressed_scan,
-									   compressed_path,
-									   dcpath->required_compressed_pathkeys,
-									   /* reqColIdx = */ NULL,
-									   /* limit_tuples = */ -1.0));
+		list_make1(ts_add_sort_if_needed(root,
+										 (Plan *) compressed_scan,
+										 compressed_path,
+										 dcpath->required_compressed_pathkeys,
+										 /* reqColIdx = */ NULL,
+										 /* limit_tuples = */ -1.0));
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
