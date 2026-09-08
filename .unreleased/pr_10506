@@ -1,0 +1,1 @@
+Fixes: #10506 Correctly match NULL tuples to compressed batches with NULL boundaries during recompression

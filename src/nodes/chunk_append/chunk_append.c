@@ -78,14 +78,23 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *patht
 	memcpy(new, ca, sizeof(ChunkAppendPath));
 	new->cpath.custom_paths = subpaths;
 
+#if PG18_GE
+	int disabled_nodes = 0;
+#endif
 	foreach (lc, subpaths)
 	{
 		Path *child = lfirst(lc);
 		total_cost += child->total_cost;
 		rows += child->rows;
+#if PG18_GE
+		disabled_nodes += child->disabled_nodes;
+#endif
 	}
 	new->cpath.path.total_cost = total_cost;
 	new->cpath.path.rows = rows;
+#if PG18_GE
+	new->cpath.path.disabled_nodes = disabled_nodes;
+#endif
 	new->cpath.path.pathtarget = copy_pathtarget(pathtarget);
 
 	return new;
@@ -471,6 +480,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		path->cpath.custom_paths = nested_children;
 	}
 
+#if PG18_GE
+	int disabled_nodes = 0;
+#endif
 	foreach (lc, path->cpath.custom_paths)
 	{
 		Path *child = lfirst(lc);
@@ -485,11 +497,17 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		{
 			total_cost += child->total_cost;
 			rows += child->rows;
+#if PG18_GE
+			disabled_nodes += child->disabled_nodes;
+#endif
 		}
 	}
 
 	path->cpath.path.rows = rows;
 	path->cpath.path.total_cost = total_cost;
+#if PG18_GE
+	path->cpath.path.disabled_nodes = disabled_nodes;
+#endif
 
 	if (path->cpath.custom_paths != NIL)
 	{

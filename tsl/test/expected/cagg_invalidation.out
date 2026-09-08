@@ -1989,11 +1989,12 @@ ORDER BY 1, 4;
 SELECT * FROM cagg_matlog_view
 WHERE materialization_id = (SELECT mat_hypertable_id
       FROM _timescaledb_catalog.continuous_agg
-      WHERE user_view_name = 'tenant_copy_daily');
+      WHERE user_view_name = 'tenant_copy_daily')
+ORDER BY 1,2,3,4;
  materialization_id | seqnum |       lowest_ts        |          greatest_ts          
 --------------------+--------+------------------------+-------------------------------
-                 32 |        | -infinity              | -infinity
                  32 |      1 | 2023-01-01 00:00:00+00 | 2023-01-02 23:59:59.999999+00
+                 32 |        | -infinity              | -infinity
                  32 |        | 2025-05-01 00:00:00+00 | infinity
 
 DROP MATERIALIZED VIEW tenant_copy_daily;

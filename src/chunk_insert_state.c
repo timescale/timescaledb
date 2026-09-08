@@ -392,7 +392,7 @@ adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsert
 		returningLists = mt->returningLists;
 	}
 
-	if (returningLists)
+	if (returningLists || ht_rri->ri_WithCheckOptions)
 	{
 		/*
 		 * We need the opposite map from cis->hyper_to_chunk_map. The map needs
@@ -401,7 +401,36 @@ adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsert
 		 */
 		chunk_map =
 			convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(hyper_rel));
+	}
 
+	if (chunk_map && ht_rri->ri_WithCheckOptions)
+	{
+		MemoryContext old_context = MemoryContextSwitchTo(mtstate->ps.state->es_query_cxt);
+		List *wco_exprs = NIL;
+		ListCell *lc;
+		bool found_whole_row;
+		List *wco_list = castNode(List,
+								  map_variable_attnos((Node *) ht_rri->ri_WithCheckOptions,
+													  ht_rri->ri_RangeTableIndex,
+													  0,
+													  chunk_map->attrMap,
+													  rowtype,
+													  &found_whole_row));
+
+		/* Mirror PostgreSQL's ExecInitPartitionInfo(). */
+		foreach (lc, wco_list)
+		{
+			WithCheckOption *wco = lfirst_node(WithCheckOption, lc);
+			wco_exprs = lappend(wco_exprs, ExecInitQual(castNode(List, wco->qual), &mtstate->ps));
+		}
+
+		chunk_rri->ri_WithCheckOptions = wco_list;
+		chunk_rri->ri_WithCheckOptionExprs = wco_exprs;
+		MemoryContextSwitchTo(old_context);
+	}
+
+	if (returningLists)
+	{
 		chunk_rri->ri_projectReturning =
 			get_adjusted_projection_info_returning(chunk_rri->ri_projectReturning,
 												   linitial(returningLists),

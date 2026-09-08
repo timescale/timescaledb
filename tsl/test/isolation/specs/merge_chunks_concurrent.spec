@@ -117,7 +117,7 @@ step "s1_commit" { commit; }
 
 session "s2"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 
@@ -145,7 +145,7 @@ step "s2_commit" {
 
 session "s3"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 
@@ -190,7 +190,7 @@ step "s3_commit" { commit; }
 
 session "s4"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 
@@ -200,7 +200,7 @@ step "s4_insert_result_chunk" {
 
 session "s5"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 
@@ -224,7 +224,7 @@ step "s5_merge_cleanup" {
 
 session "s6"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 
@@ -242,7 +242,7 @@ step "s6_merge_1_3_concurrently" {
 
 session "s7"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 

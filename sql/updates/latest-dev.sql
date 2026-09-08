@@ -208,3 +208,15 @@ $$;
 --
 -- END repair mismatched dimensional CHECK constraints
 --
+
+-- Remove the user_catalog_table option from the catalog tables.
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_catalog.pg_class c WHERE oid = '_timescaledb_catalog.hypertable'::regclass AND 'user_catalog_table=true' = ANY(reloptions)) THEN
+    ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
+  END IF;
+  IF EXISTS (SELECT FROM pg_catalog.pg_class c WHERE oid = '_timescaledb_catalog.chunk'::regclass AND 'user_catalog_table=true' = ANY(reloptions)) THEN
+    ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);
+  END IF;
+END
+$$;

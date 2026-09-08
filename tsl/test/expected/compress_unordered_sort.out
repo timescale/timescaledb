@@ -318,15 +318,13 @@ select device, sensor, first(time,time) from metrics group by device, sensor ord
  d2     | A      | Wed Jan 01 00:00:00 2025 UTC
  d2     | C      | Wed Jan 01 00:30:00 2025 UTC
 
--- Cannot use compressed sort on unordered chunk when sort keys contain non-segmentby keys
+-- Can use compressed sort order on unordered chunk with segmentwise batch sorted merge
 :PREFIX select device, sensor, time from metrics group by device, sensor, time order by 1,2, time DESC;
 --- QUERY PLAN ---
- Sort
-   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor, _hyper_1_1_chunk."time" DESC
-   ->  HashAggregate
-         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor, _hyper_1_1_chunk."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
+ Group
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor, _hyper_1_1_chunk."time"
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
 
 select device, sensor, time from metrics group by device, sensor, time order by 1,2, time DESC;
  device | sensor |             time             

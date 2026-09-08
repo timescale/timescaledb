@@ -94,7 +94,7 @@ set(TSL_MODULE_PATHNAME
 if(NOT GENERATE_DOWNGRADE_SCRIPT)
   message(
     STATUS "Not generating downgrade script: downgrade generation disabled.")
-elseif(NOT GIT_FOUND)
+elseif(NOT GIT_COMMIT_INFO_FOUND)
   message(STATUS "Not generating downgrade script: Git not available.")
 else()
   generate_downgrade_script(

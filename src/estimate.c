@@ -10,9 +10,11 @@
 #include <utils/selfuncs.h>
 
 #include "compat/compat.h"
+
 #include "estimate.h"
 #include "func_cache.h"
 #include "import/planner.h"
+#include "import/utils/selfuncs.h"
 #include "utils.h"
 
 /*

@@ -1,0 +1,2 @@
+Fixes: #10325 Avoid test errors when building from a source archive without a git repository
+Thanks: @tureba for reporting the problem with building from a source archive without a git repository

@@ -3634,14 +3634,14 @@ ORDER BY 1,2;
                  ->  Result
                        InitPlan 1
                          ->  Limit
-                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2
+                               ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2
                                      Order: "time"
                                      Filter: (("time" IS NOT NULL))
                InitPlan 4
                  ->  Result
                        InitPlan 3
                          ->  Limit
-                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_1
+                               ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2_1
                                      Order: "time" DESC
                                      Filter: (("time" IS NOT NULL))
                ->  GroupAggregate
@@ -3716,14 +3716,14 @@ ORDER BY 1,2;
                  ->  Result
                        InitPlan 2
                          ->  Limit
-                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_2
+                               ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2_2
                                      Order: "time"
                                      Filter: (("time" IS NOT NULL))
                InitPlan 5
                  ->  Result
                        InitPlan 4
                          ->  Limit
-                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_3
+                               ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2_3
                                      Order: "time" DESC
                                      Filter: (("time" IS NOT NULL))
                ->  Group
@@ -3755,7 +3755,7 @@ GROUP BY 1,2 ORDER BY 2,1;
      ->  Result
            InitPlan 2
              ->  Limit
-                   ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_2
+                   ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2_2
                          Order: "time" DESC
                          Filter: (("time" IS NOT NULL))
    ->  GroupAggregate

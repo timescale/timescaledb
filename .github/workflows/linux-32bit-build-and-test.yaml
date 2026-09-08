@@ -104,6 +104,14 @@ jobs:
         touch /etc/apt/apt-mirrors.txt
         sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
 
+    - name: Configure apt retries and timeout
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::By-Hash "yes";' >> /etc/apt/apt.conf.d/99retries
+
     # /__e/node16/bin/node (used by actions/checkout@v4) needs 64-bit libraries
     - name: Install 64-bit libraries for GitHub actions
       timeout-minutes: 15
@@ -183,9 +191,13 @@ jobs:
         # Git's "safe.directory" setting. Otherwise git would complain about
         # 'detected dubious ownership in repository'
         git config --global --add safe.directory $(pwd)
+        # The granular refresh tracker allocates DSM segments out of /dev/shm,
+        # which is only 64 MB in this container, so skip those tests here. They
+        # run in every other workflow.
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           -DREQUIRE_ALL_TESTS=ON \
+          -DTMP_ENABLE_GRANULAR_REFRESH_TESTS=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install

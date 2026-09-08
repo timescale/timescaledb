@@ -144,3 +144,6 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_watermark
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_get_tenant_tracking_info(REGCLASS);
 DROP FUNCTION IF EXISTS _timescaledb_functions.tenant_tracking_map();
+
+ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
+ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);

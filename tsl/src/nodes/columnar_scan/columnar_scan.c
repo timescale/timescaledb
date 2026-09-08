@@ -22,6 +22,7 @@
 #include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/selfuncs.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
@@ -52,10 +53,15 @@ typedef struct SortInfo
 {
 	List *required_compressed_pathkeys;
 	List *required_eq_classes;
-	bool needs_sequence_num;
+	bool needs_orderby_metadata;
 	bool use_compressed_sort; /* sort can be pushed below ColumnarScan */
 	bool use_batch_sorted_merge;
 	bool reverse;
+
+	/* Which pathkeys are segmentby columns:
+	 * needed for batch sorted merge cost estimation,
+	 * as segmentwise batch sorted merge has 1 pathkeys segment on a heap at a time */
+	Bitmapset *segmentby_pathkey_columns;
 
 	List *decompressed_sort_pathkeys;
 	QualCost decompressed_sort_pathkeys_cost;
@@ -72,7 +78,7 @@ static ColumnarScanPath *columnar_scan_path_create(PlannerInfo *root, const Comp
 
 static void columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 										  const Chunk *chunk, RelOptInfo *chunk_rel,
-										  bool needs_sequence_num);
+										  bool needs_orderby_metadata);
 
 static SortInfo build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 							   const CompressionInfo *info, List *pathkeys);
@@ -239,246 +245,239 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 
 	/*
 	 * If pathkeys contains non-segmentby columns the rest of the ordering
-	 * requirements will be satisfied by ordering by sequence_num.
+	 * requirements will be satisfied by ordering by the batch metadata columns.
 	 */
-	if (sort_info->needs_sequence_num || sort_info->use_batch_sorted_merge)
+	if (sort_info->needs_orderby_metadata && info->has_seq_num)
 	{
 		/* TODO: split up legacy sequence number path and non-sequence number path into dedicated
 		 * functions. */
-		if (info->has_seq_num)
+		bool nulls_first;
+		Oid sortop;
+		varattno =
+			get_attnum(info->compressed_rte->relid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+		var = makeVar(info->compressed_rel->relid, varattno, INT4OID, -1, InvalidOid, 0);
+
+		if (sort_info->reverse)
 		{
-			bool nulls_first;
-			Oid sortop;
-			varattno = get_attnum(info->compressed_rte->relid,
-								  COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-			var = makeVar(info->compressed_rel->relid, varattno, INT4OID, -1, InvalidOid, 0);
-
-			if (sort_info->reverse)
-			{
-				sortop = get_commutator(Int4LessOperator);
-				nulls_first = true;
-			}
-			else
-			{
-				sortop = Int4LessOperator;
-				nulls_first = false;
-			}
-
-			/*
-			 * Create the EquivalenceClass for the sequence number column of this
-			 * compressed chunk, so that we can build the PathKey that refers to it.
-			 */
-			EquivalenceClass *ec =
-				append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
-
-			/* Find the operator in pg_amop --- failure shouldn't happen. */
-			Oid opfamily, opcintype;
-			CompareType strategy;
-			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
-			{
-				elog(ERROR, "operator %u is not a valid ordering operator", sortop);
-			}
-
-			pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
-
-			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
+			sortop = get_commutator(Int4LessOperator);
+			nulls_first = true;
 		}
 		else
 		{
-			/* If there are no segmentby pathkeys, start from the beginning of the list */
-			if (info->num_segmentby_columns == 0)
+			sortop = Int4LessOperator;
+			nulls_first = false;
+		}
+
+		/*
+		 * Create the EquivalenceClass for the sequence number column of this
+		 * compressed chunk, so that we can build the PathKey that refers to it.
+		 */
+		EquivalenceClass *ec =
+			append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
+
+		/* Find the operator in pg_amop --- failure shouldn't happen. */
+		Oid opfamily, opcintype;
+		CompareType strategy;
+		if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+		{
+			elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+		}
+
+		pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
+
+		required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
+	}
+	else if (sort_info->needs_orderby_metadata || sort_info->use_batch_sorted_merge)
+	{
+		/* If there are no segmentby pathkeys, start from the beginning of the list */
+		if (info->num_segmentby_columns == 0)
+		{
+			lc = list_head(chunk_pathkeys);
+		}
+		Assert(lc != NULL);
+		Expr *expr;
+		char *column_name;
+		for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
+		{
+			pk = lfirst(lc);
+			EquivalenceMember *chunk_em = ts_find_em_for_rel(pk->pk_eclass, info->chunk_rel);
+
+			Assert(chunk_em);
+			expr = chunk_em->em_expr;
+			/*
+			 * Use em_datatype from the original equivalence member as the
+			 * opcintype. For polymorphic types like anyenum,
+			 * canonicalize_ec_expression will not add a RelabelType (it
+			 * replaces polymorphic req_type with the concrete type), so we
+			 * must explicitly pass the correct em_datatype to the metadata
+			 * column EC.
+			 */
+			Oid opcintype = chunk_em->em_datatype;
+			Oid collation = exprCollation((Node *) expr);
+			expr = (Expr *) strip_implicit_coercions((Node *) expr);
+			var = castNode(Var, expr);
+			Assert(var->varattno > 0);
+
+			column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
+			int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
+			Assert(orderby_index != 0);
+
+			bool orderby_desc =
+				ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+
+			bool orderby_nullsfirst =
+				ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
+
+			bool nulls_first;
+			CompareType strategy;
+
+			if (sort_info->reverse)
 			{
-				lc = list_head(chunk_pathkeys);
+				strategy = orderby_desc ? BTLessStrategyNumber : BTGreaterStrategyNumber;
+				nulls_first = !orderby_nullsfirst;
 			}
-			Assert(lc != NULL);
-			Expr *expr;
-			char *column_name;
-			for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
+			else
 			{
-				pk = lfirst(lc);
-				EquivalenceMember *chunk_em = ts_find_em_for_rel(pk->pk_eclass, info->chunk_rel);
+				strategy = orderby_desc ? BTGreaterStrategyNumber : BTLessStrategyNumber;
+				nulls_first = orderby_nullsfirst;
+			}
 
-				Assert(chunk_em);
-				expr = chunk_em->em_expr;
+			/* For Batch sorted merge we need to sort on specially chosen leading attribute for
+			 * each pathkey */
+			if (sort_info->use_batch_sorted_merge)
+			{
+				Oid sortop =
+					get_opfamily_member(pk->pk_opfamily, opcintype, opcintype, pk->pk_cmptype);
+				Oid opfamily, optype;
+				CompareType bsm_strategy;
+				if (!get_ordering_op_properties(sortop, &opfamily, &optype, &bsm_strategy))
+				{
+					elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+				}
+				Assert(bsm_strategy == BTLessStrategyNumber ||
+					   bsm_strategy == BTGreaterStrategyNumber);
+				char *leading_name;
+				char *trailing_name;
+				orderby_sparse_metadata_names(info->settings,
+											  orderby_index,
+											  &leading_name,
+											  &trailing_name);
+				char *meta_col_name =
+					strategy == BTLessStrategyNumber ? leading_name : trailing_name;
+
+				AttrNumber attr_position = get_attnum(info->compressed_rte->relid, meta_col_name);
+
+				if (attr_position == InvalidAttrNumber)
+				{
+					elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
+				}
+				Var *metadata_var = makeVar(info->compressed_rel->relid,
+											attr_position,
+											var->vartype,
+											var->vartypmod,
+											var->varcollid,
+											var->varlevelsup);
+				Expr *leading_expr =
+					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+				EquivalenceClass *leading_ec =
+					append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
+				PathKey *leading_pk = make_canonical_pathkey(root,
+															 leading_ec,
+															 pk->pk_opfamily,
+															 strategy,
+															 nulls_first);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, leading_pk);
+			}
+			/* Need to sort on compressed pathkeys matching compressed indexscan order */
+			else
+			{
+				AttrNumber leading_attno;
+				AttrNumber trailing_attno;
+				orderby_sparse_metadata_attnos(info->settings,
+											   info->compressed_rte->relid,
+											   orderby_index,
+											   &leading_attno,
+											   &trailing_attno);
 				/*
-				 * Use em_datatype from the original equivalence member as the
-				 * opcintype. For polymorphic types like anyenum,
-				 * canonicalize_ec_expression will not add a RelabelType (it
-				 * replaces polymorphic req_type with the concrete type), so we
-				 * must explicitly pass the correct em_datatype to the metadata
-				 * column EC.
+				 * Compressed chunk indexes based on firstlast sparse indexes can have two
+				 * orderings. New chunks index them as (first, last); chunks compressed before
+				 * that change index a DESC column as (last, first). Only DESC columns can
+				 * differ, so for those we check the chunk's index and follow whichever order it
+				 * has.
 				 */
-				Oid opcintype = chunk_em->em_datatype;
-				Oid collation = exprCollation((Node *) expr);
-				expr = (Expr *) strip_implicit_coercions((Node *) expr);
-				var = castNode(Var, expr);
-				Assert(var->varattno > 0);
-
-				column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-				int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
-				Assert(orderby_index != 0);
-
-				bool orderby_desc =
-					ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
-
-				bool orderby_nullsfirst =
-					ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
-
-				bool nulls_first;
-				CompareType strategy;
-
-				if (sort_info->reverse)
+				if (orderby_desc &&
+					orderby_sparse_kind(info->settings, orderby_index) == ORDERBY_SPARSE_FIRSTLAST)
 				{
-					strategy = orderby_desc ? BTLessStrategyNumber : BTGreaterStrategyNumber;
-					nulls_first = !orderby_nullsfirst;
-				}
-				else
-				{
-					strategy = orderby_desc ? BTGreaterStrategyNumber : BTLessStrategyNumber;
-					nulls_first = orderby_nullsfirst;
-				}
+					orderby_firstlast_metadata_attnos(info->settings,
+													  info->compressed_rte->relid,
+													  orderby_index,
+													  &leading_attno,
+													  &trailing_attno);
 
-				/* For Batch sorted merge we need to sort on specially chosen leading attribute for
-				 * each pathkey */
-				if (sort_info->use_batch_sorted_merge)
-				{
-					Oid sortop =
-						get_opfamily_member(pk->pk_opfamily, opcintype, opcintype, pk->pk_cmptype);
-					Oid opfamily, optype;
-					CompareType bsm_strategy;
-					if (!get_ordering_op_properties(sortop, &opfamily, &optype, &bsm_strategy))
+					ListCell *index_lc;
+					foreach (index_lc, info->compressed_rel->indexlist)
 					{
-						elog(ERROR, "operator %u is not a valid ordering operator", sortop);
-					}
-					Assert(bsm_strategy == BTLessStrategyNumber ||
-						   bsm_strategy == BTGreaterStrategyNumber);
-					char *leading_name;
-					char *trailing_name;
-					orderby_sparse_metadata_names(info->settings,
-												  orderby_index,
-												  &leading_name,
-												  &trailing_name);
-					char *meta_col_name =
-						strategy == BTLessStrategyNumber ? leading_name : trailing_name;
-
-					AttrNumber attr_position =
-						get_attnum(info->compressed_rte->relid, meta_col_name);
-
-					if (attr_position == InvalidAttrNumber)
-					{
-						elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
-					}
-					Var *metadata_var = makeVar(info->compressed_rel->relid,
-												attr_position,
-												var->vartype,
-												var->vartypmod,
-												var->varcollid,
-												var->varlevelsup);
-					Expr *leading_expr =
-						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-					EquivalenceClass *leading_ec =
-						append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
-					PathKey *leading_pk = make_canonical_pathkey(root,
-																 leading_ec,
-																 pk->pk_opfamily,
-																 strategy,
-																 nulls_first);
-					required_compressed_pathkeys =
-						lappend(required_compressed_pathkeys, leading_pk);
-				}
-				/* Need to sort on compressed pathkeys matching compressed indexscan order */
-				else
-				{
-					AttrNumber leading_attno;
-					AttrNumber trailing_attno;
-					orderby_sparse_metadata_attnos(info->settings,
-												   info->compressed_rte->relid,
-												   orderby_index,
-												   &leading_attno,
-												   &trailing_attno);
-					/*
-					 * Compressed chunk indexes based on firstlast sparse indexes can have two
-					 * orderings. New chunks index them as (first, last); chunks compressed before
-					 * that change index a DESC column as (last, first). Only DESC columns can
-					 * differ, so for those we check the chunk's index and follow whichever order it
-					 * has.
-					 */
-					if (orderby_desc && orderby_sparse_kind(info->settings, orderby_index) ==
-											ORDERBY_SPARSE_FIRSTLAST)
-					{
-						orderby_firstlast_metadata_attnos(info->settings,
-														  info->compressed_rte->relid,
-														  orderby_index,
-														  &leading_attno,
-														  &trailing_attno);
-
-						ListCell *index_lc;
-						foreach (index_lc, info->compressed_rel->indexlist)
+						IndexOptInfo *index = lfirst(index_lc);
+						int leading_pos = -1;
+						int trailing_pos = -1;
+						for (int k = 0; k < index->nkeycolumns; k++)
 						{
-							IndexOptInfo *index = lfirst(index_lc);
-							int leading_pos = -1;
-							int trailing_pos = -1;
-							for (int k = 0; k < index->nkeycolumns; k++)
+							if (index->indexkeys[k] == leading_attno)
 							{
-								if (index->indexkeys[k] == leading_attno)
-								{
-									leading_pos = k;
-								}
-								else if (index->indexkeys[k] == trailing_attno)
-								{
-									trailing_pos = k;
-								}
+								leading_pos = k;
 							}
-							if (leading_pos >= 0 && trailing_pos >= 0)
+							else if (index->indexkeys[k] == trailing_attno)
 							{
-								if (trailing_pos < leading_pos)
-								{
-									AttrNumber tmp = leading_attno;
-									leading_attno = trailing_attno;
-									trailing_attno = tmp;
-								}
-								break;
+								trailing_pos = k;
 							}
 						}
+						if (leading_pos >= 0 && trailing_pos >= 0)
+						{
+							if (trailing_pos < leading_pos)
+							{
+								AttrNumber tmp = leading_attno;
+								leading_attno = trailing_attno;
+								trailing_attno = tmp;
+							}
+							break;
+						}
 					}
-					Var *metadata_var;
-					metadata_var = makeVar(info->compressed_rel->relid,
-										   leading_attno,
-										   var->vartype,
-										   var->vartypmod,
-										   var->varcollid,
-										   var->varlevelsup);
-					Expr *leading_expr =
-						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-					EquivalenceClass *leading_ec =
-						append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
-					PathKey *leading_pk = make_canonical_pathkey(root,
-																 leading_ec,
-																 pk->pk_opfamily,
-																 strategy,
-																 nulls_first);
-					required_compressed_pathkeys =
-						lappend(required_compressed_pathkeys, leading_pk);
-
-					metadata_var = makeVar(info->compressed_rel->relid,
-										   trailing_attno,
-										   var->vartype,
-										   var->vartypmod,
-										   var->varcollid,
-										   var->varlevelsup);
-					Expr *trailing_expr =
-						canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-					EquivalenceClass *trailing_ec =
-						append_ec_for_metadata_col(root, info, trailing_expr, pk, opcintype);
-					PathKey *trailing_pk = make_canonical_pathkey(root,
-																  trailing_ec,
-																  pk->pk_opfamily,
-																  strategy,
-																  nulls_first);
-
-					required_compressed_pathkeys =
-						lappend(required_compressed_pathkeys, trailing_pk);
 				}
+				Var *metadata_var;
+				metadata_var = makeVar(info->compressed_rel->relid,
+									   leading_attno,
+									   var->vartype,
+									   var->vartypmod,
+									   var->varcollid,
+									   var->varlevelsup);
+				Expr *leading_expr =
+					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+				EquivalenceClass *leading_ec =
+					append_ec_for_metadata_col(root, info, leading_expr, pk, opcintype);
+				PathKey *leading_pk = make_canonical_pathkey(root,
+															 leading_ec,
+															 pk->pk_opfamily,
+															 strategy,
+															 nulls_first);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, leading_pk);
+
+				metadata_var = makeVar(info->compressed_rel->relid,
+									   trailing_attno,
+									   var->vartype,
+									   var->vartypmod,
+									   var->varcollid,
+									   var->varlevelsup);
+				Expr *trailing_expr =
+					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+				EquivalenceClass *trailing_ec =
+					append_ec_for_metadata_col(root, info, trailing_expr, pk, opcintype);
+				PathKey *trailing_pk = make_canonical_pathkey(root,
+															  trailing_ec,
+															  pk->pk_opfamily,
+															  strategy,
+															  nulls_first);
+
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, trailing_pk);
 			}
 		}
 	}
@@ -998,12 +997,14 @@ smoothstep(double x, double start, double end)
  *
  * The algorithm works as follows:
  *
- *   (1) A sort node is placed below the decompress scan node and on top of the scan
+ *   (1) If sort on ("min" or "max" values) does not match compressed sort order,
+ *       a sort node is placed below the decompress scan node and on top of the scan
  *       on the compressed chunk. This sort node uses the min/max values of the 'order by'
  *       columns from the metadata of the batch to get them into an order which can be
  *       used to merge them.
  *
- *       [Scan on compressed chunk] -> [Sort on min/max values] -> [Decompress and merge]
+ *       [Scan on compressed chunk] -> (if needed) [Sort on min/max values] -> [Decompress and
+ * merge]
  *
  *       For example, the batches are sorted on the min value of the 'order by' metadata
  *       column: [0, 3] [0, 5] [3, 7] [6, 10]
@@ -1032,7 +1033,7 @@ smoothstep(double x, double start, double end)
  */
 static void
 cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_info,
-						ColumnarScanPath *dcpath, Path *compressed_path)
+						const SortInfo *sort_info, ColumnarScanPath *dcpath, Path *compressed_path)
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
@@ -1086,6 +1087,12 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 		 segmentby_attno =
 			 bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
 	{
+		/* For segmentwise batch sorted merge we process batches one pathkey segment at a time,
+		 * i.e. we do not keep open batches for those segments */
+		if (bms_is_member(segmentby_attno, sort_info->segmentby_pathkey_columns))
+		{
+			continue;
+		}
 		char *colname = get_attname(compression_info->chunk_rte->relid,
 									segmentby_attno,
 									/* missing_ok = */ false);
@@ -1351,7 +1358,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 								  compression_info,
 								  chunk,
 								  chunk_rel,
-								  sort_info.needs_sequence_num);
+								  sort_info.needs_orderby_metadata);
 
 	if (sort_info.use_compressed_sort || sort_info.use_batch_sorted_merge)
 	{
@@ -1554,7 +1561,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	if (sort_info->use_batch_sorted_merge && ts_guc_enable_decompression_sorted_merge)
 	{
 		Assert(!sort_info->use_compressed_sort);
-
 		ColumnarScanPath *path_copy =
 			copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
 
@@ -1570,7 +1576,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 		path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 
-		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
+		cost_batch_sorted_merge(root, compression_info, sort_info, path_copy, compressed_path);
 
 		if (ts_guc_debug_require_batch_sorted_merge == DRO_Force)
 		{
@@ -1610,7 +1616,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			 */
 			ColumnarScanPath *path = (ColumnarScanPath *) chunk_path_no_sort;
 			path->reverse = sort_info->reverse;
-			path->needs_sequence_num = sort_info->needs_sequence_num;
+			path->needs_orderby_metadata = sort_info->needs_orderby_metadata;
 			path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 			path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 
@@ -1627,7 +1633,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			ColumnarScanPath *path_copy =
 				copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
 			path_copy->reverse = sort_info->reverse;
-			path_copy->needs_sequence_num = sort_info->needs_sequence_num;
+			path_copy->needs_orderby_metadata = sort_info->needs_orderby_metadata;
 			path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 			path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 
@@ -1928,7 +1934,7 @@ compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compress
  */
 static void
 compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info,
-							   bool needs_sequence_num)
+							   bool needs_orderby_metadata)
 {
 	bool have_whole_row_var = false;
 	Bitmapset *attrs_used = NULL;
@@ -2014,7 +2020,7 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 											&attrs_used);
 
 	/* add the sequence number or orderby metadata columns if we try to order by them*/
-	if (needs_sequence_num)
+	if (needs_orderby_metadata)
 	{
 		if (info->has_seq_num)
 		{
@@ -2480,7 +2486,7 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
  */
 static void
 columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk,
-							  RelOptInfo *chunk_rel, bool needs_sequence_num)
+							  RelOptInfo *chunk_rel, bool needs_orderby_metadata)
 {
 	Index compressed_index = root->simple_rel_array_size;
 
@@ -2548,7 +2554,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	}
 	table_close(r, NoLock);
 
-	compressed_rel_setup_reltarget(compressed_rel, info, needs_sequence_num);
+	compressed_rel_setup_reltarget(compressed_rel, info, needs_orderby_metadata);
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
 	compressed_rel_setup_joininfo(compressed_rel, info);
@@ -3245,6 +3251,9 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			}
 
 			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
+			/* Record segmentby columns which are pathkeys */
+			sort_info.segmentby_pathkey_columns =
+				bms_add_member(sort_info.segmentby_pathkey_columns, var->varattno);
 		}
 
 		/*
@@ -3264,19 +3273,16 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		if (bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
 		{
 			/*
-			 * If we didn't have any segmentby columns in pathkeys, try batch sorted merge
+			 * If we didn't have all segmentby columns in pathkeys, try batch sorted merge
 			 * instead.
 			 */
-			if (i == 0)
-			{
-				sort_info.use_batch_sorted_merge =
-					match_pathkeys_to_compression_orderby(pathkeys,
-														  chunk_em_exprs,
-														  /* starting_pathkey_offset = */ 0,
-														  compression_info,
-														  /* for_batch_sorted_merge = */ true,
-														  &sort_info.reverse);
-			}
+			sort_info.use_batch_sorted_merge =
+				match_pathkeys_to_compression_orderby(pathkeys,
+													  chunk_em_exprs,
+													  /* starting_pathkey_offset = */ i,
+													  compression_info,
+													  /* for_batch_sorted_merge = */ true,
+													  &sort_info.reverse);
 			return sort_info;
 		}
 	}
@@ -3294,29 +3300,23 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	if (ts_chunk_is_unordered(chunk))
 	{
 		/*
-		 * If compression has no segmentby columns or all segmentby columns in a query are pinned to
-		 * a Const, try batch sorted merge instead.
+		 * try batch sorted merge instead.
 		 */
-		if (compression_info->num_segmentby_columns == 0 ||
-			bms_num_members(compression_info->chunk_const_segmentby) ==
-				compression_info->num_segmentby_columns)
-		{
-			sort_info.use_batch_sorted_merge =
-				match_pathkeys_to_compression_orderby(pathkeys,
-													  chunk_em_exprs,
-													  /* starting_pathkey_offset = */ 0,
-													  compression_info,
-													  /* for_batch_sorted_merge = */ true,
-													  &sort_info.reverse);
-		}
+		sort_info.use_batch_sorted_merge =
+			match_pathkeys_to_compression_orderby(pathkeys,
+												  chunk_em_exprs,
+												  /* starting_pathkey_offset = */ i,
+												  compression_info,
+												  /* for_batch_sorted_merge = */ true,
+												  &sort_info.reverse);
 		return sort_info;
 	}
 
 	/*
-	 * Pathkeys includes columns past segmentby columns, so we need sequence_num
+	 * Pathkeys includes columns past segmentby columns, so we need the orderby
 	 * in the targetlist for ordering.
 	 */
-	sort_info.needs_sequence_num = true;
+	sort_info.needs_orderby_metadata = true;
 
 	/*
 	 * loop over the rest of pathkeys

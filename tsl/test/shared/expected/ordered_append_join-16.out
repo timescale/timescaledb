@@ -6,7 +6,7 @@ SET timescaledb.enable_now_constify TO FALSE;
 -- needed for the tests and it is only important which index is
 -- picked.
 SET enable_indexonlyscan TO FALSE;
-SET timescaledb.enable_deferred_chunk_scan TO off;
+SET timescaledb.enable_deferred_chunk_append TO off;
 SELECT
        format('include/%s.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
        format('%s/shared/results/%s_results_uncompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNCOMPRESSED",

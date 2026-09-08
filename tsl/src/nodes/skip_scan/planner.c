@@ -22,6 +22,7 @@
 #include <parser/parse_coerce.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
+#include <utils/selfuncs.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
