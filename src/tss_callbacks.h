@@ -6,9 +6,17 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
-/* Keep the legacy declarations below aligned with the external provider. */
+#include <executor/instrument.h>
+
+/*
+ * Mirror the external statement-tracking provider's public rendezvous contract.
+ * Its installed header is not a build dependency because the components build
+ * and release independently. Keep the rendezvous names, types, layouts, and
+ * size rules in sync with that contract.
+ */
 #define TSS_CALLBACKS_VAR_NAME "tss_callbacks"
 #define TSS_CALLBACKS_VERSION INT64_C(1)
 
@@ -28,7 +36,56 @@ typedef struct TSSCallbacks
 	tss_enabled_hook_type tss_enabled;
 } TSSCallbacks;
 
-extern bool ts_is_tss_enabled(void);
-extern void ts_begin_tss_store_callback(void);
-extern void ts_end_tss_store_callback(const char *query, int query_location, int query_len,
-									  uint64 query_id, uint64 rows);
+#define TSS_STATEMENT_SCOPE_CALLBACKS_VAR_NAME "tss_statement_scope_callbacks"
+#define TSS_STATEMENT_SCOPE_CALLBACKS_VERSION INT64_C(1)
+#define TSS_STATEMENT_SCOPE_NOT_ENTERED (-INT64_C(1))
+
+typedef int64_t TSSStatementScopeToken;
+typedef TSSStatementScopeToken (*tss_statement_scope_enter_hook_type)(void);
+typedef void (*tss_statement_scope_exit_hook_type)(TSSStatementScopeToken scope_token);
+typedef bool (*tss_statement_scope_reset_hook_type)(void);
+
+typedef struct TSSStatementScopeCallbacks
+{
+	int64_t version_num;
+	int64_t struct_size;
+	tss_statement_scope_enter_hook_type enter;
+	tss_statement_scope_exit_hook_type exit;
+	tss_statement_scope_reset_hook_type reset;
+} TSSStatementScopeCallbacks;
+
+#define TSS_STATEMENT_SCOPE_CALLBACKS_V1_MIN_SIZE                                                  \
+	((int64_t) (offsetof(TSSStatementScopeCallbacks, reset) +                                      \
+				sizeof(((TSSStatementScopeCallbacks *) 0)->reset)))
+
+static inline bool
+tss_statement_scope_callbacks_usable(const TSSStatementScopeCallbacks *callbacks)
+{
+	return callbacks != NULL && callbacks->version_num == TSS_STATEMENT_SCOPE_CALLBACKS_VERSION &&
+		   callbacks->struct_size >= TSS_STATEMENT_SCOPE_CALLBACKS_V1_MIN_SIZE &&
+		   callbacks->enter != NULL && callbacks->exit != NULL && callbacks->reset != NULL;
+}
+
+typedef struct TsTssStatementScope
+{
+	tss_statement_scope_exit_hook_type exit;
+	tss_store_hook_type store;
+	TSSStatementScopeToken scope_token;
+	bool synthetic_enabled;
+	instr_time start_time;
+	BufferUsage start_bufusage;
+	WalUsage start_walusage;
+} TsTssStatementScope;
+
+#define TS_TSS_STATEMENT_SCOPE_INIT                                                                \
+	{                                                                                              \
+		.scope_token = TSS_STATEMENT_SCOPE_NOT_ENTERED                                             \
+	}
+
+extern void ts_begin_tss_store_callback(volatile TsTssStatementScope *scope);
+extern bool ts_tss_store_callback_started(const volatile TsTssStatementScope *scope);
+extern void ts_tss_statement_scope_enter(volatile TsTssStatementScope *scope);
+extern void ts_tss_statement_scope_exit(volatile TsTssStatementScope *scope);
+extern void ts_end_tss_store_callback(volatile TsTssStatementScope *scope, const char *query,
+									  int query_location, int query_len, uint64 query_id,
+									  uint64 rows);
