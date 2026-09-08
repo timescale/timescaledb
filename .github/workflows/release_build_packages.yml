@@ -72,18 +72,6 @@ jobs:
           echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
-    - name: Build Windows Packages
-      env:
-        GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-      run: |
-        echo "🪟 Triggering Windows package build..." | tee -a build.log
-        if gh workflow run timescaledb-windows.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 🪟 Windows Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-windows.yml) |" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "| 🪟 Windows Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-windows.yml) |" >> $GITHUB_STEP_SUMMARY
-          echo "HAS_FAILURES=true" >> $GITHUB_ENV
-        fi
-
     - name: Generate final summary
       if: always()
       run: |
