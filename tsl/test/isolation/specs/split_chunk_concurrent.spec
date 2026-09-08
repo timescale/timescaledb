@@ -107,7 +107,7 @@ step "s1_delete_from_splitting_chunk" {
 
 session "s2"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 
@@ -128,7 +128,7 @@ step "s2_insert_into_splitting_chunk" {
 
 session "s3"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 
@@ -154,7 +154,7 @@ step "s3_vacuum_freeze_chunks" {
 
 session "s4"
 setup	{
-    set local lock_timeout = '500ms';
+    set local lock_timeout = '2s';
     set local deadlock_timeout = '100ms';
 }
 

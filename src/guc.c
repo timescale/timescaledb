@@ -85,6 +85,7 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby = true;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 30000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows = 5000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit = 500;
+TSDLLEXPORT bool ts_guc_use_custom_toaster = false;
 bool ts_guc_enable_deprecation_warnings = true;
 TSDLLEXPORT bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -95,7 +96,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_hypertable_expansion_for_dml = true;
-TSDLLEXPORT bool ts_guc_enable_deferred_chunk_scan = true;
+TSDLLEXPORT bool ts_guc_enable_deferred_chunk_append = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
@@ -634,6 +635,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("use_custom_toaster"),
+							 "Use a custom TOAST writer for compressed row inserts",
+							 "This setting is only used for compression. It has no effect on "
+							 "PostgreSQL 19 and above.",
+							 &ts_guc_use_custom_toaster,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_insert_tuple_sort_limit"),
 							"Number of tuples that can be sorted at once in an INSERT operation",
 							"This is mainly used to keep the memory footprint down for "
@@ -781,11 +794,11 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deferred_chunk_scan"),
-							 "Enable DeferredChunkScan for LIMIT queries",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deferred_chunk_append"),
+							 "Enable DeferredChunkAppend for LIMIT queries",
 							 "Custom scan node for hypertables that iterates chunks at "
 							 "execution instead of expanding every chunk at plan time.",
-							 &ts_guc_enable_deferred_chunk_scan,
+							 &ts_guc_enable_deferred_chunk_append,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1728,11 +1741,10 @@ _guc_init(void)
 
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_deferred_chunk_scan"),
 							 /* short_desc= */
-							 "ensure that DeferredChunkScan is used or not",
+							 "ensure that DeferredChunkAppend is used or not",
 							 /* long_desc= */
 							 "this is for debugging purposes, to check whether a query uses the "
-							 "DeferredChunkScan node without depending on version-specific EXPLAIN "
-							 "output",
+							 "DeferredChunkAppend node without depending on EXPLAIN output",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_deferred_chunk_scan,
 							 /* bootValue= */ DRO_Allow,
 							 /* options = */ debug_require_options,

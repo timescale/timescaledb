@@ -626,3 +626,15 @@ SELECT count(*) FROM dc_ret;
 RESET timescaledb.enable_direct_compress_insert;
 DROP TABLE dc_ret;
 
+
+-- Test small batch size also does direct compress if enabled at a hypertable level
+CREATE TABLE dc_small (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+    WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.direct_compress);
+
+SHOW timescaledb.enable_direct_compress_insert;
+
+INSERT INTO dc_small SELECT '2025-01-01'::timestamptz, 'd1', i::float FROM generate_series(0,5) i;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('dc_small') chunk;
+SELECT count(*) FROM dc_small;
+
+DROP TABLE dc_small;

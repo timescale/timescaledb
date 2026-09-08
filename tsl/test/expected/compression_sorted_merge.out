@@ -1082,7 +1082,7 @@ SELECT * FROM sensor_data ORDER BY time DESC LIMIT 1;
 --- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    Output: "time", sensor_id, cpu, temperature
-   ->  Custom Scan (DeferredChunkScan) on public.sensor_data (actual rows=1.00 loops=1)
+   ->  Custom Scan (DeferredChunkAppend) on public.sensor_data (actual rows=1.00 loops=1)
          Output: "time", sensor_id, cpu, temperature
          Order: "time" DESC
          Chunks Visited: 1
@@ -1474,7 +1474,7 @@ SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
 --- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    Output: dttm
-   ->  Custom Scan (DeferredChunkScan) on public.test t (actual rows=1.00 loops=1)
+   ->  Custom Scan (DeferredChunkAppend) on public.test t (actual rows=1.00 loops=1)
          Output: dttm
          Order: dttm
          Chunks Visited: 1

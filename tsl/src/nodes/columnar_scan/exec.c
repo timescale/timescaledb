@@ -24,7 +24,7 @@
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "guc.h"
-#include "import/ts_explain.h"
+#include "import/commands/explain.h"
 #include "nodes/columnar_scan/batch_array.h"
 #include "nodes/columnar_scan/batch_queue_fifo.h"
 #include "nodes/columnar_scan/batch_queue_heap.h"

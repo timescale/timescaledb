@@ -11,7 +11,7 @@ SELECT format('\! diff -u -- %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULT
 
 -- disable memoize node to avoid flaky results
 SET enable_memoize TO 'off';
-SET timescaledb.enable_deferred_chunk_scan TO off;
+SET timescaledb.enable_deferred_chunk_append TO off;
 
 -- Testing Index Scan backwards ----
 -- We want more than 1 segment in atleast 1 of the chunks

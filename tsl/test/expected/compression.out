@@ -1755,7 +1755,7 @@ SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1
 --- QUERY PLAN ---
  Limit
    Output: "time", device, value
-   ->  Custom Scan (DeferredChunkScan) on public.ht_metrics_partially_compressed
+   ->  Custom Scan (DeferredChunkAppend) on public.ht_metrics_partially_compressed
          Output: "time", device, value
          Order: "time" DESC, device
 
@@ -1936,7 +1936,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    Output: "time", sensor_id, cpu, temperature
-   ->  Custom Scan (DeferredChunkScan) on public.sensor_data_compressed (actual rows=5.00 loops=1)
+   ->  Custom Scan (DeferredChunkAppend) on public.sensor_data_compressed (actual rows=5.00 loops=1)
          Output: "time", sensor_id, cpu, temperature
          Order: "time" DESC
          Chunks Visited: 3
@@ -1960,7 +1960,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    Output: "time", sensor_id, cpu, temperature
-   ->  Custom Scan (DeferredChunkScan) on public.sensor_data_compressed (actual rows=5.00 loops=1)
+   ->  Custom Scan (DeferredChunkAppend) on public.sensor_data_compressed (actual rows=5.00 loops=1)
          Output: "time", sensor_id, cpu, temperature
          Order: "time" DESC
          Chunks Visited: 3
@@ -2009,7 +2009,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    Output: "time", sensor_id, cpu, temperature
-   ->  Custom Scan (DeferredChunkScan) on public.sensor_data_compressed (actual rows=5.00 loops=1)
+   ->  Custom Scan (DeferredChunkAppend) on public.sensor_data_compressed (actual rows=5.00 loops=1)
          Output: "time", sensor_id, cpu, temperature
          Order: "time" DESC
          Chunks Visited: 3
@@ -2057,7 +2057,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    Output: "time", sensor_id, cpu, temperature
-   ->  Custom Scan (DeferredChunkScan) on public.sensor_data_compressed (actual rows=5.00 loops=1)
+   ->  Custom Scan (DeferredChunkAppend) on public.sensor_data_compressed (actual rows=5.00 loops=1)
          Output: "time", sensor_id, cpu, temperature
          Order: "time" DESC
          Chunks Visited: 3
@@ -2106,7 +2106,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    Output: "time", sensor_id, cpu, temperature
-   ->  Custom Scan (DeferredChunkScan) on public.sensor_data_compressed (actual rows=5.00 loops=1)
+   ->  Custom Scan (DeferredChunkAppend) on public.sensor_data_compressed (actual rows=5.00 loops=1)
          Output: "time", sensor_id, cpu, temperature
          Order: "time" DESC
          Chunks Visited: 3
@@ -2154,7 +2154,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    Output: "time", sensor_id, cpu, temperature
-   ->  Custom Scan (DeferredChunkScan) on public.sensor_data_compressed (actual rows=5.00 loops=1)
+   ->  Custom Scan (DeferredChunkAppend) on public.sensor_data_compressed (actual rows=5.00 loops=1)
          Output: "time", sensor_id, cpu, temperature
          Order: "time" DESC
          Chunks Visited: 3

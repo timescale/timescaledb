@@ -78,6 +78,7 @@ struct DictionaryDecompressionIterator
 	Simple8bRleDecompressionIterator bitmap;
 	Simple8bRleDecompressionIterator nulls;
 	bool has_nulls;
+	uint32 nulls_seen;
 };
 
 //////////////////
@@ -475,6 +476,7 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 		.compressed = bitmap,
 		.values = palloc(sizeof(Datum) * bitmap->num_distinct),
 		.has_nulls = bitmap->has_nulls == 1,
+		.nulls_seen = 0,
 	};
 
 	s8_bitmap = bytes_deserialize_simple8b_and_advance(&si);
@@ -876,6 +878,9 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 			/* and also that we returned all values */
 			CheckCompressedData(decompression_iterator_values_seen(iter) ==
 								decompression_iterator_value_count(iter));
+			/* and also that the returned null and notnull elements match the expected counts */
+			CheckCompressedData(iter->nulls_seen + decompression_iterator_values_seen(iter) ==
+								decompression_iterator_item_count(iter));
 			return (DecompressResult){
 				.is_done = true,
 			};
@@ -883,6 +888,7 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 
 		if ((null.val & 1) != 0)
 		{
+			iter->nulls_seen++;
 			return (DecompressResult){
 				.is_null = true,
 			};
@@ -898,6 +904,9 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 		/* and also that we returned all values */
 		CheckCompressedData(decompression_iterator_values_seen(iter) ==
 							decompression_iterator_value_count(iter));
+		/* and also that the returned null and notnull elements match the expected counts */
+		CheckCompressedData(iter->nulls_seen + decompression_iterator_values_seen(iter) ==
+							decompression_iterator_item_count(iter));
 		return (DecompressResult){
 			.is_done = true,
 		};
@@ -933,6 +942,9 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 			/* and also that we returned all values */
 			CheckCompressedData(decompression_iterator_values_seen(iter) ==
 								decompression_iterator_value_count(iter));
+			/* and also that the returned null and notnull elements match the expected counts */
+			CheckCompressedData(iter->nulls_seen + decompression_iterator_values_seen(iter) ==
+								decompression_iterator_item_count(iter));
 			return (DecompressResult){
 				.is_done = true,
 			};
@@ -940,6 +952,7 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 
 		if ((null.val & 1) != 0)
 		{
+			iter->nulls_seen++;
 			return (DecompressResult){
 				.is_null = true,
 			};
@@ -955,6 +968,9 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 		/* and also that we returned all values */
 		CheckCompressedData(decompression_iterator_values_seen(iter) ==
 							decompression_iterator_value_count(iter));
+		/* and also that the returned null and notnull elements match the expected counts */
+		CheckCompressedData(iter->nulls_seen + decompression_iterator_values_seen(iter) ==
+							decompression_iterator_item_count(iter));
 		return (DecompressResult){
 			.is_done = true,
 		};

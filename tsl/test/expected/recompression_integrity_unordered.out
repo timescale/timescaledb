@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Set path to check data intergrity after in-memory recompression
-\set TEST_BASE_NAME recompression_intergrity_unordered
+\set TEST_BASE_NAME recompression_integrity_unordered
 -- requires TEST_BASE_NAME, TEST_TABLE_NAME, BATCH_METADATA_QUERY, ORDER_BY_CLAUSE
 \set RECOMPRESSION_INTEGRITY_CHECK_RELPATH 'include/recompression_integrity_check.sql'
 -- Setup Direct Compress

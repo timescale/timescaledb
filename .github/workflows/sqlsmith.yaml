@@ -35,6 +35,14 @@ jobs:
         sudo touch /etc/apt/apt-mirrors.txt
         sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
 
+    - name: Configure apt retries and timeout
+      run: |
+        # retry more, allow longer timeouts, and try acquire by hash first
+        sudo sh -c "echo 'Acquire::Retries \"10\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::http::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::https::Timeout \"240\";' >> /etc/apt/apt.conf.d/99retries"
+        sudo sh -c "echo 'Acquire::By-Hash \"yes\";' >> /etc/apt/apt.conf.d/99retries"
+
     - name: Install Linux Dependencies
       timeout-minutes: 15
       run: |
