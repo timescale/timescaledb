@@ -13,8 +13,8 @@ SELECT setseed(1);
 
 -- Create a materialized view from the telemetry report so that we
 -- don't regenerate telemetry for every query.  Filter heap_size for
--- materialized views since PG14 reports a different heap size for
--- them compared to earlier PG versions.
+-- materialized views because the value differs between PostgreSQL
+-- versions and this test has one expected output for all of them.
 CREATE MATERIALIZED VIEW telemetry_report AS
 SELECT (r #- '{relations,materialized_views,heap_size}') AS r
 FROM get_telemetry_report() r;
