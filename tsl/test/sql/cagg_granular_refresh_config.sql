@@ -656,7 +656,7 @@ RESET timezone;
 
 -- TEST 7: the disable inside a PL/pgSQL EXCEPTION block that never raises.
 -- A block with a handler always runs in a subtransaction, so the successful
--- path ends in SUBXACT_EVENT_COMMIT_SUB.  
+-- path ends in SUBXACT_EVENT_COMMIT_SUB.
 -- queued tenant tracker free request must survive sub transaction commit and be
 -- applied by the top level commit.
 SET timezone TO 'UTC';
@@ -683,10 +683,11 @@ INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
 SELECT count(*) AS tracker_entries_before
 FROM _timescaledb_functions.tenant_tracking_map() m
 JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
-WHERE h.table_name = 'conditions';
+WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
+  AND h.table_name = 'conditions';
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
--- subtransaction commits successfully 
+-- subtransaction commits successfully
 DO $$
 BEGIN
     ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
@@ -701,7 +702,7 @@ JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
 WHERE h.table_name = 'conditions';
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
--- Must be zero 
+-- Must be zero
 SELECT count(*) AS tracker_entries_after
 FROM _timescaledb_functions.tenant_tracking_map() m
 JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
@@ -712,3 +713,60 @@ WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_datab
 DROP MATERIALIZED VIEW cond_daily;
 DROP TABLE conditions;
 RESET timezone;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET client_min_messages TO warning;
+SET timescaledb.current_timestamp_mock = '2026-09-01 00:00:00+00';
+
+-- Test 8: Both late-arriving tenants must remain tracked when caches are
+-- repeatedly discarded and relations are analyzed or changed.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time') \gset
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = '8 years',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+SELECT max_val::integer > 0 AS have_debug_discard_caches
+FROM pg_settings WHERE name = 'debug_discard_caches' \gset
+\if :have_debug_discard_caches
+SET debug_discard_caches = 1;
+\endif
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+RESET debug_discard_caches;
+\unset have_debug_discard_caches
+
+ANALYZE conditions;
+CREATE TABLE other(time timestamptz NOT NULL, value float);
+SELECT create_hypertable('other', 'time') \gset
+INSERT INTO other VALUES ('2026-09-01 00:00+00', 1);
+DROP TABLE other;
+INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2);
+INSERT INTO conditions VALUES ('2026-09-01 00:00+00', 'sensor_recent', 3);
+
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+SELECT tenant_id
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+  AND tenant_id IS NOT NULL
+ORDER BY tenant_id;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+RESET timescaledb.current_timestamp_mock;
+RESET client_min_messages;
+RESET timezone;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
