@@ -159,7 +159,7 @@ step "hd_settings" {
 
 # The disable inside a PL/pgSQL EXCEPTION handler.  Every block with a handler
 # runs in an implicit subtransaction, so the handler swallowing the error rolls
-# the DDL back while the surrounding transaction still commits 
+# the DDL back while the surrounding transaction still commits
 # The queued shared-memory free has to be discarded along with
 # the subtransaction, or the tracker is gone while its configuration row is back.
 session "HX"
@@ -189,6 +189,27 @@ setup { SET timezone TO 'UTC'; SET client_min_messages TO warning; }
 step "he_begin"  { BEGIN; }
 step "he_enable" { ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true); }
 step "he_commit" { COMMIT; }
+
+# Configures granular refresh on the hypertable again after a disable.
+session "HC"
+setup { SET client_min_messages TO warning; }
+step "hc_configure" {
+    ALTER TABLE conditions SET (
+        timescaledb.granular_refresh_column = 'sensor_id',
+        timescaledb.granular_refresh_start_offset = '2 years',
+        timescaledb.granular_refresh_end_offset = '1 day');
+}
+
+# A writer whose cached tracker handle outlives the tracker.  Mocks now() like
+# session P so the 2020 rows fall inside the window it seeds when it creates
+# the tracker.
+session "S"
+setup {
+    SET timezone TO 'UTC'; SET client_min_messages TO warning;
+    SET timescaledb.current_timestamp_mock = '2021-01-10 00:00:00+00';
+}
+step "s_insert_a" { INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1); }
+step "s_insert_b" { INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 'sensor_b', 2); }
 
 # The refresh alone: Txn2 must block on the row lock.  If it ever stopped taking
 # the lock this step would run straight through.
@@ -239,3 +260,13 @@ permutation "d_disable" "hd_begin" "hd_disable" "he_enable" "hd_commit" "hd_sett
 # with nothing to drain and r_tracking empty.  No cagg-level priming here, since
 # the flush needs cond_daily granular.
 permutation "p_prime_insert" "p_prime_refresh" "p_insert_late" "hx_exception" "hd_settings" "d_flag" "r_refresh" "r_tracking"
+
+# 6. A cached tracker handle outlives the tracker.  S writes and caches its
+# handle to the tracker; HD frees that tracker at commit; HC and HE configure
+# and enable granular refresh again, giving the hypertable a NEW tracker.  S's
+# next write must notice the relcache invalidation the disable sent and resolve
+# the new tracker instead of writing through the old handle.  r_tracking lists
+# only sensor_b: sensor_a sat in the freed tracker, which was never flushed.
+# Its invalidation carries a seqnum with no tracking rows, so the refresh falls
+# back to a full pass there and r_cagg_contents shows both tenants anyway.
+permutation "p_prime_insert" "p_prime_refresh" "s_insert_a" "d_disable" "hd_disable" "hd_settings" "hc_configure" "he_enable" "s_insert_b" "r_refresh" "r_tracking" "r_cagg_contents" "d_flag"

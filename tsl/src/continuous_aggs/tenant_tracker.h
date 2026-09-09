@@ -62,7 +62,7 @@ extern TenantTracking *ts_tenant_tracker_get_or_attach(int32 hypertable_id,
  * it inline in a DDL that later rolls back would restore the catalog while the
  * tracker stayed gone.  See the definition for the full contract.
  */
-extern void ts_tenant_tracker_remove_at_commit(int32 hypertable_id);
+extern void ts_tenant_tracker_remove_at_commit(int32 hypertable_id, Oid main_table_relid);
 
 extern void _tenant_tracker_init(void);
 extern void _tenant_tracker_fini(void);

@@ -406,3 +406,65 @@ ALTER MATERIALIZED VIEW meters_hourly SET (timescaledb.enable_granular_refresh =
 
 DROP MATERIALIZED VIEW meters_hourly;
 DROP TABLE meters;
+
+----------------------------------------------------------------------
+-- TEST: Disabling and the tenant tracker's shared memory
+--
+-- Everything below must stay in ONE session: the backend caches its
+-- resolved tracker pointer for its lifetime, and a reconnect would hide
+-- exactly what these cases exercise.
+----------------------------------------------------------------------
+
+CREATE TABLE readings (time timestamptz NOT NULL, sensor_id integer, value float8);
+SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE readings SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '0 days'
+);
+
+CREATE MATERIALIZED VIEW readings_hourly
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, sensor_id, avg(value) AS avg_value
+FROM readings
+GROUP BY bucket, sensor_id
+WITH NO DATA;
+
+ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh = true);
+
+-- Resolve and cache this backend's handle to the tracker.
+INSERT INTO readings VALUES (now(), 1, 1.0);
+
+-- A rolled back disable must leave the configuration in place. The free of
+-- the tracker's shared memory is also not freed
+BEGIN;
+ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh = false);
+ALTER TABLE readings SET (timescaledb.cagg_enable_granular_refresh = false);
+ROLLBACK;
+:GRC 'readings';
+:GRE 'readings_hourly';
+
+-- Tracking still works in this backend after the rollback.
+INSERT INTO readings VALUES (now(), 2, 2.0);
+
+-- Now commit a disable and configure again in the same backend. The commit
+-- frees the tracker, so the cached handle must be dropped. The backend needs
+-- to realloc the tracker now
+ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh = false);
+ALTER TABLE readings SET (timescaledb.cagg_enable_granular_refresh = false);
+:GRC 'readings';
+
+ALTER TABLE readings SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '0 days'
+);
+ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh = true);
+
+INSERT INTO readings VALUES (now(), 3, 3.0);
+
+CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
+SELECT count(*) FROM readings_hourly;
+
+DROP MATERIALIZED VIEW readings_hourly;
+DROP TABLE readings;
