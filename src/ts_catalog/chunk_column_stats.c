@@ -575,6 +575,7 @@ static Constraint *
 create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_table_relid,
 								  const char *name)
 {
+	/* LOOK HERE */
 	Constraint *constr = NULL;
 	Node *rangedef;
 	ColumnRef *colref;
