@@ -129,6 +129,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
+	.tenant_tracker_cache_invalidate = continuous_agg_tenant_tracker_cache_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_add_column = continuous_agg_add_column,
 	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
