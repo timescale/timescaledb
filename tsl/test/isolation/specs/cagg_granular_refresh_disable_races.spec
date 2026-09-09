@@ -126,6 +126,70 @@ step "d_flag" {
     WHERE user_view_name = 'cond_daily';
 }
 
+# ===========================================================================
+# ALTER TABLE <hypertable> SET (timescaledb.cagg_enable_granular_refresh = false)
+# against 1) vs DML and 2) vs. cagg-level enable.
+#
+# The shared setup above leaves cond_daily's own granular refresh enabled, but
+# the hypertable-level disable below refuses whenever any of its caggs has
+# granular refresh enabled. Every permutation in this section therefore primes
+# with "d_disable" to bring the cagg back to disabled before exercising the
+# hypertable-level race, matching the state these tests were written against.
+# ===========================================================================
+
+# Writes to the hypertable, holding RowExclusiveLock until it commits.
+session "HW"
+setup { SET timezone TO 'UTC'; SET client_min_messages TO warning; }
+step "hw_begin"  { BEGIN; }
+step "hw_insert" { INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1); }
+step "hw_commit" { COMMIT; }
+
+# The hypertable-level disable.
+session "HD"
+setup { SET timezone TO 'UTC'; SET client_min_messages TO warning; }
+step "hd_begin"   { BEGIN; }
+step "hd_disable" { ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false); }
+step "hd_commit"  { COMMIT; }
+step "hd_settings" {
+    SELECT count(*) AS settings_rows
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+    WHERE h.table_name = 'conditions';
+}
+
+# The disable inside a PL/pgSQL EXCEPTION handler.  Every block with a handler
+# runs in an implicit subtransaction, so the handler swallowing the error rolls
+# the DDL back while the surrounding transaction still commits 
+# The queued shared-memory free has to be discarded along with
+# the subtransaction, or the tracker is gone while its configuration row is back.
+session "HX"
+setup { SET timezone TO 'UTC'; SET client_min_messages TO warning; }
+step "hx_exception" {
+    DO $$
+    BEGIN
+        ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+        ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+        -- Abort only once the configuration really is cleared, so a disable that
+        -- silently did nothing would show up as settings_rows = 0 rather than
+        -- letting the permutation pass for the wrong reason.
+        IF NOT EXISTS (
+            SELECT 1 FROM _timescaledb_catalog.hypertable_cagg_settings s
+            JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+            WHERE h.table_name = 'conditions') THEN
+            RAISE EXCEPTION 'abort the subtransaction';
+        END IF;
+    EXCEPTION WHEN others THEN
+        NULL;
+    END $$;
+}
+
+# The cagg-level enable, the counterparty for the second lock.
+session "HE"
+setup { SET timezone TO 'UTC'; SET client_min_messages TO warning; }
+step "he_begin"  { BEGIN; }
+step "he_enable" { ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true); }
+step "he_commit" { COMMIT; }
+
 # The refresh alone: Txn2 must block on the row lock.  If it ever stopped taking
 # the lock this step would run straight through.
 permutation "p_prime_insert" "p_prime_refresh" "p_insert_late" "l_lock" "r_refresh" "l_unlock"
@@ -152,3 +216,26 @@ permutation "p_prime_insert" "p_prime_refresh" "p_insert_late" "l_lock" "d_disab
 # though the catalog now says disabled (d_flag is false).  That is safe: the
 # tracking rows the refresh consults were committed by Txn2
 permutation "p_prime_insert" "p_prime_refresh" "p_insert_late" "w_before_txn3_enable" "r_refresh" "d_disable" "w_before_txn3_release" "r_tracking" "r_cagg_contents" "d_flag"
+
+# 3. An open writing transaction blocks the hypertable-level disable.  If the
+# disable ever stopped taking AccessExclusiveLock this step would run straight
+# through, and the shared-memory release it guards would be unsafe.
+permutation "d_disable" "hw_begin" "hw_insert" "hd_disable" "hw_commit" "hd_settings"
+
+# 4a. Enable first: the hypertable-level disable waits on the hypertable
+# lock, then finds the cagg granular and refuses.  The configuration
+# survives.
+permutation "d_disable" "he_begin" "he_enable" "hd_disable" "he_commit" "hd_settings" "d_flag"
+
+# 4b. Disable first: the enable waits on the same lock, then finds no
+# configuration left and refuses.  The flag stays off.
+permutation "d_disable" "hd_begin" "hd_disable" "he_enable" "hd_commit" "hd_settings" "d_flag"
+
+# 5. The disable inside a PL/pgSQL EXCEPTION handler.  The subtransaction rolls
+# back and the surrounding transaction commits, so both the configuration row
+# and cond_daily's own flag come back.  The tracker has to come back with them:
+# r_refresh flushes the late arrivals in Txn2, and it can only find them if the
+# tracker outlived the swallowed exception -- freeing it would leave the flush
+# with nothing to drain and r_tracking empty.  No cagg-level priming here, since
+# the flush needs cond_daily granular.
+permutation "p_prime_insert" "p_prime_refresh" "p_insert_late" "hx_exception" "hd_settings" "d_flag" "r_refresh" "r_tracking"
