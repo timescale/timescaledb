@@ -385,7 +385,6 @@ constify_cagg_watermark(Query *parse)
 void
 cagg_sort_pushdown(Query *parse, int *cursor_opts)
 {
-	/* LOOK HERE */
 	ListCell *lc;
 
 	/* We dont optimize aggregations on top of caggs for now. */
