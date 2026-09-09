@@ -77,6 +77,7 @@ if(TMP_ENABLE_GRANULAR_REFRESH_TESTS AND CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     cagg_granular_refresh.spec
     cagg_granular_refresh_cleanup_races.spec
+    cagg_granular_refresh_disable_races.spec
     cagg_granular_refresh_seqnum_race.spec
     cagg_granular_refresh_precommit_abort.spec)
 endif()

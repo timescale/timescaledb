@@ -225,7 +225,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vacuum.sql)
 
   list(APPEND TEST_TEMPLATES attach_chunk.sql.in
-       compression_update_delete.sql.in deferredchunkscan.sql.in
+       compression_update_delete.sql.in deferredchunkappend.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)

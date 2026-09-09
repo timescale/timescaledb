@@ -51,7 +51,7 @@ ts_build_tlist_index(List *tlist)
 
 	/* Find the Vars and fill in the index array */
 	vinfo = itlist->vars;
-	foreach (l, tlist)
+	foreach(l, tlist)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(l);
 		if (tle->resjunk)
@@ -59,7 +59,7 @@ ts_build_tlist_index(List *tlist)
 
 		if (tle->expr && IsA(tle->expr, Var))
 		{
-			Var *var = (Var *) tle->expr;
+			Var		   *var = (Var *) tle->expr;
 
 			vinfo->varno = var->varno;
 			vinfo->varattno = var->varattno;
@@ -78,10 +78,10 @@ ts_build_tlist_index(List *tlist)
 static Var *
 search_indexed_tlist_for_var(Var *var, ts_indexed_tlist *itlist, int newvarno, int rtoffset)
 {
-	int varno = var->varno;
-	AttrNumber varattno = var->varattno;
+	int			varno = var->varno;
+	AttrNumber	varattno = var->varattno;
 	ts_tlist_vinfo *vinfo;
-	int i;
+	int			i;
 
 	vinfo = itlist->vars;
 	i = itlist->num_vars;
@@ -122,14 +122,14 @@ search_indexed_tlist_for_non_var(Expr *node, ts_indexed_tlist *itlist, int newva
 	if (tle)
 	{
 		/* Found a matching subplan output expression */
-		Var *newvar;
+		Var		   *newvar;
 
 		newvar = makeVarFromTargetEntry(newvarno, tle);
-		newvar->varnosyn = 0; /* wasn't ever a plain Var */
+		newvar->varnosyn = 0;	/* wasn't ever a plain Var */
 		newvar->varattnosyn = 0;
 		return newvar;
 	}
-	return NULL; /* no match */
+	return NULL;				/* no match */
 }
 
 static Node *

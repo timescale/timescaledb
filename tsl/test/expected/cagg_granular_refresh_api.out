@@ -204,9 +204,6 @@ FROM sensors
 GROUP BY bucket, sensor_id
 WITH NO DATA;
 ERROR:  cannot enable granular refresh while creating a continuous aggregate
--- Error: disabling is not supported.
-ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
-ERROR:  disabling granular refresh on a continuous aggregate is not supported
 -- Error: the raw hypertable has no granular refresh configuration yet.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 ERROR:  granular refresh is not configured on the hypertable
@@ -224,6 +221,33 @@ ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh 
  sensors_hourly | t
 
 -- Enabling again is a no-op, not an error.
+ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
+:GRE 'sensors_hourly';
+ user_view_name | granular_refresh_enabled 
+----------------+--------------------------
+ sensors_hourly | t
+
+-- Disabling flips the flag back; the hypertable configuration is left alone.
+ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
+:GRE 'sensors_hourly';
+ user_view_name | granular_refresh_enabled 
+----------------+--------------------------
+ sensors_hourly | f
+
+SELECT granular_refresh_column FROM _timescaledb_catalog.hypertable_cagg_settings
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'sensors');
+ granular_refresh_column 
+-------------------------
+ sensor_id
+
+-- Disabling again is a no-op, not an error.
+ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
+:GRE 'sensors_hourly';
+ user_view_name | granular_refresh_enabled 
+----------------+--------------------------
+ sensors_hourly | f
+
+-- Re-enabling works.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 :GRE 'sensors_hourly';
  user_view_name | granular_refresh_enabled 

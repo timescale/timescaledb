@@ -35,8 +35,8 @@
 List *
 ts_new_list(NodeTag type, int min_size)
 {
-	List *newlist;
-	int max_size;
+	List	   *newlist;
+	int			max_size;
 
 	Assert(min_size > 0);
 
@@ -79,7 +79,8 @@ ts_new_list(NodeTag type, int min_size)
 	max_size = min_size;
 #endif
 
-	newlist = (List *) palloc(offsetof(List, initial_elements) + (max_size * sizeof(ListCell)));
+	newlist = (List *) palloc(offsetof(List, initial_elements) +
+							  max_size * sizeof(ListCell));
 	newlist->type = type;
 	newlist->length = min_size;
 	newlist->max_length = max_size;

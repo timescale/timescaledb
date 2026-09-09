@@ -642,9 +642,7 @@ timescaledb_shmem_startup_hook(void)
 	ts_lwlocks_shmem_startup();
 	ts_tenant_tracker_shmem_startup();
 	ts_function_telemetry_shmem_startup();
-#if PG17_LT
 	ts_stats_shmem_startup();
-#endif
 }
 
 static void
@@ -660,9 +658,7 @@ timescaledb_shmem_request_hook(void)
 	ts_lwlocks_shmem_alloc();
 	ts_tenant_tracker_shmem_alloc();
 	ts_function_telemetry_shmem_alloc();
-#if PG17_LT
 	ts_stats_shmem_request();
-#endif
 }
 
 static void
