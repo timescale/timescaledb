@@ -161,6 +161,9 @@ jobs:
         else
           patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG18GE.patch
         fi
+        # Add the debug_deny_setting_changes guard.
+        patch -F5 -p1 -d ~/$PG_SRC_DIR \
+          < .github/workflows/llm-fuzzer/postgres-deny-setting-changes.patch
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
@@ -334,6 +337,7 @@ jobs:
         psql -c "create extension timescaledb;"
 
         printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
+        printf 'set debug_deny_setting_changes = on;\n' >> restricted-repro.sql
         cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
 
         PSQLRC=oracle-psqlrc

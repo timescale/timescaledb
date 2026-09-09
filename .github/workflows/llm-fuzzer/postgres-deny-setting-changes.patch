@@ -1,0 +1,100 @@
+diff --git a/src/backend/utils/misc/guc.c b/src/backend/utils/misc/guc.c
+index ce5449f2878..1fab478ae7e 100644
+--- a/src/backend/utils/misc/guc.c
++++ b/src/backend/utils/misc/guc.c
+@@ -2004,6 +2004,11 @@ ResetAllOptions(void)
+ {
+ 	dlist_mutable_iter iter;
+ 
++	if (Debug_deny_setting_changes)
++		ereport(ERROR,
++				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
++				 errmsg("RESET ALL is rejected by debug_deny_setting_changes")));
++
+ 	/* We need only consider GUCs not already at PGC_S_DEFAULT */
+ 	dlist_foreach_modify(iter, &guc_nondef_list)
+ 	{
+@@ -3414,6 +3419,13 @@ set_config_with_handle(const char *name, config_handle *handle,
+ 	bool		prohibitValueChange = false;
+ 	bool		makeDefault;
+ 
++	if (Debug_deny_setting_changes && IsUnderPostmaster &&
++		source == PGC_S_TEST)
++		ereport(ERROR,
++				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
++				 errmsg("changing parameter \"%s\" is rejected by debug_deny_setting_changes",
++						name)));
++
+ 	if (elevel == 0)
+ 	{
+ 		if (source == PGC_S_DEFAULT || source == PGC_S_FILE)
+diff --git a/src/backend/utils/misc/guc_funcs.c b/src/backend/utils/misc/guc_funcs.c
+index b9e26982abd..70e2834826b 100644
+--- a/src/backend/utils/misc/guc_funcs.c
++++ b/src/backend/utils/misc/guc_funcs.c
+@@ -44,6 +44,12 @@ ExecSetVariableStmt(VariableSetStmt *stmt, bool isTopLevel)
+ {
+ 	GucAction	action = stmt->is_local ? GUC_ACTION_LOCAL : GUC_ACTION_SET;
+ 
++	if (Debug_deny_setting_changes)
++		ereport(ERROR,
++				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
++				 errmsg("SET %s is rejected by debug_deny_setting_changes",
++						stmt->name ? stmt->name : "(all)")));
++
+ 	/*
+ 	 * Workers synchronize these parameters at the start of the parallel
+ 	 * operation; then, we block SET during the operation.
+@@ -336,6 +342,11 @@ set_config_by_name(PG_FUNCTION_ARGS)
+ 	char	   *new_value;
+ 	bool		is_local;
+ 
++	if (Debug_deny_setting_changes)
++		ereport(ERROR,
++				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
++				 errmsg("set_config() is rejected by debug_deny_setting_changes")));
++
+ 	if (PG_ARGISNULL(0))
+ 		ereport(ERROR,
+ 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+diff --git a/src/backend/utils/misc/guc_tables.c b/src/backend/utils/misc/guc_tables.c
+index 7cab4c735c2..c9888feb40a 100644
+--- a/src/backend/utils/misc/guc_tables.c
++++ b/src/backend/utils/misc/guc_tables.c
+@@ -520,6 +520,7 @@ bool		Debug_print_parse = false;
+ bool		Debug_print_rewritten = false;
+ bool		Debug_pretty_print = true;
+ 
++bool		Debug_deny_setting_changes;
+ #ifdef DEBUG_NODE_TESTS_ENABLED
+ bool		Debug_copy_parse_plan_trees;
+ bool		Debug_write_read_parse_plan_trees;
+@@ -1360,6 +1361,16 @@ struct config_bool ConfigureNamesBool[] =
+ #endif
+ 		NULL, NULL, NULL
+ 	},
++	{
++		{"debug_deny_setting_changes", PGC_USERSET, DEVELOPER_OPTIONS,
++			gettext_noop("Rejects session-origin changes to configuration parameters."),
++			NULL,
++			GUC_NOT_IN_SAMPLE | GUC_NO_RESET_ALL
++		},
++		&Debug_deny_setting_changes,
++		false,
++		NULL, NULL, NULL
++	},
+ 	{
+ 		{"debug_write_read_parse_plan_trees", PGC_SUSET, DEVELOPER_OPTIONS,
+ 			gettext_noop("Set this to force all parse and plan trees to be passed through "
+diff --git a/src/include/utils/guc.h b/src/include/utils/guc.h
+index 27f31404fff..f2ece9d5003 100644
+--- a/src/include/utils/guc.h
++++ b/src/include/utils/guc.h
+@@ -250,6 +250,7 @@ extern PGDLLIMPORT bool Debug_print_parse;
+ extern PGDLLIMPORT bool Debug_print_rewritten;
+ extern PGDLLIMPORT bool Debug_pretty_print;
+ 
++extern PGDLLIMPORT bool Debug_deny_setting_changes;
+ #ifdef DEBUG_NODE_TESTS_ENABLED
+ extern PGDLLIMPORT bool Debug_copy_parse_plan_trees;
+ extern PGDLLIMPORT bool Debug_write_read_parse_plan_trees;
