@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-	/* LOOK HERE */
 
 /*
  * Common parts for vectorized sum(float).
