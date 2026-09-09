@@ -1232,7 +1232,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				 * abstracted representation.
 				 */
 
-	/* LOOK HERE */
 				Oid sortop = get_opfamily_member(pk->pk_opfamily,
 												 var->vartype,
 												 var->vartype,
