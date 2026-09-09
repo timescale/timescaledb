@@ -185,6 +185,7 @@
 
 #include "debug_assert.h"
 #include "debug_point.h"
+#include "insert.h"
 #include "loader/tenant_tracker_shmem.h"
 #include "tenant_tracker.h"
 #include "ts_catalog/continuous_aggs_tenant_tracking.h"
@@ -904,12 +905,9 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
  *     transactional, so a DDL that rolls back would restore the catalog while
  *     the tracker stayed freed.
  *
- * Backends that already resolved this tracker cache the raw pointer for their
- * lifetime (tenant_tracker_resolved_htab in insert.c); they must be invalidated
- * separately.
- *
- * Note: dsa_free returns the pages to the segment's free page manager, so
- * DSA can reuse it. Memory is not reclaimed by the OS.
+ * Backends that already resolved this tracker cache the raw pointer
+ * (tenant_tracker_resolved_htab in insert.c).  The DDL invalidates the
+ * hypertable's relcache entry so they drop it; see remove_at_commit below.
  */
 static bool
 tenant_tracker_remove(int32 hypertable_id)
@@ -967,6 +965,7 @@ tenant_tracker_remove(int32 hypertable_id)
 typedef struct PendingTrackerRemoval
 {
 	int32 hypertable_id;
+	Oid main_table_relid; /* key of this backend's resolved-tracker cache */
 	SubTransactionId subxid;
 } PendingTrackerRemoval;
 
@@ -986,15 +985,21 @@ pending_removals_reset(void)
  * The caller must hold AccessExclusiveLock on the raw hypertable and
  * delete entry from hypertable_cagg_settings that turns tracking off
  *
- * Note: we call dsa_attach here as it can throw and do not want to throw
+ * Note: we call dsa_attach here as it can throw. We should not throw
  * during the actual commit callback
  *
- * CALLER CONTRACT: the caller must also change hypertable_cagg_settings in
- * this txn, this triggers a cache invalidation message and tells other
- * backends to invalidate any cached tenant_tracker poiner
+ * CALLER CONTRACT: the caller must also delete the hypertable_cagg_settings row
+ * and call CacheInvalidateRelcacheByRelid(main_table_relid) in this txn.  The
+ * relcache message tells other backends to drop their cached pointer to this
+ * tracker (continuous_agg_tenant_tracker_cache_invalidate in insert.c).
+ * Why this works: the txn holds AccessExclusiveLock on the hypertable until
+ * after the message is sent (so no other user of the tracker is alive), and any
+ * backend that later wants the tracker must first lock the hypertable (DML takes
+ * RowExclusiveLock), which makes LockRelationOid process the message.  So the
+ * invalidation is never missed.
  */
 void
-ts_tenant_tracker_remove_at_commit(int32 hypertable_id)
+ts_tenant_tracker_remove_at_commit(int32 hypertable_id, Oid main_table_relid)
 {
 	MemoryContext oldcxt;
 	PendingTrackerRemoval *pending;
@@ -1017,6 +1022,7 @@ ts_tenant_tracker_remove_at_commit(int32 hypertable_id)
 	oldcxt = MemoryContextSwitchTo(TopMemoryContext);
 	pending = palloc(sizeof(*pending));
 	pending->hypertable_id = hypertable_id;
+	pending->main_table_relid = main_table_relid;
 	pending->subxid = GetCurrentSubTransactionId();
 	pending_removals = lappend(pending_removals, pending);
 	MemoryContextSwitchTo(oldcxt);
@@ -1049,7 +1055,14 @@ tenant_tracker_removal_xact_callback(XactEvent event, void *arg)
 		case XACT_EVENT_COMMIT:
 			foreach (lc, pending_removals)
 			{
-				tenant_tracker_remove(((PendingTrackerRemoval *) lfirst(lc))->hypertable_id);
+				PendingTrackerRemoval *pending = lfirst(lc);
+
+				tenant_tracker_remove(pending->hypertable_id);
+				/* Other backends learn of the free from the relcache invalidation
+				 * the DDL sent.  This backend only reads its own message back from
+				 * the shared queue at its next lock acquisition, so mark its cached
+				 * pointer stale directly, from the moment of the free. */
+				continuous_agg_tenant_tracker_cache_invalidate(pending->main_table_relid);
 			}
 			pending_removals_reset();
 			break;
@@ -1066,10 +1079,16 @@ tenant_tracker_removal_xact_callback(XactEvent event, void *arg)
 }
 
 /*
- * If subtxn rolls back, it undoes the catalog change that queued the removal,
- * so drop any entries that subtransaction added.  Note the hypertable lock
- * is not released here -- subtransaction locks are reassigned to the parent
- * to top-level end .
+ * Keep each queued removal owned by the subtransaction its catalog change
+ * currently belongs to, the way AtEOSubXact_on_commit_actions does for
+ * ON COMMIT actions.
+ *
+ * On subtransaction commit the catalog change becomes the parent's, so the
+ * entry is re-parented; without this a later rollback of the parent would undo
+ * the DDL but leave the free queued.  On subtransaction abort the catalog
+ * change is undone, so the entries it owns are dropped.  The hypertable lock is
+ * not released on abort -- subtransaction locks are reassigned to the parent
+ * until top-level end.
  */
 static void
 tenant_tracker_removal_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
@@ -1077,20 +1096,40 @@ tenant_tracker_removal_subxact_callback(SubXactEvent event, SubTransactionId myS
 {
 	ListCell *lc;
 
-	if (event != SUBXACT_EVENT_ABORT_SUB || pending_removals == NIL)
+	if (pending_removals == NIL)
 	{
 		return;
 	}
 
-	foreach (lc, pending_removals)
+	switch (event)
 	{
-		PendingTrackerRemoval *pending = lfirst(lc);
+		case SUBXACT_EVENT_COMMIT_SUB:
+			foreach (lc, pending_removals)
+			{
+				PendingTrackerRemoval *pending = lfirst(lc);
 
-		if (pending->subxid == mySubid)
-		{
-			pending_removals = foreach_delete_current(pending_removals, lc);
-			pfree(pending);
-		}
+				if (pending->subxid == mySubid)
+				{
+					pending->subxid = parentSubid;
+				}
+			}
+			break;
+
+		case SUBXACT_EVENT_ABORT_SUB:
+			foreach (lc, pending_removals)
+			{
+				PendingTrackerRemoval *pending = lfirst(lc);
+
+				if (pending->subxid == mySubid)
+				{
+					pending_removals = foreach_delete_current(pending_removals, lc);
+					pfree(pending);
+				}
+			}
+			break;
+
+		default:
+			break;
 	}
 }
 
