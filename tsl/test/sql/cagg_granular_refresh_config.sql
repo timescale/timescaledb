@@ -653,3 +653,62 @@ ORDER BY 1;
 DROP MATERIALIZED VIEW crossed_hourly;
 DROP TABLE crossed;
 RESET timezone;
+
+-- TEST 7: the disable inside a PL/pgSQL EXCEPTION block that never raises.
+-- A block with a handler always runs in a subtransaction, so the successful
+-- path ends in SUBXACT_EVENT_COMMIT_SUB.  
+-- queued tenant tracker free request must survive sub transaction commit and be
+-- applied by the top level commit.
+SET timezone TO 'UTC';
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- Creates the tracker.
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT count(*) AS tracker_entries_before
+FROM _timescaledb_functions.tenant_tracking_map() m
+JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
+WHERE h.table_name = 'conditions';
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- subtransaction commits successfully 
+DO $$
+BEGIN
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+    ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+EXCEPTION WHEN others THEN
+    RAISE;
+END $$;
+
+SELECT count(*) AS settings_rows
+FROM _timescaledb_catalog.hypertable_cagg_settings s
+JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+WHERE h.table_name = 'conditions';
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Must be zero 
+SELECT count(*) AS tracker_entries_after
+FROM _timescaledb_functions.tenant_tracking_map() m
+JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
+WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
+  AND h.table_name = 'conditions';
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+RESET timezone;
