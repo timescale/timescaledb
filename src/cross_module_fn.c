@@ -17,10 +17,7 @@
 
 #define CROSSMODULE_WRAPPER(func)                                                                  \
 	TS_FUNCTION_INFO_V1(ts_##func);                                                                \
-	Datum ts_##func(PG_FUNCTION_ARGS)                                           \
-	{                                                                                              \
-		PG_RETURN_DATUM(ts_cm_functions->func(fcinfo));                                            \
-	}
+	Datum ts_##func(PG_FUNCTION_ARGS) { PG_RETURN_DATUM(ts_cm_functions->func(fcinfo)); }
 
 /* bgw policy functions */
 CROSSMODULE_WRAPPER(policy_compression_add);

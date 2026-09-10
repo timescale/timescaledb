@@ -356,7 +356,7 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	 *
 	 * The workers later pick up these results in chunk_append_initialize_worker().
 	 *
-	 * The force_parallel_mode debug GUC can run a non-parallel_aware
+	 * The debug_parallel_query debug GUC can run a non-parallel_aware
 	 * ChunkAppend inside a parallel worker. There's no actual parallelism
 	 * happening, so we must follow the usual single-process approach. We
 	 * recognize this case by the parallel_aware flag being false.

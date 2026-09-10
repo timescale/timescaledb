@@ -258,8 +258,41 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 													dimtype);
 			applicable = true;
 		}
+
+		/*
+		 * The offsets are compared against each other as microseconds when the
+		 * settings are validated and stored (a month counts as 30 days, a day as 24 hours),
+		 * while the bounds above come from calendar-aware subtraction. Therefore,
+		 * at runtime depending on now(), end offset can endup smaller than start
+		 * offset. For example, "1 month" end offset is smaller than
+		 * "29 days" start offset in February, while is valid with a general 30-day
+		 * month assumption. Similar for a 23-day when clock moves forward in Spring
+		 * offset in days, or a 23 hour day across a DST spring forward. In such a
+		 * case, treat the late window as empty: no tenant is recorded
+		 * into the generation and every invalidation keeps seqnum 0, which is the
+		 * full-refresh path.
+		 *
+		 * The applicable check separates a window that was computed and came out
+		 * crossed from one that was never computed at all -- an integer dimension
+		 * with no integer_now, say -- where the bounds are still the empty
+		 * sentinels and would compare the same way.
+		 */
+		if (applicable && *window_start >= *window_end)
+		{
+			ereport(LOG,
+					(errmsg("per-tenant tracking window for hypertable \"%s.%s\" is empty",
+							NameStr(ht->fd.schema_name),
+							NameStr(ht->fd.table_name)),
+					 errdetail("The configured offsets resolve to a window start at or after its "
+							   "end."),
+					 errhint("No tenant is tracked while the window is empty; continuous aggregate "
+							 "refreshes fall back to the full invalidation log.")));
+			*window_start = PG_INT64_MAX;
+			*window_end = PG_INT64_MIN;
+		}
 	}
 	ts_cache_release(&ht_cache);
+
 	return applicable;
 }
 

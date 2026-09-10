@@ -92,6 +92,6 @@ set enable_seqscan=0;
 reset enable_seqscan;
 
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';

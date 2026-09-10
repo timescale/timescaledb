@@ -122,9 +122,9 @@ SELECT * FROM agg_data ORDER BY device;
 SELECT * FROM agg_data ORDER BY device;
 
 -- test parallel queries (not supported with ColumnarIndexScan)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 
 -- test with UNION ALL (Append node)
 :PREFIX SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
