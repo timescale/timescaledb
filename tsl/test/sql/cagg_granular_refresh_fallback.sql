@@ -201,9 +201,7 @@ WHERE hypertable_id = (
   AND tenant_id IS NULL;
 
 DROP MATERIALIZED VIEW cond_untracked_daily;
-DROP MATERIALIZED VIEW cond_daily;
 DROP TABLE conditions_untracked;
-DROP TABLE conditions;
 
 -- ============================================================================
 -- Outside the late-arrival window: an invalidation entry disjoint from the
@@ -301,5 +299,47 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regc
 -- Every group is materialized correctly across the disable and re-enable.
 SELECT sensor_id, avg FROM readings_daily ORDER BY sensor_id;
 
+-- ============================================================================
+-- Two tracked hypertables in one transaction: a tenant that cannot be stored
+-- on one of them must not disturb the other's tracker.  `conditions` is kept
+-- alive past its own sections for this, and 2022-09-01 is inside both
+-- late-arrival windows -- [2019-01-01, today - 1 day] for `conditions` and
+-- [2021-01-01, 2023-01-01) for `readings` -- so both sides are tracked.
+-- ============================================================================
+BEGIN;
+INSERT INTO conditions VALUES ('2022-09-01 00:00+00', 'paired', 10),
+                              ('2022-09-01 00:00+00', NULL, 20);
+INSERT INTO readings VALUES ('2022-09-01 00:00+00', 'paired', 30);
+COMMIT;
+
+-- conditions: the NULL tenant tripped its generation INVALID, which also
+-- discards the storable tenant buffered alongside it.
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::regclass);
+
+-- readings: unaffected by the other hypertable's failure -- still VALID with
+-- its own tenant tracked.
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass);
+
+-- Same split in the log: conditions' entry is untracked (NULL seqnum) and falls
+-- back, readings' entry keeps a live seqnum and stays granular.
+SELECT ca.user_view_name::text AS cagg, l.seqnum IS NOT NULL AS tracked
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+JOIN _timescaledb_catalog.continuous_agg ca ON ca.raw_hypertable_id = l.hypertable_id
+WHERE l.lowest_modified_value =
+      _timescaledb_functions.to_unix_microseconds('2022-09-01 00:00+00'::timestamptz)
+ORDER BY 1;
+
+-- Both materialize correctly, one via the fall back and one via the granular path.
+CALL refresh_continuous_aggregate('cond_daily', '2022-09-01 00:00+00', '2022-09-02 00:00+00');
+CALL refresh_continuous_aggregate('readings_daily', '2022-09-01 00:00+00', '2022-09-02 00:00+00');
+SELECT sensor_id, avg FROM cond_daily
+WHERE bucket = '2022-09-01 00:00+00' ORDER BY sensor_id NULLS LAST;
+SELECT sensor_id, avg FROM readings_daily
+WHERE bucket = '2022-09-01 00:00+00' ORDER BY sensor_id;
+
 DROP MATERIALIZED VIEW readings_daily;
+DROP MATERIALIZED VIEW cond_daily;
 DROP TABLE readings;
+DROP TABLE conditions;

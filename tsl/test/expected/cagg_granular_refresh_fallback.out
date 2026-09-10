@@ -230,10 +230,7 @@ WHERE hypertable_id = (
 
 DROP MATERIALIZED VIEW cond_untracked_daily;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_14_chunk
-DROP MATERIALIZED VIEW cond_daily;
-NOTICE:  drop cascades to 6 other objects
 DROP TABLE conditions_untracked;
-DROP TABLE conditions;
 -- ============================================================================
 -- Outside the late-arrival window: an invalidation entry disjoint from the
 -- window has no tracking entries behind it, so its seqnum is NULL and the
@@ -353,6 +350,66 @@ SELECT sensor_id, avg FROM readings_daily ORDER BY sensor_id;
  inside_window  |   2
  while_disabled |   4
 
+-- ============================================================================
+-- Two tracked hypertables in one transaction: a tenant that cannot be stored
+-- on one of them must not disturb the other's tracker.  `conditions` is kept
+-- alive past its own sections for this, and 2022-09-01 is inside both
+-- late-arrival windows -- [2019-01-01, today - 1 day] for `conditions` and
+-- [2021-01-01, 2023-01-01) for `readings` -- so both sides are tracked.
+-- ============================================================================
+BEGIN;
+INSERT INTO conditions VALUES ('2022-09-01 00:00+00', 'paired', 10),
+                              ('2022-09-01 00:00+00', NULL, 20);
+INSERT INTO readings VALUES ('2022-09-01 00:00+00', 'paired', 30);
+COMMIT;
+-- conditions: the NULL tenant tripped its generation INVALID, which also
+-- discards the storable tenant buffered alongside it.
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::regclass);
+ nentries | status 
+----------+--------
+        0 |      1
+
+-- readings: unaffected by the other hypertable's failure -- still VALID with
+-- its own tenant tracked.
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass);
+ nentries | status 
+----------+--------
+        1 |      0
+
+-- Same split in the log: conditions' entry is untracked (NULL seqnum) and falls
+-- back, readings' entry keeps a live seqnum and stays granular.
+SELECT ca.user_view_name::text AS cagg, l.seqnum IS NOT NULL AS tracked
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+JOIN _timescaledb_catalog.continuous_agg ca ON ca.raw_hypertable_id = l.hypertable_id
+WHERE l.lowest_modified_value =
+      _timescaledb_functions.to_unix_microseconds('2022-09-01 00:00+00'::timestamptz)
+ORDER BY 1;
+      cagg      | tracked 
+----------------+---------
+ cond_daily     | f
+ readings_daily | t
+
+-- Both materialize correctly, one via the fall back and one via the granular path.
+CALL refresh_continuous_aggregate('cond_daily', '2022-09-01 00:00+00', '2022-09-02 00:00+00');
+CALL refresh_continuous_aggregate('readings_daily', '2022-09-01 00:00+00', '2022-09-02 00:00+00');
+SELECT sensor_id, avg FROM cond_daily
+WHERE bucket = '2022-09-01 00:00+00' ORDER BY sensor_id NULLS LAST;
+ sensor_id | avg 
+-----------+-----
+ paired    |  10
+           |  20
+
+SELECT sensor_id, avg FROM readings_daily
+WHERE bucket = '2022-09-01 00:00+00' ORDER BY sensor_id;
+ sensor_id | avg 
+-----------+-----
+ paired    |  30
+
 DROP MATERIALIZED VIEW readings_daily;
 NOTICE:  drop cascades to 4 other objects
+DROP MATERIALIZED VIEW cond_daily;
+NOTICE:  drop cascades to 7 other objects
 DROP TABLE readings;
+DROP TABLE conditions;
