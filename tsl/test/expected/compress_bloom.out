@@ -1735,6 +1735,230 @@ ON CONFLICT (device_id, metric, ts) DO NOTHING;
 
 DROP TABLE explain_partial CASCADE;
 -------------------------------------------------------------------
+-- Upsert with more than one unique constraint
+-------------------------------------------------------------------
+CREATE TABLE multi_unique(
+    ts timestamptz NOT NULL,
+    sensor_id int NOT NULL,
+    probe_id int NOT NULL,
+    UNIQUE (sensor_id, ts),
+    UNIQUE (probe_id, ts)
+);
+SELECT create_hypertable('multi_unique', 'ts');
+     create_hypertable      
+----------------------------
+ (16,public,multi_unique,t)
+
+ALTER TABLE multi_unique SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(sensor_id), bloom(probe_id)'
+);
+WARNING:  column "sensor_id" should be used for segmenting or ordering
+WARNING:  column "probe_id" should be used for segmenting or ordering
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 50, 50);
+SELECT compress_chunk(c) FROM show_chunks('multi_unique') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_16_27_chunk
+
+-- The new row does not conflict on the arbiter (sensor_id, ts) but does
+-- conflict on (probe_id, ts), so it has to be rejected.
+\set ON_ERROR_STOP 0
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 999, 50)
+ON CONFLICT (sensor_id, ts) DO NOTHING;
+ERROR:  duplicate key value violates unique constraint "27_multi_unique_probe_id_ts_key"
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 999, 50)
+ON CONFLICT (sensor_id, ts) DO UPDATE SET probe_id = EXCLUDED.probe_id;
+ERROR:  duplicate key value violates unique constraint "27_multi_unique_probe_id_ts_key"
+-- Same the other way around.
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 50, 999)
+ON CONFLICT (probe_id, ts) DO NOTHING;
+ERROR:  duplicate key value violates unique constraint "27_multi_unique_sensor_id_ts_key"
+\set ON_ERROR_STOP 1
+-- No conflict on either constraint. The bloom columns are not shared by both
+-- constraints so the batch has to be scanned without bloom pruning.
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 999, 999)
+ON CONFLICT (sensor_id, ts) DO NOTHING;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Insert on multi_unique (actual rows=0.00 loops=1)
+         Conflict Resolution: NOTHING
+         Conflict Arbiter Indexes: multi_unique_sensor_id_ts_key
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         ->  Result (actual rows=1.00 loops=1)
+
+-- Conflict on the arbiter itself is still handled.
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 50, 50)
+ON CONFLICT (sensor_id, ts) DO NOTHING;
+SELECT * FROM multi_unique ORDER BY sensor_id;
+              ts              | sensor_id | probe_id 
+------------------------------+-----------+----------
+ Wed Jan 10 00:50:00 2024 PST |        50 |       50
+ Wed Jan 10 00:50:00 2024 PST |       999 |      999
+
+DROP TABLE multi_unique CASCADE;
+-------------------------------------------------------------------
+-- A bloom column shared by every unique constraint can still prune.
+CREATE TABLE multi_unique_shared(
+    ts timestamptz NOT NULL,
+    device_id int NOT NULL,
+    tag_a int NOT NULL,
+    tag_b int NOT NULL,
+    UNIQUE (device_id, tag_a, ts),
+    UNIQUE (device_id, tag_b, ts)
+);
+SELECT create_hypertable('multi_unique_shared', 'ts');
+         create_hypertable         
+-----------------------------------
+ (17,public,multi_unique_shared,t)
+
+ALTER TABLE multi_unique_shared SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(device_id)'
+);
+WARNING:  column "device_id" should be used for segmenting or ordering
+WARNING:  column "tag_a" should be used for segmenting or ordering
+WARNING:  column "device_id" should be used for segmenting or ordering
+WARNING:  column "tag_b" should be used for segmenting or ordering
+INSERT INTO multi_unique_shared
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i % 10, i, i
+FROM generate_series(1, 1000) i;
+SELECT compress_chunk(c) FROM show_chunks('multi_unique_shared') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_17_28_chunk
+
+-- device_id 999 is in no batch, so no row can conflict on either constraint.
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO multi_unique_shared VALUES ('2024-01-01 00:05:00', 999, 1, 1)
+ON CONFLICT (device_id, tag_a, ts) DO NOTHING;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
+   Batches checked by bloom: 1
+   Batches pruned by bloom: 1
+   ->  Insert on multi_unique_shared (actual rows=0.00 loops=1)
+         Conflict Resolution: NOTHING
+         Conflict Arbiter Indexes: multi_unique_shared_device_id_tag_a_ts_key
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         ->  Result (actual rows=1.00 loops=1)
+
+-- device_id 5 is in the batch and tag_b collides there.
+\set ON_ERROR_STOP 0
+INSERT INTO multi_unique_shared VALUES ('2024-01-01 00:05:00', 5, 999, 5)
+ON CONFLICT (device_id, tag_a, ts) DO NOTHING;
+ERROR:  duplicate key value violates unique constraint "28_multi_unique_shared_device_id_tag_b_ts_key"
+\set ON_ERROR_STOP 1
+DROP TABLE multi_unique_shared CASCADE;
+-------------------------------------------------------------------
+-- A composite bloom filter spanning a shared column and a column only
+-- one constraint has cannot prune either.
+CREATE TABLE multi_unique_composite(
+    ts timestamptz NOT NULL,
+    a int NOT NULL,
+    x int NOT NULL,
+    y int NOT NULL,
+    UNIQUE (a, x, ts),
+    UNIQUE (a, y, ts)
+);
+SELECT create_hypertable('multi_unique_composite', 'ts');
+          create_hypertable           
+--------------------------------------
+ (18,public,multi_unique_composite,t)
+
+ALTER TABLE multi_unique_composite SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(a, x)'
+);
+WARNING:  column "a" should be used for segmenting or ordering
+WARNING:  column "x" should be used for segmenting or ordering
+WARNING:  column "a" should be used for segmenting or ordering
+WARNING:  column "y" should be used for segmenting or ordering
+INSERT INTO multi_unique_composite VALUES ('2024-01-01 00:05', 1, 10, 100);
+SELECT compress_chunk(c) FROM show_chunks('multi_unique_composite') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_18_29_chunk
+
+-- (a, x) = (1, 999) is in no batch but (a, y) = (1, 100) conflicts
+\set ON_ERROR_STOP 0
+INSERT INTO multi_unique_composite VALUES ('2024-01-01 00:05', 1, 999, 100)
+ON CONFLICT (a, x, ts) DO NOTHING;
+ERROR:  duplicate key value violates unique constraint "29_multi_unique_composite_a_y_ts_key"
+\set ON_ERROR_STOP 1
+DROP TABLE multi_unique_composite CASCADE;
+-------------------------------------------------------------------
+-- A composite bloom filter inside the shared columns can still prune.
+CREATE TABLE multi_unique_composite_shared(
+    ts timestamptz NOT NULL,
+    a int NOT NULL,
+    b int NOT NULL,
+    x int NOT NULL,
+    y int NOT NULL,
+    UNIQUE (a, b, x, ts),
+    UNIQUE (a, b, y, ts)
+);
+SELECT create_hypertable('multi_unique_composite_shared', 'ts');
+              create_hypertable              
+---------------------------------------------
+ (19,public,multi_unique_composite_shared,t)
+
+ALTER TABLE multi_unique_composite_shared SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(a, b)'
+);
+WARNING:  column "a" should be used for segmenting or ordering
+WARNING:  column "b" should be used for segmenting or ordering
+WARNING:  column "x" should be used for segmenting or ordering
+WARNING:  column "a" should be used for segmenting or ordering
+WARNING:  column "b" should be used for segmenting or ordering
+WARNING:  column "y" should be used for segmenting or ordering
+INSERT INTO multi_unique_composite_shared
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i % 10, i % 7, i, i
+FROM generate_series(1, 1000) i;
+SELECT compress_chunk(c) FROM show_chunks('multi_unique_composite_shared') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_19_30_chunk
+
+-- (a, b) = (999, 999) is in no batch, so no row can conflict on either constraint
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO multi_unique_composite_shared VALUES ('2024-01-01 00:05', 999, 999, 1, 1)
+ON CONFLICT (a, b, x, ts) DO NOTHING;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
+   Batches checked by bloom: 1
+   Batches pruned by bloom: 1
+   ->  Insert on multi_unique_composite_shared (actual rows=0.00 loops=1)
+         Conflict Resolution: NOTHING
+         Conflict Arbiter Indexes: multi_unique_composite_shared_a_b_x_ts_key
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         ->  Result (actual rows=1.00 loops=1)
+
+-- (a, b) is in the batch and y collides there
+\set ON_ERROR_STOP 0
+INSERT INTO multi_unique_composite_shared VALUES ('2024-01-01 00:05', 5, 5, 999, 5)
+ON CONFLICT (a, b, x, ts) DO NOTHING;
+ERROR:  duplicate key value violates unique constraint "30_multi_unique_composite_shared_a_b_y_ts_key"
+\set ON_ERROR_STOP 1
+DROP TABLE multi_unique_composite_shared CASCADE;
+-------------------------------------------------------------------
 -- Hashed bloom filters over various column types
 -------------------------------------------------------------------
 create table hashes(ts int,
@@ -1801,7 +2025,7 @@ INSERT INTO int2_crosstype SELECT i, (-1 * (i % 100))::smallint, i % 100 FROM ge
 SELECT compress_chunk(c) FROM show_chunks('int2_crosstype') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_17_28_chunk
+ _timescaledb_internal._hyper_21_32_chunk
 
 SELECT count(*) FROM int2_crosstype WHERE i2 = 1::smallint;
  count 
