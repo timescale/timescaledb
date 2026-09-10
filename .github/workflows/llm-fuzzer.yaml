@@ -244,8 +244,8 @@ jobs:
         jq -r 'select(.type == "result") | "## ${{ matrix.display_name }} Fuzzer\n\n"
           + (.result // "No result produced.")
           + "\n\n**Cost:** $\(.total_cost_usd // 0 | tostring) | **Duration:** \((.duration_ms // 0) / 1000 | tostring)s | **Turns:** \(.num_turns // 0)"' \
-          ${{ runner.temp }}/claude-execution-output.json \
-          | tee -a ~/fuzzer-summary.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          ${{ runner.temp }}/claude-execution-output.json 2>/dev/null \
+          | tee -a ~/fuzzer-summary.txt >> "$GITHUB_STEP_SUMMARY" || true
 
         if [ -f ~/llm-fuzzer-repro.sql ]; then
           printf '\n## Reproducer\n\n```sql\n' >> "$GITHUB_STEP_SUMMARY"
