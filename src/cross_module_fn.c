@@ -292,6 +292,12 @@ tenant_tracker_cache_invalidate_default(Oid relid)
 	/* No op in community licensed code */
 }
 
+static void
+tenant_tracker_remove_at_commit_default(int32 hypertable_id, Oid main_table_relid)
+{
+	/* No op in community licensed code: nothing is tracked without TSL. */
+}
+
 static PGFunction
 bloom1_get_hash_function_default(Oid type, FmgrInfo **finfo)
 {
@@ -366,6 +372,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
 	.tenant_tracker_cache_invalidate = tenant_tracker_cache_invalidate_default,
+	.tenant_tracker_remove_at_commit = tenant_tracker_remove_at_commit_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_add_column = continuous_agg_add_column_default,
 	.continuous_agg_apply_rewrites_tsl = NULL,

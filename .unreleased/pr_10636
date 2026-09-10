@@ -1,0 +1,1 @@
+Implements: #10636 Free the tenant tracker's shared memory when its hypertable is dropped
