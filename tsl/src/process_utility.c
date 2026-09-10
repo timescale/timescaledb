@@ -90,6 +90,18 @@ parse_granular_refresh_offset(WithClauseResult option, Oid time_type)
 void
 tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clause_options)
 {
+	if ((ts_continuous_agg_hypertable_status(ht->fd.id) & HypertableIsMaterialization) != 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("Granular refresh is not supported on a materialized hypertable"),
+				 errhint("Granular refresh tracking can only be configured on a hypertable "
+						 "that is not a continuous aggregate's internal materialization "
+						 "table."),
+				 errdetail("Hypertable \"%s\" is a materialized hypertable.",
+						   NameStr(ht->fd.table_name))));
+	}
+
 	bool set_column = !with_clause_options[AlterTableFlagGranularRefreshColumn].is_default;
 	bool set_start_offset =
 		!with_clause_options[AlterTableFlagGranularRefreshStartOffset].is_default;
