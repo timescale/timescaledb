@@ -245,7 +245,7 @@ jobs:
           + (.result // "No result produced.")
           + "\n\n**Cost:** $\(.total_cost_usd // 0 | tostring) | **Duration:** \((.duration_ms // 0) / 1000 | tostring)s | **Turns:** \(.num_turns // 0)"' \
           ${{ runner.temp }}/claude-execution-output.json \
-          | tee -a fuzzer-summary.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          | tee -a ~/fuzzer-summary.txt >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
         if [ -f ~/llm-fuzzer-repro.sql ]; then
           printf '\n## Reproducer\n\n```sql\n' >> "$GITHUB_STEP_SUMMARY"
@@ -292,6 +292,7 @@ jobs:
         cd ~/$PG_SRC_DIR && make install
         cd $GITHUB_WORKSPACE
         git checkout -f ${{ github.sha }}
+        git reset --hard
         git clean -fd
         make -j$(getconf _NPROCESSORS_ONLN) -C build install
 
@@ -344,7 +345,7 @@ jobs:
           set client_min_messages = error;
         " > "${PSQLRC}"
 
-        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh restricted-repro.sql &> repro-result.txt
+        .github/workflows/llm-fuzzer/oracle/${{ matrix.oracle }}/verify.sh restricted-repro.sql &> ~/repro-result.txt
 
         psql -c "select 1;"
 
@@ -353,10 +354,10 @@ jobs:
     - name: Add repro result to summary
       if: always() && steps.repro.outputs.found == 'true'
       run: |
-        if [ -s repro-result.txt ]
+        if [ -s ~/repro-result.txt ]
         then
             printf '\n## Result\n\n' >> "$GITHUB_STEP_SUMMARY"
-            head -100 repro-result.txt >> "$GITHUB_STEP_SUMMARY"
+            head -100 ~/repro-result.txt >> "$GITHUB_STEP_SUMMARY"
         fi
 
     # The jq --exit-code option is broken with select() on jq-1.6 which we see
@@ -451,7 +452,7 @@ jobs:
         name: ${{ matrix.display_name }} Reproduction Details
         path: |
           result*
-          repro-result.txt
+          ~/repro-result.txt
         if-no-files-found: ignore
 
     - name: Upload results to the database
