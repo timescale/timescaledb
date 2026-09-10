@@ -6484,7 +6484,7 @@ process_drop_table(EventTriggerDropObject *obj)
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
 	ts_chunk_delete_by_relid(table->relid, DROP_RESTRICT);
-	ts_hypertable_delete_by_name(table->schema, table->name);
+	ts_hypertable_delete_by_name(table->schema, table->name, table->relid);
 	/*
 	 * Normally, dependent catalogs (like compression settings) are cleaned up
 	 * when deleting the hypertable or chunk. However, in some cases, e.g.,

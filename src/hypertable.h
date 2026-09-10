@@ -120,8 +120,17 @@ extern bool ts_hypertable_clear_status(Hypertable *ht, int32 status);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
-extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
-extern int ts_hypertable_delete_by_id(int32 hypertable_id);
+/*
+ * For the delete functions below, relid is the main table's OID as already
+ * known by the caller, from before the drop. It may no longer resolve to a
+ * live pg_class row by the time this runs (e.g. a plain DROP TABLE removes
+ * the relation before our sql_drop event trigger fires), so it must never be
+ * looked up or dereferenced here - it is only passed through to compare
+ * against previously cached values that need to be invalidated, such as a
+ * stale tenant tracker entry.
+ */
+extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name, Oid relid);
+extern int ts_hypertable_delete_by_id(int32 hypertable_id, Oid relid);
 extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(const Hypertable *ht,
 															  CreateTrigStmt *stmt,
 															  const char *query);
