@@ -204,9 +204,9 @@ get_arbiter_index_attnums(ChunkInsertState *cis)
  * It assumes cdst->compression_settings is already looked up for the chunk.
  *
  * Discovers which bloom columns match arbiter index columns, that is, being a subset of the
- * conflict columns. Builds the mapping from bloom columns to INSERT tuple attnums, and resolves
- * bloom column names to compressed chunk attnums. The chosen bloom filter is stored in the
- * CachedDecompressionState struct.
+ * conflict columns shared by every unique constraint. Builds the mapping from bloom columns to
+ * INSERT tuple attnums, and resolves bloom column names to compressed chunk attnums. The chosen
+ * bloom filter is stored in the CachedDecompressionState struct.
  */
 static void
 init_upsert_bloom_state(ChunkInsertState *cis)
@@ -215,6 +215,19 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 	CachedDecompressionState *cdst = cis->cached_decompression_state;
 	Assert(cdst != NULL);
 	if (cdst == NULL || conflict_attnums == NULL)
+	{
+		return;
+	}
+
+	/*
+	 * Make sure bloom sparse index is part of the shared key columns.
+	 * For any columns not part all of the arbiter indexes, we fall
+	 * back to decompressing the column and checking the actual
+	 * values.
+	 */
+	Assert(cdst->constraints != NULL);
+	conflict_attnums = bms_intersect(conflict_attnums, cdst->constraints->key_columns);
+	if (bms_is_empty(conflict_attnums))
 	{
 		return;
 	}
