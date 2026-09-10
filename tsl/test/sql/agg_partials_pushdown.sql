@@ -185,3 +185,24 @@ RESET enable_seqscan;
 RESET random_page_cost;
 RESET cpu_operator_cost;
 RESET enable_hashagg;
+
+-- Chunkwise aggregation must account for the cost of sorting the per-chunk
+-- partially aggregated results.
+SET enable_seqscan = OFF;
+
+CREATE TABLE sensor_readings(ts bigint NOT NULL, sensor_id bigint);
+SELECT create_hypertable('sensor_readings', 'ts', chunk_time_interval => 1000);
+
+INSERT INTO sensor_readings
+SELECT g, g % 7 FROM generate_series(1, 3000) g;
+
+VACUUM ANALYZE sensor_readings;
+
+SELECT ts, sensor_id, count(*) FROM sensor_readings
+GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
+
+:PREFIX
+SELECT ts, sensor_id, count(*) FROM sensor_readings
+GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
+
+RESET enable_seqscan;
