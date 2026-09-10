@@ -224,6 +224,11 @@ from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
 
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 
+insert into estimate_count
+select t, d, 1
+from generate_series('2025-01-16'::timestamptz,'2025-01-17','15 min') t,
+  generate_series(1, 100) d;
+
 vacuum analyze estimate_count;
 
 set timescaledb.enable_deferred_chunk_append to off;

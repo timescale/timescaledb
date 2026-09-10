@@ -355,6 +355,10 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 -------
      2
 
+insert into estimate_count
+select t, d, 1
+from generate_series('2025-01-16'::timestamptz,'2025-01-17','15 min') t,
+  generate_series(1, 100) d;
 vacuum analyze estimate_count;
 set timescaledb.enable_deferred_chunk_append to off;
 set enable_indexscan to off;
@@ -372,6 +376,9 @@ select * from estimate_count order by time limit 5;
                ->  Sort  (cost=8.32..8.57 rows=100 width=88)
                      Sort Key: _hyper_2_16_chunk_compressed._ts_meta_v2_first_time
                      ->  Seq Scan on _hyper_2_16_chunk_compressed  (cost=0.00..5.00 rows=100 width=88)
+         ->  Sort  (cost=320.11..344.36 rows=9700 width=20)
+               Sort Key: _hyper_2_17_chunk."time"
+               ->  Seq Scan on _hyper_2_17_chunk  (cost=0.00..159.00 rows=9700 width=20)
 
 reset enable_indexscan;
 reset timescaledb.enable_deferred_chunk_append;
