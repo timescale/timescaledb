@@ -157,6 +157,32 @@ step "hd_settings" {
     WHERE h.table_name = 'conditions';
 }
 
+# The disable inside a PL/pgSQL EXCEPTION handler.  Every block with a handler
+# runs in an implicit subtransaction, so the handler swallowing the error rolls
+# the DDL back while the surrounding transaction still commits 
+# The queued shared-memory free has to be discarded along with
+# the subtransaction, or the tracker is gone while its configuration row is back.
+session "HX"
+setup { SET timezone TO 'UTC'; SET client_min_messages TO warning; }
+step "hx_exception" {
+    DO $$
+    BEGIN
+        ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+        ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+        -- Abort only once the configuration really is cleared, so a disable that
+        -- silently did nothing would show up as settings_rows = 0 rather than
+        -- letting the permutation pass for the wrong reason.
+        IF NOT EXISTS (
+            SELECT 1 FROM _timescaledb_catalog.hypertable_cagg_settings s
+            JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+            WHERE h.table_name = 'conditions') THEN
+            RAISE EXCEPTION 'abort the subtransaction';
+        END IF;
+    EXCEPTION WHEN others THEN
+        NULL;
+    END $$;
+}
+
 # The cagg-level enable, the counterparty for the second lock.
 session "HE"
 setup { SET timezone TO 'UTC'; SET client_min_messages TO warning; }
@@ -204,3 +230,12 @@ permutation "d_disable" "he_begin" "he_enable" "hd_disable" "he_commit" "hd_sett
 # 4b. Disable first: the enable waits on the same lock, then finds no
 # configuration left and refuses.  The flag stays off.
 permutation "d_disable" "hd_begin" "hd_disable" "he_enable" "hd_commit" "hd_settings" "d_flag"
+
+# 5. The disable inside a PL/pgSQL EXCEPTION handler.  The subtransaction rolls
+# back and the surrounding transaction commits, so both the configuration row
+# and cond_daily's own flag come back.  The tracker has to come back with them:
+# r_refresh flushes the late arrivals in Txn2, and it can only find them if the
+# tracker outlived the swallowed exception -- freeing it would leave the flush
+# with nothing to drain and r_tracking empty.  No cagg-level priming here, since
+# the flush needs cond_daily granular.
+permutation "p_prime_insert" "p_prime_refresh" "p_insert_late" "hx_exception" "hd_settings" "d_flag" "r_refresh" "r_tracking"
