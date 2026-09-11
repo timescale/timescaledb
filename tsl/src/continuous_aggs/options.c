@@ -136,7 +136,7 @@ validate_granular_refresh_enable(ContinuousAgg *agg, Hypertable *mat_ht)
 {
 	FormData_hypertable_cagg_settings settings;
 
-	if (!ts_hypertable_cagg_settings_get(agg->data.raw_hypertable_id, &settings))
+	if (!ts_hypertable_cagg_settings_get(agg->data.raw_hypertable_id, &settings, NULL))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
