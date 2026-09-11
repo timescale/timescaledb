@@ -317,6 +317,10 @@ ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'fa
 ERROR:  cannot alter create_group_indexes option for continuous aggregates
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
 ERROR:  cannot alter create_group_indexes option for continuous aggregates
+\set VERBOSITY sqlstate
+ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.continuous = false);
+ERROR:  0A000
+\set VERBOSITY default
 ALTER MATERIALIZED VIEW mat_with_test ALTER timec DROP default;
 ERROR:  cannot alter only SET options of a continuous aggregate
 \set ON_ERROR_STOP 1
