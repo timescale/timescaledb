@@ -84,11 +84,13 @@ cache_invalidate_relcache_callback(Datum arg, Oid relid)
 	if (!OidIsValid(relid))
 	{
 		cache_invalidate_relcache_all();
+		ts_cm_functions->tenant_tracker_cache_invalidate(InvalidOid);
 	}
 	else if (ts_extension_is_proxy_table_relid(relid))
 	{
 		ts_extension_invalidate();
 		cache_invalidate_relcache_all();
+		ts_cm_functions->tenant_tracker_cache_invalidate(InvalidOid);
 		ts_cache_invalidate_set_proxy_tables(InvalidOid, InvalidOid);
 	}
 	else if (relid == hypertable_proxy_table_oid)
@@ -98,6 +100,17 @@ cache_invalidate_relcache_callback(Datum arg, Oid relid)
 	else if (relid == bgw_proxy_table_oid)
 	{
 		ts_bgw_job_cache_invalidate_callback();
+	}
+	else
+	{
+		/*
+		 * Disabling granular refresh on a hypertable frees its tenant tracker
+		 * at commit and invalidates the hypertable's own relcache entry, so a
+		 * backend that cached a pointer to that tracker can drop just that one.
+		 * Not routed through cache_invalidate_relcache_all(): an aborted
+		 * transaction frees nothing.
+		 */
+		ts_cm_functions->tenant_tracker_cache_invalidate(relid);
 	}
 }
 
