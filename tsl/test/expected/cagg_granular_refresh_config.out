@@ -797,3 +797,129 @@ DROP MATERIALIZED VIEW crossed_hourly;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_14_chunk
 DROP TABLE crossed;
 RESET timezone;
+-- TEST 7: a changed offset reaches the tracker only when a flush installs it on
+-- the generation it activates. Until then writes keep gating on the window the
+-- active generation already carries, so the catalog and the tracker disagree for
+-- as long as no refresh runs.
+--
+-- W1 = [2025-01-08 12:00, 2025-01-10 11:00) from offsets 3 days / 1 hour
+-- W2 = [2025-01-09 12:00, 2025-01-10 11:00) from offsets 1 day  / 1 hour
+-- Every write below is at 2025-01-08 12:00, which is inside W1 and outside W2.
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00';
+CREATE TABLE thresholds(time timestamptz NOT NULL, tenant text NOT NULL, value float);
+SELECT create_hypertable('thresholds', 'time', chunk_time_interval => INTERVAL '1 day');
+    create_hypertable     
+--------------------------
+ (17,public,thresholds,t)
+
+ALTER TABLE thresholds SET (
+    timescaledb.granular_refresh_column = 'tenant',
+    timescaledb.granular_refresh_start_offset = '3 days',
+    timescaledb.granular_refresh_end_offset = '1 hour'
+);
+-- Seeded before the cagg exists, so those don't create invalidations
+INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 1),
+                              ('2025-01-10 10:00:00+00', 'b', 2);
+CREATE MATERIALIZED VIEW thresholds_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, tenant, avg(value)
+  FROM thresholds
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+-- Initial refresh to carry the invalidation threshold past the writes below.
+CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+ALTER MATERIALIZED VIEW thresholds_hourly SET (timescaledb.enable_granular_refresh = true);
+-- Under W1. This is also the first tracked write, so it creates the tracker.
+INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 3);
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS generation_window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS generation_window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('thresholds');
+   generation_window_start    |    generation_window_end     
+------------------------------+------------------------------
+ Tue Jan 07 12:00:00 2025 UTC | Fri Jan 10 11:00:00 2025 UTC
+
+-- Inside W1, so the entry carries a seqnum.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'thresholds_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |           greatest           | seqnum 
+------------------------------+------------------------------+--------
+ Wed Jan 08 12:00:00 2025 UTC | Wed Jan 08 12:00:00 2025 UTC |      1
+
+CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+-- Narrow the window to W2. Only the catalog changes here.
+ALTER TABLE thresholds SET (timescaledb.granular_refresh_start_offset = '1 day');
+-- The tracker is still gating on W1.
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS generation_window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS generation_window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('thresholds');
+   generation_window_start    |    generation_window_end     
+------------------------------+------------------------------
+ Tue Jan 07 12:00:00 2025 UTC | Fri Jan 10 11:00:00 2025 UTC
+
+INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 4);
+-- Still inside the window the generation carries, so still a seqnum, even
+-- though the stored offsets no longer cover this write.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'thresholds_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |           greatest           | seqnum 
+------------------------------+------------------------------+--------
+ Wed Jan 08 12:00:00 2025 UTC | Wed Jan 08 12:00:00 2025 UTC |      2
+
+-- The flush in this refresh is what installs W2 on the next generation.
+CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS generation_window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS generation_window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('thresholds');
+   generation_window_start    |    generation_window_end     
+------------------------------+------------------------------
+ Thu Jan 09 12:00:00 2025 UTC | Fri Jan 10 11:00:00 2025 UTC
+
+INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 5);
+-- Now outside the window, so the entry is untracked and invalidations has NULL seqnum 
+-- (the range falls back to a full refresh)
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'thresholds_hourly')
+ORDER BY lowest_modified_value;
+            lowest            |           greatest           | seqnum 
+------------------------------+------------------------------+--------
+ Wed Jan 08 12:00:00 2025 UTC | Wed Jan 08 12:00:00 2025 UTC |       
+
+CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+-- Sanity check: cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM thresholds_hourly ORDER BY tenant, bucket;
+ tenant |            bucket            | avg  
+--------+------------------------------+------
+ a      | Wed Jan 08 12:00:00 2025 UTC | 3.25
+ b      | Fri Jan 10 10:00:00 2025 UTC |    2
+
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM thresholds
+GROUP BY 1, 2
+ORDER BY 1, 2;
+ tenant |            bucket            | avg  
+--------+------------------------------+------
+ a      | Wed Jan 08 12:00:00 2025 UTC | 3.25
+ b      | Fri Jan 10 10:00:00 2025 UTC |    2
+
+DROP MATERIALIZED VIEW thresholds_hourly;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_17_chunk
+DROP TABLE thresholds;
+RESET timezone;

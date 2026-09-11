@@ -25,6 +25,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
+#include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/hypertable_cagg_settings.h"
 #include "utils.h"
@@ -76,6 +77,17 @@ parse_granular_refresh_offset(WithClauseResult option, Oid time_type)
 	return offset;
 }
 
+/* Parse the stored offset from text to its corresponding type */
+static int64
+parse_stored_granular_refresh_offset(const text *offset, Oid time_type)
+{
+	/* Matches what ts_hypertable_cagg_settings_cast_offset produces. */
+	Oid datum_type = IS_INTEGER_TYPE(time_type) ? time_type : INTERVALOID;
+
+	return interval_to_int64(ts_hypertable_cagg_settings_cast_offset(offset, time_type),
+							 datum_type);
+}
+
 /*
  * ALTER TABLE <hypertable> SET (timescaledb.granular_refresh_column = ...,
  *                               timescaledb.granular_refresh_start_offset = ...,
@@ -84,8 +96,12 @@ parse_granular_refresh_offset(WithClauseResult option, Oid time_type)
  * Enables granular refresh of continuous aggregates on the raw hypertable.
  * Continuous aggregates opt in separately and share these settings.
  *
- * All three options are required in one statement. Once configured, the
- * settings can be neither changed nor cleared.
+ * All three options are required to enable it. Afterwards the offsets can be
+ * changed, individually or together. The column cannot be changed, and nothing can be
+ * cleared.
+ *
+ * A changed offset reaches the tracker when the next flush activates a
+ * generation, so writes keep gating on the previous window until then.
  */
 void
 tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clause_options)
@@ -107,21 +123,15 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 		!with_clause_options[AlterTableFlagGranularRefreshStartOffset].is_default;
 	bool set_end_offset = !with_clause_options[AlterTableFlagGranularRefreshEndOffset].is_default;
 	FormData_hypertable_cagg_settings settings = { 0 };
-
-	if (ts_hypertable_cagg_settings_get(ht->fd.id, &settings))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("granular refresh is already configured on hypertable \"%s\"",
-						NameStr(ht->fd.table_name)),
-				 errhint("Changing or disabling granular refresh settings is not supported.")));
-	}
+	bool configured = ts_hypertable_cagg_settings_get(ht->fd.id, &settings);
 
 	Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 	Ensure(dim, "hypertable without open dimension");
 	Oid time_type = get_atttype(dim->main_table_relid, dim->column_attno);
 
-	if (!set_column || !set_start_offset || !set_end_offset)
+	/* Enabling needs the whole configuration. Once it is stored, anything left
+	 * out of the statement keeps the value it already has. */
+	if (!configured && (!set_column || !set_start_offset || !set_end_offset))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -132,66 +142,97 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 						 "granular refresh.")));
 	}
 
-	char *colname =
-		TextDatumGetCString(with_clause_options[AlterTableFlagGranularRefreshColumn].parsed);
-
-	if (colname[0] == '\0')
+	if (set_column)
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("granular refresh column cannot be empty"),
-				 errhint("timescaledb.granular_refresh_column must reference a valid column.")));
-	}
+		char *colname =
+			TextDatumGetCString(with_clause_options[AlterTableFlagGranularRefreshColumn].parsed);
 
-	AttrNumber attno = get_attnum(ht->main_table_relid, colname);
+		/* Tracking rows already hold tenant ids read from the configured column,
+		 * and the refresh filters on that column, so the two cannot diverge.
+		 * Naming the column it already has is accepted and changes nothing,
+		 * whether or not the statement carries offsets as well. */
+		if (configured && strcmp(colname, NameStr(settings.granular_refresh_column)) != 0)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot change the granular refresh column of hypertable \"%s\"",
+							NameStr(ht->fd.table_name)),
+					 errdetail("The column is currently \"%s\".",
+							   NameStr(settings.granular_refresh_column)),
+					 errhint("Only timescaledb.granular_refresh_start_offset and "
+							 "timescaledb.granular_refresh_end_offset can be changed.")));
+		}
 
-	if (attno < 1)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_COLUMN),
-				 errmsg("column \"%s\" does not exist", colname),
-				 errhint("The timescaledb.granular_refresh_column option must reference a "
-						 "valid column.")));
-	}
+		if (colname[0] == '\0')
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("granular refresh column cannot be empty"),
+					 errhint(
+						 "timescaledb.granular_refresh_column must reference a valid column.")));
+		}
 
-	Oid tenant_typid;
-	int32 tenant_typmod;
-	Oid tenant_collid;
+		AttrNumber attno = get_attnum(ht->main_table_relid, colname);
 
-	get_atttypetypmodcoll(ht->main_table_relid,
-						  attno,
-						  &tenant_typid,
-						  &tenant_typmod,
-						  &tenant_collid);
-	tenant_typid = getBaseTypeAndTypmod(tenant_typid, &tenant_typmod);
+		if (attno < 1)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" does not exist", colname),
+					 errhint("The timescaledb.granular_refresh_column option must reference a "
+							 "valid column.")));
+		}
 
-	if (!ts_tenant_type_is_supported(tenant_typid))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid granular refresh column type"),
-				 errhint("timescaledb.granular_refresh_column must be a date, integer, UUID, "
-						 "or string type.")));
-	}
+		Oid tenant_typid;
+		int32 tenant_typmod;
+		Oid tenant_collid;
 
-	/* character(n) blank-pads every value to exactly n bytes, so for n over the
-	 * tracker's key limit no tenant is ever storable. */
-	if (tenant_typid == BPCHAROID && tenant_typmod > VARHDRSZ &&
-		tenant_typmod - VARHDRSZ > TENANT_TRACKER_KEY_MAXLEN)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("granular refresh column \"%s\" is wider than the %d byte tenant key limit",
-						colname,
-						TENANT_TRACKER_KEY_MAXLEN)));
+		get_atttypetypmodcoll(ht->main_table_relid,
+							  attno,
+							  &tenant_typid,
+							  &tenant_typmod,
+							  &tenant_collid);
+		tenant_typid = getBaseTypeAndTypmod(tenant_typid, &tenant_typmod);
+
+		if (!ts_tenant_type_is_supported(tenant_typid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("invalid granular refresh column type"),
+					 errhint("timescaledb.granular_refresh_column must be a date, integer, UUID, "
+							 "or string type.")));
+		}
+
+		/* character(n) blank-pads every value to exactly n bytes, so for n over the
+		 * tracker's key limit no tenant is ever storable. */
+		if (tenant_typid == BPCHAROID && tenant_typmod > VARHDRSZ &&
+			tenant_typmod - VARHDRSZ > TENANT_TRACKER_KEY_MAXLEN)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("granular refresh column \"%s\" is wider than the %d byte tenant key "
+							"limit",
+							colname,
+							TENANT_TRACKER_KEY_MAXLEN)));
+		}
+
+		/* store the normalized column name */
+		namestrcpy(&settings.granular_refresh_column,
+				   get_attname(ht->main_table_relid, attno, false /* missing_ok */));
 	}
 
 	int64 start_offset =
-		parse_granular_refresh_offset(with_clause_options[AlterTableFlagGranularRefreshStartOffset],
-									  time_type);
+		set_start_offset ?
+			parse_granular_refresh_offset(with_clause_options
+											  [AlterTableFlagGranularRefreshStartOffset],
+										  time_type) :
+			parse_stored_granular_refresh_offset(settings.granular_refresh_start_offset, time_type);
 	int64 end_offset =
-		parse_granular_refresh_offset(with_clause_options[AlterTableFlagGranularRefreshEndOffset],
-									  time_type);
+		set_end_offset ?
+			parse_granular_refresh_offset(with_clause_options
+											  [AlterTableFlagGranularRefreshEndOffset],
+										  time_type) :
+			parse_stored_granular_refresh_offset(settings.granular_refresh_end_offset, time_type);
 
 	/*
 	 * The refresh window is [now() - start_offset, now() - end_offset), so the
@@ -207,14 +248,27 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 	}
 
 	settings.hypertable_id = ht->fd.id;
-	/* store the normalized column name */
-	namestrcpy(&settings.granular_refresh_column, get_attname(ht->main_table_relid, attno, false));
-	settings.granular_refresh_start_offset =
-		DatumGetTextPCopy(with_clause_options[AlterTableFlagGranularRefreshStartOffset].parsed);
-	settings.granular_refresh_end_offset =
-		DatumGetTextPCopy(with_clause_options[AlterTableFlagGranularRefreshEndOffset].parsed);
 
-	ts_hypertable_cagg_settings_insert(&settings);
+	if (set_start_offset)
+	{
+		settings.granular_refresh_start_offset =
+			DatumGetTextPCopy(with_clause_options[AlterTableFlagGranularRefreshStartOffset].parsed);
+	}
+
+	if (set_end_offset)
+	{
+		settings.granular_refresh_end_offset =
+			DatumGetTextPCopy(with_clause_options[AlterTableFlagGranularRefreshEndOffset].parsed);
+	}
+
+	if (configured)
+	{
+		ts_hypertable_cagg_settings_update(&settings);
+	}
+	else
+	{
+		ts_hypertable_cagg_settings_insert(&settings);
+	}
 }
 
 void

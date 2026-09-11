@@ -1,4 +1,4 @@
-Parsed test spec with 5 sessions
+Parsed test spec with 6 sessions
 
 starting permutation: wp_attach_enable s1_insert s2_insert wp_attach_release v_refresh v_check
 step wp_attach_enable: SELECT debug_waitpoint_enable('tenant_tracker_drain_before_attach');
@@ -42,6 +42,82 @@ debug_waitpoint_release
                        
 
 step r_refresh: <... completed>
+step v_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
+step v_check: 
+    SELECT sensor_id, bucket, avg
+    FROM cond_daily
+    ORDER BY sensor_id, bucket;
+
+sensor_id|bucket                      |avg
+---------+----------------------------+---
+sensor_a |Wed Jan 01 00:00:00 2020 UTC|  1
+sensor_b |Thu Jan 02 00:00:00 2020 UTC|  2
+
+
+starting permutation: s2_insert a_narrow wp_inval_enable s1_insert v_window r_refresh v_window wp_inval_release wp_inval_noop v_inval v_tracking v_refresh v_check
+step s2_insert: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2);
+step a_narrow: ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '2 days');
+step wp_inval_enable: SELECT debug_waitpoint_enable('tenant_tracker_before_inval_write');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_insert: INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1); <waiting ...>
+step v_window: 
+    SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS window_start,
+           _timescaledb_functions.to_timestamp(late_threshold_end)   AS window_end
+    FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions');
+
+window_start                |window_end                  
+----------------------------+----------------------------
+Wed Feb 04 12:00:00 1925 UTC|Thu Jan 09 12:00:00 2025 UTC
+
+step r_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
+step v_window: 
+    SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS window_start,
+           _timescaledb_functions.to_timestamp(late_threshold_end)   AS window_end
+    FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions');
+
+window_start                |window_end                  
+----------------------------+----------------------------
+Wed Jan 08 12:00:00 2025 UTC|Thu Jan 09 12:00:00 2025 UTC
+
+step wp_inval_release: SELECT debug_waitpoint_release('tenant_tracker_before_inval_write'); <waiting ...>
+step s1_insert: <... completed>
+step wp_inval_release: <... completed>
+debug_waitpoint_release
+-----------------------
+                       
+
+step wp_inval_noop: 
+step v_inval: 
+    SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+    ORDER BY lowest_modified_value;
+
+lowest                      |greatest                    |seqnum
+----------------------------+----------------------------+------
+Wed Jan 01 00:00:00 2020 UTC|Wed Jan 01 00:00:00 2020 UTC|     1
+
+step v_tracking: 
+    SELECT tenant_id, seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (
+        SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily')
+      AND tenant_id IS NOT NULL
+    ORDER BY seqnum, tenant_id;
+
+tenant_id|seqnum
+---------+------
+sensor_a |     1
+sensor_b |     1
+
 step v_refresh: CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
 step v_check: 
     SELECT sensor_id, bucket, avg
