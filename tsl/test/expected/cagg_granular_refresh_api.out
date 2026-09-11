@@ -111,19 +111,85 @@ ALTER TABLE metrics SET (
 ------------+-------------------------+-------------------------------+-----------------------------
  metrics    | device_id               | 2 months 30 days              | 5 days
 
-\set ON_ERROR_STOP 0
--- Error: once configured, the settings cannot be changed or cleared.
+-- Once configured, the offsets can be changed, either both at once
+-- or separately.
+--Both at once
 ALTER TABLE metrics SET (
-    timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '1 day'
 );
-ERROR:  granular refresh is already configured on hypertable "metrics"
-\set ON_ERROR_STOP 1
 :GRC 'metrics';
  table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
 ------------+-------------------------+-------------------------------+-----------------------------
- metrics    | device_id               | 2 months 30 days              | 5 days
+ metrics    | device_id               | 30 days                       | 1 day
+
+-- The start offset alone; the end offset keeps its stored value.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_start_offset = '20 days');
+:GRC 'metrics';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ metrics    | device_id               | 20 days                       | 1 day
+
+-- The end offset alone; the start offset keeps its stored value.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_end_offset = '2 days');
+:GRC 'metrics';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ metrics    | device_id               | 20 days                       | 2 days
+
+-- Repeating the column it already has is accepted, so the whole configuration
+-- can be restated with one offset changed.
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'device_id',
+    timescaledb.granular_refresh_start_offset = '25 days',
+    timescaledb.granular_refresh_end_offset = '2 days'
+);
+:GRC 'metrics';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ metrics    | device_id               | 25 days                       | 2 days
+
+-- Setting the column to the same value as the current one is accepted as
+-- a no-op.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_column = 'device_id');
+:GRC 'metrics';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ metrics    | device_id               | 25 days                       | 2 days
+
+\set ON_ERROR_STOP 0
+-- Error: a new offset is checked against the stored one, so setting the start
+-- offset alone below the stored end offset is rejected.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_start_offset = '1 day');
+ERROR:  invalid granular refresh window
+-- Error: and the same from the other side -- an end offset equal to the stored
+-- start offset leaves an empty window.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_end_offset = '25 days');
+ERROR:  invalid granular refresh window
+-- Error: the column cannot be changed.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_column = 'value');
+ERROR:  cannot change the granular refresh column of hypertable "metrics"
+-- Error: Cannot change the column to an empty string.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_column = '');
+ERROR:  cannot change the granular refresh column of hypertable "metrics"
+-- Error: a rejected update leaves the stored offsets untouched, so this one
+-- still fails against the same stored end offset.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_start_offset = '1 day');
+ERROR:  invalid granular refresh window
+-- Error: a different column is rejected in a whole statement too, and the
+-- offsets alongside it are not applied either.
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'value',
+    timescaledb.granular_refresh_start_offset = '20 days',
+    timescaledb.granular_refresh_end_offset = '2 days'
+);
+ERROR:  cannot change the granular refresh column of hypertable "metrics"
+\set ON_ERROR_STOP 1
+-- None of the failed attempts changed anything.
+:GRC 'metrics';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ metrics    | device_id               | 25 days                       | 2 days
 
 -- Integer-time hypertable: offsets are interpreted as integers.
 CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
@@ -162,6 +228,27 @@ ALTER TABLE metrics_int SET (
  table_name  | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
 -------------+-------------------------+-------------------------------+-----------------------------
  metrics_int | sensor                  | 50000                         | 1000
+
+-- Test for integer offsets updates
+ALTER TABLE metrics_int SET (timescaledb.granular_refresh_end_offset = 2000);
+:GRC 'metrics_int';
+ table_name  | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------+-------------------------+-------------------------------+-----------------------------
+ metrics_int | sensor                  | 50000                         | 2000
+
+ALTER TABLE metrics_int SET (timescaledb.granular_refresh_start_offset = 40000);
+:GRC 'metrics_int';
+ table_name  | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------+-------------------------+-------------------------------+-----------------------------
+ metrics_int | sensor                  | 40000                         | 2000
+
+-- Error: checked against the stored end offset, which is now 2000.
+ALTER TABLE metrics_int SET (timescaledb.granular_refresh_start_offset = 1000);
+ERROR:  invalid granular refresh window
+:GRC 'metrics_int';
+ table_name  | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+-------------+-------------------------+-------------------------------+-----------------------------
+ metrics_int | sensor                  | 40000                         | 2000
 
 DROP TABLE metrics_int;
 DROP TABLE metrics;

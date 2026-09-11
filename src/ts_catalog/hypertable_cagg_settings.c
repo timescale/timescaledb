@@ -79,6 +79,15 @@ hypertable_cagg_settings_formdata_fill(FormData_hypertable_cagg_settings *fd, co
 	namestrcpy(&fd->granular_refresh_column,
 			   NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(
 				   Anum_hypertable_cagg_settings_granular_refresh_column)])));
+	/* The offsets are nullable in the catalog but every writer sets them, so a
+	 * NULL means the row was tampered with rather than written by ALTER TABLE. */
+	Ensure(!nulls[AttrNumberGetAttrOffset(
+			   Anum_hypertable_cagg_settings_granular_refresh_start_offset)] &&
+			   !nulls[AttrNumberGetAttrOffset(
+				   Anum_hypertable_cagg_settings_granular_refresh_end_offset)],
+		   "granular refresh offsets for hypertable %d are null",
+		   fd->hypertable_id);
+
 	fd->granular_refresh_start_offset = DatumGetTextPCopy(values[AttrNumberGetAttrOffset(
 		Anum_hypertable_cagg_settings_granular_refresh_start_offset)]);
 	fd->granular_refresh_end_offset = DatumGetTextPCopy(
@@ -147,6 +156,29 @@ ts_hypertable_cagg_settings_insert(const FormData_hypertable_cagg_settings *form
 }
 
 TSDLLEXPORT void
+ts_hypertable_cagg_settings_update(const FormData_hypertable_cagg_settings *form)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE_CAGG_SETTINGS, RowExclusiveLock, CurrentMemoryContext);
+
+	init_scan_by_hypertable_id(&iterator, form->hypertable_id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		CatalogSecurityContext sec_ctx;
+		HeapTuple tuple =
+			hypertable_cagg_settings_formdata_make_tuple(form, ts_scanner_get_tupledesc(ti));
+
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), tuple);
+		ts_catalog_restore_user(&sec_ctx);
+		heap_freetuple(tuple);
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
+TSDLLEXPORT void
 ts_hypertable_cagg_settings_delete(int32 hypertable_id)
 {
 	ScanIterator iterator =
@@ -163,8 +195,8 @@ ts_hypertable_cagg_settings_delete(int32 hypertable_id)
 	ts_scan_iterator_close(&iterator);
 }
 
-static Datum
-cast_offset_from_text(const text *offset, Oid dimtype)
+TSDLLEXPORT Datum
+ts_hypertable_cagg_settings_cast_offset(const text *offset, Oid dimtype)
 {
 	Datum cstr = CStringGetDatum(text_to_cstring(offset));
 
@@ -214,8 +246,11 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 	{
 		const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 		Oid dimtype = ts_dimension_get_partition_type(open_dim);
-		Datum start_datum = cast_offset_from_text(settings.granular_refresh_start_offset, dimtype);
-		Datum end_datum = cast_offset_from_text(settings.granular_refresh_end_offset, dimtype);
+		Datum start_datum =
+			ts_hypertable_cagg_settings_cast_offset(settings.granular_refresh_start_offset,
+													dimtype);
+		Datum end_datum =
+			ts_hypertable_cagg_settings_cast_offset(settings.granular_refresh_end_offset, dimtype);
 
 		if (IS_INTEGER_TYPE(dimtype))
 		{

@@ -94,14 +94,67 @@ ALTER TABLE metrics SET (
 );
 :GRC 'metrics';
 
-\set ON_ERROR_STOP 0
--- Error: once configured, the settings cannot be changed or cleared.
+-- Once configured, the offsets can be changed, either both at once
+-- or separately.
+
+--Both at once
 ALTER TABLE metrics SET (
-    timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '1 day'
 );
+:GRC 'metrics';
+
+-- The start offset alone; the end offset keeps its stored value.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_start_offset = '20 days');
+:GRC 'metrics';
+
+-- The end offset alone; the start offset keeps its stored value.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_end_offset = '2 days');
+:GRC 'metrics';
+
+-- Repeating the column it already has is accepted, so the whole configuration
+-- can be restated with one offset changed.
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'device_id',
+    timescaledb.granular_refresh_start_offset = '25 days',
+    timescaledb.granular_refresh_end_offset = '2 days'
+);
+:GRC 'metrics';
+
+-- Setting the column to the same value as the current one is accepted as
+-- a no-op.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_column = 'device_id');
+:GRC 'metrics';
+
+\set ON_ERROR_STOP 0
+-- Error: a new offset is checked against the stored one, so setting the start
+-- offset alone below the stored end offset is rejected.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_start_offset = '1 day');
+
+-- Error: and the same from the other side -- an end offset equal to the stored
+-- start offset leaves an empty window.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_end_offset = '25 days');
+
+-- Error: the column cannot be changed.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_column = 'value');
+
+-- Error: Cannot change the column to an empty string.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_column = '');
+
+-- Error: a rejected update leaves the stored offsets untouched, so this one
+-- still fails against the same stored end offset.
+ALTER TABLE metrics SET (timescaledb.granular_refresh_start_offset = '1 day');
+
+-- Error: a different column is rejected in a whole statement too, and the
+-- offsets alongside it are not applied either.
+ALTER TABLE metrics SET (
+    timescaledb.granular_refresh_column = 'value',
+    timescaledb.granular_refresh_start_offset = '20 days',
+    timescaledb.granular_refresh_end_offset = '2 days'
+);
+
 \set ON_ERROR_STOP 1
+-- None of the failed attempts changed anything.
 :GRC 'metrics';
 
 -- Integer-time hypertable: offsets are interpreted as integers.
@@ -130,6 +183,15 @@ ALTER TABLE metrics_int SET (
     timescaledb.granular_refresh_start_offset = 50000,
     timescaledb.granular_refresh_end_offset = 1000
 );
+:GRC 'metrics_int';
+
+-- Test for integer offsets updates
+ALTER TABLE metrics_int SET (timescaledb.granular_refresh_end_offset = 2000);
+:GRC 'metrics_int';
+ALTER TABLE metrics_int SET (timescaledb.granular_refresh_start_offset = 40000);
+:GRC 'metrics_int';
+-- Error: checked against the stored end offset, which is now 2000.
+ALTER TABLE metrics_int SET (timescaledb.granular_refresh_start_offset = 1000);
 :GRC 'metrics_int';
 
 DROP TABLE metrics_int;

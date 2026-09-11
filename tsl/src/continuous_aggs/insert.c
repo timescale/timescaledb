@@ -1030,6 +1030,8 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 			 */
 			List *hypertable_seqnums = tenant_local_htab_write();
 
+			DEBUG_WAITPOINT("tenant_tracker_before_inval_write");
+
 			cache_inval_htab_write(hypertable_seqnums);
 			list_free_deep(hypertable_seqnums);
 			/*

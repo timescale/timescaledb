@@ -25,6 +25,9 @@ extern TSDLLEXPORT bool ts_hypertable_cagg_settings_get(int32 hypertable_id,
 														FormData_hypertable_cagg_settings *form);
 extern TSDLLEXPORT void
 ts_hypertable_cagg_settings_insert(const FormData_hypertable_cagg_settings *form);
+extern TSDLLEXPORT void
+ts_hypertable_cagg_settings_update(const FormData_hypertable_cagg_settings *form);
+extern TSDLLEXPORT Datum ts_hypertable_cagg_settings_cast_offset(const text *offset, Oid dimtype);
 extern TSDLLEXPORT void ts_hypertable_cagg_settings_delete(int32 hypertable_id);
 extern TSDLLEXPORT bool ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id,
 																			   int64 *window_start,
