@@ -347,10 +347,10 @@ SELECT time_bucket('1 hour', time) AS bucket, sensor_id, avg(temp) AS avg_temp
 FROM sensors
 GROUP BY bucket, sensor_id
 WITH NO DATA;
-\set GRE 'SELECT user_view_name, granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = '
+\set GRE 'SELECT view_name, granular_refresh_enabled FROM timescaledb_information.continuous_aggregates WHERE view_name = '
 -- Disabled by default.
 :GRE 'sensors_hourly';
- user_view_name | granular_refresh_enabled 
+   view_name    | granular_refresh_enabled 
 ----------------+--------------------------
  sensors_hourly | f
 
@@ -384,21 +384,21 @@ ALTER TABLE sensors SET (
 );
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 :GRE 'sensors_hourly';
- user_view_name | granular_refresh_enabled 
+   view_name    | granular_refresh_enabled 
 ----------------+--------------------------
  sensors_hourly | t
 
 -- Enabling again is a no-op, not an error.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 :GRE 'sensors_hourly';
- user_view_name | granular_refresh_enabled 
+   view_name    | granular_refresh_enabled 
 ----------------+--------------------------
  sensors_hourly | t
 
 -- Disabling flips the flag back; the hypertable configuration is left alone.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
 :GRE 'sensors_hourly';
- user_view_name | granular_refresh_enabled 
+   view_name    | granular_refresh_enabled 
 ----------------+--------------------------
  sensors_hourly | f
 
@@ -411,14 +411,14 @@ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE tabl
 -- Disabling again is a no-op, not an error.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
 :GRE 'sensors_hourly';
- user_view_name | granular_refresh_enabled 
+   view_name    | granular_refresh_enabled 
 ----------------+--------------------------
  sensors_hourly | f
 
 -- Re-enabling works.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 :GRE 'sensors_hourly';
- user_view_name | granular_refresh_enabled 
+   view_name    | granular_refresh_enabled 
 ----------------+--------------------------
  sensors_hourly | t
 
@@ -471,7 +471,7 @@ ALTER MATERIALIZED VIEW readings_by_location SET (timescaledb.enable_granular_re
 ERROR:  granular refresh column "sensor_id" is not a grouping column of the continuous aggregate
 \set ON_ERROR_STOP 1
 :GRE 'readings_by_location';
-    user_view_name    | granular_refresh_enabled 
+      view_name       | granular_refresh_enabled 
 ----------------------+--------------------------
  readings_by_location | f
 
@@ -508,22 +508,22 @@ ALTER MATERIALIZED VIEW devices_daily SET (timescaledb.enable_granular_refresh =
 ERROR:  granular refresh is already enabled for continuous aggregate "devices_hourly"
 \set ON_ERROR_STOP 1
 :GRE 'devices_hourly';
- user_view_name | granular_refresh_enabled 
+   view_name    | granular_refresh_enabled 
 ----------------+--------------------------
  devices_hourly | t
 
 :GRE 'devices_daily';
- user_view_name | granular_refresh_enabled 
-----------------+--------------------------
- devices_daily  | f
+   view_name   | granular_refresh_enabled 
+---------------+--------------------------
+ devices_daily | f
 
 -- Dropping the first one frees the hypertable, so the second can enable it.
 DROP MATERIALIZED VIEW devices_hourly;
 ALTER MATERIALIZED VIEW devices_daily SET (timescaledb.enable_granular_refresh = true);
 :GRE 'devices_daily';
- user_view_name | granular_refresh_enabled 
-----------------+--------------------------
- devices_daily  | t
+   view_name   | granular_refresh_enabled 
+---------------+--------------------------
+ devices_daily | t
 
 DROP MATERIALIZED VIEW devices_daily;
 DROP TABLE devices;
@@ -763,9 +763,9 @@ ALTER MATERIALIZED VIEW meters_hourly SET (timescaledb.enable_granular_refresh =
 ERROR:  granular refresh is not configured on the hypertable
 \set ON_ERROR_STOP 1
 :GRE 'meters_hourly';
- user_view_name | granular_refresh_enabled 
-----------------+--------------------------
- meters_hourly  | f
+   view_name   | granular_refresh_enabled 
+---------------+--------------------------
+ meters_hourly | f
 
 DROP MATERIALIZED VIEW meters_hourly;
 DROP TABLE meters;
@@ -809,7 +809,7 @@ ROLLBACK;
  public            | readings        | sensor_id               | 30 days                       | 0 days
 
 :GRE 'readings_hourly';
- user_view_name  | granular_refresh_enabled 
+    view_name    | granular_refresh_enabled 
 -----------------+--------------------------
  readings_hourly | t
 

@@ -267,7 +267,7 @@ FROM sensors
 GROUP BY bucket, sensor_id
 WITH NO DATA;
 
-\set GRE 'SELECT user_view_name, granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = '
+\set GRE 'SELECT view_name, granular_refresh_enabled FROM timescaledb_information.continuous_aggregates WHERE view_name = '
 
 -- Disabled by default.
 :GRE 'sensors_hourly';
