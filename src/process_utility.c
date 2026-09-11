@@ -2461,6 +2461,18 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 			 * the ExecRenameStmt calls below would otherwise report. */
 			ts_cagg_permissions_check(relid, GetUserId());
 
+			/* Block renaming granular refresh column */
+			Hypertable *raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
+			if (raw_ht && is_granular_refresh_tracking_column(raw_ht, stmt->subname))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+						 errmsg("cannot rename column used to set up granular refresh \"%s\"",
+								stmt->subname),
+						 errdetail("Renaming the timescaledb.granular_refresh_column is not "
+								   "supported.")));
+			}
+
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
 													  NameStr(cagg->data.direct_view_name),

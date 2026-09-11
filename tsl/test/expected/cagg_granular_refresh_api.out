@@ -279,6 +279,29 @@ ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh 
 ----------------+--------------------------
  sensors_hourly | t
 
+-- Block renaming the column on the CAgg if it is a granular refresh column
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW sensors_hourly RENAME COLUMN sensor_id TO sensor_id_renamed;
+ERROR:  cannot rename column used to set up granular refresh "sensor_id"
+\set ON_ERROR_STOP 1
+SELECT attname FROM pg_attribute WHERE attrelid = 'sensors_hourly'::regclass
+    AND attnum > 0 ORDER BY attnum;
+  attname  
+-----------
+ bucket
+ sensor_id
+ avg_temp
+
+-- Unrelated cagg columns remain renamable.
+ALTER MATERIALIZED VIEW sensors_hourly RENAME COLUMN avg_temp TO mean_temp;
+SELECT attname FROM pg_attribute WHERE attrelid = 'sensors_hourly'::regclass
+    AND attnum > 0 ORDER BY attnum;
+  attname  
+-----------
+ bucket
+ sensor_id
+ mean_temp
+
 DROP MATERIALIZED VIEW sensors_hourly;
 DROP TABLE sensors;
 -- Error: the granular refresh column must be one of the cagg's grouping columns.
