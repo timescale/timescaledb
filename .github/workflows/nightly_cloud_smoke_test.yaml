@@ -17,7 +17,7 @@ name: Nightly - Update smoke test on release branch
 
 jobs:
   get-next-version:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       next_version: ${{ steps.fetch.outputs.next_version }}
     steps:
@@ -37,7 +37,7 @@ jobs:
         echo "next_version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
 
   generate-matrix:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -66,7 +66,7 @@ jobs:
 
   test-version:
     needs: [generate-matrix, get-next-version]
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     strategy:
       # run sequentially
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}

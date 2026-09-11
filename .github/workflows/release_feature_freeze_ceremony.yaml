@@ -29,7 +29,7 @@ permissions:
 jobs:
   validate-conditions:
     name: Validate Run Conditions
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,7 +68,7 @@ jobs:
 
   release-feature-freeze-ceremony:
     name: Release - Feature Freeze
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     needs: validate-conditions
     environment:
       name: Release Ceremonies

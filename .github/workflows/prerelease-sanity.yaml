@@ -16,7 +16,7 @@ jobs:
   # separate step below.
   config:
     name: Check the configuration
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
@@ -65,7 +65,7 @@ jobs:
     name: Check Release Commit
     needs: config
     if: needs.config.outputs.should_run == 'true'
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
 
     steps:
     - name: Checkout TimescaleDB

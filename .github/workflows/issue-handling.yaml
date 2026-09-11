@@ -13,7 +13,7 @@ jobs:
     # pull requests. To avoid adding pull requests to the bug board,
     # filter out pull requests
     if: ${{ !github.event.issue.pull_request }}
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     steps:
       - name: Add to bugs board
         uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd # v2.0.0
@@ -31,7 +31,7 @@ jobs:
 
   notify-sec:
     name: Notify security channel
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     if: >-
       github.event_name == 'issues' && github.event.action == 'opened' && (
           contains(github.event.issue.labels.*.name, 'segfault') ||
@@ -65,7 +65,7 @@ jobs:
 
   close-issue:
     name: Issue is closed
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     if: github.event_name == 'issues' && github.event.action == 'closed' && contains(github.event.issues.issue.labels.*.name, 'bug')
     steps:
       - uses: leonsteinhaeuser/project-beta-automations@939000fb1900c9fc4f7b5058a09d9f833ebc6859 # v2.2.1
@@ -83,7 +83,7 @@ jobs:
 
   waiting-for-author:
     name: Waiting for Author
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     if: github.event_name == 'issues' && github.event.action == 'labeled'
       && github.event.label.name == 'waiting-for-author'
     steps:
@@ -97,7 +97,7 @@ jobs:
 
   waiting-for-engineering:
     name: Waiting for Engineering
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
     steps:
       - name: Replace unreliable Azure APT mirror

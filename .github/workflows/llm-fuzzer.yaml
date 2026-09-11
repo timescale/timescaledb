@@ -47,7 +47,7 @@ env:
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       have_key: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
@@ -72,7 +72,7 @@ jobs:
   fuzzer:
     if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     needs: config
     permissions:
       contents: read

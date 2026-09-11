@@ -16,7 +16,7 @@ name: Regression Linux i386
   pull_request:
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       pg_latest: ${{ github.event_name == 'pull_request' && steps.setter.outputs.PG_LATEST_ONLY || steps.setter.outputs.PG_LATEST }}
     steps:
@@ -27,7 +27,7 @@ jobs:
       run: python .github/gh_config_reader.py
 
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -43,7 +43,7 @@ jobs:
   regress:
     if: needs.check_paths.outputs.run_ci == 'true'
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     needs: [config, check_paths]
     container:
       image: i386/debian:bookworm-slim@sha256:4d0f3abf8160f14d07208ff72dc4c46882bc5f0a259a8bb8652702c0ee2cc67a
@@ -369,7 +369,7 @@ jobs:
     name: Regression Linux i386 summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

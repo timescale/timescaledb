@@ -16,7 +16,7 @@ name: Regression
   pull_request:
 jobs:
   matrixbuilder:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -35,7 +35,7 @@ jobs:
         fi
 
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -53,7 +53,7 @@ jobs:
     # Change the JOB_NAME variable below when changing the name.
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: [matrixbuilder, check_paths]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     # The flaky check is advisory, so its failure must not fail the summary.
     continue-on-error: ${{ contains(matrix.name, 'Flaky') }}
 
@@ -429,7 +429,7 @@ jobs:
     name: Regression summary
     needs: [check_paths, regress]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

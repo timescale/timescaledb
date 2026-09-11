@@ -7,7 +7,7 @@ name: pg_ladybug
       - ?.*.x
 jobs:
   pg_ladybug:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     env:
       CC: clang-19
       CXX: clang++-19

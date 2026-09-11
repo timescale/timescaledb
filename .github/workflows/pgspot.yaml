@@ -9,7 +9,7 @@ name: pgspot
 
 jobs:
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -25,7 +25,7 @@ jobs:
   pgspot:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     env:
       # policy_compression, policy_compression_execute and policy_compaction do not have explicit
       # search_path because postgres does not allow it for procedures doing transaction control

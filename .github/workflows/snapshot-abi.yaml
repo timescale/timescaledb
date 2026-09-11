@@ -17,7 +17,7 @@ name: ABI Test Against Snapshot
 
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
@@ -32,7 +32,7 @@ jobs:
 
   abi_snapshot_test:
     name: ABI Snapshot Test PG${{ matrix.pg }}
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     needs: config
 
     env:

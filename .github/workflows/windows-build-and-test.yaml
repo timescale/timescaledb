@@ -15,7 +15,7 @@ name: Regression Windows
   workflow_dispatch:
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest_win }}
@@ -38,7 +38,7 @@ jobs:
         fi
 
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -55,7 +55,7 @@ jobs:
   build:
     # Change the JOB_NAME variable below when changing the name.
     name: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
-    runs-on: windows-2025
+    runs-on: runs-on=${{ github.run_id }}/family=m7i/cpu=4/image=windows25-full-x64
     needs: [config, check_paths]
     if: needs.check_paths.outputs.run_ci == 'true'
     strategy:
@@ -416,7 +416,7 @@ jobs:
     name: Regression Windows summary
     needs: [check_paths, build]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

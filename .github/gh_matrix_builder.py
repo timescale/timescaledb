@@ -201,10 +201,8 @@ m["include"].append(
     )
 )
 
-# Also test on ARM. The custom arm64 runner is only available in the
+# Also test on ARM. The RunsOn arm64 runners are only available in the
 # timescale/timescaledb repository.
-# See the available runners here:
-# https://github.com/timescale/timescaledb/actions/runners
 if os.environ.get("GITHUB_REPOSITORY") == "timescale/timescaledb":
     m["include"].append(
         build_debug_config(
@@ -397,6 +395,24 @@ elif len(sys.argv) > 2:
                     }
                 )
             )
+
+# Map the "os" name of each configuration to a RunsOn (runs-on.com) runner
+# label. The "os" value is kept as a plain name because it is used in job
+# names, cache keys and artifact names, where the slashes and run id of a
+# RunsOn label are not allowed or would break caching.
+RUNS_ON_RUNNERS = {
+    "ubuntu-22.04": "runner=4cpu-linux-x64/image=ubuntu22-full-x64",
+    "ubuntu-24.04": "runner=4cpu-linux-x64/image=ubuntu24-full-x64",
+    "timescaledb-runner-arm64": "runner=4cpu-linux-arm64/image=ubuntu24-full-arm64",
+}
+
+for config in m["include"]:
+    spec = RUNS_ON_RUNNERS.get(config["os"])
+    if spec:
+        config["runner"] = f"runs-on={os.environ.get('GITHUB_RUN_ID', '')}/{spec}"
+    else:
+        # macOS jobs stay on GitHub-hosted runners.
+        config["runner"] = config["os"]
 
 # generate command to set github action variable
 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:

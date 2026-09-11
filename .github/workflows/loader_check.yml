@@ -8,7 +8,7 @@ jobs:
     name: Check for loader changes
     # Ignore loader changes if acknowledged already
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'upgrade-requires-restart') }}
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,7 +45,7 @@ jobs:
     name: Check if loader versions are incremented for required restart
     # If the label is present, validate the loader version is bumped
     if: ${{ contains(github.event.pull_request.labels.*.name, 'upgrade-requires-restart') }}
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

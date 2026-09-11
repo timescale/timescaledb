@@ -14,7 +14,7 @@ name: Libfuzzer
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu22-full-x64
     name: Build PostgreSQL and TimescaleDB
     env:
       PG_SRC_DIR: pgbuild
@@ -151,7 +151,7 @@ jobs:
             ]
 
     name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
-    runs-on: ubuntu-22.04
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu22-full-x64
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql

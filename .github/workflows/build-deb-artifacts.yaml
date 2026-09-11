@@ -22,7 +22,7 @@ permissions:
 jobs:
   dispatch:
     name: Dispatch .deb build
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     env:
       GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       WORKFLOW_REPO: timescale/release-build-scripts

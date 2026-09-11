@@ -56,7 +56,7 @@ env:
   EXTENSIONS: "postgres_fdw test_decoding"
 jobs:
   config:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
@@ -70,7 +70,9 @@ jobs:
     # Change the JOB_NAME variable below when changing the name.
     # Don't use the env variable here because the env context is not accessible.
     name: PG${{ matrix.pg }} Sanitizer ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    # matrix.os is kept as a plain name for cache keys and artifact names; the
+    # runner image is derived from it here.
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=${{ matrix.os == 'ubuntu-22.04' && 'ubuntu22-full-x64' || 'ubuntu24-full-x64' }}
     needs: config
     strategy:
       fail-fast: false

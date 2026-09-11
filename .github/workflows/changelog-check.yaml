@@ -20,7 +20,7 @@ jobs:
   # Implements: #NNNN <feature description> (mandatory in case of new features)
   check_changelog_file:
     name: Check for file with CHANGELOG entry
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     steps:
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

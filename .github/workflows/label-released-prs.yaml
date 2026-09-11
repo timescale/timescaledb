@@ -16,7 +16,7 @@ on:
 jobs:
   label-release:
     name: Label Released PRs
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     env:
       GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 

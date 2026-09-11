@@ -17,7 +17,9 @@ jobs:
     # Change the JOB_NAME variable below when changing the name.
     # Don't use the env variable here because the env context is not accessible.
     name: SQLsmith PG${{ matrix.pg }}
-    runs-on: ${{ matrix.os }}
+    # matrix.os is kept as a plain name for artifact names; the runner image is
+    # derived from it here.
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=${{ matrix.os == 'ubuntu-22.04' && 'ubuntu22-full-x64' || 'ubuntu24-full-x64' }}
     strategy:
       matrix:
         os: ["ubuntu-24.04"]

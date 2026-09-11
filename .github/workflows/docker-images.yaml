@@ -19,7 +19,7 @@ name: "Packaging tests: Docker images"
 jobs:
   docker_tests:
     name: ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     services:
       ts:
         image: timescale/${{ matrix.image }}

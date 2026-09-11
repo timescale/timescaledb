@@ -11,7 +11,7 @@ name: Memory tests
 jobs:
   memory_leak:
     name: Memory leak on insert PG${{ matrix.pg }}
-    runs-on: ubuntu-22.04
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu22-full-x64
     strategy:
       matrix:
         pg: [16, 17, 18]

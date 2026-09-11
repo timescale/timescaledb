@@ -13,7 +13,7 @@ name: "timescaledb-extras diagnostic"
 jobs:
   diagnostic_test:
     name: timescaledb-extras PG${{ matrix.pg }} nightly
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     services:
       ts:
         image: timescaledev/timescaledb:nightly-pg${{ matrix.pg }}

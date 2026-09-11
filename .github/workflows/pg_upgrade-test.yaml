@@ -9,7 +9,7 @@ name: pg_upgrade test
 
 jobs:
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -26,7 +26,7 @@ jobs:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
     name: pg_upgrade test from PG${{ matrix.pg_version_old }} to PG${{ matrix.pg_version_new }}
-    runs-on: 'ubuntu-latest'
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     strategy:
       matrix:
         include:
@@ -142,7 +142,7 @@ jobs:
     name: pg_upgrade summary
     needs: [check_paths, pg_upgrade_test]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

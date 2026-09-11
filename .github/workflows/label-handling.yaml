@@ -18,7 +18,7 @@ jobs:
   #
   pr-upgrade-requires-restart:
     name: "PR: Ping database team if 'upgrade-requires-restart' label is set"
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
     steps:
       - name: "PR: upgrade-requires-restart"
         if: github.event.label.name == 'upgrade-requires-restart'
@@ -42,7 +42,7 @@ jobs:
   #
   issue-add-version-labels-for-bugs:
     name: "Issue: Add TimescaleDB and Postgres version labels"
-    runs-on: ubuntu-latest
+    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
 
     # Only run if the issue has the "bug" label
     if: contains(github.event.issue.labels.*.name, 'bug')
