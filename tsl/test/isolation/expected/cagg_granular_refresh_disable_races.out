@@ -257,8 +257,12 @@ step p_insert_late:
 step hx_exception: 
     DO $$
     BEGIN
-        ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
-        ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+        BEGIN
+            ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+            ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+        EXCEPTION WHEN others THEN
+            RAISE;
+        END;
         -- Abort only once the configuration really is cleared, so a disable that
         -- silently did nothing would show up as settings_rows = 0 rather than
         -- letting the permutation pass for the wrong reason.

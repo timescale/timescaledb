@@ -908,9 +908,6 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
  * Backends that already resolved this tracker cache the raw pointer
  * (tenant_tracker_resolved_htab in insert.c).  The DDL invalidates the
  * hypertable's relcache entry so they drop it; see remove_at_commit below.
- *
- * Note: dsa_free returns the pages to the segment's free page manager, so
- * DSA can reuse it. Memory is not reclaimed by the OS.
  */
 static bool
 tenant_tracker_remove(int32 hypertable_id)
@@ -1082,10 +1079,16 @@ tenant_tracker_removal_xact_callback(XactEvent event, void *arg)
 }
 
 /*
- * If subtxn rolls back, it undoes the catalog change that queued the removal,
- * so drop any entries that subtransaction added.  Note the hypertable lock
- * is not released here -- subtransaction locks are reassigned to the parent
- * to top-level end .
+ * Keep each queued removal owned by the subtransaction its catalog change
+ * currently belongs to, the way AtEOSubXact_on_commit_actions does for
+ * ON COMMIT actions.
+ *
+ * On subtransaction commit the catalog change becomes the parent's, so the
+ * entry is re-parented; without this a later rollback of the parent would undo
+ * the DDL but leave the free queued.  On subtransaction abort the catalog
+ * change is undone, so the entries it owns are dropped.  The hypertable lock is
+ * not released on abort -- subtransaction locks are reassigned to the parent
+ * until top-level end.
  */
 static void
 tenant_tracker_removal_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
@@ -1093,20 +1096,40 @@ tenant_tracker_removal_subxact_callback(SubXactEvent event, SubTransactionId myS
 {
 	ListCell *lc;
 
-	if (event != SUBXACT_EVENT_ABORT_SUB || pending_removals == NIL)
+	if (pending_removals == NIL)
 	{
 		return;
 	}
 
-	foreach (lc, pending_removals)
+	switch (event)
 	{
-		PendingTrackerRemoval *pending = lfirst(lc);
+		case SUBXACT_EVENT_COMMIT_SUB:
+			foreach (lc, pending_removals)
+			{
+				PendingTrackerRemoval *pending = lfirst(lc);
 
-		if (pending->subxid == mySubid)
-		{
-			pending_removals = foreach_delete_current(pending_removals, lc);
-			pfree(pending);
-		}
+				if (pending->subxid == mySubid)
+				{
+					pending->subxid = parentSubid;
+				}
+			}
+			break;
+
+		case SUBXACT_EVENT_ABORT_SUB:
+			foreach (lc, pending_removals)
+			{
+				PendingTrackerRemoval *pending = lfirst(lc);
+
+				if (pending->subxid == mySubid)
+				{
+					pending_removals = foreach_delete_current(pending_removals, lc);
+					pfree(pending);
+				}
+			}
+			break;
+
+		default:
+			break;
 	}
 }
 
