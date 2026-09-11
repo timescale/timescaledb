@@ -422,6 +422,16 @@ AS SELECT * FROM timescaledb_information.hypertable_compression_settings;
 CREATE OR REPLACE VIEW timescaledb_information.chunk_columnstore_settings AS
 SELECT * FROM timescaledb_information.chunk_compression_settings;
 
+CREATE OR REPLACE VIEW timescaledb_information.hypertable_granular_refresh_settings AS
+	SELECT
+	    ht.schema_name AS hypertable_schema,
+		ht.table_name AS hypertable_name,
+		s.granular_refresh_column,
+		s.granular_refresh_start_offset,
+		s.granular_refresh_end_offset
+	FROM _timescaledb_catalog.hypertable ht
+	INNER JOIN _timescaledb_catalog.hypertable_cagg_settings s ON (s.hypertable_id = ht.id);
+
 -- chunk statistics view
 CREATE OR REPLACE VIEW timescaledb_information.stat_chunk_activity AS
 SELECT
