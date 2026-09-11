@@ -9,8 +9,6 @@
 #include <postgres.h>
 
 
-extern TSDLLEXPORT Sort *ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids);
-
 extern TSDLLEXPORT Sort *ts_make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx,
 									  Oid *sortOperators, Oid *collations, bool *nullsFirst);
 
