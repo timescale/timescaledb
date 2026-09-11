@@ -47,7 +47,7 @@ env:
 
 jobs:
   config:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       have_key: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
@@ -57,6 +57,8 @@ jobs:
             && steps.filter.outputs.src == 'true') }}
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -72,7 +74,7 @@ jobs:
   fuzzer:
     if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     needs: config
     permissions:
       contents: read
@@ -90,6 +92,8 @@ jobs:
             display_name: "Hypertable ON-OFF"
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Replace unreliable Azure APT mirror
       run: |
         sudo touch /etc/apt/apt-mirrors.txt

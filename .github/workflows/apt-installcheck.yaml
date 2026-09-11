@@ -34,15 +34,17 @@ jobs:
           - "TSL"
         include:
           - arch: AMD64
-            runner: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+            runner: runs-on/fleet=linux-2cpu-x64/env=ue1
           - arch: ARM
-            runner: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+            runner: runs-on/fleet=linux-2cpu/env=ue1
           - image: ubuntu:22.04
             image_friendly: Ubuntu 22.04
 
     runs-on: ${{ matrix.runner }}
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Replace unreliable Azure APT mirror
       run: |
         touch /etc/apt/apt-mirrors.txt

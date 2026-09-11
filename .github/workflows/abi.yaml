@@ -20,7 +20,7 @@ name: ABI Test
   workflow_dispatch:
 jobs:
   config:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
@@ -30,6 +30,8 @@ jobs:
       pg18_latest: ${{ steps.config.outputs.pg18_latest }}
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Read configuration
@@ -38,7 +40,7 @@ jobs:
 
   abi_test:
     name: ABI Test PG${{ matrix.pg }}
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-8cpu-x64/env=ue1
     needs: config
     strategy:
       fail-fast: false
@@ -58,6 +60,8 @@ jobs:
             tester: ${{ fromJson(needs.config.outputs.pg18_latest) }}
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -22,12 +22,14 @@ permissions:
 jobs:
   dispatch:
     name: Dispatch .deb build
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     env:
       GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       WORKFLOW_REPO: timescale/release-build-scripts
       WORKFLOW_FILE: timescaledb-apt-tsbench.yml
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Compute build inputs

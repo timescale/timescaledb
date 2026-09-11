@@ -17,10 +17,12 @@ name: Nightly - Update smoke test on release branch
 
 jobs:
   get-next-version:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       next_version: ${{ steps.fetch.outputs.next_version }}
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Get next version
       # Get newest release branch with most recent commits
       id: fetch
@@ -37,10 +39,12 @@ jobs:
         echo "next_version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
 
   generate-matrix:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - name: Fetch TimescaleDB releases
         id: fetch-releases
         run: |
@@ -66,13 +70,15 @@ jobs:
 
   test-version:
     needs: [generate-matrix, get-next-version]
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     strategy:
       # run sequentially
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
       max-parallel: 1
       fail-fast: false
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - name: Checkout TimescaleDB
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

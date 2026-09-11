@@ -18,7 +18,7 @@ jobs:
 
   build:
     name: Windows package PG${{ matrix.pg }}
-    runs-on: runs-on=${{ github.run_id }}/family=m7i/cpu=4/image=windows25-full-x64
+    runs-on: windows-2025
     strategy:
       fail-fast: false
       matrix:

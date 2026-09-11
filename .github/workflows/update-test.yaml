@@ -10,13 +10,15 @@ name: Update and Downgrade
 
 jobs:
   check_paths:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -27,7 +29,7 @@ jobs:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
     name: Update test PG${{ matrix.pg }} ${{ matrix.mode }}
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     strategy:
       matrix:
         pg: [16, 17, 18]
@@ -37,6 +39,8 @@ jobs:
       PG_VERSION: ${{ matrix.pg }}
       POSTGRES_HOST_AUTH_METHOD: trust
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -141,8 +145,10 @@ jobs:
     name: Update and Downgrade summary
     needs: [check_paths, update_test]
     if: always()
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - run: |
           # If the detector failed, or the matrix failed, exit with error
           if [[ "${{ needs.update_test.result }}" == "failure" ]]; then

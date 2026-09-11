@@ -17,9 +17,7 @@ jobs:
     # Change the JOB_NAME variable below when changing the name.
     # Don't use the env variable here because the env context is not accessible.
     name: SQLsmith PG${{ matrix.pg }}
-    # matrix.os is kept as a plain name for artifact names; the runner image is
-    # derived from it here.
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=${{ matrix.os == 'ubuntu-22.04' && 'ubuntu22-full-x64' || 'ubuntu24-full-x64' }}
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     strategy:
       matrix:
         os: ["ubuntu-24.04"]
@@ -32,6 +30,8 @@ jobs:
       JOB_NAME: SQLsmith PG${{ matrix.pg }}
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Replace unreliable Azure APT mirror
       run: |
         sudo touch /etc/apt/apt-mirrors.txt

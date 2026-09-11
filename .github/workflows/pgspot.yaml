@@ -9,13 +9,15 @@ name: pgspot
 
 jobs:
   check_paths:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
           || (steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -25,7 +27,7 @@ jobs:
   pgspot:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     env:
       # policy_compression, policy_compression_execute and policy_compaction do not have explicit
       # search_path because postgres does not allow it for procedures doing transaction control
@@ -38,6 +40,8 @@ jobs:
         --proc-without-search-path '_timescaledb_functions.policy_compaction(job_id integer,config jsonb)'
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
 
     - name: Setup python 3.13
       uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

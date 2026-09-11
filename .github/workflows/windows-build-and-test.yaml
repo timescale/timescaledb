@@ -15,7 +15,7 @@ name: Regression Windows
   workflow_dispatch:
 jobs:
   config:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest_win }}
@@ -23,6 +23,8 @@ jobs:
       pg18_latest: ${{ steps.config.outputs.pg18_latest_win }}
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
     - name: Read configuration
@@ -38,7 +40,7 @@ jobs:
         fi
 
   check_paths:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu24-full-x64
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -46,6 +48,8 @@ jobs:
          }}
       run_installcheck: ${{ github.event_name == 'push' || steps.filter.outputs.windows-workflow == 'true' }}
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -55,7 +59,7 @@ jobs:
   build:
     # Change the JOB_NAME variable below when changing the name.
     name: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
-    runs-on: runs-on=${{ github.run_id }}/family=m7i/cpu=4/image=windows25-full-x64
+    runs-on: windows-2025
     needs: [config, check_paths]
     if: needs.check_paths.outputs.run_ci == 'true'
     strategy:
@@ -416,8 +420,10 @@ jobs:
     name: Regression Windows summary
     needs: [check_paths, build]
     if: always()
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - run: |
           # If the detector failed, or the matrix failed, exit with error
           if [[ "${{ needs.build.result }}" == "failure" ]]; then

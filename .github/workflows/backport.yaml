@@ -26,9 +26,11 @@ permissions:
 jobs:
   backport:
     name: Backport Bug Fixes
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
 
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - name: Install Python Dependencies
         run: |
           pip install PyGithub requests

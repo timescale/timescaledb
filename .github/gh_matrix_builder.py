@@ -396,23 +396,21 @@ elif len(sys.argv) > 2:
                 )
             )
 
-# Map the "os" name of each configuration to a RunsOn (runs-on.com) runner
-# label. The "os" value is kept as a plain name because it is used in job
-# names, cache keys and artifact names, where the slashes and run id of a
-# RunsOn label are not allowed or would break caching.
-RUNS_ON_RUNNERS = {
-    "ubuntu-22.04": "runner=4cpu-linux-x64/image=ubuntu22-full-x64",
-    "ubuntu-24.04": "runner=4cpu-linux-x64/image=ubuntu24-full-x64",
-    "timescaledb-runner-arm64": "runner=4cpu-linux-arm64/image=ubuntu24-full-arm64",
+# Map the "os" name of each configuration to a RunsOn fleet label (see
+# env/aws-ci/us-east-1/runson/config.yaml in savannah-infra for the fleet
+# catalog). The "os" value is kept as a plain name because it is used in job
+# names, cache keys and artifact names, where the slashes of a fleet label
+# are not allowed or would break caching. Note that the fleets run ubuntu
+# 24.04 images; there is no ubuntu 22.04 fleet.
+RUNS_ON_FLEETS = {
+    "ubuntu-22.04": "runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1",
+    "ubuntu-24.04": "runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1",
+    "timescaledb-runner-arm64": "runs-on/fleet=linux-8cpu-ubuntu24/env=ue1",
 }
 
 for config in m["include"]:
-    spec = RUNS_ON_RUNNERS.get(config["os"])
-    if spec:
-        config["runner"] = f"runs-on={os.environ.get('GITHUB_RUN_ID', '')}/{spec}"
-    else:
-        # macOS jobs stay on GitHub-hosted runners.
-        config["runner"] = config["os"]
+    # macOS jobs stay on GitHub-hosted runners.
+    config["runner"] = RUNS_ON_FLEETS.get(config["os"], config["os"])
 
 # generate command to set github action variable
 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:

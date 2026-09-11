@@ -1,5 +1,13 @@
 self-hosted-runner:
   labels:
+    # RunsOn fleets (see env/aws-ci/us-east-1/runson/config.yaml in
+    # savannah-infra for the fleet catalog).
+    - runs-on/fleet=linux-2cpu/env=ue1
+    - runs-on/fleet=linux-2cpu-x64/env=ue1
+    - runs-on/fleet=linux-8cpu-x64/env=ue1
+    - runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
+    - runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
+    # Legacy self-hosted runners, still referenced on backport branches.
     - timescaledb-runner-arm64
     - cloud-image-runner-ubuntu-24-arm64
 

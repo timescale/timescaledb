@@ -16,10 +16,12 @@ jobs:
   # separate step below.
   config:
     name: Check the configuration
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
@@ -65,9 +67,11 @@ jobs:
     name: Check Release Commit
     needs: config
     if: needs.config.outputs.should_run == 'true'
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # GitHub creates an empty merge commit even for fast-forward merges, which

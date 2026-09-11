@@ -11,13 +11,15 @@ name: Memory tests
 jobs:
   memory_leak:
     name: Memory leak on insert PG${{ matrix.pg }}
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-x64/image=ubuntu22-full-x64
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     strategy:
       matrix:
         pg: [16, 17, 18]
       fail-fast: false
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Replace unreliable Azure APT mirror
       run: |
         sudo touch /etc/apt/apt-mirrors.txt

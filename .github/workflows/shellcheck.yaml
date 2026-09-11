@@ -8,13 +8,15 @@ name: Shellcheck
       - ?.*.x
 jobs:
   check_paths:
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
           || (steps.filter.outputs.shell == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -25,9 +27,11 @@ jobs:
     name: Shellcheck
     needs: [check_paths]
     if: needs.check_paths.outputs.run_ci == 'true'
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
 
     steps:
+    - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
     - name: Replace unreliable Azure APT mirror
       run: |
         sudo touch /etc/apt/apt-mirrors.txt
@@ -59,8 +63,10 @@ jobs:
     name: Shellcheck summary
     needs: [check_paths, shellcheck]
     if: always()
-    runs-on: runs-on=${{ github.run_id }}/runner=4cpu-linux-arm64/image=ubuntu24-full-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
       - run: |
           # If the detector failed, or the matrix failed, exit with error
           if [[ "${{ needs.shellcheck.result }}" == "failure" ]]; then
