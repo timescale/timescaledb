@@ -1495,7 +1495,27 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 		perminfo->insertedCols = bms_add_member(perminfo->insertedCols, attno);
 	}
 
-	ExecCheckPermissions(pstate->p_rtable, list_make1(perminfo), true);
+	/*
+	 * Check INSERT permissions directly on the hypertable root relation.
+	 * Temporarily clear ExecutorCheckPerms_hook so that third-party hooks
+	 * (e.g. pgaudit) are not invoked outside a normal executor context, where
+	 * their internal state is not initialized and they may crash (see #7667).
+	 * The standard ACL_INSERT checks performed by ExecCheckRTEPerms() are
+	 * unaffected, and the hook is restored afterwards, including on error.
+	 */
+	volatile ExecutorCheckPerms_hook_type prev_perms_hook = ExecutorCheckPerms_hook;
+	PG_TRY();
+	{
+		ExecutorCheckPerms_hook = NULL;
+		ExecCheckPermissions(pstate->p_rtable, list_make1(perminfo), true);
+		ExecutorCheckPerms_hook = prev_perms_hook;
+	}
+	PG_CATCH();
+	{
+		ExecutorCheckPerms_hook = prev_perms_hook;
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	/*
 	 * Permission check for row security policies.
