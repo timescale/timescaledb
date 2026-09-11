@@ -31,7 +31,9 @@ jobs:
       - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
 
       - name: Install prerequisites
-        run: sudo apt install perltidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y perltidy
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check trailing whitespace
@@ -108,7 +110,7 @@ jobs:
 
   cc_checks:
     name: Check code formatting
-    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     strategy:
       fail-fast: false
     env:
@@ -120,6 +122,13 @@ jobs:
       run: |
         sudo touch /etc/apt/apt-mirrors.txt
         sudo sed -i.bak -e s,azure.archive.ubuntu,aws.archive.ubuntu,g /etc/apt/apt-mirrors.txt
+        # On RunsOn (AWS) runners, switch to the regional EC2 mirror since
+        # archive.ubuntu.com throttles concurrent downloads from AWS.
+        for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+          if [ -f "$f" ]; then
+            sudo sed -i.bak -E 's,https?://(archive|security)\.ubuntu\.com/ubuntu,http://'"${RUNS_ON_AWS_REGION:-us-east-1}"'.ec2.archive.ubuntu.com/ubuntu,g' "$f"
+          fi
+        done
 
     - name: Configure apt retries and timeout
       run: |
@@ -249,7 +258,7 @@ jobs:
 
   python_checks:
     name: Check Python code in tree
-    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     steps:
       - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
 
