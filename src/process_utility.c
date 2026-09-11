@@ -3349,7 +3349,7 @@ is_granular_refresh_tracking_column(Hypertable *ht, const char *colname)
 {
 	FormData_hypertable_cagg_settings settings;
 
-	return ts_hypertable_cagg_settings_get(ht->fd.id, &settings) &&
+	return ts_hypertable_cagg_settings_get(ht->fd.id, &settings, NULL) &&
 		   namestrcmp(&settings.granular_refresh_column, colname) == 0;
 }
 
