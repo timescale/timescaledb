@@ -126,7 +126,11 @@ SELECT ht.schema_name AS hypertable_schema,
   mat_ht.status & 4 = 4 AS compression_enabled,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
-  directview.viewdefinition AS view_definition
+  directview.viewdefinition AS view_definition,
+  CASE WHEN cagg.granular_refresh_enabled THEN (
+    SELECT s.granular_refresh_column
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    WHERE s.hypertable_id = cagg.raw_hypertable_id) END AS granular_refresh_column
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
   LATERAL (

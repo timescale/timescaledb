@@ -68,7 +68,8 @@ SELECT
   NULL::boolean AS compression_enabled,
   NULL::name AS materialization_hypertable_schema,
   NULL::name AS materialization_hypertable_name,
-  NULL::text AS view_definition;
+  NULL::text AS view_definition,
+  NULL::name AS granular_refresh_column;
 
 CREATE OR REPLACE VIEW timescaledb_information.chunks AS
 SELECT

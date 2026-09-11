@@ -48,7 +48,15 @@ CREATE MATERIALIZED VIEW cond_daily
   GROUP BY bucket, sensor_id
   WITH NO DATA;
 
+SELECT view_name, granular_refresh_column
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'cond_daily';
+
 ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+SELECT view_name, granular_refresh_column
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'cond_daily';
 
 SELECT start_offset::interval - end_offset::interval
          = (:granular_refresh_lookback_days - 1) * INTERVAL '1 day' AS window_width_matches,
