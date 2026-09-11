@@ -221,6 +221,18 @@ ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh 
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 :GRE 'sensors_hourly';
 
+-- Block renaming the column on the CAgg if it is a granular refresh column
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW sensors_hourly RENAME COLUMN sensor_id TO sensor_id_renamed;
+\set ON_ERROR_STOP 1
+SELECT attname FROM pg_attribute WHERE attrelid = 'sensors_hourly'::regclass
+    AND attnum > 0 ORDER BY attnum;
+
+-- Unrelated cagg columns remain renamable.
+ALTER MATERIALIZED VIEW sensors_hourly RENAME COLUMN avg_temp TO mean_temp;
+SELECT attname FROM pg_attribute WHERE attrelid = 'sensors_hourly'::regclass
+    AND attnum > 0 ORDER BY attnum;
+
 DROP MATERIALIZED VIEW sensors_hourly;
 DROP TABLE sensors;
 
