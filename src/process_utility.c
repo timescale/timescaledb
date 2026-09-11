@@ -92,6 +92,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
 #include "ts_stats/ts_stats_record.h"
 #include "tss_callbacks.h"
 #include "utils.h"
@@ -114,6 +115,7 @@ static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPL
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
+static bool is_granular_refresh_tracking_column(Hypertable *ht, const char *colname);
 static void ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc,
 									Oid newrole_oid);
 
@@ -2416,6 +2418,17 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	Dimension *dim;
 	bool is_cagg = false;
 
+	if (ht && is_granular_refresh_tracking_column(ht, stmt->subname))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot rename column used to set up granular refresh \"%s\"",
+						stmt->subname),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(relid))));
+	}
+
 	if (!ht)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
@@ -2447,6 +2460,18 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 			 * aggregate rather than one of the internal views, which is what
 			 * the ExecRenameStmt calls below would otherwise report. */
 			ts_cagg_permissions_check(relid, GetUserId());
+
+			/* Block renaming granular refresh column */
+			Hypertable *raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
+			if (raw_ht && is_granular_refresh_tracking_column(raw_ht, stmt->subname))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+						 errmsg("cannot rename column used to set up granular refresh \"%s\"",
+								stmt->subname),
+						 errdetail("Renaming the timescaledb.granular_refresh_column is not "
+								   "supported.")));
+			}
 
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
@@ -3319,6 +3344,15 @@ process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 	}
 }
 
+static bool
+is_granular_refresh_tracking_column(Hypertable *ht, const char *colname)
+{
+	FormData_hypertable_cagg_settings settings;
+
+	return ts_hypertable_cagg_settings_get(ht->fd.id, &settings) &&
+		   namestrcmp(&settings.granular_refresh_column, colname) == 0;
+}
+
 static void
 process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 {
@@ -3337,6 +3371,16 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
 		}
+	}
+
+	if (is_granular_refresh_tracking_column(ht, cmd->name))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot drop column used to set up granular refresh \"%s\"", cmd->name),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(ht->main_table_relid))));
 	}
 
 	/* Delete dimension range entries on this column, if any.  */
@@ -4537,6 +4581,17 @@ process_alter_column_type_start(ParseState *pstate, Hypertable *ht, AlterTableCm
 								 " Disable the stats using disable_column_stats function"
 								 " before changing the type")));
 		}
+	}
+
+	if (is_granular_refresh_tracking_column(ht, cmd->name))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot change type of column used to set up granular refresh \"%s\"",
+						cmd->name),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(ht->main_table_relid))));
 	}
 }
 
