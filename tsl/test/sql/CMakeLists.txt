@@ -50,6 +50,7 @@ set(TEST_FILES
     compression_constraints.sql
     compression_create_compressed_table.sql
     compression_defaults.sql
+    compression_dependency.sql
     compression_fks.sql
     compression_indexcreate.sql
     compression_insert.sql
