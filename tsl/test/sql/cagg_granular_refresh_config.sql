@@ -33,13 +33,28 @@ ALTER TABLE conditions SET (
     timescaledb.granular_refresh_end_offset = '1 day'
 );
 
+-- Check configured settings using the view in `timescaledb_information`
+-- Report window width and end_offset since start_offset varies, but end_offset is constant
+SELECT start_offset::interval - end_offset::interval
+         = (:granular_refresh_lookback_days - 1) * INTERVAL '1 day' AS window_width_matches,
+       end_offset
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable::text = 'conditions';
+
 CREATE MATERIALIZED VIEW cond_daily
   WITH (timescaledb.continuous) AS
   SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
   FROM conditions
   GROUP BY bucket, sensor_id
   WITH NO DATA;
+
 ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+SELECT start_offset::interval - end_offset::interval
+         = (:granular_refresh_lookback_days - 1) * INTERVAL '1 day' AS window_width_matches,
+       end_offset
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable::text = 'conditions';
 
 -- TEST 1: the tracking window is computed and pinned on the tracker.
 --
@@ -58,6 +73,12 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions');
 DROP MATERIALIZED VIEW cond_daily;
 DROP TABLE conditions;
 
+SELECT start_offset::interval - end_offset::interval
+         = (:granular_refresh_lookback_days - 1) * INTERVAL '1 day' AS window_width_matches,
+       end_offset
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable::text = 'conditions';
+
 -- TEST 1b: integer-time hypertables (smallint/int/bigint) use the integer_now()
 -- watermark for the window, with the configured offsets interpreted as plain
 -- integers.  metrics_now() is a constant 1000, and offsets are 900/100, so the
@@ -72,6 +93,11 @@ ALTER TABLE metrics SET (
     timescaledb.granular_refresh_start_offset = 900,
     timescaledb.granular_refresh_end_offset = 100
 );
+
+SELECT start_offset::bigint - end_offset::bigint = 800 AS window_width_matches,
+       end_offset
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable::text = 'metrics';
 
 CREATE MATERIALIZED VIEW metrics_by_bucket
   WITH (timescaledb.continuous) AS
@@ -90,6 +116,11 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics');
 DROP MATERIALIZED VIEW metrics_by_bucket;
 DROP TABLE metrics;
 
+SELECT start_offset::bigint - end_offset::bigint = 800 AS window_width_matches,
+       end_offset
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable::text = 'metrics';
+
 -- TEST 2: only late-arriving data (inside the window) is tracked; recent data
 -- (newer than now - 1 day) is gated out at the commit drain, so its tenant
 -- never enters the tracker.
@@ -100,6 +131,12 @@ ALTER TABLE conditions SET (
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
 );
+
+SELECT start_offset::interval - end_offset::interval
+         = (:granular_refresh_lookback_days - 1) * INTERVAL '1 day' AS window_width_matches,
+       end_offset
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable::text = 'conditions';
 
 CREATE MATERIALIZED VIEW cond_daily
   WITH (timescaledb.continuous) AS
@@ -145,6 +182,12 @@ ALTER TABLE conditions SET (
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
 );
+
+SELECT start_offset::interval - end_offset::interval
+         = (:granular_refresh_lookback_days - 1) * INTERVAL '1 day' AS window_width_matches,
+       end_offset
+FROM timescaledb_information.hypertable_granular_refresh_settings
+WHERE hypertable::text = 'conditions';
 
 CREATE MATERIALIZED VIEW cond_daily
   WITH (timescaledb.continuous) AS

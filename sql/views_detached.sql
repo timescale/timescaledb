@@ -176,6 +176,13 @@ SELECT
   NULL::text AS orderby,
   NULL::jsonb AS index;
 
+CREATE OR REPLACE VIEW timescaledb_information.hypertable_granular_refresh_settings AS
+SELECT
+    NULL::regclass AS hypertable,
+    NULL::name AS refresh_column,
+    NULL::text AS start_offset,
+    NULL::text AS end_offset;
+
 DO $$
 BEGIN
   IF EXISTS (SELECT FROM pg_class WHERE relname = 'stat_chunk_activity' AND relkind = 'v') THEN
