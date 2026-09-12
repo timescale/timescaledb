@@ -1913,6 +1913,7 @@ segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null)
 bool
 segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_null)
 {
+	/* LOOK HERE */
 	Datum data_is_eq;
 	FunctionCallInfo eq_fcinfo;
 	/* if one of the datums is null and the other isn't, we must be in a new group */
