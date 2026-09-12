@@ -581,7 +581,7 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	List *compexprs = NIL;
 	Oid col_type;
 
-	if (info->range_start == PG_INT64_MIN && info->range_end == PG_INT64_MAX)
+	if (!info->valid || (info->range_start == PG_INT64_MIN && info->range_end == PG_INT64_MAX))
 	{
 		return NULL;
 	}
