@@ -145,7 +145,11 @@ where (t2.id = 1 or t2.id = 2)
                                  Index Cond: ((_hyper_1_2_chunk_compressed_1._ts_meta_v2_first_id <= 1) AND (_hyper_1_2_chunk_compressed_1._ts_meta_v2_last_id >= 1))
                            ->  Bitmap Index Scan on _hyper_1_2_chunk_compressed_s__ts_meta_v2_first_id__ts_meta_idx (actual rows=5.00 loops=1)
                                  Index Cond: ((_hyper_1_2_chunk_compressed_1._ts_meta_v2_first_id <= 2) AND (_hyper_1_2_chunk_compressed_1._ts_meta_v2_last_id >= 2))
-   ->  Append (actual rows=18.00 loops=18)
+   ->  Custom Scan (ChunkAppend) on public.bscan t1 (actual rows=18.00 loops=18)
+         Output: t1.ts, t1.s, t1.id, t1.payload
+         Startup Exclusion: false
+         Runtime Exclusion: true
+         Hypertables excluded during runtime: 0
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk t1_1 (actual rows=10.00 loops=18)
                Output: t1_1.ts, t1_1.s, t1_1.id, t1_1.payload
                Vectorized Filter: (t1_1.payload = '-537'::integer)

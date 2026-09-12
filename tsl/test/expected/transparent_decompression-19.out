@@ -2889,19 +2889,20 @@ WHERE metrics.time > metrics_space.time
          ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk (actual rows=1008.00 loops=1)
                ->  Index Scan using _hyper_2_11_chunk_compressed_device_id_device_id_peer__ts_m_idx on _hyper_2_11_chunk_compressed (actual rows=3.00 loops=1)
          ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=336.00 loops=1)
-   ->  Append (actual rows=0.00 loops=8640)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=8640)
+   ->  Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=8640)
+         Chunks excluded during runtime: 2
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=3600)
                Filter: (("time" > metrics_space."time") AND ("time" < metrics_space."time"))
                Rows Removed by Filter: 720
-               ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=8640)
+               ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=3600)
                      Index Cond: (device_id = metrics_space.device_id)
-         ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=0.00 loops=8640)
+         ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=0.00 loops=3355)
                Index Cond: (("time" > metrics_space."time") AND ("time" < metrics_space."time"))
                Filter: (metrics_space.device_id = device_id)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=0.00 loops=8640)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=0.00 loops=1675)
                Filter: (("time" > metrics_space."time") AND ("time" < metrics_space."time"))
                Rows Removed by Filter: 336
-               ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=1.00 loops=8640)
+               ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=1.00 loops=1675)
                      Index Cond: (device_id = metrics_space.device_id)
 
 SET enable_seqscan = TRUE;
@@ -7139,19 +7140,20 @@ WHERE metrics.time > metrics_space.time
          ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk (actual rows=1008.00 loops=1)
                ->  Index Scan using _hyper_2_11_chunk_compressed_device_id_device_id_peer__ts_m_idx on _hyper_2_11_chunk_compressed (actual rows=3.00 loops=1)
          ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=336.00 loops=1)
-   ->  Append (actual rows=0.00 loops=8640)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=8640)
+   ->  Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=8640)
+         Chunks excluded during runtime: 2
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=3600)
                Filter: (("time" > metrics_space."time") AND ("time" < metrics_space."time"))
                Rows Removed by Filter: 720
-               ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=8640)
+               ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=3600)
                      Index Cond: (device_id = metrics_space.device_id)
-         ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=0.00 loops=8640)
+         ->  Index Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=0.00 loops=3355)
                Index Cond: (("time" > metrics_space."time") AND ("time" < metrics_space."time"))
                Filter: (metrics_space.device_id = device_id)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=0.00 loops=8640)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=0.00 loops=1675)
                Filter: (("time" > metrics_space."time") AND ("time" < metrics_space."time"))
                Rows Removed by Filter: 336
-               ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=1.00 loops=8640)
+               ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=1.00 loops=1675)
                      Index Cond: (device_id = metrics_space.device_id)
 
 SET enable_seqscan = TRUE;

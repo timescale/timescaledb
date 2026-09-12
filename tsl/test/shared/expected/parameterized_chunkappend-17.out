@@ -43,6 +43,33 @@ ORDER BY devices.device_id, win.id
                            ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=360.00 loops=3)
                                  Index Cond: ((device_id = devices.device_id) AND ("time" >= "*VALUES*".column2) AND ("time" < "*VALUES*".column3) AND ("time" > (now() - '@ 100 years'::interval)))
 
+:PREFIX
+SELECT time FROM unnest(array['2000-01-10 1:00+0'::timestamptz]) AS vars(v)
+JOIN metrics ON time = vars.v;
+--- QUERY PLAN ---
+ Nested Loop (actual rows=5.00 loops=1)
+   ->  Function Scan on unnest vars (actual rows=1.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics (actual rows=5.00 loops=1)
+         Chunks excluded during runtime: 2
+         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+               Index Cond: ("time" = vars.v)
+         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=5.00 loops=1)
+               Index Cond: ("time" = vars.v)
+         ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
+               Index Cond: ("time" = vars.v)
+
+:PREFIX
+SELECT count(s.w) FROM unnest(array[1]::int[]) AS vars(v)
+LEFT JOIN LATERAL (SELECT vars.v AS w FROM metrics) s ON true;
+--- QUERY PLAN ---
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Nested Loop Left Join (actual rows=68370.00 loops=1)
+         ->  Function Scan on unnest vars (actual rows=1.00 loops=1)
+         ->  Append (actual rows=68370.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk (actual rows=25190.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk (actual rows=25190.00 loops=1)
+
 RESET enable_hashjoin;
 RESET enable_mergejoin;
 RESET enable_material;
