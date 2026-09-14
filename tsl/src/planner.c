@@ -56,27 +56,26 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 {
 	if (ts_guc_enable_optimizations)
 	{
-
 		switch (stage)
 		{
-		case UPPERREL_GROUP_AGG:
-			if (ts_guc_enable_chunkwise_aggregation && input_rel != NULL &&
+			case UPPERREL_GROUP_AGG:
+				if (ts_guc_enable_chunkwise_aggregation && input_rel != NULL &&
 					!IS_DUMMY_REL(input_rel) && output_rel != NULL &&
 					involves_hypertable(root, input_rel))
-			{
-				tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
-			}
+				{
+					tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
+				}
 
-			if (root->numOrderedAggs && !IS_DUMMY_REL(input_rel) && output_rel != NULL)
-			{
+				if (root->numOrderedAggs && !IS_DUMMY_REL(input_rel) && output_rel != NULL)
+				{
+					tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
+				}
+				break;
+			case UPPERREL_DISTINCT:
 				tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
-			}
-			break;
-		case UPPERREL_DISTINCT:
-			tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
-			break;
-		default:
-			break;
+				break;
+			default:
+				break;
 		}
 	}
 
