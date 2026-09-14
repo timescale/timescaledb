@@ -2067,6 +2067,7 @@ view_definition                   |  SELECT time_bucket('@ 1 day'::interval, tim
                                   |     sum(humidity) AS sumh                                +
                                   |    FROM conditions                                       +
                                   |   GROUP BY (time_bucket('@ 1 day'::interval, timec));
+granular_refresh_column           | 
 
 \x OFF
 CALL refresh_continuous_aggregate('conditions_summary_new', NULL, NULL);
