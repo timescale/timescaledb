@@ -1080,9 +1080,13 @@ next_chunk_row(DeferredChunkAppendState *state)
 		state->cur_nrows = 0;
 		state->cur_row = 0;
 		ExecutorRun_compat(state->cur_qd, ForwardScanDirection, state->batch_size, false);
-		if (state->cur_nrows == 0)
+		/*
+		 * A batch shorter than requested means the chunk query reached its end.
+		 * Close the executor right away, running it again would start the scan
+		 * over and hand us the same rows a second time.
+		 */
+		if (state->cur_nrows < (uint64) state->batch_size)
 		{
-			/* Chunk exhausted: close its executor and move to the next chunk. */
 			close_current_chunk(state);
 		}
 	}

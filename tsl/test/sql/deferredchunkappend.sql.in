@@ -306,3 +306,14 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT value,
 RESET timescaledb.debug_require_deferred_chunk_scan;
 RESET enable_material;
 
+
+-- A parameterized LIMIT in a generic plan, or a LIMIT too large to push down,
+-- leaves the per-chunk query unbounded so each chunk is read in batches.
+SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+PREPARE p(int) AS SELECT time, device FROM metrics ORDER BY time DESC LIMIT $1;
+SET plan_cache_mode TO force_generic_plan;
+EXECUTE p(6);
+RESET plan_cache_mode;
+DEALLOCATE p;
+SELECT count(*), count(DISTINCT time) FROM (SELECT time FROM metrics ORDER BY time DESC LIMIT 3000000000) q;
+RESET timescaledb.debug_require_deferred_chunk_scan;
