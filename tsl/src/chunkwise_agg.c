@@ -697,6 +697,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	{
 		Path *partially_aggregated_path = lfirst(lc);
 		const bool is_sorted =
+			root->group_pathkeys != NIL &&
 			pathkeys_contained_in(root->group_pathkeys, partially_aggregated_path->pathkeys);
 		AggStrategy final_strategy;
 		if (parse->groupClause == NULL)
@@ -747,7 +748,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		{
 			double total_groups =
 				partially_aggregated_path->rows * partially_aggregated_path->parallel_workers;
-			if (final_strategy != AGG_SORTED)
+			if (partially_aggregated_path->pathkeys == NIL)
 			{
 				partially_aggregated_path =
 					(Path *) create_gather_path(root,
@@ -764,7 +765,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 													  partially_grouped_rel,
 													  partially_aggregated_path,
 													  partially_grouped_rel->reltarget,
-													  root->group_pathkeys,
+													  partially_aggregated_path->pathkeys,
 													  /* required_outer = */ NULL,
 													  &total_groups);
 			}
