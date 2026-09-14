@@ -1,0 +1,1 @@
+Fixes: #10590 Fix "cannot cast type cstring" error in DeferredChunkAppend queries
