@@ -276,9 +276,9 @@ UNION SELECT b.* FROM
 -- parallel query
 RESET max_parallel_workers_per_gather;
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 
 TRUNCATE skip_scan_insert;
 

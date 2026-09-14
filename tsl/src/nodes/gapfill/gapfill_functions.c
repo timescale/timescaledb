@@ -24,7 +24,7 @@ gapfill_marker(PG_FUNCTION_ARGS)
 }
 
 #define GAPFILL_TIMEBUCKET_WRAPPER(datatype)                                                       \
-	Datum gapfill_##datatype##_time_bucket(PG_FUNCTION_ARGS)                    \
+	Datum gapfill_##datatype##_time_bucket(PG_FUNCTION_ARGS)                                       \
 	{                                                                                              \
 		/*                                                                                         \
 		 * since time_bucket is STRICT and time_bucket_gapfill                                     \

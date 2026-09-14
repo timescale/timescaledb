@@ -23,7 +23,7 @@ ts_gapfill_marker(PG_FUNCTION_ARGS)
 
 #define GAPFILL_TIMEBUCKET_WRAPPER(datatype)                                                       \
 	TS_FUNCTION_INFO_V1(ts_gapfill_##datatype##_bucket);                                           \
-	Datum ts_gapfill_##datatype##_bucket(PG_FUNCTION_ARGS)                      \
+	Datum ts_gapfill_##datatype##_bucket(PG_FUNCTION_ARGS)                                         \
 	{                                                                                              \
 		return ts_cm_functions->gapfill_##datatype##_time_bucket(fcinfo);                          \
 	}

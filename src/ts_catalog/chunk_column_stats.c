@@ -1031,13 +1031,8 @@ ts_chunk_column_stats_insert(const Hypertable *ht, const Chunk *chunk)
 
 	for (range_index = 0; range_index < rs->num_range_cols; range_index++)
 	{
-		AttrNumber attno;
 		char *col_name = NameStr(rs->range_cols[range_index].column_name);
 		FormData_chunk_column_stats fd = { 0 };
-
-		/* Get the attribute number in the HT for this column, and map to the chunk */
-		attno = get_attnum(ht->main_table_relid, col_name);
-		attno = ts_map_attno(ht->main_table_relid, chunk->fd.relid, attno);
 
 		/* insert an entry for this ht_id, chunk_id for this col_name with -inf/+inf range */
 		fd.hypertable_id = ht->fd.id;

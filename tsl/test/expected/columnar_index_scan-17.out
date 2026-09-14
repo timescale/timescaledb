@@ -451,11 +451,7 @@ SELECT * FROM agg_data ORDER BY device;
          ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
 
 -- test parallel queries (not supported with ColumnarIndexScan)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  GroupAggregate
@@ -463,11 +459,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
    ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
          ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 -- test with UNION ALL (Append node)
 :PREFIX SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
 UNION ALL
@@ -1778,11 +1770,7 @@ SELECT * FROM agg_data ORDER BY device;
                      ->  Seq Scan on _hyper_1_1_chunk
 
 -- test parallel queries (not supported with ColumnarIndexScan)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  Finalize GroupAggregate
@@ -1799,11 +1787,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
                      Sort Key: _hyper_1_1_chunk.device
                      ->  Seq Scan on _hyper_1_1_chunk
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 -- test with UNION ALL (Append node)
 :PREFIX SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
 UNION ALL
@@ -3419,11 +3403,7 @@ SELECT * FROM agg_data ORDER BY device;
                      ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed
 
 -- test parallel queries (not supported with ColumnarIndexScan)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  Finalize GroupAggregate
@@ -3439,11 +3419,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk metrics
                      ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 -- test with UNION ALL (Append node)
 :PREFIX SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
 UNION ALL
@@ -5231,11 +5207,7 @@ SELECT * FROM agg_data ORDER BY device;
                      ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed
 
 -- test parallel queries (not supported with ColumnarIndexScan)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
  Finalize GroupAggregate
@@ -5251,11 +5223,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
                ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk metrics
                      ->  Index Scan using _hyper_1_2_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_2_chunk_compressed
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 -- test with UNION ALL (Append node)
 :PREFIX SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
 UNION ALL

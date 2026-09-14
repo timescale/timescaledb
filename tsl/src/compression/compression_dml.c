@@ -204,9 +204,9 @@ get_arbiter_index_attnums(ChunkInsertState *cis)
  * It assumes cdst->compression_settings is already looked up for the chunk.
  *
  * Discovers which bloom columns match arbiter index columns, that is, being a subset of the
- * conflict columns. Builds the mapping from bloom columns to INSERT tuple attnums, and resolves
- * bloom column names to compressed chunk attnums. The chosen bloom filter is stored in the
- * CachedDecompressionState struct.
+ * conflict columns shared by every unique constraint. Builds the mapping from bloom columns to
+ * INSERT tuple attnums, and resolves bloom column names to compressed chunk attnums. The chosen
+ * bloom filter is stored in the CachedDecompressionState struct.
  */
 static void
 init_upsert_bloom_state(ChunkInsertState *cis)
@@ -215,6 +215,19 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 	CachedDecompressionState *cdst = cis->cached_decompression_state;
 	Assert(cdst != NULL);
 	if (cdst == NULL || conflict_attnums == NULL)
+	{
+		return;
+	}
+
+	/*
+	 * Make sure bloom sparse index is part of the shared key columns.
+	 * For any columns not part all of the arbiter indexes, we fall
+	 * back to decompressing the column and checking the actual
+	 * values.
+	 */
+	Assert(cdst->constraints != NULL);
+	conflict_attnums = bms_intersect(conflict_attnums, cdst->constraints->key_columns);
+	if (bms_is_empty(conflict_attnums))
 	{
 		return;
 	}
@@ -1280,16 +1293,30 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 						slot_getattr(insert_slot, attnum, &values[col_idx].isnull);
 					col_idx++;
 				}
-				uint64 hash = cdst->bloom_hasher->hash_values(cdst->bloom_hasher, values);
+				Assert(col_idx == cdst->bloom_hasher->num_columns);
 
-				stats.batches_checked_by_bloom++;
-				if (!bloom1_contains_hash(bloom_datum, hash))
+				/*
+				 * Single column bloom indexes can't check for NULL values
+				 * so fall back to full decompression.
+				 * Composite bloom indexes can handle NULL checks properly.
+				 */
+				if (cdst->bloom_hasher->num_columns == 1 && values[0].isnull)
 				{
-					row_decompressor_reset(&decompressor);
-					stats.batches_pruned_by_bloom++;
-					continue;
+					stats.batches_without_bloom++;
 				}
-				bloom_passed = true;
+				else
+				{
+					uint64 hash = cdst->bloom_hasher->hash_values(cdst->bloom_hasher, values);
+
+					stats.batches_checked_by_bloom++;
+					if (!bloom1_contains_hash(bloom_datum, hash))
+					{
+						row_decompressor_reset(&decompressor);
+						stats.batches_pruned_by_bloom++;
+						continue;
+					}
+					bloom_passed = true;
+				}
 			}
 			else
 			{
