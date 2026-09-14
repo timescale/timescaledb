@@ -381,4 +381,34 @@ SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged >= 9223372036854775806;
 SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged > 9223372036854775805;
 
 
+-- Test chunk skipping with the largest value of a 4 byte and 2 byte range column
+CREATE TABLE chunk_skip_int_max(
+    ts     timestamptz NOT NULL,
+    ranged int,
+    small  smallint
+);
+SELECT * FROM create_hypertable('chunk_skip_int_max', 'ts',
+                         chunk_time_interval => interval '1 day');
+SELECT * FROM enable_chunk_skipping('chunk_skip_int_max', 'ranged');
+SELECT * FROM enable_chunk_skipping('chunk_skip_int_max', 'small');
+ALTER TABLE chunk_skip_int_max SET (timescaledb.compress);
+
+INSERT INTO chunk_skip_int_max VALUES
+    ('2025-01-01', 2147483647, 32767), -- PG_INT32_MAX, PG_INT16_MAX
+    ('2025-01-01 01:00', 100, 100),
+    ('2025-01-02', 2147483646, 32766);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('chunk_skip_int_max') c;
+
+SELECT chunk_id IS NOT NULL AS have_chunk, column_name, range_start, range_end
+FROM _timescaledb_catalog.chunk_column_stats
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'chunk_skip_int_max')
+ORDER BY chunk_id, column_name;
+
+-- The now() expression makes the chunks get excluded at executor startup
+SELECT count(*) FROM chunk_skip_int_max WHERE ts > now() - interval '100 years' AND ranged >= 0;
+SELECT count(*) FROM chunk_skip_int_max WHERE ts > now() - interval '100 years' AND small >= 0;
+SELECT count(*) FROM chunk_skip_int_max WHERE ts > now() - interval '100 years' AND ranged >= 2147483647;
+SELECT count(*) FROM chunk_skip_int_max WHERE ts > now() - interval '100 years' AND ranged < 50;
+
 RESET timescaledb.enable_chunk_skipping;
