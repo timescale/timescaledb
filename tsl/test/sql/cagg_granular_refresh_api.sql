@@ -104,6 +104,27 @@ ALTER TABLE metrics SET (
 \set ON_ERROR_STOP 1
 :GRC 'metrics';
 
+-- Error: once configured, ALTER subcommands on the tracking column
+-- are restricted: ALTER...TYPE, RENAME, and DROP are blocked.
+-- Unlike a column referenced by an existing continuous aggregate's view,
+-- there is no pg_depend entry blocking this on its own when no continuous
+-- aggregate has been created yet.
+\set ON_ERROR_STOP 0
+ALTER TABLE metrics ALTER COLUMN device_id TYPE bigint;
+ALTER TABLE metrics RENAME COLUMN device_id TO device_id_renamed;
+ALTER TABLE metrics DROP COLUMN device_id;
+\set ON_ERROR_STOP 1
+:GRC 'metrics';
+
+-- Other ALTER COLUMN subcommands are not restricted
+ALTER TABLE metrics ALTER COLUMN device_id SET NOT NULL;
+ALTER TABLE metrics ALTER COLUMN device_id DROP NOT NULL;
+
+-- Unrelated columns on the same hypertable remain fully alterable.
+ALTER TABLE metrics ALTER COLUMN value TYPE numeric;
+ALTER TABLE metrics RENAME COLUMN value TO reading;
+ALTER TABLE metrics DROP COLUMN reading;
+
 -- Integer-time hypertable: offsets are interpreted as integers.
 CREATE TABLE metrics_int (time bigint NOT NULL, sensor integer, value float8);
 SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
@@ -199,6 +220,18 @@ ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh 
 -- Re-enabling works.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 :GRE 'sensors_hourly';
+
+-- Block renaming the column on the CAgg if it is a granular refresh column
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW sensors_hourly RENAME COLUMN sensor_id TO sensor_id_renamed;
+\set ON_ERROR_STOP 1
+SELECT attname FROM pg_attribute WHERE attrelid = 'sensors_hourly'::regclass
+    AND attnum > 0 ORDER BY attnum;
+
+-- Unrelated cagg columns remain renamable.
+ALTER MATERIALIZED VIEW sensors_hourly RENAME COLUMN avg_temp TO mean_temp;
+SELECT attname FROM pg_attribute WHERE attrelid = 'sensors_hourly'::regclass
+    AND attnum > 0 ORDER BY attnum;
 
 DROP MATERIALIZED VIEW sensors_hourly;
 DROP TABLE sensors;
