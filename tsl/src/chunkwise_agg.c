@@ -537,19 +537,15 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		 */
 		if (hashed_subpaths != NIL)
 		{
-			Path *path = copy_append_like_path(root,
-											   top_append,
-											   hashed_subpaths,
-											   partial_grouping_target);
+			Path *path =
+				copy_append_like_path(root, top_append, hashed_subpaths, partial_grouping_target);
 			add_partial_path(partially_grouped_rel, path);
 		}
 
 		if (sorted_subpaths != NIL)
 		{
-			Path *path = copy_append_like_path(root,
-											   top_append,
-											   sorted_subpaths,
-											   partial_grouping_target);
+			Path *path =
+				copy_append_like_path(root, top_append, sorted_subpaths, partial_grouping_target);
 			add_partial_path(partially_grouped_rel, path);
 		}
 	}
@@ -707,18 +703,20 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		{
 			final_strategy = AGG_PLAIN;
 		}
-		else if (is_sorted || !(extra_data->flags & GROUPING_CAN_USE_HASH))
+		else if (is_sorted || !(extra_data->flags & GROUPING_CAN_USE_HASH) || !enable_hashagg)
 		{
 			/*
-			 * Only try the final Group Aggregate if the append over the partial
+			 * Try the final Group Aggregate if the append over the partial
 			 * aggregation results produces the output that is appropriately
 			 * sorted for this aggregation. Otherwise, it needs a costly Sort
 			 * node. Group Aggregate mostly makes sense if the input is already
 			 * cheaply sorted, and if we have to re-sort all input, it's normally
 			 * inferior to Hash Aggregate.
 			 *
-			 * We also have to use it as a fallback for types that can't be
+			 * Also use it as a fallback for types that can't be
 			 * hashed.
+			 *
+			 * Also use it if hash aggregation is disabled by GUC.
 			 */
 			final_strategy = AGG_SORTED;
 		}
