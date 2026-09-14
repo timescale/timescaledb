@@ -751,3 +751,11 @@ ORDER BY schemaname, tablename;
 -- Cleanup
 DROP PUBLICATION test_split_pub CASCADE;
 DROP TABLE pub_split_test CASCADE;
+
+-- Split at range_end - 1 (last valid split point)
+create table splitme_edge (time int not null, v int);
+select create_hypertable('splitme_edge', 'time', chunk_time_interval => 10::int);
+insert into splitme_edge values (1, 1);
+select ch as edge_chunk from show_chunks('splitme_edge') ch order by ch limit 1 \gset
+call split_chunk(:'edge_chunk', split_at => 9);
+select * from chunk_slices where hypertable_name = 'splitme_edge';
