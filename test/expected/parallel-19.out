@@ -19,11 +19,7 @@ ANALYZE test;
 ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=2);
 SET work_mem TO '50MB';
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost TO 0;
 SET timescaledb.enable_deferred_chunk_append TO false;
@@ -425,22 +421,14 @@ WHERE s.time > '2020-01-01 00:00:30'::text::timestamptz AND s.sensor_id > 50;
 RESET parallel_leader_participation;
 -- Same result from a sequential query.
 SET max_parallel_workers_per_gather = 0;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 SELECT count(*) FROM monitoring_sites m JOIN sensor_data s ON (TRUE)
 WHERE s.time > '2020-01-01 00:00:30'::text::timestamptz AND s.sensor_id > 50;
  count 
 -------
      6
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 -- initplan filter: no startup exclusion
 SELECT count(*) AS expected_i FROM "test" WHERE i = (SELECT max(i) FROM "test") \gset
 SELECT count(*) AS expected_j FROM "test" WHERE j = (SELECT max(j) FROM "test") \gset

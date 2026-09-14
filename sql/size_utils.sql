@@ -53,56 +53,30 @@ RETURNS TABLE (
 	total_bytes BIGINT)
 LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-    /* get the main hypertable id and sizes */
-    WITH _hypertable_sizes AS (
-        SELECT
-            id,
-            COALESCE((relsize).total_size, 0) AS total_bytes,
-            COALESCE((relsize).heap_size, 0) AS heap_bytes,
-            COALESCE((relsize).index_size, 0) AS index_bytes,
-            COALESCE((relsize).toast_size, 0) AS toast_bytes,
-            0::BIGINT AS compressed_total_size,
-            0::BIGINT AS compressed_index_size,
-            0::BIGINT AS compressed_toast_size,
-            0::BIGINT AS compressed_heap_size
-        FROM
-            _timescaledb_catalog.hypertable ht
-            JOIN pg_class c ON relname = ht.table_name AND c.relkind = 'r'
-            JOIN pg_namespace n ON n.oid = c.relnamespace
-            AND n.nspname = ht.schema_name
-            JOIN LATERAL _timescaledb_functions.relation_size(c.oid) AS relsize ON TRUE
-        WHERE
-            schema_name = schema_name_in
-            AND table_name = table_name_in
-    ),
-    /* calculate the size of the hypertable chunks */
-    _chunk_sizes AS (
-        SELECT
-            chunk_id,
-            COALESCE(ch.total_bytes, 0) AS total_bytes,
-            COALESCE(ch.heap_bytes, 0) AS heap_bytes,
-            COALESCE(ch.index_bytes, 0) AS index_bytes,
-            COALESCE(ch.toast_bytes, 0) AS toast_bytes,
-            COALESCE(ch.compressed_total_size, 0) AS compressed_total_size,
-            COALESCE(ch.compressed_index_size, 0) AS compressed_index_size,
-            COALESCE(ch.compressed_toast_size, 0) AS compressed_toast_size,
-            COALESCE(ch.compressed_heap_size, 0) AS compressed_heap_size
-        FROM
-            _timescaledb_internal.hypertable_chunk_local_size ch
-            JOIN _hypertable_sizes ht ON ht.id = ch.hypertable_id
-        WHERE hypertable_schema = schema_name_in
-          AND hypertable_name = table_name_in
-    )
-    /* calculate the SUM of the hypertable and chunk sizes */
-	SELECT
-		(SUM(heap_bytes)  + SUM(compressed_heap_size))::BIGINT AS heap_bytes,
-		(SUM(index_bytes) + SUM(compressed_index_size))::BIGINT AS index_bytes,
-		(SUM(toast_bytes) + SUM(compressed_toast_size))::BIGINT AS toast_bytes,
-		(SUM(total_bytes) + SUM(compressed_total_size))::BIGINT AS total_bytes
-	FROM
-		(SELECT * FROM _hypertable_sizes
-         UNION ALL
-         SELECT * FROM _chunk_sizes) AS sizes;
+    SELECT
+        SUM((relsize).heap_size + chunks.table_bytes)::BIGINT,
+        SUM((relsize).index_size + chunks.index_bytes)::BIGINT,
+        SUM((relsize).toast_size + chunks.toast_bytes)::BIGINT,
+        SUM((relsize).total_size + chunks.total_bytes)::BIGINT
+    FROM
+        _timescaledb_catalog.hypertable ht
+        JOIN pg_class c ON relname = ht.table_name AND c.relkind = 'r'
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        AND n.nspname = ht.schema_name
+        JOIN LATERAL _timescaledb_functions.relation_size(c.oid) AS relsize ON TRUE
+        JOIN LATERAL (
+            SELECT
+                COALESCE(SUM(heap_bytes + compressed_heap_size), 0) AS table_bytes,
+                COALESCE(SUM(index_bytes + compressed_index_size), 0) AS index_bytes,
+                COALESCE(SUM(toast_bytes + compressed_toast_size), 0) AS toast_bytes,
+                COALESCE(SUM(total_bytes + compressed_total_size), 0) AS total_bytes
+            FROM
+                _timescaledb_internal.hypertable_chunk_local_size ch
+            WHERE hypertable_id = ht.id
+        ) AS chunks ON TRUE
+    WHERE
+        schema_name = schema_name_in
+        AND table_name = table_name_in;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get relation size of hypertable
@@ -686,4 +660,3 @@ BEGIN
   total_size := relation_size + index_size;
 END
 $$ LANGUAGE plpgsql SET search_path TO pg_catalog, pg_temp;
-

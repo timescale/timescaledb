@@ -11,6 +11,7 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <storage/lwlock.h>
+#include <utils.h>
 #include <utils/guc.h>
 #include <utils/hsearch.h>
 #include <utils/lsyscache.h>
@@ -821,6 +822,46 @@ tenant_tracking_for_hypertable(List *hypertable_seqnums, int32 hypertable_id)
 	return NULL;
 }
 
+/*
+ * Add an invalidation to the hypertable log, split at the edges of the
+ * granular tracking window. The part outside the tracking window will
+ * be written with seqnum 0, and the one inside with the current, non-zero
+ * seqnum.
+ */
+static void
+add_invalidation_split_on_late_window(int32 hyper_id, int64 start, int64 end, int32 seqnum,
+									  const HypertableSeqnumEntry *tracking_entry)
+{
+	if (seqnum == 0)
+	{
+		invalidation_hyper_log_add_entry(hyper_id, start, end, seqnum);
+		return;
+	}
+	/* We don't call this function for entries that are completely outside the
+	 * tracking window, so an entry here should overlap the window.
+	 */
+	Assert(start < tracking_entry->late_threshold_end &&
+		   end >= tracking_entry->late_threshold_start);
+
+	if (start < tracking_entry->late_threshold_start)
+	{
+		invalidation_hyper_log_add_entry(hyper_id,
+										 start,
+										 int64_saturating_sub(tracking_entry->late_threshold_start,
+															  1),
+										 0);
+		start = tracking_entry->late_threshold_start;
+	}
+
+	if (end >= tracking_entry->late_threshold_end)
+	{
+		invalidation_hyper_log_add_entry(hyper_id, tracking_entry->late_threshold_end, end, 0);
+		end = int64_saturating_sub(tracking_entry->late_threshold_end, 1);
+	}
+
+	invalidation_hyper_log_add_entry(hyper_id, start, end, seqnum);
+}
+
 static inline void
 cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_seqnums)
 {
@@ -853,10 +894,11 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_s
 	 */
 	if (IsolationUsesXactSnapshot())
 	{
-		invalidation_hyper_log_add_entry(entry->hypertable_id,
-										 entry->lowest_modified_value,
-										 entry->greatest_modified_value,
-										 seqnum);
+		add_invalidation_split_on_late_window(entry->hypertable_id,
+											  entry->lowest_modified_value,
+											  entry->greatest_modified_value,
+											  seqnum,
+											  tracking_entry);
 		return;
 	}
 
@@ -864,10 +906,11 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_s
 
 	if (entry->lowest_modified_value < liv)
 	{
-		invalidation_hyper_log_add_entry(entry->hypertable_id,
-										 entry->lowest_modified_value,
-										 entry->greatest_modified_value,
-										 seqnum);
+		add_invalidation_split_on_late_window(entry->hypertable_id,
+											  entry->lowest_modified_value,
+											  entry->greatest_modified_value,
+											  seqnum,
+											  tracking_entry);
 	}
 };
 
