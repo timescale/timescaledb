@@ -726,6 +726,19 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		}
 
 		/*
+		 * If we chose GroupAggregate but the input is not properly sorted, we
+		 * have to account for sorting it.
+		 */
+		if (final_strategy == AGG_SORTED && !is_sorted)
+		{
+			partially_aggregated_path = (Path *) create_sort_path(root,
+																  output_rel,
+																  partially_aggregated_path,
+																  root->group_pathkeys,
+																  -1.0);
+		}
+
+		/*
 		 * We have to add a Gather or Gather Merge on top of parallel plans. It
 		 * goes above the Sort we might have added just before, so that the Sort
 		 * is parallelized as well.
@@ -734,7 +747,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		{
 			double total_groups =
 				partially_aggregated_path->rows * partially_aggregated_path->parallel_workers;
-			if (partially_aggregated_path->pathkeys == NIL)
+			if (final_strategy != AGG_SORTED)
 			{
 				partially_aggregated_path =
 					(Path *) create_gather_path(root,
@@ -751,7 +764,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 													  partially_grouped_rel,
 													  partially_aggregated_path,
 													  partially_grouped_rel->reltarget,
-													  partially_aggregated_path->pathkeys,
+													  root->group_pathkeys,
 													  /* required_outer = */ NULL,
 													  &total_groups);
 			}
