@@ -1047,11 +1047,11 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 			return false;
 		}
 
-		if (ts_guc_enable_runtime_exclusion && path->param_info->ppi_clauses != NIL)
+		if (path->param_info->ppi_clauses != NIL)
 		{
 			/*
-			 * If we have any parameterized clauses, we can apply runtime chunk
-			 * exclusion.
+			 * If we have any clauses with join parameters, we can apply runtime
+			 * chunk exclusion.
 			 */
 			return true;
 		}
