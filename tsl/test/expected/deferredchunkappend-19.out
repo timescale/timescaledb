@@ -1273,3 +1273,73 @@ SELECT count(*), count(DISTINCT time) FROM (SELECT time FROM metrics ORDER BY ti
     20 |    20
 
 RESET timescaledb.debug_require_deferred_chunk_scan;
+-- Constant folding can leave a Const of a pseudo-type, which has no literal
+-- syntax to deparse into the per-chunk query.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TYPE dca_enum AS ENUM ('Val1', 'Val2');
+CREATE TYPE dca_row AS (a int, b int);
+CREATE TABLE enum_metrics (time timestamptz NOT NULL, kind dca_enum NOT NULL, seen timestamptz)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO enum_metrics VALUES ('2020-01-01', 'Val1', '2021-01-01'), ('2020-01-02', 'Val2', '2021-01-02');
+-- the cast is inlined from a SQL function here, so it only shows up after preprocessing
+CREATE FUNCTION dca_to_enum(text) RETURNS dca_enum AS $$ SELECT $1::dca_enum $$ LANGUAGE sql STABLE;
+SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
+EXPLAIN (COSTS OFF) SELECT kind::text FROM enum_metrics WHERE kind = CAST('Val2'::text AS dca_enum) LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ChunkAppend) on enum_metrics
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_10_52_chunk
+                     Filter: (kind = ('Val2'::cstring)::dca_enum)
+               ->  Seq Scan on _hyper_10_53_chunk
+                     Filter: (kind = ('Val2'::cstring)::dca_enum)
+
+SELECT kind::text FROM enum_metrics WHERE kind = CAST('Val2'::text AS dca_enum) LIMIT 1;
+ kind 
+------
+ Val2
+
+SELECT kind::text FROM enum_metrics WHERE kind = dca_to_enum('Val1') LIMIT 1;
+ kind 
+------
+ Val1
+
+SELECT seen FROM enum_metrics WHERE seen = CAST('2021-01-02'::text AS timestamptz) LIMIT 1;
+             seen             
+------------------------------
+ Sat Jan 02 00:00:00 2021 PST
+
+-- a bare ROW folds to a record Const
+SELECT kind::text FROM enum_metrics WHERE kind::text = (ROW(1,2))::text LIMIT 1;
+ kind 
+------
+
+RESET timescaledb.debug_require_deferred_chunk_scan;
+-- expressions that fold to a Const of a real type keep the node
+SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SELECT kind::text FROM enum_metrics WHERE kind = 'Val2' LIMIT 1;
+ kind 
+------
+ Val2
+
+SELECT kind::text FROM enum_metrics WHERE kind = 'Val2'::dca_enum LIMIT 1;
+ kind 
+------
+ Val2
+
+SELECT kind::text FROM enum_metrics WHERE kind::text = 'Val2' LIMIT 1;
+ kind 
+------
+ Val2
+
+SELECT kind::text FROM enum_metrics WHERE kind::text = (ROW(1,2)::dca_row)::text LIMIT 1;
+ kind 
+------
+
+-- a NULL input folds away completely, leaving an ordinary NULL Const
+SELECT kind::text FROM enum_metrics WHERE kind = CAST(NULL::text AS dca_enum) LIMIT 1;
+ kind 
+------
+
+RESET timescaledb.debug_require_deferred_chunk_scan;

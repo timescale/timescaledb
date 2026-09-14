@@ -238,8 +238,21 @@ qual_walker(Node *node, QualSupportContext *ctx)
 			return expression_tree_walker(node, qual_walker, ctx);
 		}
 
-		case T_List:
 		case T_Const:
+		{
+			/* A Const is deparsed as a literal of its type, and pseudo-types have
+			 * no literal syntax. Constant folding leaves such a Const behind for
+			 * a cast without a cast function (cstring) or a bare ROW (record). */
+			Const *con = (Const *) node;
+			if (get_typtype(con->consttype) == TYPTYPE_PSEUDO)
+			{
+				ctx->supported = false;
+				return true;
+			}
+			return false;
+		}
+
+		case T_List:
 		case T_OpExpr:
 		case T_DistinctExpr:
 		case T_NullIfExpr:
