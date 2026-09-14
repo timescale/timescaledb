@@ -300,7 +300,7 @@ CREATE TABLE _timescaledb_internal.bgw_policy_chunk_stats (
   num_times_job_run integer,
   last_time_job_run timestamptz,
   -- table constraints
-  CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key UNIQUE (job_id, chunk_id),
+  CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key PRIMARY KEY (job_id, chunk_id),
   CONSTRAINT bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   CONSTRAINT bgw_policy_chunk_stats_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_catalog.bgw_job (id) ON DELETE CASCADE
 );

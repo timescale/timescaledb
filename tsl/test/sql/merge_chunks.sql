@@ -481,7 +481,10 @@ INSERT INTO pub_merge_test VALUES
     ('2024-01-02 01:00', 2, 2.0);
 
 -- Create publication
+-- This suite runs at wal_level = replica, so hide the warning about that
+SET client_min_messages TO error;
 CREATE PUBLICATION test_merge_pub FOR TABLE pub_merge_test;
+RESET client_min_messages;
 
 -- Verify chunks before merge
 SELECT schemaname, tablename

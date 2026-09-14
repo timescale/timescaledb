@@ -380,3 +380,36 @@ SELECT 'test_defaults' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_hypertable_segment_meta.sql
 
 DROP TABLE test_defaults;
+
+-- Test chunk merging works with default sparse indexes
+CREATE TABLE test_sparse_default("Time" timestamptz NOT NULL, i integer, tag integer, value integer);
+SELECT table_name from create_hypertable('test_sparse_default', 'Time', chunk_time_interval => INTERVAL '1 hour');
+
+-- A btree index so that default sparse indexes are set
+CREATE INDEX ON test_sparse_default (tag);
+
+-- This will generate 8 chunks
+INSERT INTO test_sparse_default
+SELECT t, i, i, gen_rand_minstd()
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 8:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+
+ALTER TABLE test_sparse_default
+SET (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='4 hours');
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_sparse_default') ch;
+
+SELECT index FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_sparse_default'::regclass;
+
+SELECT DISTINCT cs.index
+FROM _timescaledb_catalog.compression_settings cs
+JOIN _timescaledb_catalog.chunk ch ON cs.relid = ch.relid
+JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'test_sparse_default';
+
+-- chunks merged upon compression due to compress_chunk_time_interval
+SELECT count(*) AS chunk_count FROM show_chunks('test_sparse_default');
+SELECT range_start, range_end FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_sparse_default' ORDER BY 1;
+
+DROP TABLE test_sparse_default;

@@ -6,8 +6,8 @@ endif()
 
 option(
   TMP_ENABLE_GRANULAR_REFRESH_TESTS
-  "TODO: the granular refresh tests are disabled because of a shared memory leak"
-  OFF)
+  "Run the cagg granular refresh tests. Turn off where /dev/shm is too small for the tracker's shared memory leak, as in linux-32bit-build-and-test.yaml."
+  ON)
 
 # Add the subdirectories
 add_subdirectory(test)

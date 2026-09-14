@@ -33,7 +33,7 @@ static bool create_segment_filter_scankey(Relation in_rel, char *segment_filter_
  * and (key <= NULL) returns True for !nulls_first (i.e. for NULLS LAST).
  */
 bool
-slot_key_test(TupleTableSlot *compressed_slot, ScanKey key, bool nulls_first)
+slot_key_test(TupleTableSlot *compressed_slot, ScanKey key, bool null_slot_attribute_passes_test)
 {
 	/* No need to get the datum if we are only checking for NULL key */
 	if (key->sk_flags & SK_ISNULL)
@@ -47,21 +47,7 @@ slot_key_test(TupleTableSlot *compressed_slot, ScanKey key, bool nulls_first)
 
 	if (is_null)
 	{
-		/* NULL < key i.e. NULL sorts before key argument */
-		if (nulls_first && (key->sk_strategy == BTLessStrategyNumber ||
-							key->sk_strategy == BTLessEqualStrategyNumber))
-		{
-			return true;
-		}
-
-		/* NULL > key i.e. NULL sorts after key argument */
-		if (!nulls_first && (key->sk_strategy == BTGreaterStrategyNumber ||
-							 key->sk_strategy == BTGreaterEqualStrategyNumber))
-		{
-			return true;
-		}
-
-		return false;
+		return null_slot_attribute_passes_test;
 	}
 
 	return DatumGetBool(FunctionCall2Coll(&key->sk_func, key->sk_collation, val, key->sk_argument));

@@ -196,6 +196,9 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 static void
 copy_plan_costsize(Plan *dest, Plan *src)
 {
+#if PG18_GE
+	dest->disabled_nodes = src->disabled_nodes;
+#endif
 	dest->startup_cost = src->startup_cost;
 	dest->total_cost = src->total_cost;
 	dest->plan_rows = src->plan_rows;
@@ -233,7 +236,7 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 			  root,
 			  NIL,
 #if PG18_GE
-			  lefttree->disabled_nodes,
+			  plan->plan.disabled_nodes,
 #endif
 			  lefttree->total_cost,
 			  lefttree->plan_rows,
@@ -267,6 +270,9 @@ ts_make_sort(Plan *lefttree, int numCols,
 
 	plan = &node->plan;
 	plan->targetlist = lefttree->targetlist;
+#if PG18_GE
+	plan->disabled_nodes = lefttree->disabled_nodes + (enable_sort == false);
+#endif
 	plan->qual = NIL;
 	plan->lefttree = lefttree;
 	plan->righttree = NULL;

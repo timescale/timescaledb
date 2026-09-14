@@ -1127,6 +1127,7 @@ SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, v
 SET timescaledb.enable_deferred_chunk_append TO on;
 :DIFF_CMD
 -- EXPLAIN ANALYZE prints the actual per-chunk plan for every chunk the LIMIT visited.
+SET enable_material = off;
 SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics LIMIT 3;  -- stops in the first non-empty chunk
 --- QUERY PLAN ---
@@ -1187,6 +1188,19 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM
                      ->  Custom Scan (ColumnarScan) on _hyper_2_12_chunk (actual rows=4.00 loops=1)
                            ->  Seq Scan on _hyper_2_12_chunk_compressed (actual rows=4.00 loops=1)
 
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM generate_series(1,3) g(i) LEFT JOIN LATERAL(SELECT * FROM metrics ORDER BY time DESC LIMIT 3) x ON true;  -- deferred scan on the inner side of a lateral join, rescanned per outer row
+--- QUERY PLAN ---
+ Nested Loop Left Join (actual rows=9.00 loops=1)
+   ->  Function Scan on generate_series g (actual rows=3.00 loops=1)
+   ->  Limit (actual rows=3.00 loops=3)
+         ->  Custom Scan (DeferredChunkAppend) on metrics (actual rows=3.00 loops=3)
+               Order: "time" DESC
+               Chunks Visited: 6
+               ->  Limit (actual rows=0.00 loops=1)
+                     ->  Index Scan using _hyper_1_7_chunk_metrics_time_idx on _hyper_1_7_chunk (actual rows=0.00 loops=1)
+               ->  Limit (actual rows=3.00 loops=1)
+                     ->  Index Scan using _hyper_1_5_chunk_metrics_time_idx on _hyper_1_5_chunk (actual rows=3.00 loops=1)
+
 -- make the first-visited chunk partially compressed, then scan it
 INSERT INTO metrics_compressed (time, device, value) VALUES ('2020-01-05 06:00', 9, 99);
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_compressed LIMIT 4;  -- partial chunk: compressed and uncompressed parts
@@ -1235,3 +1249,4 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT value,
                        Rows Removed by Filter: 1
 
 RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET enable_material;

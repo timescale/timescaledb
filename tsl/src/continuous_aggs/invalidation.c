@@ -1208,8 +1208,10 @@ invalidation_garbage_collect_tenant_tracking(const ContinuousAgg *cagg)
 
 	/*
 	 * Only a cagg doing granular refresh has tracking rows to reclaim, and only
-	 * its own log can keep them alive. A cagg that does not opt in has its
-	 * entries stamped seqnum 0, which no tracking row carries.
+	 * its own log can keep them alive. A cagg that does not opt in does not consult
+	 * the tracker. (if it was enabled before, the cagg could have entries stamped with
+	 * seqnum > 0. But it is disabled, these seqnums are no longer useful. So we
+	 * safely delete entries by consulting only caggs that have granular refresh enabled
 	 */
 	if (!cagg->data.granular_refresh_enabled)
 	{
@@ -1616,16 +1618,14 @@ invalidation_max_seqnum_for_hypertable(int32 hypertable_id)
 	{
 		ContinuousAgg *cagg = lfirst(lc);
 
-		/* TODO: Revisit this after we decided on how we handle seqnums for caggs that opt out of
-		   granular refresh while its hypertable has a tracking column. Also related to this is how
-		   we handle seqnums in cagg invalidation logs when we disable and re-enable granular
-		   refresh for a cagg. */
-
-		if (!cagg->data.granular_refresh_enabled)
-		{
-			continue;
-		}
-
+		/*
+		 * Scan every cagg's log, including one that does not do granular
+		 * refresh: e.g cagg1 had granular refresh enabled. mat log for cagg1
+		 * has seqnum entries even after it is disabled. we need a seqnum that
+		 * does not exist in any of the mat. inv logs for caggs (based off the
+		 * same hypertable). If we skip, we run the risk of reusing a seqnum
+		 * Our invariant: seqnum is always montonically increasing
+		 */
 		int32 mat_max = scan_max_seqnum(
 			CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 			CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX,

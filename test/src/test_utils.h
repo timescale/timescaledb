@@ -11,23 +11,6 @@
 
 #include "export.h"
 
-static inline const char *
-strip_path(const char *filename)
-{
-	int i = 0, slash = 0;
-
-	while (filename[i] != '\0')
-	{
-		if (filename[i] == '/' || filename[i] == '\\')
-		{
-			slash = i;
-		}
-		i++;
-	}
-
-	return &filename[slash + 1];
-}
-
 #define TestFailure(fmt, ...)                                                                      \
 	do                                                                                             \
 	{                                                                                              \

@@ -179,6 +179,7 @@
 #include <utils/memutils.h>
 #include <utils/timestamp.h>
 
+#include "debug_assert.h"
 #include "debug_point.h"
 #include "loader/tenant_tracker_shmem.h"
 #include "tenant_tracker.h"
@@ -441,7 +442,13 @@ ts_tenant_tracker_apply_one(TenantGeneration *generation, const char *key, uint1
 void
 ts_tenant_tracker_end_batch(TenantGeneration *generation)
 {
-	pg_atomic_fetch_sub_u32(&generation->num_writers, 1);
+	uint32 prev = pg_atomic_fetch_sub_u32(&generation->num_writers, 1);
+
+	/* num_writers is only ever decremented by a backend that incremented it, so
+	 * a count of 0 here means an unmatched release: the counter would wrap to
+	 * UINT32_MAX and this generation's flush would spin forever.
+	 */
+	Ensure(prev > 0, "tenant tracker generation released without a matching pin");
 }
 
 void

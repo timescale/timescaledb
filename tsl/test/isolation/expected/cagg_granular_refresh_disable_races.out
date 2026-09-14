@@ -1,0 +1,166 @@
+Parsed test spec with 5 sessions
+
+starting permutation: p_prime_insert p_prime_refresh p_insert_late l_lock r_refresh l_unlock
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step p_insert_late: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1),
+                                  ('2020-01-05 00:00+00', 'sensor_b', 2);
+
+step l_lock: 
+    BEGIN;
+    SELECT lock_cagg(mat_hypertable_id) FROM (
+        SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily') q;
+
+lock_cagg
+---------
+         
+
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step l_unlock: ROLLBACK;
+step r_refresh: <... completed>
+
+starting permutation: p_prime_insert p_prime_refresh p_insert_late l_lock d_disable l_unlock
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step p_insert_late: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1),
+                                  ('2020-01-05 00:00+00', 'sensor_b', 2);
+
+step l_lock: 
+    BEGIN;
+    SELECT lock_cagg(mat_hypertable_id) FROM (
+        SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily') q;
+
+lock_cagg
+---------
+         
+
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+ <waiting ...>
+step l_unlock: ROLLBACK;
+step d_disable: <... completed>
+
+starting permutation: p_prime_insert p_prime_refresh p_insert_late l_lock d_disable r_refresh l_unlock r_tracking d_flag
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step p_insert_late: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1),
+                                  ('2020-01-05 00:00+00', 'sensor_b', 2);
+
+step l_lock: 
+    BEGIN;
+    SELECT lock_cagg(mat_hypertable_id) FROM (
+        SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cond_daily') q;
+
+lock_cagg
+---------
+         
+
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+ <waiting ...>
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step l_unlock: ROLLBACK;
+step d_disable: <... completed>
+step r_refresh: <... completed>
+step r_tracking: 
+    SELECT tt.tenant_id
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt
+    WHERE tt.hypertable_id = (SELECT raw_hypertable_id
+                              FROM _timescaledb_catalog.continuous_agg
+                              WHERE user_view_name = 'cond_daily')
+      AND tt.tenant_id IN ('sensor_a', 'sensor_b')
+    ORDER BY tt.tenant_id;
+
+tenant_id
+---------
+
+step d_flag: 
+    SELECT granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily';
+
+granular_refresh_enabled
+------------------------
+f                       
+
+
+starting permutation: p_prime_insert p_prime_refresh p_insert_late w_before_txn3_enable r_refresh d_disable w_before_txn3_release r_tracking r_cagg_contents d_flag
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step p_insert_late: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1),
+                                  ('2020-01-05 00:00+00', 'sensor_b', 2);
+
+step w_before_txn3_enable: SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+ <waiting ...>
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+
+step w_before_txn3_release: SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh: <... completed>
+step r_tracking: 
+    SELECT tt.tenant_id
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt
+    WHERE tt.hypertable_id = (SELECT raw_hypertable_id
+                              FROM _timescaledb_catalog.continuous_agg
+                              WHERE user_view_name = 'cond_daily')
+      AND tt.tenant_id IN ('sensor_a', 'sensor_b')
+    ORDER BY tt.tenant_id;
+
+tenant_id
+---------
+sensor_a 
+sensor_b 
+
+step r_cagg_contents: 
+    SELECT bucket, sensor_id, avg FROM cond_daily ORDER BY bucket, sensor_id;
+
+bucket                      |sensor_id   |avg
+----------------------------+------------+---
+Thu Jan 02 00:00:00 2020 UTC|sensor_a    |  1
+Sun Jan 05 00:00:00 2020 UTC|sensor_b    |  2
+Mon Jun 01 00:00:00 2020 UTC|sensor_prime|  9
+
+step d_flag: 
+    SELECT granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily';
+
+granular_refresh_enabled
+------------------------
+f                       
+

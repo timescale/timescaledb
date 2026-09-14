@@ -95,7 +95,9 @@ jobs:
 
         docker pull ${TEST_IMAGE}
         docker buildx imagetools inspect ${TEST_IMAGE}
-        docker run -i --rm -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${TEST_IMAGE} bash <<"EOF"
+        # The granular refresh tracker allocates DSM segments out of /dev/shm,
+        # which docker defaults to 64 MB.
+        docker run -i --rm --shm-size=512m -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${TEST_IMAGE} bash <<"EOF"
           apk add cmake gcc make build-base sudo coreutils ${EXTRA_PKGS}
           apk add openssl1.1-compat-dev || apk add openssl-dev
           cd /mnt

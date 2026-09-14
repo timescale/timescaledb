@@ -169,8 +169,6 @@ SELECT time_bucket('1 hour', time) AS bucket, sensor_id, avg(temp) AS avg_temp
 FROM sensors
 GROUP BY bucket, sensor_id
 WITH NO DATA;
--- Error: disabling is not supported.
-ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
 -- Error: the raw hypertable has no granular refresh configuration yet.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 \set ON_ERROR_STOP 1
@@ -185,6 +183,20 @@ ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh 
 :GRE 'sensors_hourly';
 
 -- Enabling again is a no-op, not an error.
+ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
+:GRE 'sensors_hourly';
+
+-- Disabling flips the flag back; the hypertable configuration is left alone.
+ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
+:GRE 'sensors_hourly';
+SELECT granular_refresh_column FROM _timescaledb_catalog.hypertable_cagg_settings
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'sensors');
+
+-- Disabling again is a no-op, not an error.
+ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = false);
+:GRE 'sensors_hourly';
+
+-- Re-enabling works.
 ALTER MATERIALIZED VIEW sensors_hourly SET (timescaledb.enable_granular_refresh = true);
 :GRE 'sensors_hourly';
 

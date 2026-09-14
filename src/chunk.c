@@ -3871,32 +3871,6 @@ show_chunks_return_srf(FunctionCallInfo fcinfo)
 }
 
 void
-ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
-{
-	ObjectAddress objaddr = {
-		.classId = RelationRelationId,
-		.objectId = chunk->fd.relid,
-	};
-
-	if (log_level >= 0)
-	{
-		const char *schema_name = ts_chunk_get_schema_name(chunk);
-		const char *table_name = ts_chunk_get_table_name(chunk);
-
-		elog(log_level, "dropping chunk %s.%s", schema_name, table_name);
-	}
-
-	/* Remove the chunk from the chunk table */
-	ts_chunk_delete_by_relid(chunk->fd.relid, behavior);
-
-	/* Drop the table */
-	performDeletion(&objaddr, behavior, 0);
-
-	/* Evict the chunk stats from the shared memory */
-	ts_stats_chunk_evict(chunk->fd.relid);
-}
-
-void
 ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level)
 {
 	ObjectAddress objaddr = {
@@ -4125,7 +4099,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
+		ts_chunk_drop_by_relid(chunks[i].fd.relid, DROP_RESTRICT, log_level);
 	}
 	// if we have tiered chunks cascade drop to tiering layer as well
 	if (osm_chunk_id != INVALID_CHUNK_ID)
@@ -4260,7 +4234,7 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 
 	/* do not drop any chunk dependencies */
-	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
+	ts_chunk_drop_by_relid(ch->fd.relid, DROP_RESTRICT, LOG);
 	PG_RETURN_BOOL(true);
 }
 
@@ -5118,7 +5092,7 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	ts_chunk_copy_referencing_fk(ht, chunk);
 	ts_process_utility_set_expect_chunk_modification(false);
 
-	ts_chunk_drop(merge_chunk, DROP_RESTRICT, 1);
+	ts_chunk_drop_by_relid(merge_chunk->fd.relid, DROP_RESTRICT, 1);
 }
 
 /* Internal API used by OSM extension. OSM table is a foreign table that is
@@ -5479,7 +5453,7 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 	ts_chunk_validate_chunk_status_for_operation(osm_chunk, CHUNK_DROP, true);
 
 	/* do not drop any chunk dependencies */
-	ts_chunk_drop(osm_chunk, DROP_RESTRICT, LOG);
+	ts_chunk_drop_by_relid(osm_chunk->fd.relid, DROP_RESTRICT, LOG);
 
 	/* reset hypertable OSM status */
 	ts_hypertable_clear_status(ht,

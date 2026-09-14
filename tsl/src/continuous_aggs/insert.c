@@ -11,6 +11,7 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <storage/lwlock.h>
+#include <utils.h>
 #include <utils/guc.h>
 #include <utils/hsearch.h>
 #include <utils/lsyscache.h>
@@ -20,6 +21,7 @@
 #include "compat/compat.h"
 
 #include "continuous_aggs/insert.h"
+#include "debug_assert.h"
 #include "debug_point.h"
 #include "guc.h"
 #include "invalidation.h"
@@ -135,6 +137,16 @@ static HTAB *continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
 /* Per-transaction tenant buffer (drained to shared memory at commit). */
 static HTAB *tenant_local_htab = NULL;
 static bool tenant_buffer_unencodable = false;
+
+/*
+ * Generation this backend currently pins, or NULL.  A flush will not drain a
+ * generation while its num_writers is non-zero, so a writer that fails between
+ * begin_batch and end_batch would stall every later flush.  The abort handler
+ * releases whatever this points at, which covers both an ERROR unwinding out of
+ * the drain and a FATAL exit (ShutdownPostgres, called during process cleanup,
+ * aborts the open transaction before shared memory is detached).
+ */
+static TenantGeneration *pinned_generation = NULL;
 
 /* Backend-lifetime resolved-tracker cache (see TenantTrackerCacheEntry). */
 static HTAB *tenant_tracker_resolved_htab = NULL;
@@ -694,8 +706,10 @@ tenant_local_htab_write(void)
 		/*
 		 * The tracker was resolved (and cached) in the DML path by
 		 * resolve_tenant_tracker, so the drain only reads the backend-local cache
-		 * here -- no attach, lookup, allocation, catalog scan, or PG_TRY, and thus
-		 * nothing that can throw at pre-commit.  A NULL entry means tracking is
+		 * here -- no attach, lookup, allocation or catalog scan.  Errors are still
+		 * possible (a debug build injects one below, and a cancel can arrive), so
+		 * the pin taken further down is released by the abort handler rather than
+		 * relying on this staying throw-free.  A NULL entry means tracking is
 		 * disabled for this hypertable; a missing entry means nothing was buffered
 		 * for it (shouldn't happen), both -> skip (untracked, seqnum 0).
 		 */
@@ -722,9 +736,18 @@ tenant_local_htab_write(void)
 		 * Reading it under the pin means every backend draining into this
 		 * generation gates on the same [window_start, window_end). */
 		generation = ts_tenant_tracker_begin_batch(tracking, &seqnum, &window_start, &window_end);
+
+		/* One pin at a time: this loop releases each before pinning the next. */
+		Ensure(pinned_generation == NULL,
+			   "tenant tracker generation pinned twice by the same backend");
+		pinned_generation = generation;
 		seq_entry->seqnum = seqnum;
 		seq_entry->late_threshold_start = window_start;
 		seq_entry->late_threshold_end = window_end;
+
+		/* Park while the generation is pinned, so a test can cancel or terminate
+		 * the writer before it reaches end_batch. */
+		DEBUG_WAITPOINT("tenant_tracker_in_pin");
 
 		hash_seq_init(&hash_seq, tenant_local_htab);
 		while ((entry = hash_seq_search(&hash_seq)) != NULL)
@@ -751,6 +774,7 @@ tenant_local_htab_write(void)
 			}
 		}
 		ts_tenant_tracker_end_batch(generation);
+		pinned_generation = NULL;
 	}
 
 	list_free(hypertable_ids);
@@ -798,6 +822,46 @@ tenant_tracking_for_hypertable(List *hypertable_seqnums, int32 hypertable_id)
 	return NULL;
 }
 
+/*
+ * Add an invalidation to the hypertable log, split at the edges of the
+ * granular tracking window. The part outside the tracking window will
+ * be written with seqnum 0, and the one inside with the current, non-zero
+ * seqnum.
+ */
+static void
+add_invalidation_split_on_late_window(int32 hyper_id, int64 start, int64 end, int32 seqnum,
+									  const HypertableSeqnumEntry *tracking_entry)
+{
+	if (seqnum == 0)
+	{
+		invalidation_hyper_log_add_entry(hyper_id, start, end, seqnum);
+		return;
+	}
+	/* We don't call this function for entries that are completely outside the
+	 * tracking window, so an entry here should overlap the window.
+	 */
+	Assert(start < tracking_entry->late_threshold_end &&
+		   end >= tracking_entry->late_threshold_start);
+
+	if (start < tracking_entry->late_threshold_start)
+	{
+		invalidation_hyper_log_add_entry(hyper_id,
+										 start,
+										 int64_saturating_sub(tracking_entry->late_threshold_start,
+															  1),
+										 0);
+		start = tracking_entry->late_threshold_start;
+	}
+
+	if (end >= tracking_entry->late_threshold_end)
+	{
+		invalidation_hyper_log_add_entry(hyper_id, tracking_entry->late_threshold_end, end, 0);
+		end = int64_saturating_sub(tracking_entry->late_threshold_end, 1);
+	}
+
+	invalidation_hyper_log_add_entry(hyper_id, start, end, seqnum);
+}
+
 static inline void
 cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_seqnums)
 {
@@ -830,10 +894,11 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_s
 	 */
 	if (IsolationUsesXactSnapshot())
 	{
-		invalidation_hyper_log_add_entry(entry->hypertable_id,
-										 entry->lowest_modified_value,
-										 entry->greatest_modified_value,
-										 seqnum);
+		add_invalidation_split_on_late_window(entry->hypertable_id,
+											  entry->lowest_modified_value,
+											  entry->greatest_modified_value,
+											  seqnum,
+											  tracking_entry);
 		return;
 	}
 
@@ -841,10 +906,11 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_s
 
 	if (entry->lowest_modified_value < liv)
 	{
-		invalidation_hyper_log_add_entry(entry->hypertable_id,
-										 entry->lowest_modified_value,
-										 entry->greatest_modified_value,
-										 seqnum);
+		add_invalidation_split_on_late_window(entry->hypertable_id,
+											  entry->lowest_modified_value,
+											  entry->greatest_modified_value,
+											  seqnum,
+											  tracking_entry);
 	}
 };
 
@@ -927,6 +993,21 @@ cache_inval_htab_write(List *hypertable_seqnums)
 static void
 continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 {
+	/* A writer that did not reach end_batch still holds its generation pinned;
+	 * (i.e., it increased num_writers but never decreased it). Release it
+	 * in the Abort events before the transaction ends.
+	 *
+	 * Note that we release the generation pin here instead of in the
+	 * switch below, so it wouldn't be missed in the early return
+	 * when continuous_aggs_cache_inval_htab is NULL
+	 */
+	if (pinned_generation != NULL &&
+		(event == XACT_EVENT_ABORT || event == XACT_EVENT_PARALLEL_ABORT))
+	{
+		ts_tenant_tracker_end_batch(pinned_generation);
+		pinned_generation = NULL;
+	}
+
 	/* Return quickly if we never initialize the hashtable */
 	if (!continuous_aggs_cache_inval_htab)
 	{
@@ -964,11 +1045,19 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 			DEBUG_WAITPOINT("tenant_tracker_after_precommit_drain");
 			break;
 		}
+		case XACT_EVENT_ABORT:
+		case XACT_EVENT_PARALLEL_ABORT:
+			/* The pin, if any, should have been released above. */
+			Ensure(pinned_generation == NULL,
+				   "tenant tracker generation still pinned by this backend at abort");
+			cache_inval_cleanup();
+			break;
 		case XACT_EVENT_PREPARE:
 		case XACT_EVENT_COMMIT:
 		case XACT_EVENT_PARALLEL_COMMIT:
-		case XACT_EVENT_ABORT:
-		case XACT_EVENT_PARALLEL_ABORT:
+			/* The pin should have been released before reaching commit. */
+			Ensure(pinned_generation == NULL,
+				   "tenant tracker generation still pinned by this backend at commit");
 			cache_inval_cleanup();
 			break;
 		default:

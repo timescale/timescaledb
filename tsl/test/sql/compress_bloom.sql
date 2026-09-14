@@ -681,6 +681,157 @@ ON CONFLICT (device_id, metric, ts) DO NOTHING;
 DROP TABLE explain_partial CASCADE;
 
 -------------------------------------------------------------------
+-- Upsert with more than one unique constraint
+-------------------------------------------------------------------
+CREATE TABLE multi_unique(
+    ts timestamptz NOT NULL,
+    sensor_id int NOT NULL,
+    probe_id int NOT NULL,
+    UNIQUE (sensor_id, ts),
+    UNIQUE (probe_id, ts)
+);
+SELECT create_hypertable('multi_unique', 'ts');
+ALTER TABLE multi_unique SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(sensor_id), bloom(probe_id)'
+);
+
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 50, 50);
+SELECT compress_chunk(c) FROM show_chunks('multi_unique') c;
+
+-- The new row does not conflict on the arbiter (sensor_id, ts) but does
+-- conflict on (probe_id, ts), so it has to be rejected.
+\set ON_ERROR_STOP 0
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 999, 50)
+ON CONFLICT (sensor_id, ts) DO NOTHING;
+
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 999, 50)
+ON CONFLICT (sensor_id, ts) DO UPDATE SET probe_id = EXCLUDED.probe_id;
+
+-- Same the other way around.
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 50, 999)
+ON CONFLICT (probe_id, ts) DO NOTHING;
+\set ON_ERROR_STOP 1
+
+-- No conflict on either constraint. The bloom columns are not shared by both
+-- constraints so the batch has to be scanned without bloom pruning.
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 999, 999)
+ON CONFLICT (sensor_id, ts) DO NOTHING;
+
+-- Conflict on the arbiter itself is still handled.
+INSERT INTO multi_unique VALUES ('2024-01-10 00:50', 50, 50)
+ON CONFLICT (sensor_id, ts) DO NOTHING;
+
+SELECT * FROM multi_unique ORDER BY sensor_id;
+DROP TABLE multi_unique CASCADE;
+
+-------------------------------------------------------------------
+-- A bloom column shared by every unique constraint can still prune.
+CREATE TABLE multi_unique_shared(
+    ts timestamptz NOT NULL,
+    device_id int NOT NULL,
+    tag_a int NOT NULL,
+    tag_b int NOT NULL,
+    UNIQUE (device_id, tag_a, ts),
+    UNIQUE (device_id, tag_b, ts)
+);
+SELECT create_hypertable('multi_unique_shared', 'ts');
+ALTER TABLE multi_unique_shared SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(device_id)'
+);
+
+INSERT INTO multi_unique_shared
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i % 10, i, i
+FROM generate_series(1, 1000) i;
+SELECT compress_chunk(c) FROM show_chunks('multi_unique_shared') c;
+
+-- device_id 999 is in no batch, so no row can conflict on either constraint.
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO multi_unique_shared VALUES ('2024-01-01 00:05:00', 999, 1, 1)
+ON CONFLICT (device_id, tag_a, ts) DO NOTHING;
+
+-- device_id 5 is in the batch and tag_b collides there.
+\set ON_ERROR_STOP 0
+INSERT INTO multi_unique_shared VALUES ('2024-01-01 00:05:00', 5, 999, 5)
+ON CONFLICT (device_id, tag_a, ts) DO NOTHING;
+\set ON_ERROR_STOP 1
+
+DROP TABLE multi_unique_shared CASCADE;
+
+-------------------------------------------------------------------
+-- A composite bloom filter spanning a shared column and a column only
+-- one constraint has cannot prune either.
+CREATE TABLE multi_unique_composite(
+    ts timestamptz NOT NULL,
+    a int NOT NULL,
+    x int NOT NULL,
+    y int NOT NULL,
+    UNIQUE (a, x, ts),
+    UNIQUE (a, y, ts)
+);
+SELECT create_hypertable('multi_unique_composite', 'ts');
+ALTER TABLE multi_unique_composite SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(a, x)'
+);
+
+INSERT INTO multi_unique_composite VALUES ('2024-01-01 00:05', 1, 10, 100);
+SELECT compress_chunk(c) FROM show_chunks('multi_unique_composite') c;
+
+-- (a, x) = (1, 999) is in no batch but (a, y) = (1, 100) conflicts
+\set ON_ERROR_STOP 0
+INSERT INTO multi_unique_composite VALUES ('2024-01-01 00:05', 1, 999, 100)
+ON CONFLICT (a, x, ts) DO NOTHING;
+\set ON_ERROR_STOP 1
+
+DROP TABLE multi_unique_composite CASCADE;
+
+-------------------------------------------------------------------
+-- A composite bloom filter inside the shared columns can still prune.
+CREATE TABLE multi_unique_composite_shared(
+    ts timestamptz NOT NULL,
+    a int NOT NULL,
+    b int NOT NULL,
+    x int NOT NULL,
+    y int NOT NULL,
+    UNIQUE (a, b, x, ts),
+    UNIQUE (a, b, y, ts)
+);
+SELECT create_hypertable('multi_unique_composite_shared', 'ts');
+ALTER TABLE multi_unique_composite_shared SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(a, b)'
+);
+
+INSERT INTO multi_unique_composite_shared
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i % 10, i % 7, i, i
+FROM generate_series(1, 1000) i;
+SELECT compress_chunk(c) FROM show_chunks('multi_unique_composite_shared') c;
+
+-- (a, b) = (999, 999) is in no batch, so no row can conflict on either constraint
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO multi_unique_composite_shared VALUES ('2024-01-01 00:05', 999, 999, 1, 1)
+ON CONFLICT (a, b, x, ts) DO NOTHING;
+
+-- (a, b) is in the batch and y collides there
+\set ON_ERROR_STOP 0
+INSERT INTO multi_unique_composite_shared VALUES ('2024-01-01 00:05', 5, 5, 999, 5)
+ON CONFLICT (a, b, x, ts) DO NOTHING;
+\set ON_ERROR_STOP 1
+
+DROP TABLE multi_unique_composite_shared CASCADE;
+
+-------------------------------------------------------------------
 -- Hashed bloom filters over various column types
 -------------------------------------------------------------------
 

@@ -111,7 +111,7 @@ CREATE TABLE _timescaledb_catalog.chunk (
   creation_time timestamptz NOT NULL,
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_relid_key UNIQUE (relid)
-) WITH (user_catalog_table = true);
+);
 
 INSERT INTO _timescaledb_catalog.chunk
   (id, relid, hypertable_id, status, osm_chunk, creation_time)

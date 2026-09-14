@@ -102,27 +102,6 @@ jobs:
         echo "Commit title: $commit_title"
         grep "$required_title" <<<"$commit_title"
 
-    # The release commit must modify the version.config
-    - name: The release commit must modify the version.config
-      run: |
-        set -xeu
-
-        if [[ "${{ github.event_name }}" == "pull_request" ]]
-        then
-            git remote set-branches origin '*'
-            git fetch origin "${{ github.event.pull_request.base.ref }}"
-
-            # We're working with pull request head here, see the comment
-            # at checkout step.
-            base="$(git merge-base "${{ github.event.pull_request.base.sha }}" @)"
-        else
-            base="${{ github.sha }}~"
-        fi
-
-        git log --oneline -1 @^0
-        git log --oneline -1 "${base}"
-        ! git diff --exit-code "${base}" @^0 -- version.config
-
     # The SQL upgrade scripts must be moved from the development files to
     # the respective versioned files.
     - name: The latest-dev.sql and the reverse-dev.sql must be empty

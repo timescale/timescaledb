@@ -154,3 +154,23 @@ SELECT * FROM observ; -- see view definition above
 DROP VIEW observ;
 DROP VIEW observ_main_view;
 DROP TABLE t;
+
+
+-- Dropping the hypertable also removes the statistics of its chunks
+SELECT count(*) FROM _timescaledb_functions.chunk_statistics();
+
+
+-- DROP OWNED BY removes the statistics of the owned hypertable's chunks
+CREATE TABLE t(ts timestamptz, a int, seg int);
+SELECT create_hypertable('t', by_range('ts', interval '1 day'));
+ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_segmentby = 'seg');
+INSERT INTO t SELECT ts, 1, 1 FROM generate_series('2024-01-01'::timestamptz, '2024-01-03', interval '1 hour') ts;
+SELECT count(compress_chunk(c)) FROM show_chunks('t') c;
+SELECT count(*) FROM t WHERE a = 5;
+SELECT count(*) FROM _timescaledb_functions.chunk_statistics();
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER TABLE t OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+DROP OWNED BY :ROLE_DEFAULT_PERM_USER_2;
+SELECT count(*) FROM _timescaledb_functions.chunk_statistics();
+
