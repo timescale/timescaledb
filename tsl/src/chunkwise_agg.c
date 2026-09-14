@@ -707,7 +707,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		{
 			final_strategy = AGG_PLAIN;
 		}
-		else if (is_sorted)
+		else if (is_sorted || !(extra_data->flags & GROUPING_CAN_USE_HASH))
 		{
 			/*
 			 * Only try the final Group Aggregate if the append over the partial
@@ -716,6 +716,9 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 			 * node. Group Aggregate mostly makes sense if the input is already
 			 * cheaply sorted, and if we have to re-sort all input, it's normally
 			 * inferior to Hash Aggregate.
+			 *
+			 * We also have to use it as a fallback for types that can't be
+			 * hashed.
 			 */
 			final_strategy = AGG_SORTED;
 		}
