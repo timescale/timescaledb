@@ -326,3 +326,145 @@ ALTER TABLE char_widths SET (
 
 DROP TABLE char_widths;
 DROP TABLE vc_width;
+
+----------------------------------------------------------------------
+-- ALTER TABLE <hypertable> SET (timescaledb.cagg_enable_granular_refresh)
+----------------------------------------------------------------------
+
+CREATE TABLE meters (time timestamptz NOT NULL, meter_id integer, value float8);
+SELECT create_hypertable('meters', 'time', chunk_time_interval => '1 day'::interval);
+
+-- Disabling when nothing is configured is a no-op, not an error.
+ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
+:GRC 'meters';
+
+-- Enabling through this option is not supported yet: accepted, does nothing.
+ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = true);
+:GRC 'meters';
+
+\set ON_ERROR_STOP 0
+-- Error: cannot be combined with the granular_refresh_* options.
+ALTER TABLE meters SET (
+    timescaledb.cagg_enable_granular_refresh = false,
+    timescaledb.granular_refresh_column = 'meter_id'
+);
+-- Error: timescaledb options only apply to hypertables.
+CREATE TABLE plain_meters (time timestamptz NOT NULL, meter_id integer);
+ALTER TABLE plain_meters SET (timescaledb.cagg_enable_granular_refresh = false);
+\set ON_ERROR_STOP 1
+DROP TABLE plain_meters;
+
+ALTER TABLE meters SET (
+    timescaledb.granular_refresh_column = 'meter_id',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+:GRC 'meters';
+
+-- Disabling removes the configuration row.
+ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
+:GRC 'meters';
+
+-- Disabling again is a no-op.
+ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
+:GRC 'meters';
+
+-- The row really went: the settings can be configured again, and with
+-- different values than before.
+ALTER TABLE meters SET (
+    timescaledb.granular_refresh_column = 'meter_id',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '1 day'
+);
+:GRC 'meters';
+
+-- A cagg still using the configuration blocks the disable.
+CREATE MATERIALIZED VIEW meters_hourly
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, meter_id, avg(value) AS avg_value
+FROM meters
+GROUP BY bucket, meter_id
+WITH NO DATA;
+
+ALTER MATERIALIZED VIEW meters_hourly SET (timescaledb.enable_granular_refresh = true);
+
+\set ON_ERROR_STOP 0
+ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
+\set ON_ERROR_STOP 1
+:GRC 'meters';
+
+-- Disabling the cagg first lets the hypertable be disabled.
+ALTER MATERIALIZED VIEW meters_hourly SET (timescaledb.enable_granular_refresh = false);
+ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
+:GRC 'meters';
+
+-- With no hypertable configuration the cagg can no longer be enabled.
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW meters_hourly SET (timescaledb.enable_granular_refresh = true);
+\set ON_ERROR_STOP 1
+:GRE 'meters_hourly';
+
+DROP MATERIALIZED VIEW meters_hourly;
+DROP TABLE meters;
+
+----------------------------------------------------------------------
+-- TEST: Disabling and the tenant tracker's shared memory
+--
+-- Everything below must stay in ONE session: the backend caches its
+-- resolved tracker pointer for its lifetime, and a reconnect would hide
+-- exactly what these cases exercise.
+----------------------------------------------------------------------
+
+CREATE TABLE readings (time timestamptz NOT NULL, sensor_id integer, value float8);
+SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE readings SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '0 days'
+);
+
+CREATE MATERIALIZED VIEW readings_hourly
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, sensor_id, avg(value) AS avg_value
+FROM readings
+GROUP BY bucket, sensor_id
+WITH NO DATA;
+
+ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh = true);
+
+-- Resolve and cache this backend's handle to the tracker.
+INSERT INTO readings VALUES (now(), 1, 1.0);
+
+-- A rolled back disable must leave the configuration in place. The free of
+-- the tracker's shared memory is also not freed
+BEGIN;
+ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh = false);
+ALTER TABLE readings SET (timescaledb.cagg_enable_granular_refresh = false);
+ROLLBACK;
+:GRC 'readings';
+:GRE 'readings_hourly';
+
+-- Tracking still works in this backend after the rollback.
+INSERT INTO readings VALUES (now(), 2, 2.0);
+
+-- Now commit a disable and configure again in the same backend. The commit
+-- frees the tracker, so the cached handle must be dropped. The backend needs
+-- to realloc the tracker now
+ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh = false);
+ALTER TABLE readings SET (timescaledb.cagg_enable_granular_refresh = false);
+:GRC 'readings';
+
+ALTER TABLE readings SET (
+    timescaledb.granular_refresh_column = 'sensor_id',
+    timescaledb.granular_refresh_start_offset = '30 days',
+    timescaledb.granular_refresh_end_offset = '0 days'
+);
+ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh = true);
+
+INSERT INTO readings VALUES (now(), 3, 3.0);
+
+CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
+SELECT count(*) FROM readings_hourly;
+
+DROP MATERIALIZED VIEW readings_hourly;
+DROP TABLE readings;

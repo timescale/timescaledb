@@ -222,9 +222,14 @@ SELECT debug_waitpoint_enable('tenant_tracker_seqnum_scan_oom');
 -- rolls back (no relation/snapshot leak) and the INSERT still commits.
 INSERT INTO gauges VALUES ('2020-01-01 00:00+00', 'sensor_z', 10);
 NOTICE:  per-tenant invalidation tracker unavailable for hypertable 5, falling back to full invalidation log
--- Second INSERT does not hang (scan resources released) and stays untracked
--- (resolution cached DISABLED, so no re-scan).
+-- Second INSERT does not hang (scan resources released) and stays untracked.
+-- The tracker resolves again: the first INSERT created the hypertable's
+-- first chunk, which flips relhassubclass on the hypertable and so invalidates
+-- its relcache entry.  That marks the cached result as stale, so the
+-- re-scan hits the still-enabled injection, and the fallback is reported
+-- once more.
 INSERT INTO gauges VALUES ('2020-01-01 06:00+00', 'sensor_z', 20);
+NOTICE:  per-tenant invalidation tracker unavailable for hypertable 5, falling back to full invalidation log
 SELECT count(*) AS gauges_rows FROM gauges;
  gauges_rows 
 -------------

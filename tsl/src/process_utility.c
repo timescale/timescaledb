@@ -13,7 +13,9 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
+#include <storage/lmgr.h>
 #include <storage/lockdefs.h>
+#include <utils/inval.h>
 #include <utils/lsyscache.h>
 
 #include "bgw_policy/policies_v2.h"
@@ -77,6 +79,71 @@ parse_granular_refresh_offset(WithClauseResult option, Oid time_type)
 }
 
 /*
+ * ALTER TABLE <hypertable> SET (timescaledb.cagg_enable_granular_refresh = false)
+ *
+ * Removes the hypertable's granular refresh configuration, which stops the DML
+ * path from collecting tenants, and releases the tenant tracker's shared
+ * memory.
+ * A no-op when nothing is configured, so the statement is idempotent.
+ */
+static void
+granular_refresh_disable(Hypertable *ht)
+{
+	FormData_hypertable_cagg_settings settings = { 0 };
+	List *caggs;
+	ListCell *lc;
+
+	/*
+	 * ALTER TABLE carrying only timescaledb options takes no relation lock at
+	 * all: the subcommand is consumed here and standard_ProcessUtility never
+	 * runs, so AlterTableGetLockLevel is never reached. Acquire
+	 * AccessExclusiveLock. This makes releasing the tracker's
+	 * shared memory safe as the lock will block DML writers (that write to
+	 * shared memory), so once we start hold this lock no writer can be
+	 * inside the tracker. so all dml blocked till the end of this DDL.
+	 *
+	 * The lock is held past the commit callback that actually frees the
+	 * tracker (PostgreSQL releases locks after XACT_EVENT_COMMIT), so the
+	 * writers stay locked out for the whole window.
+	 */
+	LockRelationOid(ht->main_table_relid, AccessExclusiveLock);
+
+	/* verify current settings under the lock */
+	if (!ts_hypertable_cagg_settings_get(ht->fd.id, &settings))
+	{
+		return; /* not configured: nothing to disable */
+	}
+
+	/* check if any cagg needs this setting */
+	caggs = ts_continuous_aggs_find_by_raw_table_id(ht->fd.id);
+
+	foreach (lc, caggs)
+	{
+		const ContinuousAgg *cagg = lfirst(lc);
+
+		if (cagg->data.granular_refresh_enabled)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("granular refresh is enabled for continuous aggregate \"%s\"",
+							NameStr(cagg->data.user_view_name)),
+					 errhint("Disable it first with ALTER MATERIALIZED VIEW ... SET "
+							 "(timescaledb.enable_granular_refresh = false).")));
+		}
+	}
+
+	list_free(caggs);
+
+	ts_hypertable_cagg_settings_delete(ht->fd.id);
+
+	/* Queue the shared-memory free for commit time */
+	ts_tenant_tracker_remove_at_commit(ht->fd.id, ht->main_table_relid);
+
+	/* Tell other backends to drop their cached pointer to the tracker*/
+	CacheInvalidateRelcacheByRelid(ht->main_table_relid);
+}
+
+/*
  * ALTER TABLE <hypertable> SET (timescaledb.granular_refresh_column = ...,
  *                               timescaledb.granular_refresh_start_offset = ...,
  *                               timescaledb.granular_refresh_end_offset = ...)
@@ -85,7 +152,8 @@ parse_granular_refresh_offset(WithClauseResult option, Oid time_type)
  * Continuous aggregates opt in separately and share these settings.
  *
  * All three options are required in one statement. Once configured, the
- * settings can be neither changed nor cleared.
+ * settings cannot be changed; timescaledb.cagg_enable_granular_refresh = false
+ * clears them.
  */
 void
 tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clause_options)
@@ -106,7 +174,32 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 	bool set_start_offset =
 		!with_clause_options[AlterTableFlagGranularRefreshStartOffset].is_default;
 	bool set_end_offset = !with_clause_options[AlterTableFlagGranularRefreshEndOffset].is_default;
+	bool set_enable = !with_clause_options[AlterTableFlagCaggEnableGranularRefresh].is_default;
 	FormData_hypertable_cagg_settings settings = { 0 };
+
+	if (set_enable)
+	{
+		if (set_column || set_start_offset || set_end_offset)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("conflicting granular refresh options"),
+					 errhint("timescaledb.cagg_enable_granular_refresh cannot be combined with "
+							 "the timescaledb.granular_refresh_* options.")));
+		}
+
+		if (DatumGetBool(with_clause_options[AlterTableFlagCaggEnableGranularRefresh].parsed))
+		{
+			/* TODO: enabling through this option is not supported yet. Granular
+			 * refresh is enabled with the three timescaledb.granular_refresh_*
+			 * options; accept true so that later adding support here is not a
+			 * behavior change for anyone who set it. */
+			return;
+		}
+
+		granular_refresh_disable(ht);
+		return;
+	}
 
 	if (ts_hypertable_cagg_settings_get(ht->fd.id, &settings))
 	{
@@ -114,7 +207,8 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("granular refresh is already configured on hypertable \"%s\"",
 						NameStr(ht->fd.table_name)),
-				 errhint("Changing or disabling granular refresh settings is not supported.")));
+				 errhint("Changing the settings is not supported; clear them with ALTER TABLE "
+						 "... SET (timescaledb.cagg_enable_granular_refresh = false) first.")));
 	}
 
 	Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
