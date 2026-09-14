@@ -7,6 +7,7 @@
 
 #include <access/sysattr.h>
 #include <executor/executor.h>
+#include <executor/tuptable.h>
 #include <nodes/extensible.h>
 #include <nodes/plannodes.h>
 #include <utils/rel.h>
@@ -17,7 +18,8 @@ typedef struct ColumnarIndexScanState
 {
 	CustomScanState custom;
 	int num_outputs;
-	AttrNumber *child_resnos; /* one per output column */
+	AttrNumber *result_attnos;
+	AttrNumber *child_resnos;
 } ColumnarIndexScanState;
 
 static void
@@ -25,21 +27,18 @@ columnar_index_scan_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	ColumnarIndexScanState *state = (ColumnarIndexScanState *) node;
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
+	List *output_map = cscan->custom_private;
 
-	/*
-	 * Parse output_map from custom_private: a flat list of Integer values,
-	 * one child_resno per output column.
-	 */
-	List *output_map = linitial(cscan->custom_private);
-	int num_outputs = list_length(output_map);
+	Assert(list_length(output_map) % 2 == 0);
+	int num_outputs = list_length(output_map) / 2;
 	state->num_outputs = num_outputs;
+	state->result_attnos = palloc(sizeof(AttrNumber) * num_outputs);
 	state->child_resnos = palloc(sizeof(AttrNumber) * num_outputs);
 
-	ListCell *lc;
-	int i = 0;
-	foreach (lc, output_map)
+	for (int i = 0; i < num_outputs; i++)
 	{
-		state->child_resnos[i++] = intVal(lfirst(lc));
+		state->result_attnos[i] = list_nth_int(output_map, i * 2);
+		state->child_resnos[i] = list_nth_int(output_map, i * 2 + 1);
 	}
 
 	Assert(list_length(cscan->custom_plans) == 1);
@@ -47,40 +46,52 @@ columnar_index_scan_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 static TupleTableSlot *
-columnar_index_scan_exec(CustomScanState *node)
+columnar_index_scan_next(ScanState *node)
 {
 	ColumnarIndexScanState *state = (ColumnarIndexScanState *) node;
-	PlanState *child_ps = linitial(node->custom_ps);
-	TupleTableSlot *result_slot = node->ss.ps.ps_ResultTupleSlot;
-	ExecClearTuple(result_slot);
-
+	PlanState *child_ps = linitial(state->custom.custom_ps);
 	TupleTableSlot *child_slot = ExecProcNode(child_ps);
 	if (TupIsNull(child_slot))
 	{
 		return NULL;
 	}
 
-	/*
-	 * Copy values from the child slot to the output slot using the output_map.
-	 * Each output column i gets its value from child_resnos[i].
-	 */
-	Datum *values = result_slot->tts_values;
-	bool *nulls = result_slot->tts_isnull;
-
+	TupleTableSlot *scan_slot = node->ss_ScanTupleSlot;
+	ExecStoreAllNullTuple(scan_slot);
 	for (int i = 0; i < state->num_outputs; i++)
 	{
-		if (state->child_resnos[i] == TableOidAttributeNumber)
+		bool isnull;
+		AttrNumber result_attno = state->result_attnos[i];
+		AttrNumber child_resno = state->child_resnos[i];
+		int result_index = AttrNumberGetAttrOffset(result_attno);
+
+		if (child_resno == TableOidAttributeNumber)
 		{
-			values[i] = ObjectIdGetDatum(node->ss.ss_currentRelation->rd_id);
-			nulls[i] = false;
+			scan_slot->tts_values[result_index] = ObjectIdGetDatum(node->ss_currentRelation->rd_id);
+			scan_slot->tts_isnull[result_index] = false;
 		}
 		else
 		{
-			values[i] = slot_getattr(child_slot, state->child_resnos[i], &nulls[i]);
+			scan_slot->tts_values[result_index] = slot_getattr(child_slot, child_resno, &isnull);
+			scan_slot->tts_isnull[result_index] = isnull;
 		}
 	}
 
-	return ExecStoreVirtualTuple(result_slot);
+	return scan_slot;
+}
+
+static bool
+columnar_index_scan_recheck(ScanState *node, TupleTableSlot *slot)
+{
+	return true;
+}
+
+static TupleTableSlot *
+columnar_index_scan_exec(CustomScanState *node)
+{
+	return ExecScan(&node->ss,
+					(ExecScanAccessMtd) columnar_index_scan_next,
+					(ExecScanRecheckMtd) columnar_index_scan_recheck);
 }
 
 static void
@@ -93,6 +104,7 @@ static void
 columnar_index_scan_rescan(CustomScanState *node)
 {
 	ExecReScan(linitial(node->custom_ps));
+	ExecScanReScan(&node->ss);
 }
 
 static struct CustomExecMethods exec_methods = {
@@ -107,8 +119,9 @@ static struct CustomExecMethods exec_methods = {
 Node *
 columnar_index_scan_state_create(CustomScan *cscan)
 {
-	ColumnarIndexScanState *state =
-		(ColumnarIndexScanState *) newNode(sizeof(ColumnarIndexScanState), T_CustomScanState);
+	ColumnarIndexScanState *state = palloc0(sizeof(ColumnarIndexScanState));
+	NodeSetTag(state, T_CustomScanState);
+
 	state->custom.methods = &exec_methods;
 	return (Node *) state;
 }
