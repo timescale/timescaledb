@@ -12,6 +12,8 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "chunk.h"
+#include "dimension_slice.h"
 #include "func_cache.h"
 #include "guc.h"
 #include "nodes/chunk_append/chunk_append.h"
@@ -35,6 +37,54 @@ static bool
 has_joins(FromExpr *jointree)
 {
 	return list_length(jointree->fromlist) != 1 || !IsA(linitial(jointree->fromlist), RangeTblRef);
+}
+
+/*
+ * Build the nested oids list for the ChunkAppend with ordering with space
+ * partitioning.
+ *
+ * nested_oids is a list of lists, chunks that occupy the same time slice will be
+ * in the same list. In the list [[1,2,3],[4,5,6]] chunks 1, 2 and 3 are space partitions of
+ * the same time slice and 4, 5 and 6 are space partitions of the next time slice.
+ */
+static List *
+build_nested_oids(PlannerInfo *root, List *children)
+{
+	List *nested_oids = NIL;
+	List *slice_oids = NIL;
+	const DimensionSlice *prev_slice = NULL;
+
+	ListCell *lc;
+	foreach (lc, children)
+	{
+		Path *child = (Path *) lfirst(lc);
+		const Chunk *chunk = ts_planner_chunk_fetch(root, child->parent);
+
+		/*
+		 * The children should be only plain chunks since we're creating a
+		 * ChunkAppend, but don't segfault.
+		 */
+		Ensure(chunk != NULL,
+			   "unexpected ChunkAppend child relation (index %d)",
+			   child->parent->relid);
+
+		if (prev_slice != NULL && ts_dimension_slice_cmp(prev_slice, chunk->cube->slices[0]) != 0)
+		{
+			nested_oids = lappend(nested_oids, slice_oids);
+			slice_oids = NIL;
+		}
+
+		slice_oids = lappend_oid(slice_oids, chunk->fd.relid);
+
+		prev_slice = chunk->cube->slices[0];
+	}
+
+	if (slice_oids != NIL)
+	{
+		nested_oids = lappend(nested_oids, slice_oids);
+	}
+
+	return nested_oids;
 }
 
 /*
@@ -102,7 +152,7 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *patht
 
 Path *
 ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, Path *subpath,
-							bool parallel_aware, bool ordered, List *nested_oids)
+							bool parallel_aware, bool ordered)
 {
 	ChunkAppendPath *path;
 	ListCell *lc;
@@ -389,6 +439,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		 * We do not check sort order at this stage but injecting of Sort
 		 * nodes happens when the plan is created instead.
 		 */
+		List *nested_oids = build_nested_oids(root, children);
 		ListCell *flat = list_head(children);
 		List *nested_children = NIL;
 		bool has_scan_childs = false;

@@ -1406,7 +1406,6 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 		TimescaleDBPrivate *private = ts_get_private_reloptinfo(rel);
 		bool ordered = private->appends_ordered;
 		int order_attno = private->order_attno;
-		List *nested_oids = private->nested_oids;
 		ListCell *lc;
 
 		Assert(ht != NULL);
@@ -1421,13 +1420,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				case T_MergeAppendPath:
 					if (should_chunk_append(ht, root, rel, *pathptr, ordered, order_attno))
 					{
-						*pathptr = ts_chunk_append_path_create(root,
-															   rel,
-															   ht,
-															   *pathptr,
-															   false,
-															   ordered,
-															   nested_oids);
+						*pathptr =
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, false, ordered);
 					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
 					{
@@ -1450,7 +1444,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 					if (should_chunk_append(ht, root, rel, *pathptr, false, 0))
 					{
 						*pathptr =
-							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false);
 					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
 					{
