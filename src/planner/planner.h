@@ -38,9 +38,6 @@ typedef struct TimescaleDBPrivate
 	/* Cached chunk data for the chunk relinfo. */
 	Chunk *cached_chunk_struct;
 
-	/* Cached equivalence members for compressed chunks. List of (EC, EM) Lists. */
-	List *compressed_ec_em_pairs;
-
 	/* Cached transformed pathkeys */
 	List *transformed_sort_pathkeys;
 	bool transformed_sort_pathkeys_valid;
