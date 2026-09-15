@@ -731,7 +731,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		 * If we chose GroupAggregate but the input is not properly sorted, we
 		 * have to account for sorting it.
 		 */
-		if (final_strategy == AGG_SORTED && !partial_agg_is_sorted)
+		if (final_strategy == AGG_SORTED && !partial_agg_is_sorted && root->group_pathkeys != NIL)
 		{
 			partially_aggregated_path = (Path *) create_sort_path(root,
 																  output_rel,
