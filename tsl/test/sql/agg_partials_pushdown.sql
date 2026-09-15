@@ -58,6 +58,29 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
 :PREFIX
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
 
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+    AND device_id = 1
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+    AND device_id = -1
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+
 RESET enable_hashagg;
 
 -- Check chunk exclusion for index scans

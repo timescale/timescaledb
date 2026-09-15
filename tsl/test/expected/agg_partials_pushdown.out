@@ -229,6 +229,41 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Filter: (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone)
 
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+ device_id | count | sum | sum | sum | sum 
+-----------+-------+-----+-----+-----+-----
+         1 |    20 |  40 |  60 |  30 |    
+         2 |    20 |  60 |  80 |  50 |    
+         3 |    20 |  80 | 100 |  70 |    
+         4 |    20 | 100 | 120 |  90 |    
+         5 |    20 | 120 | 140 | 110 |    
+
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+    AND device_id = 1
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+ device_id | count | sum | sum | sum | sum 
+-----------+-------+-----+-----+-----+-----
+         1 |    20 |  40 |  60 |  30 |    
+
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+    AND device_id = -1
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+ device_id | count | sum | sum | sum | sum 
+-----------+-------+-----+-----+-----+-----
+
 RESET enable_hashagg;
 -- Check chunk exclusion for index scans
 SET enable_seqscan = OFF;
@@ -580,13 +615,13 @@ GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    Output: sensor_readings.ts, sensor_readings.sensor_id, (count(*))
-   ->  Finalize GroupAggregate (actual rows=5.00 loops=1)
-         Output: sensor_readings.ts, sensor_readings.sensor_id, count(*)
-         Group Key: sensor_readings.ts, sensor_readings.sensor_id
-         ->  Sort (actual rows=6.00 loops=1)
-               Output: sensor_readings.ts, sensor_readings.sensor_id, (PARTIAL count(*))
-               Sort Key: sensor_readings.ts, sensor_readings.sensor_id
-               Sort Method: quicksort 
+   ->  Sort (actual rows=5.00 loops=1)
+         Output: sensor_readings.ts, sensor_readings.sensor_id, (count(*))
+         Sort Key: sensor_readings.ts, sensor_readings.sensor_id
+         Sort Method: top-N heapsort 
+         ->  Finalize HashAggregate (actual rows=3000.00 loops=1)
+               Output: sensor_readings.ts, sensor_readings.sensor_id, count(*)
+               Group Key: sensor_readings.ts, sensor_readings.sensor_id
                ->  Custom Scan (ChunkAppend) on public.sensor_readings (actual rows=3000.00 loops=1)
                      Output: sensor_readings.ts, sensor_readings.sensor_id, (PARTIAL count(*))
                      Order: sensor_readings.ts
