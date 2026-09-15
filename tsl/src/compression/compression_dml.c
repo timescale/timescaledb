@@ -1293,16 +1293,30 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 						slot_getattr(insert_slot, attnum, &values[col_idx].isnull);
 					col_idx++;
 				}
-				uint64 hash = cdst->bloom_hasher->hash_values(cdst->bloom_hasher, values);
+				Assert(col_idx == cdst->bloom_hasher->num_columns);
 
-				stats.batches_checked_by_bloom++;
-				if (!bloom1_contains_hash(bloom_datum, hash))
+				/*
+				 * Single column bloom indexes can't check for NULL values
+				 * so fall back to full decompression.
+				 * Composite bloom indexes can handle NULL checks properly.
+				 */
+				if (cdst->bloom_hasher->num_columns == 1 && values[0].isnull)
 				{
-					row_decompressor_reset(&decompressor);
-					stats.batches_pruned_by_bloom++;
-					continue;
+					stats.batches_without_bloom++;
 				}
-				bloom_passed = true;
+				else
+				{
+					uint64 hash = cdst->bloom_hasher->hash_values(cdst->bloom_hasher, values);
+
+					stats.batches_checked_by_bloom++;
+					if (!bloom1_contains_hash(bloom_datum, hash))
+					{
+						row_decompressor_reset(&decompressor);
+						stats.batches_pruned_by_bloom++;
+						continue;
+					}
+					bloom_passed = true;
+				}
 			}
 			else
 			{

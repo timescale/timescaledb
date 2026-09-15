@@ -1,4 +1,4 @@
-Parsed test spec with 5 sessions
+Parsed test spec with 11 sessions
 
 starting permutation: p_prime_insert p_prime_refresh p_insert_late l_lock r_refresh l_unlock
 step p_prime_insert: 
@@ -163,4 +163,215 @@ step d_flag:
 granular_refresh_enabled
 ------------------------
 f                       
+
+
+starting permutation: d_disable hw_begin hw_insert hd_disable hw_commit hd_settings
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+
+step hw_begin: BEGIN;
+step hw_insert: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+step hd_disable: ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false); <waiting ...>
+step hw_commit: COMMIT;
+step hd_disable: <... completed>
+step hd_settings: 
+    SELECT count(*) AS settings_rows
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+    WHERE h.table_name = 'conditions';
+
+settings_rows
+-------------
+            0
+
+
+starting permutation: d_disable he_begin he_enable hd_disable he_commit hd_settings d_flag
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+
+step he_begin: BEGIN;
+step he_enable: ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+step hd_disable: ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false); <waiting ...>
+step he_commit: COMMIT;
+step hd_disable: <... completed>
+ERROR:  granular refresh is enabled for continuous aggregate "cond_daily"
+step hd_settings: 
+    SELECT count(*) AS settings_rows
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+    WHERE h.table_name = 'conditions';
+
+settings_rows
+-------------
+            1
+
+step d_flag: 
+    SELECT granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily';
+
+granular_refresh_enabled
+------------------------
+t                       
+
+
+starting permutation: d_disable hd_begin hd_disable he_enable hd_commit hd_settings d_flag
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+
+step hd_begin: BEGIN;
+step hd_disable: ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+step he_enable: ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true); <waiting ...>
+step hd_commit: COMMIT;
+step he_enable: <... completed>
+ERROR:  granular refresh is not configured on the hypertable
+step hd_settings: 
+    SELECT count(*) AS settings_rows
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+    WHERE h.table_name = 'conditions';
+
+settings_rows
+-------------
+            0
+
+step d_flag: 
+    SELECT granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily';
+
+granular_refresh_enabled
+------------------------
+f                       
+
+
+starting permutation: p_prime_insert p_prime_refresh p_insert_late hx_exception hd_settings d_flag r_refresh r_tracking
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step p_insert_late: 
+    INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1),
+                                  ('2020-01-05 00:00+00', 'sensor_b', 2);
+
+step hx_exception: 
+    DO $$
+    BEGIN
+        BEGIN
+            ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+            ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+        EXCEPTION WHEN others THEN
+            RAISE;
+        END;
+        -- Abort only once the configuration really is cleared, so a disable that
+        -- silently did nothing would show up as settings_rows = 0 rather than
+        -- letting the permutation pass for the wrong reason.
+        IF NOT EXISTS (
+            SELECT 1 FROM _timescaledb_catalog.hypertable_cagg_settings s
+            JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+            WHERE h.table_name = 'conditions') THEN
+            RAISE EXCEPTION 'abort the subtransaction';
+        END IF;
+    EXCEPTION WHEN others THEN
+        NULL;
+    END $$;
+
+step hd_settings: 
+    SELECT count(*) AS settings_rows
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+    WHERE h.table_name = 'conditions';
+
+settings_rows
+-------------
+            1
+
+step d_flag: 
+    SELECT granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily';
+
+granular_refresh_enabled
+------------------------
+t                       
+
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+
+step r_tracking: 
+    SELECT tt.tenant_id
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt
+    WHERE tt.hypertable_id = (SELECT raw_hypertable_id
+                              FROM _timescaledb_catalog.continuous_agg
+                              WHERE user_view_name = 'cond_daily')
+      AND tt.tenant_id IN ('sensor_a', 'sensor_b')
+    ORDER BY tt.tenant_id;
+
+tenant_id
+---------
+sensor_a 
+sensor_b 
+
+
+starting permutation: p_prime_insert p_prime_refresh s_insert_a d_disable hd_disable hd_settings hc_configure he_enable s_insert_b r_refresh r_tracking r_cagg_contents d_flag
+step p_prime_insert: 
+    INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'sensor_prime', 9);
+
+step p_prime_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01', options => jsonb_build_object('buckets_per_batch', 0));
+
+step s_insert_a: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_a', 1);
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+
+step hd_disable: ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+step hd_settings: 
+    SELECT count(*) AS settings_rows
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+    WHERE h.table_name = 'conditions';
+
+settings_rows
+-------------
+            0
+
+step hc_configure: 
+    ALTER TABLE conditions SET (
+        timescaledb.granular_refresh_column = 'sensor_id',
+        timescaledb.granular_refresh_start_offset = '2 years',
+        timescaledb.granular_refresh_end_offset = '1 day');
+
+step he_enable: ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+step s_insert_b: INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 'sensor_b', 2);
+step r_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-11', options => jsonb_build_object('buckets_per_batch', 0));
+
+step r_tracking: 
+    SELECT tt.tenant_id
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt
+    WHERE tt.hypertable_id = (SELECT raw_hypertable_id
+                              FROM _timescaledb_catalog.continuous_agg
+                              WHERE user_view_name = 'cond_daily')
+      AND tt.tenant_id IN ('sensor_a', 'sensor_b')
+    ORDER BY tt.tenant_id;
+
+tenant_id
+---------
+sensor_b 
+
+step r_cagg_contents: 
+    SELECT bucket, sensor_id, avg FROM cond_daily ORDER BY bucket, sensor_id;
+
+bucket                      |sensor_id   |avg
+----------------------------+------------+---
+Thu Jan 02 00:00:00 2020 UTC|sensor_a    |  1
+Sun Jan 05 00:00:00 2020 UTC|sensor_b    |  2
+Mon Jun 01 00:00:00 2020 UTC|sensor_prime|  9
+
+step d_flag: 
+    SELECT granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily';
+
+granular_refresh_enabled
+------------------------
+t                       
 
