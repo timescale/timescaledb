@@ -55,7 +55,6 @@
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
-#include "ts_catalog/hypertable_cagg_settings.h"
 #include "ts_stats/ts_stats_record.h"
 #include <nodes/columnar_scan/vector_quals.h>
 
@@ -1039,13 +1038,12 @@ tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht, Oid c
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
 	Ensure(time_dim, "Hypertable must have an open dimension");
 	AttrNumber attnum = get_attnum(chunk_relid, NameStr(time_dim->fd.column_name));
-	const char *tenant_column_name;
 
 	compressor->invalidation.hypertable_id = ht->fd.id;
 	compressor->invalidation.chunk_relid = chunk_relid;
 	compressor->invalidation.invalidation_column_offset = AttrNumberGetAttrOffset(attnum);
 	compressor->invalidation.tenant_tracking_enabled =
-		ts_hypertable_cagg_settings_get_tenant_tracking_column(ht->fd.id, &tenant_column_name);
+		continuous_agg_tenant_tracking_enabled(ht->fd.id);
 }
 
 void
