@@ -580,13 +580,13 @@ GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    Output: sensor_readings.ts, sensor_readings.sensor_id, (count(*))
-   ->  Finalize GroupAggregate (actual rows=5.00 loops=1)
-         Output: sensor_readings.ts, sensor_readings.sensor_id, count(*)
-         Group Key: sensor_readings.ts, sensor_readings.sensor_id
-         ->  Sort (actual rows=6.00 loops=1)
-               Output: sensor_readings.ts, sensor_readings.sensor_id, (PARTIAL count(*))
-               Sort Key: sensor_readings.ts, sensor_readings.sensor_id
-               Sort Method: quicksort 
+   ->  Sort (actual rows=5.00 loops=1)
+         Output: sensor_readings.ts, sensor_readings.sensor_id, (count(*))
+         Sort Key: sensor_readings.ts, sensor_readings.sensor_id
+         Sort Method: top-N heapsort 
+         ->  Finalize HashAggregate (actual rows=3000.00 loops=1)
+               Output: sensor_readings.ts, sensor_readings.sensor_id, count(*)
+               Group Key: sensor_readings.ts, sensor_readings.sensor_id
                ->  Custom Scan (ChunkAppend) on public.sensor_readings (actual rows=3000.00 loops=1)
                      Output: sensor_readings.ts, sensor_readings.sensor_id, (PARTIAL count(*))
                      Order: sensor_readings.ts

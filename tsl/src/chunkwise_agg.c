@@ -696,15 +696,16 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	foreach (lc, partially_grouped_paths)
 	{
 		Path *partially_aggregated_path = lfirst(lc);
-		const bool is_sorted =
-			root->group_pathkeys != NIL &&
+
+		const bool partial_agg_is_sorted =
 			pathkeys_contained_in(root->group_pathkeys, partially_aggregated_path->pathkeys);
+
 		AggStrategy final_strategy;
-		if (parse->groupClause == NULL)
+		if (parse->groupClause == NIL)
 		{
 			final_strategy = AGG_PLAIN;
 		}
-		else if (is_sorted || !(extra_data->flags & GROUPING_CAN_USE_HASH) || !enable_hashagg)
+		else if (partial_agg_is_sorted || !(extra_data->flags & GROUPING_CAN_USE_HASH) || !enable_hashagg)
 		{
 			/*
 			 * Try the final Group Aggregate if the append over the partial
@@ -730,7 +731,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		 * If we chose GroupAggregate but the input is not properly sorted, we
 		 * have to account for sorting it.
 		 */
-		if (final_strategy == AGG_SORTED && !is_sorted)
+		if (final_strategy == AGG_SORTED && !partial_agg_is_sorted)
 		{
 			partially_aggregated_path = (Path *) create_sort_path(root,
 																  output_rel,
