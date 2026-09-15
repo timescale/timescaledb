@@ -705,7 +705,8 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		{
 			final_strategy = AGG_PLAIN;
 		}
-		else if (partial_agg_is_sorted || !(extra_data->flags & GROUPING_CAN_USE_HASH) || !enable_hashagg)
+		else if (partial_agg_is_sorted || !(extra_data->flags & GROUPING_CAN_USE_HASH) ||
+				 !enable_hashagg)
 		{
 			/*
 			 * Try the final Group Aggregate if the append over the partial
