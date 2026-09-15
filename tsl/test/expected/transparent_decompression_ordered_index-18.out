@@ -417,29 +417,27 @@ GROUP BY device_id;
          Sort Method: quicksort 
          ->  Nested Loop (actual rows=48.00 loops=1)
                ->  Seq Scan on nodetime nd (actual rows=1.00 loops=1)
-               ->  Append (actual rows=48.00 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk mt_1 (actual rows=0.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=48.00 loops=1)
+                     Chunks excluded during runtime: 4
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk mt_1 (never executed)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
-                           Rows Removed by Filter: 96
-                           ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                           ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (never executed)
                                  Index Cond: (device_id = nd.node)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk mt_2 (actual rows=0.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk mt_2 (never executed)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
-                           Rows Removed by Filter: 192
-                           ->  Index Scan using _hyper_1_2_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_2_chunk_compressed (actual rows=1.00 loops=1)
+                           ->  Index Scan using _hyper_1_2_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_2_chunk_compressed (never executed)
                                  Index Cond: (device_id = nd.node)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk mt_3 (actual rows=0.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk mt_3 (never executed)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
-                           ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=0.00 loops=1)
+                           ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (never executed)
                                  Index Cond: (device_id = nd.node)
                      ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk mt_4 (actual rows=48.00 loops=1)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
                            ->  Index Scan using _hyper_1_4_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_4_chunk_compressed (actual rows=1.00 loops=1)
                                  Index Cond: (device_id = nd.node)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (actual rows=0.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (never executed)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
-                           Rows Removed by Filter: 1
-                           ->  Index Scan using _hyper_1_5_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_5_chunk_compressed (actual rows=1.00 loops=1)
+                           ->  Index Scan using _hyper_1_5_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_5_chunk_compressed (never executed)
                                  Index Cond: (device_id = nd.node)
 
 :PREFIX
@@ -584,12 +582,14 @@ ORDER BY v0;
    Sort Method: quicksort 
    ->  Nested Loop (actual rows=2.00 loops=1)
          ->  Values Scan on "*VALUES*" (actual rows=2.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk met (actual rows=1.00 loops=2)
-               Filter: ("*VALUES*".column2 = v0)
-               Rows Removed by Filter: 47
-               Vectorized Filter: (("time" > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone))
-               ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=1.00 loops=2)
-                     Index Cond: ((device_id = "*VALUES*".column1) AND (_ts_meta_v2_first_time < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone))
+         ->  Custom Scan (ChunkAppend) on metrics_ordered_idx met (actual rows=1.00 loops=2)
+               Hypertables excluded during runtime: 0
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk met_1 (actual rows=1.00 loops=2)
+                     Filter: ("*VALUES*".column2 = v0)
+                     Rows Removed by Filter: 47
+                     Vectorized Filter: (("time" > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone))
+                     ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=1.00 loops=2)
+                           Index Cond: ((device_id = "*VALUES*".column1) AND (_ts_meta_v2_first_time < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone))
 
 --add filter to segment by (device_id) and compressed attr column (v0)
 :PREFIX
@@ -647,12 +647,14 @@ ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
          Rows Removed by Join Filter: 1
          ->  Values Scan on "*VALUES*" (actual rows=2.00 loops=1)
          ->  Seq Scan on nodetime (actual rows=1.00 loops=2)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk met (actual rows=1.00 loops=1)
-         Filter: ("*VALUES*".column3 = v0)
-         Rows Removed by Filter: 47
-         Vectorized Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
-         ->  Index Scan using _hyper_1_4_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_4_chunk_compressed (actual rows=1.00 loops=1)
-               Index Cond: ((device_id = "*VALUES*".column1) AND (device_id_peer = "*VALUES*".column2) AND (_ts_meta_v2_first_time <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx met (actual rows=1.00 loops=1)
+         Hypertables excluded during runtime: 0
+         ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk met_1 (actual rows=1.00 loops=1)
+               Filter: ("*VALUES*".column3 = v0)
+               Rows Removed by Filter: 47
+               Vectorized Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+               ->  Index Scan using _hyper_1_4_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_4_chunk_compressed (actual rows=1.00 loops=1)
+                     Index Cond: ((device_id = "*VALUES*".column1) AND (device_id_peer = "*VALUES*".column2) AND (_ts_meta_v2_first_time <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
 
 -- filter on compressed attr (v0) with seqscan enabled and indexscan
 -- disabled. filters on compressed attr should be above the seq scan.
