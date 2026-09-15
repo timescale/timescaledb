@@ -108,6 +108,13 @@ typedef struct ContinuousAggsCacheHyperInvalThresholdEntry
 	int64 watermark;
 } ContinuousAggsCacheHyperInvalThresholdEntry;
 
+typedef struct ContinuousAggsCacheHyperTenantColEntry
+{
+	int32 hypertable_id;
+	bool configured;
+	NameData column_name;
+} ContinuousAggsCacheHyperTenantColEntry;
+
 /*
  * Backend-local cache of this backend's resolved handle to hypertable's
  * shared tracker.  Tracking entries are held in shared mem. Each backend
@@ -141,6 +148,7 @@ static inline int64 cache_get_lowest_invalidated_time_for_hypertable(int32 hyper
 
 static HTAB *continuous_aggs_cache_inval_htab = NULL;
 static HTAB *continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
+static HTAB *continuous_aggs_cache_hyper_tenant_col_htab = NULL;
 
 /* Per-transaction tenant buffer (drained to shared memory at commit). */
 static HTAB *tenant_local_htab = NULL;
@@ -204,6 +212,55 @@ cache_inval_init()
 					CA_CACHE_INVAL_INIT_HTAB_SIZE,
 					&ctl,
 					HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+	memset(&ctl, 0, sizeof(ctl));
+	ctl.keysize = sizeof(int32);
+	ctl.entrysize = sizeof(ContinuousAggsCacheHyperTenantColEntry);
+	ctl.hcxt = continuous_aggs_invalidation_mctx;
+
+	continuous_aggs_cache_hyper_tenant_col_htab =
+		hash_create("TS Continuous Aggs Hypertable Tenant Column",
+					CA_CACHE_INVAL_INIT_HTAB_SIZE,
+					&ctl,
+					HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+/* Tenant tracking column of a hypertable, or NULL. Read from the catalog once
+ * per transaction so every chunk the transaction touches agrees. */
+static const char *
+tenant_tracking_column_for_hypertable(int32 hypertable_id)
+{
+	ContinuousAggsCacheHyperTenantColEntry *entry;
+	bool found;
+
+	if (!continuous_aggs_cache_inval_htab)
+	{
+		cache_inval_init();
+	}
+
+	entry = hash_search(continuous_aggs_cache_hyper_tenant_col_htab,
+						&hypertable_id,
+						HASH_ENTER,
+						&found);
+	if (!found)
+	{
+		const char *column_name;
+
+		entry->configured =
+			ts_hypertable_cagg_settings_get_tenant_tracking_column(hypertable_id, &column_name);
+		if (entry->configured)
+		{
+			namestrcpy(&entry->column_name, column_name);
+		}
+	}
+
+	return entry->configured ? NameStr(entry->column_name) : NULL;
+}
+
+bool
+continuous_agg_tenant_tracking_enabled(int32 hypertable_id)
+{
+	return tenant_tracking_column_for_hypertable(hypertable_id) != NULL;
 }
 
 static void
@@ -261,9 +318,8 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	 * when tenant tracking isn't configured for this hypertable or this chunk
 	 * lacks the column; otherwise cache the type facts used to encode the key. */
 	MemSet(&cache_entry->tenant_col, 0, sizeof(cache_entry->tenant_col));
-	const char *tracking_column_name;
-	if (ts_hypertable_cagg_settings_get_tenant_tracking_column(hypertable_id,
-															   &tracking_column_name))
+	const char *tracking_column_name = tenant_tracking_column_for_hypertable(hypertable_id);
+	if (tracking_column_name != NULL)
 	{
 		cache_entry->tenant_col.attno = get_attnum(chunk_relid, tracking_column_name);
 		if (cache_entry->tenant_col.attno != InvalidAttrNumber)
@@ -1001,6 +1057,7 @@ cache_inval_cleanup(void)
 	Assert(continuous_aggs_cache_hyper_inval_threshold_htab != NULL);
 	hash_destroy(continuous_aggs_cache_inval_htab);
 	hash_destroy(continuous_aggs_cache_hyper_inval_threshold_htab);
+	hash_destroy(continuous_aggs_cache_hyper_tenant_col_htab);
 	if (tenant_local_htab != NULL)
 	{
 		hash_destroy(tenant_local_htab);
@@ -1009,6 +1066,7 @@ cache_inval_cleanup(void)
 
 	continuous_aggs_cache_inval_htab = NULL;
 	continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
+	continuous_aggs_cache_hyper_tenant_col_htab = NULL;
 	tenant_local_htab = NULL;
 	tenant_buffer_unencodable = false;
 	continuous_aggs_invalidation_mctx = NULL;
