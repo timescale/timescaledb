@@ -238,8 +238,31 @@ qual_walker(Node *node, QualSupportContext *ctx)
 			return expression_tree_walker(node, qual_walker, ctx);
 		}
 
-		case T_List:
 		case T_Const:
+		{
+			/*
+			 * The walked expression is the WHERE clause after preprocessing,
+			 * so eval_const_expressions has already run over it. That clause is
+			 * deparsed into the per-chunk query once at plan time and parsed
+			 * back for every scanned chunk, so every Const has to survive the
+			 * round trip. That requires a literal syntax for its type, and we
+			 * use pseudo-type as a proxy for it.
+			 *
+			 * A cstring Const comes from eval_const_expressions on a CoerceViaIO
+			 * into any type whose input function is not immutable. It rewrites
+			 * 'x'::text::myenum into 'x'::cstring::myenum
+			 *
+			 */
+			Const *con = (Const *) node;
+			if (get_typtype(con->consttype) == TYPTYPE_PSEUDO)
+			{
+				ctx->supported = false;
+				return true;
+			}
+			return false;
+		}
+
+		case T_List:
 		case T_OpExpr:
 		case T_DistinctExpr:
 		case T_NullIfExpr:
