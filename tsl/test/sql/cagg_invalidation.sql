@@ -1230,6 +1230,7 @@ SET timezone TO 'UTC';
 SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_lookback \gset
 CREATE TABLE tenant_copy(time timestamptz NOT NULL, sensor_id text, value float) WITH (tsdb.hypertable);
 ALTER TABLE tenant_copy SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'

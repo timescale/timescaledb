@@ -20,18 +20,49 @@ SELECT create_hypertable('metrics', 'time', chunk_time_interval => '1 day'::inte
 ------------+-------------------------+-------------------------------+-----------------------------
 
 \set ON_ERROR_STOP 0
--- Error: all three options are required to enable granular refresh.
+\set VERBOSITY default
+-- Error: the granular_refresh_* options change a configuration that is already
+-- stored, so on their own they do not enable granular refresh.
 ALTER TABLE metrics SET (timescaledb.granular_refresh_column = 'device_id');
-ERROR:  incomplete granular refresh configuration
+ERROR:  granular refresh is not enabled on hypertable "metrics"
+DETAIL:  timescaledb.cagg_enable_granular_refresh must be set to true together with timescaledb.granular_refresh_column, timescaledb.granular_refresh_start_offset and timescaledb.granular_refresh_end_offset to enable it.
 ALTER TABLE metrics SET (timescaledb.granular_refresh_start_offset = '2 months 30 days');
-ERROR:  incomplete granular refresh configuration
+ERROR:  granular refresh is not enabled on hypertable "metrics"
+DETAIL:  timescaledb.cagg_enable_granular_refresh must be set to true together with timescaledb.granular_refresh_column, timescaledb.granular_refresh_start_offset and timescaledb.granular_refresh_end_offset to enable it.
 ALTER TABLE metrics SET (
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days'
 );
+ERROR:  granular refresh is not enabled on hypertable "metrics"
+DETAIL:  timescaledb.cagg_enable_granular_refresh must be set to true together with timescaledb.granular_refresh_column, timescaledb.granular_refresh_start_offset and timescaledb.granular_refresh_end_offset to enable it.
+-- Error: enabling takes all four options together.
+ALTER TABLE metrics SET (timescaledb.cagg_enable_granular_refresh = true);
 ERROR:  incomplete granular refresh configuration
+DETAIL:  timescaledb.cagg_enable_granular_refresh, timescaledb.granular_refresh_column, timescaledb.granular_refresh_start_offset and timescaledb.granular_refresh_end_offset must all be set to enable granular refresh.
+ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.granular_refresh_column = 'device_id'
+);
+ERROR:  incomplete granular refresh configuration
+DETAIL:  timescaledb.cagg_enable_granular_refresh, timescaledb.granular_refresh_column, timescaledb.granular_refresh_start_offset and timescaledb.granular_refresh_end_offset must all be set to enable granular refresh.
+ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.granular_refresh_column = 'device_id',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days'
+);
+ERROR:  incomplete granular refresh configuration
+DETAIL:  timescaledb.cagg_enable_granular_refresh, timescaledb.granular_refresh_column, timescaledb.granular_refresh_start_offset and timescaledb.granular_refresh_end_offset must all be set to enable granular refresh.
+-- Error: disabling takes no other option.
+ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = false,
+    timescaledb.granular_refresh_start_offset = '2 months 30 days'
+);
+ERROR:  conflicting granular refresh options
+DETAIL:  timescaledb.cagg_enable_granular_refresh = false cannot be combined with the timescaledb.granular_refresh_* options.
+\set VERBOSITY terse
 -- Error: column does not exist.
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'does_not_exist',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -40,6 +71,7 @@ ERROR:  column "does_not_exist" does not exist
 -- Error: column type is not supported (must be timestamp, date, integer, UUID
 -- or a string type).
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'value',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -47,6 +79,7 @@ ALTER TABLE metrics SET (
 ERROR:  invalid granular refresh column type
 -- Error: the column cannot be empty (disabling is not supported).
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = '',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -54,6 +87,7 @@ ALTER TABLE metrics SET (
 ERROR:  granular refresh column cannot be empty
 -- Error: start_offset must be greater than end_offset.
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '5 days',
     timescaledb.granular_refresh_end_offset = '2 months 30 days'
@@ -61,12 +95,14 @@ ALTER TABLE metrics SET (
 ERROR:  invalid granular refresh window
 -- Error: offsets must not be negative.
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '-2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
 );
 ERROR:  invalid granular refresh offset
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '-5 days'
@@ -74,12 +110,14 @@ ALTER TABLE metrics SET (
 ERROR:  invalid granular refresh offset
 -- Error: NULL is not a valid offset value.
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = NULL,
     timescaledb.granular_refresh_end_offset = '5 days'
 );
 ERROR:  invalid input syntax for type interval: "null"
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = NULL
@@ -88,6 +126,7 @@ ERROR:  invalid input syntax for type interval: "null"
 -- Error: timescaledb options only apply to hypertables.
 CREATE TABLE plain_table (time timestamptz NOT NULL, device_id integer);
 ALTER TABLE plain_table SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -102,6 +141,7 @@ DROP TABLE plain_table;
 
 -- Enable granular refresh: the column and the late-arrival window.
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -237,6 +277,7 @@ SELECT create_hypertable('metrics_int', 'time', chunk_time_interval => 100000);
 \set ON_ERROR_STOP 0
 -- Error: offsets must not be negative.
 ALTER TABLE metrics_int SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor',
     timescaledb.granular_refresh_start_offset = 50000,
     timescaledb.granular_refresh_end_offset = -1000
@@ -244,18 +285,21 @@ ALTER TABLE metrics_int SET (
 ERROR:  invalid granular refresh offset
 -- Error: NULL is not a valid offset value.
 ALTER TABLE metrics_int SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor',
     timescaledb.granular_refresh_start_offset = NULL,
     timescaledb.granular_refresh_end_offset = 1000
 );
 ERROR:  invalid input syntax for type bigint: "null"
 ALTER TABLE metrics_int SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor',
     timescaledb.granular_refresh_start_offset = 50000,
     timescaledb.granular_refresh_end_offset = NULL
 );
 ERROR:  invalid input syntax for type bigint: "null"
 ALTER TABLE metrics_int SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor',
     timescaledb.granular_refresh_start_offset = 50000,
     timescaledb.granular_refresh_end_offset = 1000
@@ -333,6 +377,7 @@ ERROR:  granular refresh is not configured on the hypertable
 \set ON_ERROR_STOP 1
 -- Configure granular refresh on the raw hypertable, then enable it on the cagg.
 ALTER TABLE sensors SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -410,6 +455,7 @@ SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::int
  (5,public,readings,t)
 
 ALTER TABLE readings SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -439,6 +485,7 @@ SELECT create_hypertable('devices', 'time', chunk_time_interval => '1 day'::inte
  (7,public,devices,t)
 
 ALTER TABLE devices SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'device_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -490,6 +537,7 @@ WARNING:  column type "timestamp without time zone" used for "event_time" does n
 
 \set ON_ERROR_STOP 0
 ALTER TABLE events SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'event_time',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
@@ -515,6 +563,7 @@ WARNING:  column type "character varying" used for "unpadded" does not follow be
 
 \set ON_ERROR_STOP 0
 ALTER TABLE char_widths SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'wide',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -522,6 +571,7 @@ ALTER TABLE char_widths SET (
 ERROR:  granular refresh column "wide" is wider than the 64 byte tenant key limit
 -- One byte over is still rejected.
 ALTER TABLE char_widths SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'over',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -543,6 +593,7 @@ WARNING:  column type "character varying" used for "sensor" does not follow best
  (12,public,vc_width,t)
 
 ALTER TABLE vc_width SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -554,6 +605,7 @@ ALTER TABLE vc_width SET (
 
 -- Exactly at the limit is accepted.
 ALTER TABLE char_widths SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'at_limit',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -580,14 +632,12 @@ ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
  table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
 ------------+-------------------------+-------------------------------+-----------------------------
 
--- Enabling through this option is not supported yet: accepted, does nothing.
-ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = true);
-:GRC 'meters';
- table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
-------------+-------------------------+-------------------------------+-----------------------------
-
 \set ON_ERROR_STOP 0
--- Error: cannot be combined with the granular_refresh_* options.
+-- Error: enabling takes the whole configuration, so the flag on its own is
+-- rejected.
+ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = true);
+ERROR:  incomplete granular refresh configuration
+-- Error: disabling takes no other option.
 ALTER TABLE meters SET (
     timescaledb.cagg_enable_granular_refresh = false,
     timescaledb.granular_refresh_column = 'meter_id'
@@ -599,11 +649,60 @@ ALTER TABLE plain_meters SET (timescaledb.cagg_enable_granular_refresh = false);
 ERROR:  timescaledb table options can only be specified for hypertables
 \set ON_ERROR_STOP 1
 DROP TABLE plain_meters;
+-- None of the rejected statements stored anything.
+:GRC 'meters';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+
 ALTER TABLE meters SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'meter_id',
     timescaledb.granular_refresh_start_offset = '2 months 30 days',
     timescaledb.granular_refresh_end_offset = '5 days'
 );
+:GRC 'meters';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ meters     | meter_id                | 2 months 30 days              | 5 days
+
+-- Enabling a hypertable that is already enabled is rejected regardless of
+-- whether the other options are the same or different.
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+-- The incompleteness check is done first so this gets the incompleteness error
+-- instead of the already-enabled error.
+ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = true);
+ERROR:  incomplete granular refresh configuration
+DETAIL:  timescaledb.cagg_enable_granular_refresh, timescaledb.granular_refresh_column, timescaledb.granular_refresh_start_offset and timescaledb.granular_refresh_end_offset must all be set to enable granular refresh.
+-- The whole configuration restated unchanged.
+ALTER TABLE meters SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.granular_refresh_column = 'meter_id',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+ERROR:  granular refresh is already enabled on hypertable "meters"
+HINT:  Change timescaledb.granular_refresh_start_offset and timescaledb.granular_refresh_end_offset on their own, without timescaledb.cagg_enable_granular_refresh.
+\set VERBOSITY terse
+-- The whole configuration with different offsets
+ALTER TABLE meters SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.granular_refresh_column = 'meter_id',
+    timescaledb.granular_refresh_start_offset = '60 days',
+    timescaledb.granular_refresh_end_offset = '2 days'
+);
+ERROR:  granular refresh is already enabled on hypertable "meters"
+-- Already enabled is reported ahead of a different column, which on its own
+-- would be rejected as an attempt to change the column.
+ALTER TABLE meters SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.granular_refresh_column = 'value',
+    timescaledb.granular_refresh_start_offset = '2 months 30 days',
+    timescaledb.granular_refresh_end_offset = '5 days'
+);
+ERROR:  granular refresh is already enabled on hypertable "meters"
+\set ON_ERROR_STOP 1
+-- None of the rejected statements changed the stored configuration.
 :GRC 'meters';
  table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
 ------------+-------------------------+-------------------------------+-----------------------------
@@ -624,6 +723,7 @@ ALTER TABLE meters SET (timescaledb.cagg_enable_granular_refresh = false);
 -- The row really went: the settings can be configured again, and with
 -- different values than before.
 ALTER TABLE meters SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'meter_id',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -683,6 +783,7 @@ SELECT create_hypertable('readings', 'time', chunk_time_interval => '1 day'::int
  (15,public,readings,t)
 
 ALTER TABLE readings SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '0 days'
@@ -724,6 +825,7 @@ ALTER TABLE readings SET (timescaledb.cagg_enable_granular_refresh = false);
 ------------+-------------------------+-------------------------------+-----------------------------
 
 ALTER TABLE readings SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = '30 days',
     timescaledb.granular_refresh_end_offset = '0 days'

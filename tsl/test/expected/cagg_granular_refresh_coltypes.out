@@ -112,6 +112,7 @@ SELECT create_hypertable('s_metrics', 'time');
  (1,public,s_metrics,t)
 
 ALTER TABLE s_metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -180,6 +181,7 @@ SELECT create_hypertable('su_metrics', 'time');
  (3,public,su_metrics,t)
 
 ALTER TABLE su_metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -253,6 +255,7 @@ SELECT create_hypertable('gm', 'time');
  (5,public,gm,t)
 
 ALTER TABLE gm SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -303,6 +306,7 @@ SELECT create_hypertable('dm', 'time');
  (7,public,dm,t)
 
 ALTER TABLE dm SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -358,6 +362,7 @@ SELECT create_hypertable('bp', 'time');
  (9,public,bp,t)
 
 ALTER TABLE bp SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -411,6 +416,7 @@ WARNING:  column type "character varying" used for "sensor_id" does not follow b
  (11,public,vc,t)
 
 ALTER TABLE vc SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'

@@ -156,17 +156,17 @@ granular_refresh_disable(Hypertable *ht)
 }
 
 /*
- * ALTER TABLE <hypertable> SET (timescaledb.granular_refresh_column = ...,
+ * ALTER TABLE <hypertable> SET (timescaledb.cagg_enable_granular_refresh = true,
+ *                               timescaledb.granular_refresh_column = ...,
  *                               timescaledb.granular_refresh_start_offset = ...,
  *                               timescaledb.granular_refresh_end_offset = ...)
  *
  * Enables granular refresh of continuous aggregates on the raw hypertable.
  * Continuous aggregates opt in separately and share these settings.
  *
- * All three options are required to enable it. Afterwards the offsets can be
- * changed, individually or together, and one left out of the statement keeps
- * its stored value. The column cannot be changed;
- * timescaledb.cagg_enable_granular_refresh = false clears the settings.
+ *  To enable: All four options are required to enable it.
+ *  Update config options: Only start_offset and end_offset can be updated.
+ *  To disable: cagg_enable_granular_refresh = false
  *
  * A changed offset reaches the tracker when the next flush activates a
  * generation, so writes keep gating on the previous window until then.
@@ -190,31 +190,43 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 	bool set_start_offset =
 		!with_clause_options[AlterTableFlagGranularRefreshStartOffset].is_default;
 	bool set_end_offset = !with_clause_options[AlterTableFlagGranularRefreshEndOffset].is_default;
+
+	/* Whether the statement mentioned timescaledb.cagg_enable_granular_refresh*/
 	bool set_enable = !with_clause_options[AlterTableFlagCaggEnableGranularRefresh].is_default;
+
+	/*whether the statement set timescaledb.cagg_enable_granular_refresh to true*/
+	bool enabling =
+		DatumGetBool(with_clause_options[AlterTableFlagCaggEnableGranularRefresh].parsed);
+
 	FormData_hypertable_cagg_settings settings = { 0 };
 
-	if (set_enable)
+	if (set_enable && !enabling)
 	{
 		if (set_column || set_start_offset || set_end_offset)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("conflicting granular refresh options"),
-					 errhint("timescaledb.cagg_enable_granular_refresh cannot be combined with "
-							 "the timescaledb.granular_refresh_* options.")));
-		}
-
-		if (DatumGetBool(with_clause_options[AlterTableFlagCaggEnableGranularRefresh].parsed))
-		{
-			/* TODO: enabling through this option is not supported yet. Granular
-			 * refresh is enabled with the three timescaledb.granular_refresh_*
-			 * options; accept true so that later adding support here is not a
-			 * behavior change for anyone who set it. */
-			return;
+					 errdetail("timescaledb.cagg_enable_granular_refresh = false cannot be "
+							   "combined with the timescaledb.granular_refresh_* options.")));
 		}
 
 		granular_refresh_disable(ht);
 		return;
+	}
+
+	/* Enabling takes the whole configuration. Checked before anything is locked
+	 * or read to avoid the cost*/
+	if (enabling && (!set_column || !set_start_offset || !set_end_offset))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("incomplete granular refresh configuration"),
+				 errdetail("timescaledb.cagg_enable_granular_refresh, "
+						   "timescaledb.granular_refresh_column, "
+						   "timescaledb.granular_refresh_start_offset and "
+						   "timescaledb.granular_refresh_end_offset must all be set to enable "
+						   "granular refresh.")));
 	}
 
 	/*
@@ -230,21 +242,31 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 
 	bool configured = ts_hypertable_cagg_settings_get(ht->fd.id, &settings, &tuplock);
 
-	Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
-	Ensure(dim, "hypertable without open dimension");
-	Oid time_type = get_atttype(dim->main_table_relid, dim->column_attno);
-
-	/* Enabling needs the whole configuration. Once it is stored, anything left
-	 * out of the statement keeps the value it already has. */
-	if (!configured && (!set_column || !set_start_offset || !set_end_offset))
+	/* Enabling is only allowed for a hypertable that is not enabled yet, error out otherwise */
+	if (enabling && configured)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("incomplete granular refresh configuration"),
-				 errhint("timescaledb.granular_refresh_column, "
-						 "timescaledb.granular_refresh_start_offset and "
-						 "timescaledb.granular_refresh_end_offset must all be set to enable "
-						 "granular refresh.")));
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("granular refresh is already enabled on hypertable \"%s\"",
+						NameStr(ht->fd.table_name)),
+				 errhint("Change timescaledb.granular_refresh_start_offset and "
+						 "timescaledb.granular_refresh_end_offset on their own, without "
+						 "timescaledb.cagg_enable_granular_refresh.")));
+	}
+
+	/* The granular_refresh_* options on their own change a configuration that is
+	 * already stored, and anything left out of the statement keeps the value it
+	 * already has. Storing one in the first place takes an enabling statement. */
+	if (!configured && !enabling)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("granular refresh is not enabled on hypertable \"%s\"",
+						NameStr(ht->fd.table_name)),
+				 errdetail("timescaledb.cagg_enable_granular_refresh must be set to true together "
+						   "with timescaledb.granular_refresh_column, "
+						   "timescaledb.granular_refresh_start_offset and "
+						   "timescaledb.granular_refresh_end_offset to enable it.")));
 	}
 
 	if (set_column)
@@ -325,6 +347,11 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 		namestrcpy(&settings.granular_refresh_column,
 				   get_attname(ht->main_table_relid, attno, false /* missing_ok */));
 	}
+
+	/* get the time type */
+	Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+	Ensure(dim, "hypertable without open dimension");
+	Oid time_type = get_atttype(dim->main_table_relid, dim->column_attno);
 
 	int64 start_offset =
 		set_start_offset ?

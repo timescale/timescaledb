@@ -15,6 +15,7 @@ SELECT create_hypertable('conditions', 'time');
  (1,public,conditions,t)
 
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -120,6 +121,7 @@ SELECT create_hypertable('metrics', 'time');
  (3,public,metrics,t)
 
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -202,6 +204,7 @@ SELECT create_hypertable('gauges', 'time');
  (5,public,gauges,t)
 
 ALTER TABLE gauges SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
