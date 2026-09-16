@@ -28,6 +28,7 @@ SELECT (CURRENT_DATE - DATE '2019-01-01') AS granular_refresh_lookback_days,
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -68,6 +69,7 @@ CREATE OR REPLACE FUNCTION metrics_now() RETURNS bigint LANGUAGE SQL STABLE AS
   $$ SELECT 1000::bigint $$;
 SELECT set_integer_now_func('metrics', 'metrics_now');
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = 900,
     timescaledb.granular_refresh_end_offset = 100
@@ -96,6 +98,7 @@ DROP TABLE metrics;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -141,6 +144,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -223,6 +227,7 @@ CREATE TABLE metrics(time timestamptz NOT NULL, tenant text NOT NULL, value floa
 
 SELECT create_hypertable('metrics', 'time', chunk_time_interval => INTERVAL '30 days');
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'tenant',
     timescaledb.granular_refresh_start_offset = '3 days',
     timescaledb.granular_refresh_end_offset = '1 hour'
@@ -518,6 +523,7 @@ CREATE TABLE crossed(time timestamptz NOT NULL, tenant text NOT NULL, value floa
 
 SELECT create_hypertable('crossed', 'time', chunk_time_interval => INTERVAL '30 days');
 ALTER TABLE crossed SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'tenant',
     timescaledb.granular_refresh_start_offset = '1 month',
     timescaledb.granular_refresh_end_offset = '29 days'
@@ -594,6 +600,7 @@ SET timescaledb.current_timestamp_mock = '2025-03-09 07:30:00+00';
 CREATE TABLE crossed(time timestamptz NOT NULL, tenant text NOT NULL, value float);
 SELECT create_hypertable('crossed', 'time', chunk_time_interval => INTERVAL '1 day');
 ALTER TABLE crossed SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'tenant',
     timescaledb.granular_refresh_start_offset = '1 day',
     timescaledb.granular_refresh_end_offset = '23 hours 30 minutes'
@@ -663,6 +670,7 @@ SET timezone TO 'UTC';
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -724,6 +732,7 @@ SET timescaledb.current_timestamp_mock = '2026-09-01 00:00:00+00';
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time') \gset
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = '8 years',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -785,6 +794,7 @@ SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00';
 CREATE TABLE thresholds(time timestamptz NOT NULL, tenant text NOT NULL, value float);
 SELECT create_hypertable('thresholds', 'time', chunk_time_interval => INTERVAL '1 day');
 ALTER TABLE thresholds SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'tenant',
     timescaledb.granular_refresh_start_offset = '3 days',
     timescaledb.granular_refresh_end_offset = '1 hour'
