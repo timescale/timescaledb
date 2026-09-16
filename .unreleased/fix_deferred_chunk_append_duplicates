@@ -1,1 +1,0 @@
-Fixes: #10584 Fix duplicate rows from DeferredChunkAppend when the LIMIT is not pushed down
