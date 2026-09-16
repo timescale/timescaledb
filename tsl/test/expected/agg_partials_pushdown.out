@@ -265,6 +265,22 @@ ORDER BY device_id, count(*) DESC
 -----------+-------+-----+-----+-----+-----
 
 RESET enable_hashagg;
+-- Unhashable grouping
+SELECT (device_id % 4)::bit(4), sum(v0) FROM testtable GROUP BY 1 ORDER BY 1, 2;
+ bit  | sum 
+------+-----
+ 0000 | 100
+ 0001 | 160
+ 0010 |  60
+ 0011 |  80
+
+-- Unsortable grouping
+SELECT (device_id % 2)::text::xid, sum(v0) FROM testtable GROUP BY 1 ORDER BY 2;
+ xid | sum 
+-----+-----
+   0 | 160
+   1 | 240
+
 -- Check chunk exclusion for index scans
 SET enable_seqscan = OFF;
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-09 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0'::text::timestamptz;

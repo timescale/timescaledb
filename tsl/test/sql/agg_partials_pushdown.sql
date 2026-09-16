@@ -83,6 +83,14 @@ ORDER BY device_id, count(*) DESC
 
 RESET enable_hashagg;
 
+
+-- Unhashable grouping
+SELECT (device_id % 4)::bit(4), sum(v0) FROM testtable GROUP BY 1 ORDER BY 1, 2;
+
+-- Unsortable grouping
+SELECT (device_id % 2)::text::xid, sum(v0) FROM testtable GROUP BY 1 ORDER BY 2;
+
+
 -- Check chunk exclusion for index scans
 SET enable_seqscan = OFF;
 

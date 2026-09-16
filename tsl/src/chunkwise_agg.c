@@ -700,31 +700,37 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		const bool partial_agg_is_sorted =
 			pathkeys_contained_in(root->group_pathkeys, partially_aggregated_path->pathkeys);
 
+		/*
+		 * Try the final Group Aggregate if the append over the partial
+		 * aggregation results produces the output that is appropriately
+		 * sorted for this aggregation. Otherwise, it needs a costly Sort
+		 * node. Group Aggregate mostly makes sense if the input is already
+		 * cheaply sorted, and if we have to re-sort all input, it's normally
+		 * inferior to Hash Aggregate.
+		 *
+		 * Also use it as a fallback for types that can't be
+		 * hashed.
+		 *
+		 * Also use it if hash aggregation is disabled by GUC.
+		 */
+		const bool prefer_sorted_strategy = partial_agg_is_sorted ||
+											!(extra_data->flags & GROUPING_CAN_USE_HASH) ||
+											!enable_hashagg;
+		const bool can_use_sorted_strategy = extra_data->flags & GROUPING_CAN_USE_SORT;
+
 		AggStrategy final_strategy;
 		if (parse->groupClause == NIL)
 		{
 			final_strategy = AGG_PLAIN;
 		}
-		else if (partial_agg_is_sorted || !(extra_data->flags & GROUPING_CAN_USE_HASH) ||
-				 !enable_hashagg)
+		else if (prefer_sorted_strategy && can_use_sorted_strategy)
 		{
-			/*
-			 * Try the final Group Aggregate if the append over the partial
-			 * aggregation results produces the output that is appropriately
-			 * sorted for this aggregation. Otherwise, it needs a costly Sort
-			 * node. Group Aggregate mostly makes sense if the input is already
-			 * cheaply sorted, and if we have to re-sort all input, it's normally
-			 * inferior to Hash Aggregate.
-			 *
-			 * Also use it as a fallback for types that can't be
-			 * hashed.
-			 *
-			 * Also use it if hash aggregation is disabled by GUC.
-			 */
+			Assert(extra_data->flags & GROUPING_CAN_USE_SORT);
 			final_strategy = AGG_SORTED;
 		}
 		else
 		{
+			Assert(extra_data->flags & GROUPING_CAN_USE_HASH);
 			final_strategy = AGG_HASHED;
 		}
 
