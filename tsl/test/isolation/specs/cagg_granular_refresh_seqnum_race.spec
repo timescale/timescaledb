@@ -39,9 +39,9 @@ setup
     SELECT create_hypertable('conditions', 'time');
     ALTER TABLE conditions SET (
         timescaledb.cagg_enable_granular_refresh = true,
-        timescaledb.granular_refresh_column = 'sensor_id',
-        timescaledb.granular_refresh_start_offset = '36500 days',
-        timescaledb.granular_refresh_end_offset = '1 day'
+        timescaledb.cagg_granular_refresh_column = 'sensor_id',
+        timescaledb.cagg_granular_refresh_start_offset = '36500 days',
+        timescaledb.cagg_granular_refresh_end_offset = '1 day'
     );
 
     CREATE MATERIALIZED VIEW cond_daily

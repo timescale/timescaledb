@@ -21,9 +21,9 @@ CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW cond_daily
@@ -70,9 +70,9 @@ CREATE TABLE conditions2(time timestamptz NOT NULL, sensor_id text, value float)
 SELECT create_hypertable('conditions2', 'time');
 ALTER TABLE conditions2 SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 CREATE MATERIALIZED VIEW cond2_daily
   WITH (timescaledb.continuous) AS
