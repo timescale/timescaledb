@@ -160,6 +160,7 @@ FROM _timescaledb_catalog.continuous_aggs_tenant_tracking;
 CREATE TABLE tenant_conditions(time timestamptz NOT NULL, sensor_id text, value float)
   WITH (tsdb.hypertable, tsdb.orderby = 'time', tsdb.segmentby = 'sensor_id');
 ALTER TABLE tenant_conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
