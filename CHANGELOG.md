@@ -4,7 +4,7 @@
 
 ## 2.30.1 (2026-09-17)
 
-This release contains performance improvements and bug fixes since the 2.30.0 release. We recommend that you upgrade at the next available opportunity.
+This release contains bug fixes since the 2.30.0 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
 * [#10580](https://github.com/timescale/timescaledb/pull/10580) Fix missing conflicts for `INSERT ... ON CONFLICT` with multiple unique constraints
