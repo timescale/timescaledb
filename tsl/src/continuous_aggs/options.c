@@ -142,7 +142,7 @@ validate_granular_refresh_enable(ContinuousAgg *agg, Hypertable *mat_ht)
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("granular refresh is not configured on the hypertable"),
 				 errhint("Configure granular refresh on the hypertable first using "
-						 "ALTER TABLE ... SET (timescaledb.granular_refresh_column = ...).")));
+						 "ALTER TABLE ... SET (timescaledb.cagg_granular_refresh_column = ...).")));
 	}
 
 	const char *refresh_column = NameStr(settings.granular_refresh_column);
