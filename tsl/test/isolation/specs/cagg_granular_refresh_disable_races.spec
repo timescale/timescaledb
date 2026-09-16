@@ -23,6 +23,7 @@ setup
     CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
     SELECT create_hypertable('conditions', 'time');
     ALTER TABLE conditions SET (
+        timescaledb.cagg_enable_granular_refresh = true,
         timescaledb.granular_refresh_column = 'sensor_id',
         timescaledb.granular_refresh_start_offset = '2 years',
         timescaledb.granular_refresh_end_offset = '1 day'
@@ -202,6 +203,7 @@ session "HC"
 setup { SET client_min_messages TO warning; }
 step "hc_configure" {
     ALTER TABLE conditions SET (
+        timescaledb.cagg_enable_granular_refresh = true,
         timescaledb.granular_refresh_column = 'sensor_id',
         timescaledb.granular_refresh_start_offset = '2 years',
         timescaledb.granular_refresh_end_offset = '1 day');

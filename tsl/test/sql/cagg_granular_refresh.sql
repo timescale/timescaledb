@@ -62,6 +62,7 @@ ORDER BY 1, 2, 4;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -111,6 +112,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -179,6 +181,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -187,6 +190,7 @@ ALTER TABLE conditions SET (
 CREATE TABLE readings(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('readings', 'time');
 ALTER TABLE readings SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -239,6 +243,7 @@ DROP TABLE readings;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -306,6 +311,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -385,6 +391,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -434,6 +441,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -482,6 +490,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -549,6 +558,7 @@ CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float,
   UNIQUE (time, sensor_id));
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -600,6 +610,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -684,6 +695,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -736,6 +748,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -806,6 +819,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -887,6 +901,7 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'sensor_id',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day');
@@ -1000,6 +1015,7 @@ DROP TABLE conditions;
 CREATE TABLE metrics(time timestamptz NOT NULL, tenant text, value float);
 SELECT create_hypertable('metrics', 'time');
 ALTER TABLE metrics SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'tenant',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
@@ -1173,6 +1189,7 @@ DROP TABLE metrics;
 CREATE TABLE collide(time timestamptz NOT NULL, tenant text, value float);
 SELECT create_hypertable('collide', 'time');
 ALTER TABLE collide SET (
+    timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.granular_refresh_column = 'tenant',
     timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
     timescaledb.granular_refresh_end_offset = '1 day'
