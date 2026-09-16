@@ -46,9 +46,9 @@ $node->safe_psql(
     SELECT create_hypertable('conditions', 'time');
     ALTER TABLE conditions SET (
         timescaledb.cagg_enable_granular_refresh = true,
-        timescaledb.granular_refresh_column = 'sensor_id',
-        timescaledb.granular_refresh_start_offset = '100 years',
-        timescaledb.granular_refresh_end_offset = '1 day');
+        timescaledb.cagg_granular_refresh_column = 'sensor_id',
+        timescaledb.cagg_granular_refresh_start_offset = '100 years',
+        timescaledb.cagg_granular_refresh_end_offset = '1 day');
 });
 $node->safe_psql(
 	'postgres', q{
@@ -157,9 +157,9 @@ $node->safe_psql(
     SELECT create_hypertable('fresh', 'time');
     ALTER TABLE fresh SET (
         timescaledb.cagg_enable_granular_refresh = true,
-        timescaledb.granular_refresh_column = 'sensor_id',
-        timescaledb.granular_refresh_start_offset = '100 years',
-        timescaledb.granular_refresh_end_offset = '1 day');
+        timescaledb.cagg_granular_refresh_column = 'sensor_id',
+        timescaledb.cagg_granular_refresh_start_offset = '100 years',
+        timescaledb.cagg_granular_refresh_end_offset = '1 day');
 });
 $node->safe_psql(
 	'postgres', q{
@@ -190,9 +190,9 @@ $node->safe_psql(
     SELECT create_hypertable('crash_ht', 'time');
     ALTER TABLE crash_ht SET (
         timescaledb.cagg_enable_granular_refresh = true,
-        timescaledb.granular_refresh_column = 'sensor_id',
-        timescaledb.granular_refresh_start_offset = '100 years',
-        timescaledb.granular_refresh_end_offset = '1 day');
+        timescaledb.cagg_granular_refresh_column = 'sensor_id',
+        timescaledb.cagg_granular_refresh_start_offset = '100 years',
+        timescaledb.cagg_granular_refresh_end_offset = '1 day');
 });
 $node->safe_psql(
 	'postgres', q{
@@ -310,9 +310,9 @@ $node->safe_psql(
     SELECT create_hypertable('optout', 'time');
     ALTER TABLE optout SET (
         timescaledb.cagg_enable_granular_refresh = true,
-        timescaledb.granular_refresh_column = 'sensor_id',
-        timescaledb.granular_refresh_start_offset = '100 years',
-        timescaledb.granular_refresh_end_offset = '1 day');
+        timescaledb.cagg_granular_refresh_column = 'sensor_id',
+        timescaledb.cagg_granular_refresh_start_offset = '100 years',
+        timescaledb.cagg_granular_refresh_end_offset = '1 day');
 });
 $node->safe_psql(
 	'postgres', q{

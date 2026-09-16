@@ -93,9 +93,9 @@ CREATE TABLE s_metrics(time timestamptz NOT NULL, sensor_id int, value float);
 SELECT create_hypertable('s_metrics', 'time');
 ALTER TABLE s_metrics SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW s_daily
@@ -149,9 +149,9 @@ CREATE TABLE su_metrics(time timestamptz NOT NULL, sensor_id uuid, value float);
 SELECT create_hypertable('su_metrics', 'time');
 ALTER TABLE su_metrics SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW su_daily
@@ -210,9 +210,9 @@ CREATE TABLE gm(time timestamptz NOT NULL, sensor_id date, value float);
 SELECT create_hypertable('gm', 'time');
 ALTER TABLE gm SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW gm_daily
@@ -257,9 +257,9 @@ CREATE TABLE dm(time timestamptz NOT NULL, sensor_id sensor_id_dom, value float)
 SELECT create_hypertable('dm', 'time');
 ALTER TABLE dm SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW dm_daily
@@ -306,9 +306,9 @@ CREATE TABLE bp(time timestamptz NOT NULL, sensor_id char(10), value float);
 SELECT create_hypertable('bp', 'time');
 ALTER TABLE bp SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW bp_daily
@@ -351,9 +351,9 @@ CREATE TABLE vc(time timestamptz NOT NULL, sensor_id varchar(10), value float);
 SELECT create_hypertable('vc', 'time');
 ALTER TABLE vc SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW vc_daily

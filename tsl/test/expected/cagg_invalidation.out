@@ -1945,9 +1945,9 @@ CREATE TABLE tenant_copy(time timestamptz NOT NULL, sensor_id text, value float)
 NOTICE:  using column "time" as partitioning column
 ALTER TABLE tenant_copy SET (
     timescaledb.cagg_enable_granular_refresh = true,
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 CREATE MATERIALIZED VIEW tenant_copy_daily WITH (tsdb.continuous) AS
   SELECT time_bucket('1day', time) AS bucket, sensor_id, avg(value)

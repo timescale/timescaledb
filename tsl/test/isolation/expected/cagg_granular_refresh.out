@@ -56,7 +56,7 @@ sensor_b |Thu Jan 02 00:00:00 2020 UTC|  2
 
 starting permutation: s2_insert a_narrow wp_inval_enable s1_insert v_window r_refresh v_window wp_inval_release wp_inval_noop v_inval v_tracking v_refresh v_check
 step s2_insert: INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2);
-step a_narrow: ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '2 days');
+step a_narrow: ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_start_offset = '2 days');
 step wp_inval_enable: SELECT debug_waitpoint_enable('tenant_tracker_before_inval_write');
 debug_waitpoint_enable
 ----------------------
@@ -133,8 +133,8 @@ sensor_b |Thu Jan 02 00:00:00 2020 UTC|  2
 starting permutation: a_begin a2_begin a_start_3d a2_end_4d a_commit a2_commit v_offsets
 step a_begin: BEGIN;
 step a2_begin: BEGIN;
-step a_start_3d: ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '3 days');
-step a2_end_4d: ALTER TABLE conditions SET (timescaledb.granular_refresh_end_offset = '4 days'); <waiting ...>
+step a_start_3d: ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_start_offset = '3 days');
+step a2_end_4d: ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_end_offset = '4 days'); <waiting ...>
 step a_commit: COMMIT;
 step a2_end_4d: <... completed>
 ERROR:  invalid granular refresh window
