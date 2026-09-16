@@ -45,9 +45,9 @@ setup
     SELECT create_hypertable('conditions', 'time');
     ALTER TABLE conditions SET (
         timescaledb.cagg_enable_granular_refresh = true,
-        timescaledb.granular_refresh_column = 'sensor_id',
-        timescaledb.granular_refresh_start_offset = '36500 days',
-        timescaledb.granular_refresh_end_offset = '1 day'
+        timescaledb.cagg_granular_refresh_column = 'sensor_id',
+        timescaledb.cagg_granular_refresh_start_offset = '36500 days',
+        timescaledb.cagg_granular_refresh_end_offset = '1 day'
     );
 
     CREATE MATERIALIZED VIEW cond_daily
@@ -99,17 +99,17 @@ step "r_refresh" { CALL refresh_continuous_aggregate('cond_daily', '2019-01-01',
 
 # Narrows the late-arrival window so it no longer covers the 2020 data.
 session "A"
-step "a_narrow" { ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '2 days'); }
+step "a_narrow" { ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_start_offset = '2 days'); }
 
 # For Scenario 4
 step "a_begin"    { BEGIN; }
-step "a_start_3d" { ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '3 days'); }
+step "a_start_3d" { ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_start_offset = '3 days'); }
 step "a_commit"   { COMMIT; }
 
 # The second offset change, which has to wait for A's tuple lock (scenario 4).
 session "A2"
 step "a2_begin"  { BEGIN; }
-step "a2_end_4d" { ALTER TABLE conditions SET (timescaledb.granular_refresh_end_offset = '4 days'); }
+step "a2_end_4d" { ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_end_offset = '4 days'); }
 step "a2_commit" { COMMIT; }
 
 # Verification: a final granular refresh must materialize every tenant correctly.

@@ -157,9 +157,9 @@ granular_refresh_disable(Hypertable *ht)
 
 /*
  * ALTER TABLE <hypertable> SET (timescaledb.cagg_enable_granular_refresh = true,
- *                               timescaledb.granular_refresh_column = ...,
- *                               timescaledb.granular_refresh_start_offset = ...,
- *                               timescaledb.granular_refresh_end_offset = ...)
+ *                               timescaledb.cagg_granular_refresh_column = ...,
+ *                               timescaledb.cagg_granular_refresh_start_offset = ...,
+ *                               timescaledb.cagg_granular_refresh_end_offset = ...)
  *
  * Enables granular refresh of continuous aggregates on the raw hypertable.
  * Continuous aggregates opt in separately and share these settings.
@@ -208,7 +208,7 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("conflicting granular refresh options"),
 					 errdetail("timescaledb.cagg_enable_granular_refresh = false cannot be "
-							   "combined with the timescaledb.granular_refresh_* options.")));
+							   "combined with the timescaledb.cagg_granular_refresh_* options.")));
 		}
 
 		granular_refresh_disable(ht);
@@ -223,9 +223,9 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("incomplete granular refresh configuration"),
 				 errdetail("timescaledb.cagg_enable_granular_refresh, "
-						   "timescaledb.granular_refresh_column, "
-						   "timescaledb.granular_refresh_start_offset and "
-						   "timescaledb.granular_refresh_end_offset must all be set to enable "
+						   "timescaledb.cagg_granular_refresh_column, "
+						   "timescaledb.cagg_granular_refresh_start_offset and "
+						   "timescaledb.cagg_granular_refresh_end_offset must all be set to enable "
 						   "granular refresh.")));
 	}
 
@@ -249,8 +249,8 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("granular refresh is already enabled on hypertable \"%s\"",
 						NameStr(ht->fd.table_name)),
-				 errhint("Change timescaledb.granular_refresh_start_offset and "
-						 "timescaledb.granular_refresh_end_offset on their own, without "
+				 errhint("Change timescaledb.cagg_granular_refresh_start_offset and "
+						 "timescaledb.cagg_granular_refresh_end_offset on their own, without "
 						 "timescaledb.cagg_enable_granular_refresh.")));
 	}
 
@@ -264,9 +264,9 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 				 errmsg("granular refresh is not enabled on hypertable \"%s\"",
 						NameStr(ht->fd.table_name)),
 				 errdetail("timescaledb.cagg_enable_granular_refresh must be set to true together "
-						   "with timescaledb.granular_refresh_column, "
-						   "timescaledb.granular_refresh_start_offset and "
-						   "timescaledb.granular_refresh_end_offset to enable it.")));
+						   "with timescaledb.cagg_granular_refresh_column, "
+						   "timescaledb.cagg_granular_refresh_start_offset and "
+						   "timescaledb.cagg_granular_refresh_end_offset to enable it.")));
 	}
 
 	if (set_column)
@@ -286,8 +286,8 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 							NameStr(ht->fd.table_name)),
 					 errdetail("The column is currently \"%s\".",
 							   NameStr(settings.granular_refresh_column)),
-					 errhint("Only timescaledb.granular_refresh_start_offset and "
-							 "timescaledb.granular_refresh_end_offset can be changed.")));
+					 errhint("Only timescaledb.cagg_granular_refresh_start_offset and "
+							 "timescaledb.cagg_granular_refresh_end_offset can be changed.")));
 		}
 
 		if (colname[0] == '\0')
@@ -295,8 +295,8 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("granular refresh column cannot be empty"),
-					 errhint(
-						 "timescaledb.granular_refresh_column must reference a valid column.")));
+					 errhint("timescaledb.cagg_granular_refresh_column must reference a valid "
+							 "column.")));
 		}
 
 		AttrNumber attno = get_attnum(ht->main_table_relid, colname);
@@ -306,7 +306,7 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("column \"%s\" does not exist", colname),
-					 errhint("The timescaledb.granular_refresh_column option must reference a "
+					 errhint("The timescaledb.cagg_granular_refresh_column option must reference a "
 							 "valid column.")));
 		}
 
@@ -326,8 +326,9 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid granular refresh column type"),
-					 errhint("timescaledb.granular_refresh_column must be a date, integer, UUID, "
-							 "or string type.")));
+					 errhint(
+						 "timescaledb.cagg_granular_refresh_column must be a date, integer, UUID, "
+						 "or string type.")));
 		}
 
 		/* character(n) blank-pads every value to exactly n bytes, so for n over the
@@ -388,8 +389,9 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid granular refresh window"),
-				 errdetail("timescaledb.granular_refresh_start_offset (%s) must be greater than "
-						   "timescaledb.granular_refresh_end_offset (%s).",
+				 errdetail("timescaledb.cagg_granular_refresh_start_offset (%s) must be greater "
+						   "than "
+						   "timescaledb.cagg_granular_refresh_end_offset (%s).",
 						   start_text,
 						   end_text)));
 	}
