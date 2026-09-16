@@ -6,28 +6,17 @@
 
 This release contains performance improvements and bug fixes since the 2.30.0 release. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.30.1**
-* 
-
-**Backward-Incompatible Changes**
-
 **Features**
-* [#10512](https://github.com/timescale/timescaledb/pull/10512) Block ALTER/DROP on granular refresh column
+* [#10512](https://github.com/timescale/timescaledb/pull/10512) Block `ALTER`/`DROP` on granular refresh column
 * [#10517](https://github.com/timescale/timescaledb/pull/10517) Block granular refresh on materialization hypertable
-* [#10546](https://github.com/timescale/timescaledb/pull/10546) API to disable granular refresh on the hypertable
-* [#10588](https://github.com/timescale/timescaledb/pull/10588) Allow changing the granular refresh offsets of a hypertable
+* [#10546](https://github.com/timescale/timescaledb/pull/10546) Add API to disable granular refresh on a hypertable
+* [#10588](https://github.com/timescale/timescaledb/pull/10588) Allow changing granular refresh offsets for a hypertable
 
 **Bugfixes**
-* [#10580](https://github.com/timescale/timescaledb/pull/10580) Fix missing conflicts on upsert with multiple unique constraints
-* [#10583](https://github.com/timescale/timescaledb/pull/10583) Fix NULL conflict resolution on single column bloom filtering
-* [#10584](https://github.com/timescale/timescaledb/pull/10584) Fix duplicate rows from DeferredChunkAppend when the LIMIT is not pushed down
-* [#10590](https://github.com/timescale/timescaledb/pull/10590) Fix "cannot cast type cstring" error in DeferredChunkAppend queries
-
-**New Settings**
-
-**GUCs**
-
-**Thanks**
+* [#10580](https://github.com/timescale/timescaledb/pull/10580) Fix missing conflicts for `INSERT ... ON CONFLICT` with multiple unique constraints
+* [#10583](https://github.com/timescale/timescaledb/pull/10583) Fix `NULL` conflict resolution on single-column bloom filtering
+* [#10584](https://github.com/timescale/timescaledb/pull/10584) Fix duplicate rows from `DeferredChunkAppend` when `LIMIT` is not pushed down
+* [#10590](https://github.com/timescale/timescaledb/pull/10590) Fix `cannot cast type cstring` error in `DeferredChunkAppend` queries
 
 ## 2.30.0 (2026-09-08)
 
