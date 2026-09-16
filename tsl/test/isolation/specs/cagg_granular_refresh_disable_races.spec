@@ -209,6 +209,14 @@ step "hc_configure" {
         timescaledb.cagg_granular_refresh_end_offset = '1 day');
 }
 
+# Changes only the offsets, which is allowed once granular refresh is
+# configured.  Holds the settings row's tuple lock until it commits.
+session "HO"
+setup { SET client_min_messages TO warning; }
+step "ho_begin"   { BEGIN; }
+step "ho_offsets" { ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '3 years'); }
+step "ho_commit"  { COMMIT; }
+
 # A writer whose cached tracker handle outlives the tracker.  Mocks now() like
 # session P so the 2020 rows fall inside the window it seeds when it creates
 # the tracker.
@@ -280,3 +288,14 @@ permutation "p_prime_insert" "p_prime_refresh" "p_insert_late" "hx_exception" "h
 # Its invalidation carries a seqnum with no tracking rows, so the refresh falls
 # back to a full pass there and r_cagg_contents shows both tenants anyway.
 permutation "p_prime_insert" "p_prime_refresh" "s_insert_a" "d_disable" "hd_disable" "hd_settings" "hc_configure" "he_enable" "s_insert_b" "r_refresh" "r_tracking" "r_cagg_contents" "d_flag"
+
+# 7. The hypertable-level disable against an open offset change.  The offset
+# change takes no lock on the hypertable, so the disable's AccessExclusiveLock
+# does not keep it out; the two serialize on the settings row instead.  The
+# delete waits for the offset change and removes the version it left behind.
+# Without that row lock the delete hits a tuple being updated and fails.
+permutation "d_disable" "ho_begin" "ho_offsets" "hd_disable" "ho_commit" "hd_settings"
+
+# 8. The same pair the other way round: the disable locks the row first, so the
+# offset change waits and then finds nothing configured.
+permutation "d_disable" "hd_begin" "hd_disable" "ho_offsets" "hd_commit" "hd_settings"

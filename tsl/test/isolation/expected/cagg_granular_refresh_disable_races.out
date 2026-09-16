@@ -1,4 +1,4 @@
-Parsed test spec with 11 sessions
+Parsed test spec with 12 sessions
 
 starting permutation: p_prime_insert p_prime_refresh p_insert_late l_lock r_refresh l_unlock
 step p_prime_insert: 
@@ -375,4 +375,45 @@ step d_flag:
 granular_refresh_enabled
 ------------------------
 t                       
+
+
+starting permutation: d_disable ho_begin ho_offsets hd_disable ho_commit hd_settings
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+
+step ho_begin: BEGIN;
+step ho_offsets: ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '3 years');
+step hd_disable: ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false); <waiting ...>
+step ho_commit: COMMIT;
+step hd_disable: <... completed>
+step hd_settings: 
+    SELECT count(*) AS settings_rows
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+    WHERE h.table_name = 'conditions';
+
+settings_rows
+-------------
+            0
+
+
+starting permutation: d_disable hd_begin hd_disable ho_offsets hd_commit hd_settings
+step d_disable: 
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+
+step hd_begin: BEGIN;
+step hd_disable: ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+step ho_offsets: ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '3 years'); <waiting ...>
+step hd_commit: COMMIT;
+step ho_offsets: <... completed>
+ERROR:  incomplete granular refresh configuration
+step hd_settings: 
+    SELECT count(*) AS settings_rows
+    FROM _timescaledb_catalog.hypertable_cagg_settings s
+    JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+    WHERE h.table_name = 'conditions';
+
+settings_rows
+-------------
+            0
 
