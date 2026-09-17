@@ -2,6 +2,21 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.30.1 (2026-09-17)
+
+This release contains bug fixes since the 2.30.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#10580](https://github.com/timescale/timescaledb/pull/10580) Fix missing conflicts for `INSERT ... ON CONFLICT` with multiple unique constraints
+* [#10583](https://github.com/timescale/timescaledb/pull/10583) Fix `NULL` conflict resolution on single-column bloom filtering
+* [#10592](https://github.com/timescale/timescaledb/pull/10592) Fix duplicate rows from `DeferredChunkAppend` when `LIMIT` is not pushed down
+* [#10593](https://github.com/timescale/timescaledb/pull/10593) Fix `cannot cast type cstring` error in `DeferredChunkAppend` queries
+
+**Thanks**
+* @davidecentioni for reporting the problem with a LIMIT query on a hypertable returning duplicate rows once the plan goes generic [#10584](https://github.com/timescale/timescaledb/issues/10584)
+* @vincentrolfs for reporting the problem of LIMIT query with enum columns and casting [#10590](https://github.com/timescale/timescaledb/issues/10590)
+
+
 ## 2.30.0 (2026-09-08)
 
 This release contains performance improvements and bug fixes since the 2.29.2 release. We recommend that you upgrade at the next available opportunity.
