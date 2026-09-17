@@ -133,6 +133,10 @@ fl_input_bytes(uint32 n, fl_elem_width_t t)
 /*
  * Plain pack / unpack.
  *
+ *   the `packed` result is in little-endian format and the library
+ *   does the necessary conversions on big-endian platforms such
+ *   that `values` are in native format
+ *
  *   fl_pack returns the truncated byte count (<= fl_required_bytes) --
  *   the size of the `packed` data in bytes. The kernel reads
  *   fl_input_count() elements from `values` and writes fl_required_bytes
