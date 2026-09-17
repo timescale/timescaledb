@@ -507,6 +507,36 @@ deferred_chunk_scan_push_limit(const Query *query)
 	return sum;
 }
 
+/*
+ * Pin the GUCs affecting how literals are written, so the clause survives the
+ * trip through text.
+ */
+static void
+dca_set_literal_gucs(void)
+{
+	static const struct
+	{
+		const char *name;
+		const char *value;
+	} settings[] = {
+		{ "extra_float_digits", "3" },			 { "DateStyle", "ISO" },
+		{ "IntervalStyle", "postgres" },		 { "bytea_output", "hex" },
+		{ "standard_conforming_strings", "on" }, { "array_nulls", "on" },
+	};
+
+	for (size_t i = 0; i < lengthof(settings); i++)
+	{
+		set_config_option(settings[i].name,
+						  settings[i].value,
+						  PGC_USERSET,
+						  PGC_S_SESSION,
+						  GUC_ACTION_SAVE,
+						  true,
+						  ERROR,
+						  false);
+	}
+}
+
 static char *
 deferred_chunk_scan_deparse_quals(RelOptInfo *rel, Oid ht_relid)
 {
@@ -634,6 +664,7 @@ ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypert
 	/* Deparse under a locked-down search_path so names come out fully qualified. */
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
+	dca_set_literal_gucs();
 	char *where_clause = deferred_chunk_scan_deparse_quals(rel, ht->main_table_relid);
 	char *order_by =
 		sgc != NULL ? deferred_chunk_scan_deparse_orderby(root->parse, rel, ht->main_table_relid) :
@@ -1024,9 +1055,10 @@ open_next_chunk(DeferredChunkAppendState *state)
 
 	char *sql = deferred_chunk_scan_chunk_sql(state, reloid);
 
-	/* Reparse under the same locked-down search_path used to deparse the quals. */
+	/* Reparse under the same settings used to deparse the quals. */
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
+	dca_set_literal_gucs();
 	List *parsetree = pg_parse_query(sql);
 	RawStmt *raw = linitial_node(RawStmt, parsetree);
 	List *querytree = pg_analyze_and_rewrite_fixedparams(raw, sql, NULL, 0, NULL);
