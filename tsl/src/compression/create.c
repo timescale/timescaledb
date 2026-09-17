@@ -8,10 +8,12 @@
 #include <access/reloptions.h>
 #include <access/tupdesc.h>
 #include <access/xact.h>
+#include <catalog/dependency.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am_d.h>
+#include <catalog/pg_class.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_constraint_d.h>
 #include <catalog/pg_type.h>
@@ -974,6 +976,17 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 	{
 		List *column_defs = build_columndefs(settings, src_chunk->fd.relid);
 		table_id = compression_table_create(src_chunk, column_defs, tablespace_oid, settings);
+
+		/*
+		 * Add dependency from the compressed chunk to its hypertable.
+		 * DEPENDENCY_AUTO type doesn't require CASCADE when dropping the hypertable
+		 * and doesn't restrict dropping the chunk separately from the hypertable
+		 */
+		ObjectAddress compressed_chunk_addr = { .classId = RelationRelationId,
+												.objectId = table_id };
+		ObjectAddress hypertable_addr = { .classId = RelationRelationId,
+										  .objectId = src_chunk->hypertable_relid };
+		recordDependencyOn(&compressed_chunk_addr, &hypertable_addr, DEPENDENCY_AUTO);
 	}
 	else
 	{
