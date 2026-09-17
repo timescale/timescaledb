@@ -214,7 +214,7 @@ step "hc_configure" {
 session "HO"
 setup { SET client_min_messages TO warning; }
 step "ho_begin"   { BEGIN; }
-step "ho_offsets" { ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '3 years'); }
+step "ho_offsets" { ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_start_offset = '3 years'); }
 step "ho_commit"  { COMMIT; }
 
 # A writer whose cached tracker handle outlives the tracker.  Mocks now() like

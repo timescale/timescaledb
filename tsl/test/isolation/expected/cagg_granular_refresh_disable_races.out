@@ -382,7 +382,7 @@ step d_disable:
     ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
 
 step ho_begin: BEGIN;
-step ho_offsets: ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '3 years');
+step ho_offsets: ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_start_offset = '3 years');
 step hd_disable: ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false); <waiting ...>
 step ho_commit: COMMIT;
 step hd_disable: <... completed>
@@ -403,10 +403,10 @@ step d_disable:
 
 step hd_begin: BEGIN;
 step hd_disable: ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
-step ho_offsets: ALTER TABLE conditions SET (timescaledb.granular_refresh_start_offset = '3 years'); <waiting ...>
+step ho_offsets: ALTER TABLE conditions SET (timescaledb.cagg_granular_refresh_start_offset = '3 years'); <waiting ...>
 step hd_commit: COMMIT;
 step ho_offsets: <... completed>
-ERROR:  incomplete granular refresh configuration
+ERROR:  granular refresh is not enabled on hypertable "conditions"
 step hd_settings: 
     SELECT count(*) AS settings_rows
     FROM _timescaledb_catalog.hypertable_cagg_settings s
