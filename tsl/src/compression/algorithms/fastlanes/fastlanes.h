@@ -9,9 +9,9 @@
  * layer.
  *
  *   This is the ONLY header callers should include. All functions are
- *   declared here; their definitions live in fastlanes_sizing.c
- *   (tier selection + sizing API), fastlanes_pack.c (plain pack and
- *   unpack), and fastlanes_ffor.c (FFOR pack and unpack).
+ *   declared here; their definitions are either inline, or in
+ *   fastlanes_pack.c (plain pack and unpack), and fastlanes_ffor.c
+ *   (FFOR pack and unpack).
  *
  * Conventions:
  *
@@ -76,7 +76,11 @@ fl_tier_select(uint32 n, fl_elem_width_t t)
 /* Required size for the tier (selected by fl_tier_select(N, T)).
  * Determines the sizes of pack output and unpack input buffers exactly.
  */
-extern size_t fl_required_bytes(uint32 n, uint8 w, fl_elem_width_t t);
+static inline size_t
+fl_required_bytes(uint32 n, uint8 w, fl_elem_width_t t)
+{
+	return (size_t) w * (((uint32) fl_tier_select(n, t)) >> 3);
+}
 
 /* Bytes the encoded output carries for N elements (<= fl_required_bytes).
  * Matches the return of fl_pack / fl_pack_ffor; useful for sizing the
@@ -104,15 +108,27 @@ fl_result_bytes(uint32 n, uint8 w, fl_elem_width_t t)
 /* Required alignment for the _packed_ input and output buffers.
  * Recommended alignment for the input and output _values_.
  */
-extern size_t fl_alignment(uint32 n, fl_elem_width_t t);
+static inline size_t
+fl_alignment(uint32 n, fl_elem_width_t t)
+{
+	return (size_t) (((uint32) fl_tier_select(n, t)) >> 3);
+}
 
 /* Number of input ELEMENTS the kernel reads -- callers must provide
  * at least this many readable elements at `values` (positions past N
  * are read but only the [0..N) outputs are meaningful). */
-extern uint32 fl_input_count(uint32 n, fl_elem_width_t t);
+static inline uint32
+fl_input_count(uint32 n, fl_elem_width_t t)
+{
+	return (uint32) fl_tier_select(n, t);
+}
 
 /* Byte size of the input buffer (= fl_input_count() * t / 8). */
-extern size_t fl_input_bytes(uint32 n, fl_elem_width_t t);
+static inline size_t
+fl_input_bytes(uint32 n, fl_elem_width_t t)
+{
+	return (size_t) (((uint32) fl_tier_select(n, t) * (uint32) t) >> 3);
+}
 
 /*
  * Plain pack / unpack.
@@ -145,5 +161,3 @@ extern size_t fl_pack_ffor(const void *values, void *packed, uint32 n, uint8 w, 
 						   uint64 base);
 extern void fl_unpack_ffor(const void *packed, void *values, uint32 n, uint8 w, fl_elem_width_t t,
 						   uint64 base);
-
-/* the inline implementation of fl_tier_select */
