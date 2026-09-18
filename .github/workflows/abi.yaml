@@ -25,9 +25,11 @@ jobs:
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
       pg18_abi_min: ${{ steps.config.outputs.pg18_abi_min }}
+      pg19_abi_min: ${{ steps.config.outputs.pg19_abi_min }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest }}
       pg18_latest: ${{ steps.config.outputs.pg18_latest }}
+      pg19_latest: ${{ steps.config.outputs.pg19_latest }}
 
     steps:
     - name: Checkout source code
@@ -43,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 16, 17, 18 ]
+        pg: [ 16, 17, 18, 19 ]
         ignores:
           - 'net telemetry'
         include:
@@ -56,6 +58,9 @@ jobs:
           - pg: 18
             builder: ${{ fromJson(needs.config.outputs.pg18_abi_min) }}
             tester: ${{ fromJson(needs.config.outputs.pg18_latest) }}
+          - pg: 19
+            builder: ${{ fromJson(needs.config.outputs.pg19_abi_min) }}
+            tester: ${{ fromJson(needs.config.outputs.pg19_latest) }}
 
     steps:
 
