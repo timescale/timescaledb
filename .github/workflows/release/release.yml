@@ -3,9 +3,7 @@
 
 name: Release
 on:
-  push:
-    branches:
-      - feat/one-click-release
+
   workflow_dispatch:
   workflow_call:
     inputs:

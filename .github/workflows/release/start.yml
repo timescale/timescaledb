@@ -1,5 +1,8 @@
 name: Start release
 on:
+  push:
+    branches:
+      - feat/one-click-release
   workflow_dispatch:
     inputs:
       version:
