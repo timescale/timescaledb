@@ -3,12 +3,16 @@
 
 name: Release
 on:
-    workflow_call:
-      inputs:
-        version:
-          required: true
-          type: string
-    workflow_dispatch:
+  push:
+    branches:
+      - feat/one-click-release
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
 
 jobs:
   release_creation:
