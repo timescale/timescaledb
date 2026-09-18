@@ -79,6 +79,8 @@ typedef struct ColumnarScanPath
 void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
 									 const Chunk *chunk);
 
+extern Node *ts_strip_relabel_types(Node *node);
+
 extern bool ts_is_columnar_scan_path(Path *path);
 extern bool ts_is_columnar_scan_plan(Plan *plan);
 
