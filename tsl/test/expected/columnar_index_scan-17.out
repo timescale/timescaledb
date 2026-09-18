@@ -6050,3 +6050,209 @@ SET enable_partitionwise_aggregate = off;
 + on
  
   device | count 
+-- The sparse index metadata is built with the default operator class of the
+-- column type and the collation of the column. Aggregates that ask for a
+-- different order cannot be answered from it.
+CREATE TABLE agg_order(time timestamptz not null, grp int not null, seq int not null, name text not null);
+SELECT FROM create_hypertable('agg_order','time',chunk_time_interval => interval '1 year');
+--
+
+ALTER TABLE agg_order SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='seq asc, name asc');
+INSERT INTO agg_order VALUES
+  ('2000-01-01',1,-3,'a'), ('2000-01-01',1,-2,'B'),
+  ('2000-01-01',1, 2,'c'), ('2000-01-01',1, 3,'D');
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_order') ch;
+ count 
+-------
+     1
+
+ANALYZE agg_order;
+-- answered from the metadata
+EXPLAIN (costs off) SELECT min(seq), max(seq) FROM agg_order;
+--- QUERY PLAN ---
+ Result
+   InitPlan 1
+     ->  Limit
+           ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+                 ->  Sort
+                       Sort Key: _hyper_5_6_chunk_compressed._ts_meta_v2_first_seq
+                       ->  Seq Scan on _hyper_5_6_chunk_compressed
+   InitPlan 2
+     ->  Limit
+           ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk _hyper_5_6_chunk_1
+                 ->  Sort
+                       Sort Key: _hyper_5_6_chunk_compressed_1._ts_meta_v2_last_seq DESC
+                       ->  Seq Scan on _hyper_5_6_chunk_compressed _hyper_5_6_chunk_compressed_1
+
+SELECT min(seq), max(seq) FROM agg_order;
+ min | max 
+-----+-----
+  -3 |   3
+
+-- a relabel to a type that sorts differently, oid compares unsigned so the
+-- answer is 2 and not -3
+EXPLAIN (costs off) SELECT min(seq::oid) FROM agg_order;
+--- QUERY PLAN ---
+ Aggregate
+   ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+         ->  Seq Scan on _hyper_5_6_chunk_compressed
+
+SELECT min(seq::oid) FROM agg_order;
+ min 
+-----
+   2
+
+-- a different collation, in byte order 'B' sorts before 'a'
+EXPLAIN (costs off) SELECT min(name COLLATE "C") FROM agg_order;
+--- QUERY PLAN ---
+ Aggregate
+   ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+         ->  Seq Scan on _hyper_5_6_chunk_compressed
+
+SELECT min(name COLLATE "C") FROM agg_order;
+ min 
+-----
+ B
+
+-- first and last order by their second argument, a relabel there asks for
+-- another order as well. In oid order the first value is 2 and the last -2.
+EXPLAIN (costs off) SELECT first(seq::oid, seq::oid), last(seq::oid, seq::oid) FROM agg_order;
+--- QUERY PLAN ---
+ Aggregate
+   ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+         ->  Seq Scan on _hyper_5_6_chunk_compressed
+
+SELECT first(seq::oid, seq::oid), last(seq::oid, seq::oid) FROM agg_order;
+ first |    last    
+-------+------------
+     2 | 4294967294
+
+-- without the casts they are answered from the metadata
+EXPLAIN (costs off) SELECT first(seq, seq), last(seq, seq) FROM agg_order;
+--- QUERY PLAN ---
+ Result
+   InitPlan 1
+     ->  Limit
+           ->  Result
+                 ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+                       ->  Sort
+                             Sort Key: _hyper_5_6_chunk_compressed._ts_meta_v2_last_seq DESC
+                             ->  Seq Scan on _hyper_5_6_chunk_compressed
+   InitPlan 2
+     ->  Limit
+           ->  Result
+                 ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk _hyper_5_6_chunk_1
+                       ->  Sort
+                             Sort Key: _hyper_5_6_chunk_compressed_1._ts_meta_v2_first_seq
+                             ->  Seq Scan on _hyper_5_6_chunk_compressed _hyper_5_6_chunk_compressed_1
+
+SELECT first(seq, seq), last(seq, seq) FROM agg_order;
+ first | last 
+-------+------
+    -3 |    3
+
+-- a cast of the value but not of the order argument keeps the order
+EXPLAIN (costs off) SELECT first(seq::oid, seq) FROM agg_order;
+--- QUERY PLAN ---
+ Result
+   InitPlan 1
+     ->  Limit
+           ->  Result
+                 ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+                       ->  Sort
+                             Sort Key: _hyper_5_6_chunk_compressed._ts_meta_v2_first_seq
+                             ->  Seq Scan on _hyper_5_6_chunk_compressed
+
+SELECT first(seq::oid, seq) FROM agg_order;
+   first    
+------------
+ 4294967293
+
+-- a relabel that keeps the order is still answered from the metadata
+CREATE TABLE agg_order_vc(time timestamptz not null, grp int not null, vc varchar not null);
+SELECT FROM create_hypertable('agg_order_vc','time',chunk_time_interval => interval '1 year');
+WARNING:  column type "character varying" used for "vc" does not follow best practices
+--
+
+ALTER TABLE agg_order_vc SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='vc asc');
+INSERT INTO agg_order_vc VALUES ('2000-01-01',1,'b'), ('2000-01-01',1,'c'), ('2000-01-01',1,'d');
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_order_vc') ch;
+ count 
+-------
+     1
+
+ANALYZE agg_order_vc;
+EXPLAIN (costs off) SELECT min(vc), min(vc::text) FROM agg_order_vc;
+--- QUERY PLAN ---
+ Aggregate
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_6_7_chunk agg_order_vc
+         ->  Seq Scan on _hyper_6_7_chunk_compressed
+
+SELECT min(vc), min(vc::text) FROM agg_order_vc;
+ min | min 
+-----+-----
+ b   | b
+
+DROP TABLE agg_order_vc;
+DROP TABLE agg_order;
+-- first and last compare the order argument with the input collation of the
+-- aggregate while the metadata is built with the collation of the column
+CREATE TABLE agg_coll(time timestamptz not null, grp int not null, name text not null, txt text not null)
+ WITH (tsdb.hypertable,tsdb.orderby='time',tsdb.segmentby='grp',tsdb.index='minmax(name), firstlast(txt)');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO agg_coll VALUES
+  ('2000-01-01',1,'a','a'), ('2000-01-02',1,'b','b'),
+  ('2000-01-03',1,'c','c'), ('2000-01-04',1,'d','d');
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_coll') ch;
+ count 
+-------
+     1
+
+ANALYZE agg_coll;
+-- answered from the metadata
+EXPLAIN (costs off) SELECT grp, first(name, name), last(name, name) FROM agg_coll GROUP BY grp;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: grp
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_7_8_chunk agg_coll
+         ->  Sort
+               Sort Key: _hyper_7_8_chunk_compressed.grp
+               ->  Seq Scan on _hyper_7_8_chunk_compressed
+
+SELECT grp, first(name, name), last(name, name) FROM agg_coll GROUP BY grp;
+ grp | first | last 
+-----+-------+------
+   1 | a     | d
+
+-- another collation asks for another order, which the metadata does not answer
+EXPLAIN (costs off) SELECT grp, first(name COLLATE "C", name COLLATE "C"), last(name COLLATE "C", name COLLATE "C") FROM agg_coll GROUP BY grp;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_7_8_chunk.grp
+   ->  Custom Scan (ColumnarScan) on _hyper_7_8_chunk
+         ->  Sort
+               Sort Key: _hyper_7_8_chunk_compressed.grp
+               ->  Seq Scan on _hyper_7_8_chunk_compressed
+
+SELECT grp, first(name COLLATE "C", name COLLATE "C"), last(name COLLATE "C", name COLLATE "C") FROM agg_coll GROUP BY grp;
+ grp | first | last 
+-----+-------+------
+   1 | a     | d
+
+-- a non collatable order argument is answered from the metadata even when the
+-- value argument brings a collation
+EXPLAIN (costs off) SELECT grp, first(txt COLLATE "C", time) FROM agg_coll GROUP BY grp;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: grp
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_7_8_chunk agg_coll
+         ->  Sort
+               Sort Key: _hyper_7_8_chunk_compressed.grp
+               ->  Seq Scan on _hyper_7_8_chunk_compressed
+
+SELECT grp, first(txt COLLATE "C", time) FROM agg_coll GROUP BY grp;
+ grp | first 
+-----+-------
+   1 | a
+
+DROP TABLE agg_coll;
