@@ -1201,6 +1201,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				 * Look up the correct sort operator from the PathKey's slightly
 				 * abstracted representation.
 				 */
+
 				Oid sortop = get_opfamily_member(pk->pk_opfamily,
 												 var->vartype,
 												 var->vartype,
