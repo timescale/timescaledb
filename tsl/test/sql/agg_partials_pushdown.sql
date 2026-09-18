@@ -58,7 +58,42 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
 :PREFIX
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
 
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+    AND device_id = 1
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+
+SELECT device_id, count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable
+WHERE time >= '2000-01-01 00:00:00+0'
+    AND time <= '2000-02-01 00:00:00+0'
+    AND device_id = -1
+GROUP BY device_id
+ORDER BY device_id, count(*) DESC
+;
+
 RESET enable_hashagg;
+
+
+-- Unhashable grouping
+SELECT (device_id % 4)::bit(4), sum(v0) FROM testtable GROUP BY 1 ORDER BY 1, 2;
+
+-- Unsortable grouping
+SELECT (device_id % 2)::text::xid, sum(v0) FROM testtable GROUP BY 1 ORDER BY 2;
+
+SET enable_hashagg to OFF;
+SELECT (device_id % 2)::text::xid, sum(v0) FROM testtable GROUP BY 1 ORDER BY 2;
+RESET enable_hashagg;
+
 
 -- Check chunk exclusion for index scans
 SET enable_seqscan = OFF;
