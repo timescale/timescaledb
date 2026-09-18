@@ -1,0 +1,23 @@
+# Runs the first part of the release, namely creating
+# a tag and the GitHub Release page.
+
+name: Release
+on:
+    workflow_call:
+      inputs:
+        version:
+          required: true
+          type: string
+    workflow_dispatch:
+
+jobs:
+  release_creation:
+    name: Release creation
+    runs-on: ubuntu-latest #runs-on/fleet=linux-2cpu/env=prod
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create tag
+        run: |
+          echo "Version is ${{ inputs.version }}"
+
+

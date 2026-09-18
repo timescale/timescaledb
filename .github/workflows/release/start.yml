@@ -1,0 +1,14 @@
+name: Start release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to use"
+        required: true
+        type: string
+
+
+jobs:
+  release:
+    name: Release mechanisms
+    uses: ./github/workflows/release/start.yml
