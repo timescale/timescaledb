@@ -197,10 +197,12 @@ append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr 
 /*
  * Remove any RelabelType from the expression to get at the underlying
  * expression. Unlike strip_implicit_coercions we also strip explicit casts
- * since a RelabelType never changes the value.
+ * since a RelabelType never changes the value. Note that it does not have to
+ * keep the sort order, so callers that rely on an order have to check the
+ * operator family separately.
  */
-static Node *
-strip_relabel_types(Node *node)
+Node *
+ts_strip_relabel_types(Node *node)
 {
 	while (node != NULL && IsA(node, RelabelType))
 	{
@@ -355,7 +357,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			 */
 			Oid opcintype = chunk_em->em_datatype;
 			Oid collation = exprCollation((Node *) expr);
-			expr = (Expr *) strip_relabel_types((Node *) expr);
+			expr = (Expr *) ts_strip_relabel_types((Node *) expr);
 			var = castNode(Var, expr);
 			Assert(var->varattno > 0);
 
@@ -2908,8 +2910,8 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 					continue;
 				}
 
-				lnode = strip_relabel_types(linitial(op->args));
-				rnode = strip_relabel_types(lsecond(op->args));
+				lnode = ts_strip_relabel_types(linitial(op->args));
+				rnode = ts_strip_relabel_types(lsecond(op->args));
 
 				Assert(lnode && rnode);
 				if (IsA(lnode, Var))
@@ -3036,7 +3038,7 @@ is_var_notnull(const CompressionInfo *compression_info, Var *var)
 static Var *
 extract_valid_column_from_em(EquivalenceMember *em)
 {
-	Node *node = strip_relabel_types((Node *) em->em_expr);
+	Node *node = ts_strip_relabel_types((Node *) em->em_expr);
 	if (node == NULL || !IsA(node, Var))
 	{
 		return NULL;
