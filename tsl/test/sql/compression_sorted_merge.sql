@@ -754,3 +754,112 @@ drop table insert_test cascade;
 
 reset timescaledb.debug_require_batch_sorted_merge;
 
+
+-- Sorting on a column cast to a binary coercible type with a different sort
+-- order. int4 and oid compare differently for negative values, so the sort
+-- cannot be pushed below the ColumnarScan.
+CREATE TABLE sort_cast(time timestamptz not null, grp int not null, seq int not null, val int not null);
+SELECT FROM create_hypertable('sort_cast','time',chunk_time_interval => interval '1 year');
+ALTER TABLE sort_cast SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='seq asc');
+
+INSERT INTO sort_cast VALUES
+  ('2000-01-01', -2, -3, 10), ('2000-01-01', -2, -2, 20), ('2000-01-01', -2, -1, 30),
+  ('2000-01-01', -2,  0, 40), ('2000-01-01', -2,  1, 50), ('2000-01-01', -2,  2, 60),
+  ('2000-01-01', -2,  3, 70),
+  ('2000-01-01',  1, -1, 80), ('2000-01-01',  1,  0, 90), ('2000-01-01',  1,  1, 100);
+SELECT count(compress_chunk(ch)) FROM show_chunks('sort_cast') ch;
+ANALYZE sort_cast;
+
+-- orderby column, oid order starts at 0
+EXPLAIN (buffers off, costs off) SELECT seq::oid AS seq_oid, val FROM sort_cast WHERE grp = -2 ORDER BY seq::oid LIMIT 3;
+SELECT seq::oid AS seq_oid, val FROM sort_cast WHERE grp = -2 ORDER BY seq::oid LIMIT 3;
+
+-- without the cast the sort is still pushed down
+EXPLAIN (buffers off, costs off) SELECT seq, val FROM sort_cast WHERE grp = -2 ORDER BY seq LIMIT 3;
+SELECT seq, val FROM sort_cast WHERE grp = -2 ORDER BY seq LIMIT 3;
+
+-- segmentby columns are re-sorted with the requested operator, still pushed down
+EXPLAIN (buffers off, costs off) SELECT grp::oid AS grp_oid, seq FROM sort_cast ORDER BY grp::oid, seq LIMIT 3;
+SELECT grp::oid AS grp_oid, seq FROM sort_cast ORDER BY grp::oid, seq LIMIT 3;
+
+drop table sort_cast cascade;
+
+-- Sorting with an operator from another family than the one the data was
+-- sorted with. The two families compare differently for values that differ in
+-- case, which depends on the database collation, so only check the plans here.
+CREATE TABLE sort_pattern(time timestamptz not null, grp text not null, name text not null);
+SELECT FROM create_hypertable('sort_pattern','time',chunk_time_interval => interval '1 year');
+ALTER TABLE sort_pattern SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='name asc');
+
+INSERT INTO sort_pattern VALUES
+  ('2000-01-01','g','a'), ('2000-01-01','g','b'), ('2000-01-01','g','c'), ('2000-01-01','g','d');
+SELECT count(compress_chunk(ch)) FROM show_chunks('sort_pattern') ch;
+ANALYZE sort_pattern;
+
+-- orderby column sorted by byte order
+EXPLAIN (buffers off, costs off) SELECT name FROM sort_pattern WHERE grp = 'g' ORDER BY name USING ~<~ LIMIT 2;
+SELECT name FROM sort_pattern WHERE grp = 'g' ORDER BY name USING ~<~ LIMIT 2;
+
+-- and with the collation aware operator the sort is still pushed down
+EXPLAIN (buffers off, costs off) SELECT name FROM sort_pattern WHERE grp = 'g' ORDER BY name LIMIT 2;
+SELECT name FROM sort_pattern WHERE grp = 'g' ORDER BY name LIMIT 2;
+
+-- segmentby columns are re-sorted with the requested operator
+EXPLAIN (buffers off, costs off) SELECT grp, name FROM sort_pattern ORDER BY grp USING ~<~, name LIMIT 2;
+SELECT grp, name FROM sort_pattern ORDER BY grp USING ~<~, name LIMIT 2;
+
+drop table sort_pattern cascade;
+
+-- Sort keys of a type whose operator family declares its operators on a
+-- polymorphic type. The sort operator has to be looked up with the type of the
+-- sort key, there is none for the concrete type.
+CREATE TYPE sort_poly_enum AS ENUM ('a','b','c');
+CREATE TABLE sort_poly_e(time timestamptz not null, grp int not null, v sort_poly_enum);
+SELECT FROM create_hypertable('sort_poly_e','time',chunk_time_interval => interval '1 year');
+ALTER TABLE sort_poly_e SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='v asc');
+INSERT INTO sort_poly_e VALUES ('2000-01-01',1,'b'), ('2000-01-01',1,'a'), ('2000-01-01',1,'c');
+SELECT count(compress_chunk(ch)) FROM show_chunks('sort_poly_e') ch;
+ANALYZE sort_poly_e;
+
+SELECT min(v), max(v) FROM sort_poly_e;
+SELECT v FROM sort_poly_e ORDER BY v LIMIT 1;
+
+CREATE TABLE sort_poly_a(time timestamptz not null, grp int not null, v int[]);
+SELECT FROM create_hypertable('sort_poly_a','time',chunk_time_interval => interval '1 year');
+ALTER TABLE sort_poly_a SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='v asc');
+INSERT INTO sort_poly_a VALUES ('2000-01-01',1,'{2}'), ('2000-01-01',1,'{1}'), ('2000-01-01',1,'{3}');
+SELECT count(compress_chunk(ch)) FROM show_chunks('sort_poly_a') ch;
+ANALYZE sort_poly_a;
+
+SELECT min(v), max(v) FROM sort_poly_a;
+SELECT v FROM sort_poly_a ORDER BY v LIMIT 1;
+
+drop table sort_poly_e cascade;
+drop table sort_poly_a cascade;
+DROP TYPE sort_poly_enum;
+
+-- A segmentby column equated to a relabeled parameter is still recognized as
+-- constant, so the batches do not have to be merged.
+CREATE TABLE seg_param(time timestamptz not null, device text not null, value float);
+SELECT FROM create_hypertable('seg_param','time',chunk_time_interval => interval '1 year');
+ALTER TABLE seg_param SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time desc');
+INSERT INTO seg_param
+SELECT '2000-01-01'::timestamptz + i * interval '1 hour', 'd' || d, d
+FROM generate_series(1,3) d, generate_series(1,5) i;
+SELECT count(compress_chunk(ch)) FROM show_chunks('seg_param') ch;
+ANALYZE seg_param;
+
+set plan_cache_mode to 'force_generic_plan';
+
+PREPARE seg_param_vc(varchar) AS SELECT time, value FROM seg_param WHERE device = $1 ORDER BY time DESC LIMIT 2;
+EXPLAIN (buffers off, costs off, verbose) EXECUTE seg_param_vc('d2');
+EXECUTE seg_param_vc('d2');
+
+-- the same query without the relabel
+PREPARE seg_param_text(text) AS SELECT time, value FROM seg_param WHERE device = $1 ORDER BY time DESC LIMIT 2;
+EXPLAIN (buffers off, costs off, verbose) EXECUTE seg_param_text('d2');
+EXECUTE seg_param_text('d2');
+
+reset plan_cache_mode;
+
+drop table seg_param cascade;
