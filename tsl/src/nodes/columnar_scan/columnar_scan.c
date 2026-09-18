@@ -2901,6 +2901,7 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 				Node *lnode, *rnode;
 				Var *var;
 				Expr *other;
+				Node *other_stripped;
 
 				if (op->opretset)
 				{
@@ -2915,11 +2916,13 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 				{
 					var = castNode(Var, lnode);
 					other = lsecond(op->args);
+					other_stripped = rnode;
 				}
 				else if (IsA(rnode, Var))
 				{
 					var = castNode(Var, rnode);
 					other = linitial(op->args);
+					other_stripped = lnode;
 				}
 				else
 				{
@@ -2931,7 +2934,9 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 					continue;
 				}
 
-				if (IsA(other, Const) || IsA(other, Param))
+				/* The operator was resolved for the relabeled expression, so keep the
+				 * unstripped node for the type lookups below. */
+				if (IsA(other_stripped, Const) || IsA(other_stripped, Param))
 				{
 					TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_EQ_OPR);
 
@@ -3108,6 +3113,17 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_eclasses,
 			}
 
 			if (orderby_attnum != var->varattno)
+			{
+				continue;
+			}
+
+			/* Rows inside a batch keep the order they were compressed in, which is
+			 * the one of the default btree opclass of the column type. A pathkey
+			 * asking for another operator family is not satisfied by that order, a
+			 * RelabelType keeps the value but int4 and oid compare differently.
+			 */
+			if (pk->pk_opfamily !=
+				lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY)->btree_opf)
 			{
 				continue;
 			}

@@ -1,0 +1,1 @@
+Fixes: #10617 Wrong query results when the sort operator differs from the one a compression key was sorted with
