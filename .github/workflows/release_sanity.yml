@@ -1,0 +1,141 @@
+# This workflow validates that given an input [version] the selected
+# [x.x.x] release branch is in a correct releasable state.
+# This workflow is meant to be used by other workflows.
+
+# [version] must be given by the release manager.
+
+name: Release sanity
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+jobs:
+  # Tests that the release has a releaseable state.
+  release_sanity:
+    name: Validate release conditions
+    runs-on: ubuntu-latest #runs-on/fleet=linux-2cpu/env=prod
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The release branch must have the exact version the release manager
+      # specified.
+      - name: The release branch must have a correct version.
+        run: |
+          local_version="$(sed -n 's/^version = //p' version.config)"
+          input_version="${{ inputs.version }}"
+
+          echo "Input version: $input_version"
+          echo "version.config version: $local_version"
+
+          if [ "$local_version" != "$input_version" ]; then
+            echo "::error::version.config must contain '$input_version', got '$local_version'"
+            exit 1
+          fi
+
+      # The release commit has to follow a name convention: "Release `version`".
+      - name: Last commit has correct name
+        run: |
+          required_title="Release ${{ inputs.version }}"
+          commit_title="$(git log -1 --pretty=format:%s HEAD)"
+
+          echo "Required title: $required_title"
+          echo "Commit title: $commit_title"
+
+          if [ "$commit_title" != "$required_title" ]; then
+            echo "::error::Last commit title must be '$required_title', got '$commit_title'"
+            exit 1
+          fi
+
+      # All .unreleased files should be referenced in the CHANGELOG and not
+      # exist as files at the time of a release.
+      - name: No .unreleased files are left behind
+        run: |
+          ! compgen -G '.unreleased/*'
+
+      # The SQL upgrade scripts must be moved from the development files to
+      # the respective versioned files.
+      - name: The latest-dev.sql and the reverse-dev.sql must be empty
+        run: |
+          if [ -s sql/updates/latest-dev.sql ]
+          then
+              echo "latest-dev.sql is not empty"
+              exit 1
+          fi
+
+          if [ -s sql/updates/reverse-dev.sql ]
+          then
+              echo "reverse-dev.sql is not empty"
+              exit 1
+          fi
+
+      # The release milestone is named v{version}, e.g. v2.31.0, and must have
+      # no open issues or PRs at release time.
+      - name: Release milestone is empty
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          milestone_title="v${{ inputs.version }}"
+
+          milestone_number="$(
+            gh api "repos/${GITHUB_REPOSITORY}/milestones?state=all&per_page=100" \
+              --paginate \
+              --jq ".[] | select(.title == \"$milestone_title\") | .number" \
+              | head -n 1
+          )"
+
+          if [ -z "$milestone_number" ]; then
+            echo "::error::Release milestone '$milestone_title' does not exist"
+            exit 1
+          fi
+
+          open_items="$(
+            gh api "repos/${GITHUB_REPOSITORY}/milestones/${milestone_number}" \
+              --jq '.open_issues'
+          )"
+
+          echo "Release milestone: $milestone_title"
+          echo "Open milestone items: $open_items"
+
+          if [ "$open_items" -ne 0 ]; then
+            echo "::error::Release milestone '$milestone_title' still has open items"
+            gh api "repos/${GITHUB_REPOSITORY}/issues?milestone=${milestone_number}&state=open&per_page=100" \
+              --paginate \
+              --jq '.[] | "- #\(.number) \(.title) (\(.html_url))"'
+            exit 1
+          fi
+
+  regression:
+    name: Regression
+    needs: release_sanity
+    uses: ./.github/workflows/linux-build-and-test.yaml
+
+  regression_linux_i386:
+    name: Regression Linux i386
+    needs: release_sanity
+    uses: ./.github/workflows/linux-32bit-build-and-test.yaml
+
+  regression_windows:
+    name: Regression Windows
+    needs: release_sanity
+    uses: ./.github/workflows/windows-build-and-test.yaml
+
+  update_and_downgrade:
+    name: Update and Downgrade
+    needs: release_sanity
+    uses: ./.github/workflows/update-test.yaml
+
+  pg_upgrade:
+    name: pg_upgrade test
+    needs: release_sanity
+    uses: ./.github/workflows/pg_upgrade-test.yaml
+
+  abi:
+    name: ABI Test
+    needs: release_sanity
+    uses: ./.github/workflows/abi.yaml
