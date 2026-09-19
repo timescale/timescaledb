@@ -241,3 +241,58 @@ SET timescaledb.enable_columnarindexscan = on;
 -- compare optimized vs non-optimized results
 :DIFF_CMD
 
+
+\set ECHO all
+-- The sparse index metadata is built with the default operator class of the
+-- column type and the collation of the column. Aggregates that ask for a
+-- different order cannot be answered from it.
+CREATE TABLE agg_order(time timestamptz not null, grp int not null, seq int not null, name text not null);
+SELECT FROM create_hypertable('agg_order','time',chunk_time_interval => interval '1 year');
+ALTER TABLE agg_order SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='seq asc, name asc');
+
+INSERT INTO agg_order VALUES
+  ('2000-01-01',1,-3,'a'), ('2000-01-01',1,-2,'B'),
+  ('2000-01-01',1, 2,'c'), ('2000-01-01',1, 3,'D');
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_order') ch;
+ANALYZE agg_order;
+
+-- answered from the metadata
+EXPLAIN (costs off) SELECT min(seq), max(seq) FROM agg_order;
+SELECT min(seq), max(seq) FROM agg_order;
+
+-- a relabel to a type that sorts differently, oid compares unsigned so the
+-- answer is 2 and not -3
+EXPLAIN (costs off) SELECT min(seq::oid) FROM agg_order;
+SELECT min(seq::oid) FROM agg_order;
+
+-- a different collation, in byte order 'B' sorts before 'a'
+EXPLAIN (costs off) SELECT min(name COLLATE "C") FROM agg_order;
+SELECT min(name COLLATE "C") FROM agg_order;
+
+-- first and last order by their second argument, a relabel there asks for
+-- another order as well. In oid order the first value is 2 and the last -2.
+EXPLAIN (costs off) SELECT first(seq::oid, seq::oid), last(seq::oid, seq::oid) FROM agg_order;
+SELECT first(seq::oid, seq::oid), last(seq::oid, seq::oid) FROM agg_order;
+
+-- without the casts they are answered from the metadata
+EXPLAIN (costs off) SELECT first(seq, seq), last(seq, seq) FROM agg_order;
+SELECT first(seq, seq), last(seq, seq) FROM agg_order;
+
+-- a cast of the value but not of the order argument keeps the order
+EXPLAIN (costs off) SELECT first(seq::oid, seq) FROM agg_order;
+SELECT first(seq::oid, seq) FROM agg_order;
+
+-- a relabel that keeps the order is still answered from the metadata
+CREATE TABLE agg_order_vc(time timestamptz not null, grp int not null, vc varchar not null);
+SELECT FROM create_hypertable('agg_order_vc','time',chunk_time_interval => interval '1 year');
+ALTER TABLE agg_order_vc SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='vc asc');
+INSERT INTO agg_order_vc VALUES ('2000-01-01',1,'b'), ('2000-01-01',1,'c'), ('2000-01-01',1,'d');
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_order_vc') ch;
+ANALYZE agg_order_vc;
+
+EXPLAIN (costs off) SELECT min(vc), min(vc::text) FROM agg_order_vc;
+SELECT min(vc), min(vc::text) FROM agg_order_vc;
+
+DROP TABLE agg_order_vc;
+
+DROP TABLE agg_order;

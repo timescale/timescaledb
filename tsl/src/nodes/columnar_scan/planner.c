@@ -1200,18 +1200,22 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				/*
 				 * Look up the correct sort operator from the PathKey's slightly
 				 * abstracted representation.
+				 * Take the type from the equivalence member and not from the
+				 * Var, like prepare_sort_from_pathkeys does. The operators of
+				 * an array or enum family are declared on anyarray or anyenum
+				 * and there is none for the concrete type.
 				 */
 				Oid sortop = get_opfamily_member(pk->pk_opfamily,
-												 var->vartype,
-												 var->vartype,
+												 em->em_datatype,
+												 em->em_datatype,
 												 pk->pk_cmptype);
 				if (!OidIsValid(sortop)) /* should not happen */
 				{
 					elog(ERROR,
 						 "missing operator %d(%u,%u) in opfamily %u",
 						 pk->pk_cmptype,
-						 var->vartype,
-						 var->vartype,
+						 em->em_datatype,
+						 em->em_datatype,
 						 pk->pk_opfamily);
 				}
 

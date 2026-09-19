@@ -194,6 +194,24 @@ append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr 
 	return ec;
 }
 
+/*
+ * Remove any RelabelType from the expression to get at the underlying
+ * expression. Unlike strip_implicit_coercions we also strip explicit casts
+ * since a RelabelType never changes the value. Note that it does not have to
+ * keep the sort order, so callers that rely on an order have to check the
+ * operator family separately.
+ */
+Node *
+ts_strip_relabel_types(Node *node)
+{
+	while (node != NULL && IsA(node, RelabelType))
+	{
+		node = (Node *) castNode(RelabelType, node)->arg;
+	}
+
+	return node;
+}
+
 static List *
 build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chunk_pathkeys,
 							   const CompressionInfo *info)
@@ -339,7 +357,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			 */
 			Oid opcintype = chunk_em->em_datatype;
 			Oid collation = exprCollation((Node *) expr);
-			expr = (Expr *) strip_implicit_coercions((Node *) expr);
+			expr = (Expr *) ts_strip_relabel_types((Node *) expr);
 			var = castNode(Var, expr);
 			Assert(var->varattno > 0);
 
@@ -2885,25 +2903,28 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 				Node *lnode, *rnode;
 				Var *var;
 				Expr *other;
+				Node *other_stripped;
 
 				if (op->opretset)
 				{
 					continue;
 				}
 
-				lnode = strip_implicit_coercions(linitial(op->args));
-				rnode = strip_implicit_coercions(lsecond(op->args));
+				lnode = ts_strip_relabel_types(linitial(op->args));
+				rnode = ts_strip_relabel_types(lsecond(op->args));
 
 				Assert(lnode && rnode);
 				if (IsA(lnode, Var))
 				{
 					var = castNode(Var, lnode);
 					other = lsecond(op->args);
+					other_stripped = rnode;
 				}
 				else if (IsA(rnode, Var))
 				{
 					var = castNode(Var, rnode);
 					other = linitial(op->args);
+					other_stripped = lnode;
 				}
 				else
 				{
@@ -2915,7 +2936,9 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 					continue;
 				}
 
-				if (IsA(other, Const) || IsA(other, Param))
+				/* The operator was resolved for the relabeled expression, so keep the
+				 * unstripped node for the type lookups below. */
+				if (IsA(other_stripped, Const) || IsA(other_stripped, Param))
 				{
 					TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_EQ_OPR);
 
@@ -3015,7 +3038,7 @@ is_var_notnull(const CompressionInfo *compression_info, Var *var)
 static Var *
 extract_valid_column_from_em(EquivalenceMember *em)
 {
-	Node *node = strip_implicit_coercions((Node *) em->em_expr);
+	Node *node = ts_strip_relabel_types((Node *) em->em_expr);
 	if (node == NULL || !IsA(node, Var))
 	{
 		return NULL;
@@ -3087,6 +3110,17 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_eclasses,
 			/* Pathkey collation different from underlying column collation may lead to different
 			 * sort order */
 			if (var->varcollid != pk->pk_eclass->ec_collation)
+			{
+				continue;
+			}
+
+			/* Rows inside a batch keep the order they were compressed in, which is
+			 * the one of the default btree opclass of the column type. A pathkey
+			 * asking for another operator family is not satisfied by that order, a
+			 * RelabelType keeps the value but int4 and oid compare differently.
+			 */
+			if (pk->pk_opfamily !=
+				lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY)->btree_opf)
 			{
 				continue;
 			}
