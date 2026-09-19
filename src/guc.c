@@ -214,7 +214,7 @@ DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
 
 DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 
-DebugRequireOption ts_guc_debug_require_deferred_chunk_scan = DRO_Allow;
+DebugRequireOption ts_guc_debug_require_deferred_chunk_append = DRO_Allow;
 #endif
 
 DebugRequireOption ts_guc_debug_require_batch_sorted_merge = DRO_Allow;
@@ -1739,13 +1739,13 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_deferred_chunk_scan"),
+	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_deferred_chunk_append"),
 							 /* short_desc= */
 							 "ensure that DeferredChunkAppend is used or not",
 							 /* long_desc= */
 							 "this is for debugging purposes, to check whether a query uses the "
 							 "DeferredChunkAppend node without depending on EXPLAIN output",
-							 /* valueAddr= */ (int *) &ts_guc_debug_require_deferred_chunk_scan,
+							 /* valueAddr= */ (int *) &ts_guc_debug_require_deferred_chunk_append,
 							 /* bootValue= */ DRO_Allow,
 							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,

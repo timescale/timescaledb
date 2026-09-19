@@ -152,7 +152,7 @@ extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_qual;
 
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
 
-extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_deferred_chunk_scan;
+extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_deferred_chunk_append;
 
 #endif
 
