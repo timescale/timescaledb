@@ -1509,7 +1509,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 */
 	if (reltype == TS_REL_HYPERTABLE && ht && ts_get_private_reloptinfo(rel)->deferred_chunk_append)
 	{
-		ts_deferred_chunk_scan_add_path(root, rel, ht);
+		ts_deferred_chunk_append_add_path(root, rel, ht);
 		if (prev_set_rel_pathlist_hook != NULL)
 		{
 			(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
@@ -1663,7 +1663,8 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * `inhparent` goes to false in two cases: a hypertable without
 			 * chunks or a SELECT FROM ONLY hypertable.
 			 */
-			bool use_deferred_chunk_append = inhparent && ts_should_deferred_chunk_scan(query, ht);
+			bool use_deferred_chunk_append =
+				inhparent && ts_should_deferred_chunk_append(query, ht);
 			if (use_deferred_chunk_append)
 			{
 				rte->inh = false;
