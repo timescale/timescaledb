@@ -3511,6 +3511,38 @@ lmerge_matched:;
 									   NULL,
 									   newslot);
 					mtstate->mt_merge_updated += 1;
+
+					if (context->ht_state->has_continuous_aggregate &&
+						!ts_guc_skip_cagg_invalidation)
+					{
+						Relation rel = resultRelInfo->ri_RelationDesc;
+						bool should_free_old = false, should_free_new = false;
+						TupleTableSlot *invalidation_slot =
+							table_slot_create(rel, NULL);
+						table_tuple_fetch_row_version(rel,
+													  tupleid,
+													  SnapshotAny,
+													  invalidation_slot);
+						HeapTuple old_ht =
+							ExecFetchSlotHeapTuple(invalidation_slot,
+												   false,
+												   &should_free_old);
+						HeapTuple new_ht =
+							ExecFetchSlotHeapTuple(newslot,
+												   false,
+												   &should_free_new);
+						ts_cm_functions->continuous_agg_dml_invalidate(
+							context->ht_state->ht->fd.id,
+							rel,
+							old_ht,
+							new_ht,
+							true);
+						if (should_free_old)
+							heap_freetuple(old_ht);
+						if (should_free_new)
+							heap_freetuple(new_ht);
+						ExecDropSingleTupleTableSlot(invalidation_slot);
+					}
 				}
 
 				break;
@@ -3532,6 +3564,32 @@ lmerge_matched:;
 				result = ExecDeleteAct(context, resultRelInfo, tupleid, false);
 				if (result == TM_Ok)
 				{
+					if (context->ht_state->has_continuous_aggregate &&
+						!ts_guc_skip_cagg_invalidation)
+					{
+						Relation rel = resultRelInfo->ri_RelationDesc;
+						bool should_free;
+						TupleTableSlot *cagg_slot =
+							table_slot_create(rel, NULL);
+						table_tuple_fetch_row_version(rel,
+													  tupleid,
+													  SnapshotAny,
+													  cagg_slot);
+						HeapTuple tuple =
+							ExecFetchSlotHeapTuple(cagg_slot,
+												   false,
+												   &should_free);
+						ts_cm_functions->continuous_agg_dml_invalidate(
+							context->ht_state->ht->fd.id,
+							rel,
+							tuple,
+							NULL,
+							false);
+						if (should_free)
+							heap_freetuple(tuple);
+						ExecDropSingleTupleTableSlot(cagg_slot);
+					}
+
 					ExecDeleteEpilogue(context, resultRelInfo, tupleid, NULL, false);
 					mtstate->mt_merge_deleted = 1;
 				}
