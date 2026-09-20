@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include "compression/compression.h"
 #include <access/attmap.h>
 #include <access/attnum.h>
 #include <access/detoast.h>
@@ -33,6 +34,7 @@
 
 #include "compat/compat.h"
 
+#include "algorithms/aic.h"
 #include "algorithms/array.h"
 #include "algorithms/bool_compress.h"
 #include "algorithms/deltadelta.h"
@@ -79,6 +81,7 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_NULL] = NULL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_UUID] = UUID_COMPRESS_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_AIC] = AIC_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -90,6 +93,7 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
 	[COMPRESSION_ALGORITHM_NULL] = { "NULL" },
 	[COMPRESSION_ALGORITHM_UUID] = { "UUID" },
+	[COMPRESSION_ALGORITHM_AIC] = { "AIC" },
 };
 
 Name
@@ -3264,6 +3268,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_UUID:
 			has_nulls = uuid_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_AIC:
+			has_nulls = aic_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -3311,6 +3318,9 @@ compressed_data_has_nulls(Datum compressed_data)
 		case COMPRESSION_ALGORITHM_UUID:
 			has_nulls = uuid_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_AIC:
+			has_nulls = aic_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -3354,7 +3364,14 @@ compression_get_default_algorithm(Oid typeoid)
 		case DATEOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-			return COMPRESSION_ALGORITHM_DELTADELTA;
+			if (ts_guc_enable_aic_compression)
+			{
+				return COMPRESSION_ALGORITHM_AIC;
+			}
+			else
+			{
+				return COMPRESSION_ALGORITHM_DELTADELTA;
+			}
 
 		case FLOAT4OID:
 		case FLOAT8OID:

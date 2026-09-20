@@ -69,6 +69,8 @@ CROSSMODULE_WRAPPER(compressed_data_info);
 CROSSMODULE_WRAPPER(compressed_data_has_nulls);
 CROSSMODULE_WRAPPER(deltadelta_compressor_append);
 CROSSMODULE_WRAPPER(deltadelta_compressor_finish);
+CROSSMODULE_WRAPPER(aic_compressor_append);
+CROSSMODULE_WRAPPER(aic_compressor_finish);
 CROSSMODULE_WRAPPER(gorilla_compressor_append);
 CROSSMODULE_WRAPPER(gorilla_compressor_finish);
 CROSSMODULE_WRAPPER(dictionary_compressor_append);
@@ -393,6 +395,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.decompress_batch = error_no_default_fn_pg_community,
 	.deltadelta_compressor_append = error_no_default_fn_pg_community,
 	.deltadelta_compressor_finish = error_no_default_fn_pg_community,
+	.aic_compressor_append = error_no_default_fn_pg_community,
+	.aic_compressor_finish = error_no_default_fn_pg_community,
 	.gorilla_compressor_append = error_no_default_fn_pg_community,
 	.gorilla_compressor_finish = error_no_default_fn_pg_community,
 	.dictionary_compressor_append = error_no_default_fn_pg_community,

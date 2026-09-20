@@ -180,6 +180,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_hypertable.sql
     compression_merge.sql
     compression_indexscan.sql
+    compression_aic.sql
     compression_segment_meta.sql
     compression_sorted_merge_columns.sql
     compression_sorted_merge_filter.sql
