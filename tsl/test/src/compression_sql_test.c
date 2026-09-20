@@ -47,6 +47,10 @@ get_compression_algorithm(char *name)
 	{
 		return COMPRESSION_ALGORITHM_UUID;
 	}
+	else if (pg_strcasecmp(name, "aic") == 0)
+	{
+		return COMPRESSION_ALGORITHM_AIC;
+	}
 
 	ereport(ERROR, (errmsg("unknown compression algorithm %s", name)));
 	return _INVALID_COMPRESSION_ALGORITHM;
@@ -66,6 +70,24 @@ get_compression_algorithm(char *name)
 #define CTYPE int64
 #define PG_TYPE_PREFIX INT8
 #define DATUM_TO_CTYPE DatumGetInt64
+#include "decompress_arithmetic_test_impl.c"
+
+#define ALGO AIC
+#define CTYPE int64
+#define PG_TYPE_PREFIX INT8
+#define DATUM_TO_CTYPE DatumGetInt64
+#include "decompress_arithmetic_test_impl.c"
+
+#define ALGO AIC
+#define CTYPE int32
+#define PG_TYPE_PREFIX INT4
+#define DATUM_TO_CTYPE DatumGetInt32
+#include "decompress_arithmetic_test_impl.c"
+
+#define ALGO AIC
+#define CTYPE int16
+#define PG_TYPE_PREFIX INT2
+#define DATUM_TO_CTYPE DatumGetInt16
 #include "decompress_arithmetic_test_impl.c"
 
 #define ALGO BOOL
@@ -98,6 +120,12 @@ get_compression_algorithm(char *name)
 	X(GORILLA, FLOAT8, false)                                                                      \
 	X(DELTADELTA, INT8, true)                                                                      \
 	X(DELTADELTA, INT8, false)                                                                     \
+	X(AIC, INT8, true)                                                                             \
+	X(AIC, INT8, false)                                                                            \
+	X(AIC, INT4, true)                                                                             \
+	X(AIC, INT4, false)                                                                            \
+	X(AIC, INT2, true)                                                                             \
+	X(AIC, INT2, false)                                                                            \
 	X(ARRAY, TEXT, false)                                                                          \
 	X(ARRAY, TEXT, true)                                                                           \
 	X(DICTIONARY, TEXT, false)                                                                     \
