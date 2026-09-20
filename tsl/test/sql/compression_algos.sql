@@ -90,7 +90,6 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF
 \ir include/compression_test.sql
 DROP TABLE base_ints;
 
-
 ------------------------
 -- INT Compression --
 ------------------------
@@ -126,6 +125,109 @@ CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
 \ir include/compression_test.sql
 DROP TABLE base_time;
 
+---------------------------
+-- RR BIGINT Compression --
+---------------------------
+SELECT
+  $$
+  select item from base_ints order by rn
+  $$ AS "QUERY"
+\gset
+\set TABLE_NAME base_ints
+\set TYPE BIGINT
+\set COMPRESSION_CMD _timescaledb_internal.compress_rapid_raccoon(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
+
+-- random order
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
+-- ascending order with nulls
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (SELECT generate_series(1, 1000) item) sub;
+INSERT INTO base_ints VALUES (0, NULL), (10, NULL), (10000, NULL);
+\ir include/compression_test.sql
+
+SELECT c ints_text FROM compressed;
+
+DROP TABLE base_ints;
+
+-- single element
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (SELECT generate_series(1, 1) item) sub;
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
+-- really big deltas
+SELECT  9223372036854775807 as big_int_max \gset
+SELECT -9223372036854775808	 as big_int_min \gset
+CREATE TABLE base_ints AS SELECT row_number() over () as rn, item FROM
+    (
+        VALUES
+           --big deltas
+           (0), (:big_int_max), (:big_int_min), (:big_int_max), (:big_int_min),
+           (0), (:big_int_min), (32), (5), (:big_int_min), (-52), (:big_int_max),
+           (1000),
+           --big delta_deltas
+            (0), (:big_int_max), (:big_int_max), (:big_int_min), (:big_int_min), (:big_int_max), (:big_int_max),
+            (0), (:big_int_max-1), (:big_int_max-1), (:big_int_min), (:big_int_min), (:big_int_max-1), (:big_int_max-1)
+    ) as t(item);
+
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
+-- NULLs
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 5) item FROM generate_series(1::BIGINT, 10) i;
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 1) item FROM generate_series(1::BIGINT, 10) i;
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 10) item FROM generate_series(1::BIGINT, 10) i;
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8) item FROM generate_series(1::BIGINT, 10) i;
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
+
+------------------------
+-- RR INT Compression --
+------------------------
+
+CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::int FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
+SELECT
+  $$
+  select item::bigint from base_ints order by rn
+  $$ AS "QUERY"
+\gset
+\set TABLE_NAME base_ints
+\set TYPE BIGINT
+\set COMPRESSION_CMD _timescaledb_internal.compress_rapid_raccoon(item::bigint)
+\ir include/compression_test.sql
+DROP TABLE base_ints;
+
+--------------------------------
+-- RR TIMESTAMPTZ Compression --
+--------------------------------
+SELECT
+  $$
+  select item from base_time order by rn
+  $$ AS "QUERY"
+\gset
+\set TYPE TIMESTAMPTZ
+\set TABLE_NAME base_time
+\set COMPRESSION_CMD _timescaledb_internal.compress_rapid_raccoon(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::TIMESTAMPTZ)
+
+CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
+    (select sub.item from (SELECT generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') item) as sub ORDER BY mix(item)) sub;
+\ir include/compression_test.sql
+DROP TABLE base_time;
 
 ------------------------
 -- FLOAT4 Compression --

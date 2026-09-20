@@ -47,6 +47,10 @@ get_compression_algorithm(char *name)
 	{
 		return COMPRESSION_ALGORITHM_UUID;
 	}
+	else if (pg_strcasecmp(name, "rapid_raccoon") == 0)
+	{
+		return COMPRESSION_ALGORITHM_RAPID_RACCOON;
+	}
 
 	ereport(ERROR, (errmsg("unknown compression algorithm %s", name)));
 	return _INVALID_COMPRESSION_ALGORITHM;
@@ -63,6 +67,12 @@ get_compression_algorithm(char *name)
 #include "decompress_arithmetic_test_impl.c"
 
 #define ALGO DELTADELTA
+#define CTYPE int64
+#define PG_TYPE_PREFIX INT8
+#define DATUM_TO_CTYPE DatumGetInt64
+#include "decompress_arithmetic_test_impl.c"
+
+#define ALGO RAPID_RACCOON
 #define CTYPE int64
 #define PG_TYPE_PREFIX INT8
 #define DATUM_TO_CTYPE DatumGetInt64
@@ -98,6 +108,8 @@ get_compression_algorithm(char *name)
 	X(GORILLA, FLOAT8, false)                                                                      \
 	X(DELTADELTA, INT8, true)                                                                      \
 	X(DELTADELTA, INT8, false)                                                                     \
+	X(RAPID_RACCOON, INT8, true)                                                                   \
+	X(RAPID_RACCOON, INT8, false)                                                                  \
 	X(ARRAY, TEXT, false)                                                                          \
 	X(ARRAY, TEXT, true)                                                                           \
 	X(DICTIONARY, TEXT, false)                                                                     \

@@ -31,6 +31,7 @@
 #include "compression/algorithms/float_utils.h"
 #include "compression/algorithms/gorilla.h"
 #include "compression/algorithms/null.h"
+#include "compression/algorithms/rapid_raccoon.h"
 #include "compression/algorithms/simple8b_rle.h"
 #include "compression/algorithms/uuid_compress.h"
 #include "compression/arrow_c_data_interface.h"
@@ -484,6 +485,34 @@ test_delta()
 }
 
 static void
+test_rr()
+{
+	Compressor *compressor = rapid_raccoon_compressor_for_type(INT4OID);
+	Datum compressed;
+	DecompressionIterator *iter;
+	int i;
+	for (i = 0; i < TEST_ELEMENTS; i++)
+	{
+		compressor->append_val(compressor, Int32GetDatum(i));
+	}
+
+	compressed =
+		DirectFunctionCall1(tsl_rapid_raccoon_compressor_finish, PointerGetDatum(compressor));
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 17);
+
+	i = 0;
+	iter = rapid_raccoon_decompression_iterator_from_datum_forward(compressed, INT4OID);
+	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+	{
+		TestAssertTrue(!r.is_null);
+		TestAssertInt64Eq(DatumGetInt32(r.val), i);
+		i += 1;
+	}
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
+}
+
+static void
 test_delta2()
 {
 	DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
@@ -513,6 +542,49 @@ test_delta2()
 	iter = delta_delta_decompression_iterator_from_datum_forward(compressed, INT8OID);
 	for (DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter); !r.is_done;
 		 r = delta_delta_decompression_iterator_try_next_forward(iter))
+	{
+		TestAssertTrue(!r.is_null);
+		if (i % 2 != 0)
+		{
+			TestAssertInt64Eq(DatumGetInt64(r.val), 2 * i);
+		}
+		else
+		{
+			TestAssertInt64Eq(DatumGetInt64(r.val), i);
+		}
+		i += 1;
+	}
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
+}
+
+static void
+test_rr2()
+{
+	Compressor *compressor = rapid_raccoon_compressor_for_type(INT8OID);
+	Datum compressed;
+	DecompressionIterator *iter;
+	int i;
+	for (i = 0; i < TEST_ELEMENTS; i++)
+	{
+		/* prevent everything from being rle'd away */
+		if (i % 2 != 0)
+		{
+			compressor->append_val(compressor, Int64GetDatum((2 * i)));
+		}
+		else
+		{
+			compressor->append_val(compressor, Int64GetDatum(i));
+		}
+	}
+
+	compressed =
+		DirectFunctionCall1(tsl_rapid_raccoon_compressor_finish, PointerGetDatum(compressor));
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 618);
+
+	i = 0;
+	iter = rapid_raccoon_decompression_iterator_from_datum_forward(compressed, INT8OID);
+	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
 		TestAssertTrue(!r.is_null);
 		if (i % 2 != 0)
@@ -626,6 +698,103 @@ test_delta3(bool have_nulls, bool have_random)
 		}
 	}
 	r = delta_delta_decompression_iterator_try_next_reverse(iter);
+	TestAssertTrue(r.is_done);
+}
+
+static void
+test_rr3(bool have_nulls, bool have_random)
+{
+	Compressor *compressor = rapid_raccoon_compressor_for_type(INT8OID);
+	Datum compressed;
+
+	int64 values[TEST_ELEMENTS];
+	bool nulls[TEST_ELEMENTS];
+	for (int i = 0; i < TEST_ELEMENTS; i++)
+	{
+		if (have_random)
+		{
+			/* Also add some stretches of equal numbers. */
+			int base = i;
+			if (i % 37 < 4)
+			{
+				base = 1;
+			}
+			else if (i % 53 < 2)
+			{
+				base = 2;
+			}
+
+			values[i] = test_hash64(base);
+		}
+		else
+		{
+			values[i] = i;
+		}
+
+		if (have_nulls && i % 29 == 0)
+		{
+			nulls[i] = true;
+		}
+		else
+		{
+			nulls[i] = false;
+		}
+
+		if (nulls[i])
+		{
+			compressor->append_null(compressor);
+		}
+		else
+		{
+			compressor->append_val(compressor, Int64GetDatum(values[i]));
+		}
+	}
+
+	compressed = PointerGetDatum(compressor->finish(compressor));
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	/* Forward decompression. */
+	DecompressionIterator *iter =
+		rapid_raccoon_decompression_iterator_from_datum_forward(compressed, INT8OID);
+	ArrowArray *bulk_result =
+		rapid_raccoon_decompress_all(compressed, INT8OID, CurrentMemoryContext);
+	for (int i = 0; i < TEST_ELEMENTS; i++)
+	{
+		DecompressResult r = iter->try_next(iter);
+		TestAssertTrue(!r.is_done);
+		if (r.is_null)
+		{
+			TestAssertTrue(nulls[i]);
+			TestAssertTrue(!arrow_row_is_valid(bulk_result->buffers[0], i));
+		}
+		else
+		{
+			TestAssertTrue(!nulls[i]);
+			TestAssertTrue(arrow_row_is_valid(bulk_result->buffers[0], i));
+			TestAssertTrue(values[i] == DatumGetInt64(r.val));
+			TestAssertTrue(values[i] == ((int64 *) bulk_result->buffers[1])[i]);
+		}
+	}
+	DecompressResult r = iter->try_next(iter);
+	TestAssertTrue(r.is_done);
+
+	/* Reverse decompression. */
+	iter = rapid_raccoon_decompression_iterator_from_datum_reverse(compressed, INT8OID);
+	for (int i = TEST_ELEMENTS - 1; i >= 0; i--)
+	{
+		DecompressResult r = iter->try_next(iter);
+		TestAssertTrue(!r.is_done);
+		if (r.is_null)
+		{
+			TestAssertTrue(nulls[i]);
+		}
+		else
+		{
+			TestAssertTrue(!nulls[i]);
+			TestAssertTrue(values[i] == DatumGetInt64(r.val));
+		}
+	}
+	r = iter->try_next(iter);
 	TestAssertTrue(r.is_done);
 }
 
@@ -1718,6 +1887,13 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_null();
 	test_simple8b_rle();
 	test_uuid();
+
+	test_rr();
+	test_rr2();
+	test_rr3(/* have_nulls = */ false, /* have_random = */ false);
+	test_rr3(/* have_nulls = */ false, /* have_random = */ true);
+	test_rr3(/* have_nulls = */ true, /* have_random = */ false);
+	test_rr3(/* have_nulls = */ true, /* have_random = */ true);
 
 	/* Some tests for zig-zag encoding overflowing the original element width. */
 	test_delta4(test_delta4_case1, sizeof(test_delta4_case1) / sizeof(*test_delta4_case1));

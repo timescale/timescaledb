@@ -22,6 +22,7 @@
 #include "compression/algorithms/deltadelta.h"
 #include "compression/algorithms/dictionary.h"
 #include "compression/algorithms/gorilla.h"
+#include "compression/algorithms/rapid_raccoon.h"
 #include "compression/algorithms/uuid_compress.h"
 #include "compression/api.h"
 #include "compression/compression.h"
@@ -152,6 +153,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compressed_data_has_nulls = tsl_compressed_data_has_nulls,
 	.deltadelta_compressor_append = tsl_deltadelta_compressor_append,
 	.deltadelta_compressor_finish = tsl_deltadelta_compressor_finish,
+	.rapid_raccoon_compressor_append = tsl_rapid_raccoon_compressor_append,
+	.rapid_raccoon_compressor_finish = tsl_rapid_raccoon_compressor_finish,
 	.gorilla_compressor_append = tsl_gorilla_compressor_append,
 	.gorilla_compressor_finish = tsl_gorilla_compressor_finish,
 	.dictionary_compressor_append = tsl_dictionary_compressor_append,

@@ -131,10 +131,12 @@ jobs:
       fail-fast: false
       matrix:
         case: [
-            { algo: gorilla   , pgtype: float8, bulk: false, runs:   500000000 },
-            { algo: deltadelta, pgtype: int8  , bulk: false, runs:   500000000 },
-            { algo: gorilla   , pgtype: float8, bulk: true , runs:  1000000000 },
-            { algo: deltadelta, pgtype: int8  , bulk: true , runs:  1000000000 },
+            { algo: gorilla      , pgtype: float8, bulk: false, runs:   500000000 },
+            { algo: deltadelta   , pgtype: int8  , bulk: false, runs:   500000000 },
+            { algo: rapid_raccoon, pgtype: int8  , bulk: false, runs:   500000000 },
+            { algo: gorilla      , pgtype: float8, bulk: true , runs:  1000000000 },
+            { algo: deltadelta   , pgtype: int8  , bulk: true , runs:  1000000000 },
+            { algo: rapid_raccoon, pgtype: int8  , bulk: true , runs:  1000000000 },
             # array has a peculiar recv function that recompresses all input, so
             # fuzzing it is much slower. The dictionary recv also uses it.
             { algo: array     , pgtype: text  , bulk: false, runs:    10000000 },

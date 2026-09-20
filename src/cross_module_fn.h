@@ -157,6 +157,8 @@ typedef struct CrossModuleFunctions
 	PGFunction decompress_batch;
 	PGFunction deltadelta_compressor_append;
 	PGFunction deltadelta_compressor_finish;
+	PGFunction rapid_raccoon_compressor_append;
+	PGFunction rapid_raccoon_compressor_finish;
 	PGFunction gorilla_compressor_append;
 	PGFunction gorilla_compressor_finish;
 	PGFunction dictionary_compressor_append;

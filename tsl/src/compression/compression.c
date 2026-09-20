@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include "compression/compression.h"
 #include <access/attmap.h>
 #include <access/attnum.h>
 #include <access/detoast.h>
@@ -39,6 +40,7 @@
 #include "algorithms/dictionary.h"
 #include "algorithms/gorilla.h"
 #include "algorithms/null.h"
+#include "algorithms/rapid_raccoon.h"
 #include "algorithms/uuid_compress.h"
 #include "batch_metadata_builder.h"
 #include "chunk_insert_state.h"
@@ -80,6 +82,7 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_NULL] = NULL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_UUID] = UUID_COMPRESS_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_RAPID_RACCOON] = RAPID_RACCOON_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -91,6 +94,7 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
 	[COMPRESSION_ALGORITHM_NULL] = { "NULL" },
 	[COMPRESSION_ALGORITHM_UUID] = { "UUID" },
+	[COMPRESSION_ALGORITHM_RAPID_RACCOON] = { "RAPID_RACCOON" },
 };
 
 Name
@@ -3266,6 +3270,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_UUID:
 			has_nulls = uuid_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_RAPID_RACCOON:
+			has_nulls = rapid_raccoon_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -3313,6 +3320,9 @@ compressed_data_has_nulls(Datum compressed_data)
 		case COMPRESSION_ALGORITHM_UUID:
 			has_nulls = uuid_compressed_has_nulls(header);
 			break;
+		case COMPRESSION_ALGORITHM_RAPID_RACCOON:
+			has_nulls = rapid_raccoon_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -3356,7 +3366,14 @@ compression_get_default_algorithm(Oid typeoid)
 		case DATEOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-			return COMPRESSION_ALGORITHM_DELTADELTA;
+			if (ts_guc_enable_rapid_raccoon_compression)
+			{
+				return COMPRESSION_ALGORITHM_RAPID_RACCOON;
+			}
+			else
+			{
+				return COMPRESSION_ALGORITHM_DELTADELTA;
+			}
 
 		case FLOAT4OID:
 		case FLOAT8OID:
