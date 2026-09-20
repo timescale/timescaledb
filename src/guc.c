@@ -132,7 +132,7 @@ TSDLLEXPORT bool ts_guc_enable_in_memory_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
-TSDLLEXPORT bool ts_guc_enable_rapid_raccoon_compression = false;
+TSDLLEXPORT bool ts_guc_enable_rapid_raccoon_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = TARGET_COMPRESSED_BATCH_SIZE;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
@@ -1201,7 +1201,7 @@ _guc_init(void)
 							 "Enable rapid raccoon integer compression functionality",
 							 "Enable rapid raccoon integer compression",
 							 &ts_guc_enable_rapid_raccoon_compression,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
