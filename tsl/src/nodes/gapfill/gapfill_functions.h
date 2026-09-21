@@ -21,3 +21,7 @@ extern Datum gapfill_timestamp_time_bucket(PG_FUNCTION_ARGS);
 extern Datum gapfill_timestamptz_time_bucket(PG_FUNCTION_ARGS);
 extern Datum gapfill_timestamptz_timezone_time_bucket(PG_FUNCTION_ARGS);
 extern Datum gapfill_date_time_bucket(PG_FUNCTION_ARGS);
+extern Datum gapfill_timestamp_offset_bucket(PG_FUNCTION_ARGS);
+extern Datum gapfill_timestamptz_offset_bucket(PG_FUNCTION_ARGS);
+extern Datum gapfill_date_offset_bucket(PG_FUNCTION_ARGS);
+extern Datum gapfill_timestamptz_timezone_offset_bucket(PG_FUNCTION_ARGS);
