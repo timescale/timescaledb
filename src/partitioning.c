@@ -508,3 +508,12 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 
 	PG_RETURN_INT32(res);
 }
+
+/*
+ * Check whether the partitioning function is get_partition_hash.
+ */
+bool
+ts_partitioning_func_is_partition_hash(const PartitioningFunc *pf)
+{
+	return pf->func_fmgr.fn_addr == ts_get_partition_hash;
+}
