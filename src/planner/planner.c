@@ -1071,6 +1071,23 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 						return true;
 					}
 				}
+
+				/*
+				 * On the parameterized side of a nested loop the clauses
+				 * referencing the outer relations are not part of
+				 * baserestrictinfo but in ppi_clauses. Those clauses can be
+				 * used for runtime exclusion when they compare a partitioning
+				 * column.
+				 */
+				if (ts_guc_enable_runtime_exclusion && ht != NULL && path->param_info != NULL &&
+					ts_chunk_append_clauses_allow_exclusion(root,
+															path->param_info->ppi_clauses,
+															rel->relid,
+															ht))
+				{
+					return true;
+				}
+
 				return false;
 				break;
 			}

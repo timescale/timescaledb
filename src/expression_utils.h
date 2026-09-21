@@ -10,6 +10,8 @@
 
 #include "export.h"
 
+extern TSDLLEXPORT Node *ts_strip_relabel_types(Node *node);
+
 bool TSDLLEXPORT ts_extract_expr_args(Expr *expr, Var **var, Expr **arg_value, Oid *opno,
 									  Oid *opcode);
 

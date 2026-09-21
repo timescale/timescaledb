@@ -107,6 +107,7 @@ extern Expr *ts_transform_nested_time_bucket_comparison(Expr *);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);
+extern Expr *ts_space_constraint_for_param(PlannerInfo *root, Index relid, Expr *clause);
 
 extern TSDLLEXPORT void ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid,
 															 Hypertable *hypertable);

@@ -171,6 +171,8 @@ extern TSDLLEXPORT Dimension *ts_hyperspace_get_mutable_dimension(Hyperspace *hs
 																  DimensionType type, Index n);
 extern TSDLLEXPORT const Dimension *
 ts_hyperspace_get_dimension_by_name(const Hyperspace *hs, DimensionType type, const char *name);
+extern TSDLLEXPORT const Dimension *
+ts_hyperspace_get_dimension_by_attno(const Hyperspace *hs, DimensionType type, AttrNumber attno);
 extern TSDLLEXPORT Dimension *
 ts_hyperspace_get_mutable_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
 extern DimensionVec *ts_dimension_get_slices(const Dimension *dim);
