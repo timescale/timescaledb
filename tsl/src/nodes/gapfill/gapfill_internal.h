@@ -97,12 +97,20 @@ typedef struct GapFillState
 	/* arguments of the gapfill function call */
 	List *args;
 	bool have_timezone;
+	bool have_offset;
 	int64 gapfill_start;
 	int64 gapfill_end;
-	/* bucket width for fixed-size buckets */
+	/* bucket width for integer buckets */
 	int64 gapfill_period;
-	/* bucket width when bucketing by month */
+	/* bucket width for date/time buckets */
 	Interval *gapfill_interval;
+
+	/* used when offset or bucket width is variable-size or when we deal with time zone */
+	Interval *offset_interval;
+
+	/* non-default origin used to adjust timestamp with time zone after advancing it */
+	bool have_origin;
+	int64 origin;
 
 	int64 next_timestamp;
 	/* interval offset for next_timestamp from gapfill_start */

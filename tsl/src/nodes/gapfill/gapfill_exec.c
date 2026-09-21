@@ -140,27 +140,13 @@ gapfill_internal_get_datum(int64 value, Oid type)
 static Expr *
 get_start_arg(GapFillState *state)
 {
-	if (!state->have_timezone)
-	{
-		return lthird(state->args);
-	}
-	else
-	{
-		return lfourth(state->args);
-	}
+	return list_nth(state->args, list_length(state->args) - 2);
 }
 
 static Expr *
 get_finish_arg(GapFillState *state)
 {
-	if (!state->have_timezone)
-	{
-		return lfourth(state->args);
-	}
-	else
-	{
-		return lfifth(state->args);
-	}
+	return llast(state->args);
 }
 
 static Expr *
@@ -168,6 +154,34 @@ get_timezone_arg(GapFillState *state)
 {
 	Assert(state->have_timezone);
 	return lthird(state->args);
+}
+
+static Expr *
+get_offset_arg(GapFillState *state)
+{
+	Assert(state->have_offset);
+	if (state->have_timezone)
+	{
+		return lfourth(state->args);
+	}
+	else
+	{
+		return lthird(state->args);
+	}
+}
+
+static Expr *
+get_origin_arg(GapFillState *state)
+{
+	Assert(state->have_offset && !gapfill_is_integer_bucket(state->args));
+	if (state->have_timezone)
+	{
+		return lfifth(state->args);
+	}
+	else
+	{
+		return lfourth(state->args);
+	}
 }
 
 int64
@@ -230,7 +244,17 @@ gapfill_state_create(CustomScan *cscan)
 	state->csstate.methods = &gapfill_state_methods;
 	state->subplan = linitial(cscan->custom_plans);
 	state->args = list_nth(cscan->custom_private, GFP_Args);
-	state->have_timezone = list_length(state->args) == 5;
+
+	/* Can have offset, cannot have origin or timezone */
+	if (gapfill_is_integer_bucket(state->args))
+	{
+		state->have_offset = list_length(state->args) == 5;
+	}
+	else
+	{
+		state->have_timezone = (list_length(state->args) == 5 || list_length(state->args) == 7);
+		state->have_offset = list_length(state->args) >= 6;
+	}
 
 	return (Node *) state;
 }
@@ -239,6 +263,13 @@ bool
 gapfill_is_const_null(Expr *expr)
 {
 	return IsA(expr, Const) && castNode(Const, expr)->constisnull;
+}
+
+bool
+gapfill_is_integer_bucket(List *args)
+{
+	Oid bucket_type = exprType(lsecond(args));
+	return (bucket_type == INT2OID || bucket_type == INT4OID || bucket_type == INT8OID);
 }
 
 /*
@@ -365,8 +396,7 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 
 	if (state->have_timezone)
 	{
-		if (IsA(get_timezone_arg(state), Const) &&
-			castNode(Const, get_timezone_arg(state))->constisnull)
+		if (gapfill_is_const_null(get_timezone_arg(state)))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -380,6 +410,22 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 	{
 		time_bucket->args = list_make2(linitial(time_bucket->args), expr);
 	}
+
+	if (state->have_offset)
+	{
+		time_bucket->args = lappend(time_bucket->args, get_offset_arg(state));
+		if (!gapfill_is_integer_bucket(state->args))
+		{
+			time_bucket->args = lappend(time_bucket->args, get_origin_arg(state));
+		}
+		/* For integer buckets we expect 5 arguments to disambiguate gapfill with offset */
+		else
+		{
+			time_bucket->args = lappend(time_bucket->args, get_start_arg(state));
+			time_bucket->args = lappend(time_bucket->args, get_finish_arg(state));
+		}
+	}
+
 	value = gapfill_exec_expr(state, state->scanslot, (Expr *) time_bucket, &isnull);
 
 	/* start expression must not evaluate to NULL */
@@ -727,7 +773,109 @@ make_const_value_for_gapfill_internal(Oid typid, int64 value)
 static void
 gapfill_advance_timestamp(GapFillState *state)
 {
+	Datum tzname;
+	if (state->have_timezone)
+	{
+		bool isnull;
+		/* TODO: optimize by constifying and caching the datum if possible */
+		tzname = gapfill_exec_expr(state, state->scanslot, get_timezone_arg(state), &isnull);
+		Assert(!isnull);
+	}
+
 	Datum next;
+
+	/* Do not use (gapfill_start + (next_offset + gapfill_interval)) to advance timestamp
+	 * as gapfill_interval can be variable-size.
+	 * Instead use bucket_offset(next_timestamp + gapfill_interval)
+	 * i.e. derive next timestamp from previous timestamp with offset adjustment */
+	if (state->offset_interval)
+	{
+		switch (state->gapfill_typid)
+		{
+			case TIMESTAMPOID:
+			{
+				Timestamp candidate = state->next_timestamp;
+				Datum candidate_datum = TimestampGetDatum(state->next_timestamp);
+				while (candidate <= state->next_timestamp)
+				{
+					/* Get next candidate before adjusting for offset:
+					 * (candidate + gapfill_interval) */
+					candidate_datum =
+						DirectFunctionCall2(timestamp_pl_interval,
+											candidate_datum,
+											IntervalPGetDatum(state->gapfill_interval));
+					/* Adjust candidate for offset.
+					 * It may land into the same bucket instead of advancing. */
+					next = DirectFunctionCall3(ts_timestamp_offset_bucket,
+											   IntervalPGetDatum(state->gapfill_interval),
+											   candidate_datum,
+											   IntervalPGetDatum(state->offset_interval));
+					candidate = DatumGetTimestamp(next);
+				}
+				state->next_timestamp = candidate;
+			}
+			break;
+			case TIMESTAMPTZOID:
+			{
+				TimestampTz candidate = state->next_timestamp;
+				Datum candidate_datum = TimestampTzGetDatum(state->next_timestamp);
+				while (candidate <= state->next_timestamp)
+				{
+					/* Get next candidate before adjusting for offset:
+					 * (candidate + gapfill_interval) */
+					candidate_datum =
+						DirectFunctionCall2(timestamptz_pl_interval,
+											candidate_datum,
+											IntervalPGetDatum(state->gapfill_interval));
+					/* Adjust candidate for offset.
+					 * It may land into the same bucket instead of advancing. */
+					if (state->have_timezone)
+					{
+						/* Apply offset in UTC space to avoid DST issues (issue #7059). */
+						next = DirectFunctionCall2(timestamptz_mi_interval,
+												   candidate_datum,
+												   IntervalPGetDatum(state->offset_interval));
+
+						/* Adjust the result according to time zone */
+						if (state->have_origin)
+						{
+							next = DirectFunctionCall4(ts_timestamptz_timezone_bucket,
+													   IntervalPGetDatum(state->gapfill_interval),
+													   next,
+													   tzname,
+													   TimestampTzGetDatum(state->origin));
+						}
+						else
+						{
+							next = DirectFunctionCall3(ts_timestamptz_timezone_bucket,
+													   IntervalPGetDatum(state->gapfill_interval),
+													   next,
+													   tzname);
+						}
+
+						/* Remove offset in UTC space. */
+						next = DirectFunctionCall2(timestamptz_pl_interval,
+												   next,
+												   IntervalPGetDatum(state->offset_interval));
+					}
+					else
+					{
+						next = DirectFunctionCall3(ts_timestamptz_offset_bucket,
+												   IntervalPGetDatum(state->gapfill_interval),
+												   candidate_datum,
+												   IntervalPGetDatum(state->offset_interval));
+					}
+					candidate = DatumGetTimestampTz(next);
+				}
+				state->next_timestamp = candidate;
+			}
+			break;
+			default:
+				pg_unreachable();
+				break;
+		}
+		return;
+	}
 
 	switch (state->gapfill_typid)
 	{
@@ -751,12 +899,6 @@ gapfill_advance_timestamp(GapFillState *state)
 			 */
 			if (state->have_timezone)
 			{
-				bool isnull;
-				/* TODO: optimize by constifying and caching the datum if possible */
-				Datum tzname =
-					gapfill_exec_expr(state, state->scanslot, get_timezone_arg(state), &isnull);
-				Assert(!isnull);
-
 				if (state->next_offset->day != 0 || state->next_offset->month != 0)
 				{
 					/*
@@ -799,7 +941,19 @@ gapfill_advance_timestamp(GapFillState *state)
 						local_ts = DirectFunctionCall2(timestamptz_zone,
 													   tzname,
 													   TimestampTzGetDatum(candidate));
-						local_bucket = DirectFunctionCall2(ts_timestamp_bucket, period, local_ts);
+						if (state->have_origin)
+						{
+							Datum origin = DirectFunctionCall2(timestamptz_zone,
+															   tzname,
+															   TimestampTzGetDatum(state->origin));
+							local_bucket =
+								DirectFunctionCall3(ts_timestamp_bucket, period, local_ts, origin);
+						}
+						else
+						{
+							local_bucket =
+								DirectFunctionCall2(ts_timestamp_bucket, period, local_ts);
+						}
 						next = DirectFunctionCall2(timestamp_zone, tzname, local_bucket);
 
 						/*
@@ -876,6 +1030,66 @@ gapfill_initialize_arguments(GapFillState *state)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg(
 					 "invalid time_bucket_gapfill argument: bucket_width must be greater than 0")));
+	}
+
+	if (state->have_offset)
+	{
+		if (!gapfill_is_simple_expr(get_offset_arg(state)))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time_bucket_gapfill argument: offset must be a simple "
+							"expression")));
+		}
+		if (!gapfill_is_integer_bucket(state->args) &&
+			!gapfill_is_simple_expr(get_origin_arg(state)))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time_bucket_gapfill argument: origin must be a simple "
+							"expression")));
+		}
+	}
+
+	/* offset interval for variable size offset or bucket */
+	if (state->have_offset &&
+		(state->gapfill_typid == TIMESTAMPTZOID || state->gapfill_typid == TIMESTAMPOID))
+	{
+		Expr *offset = get_offset_arg(state);
+		if (!gapfill_is_const_null(offset))
+		{
+			arg_value = gapfill_exec_expr(state, NULL, offset, &isnull);
+			Interval *interval_arg = DatumGetIntervalP(arg_value);
+
+			/* Ignore offset of 0 or NULL */
+			if (!isnull &&
+				(interval_arg->time != 0 || interval_arg->day != 0 || interval_arg->month != 0))
+			{
+				Assert(state->gapfill_interval);
+
+				/* Have to deal with variable-size results of applying offset */
+				if (state->have_timezone || interval_arg->day != 0 || interval_arg->month != 0 ||
+					state->gapfill_interval->day != 0 || state->gapfill_interval->month != 0)
+				{
+					state->offset_interval = interval_arg;
+				}
+			}
+		}
+	}
+
+	/* origin for timestamps with time zone */
+	if (state->have_offset && state->have_timezone && state->gapfill_typid == TIMESTAMPTZOID)
+	{
+		Expr *origin = get_origin_arg(state);
+		if (!gapfill_is_const_null(origin))
+		{
+			arg_value = gapfill_exec_expr(state, NULL, origin, &isnull);
+			if (!isnull)
+			{
+				state->origin = gapfill_datum_get_internal(arg_value, state->gapfill_typid);
+				state->have_origin = true;
+			}
+		}
 	}
 
 	/*
