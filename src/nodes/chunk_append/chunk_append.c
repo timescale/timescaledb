@@ -11,13 +11,17 @@
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
 #include <utils/builtins.h>
+#include <utils/lsyscache.h>
 #include <utils/typcache.h>
 
 #include "chunk.h"
+#include "dimension.h"
 #include "dimension_slice.h"
+#include "expression_utils.h"
 #include "func_cache.h"
 #include "guc.h"
 #include "nodes/chunk_append/chunk_append.h"
+#include "partitioning.h"
 #include "planner/planner.h"
 
 static Var *find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions);
@@ -183,6 +187,147 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *patht
 	return new;
 }
 
+typedef struct PartitioningComparisonContext
+{
+	Index relid;
+	const Hypertable *ht;
+} PartitioningComparisonContext;
+
+/*
+ * Check whether this is the expression the chunk constraints of an open
+ * dimension are on: the column itself, or the partitioning function applied
+ * to the column when the dimension has one. A relabel around the column
+ * appears when it is compared through the operators of a binary compatible
+ * type.
+ */
+static bool
+is_open_dimension_expr(Node *node, PartitioningComparisonContext *context)
+{
+	Oid funcid = InvalidOid;
+
+	node = ts_strip_relabel_types(node);
+
+	if (IsA(node, FuncExpr) && list_length(castNode(FuncExpr, node)->args) == 1)
+	{
+		funcid = castNode(FuncExpr, node)->funcid;
+		node = ts_strip_relabel_types(linitial(castNode(FuncExpr, node)->args));
+	}
+
+	if (!IsA(node, Var))
+	{
+		return false;
+	}
+
+	Var *var = castNode(Var, node);
+
+	/*
+	 * varattno 0 is whole row and varattno less than zero are system columns
+	 * so we skip those
+	 */
+	if ((Index) var->varno != context->relid || var->varlevelsup != 0 || var->varattno <= 0)
+	{
+		return false;
+	}
+
+	const Dimension *dim = ts_hyperspace_get_dimension_by_attno(context->ht->space,
+																DIMENSION_TYPE_OPEN,
+																var->varattno);
+
+	if (dim == NULL)
+	{
+		return false;
+	}
+
+	return funcid ==
+		   (dim->partitioning != NULL ? dim->partitioning->partfunc.func_fmgr.fn_oid : InvalidOid);
+}
+
+/*
+ * Check whether this is a comparison on an open dimension. Only operators of
+ * the default btree operator family can contradict the constraints of a chunk.
+ */
+static bool
+is_open_dimension_comparison(Oid opno, List *args, PartitioningComparisonContext *context)
+{
+	ListCell *lc;
+
+	if (list_length(args) != 2)
+	{
+		return false;
+	}
+
+	foreach (lc, args)
+	{
+		if (is_open_dimension_expr(lfirst(lc), context))
+		{
+			TypeCacheEntry *tce = lookup_type_cache(exprType(lfirst(lc)), TYPECACHE_BTREE_OPFAMILY);
+
+			return op_in_opfamily(opno, tce->btree_opf);
+		}
+	}
+
+	return false;
+}
+
+static bool
+open_dimension_comparison_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, OpExpr) && is_open_dimension_comparison(castNode(OpExpr, node)->opno,
+														  castNode(OpExpr, node)->args,
+														  context))
+	{
+		return true;
+	}
+
+	if (IsA(node, ScalarArrayOpExpr) &&
+		is_open_dimension_comparison(castNode(ScalarArrayOpExpr, node)->opno,
+									 castNode(ScalarArrayOpExpr, node)->args,
+									 context))
+	{
+		return true;
+	}
+
+	return expression_tree_walker(node, open_dimension_comparison_walker, context);
+}
+
+/*
+ * Check whether any of the clauses can contradict the constraints of a chunk.
+ * Without such a clause there is nothing to gain from checking every chunk.
+ *
+ * For an open dimension any comparison inside the clause can contradict the
+ * range constraints of a chunk. A closed dimension needs a clause on the
+ * partition hash, which we can only derive when the clause itself is an
+ * equality on the column.
+ */
+static bool
+clauses_allow_exclusion(PlannerInfo *root, List *clauses, Index relid, const Hypertable *ht)
+{
+	PartitioningComparisonContext context = { .relid = relid, .ht = ht };
+	ListCell *lc;
+
+	foreach (lc, clauses)
+	{
+		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+		if (open_dimension_comparison_walker((Node *) rinfo->clause, &context))
+		{
+			return true;
+		}
+
+		if (ts_make_partition_hash_clause(root, root->parse->rtable, relid, rinfo->clause) != NULL)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 Path *
 ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, Path *subpath,
 							bool parallel_aware, bool ordered)
@@ -252,6 +397,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	/*
 	 * check if we should do startup and runtime exclusion
 	 */
+	List *join_param_clauses = NIL;
+
 	foreach (lc, rel->baserestrictinfo)
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
@@ -271,77 +418,43 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 
 		if (ts_guc_enable_runtime_exclusion && ts_contains_join_param((Node *) rinfo->clause))
 		{
-			ListCell *lc_var;
-
-			/* We have two types of exclusion:
-			 *
-			 * Parent exclusion fires if the entire hypertable can be excluded.
-			 * This happens if doing things like joining against a parameter
-			 * value that is an empty array or NULL. It doesn't happen often,
-			 * but when it does, it speeds up the query immensely. It's also cheap
-			 * to check for this condition as you check this once per hypertable
-			 * at runtime.
-			 *
-			 * Child exclusion works by seeing if there is a contradiction between
-			 * the chunks constraints and the expression on parameter values. For example,
-			 * it can evaluate whether a time parameter from a subquery falls outside
-			 * the range of the chunk. It is more widely applicable than the parent
-			 * exclusion but is also more expensive to evaluate since you have to perform
-			 * the check on every chunk. Child exclusion can only apply if one of the quals
-			 * involves a partitioning column.
-			 *
-			 */
-			path->runtime_exclusion_parent = true;
-			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, PVC_RECURSE_PLACEHOLDERS))
-			{
-				Var *var = lfirst(lc_var);
-				/*
-				 * varattno 0 is whole row and varattno less than zero are
-				 * system columns so we skip those even though
-				 * ts_is_partitioning_column would return the correct
-				 * answer for those as well
-				 */
-				if ((Index) var->varno == rel->relid && var->varattno > 0 &&
-					ts_is_partitioning_column(ht, var->varattno))
-				{
-					path->runtime_exclusion_children = true;
-					break;
-				}
-			}
+			join_param_clauses = lappend(join_param_clauses, rinfo);
 		}
 	}
 
 	/*
-	 * For parameterized paths (e.g., inner side of LATERAL joins), also check
-	 * ppi_clauses for runtime exclusion. Any clause in ppi_clauses references
-	 * outer relations by definition.
+	 * For parameterized paths (e.g., inner side of LATERAL joins) the clauses
+	 * referencing the outer relations are not part of baserestrictinfo but in
+	 * ppi_clauses, so we have to look at those as well.
 	 */
-	if (ts_guc_enable_runtime_exclusion && subpath->param_info != NULL &&
-		subpath->param_info->ppi_clauses != NIL)
+	if (ts_guc_enable_runtime_exclusion && subpath->param_info != NULL)
+	{
+		join_param_clauses = list_concat(join_param_clauses, subpath->param_info->ppi_clauses);
+	}
+
+	/* We have two types of exclusion:
+	 *
+	 * Parent exclusion fires if the entire hypertable can be excluded.
+	 * This happens if doing things like joining against a parameter
+	 * value that is an empty array or NULL. It doesn't happen often,
+	 * but when it does, it speeds up the query immensely. It's also cheap
+	 * to check for this condition as you check this once per hypertable
+	 * at runtime.
+	 *
+	 * Child exclusion works by seeing if there is a contradiction between
+	 * the chunks constraints and the expression on parameter values. For example,
+	 * it can evaluate whether a time parameter from a subquery falls outside
+	 * the range of the chunk. It is more widely applicable than the parent
+	 * exclusion but is also more expensive to evaluate since you have to perform
+	 * the check on every chunk. Child exclusion can only apply if one of the quals
+	 * involves a partitioning column.
+	 *
+	 */
+	if (join_param_clauses != NIL)
 	{
 		path->runtime_exclusion_parent = true;
-
-		/* Check if any clause involves a partitioning column for child exclusion */
-		foreach (lc, subpath->param_info->ppi_clauses)
-		{
-			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
-			ListCell *lc_var;
-
-			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, PVC_RECURSE_PLACEHOLDERS))
-			{
-				Var *var = lfirst(lc_var);
-				if ((Index) var->varno == rel->relid && var->varattno > 0 &&
-					ts_is_partitioning_column(ht, var->varattno))
-				{
-					path->runtime_exclusion_children = true;
-					break;
-				}
-			}
-			if (path->runtime_exclusion_children)
-			{
-				break;
-			}
-		}
+		path->runtime_exclusion_children =
+			clauses_allow_exclusion(root, join_param_clauses, rel->relid, ht);
 	}
 
 	/*

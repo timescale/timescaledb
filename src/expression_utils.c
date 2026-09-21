@@ -18,6 +18,24 @@
 #include "expression_utils.h"
 
 /*
+ * Remove any RelabelType from the expression to get at the underlying
+ * expression. Unlike strip_implicit_coercions we also strip explicit casts
+ * since a RelabelType never changes the value. Note that it does not have to
+ * keep the sort order, so callers that rely on an order have to check the
+ * operator family separately.
+ */
+Node *
+ts_strip_relabel_types(Node *node)
+{
+	while (node != NULL && IsA(node, RelabelType))
+	{
+		node = (Node *) castNode(RelabelType, node)->arg;
+	}
+
+	return node;
+}
+
+/*
  * This function is meant to extract the expression components to be used in a ScanKey.
  *
  * It will work on the following expression types:
@@ -68,14 +86,8 @@ ts_extract_expr_args(Expr *expr, Var **var, Expr **arg_value, Oid *opno, Oid *op
 	Expr *leftop = linitial(args);
 	Expr *rightop = lsecond(args);
 
-	if (IsA(leftop, RelabelType))
-	{
-		leftop = castNode(RelabelType, leftop)->arg;
-	}
-	if (IsA(rightop, RelabelType))
-	{
-		rightop = castNode(RelabelType, rightop)->arg;
-	}
+	leftop = (Expr *) ts_strip_relabel_types((Node *) leftop);
+	rightop = (Expr *) ts_strip_relabel_types((Node *) rightop);
 
 	if (IsA(leftop, Var) && !IsA(rightop, Var))
 	{

@@ -44,6 +44,7 @@ typedef struct PartitioningInfo
 } PartitioningInfo;
 
 extern Oid ts_partitioning_func_get_closed_default(void);
+extern bool ts_partitioning_func_is_partition_hash(const PartitioningFunc *pf);
 extern bool ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype, Oid argtype);
 
 extern PartitioningInfo *ts_partitioning_info_create(const char *schema, const char *partfunc,
