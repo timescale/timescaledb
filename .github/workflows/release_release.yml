@@ -90,3 +90,40 @@ jobs:
           gh release edit "${{ inputs.version }}" \
             --draft=false \
             --latest
+
+  build_docker_image:
+    name: Build Docker image
+    needs: publish_release
+    uses: timescale/timescaledb-docker/.github/workflows/docker-image.yml@main
+    with:
+      version: ${{ inputs.version }}
+      tag_latest: true
+      registry: prod
+    secrets: inherit
+
+  build_apt_packages:
+    name: Build APT packages
+    needs: publish_release
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-apt.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
+
+  build_rpm_packages:
+    name: Build RPM packages
+    needs: publish_release
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-rpm.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
+
+  build_homebrew_packages:
+    name: Build Homebrew package
+    needs: publish_release
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-homebrew.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit

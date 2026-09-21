@@ -13,6 +13,7 @@ name: "Packaging tests: APT"
     - release_test
     - trigger/package_test
   workflow_dispatch:
+  workflow_call:
 jobs:
   apt_tests:
     name: APT ${{ matrix.arch }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
@@ -144,4 +145,3 @@ jobs:
       if: always()
       run: |
         cat /var/log/postgresql/postgresql-${{ matrix.pg }}-main.log
-

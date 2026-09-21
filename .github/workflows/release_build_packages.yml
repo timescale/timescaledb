@@ -1,90 +1,94 @@
-name: "Packaging: Build distributions"
+name: "Release: Build packages"
 
-"on":
-  release:
-    types: [published]
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
 
 jobs:
-  update:
+  build_docker_image:
+    name: Build Docker image
+    uses: timescale/timescaledb-docker/.github/workflows/docker-image.yml@main
+    with:
+      version: ${{ inputs.version }}
+      tag_latest: true
+      registry: prod
+    secrets: inherit
+
+  docker_image_cooldown:
+    name: Docker image propagation cooldown
+    needs: build_docker_image
     runs-on: ubuntu-latest
-
     steps:
-    - name: Initialize build summary
-      run: |
-        echo "# 📦 Distribution Package Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Version:** \`${{ github.event.release.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "**URL:** [${{ github.event.release.name }}](${{ github.event.release.html_url }})" >> $GITHUB_STEP_SUMMARY
-        echo "**Triggered at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "## 🚀 Build Status" >> $GITHUB_STEP_SUMMARY
-        echo "| Package | Status | Workflow |" >> $GITHUB_STEP_SUMMARY
-        echo "| --- | --- | --- |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+      - name: Wait for image propagation
+        run: sleep 15
 
-        echo "HAS_FAILURES=false" >> $GITHUB_ENV
+  test_docker_images:
+    name: Test Docker images
+    needs: docker_image_cooldown
+    uses: ./.github/workflows/docker-images.yaml
 
-    - name: Build Docker Image
-      env:
-        GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-      run: |
-        echo "🐳 Triggering Docker image build..." | tee -a build.log
-        if gh workflow run docker-image.yml -R timescale/timescaledb-docker -f version=${{ github.event.release.tag_name }} -f tag_latest=true -f registry=prod; then
-          echo "| 🐳 Docker Image | ✅ Triggered | [timescaledb-docker](https://github.com/timescale/timescaledb-docker/actions/workflows/docker-image.yml) |" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "| 🐳 Docker Image | ❌ Failed | [timescaledb-docker](https://github.com/timescale/timescaledb-docker/actions/workflows/docker-image.yml) |" >> $GITHUB_STEP_SUMMARY
-          echo "HAS_FAILURES=true" >> $GITHUB_ENV
-        fi
+  build_apt_packages:
+    name: Build APT packages
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-apt.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
 
-    - name: Build APT Packages
-      env:
-        GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-      run: |
-        echo "🐧 Triggering APT package build..." | tee -a build.log
-        if gh workflow run timescaledb-apt.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 🐧 APT Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-apt.yml) |" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "| 🐧 APT Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-apt.yml) |" >> $GITHUB_STEP_SUMMARY
-          echo "HAS_FAILURES=true" >> $GITHUB_ENV
-        fi
+  apt_packages_cooldown:
+    name: APT package propagation cooldown
+    needs: build_apt_packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for package propagation
+        run: sleep 15
 
-    - name: Build RPM Packages
-      env:
-        GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-      run: |
-        echo "⚙ Triggering RPM package build..." | tee -a build.log
-        if gh workflow run timescaledb-rpm.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| ⚙ RPM Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-rpm.yml) |" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "| ⚙ RPM Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-rpm.yml) |" >> $GITHUB_STEP_SUMMARY
-          echo "HAS_FAILURES=true" >> $GITHUB_ENV
-        fi
+  test_apt_packages:
+    name: Test APT packages
+    needs: apt_packages_cooldown
+    uses: ./.github/workflows/apt-packages.yaml
 
-    - name: Build Homebrew Packages
-      env:
-        GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-      run: |
-        echo "🍺 Triggering Homebrew package build..." | tee -a build.log
-        if gh workflow run timescaledb-homebrew.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 🍺 Homebrew Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-homebrew.yml) |" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "| 🍺 Homebrew Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-homebrew.yml) |" >> $GITHUB_STEP_SUMMARY
-          echo "HAS_FAILURES=true" >> $GITHUB_ENV
-        fi
+  build_rpm_packages:
+    name: Build RPM packages
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-rpm.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
 
-    - name: Generate final summary
-      if: always()
-      run: |
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "## 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "1. Monitor the triggered workflows in their respective repositories" >> $GITHUB_STEP_SUMMARY
-        echo "2. Check build artifacts once workflows complete" >> $GITHUB_STEP_SUMMARY
-        echo "3. Verify package availability in distribution channels" >> $GITHUB_STEP_SUMMARY
+  rpm_package_cooldown:
+    name: RPM package propagation cooldown
+    needs: build_rpm_packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for package propagation
+        run: sleep 15
 
-    - name: Validate workflow dispatch status
-      if: ${{ env.HAS_FAILURES == 'true' }}
-      run: |
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "❌ one or more workflows could not get dispatched" >> $GITHUB_STEP_SUMMARY
-        exit 1
+  test_rpm_packages:
+    name: Test RPM packages
+    needs: rpm_package_cooldown
+    uses: ./.github/workflows/rpm-packages.yaml
+
+  build_homebrew_packages:
+    name: Build Homebrew package
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-homebrew.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
+
+  homebrew_package_cooldown:
+    name: Homebrew package propagation cooldown
+    needs: build_homebrew_packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for package propagation
+        run: sleep 15
+
+  test_homebrew_package:
+    name: Test Homebrew package
+    needs: homebrew_package_cooldown
+    uses: ./.github/workflows/homebrew.yaml
