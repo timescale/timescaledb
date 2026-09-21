@@ -2107,7 +2107,11 @@ build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid
 
 	detoaster_init(&decompressor.detoaster, CurrentMemoryContext);
 
-	row_decompressor_init_stats(&decompressor, in_oid, out_oid, CMD_SELECT);
+	/*
+	 * Use CMD_UTILITY to avoid squashing chunk stats while recompressing
+	 * or compacting a chunk.
+	 */
+	row_decompressor_init_stats(&decompressor, in_oid, out_oid, CMD_UTILITY);
 
 	return decompressor;
 }
