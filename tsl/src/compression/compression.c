@@ -19,6 +19,7 @@
 #include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <storage/latch.h>
+#include <storage/lock.h>
 #include <storage/predicate.h>
 #include <utils/datum.h>
 #include <utils/elog.h>
@@ -41,6 +42,7 @@
 #include "algorithms/null.h"
 #include "algorithms/uuid_compress.h"
 #include "batch_metadata_builder.h"
+#include "chunk.h"
 #include "chunk_insert_state.h"
 #include "compression.h"
 #include "compression/sparse_index_bloom1.h"
@@ -52,10 +54,12 @@
 #include "guc.h"
 #include "import/compression_toast.h"
 #include "nodes/modify_hypertable.h"
+#include "recompress.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_stats/ts_stats_record.h"
+#include "wal_utils.h"
 #include <nodes/columnar_scan/vector_quals.h>
 
 /*
@@ -3597,4 +3601,190 @@ analyze_and_get_segmentby(CompressionSettings *settings, RowCompressor *compress
 
 	pfree(candidates);
 	return result;
+}
+
+static bool
+delete_tuple_for_compression(Relation rel, ItemPointer tid, Snapshot snapshot)
+{
+	TM_Result result;
+	TM_FailureData tmfd;
+	/*
+	 * If there is an unexpected result, we should just abort the operation completely.
+	 */
+	result = table_tuple_delete_compat(rel,
+									   tid,
+									   GetCurrentCommandId(true),
+									   TABLE_DELETE_CHANGING_PARTITION, /* options */
+									   snapshot,
+									   InvalidSnapshot,
+									   true,
+									   &tmfd);
+
+	return result == TM_Ok;
+}
+
+static bool
+someone_waiting_on_us(void)
+{
+	TransactionId xid = GetTopTransactionIdIfAny();
+	LOCKTAG tag;
+
+	if (!TransactionIdIsValid(xid))
+	{
+		return false;
+	}
+
+	/* Our own xid is locked ExclusiveLock by XactLockTableInsert() */
+	SET_LOCKTAG_TRANSACTION(tag, xid);
+
+	return LockHasWaiters(&tag, ExclusiveLock, false);
+}
+
+bool
+move_to_columnstore_impl(Chunk *chunk)
+{
+	/* No-op if chunk status is compressed or not partial */
+	if (ts_chunk_is_compressed(chunk) && !ts_chunk_is_partial(chunk))
+	{
+		elog(DEBUG1,
+			 "chunk \"%s.%s\" has no uncompressed rows to move",
+			 ts_chunk_get_schema_name(chunk),
+			 ts_chunk_get_table_name(chunk));
+		return false;
+	}
+
+	/*
+	 * Bracket the deletes so the logical decoding that feeds continuous
+	 * aggregate invalidation treats them as a columnstore conversion rather
+	 * than as user DML. Without this the rows would look deleted and
+	 * reinserted, invalidating ranges whose data never changed.
+	 */
+	write_logical_replication_msg_compression_start();
+
+	Relation in_rel = table_open(chunk->fd.relid, ShareUpdateExclusiveLock);
+
+	DEBUG_WAITPOINT("move_to_columnstore_start");
+
+	/*
+	 * The compressed chunk does not exist yet, so create it before
+	 * compressing into it.
+	 *
+	 * To avoid simultaneous compressed chunk creation, we need to synchronize.
+	 * (can happen if another session has direct compress GUC enabled)
+	 */
+	if (!ts_chunk_is_compressed(chunk))
+	{
+		TM_Result lockres;
+		lockres = ts_chunk_lock_for_creating_compressed_chunk(chunk);
+
+		Ensure(lockres == TM_Ok,
+			   "could not lock chunk row for creating "
+			   "compressed chunk. Lock result %d",
+			   lockres);
+
+		/* Recheck whether the chunk got compressed after acquiring the lock */
+		if (!ts_chunk_is_compressed(chunk))
+		{
+			create_compress_chunk(chunk, InvalidOid, false, NULL);
+
+			/*
+			 * Mark the chunk partial straight away as parallel INSERTS
+			 * could be taking place on the uncompressed chunk, but since
+			 * they can not see the compressed chunk, they won't mark the
+			 * chunk partial themselves.
+			 */
+			ts_chunk_set_partial(chunk);
+			CommandCounterIncrement();
+
+			DEBUG_WAITPOINT("move_to_columnstore_after_create");
+		}
+	}
+
+	BulkWriter *bulk_writer = NULL;
+	RowCompressor *compressor = tsl_compressor_init(in_rel,
+													&bulk_writer,
+													true /* sort */,
+													ts_guc_move_to_columnstore_tuple_sort_limit,
+													false);
+
+	Ensure(compressor->sort_state != NULL, "no sortstate in compressor");
+
+	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
+	TableScanDesc scan = table_beginscan_compat(in_rel, snapshot, 0, 0, 0);
+	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
+	bool stopped_early = false;
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
+	{
+		CHECK_FOR_INTERRUPTS();
+
+		slot_getallattrs(slot);
+		tsl_compressor_add_slot(compressor, bulk_writer, slot);
+
+		if (!delete_tuple_for_compression(in_rel, &slot->tts_tid, snapshot))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+					 errmsg("aborting move to columnstore due to concurrent updates on "
+							"uncompressed data.")));
+		}
+
+		DEBUG_WAITPOINT("move_to_columnstore_after_delete");
+
+		/*
+		 * This means compressor just flushed, good time to stop if another
+		 * DML is waiting for us to complete
+		 */
+		if (compressor->tuples_to_sort == 0 && someone_waiting_on_us())
+		{
+			stopped_early = true;
+			break;
+		}
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	table_endscan(scan);
+	UnregisterSnapshot(snapshot);
+
+	tsl_compressor_flush(compressor, bulk_writer);
+	tsl_compressor_close(compressor, bulk_writer);
+
+	CommandCounterIncrement();
+
+	/* Finished move to columnstore. Update chunk status */
+	if (compressor->rowcnt_pre_compression > 0)
+	{
+		if (!ts_chunk_is_unordered(chunk))
+		{
+			ts_chunk_set_unordered(chunk);
+		}
+
+		if (stopped_early)
+		{
+			/*
+			 * Rows are still in the uncompressed chunk, so the chunk is
+			 * partial even if it was fully uncompressed when we started.
+			 */
+			if (!ts_chunk_is_partial(chunk))
+			{
+				ts_chunk_set_partial(chunk);
+			}
+		}
+		/* Moved all rows to compressed chunk. Try removing partial status */
+		else if (ts_chunk_is_partial(chunk) && ConditionalLockRelation(in_rel, ExclusiveLock))
+		{
+			try_updating_chunk_status(chunk, in_rel);
+		}
+	}
+
+	DEBUG_WAITPOINT("move_to_columnstore_before_commit");
+
+	table_close(in_rel, NoLock);
+
+	pfree(compressor);
+	pfree(bulk_writer);
+
+	write_logical_replication_msg_compression_end();
+
+	return true;
 }

@@ -171,7 +171,6 @@ static bool compact_chunk_recompress_overlapping_batches(
 	RecompressContext *recompress_ctx, CompactChunkScanState *state, RowCompressor *compressor,
 	RowDecompressor *decompressor, Tuplesortstate *recompress_tuplesortstate, BulkWriter *writer,
 	int max_batches);
-static void try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel);
 
 /*
  * Recompress an existing chunk by decompressing the batches
@@ -2232,7 +2231,7 @@ delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot)
  *
  * Note: Caller is expected to have an ExclusiveLock on the uncompressed_chunk
  */
-static void
+void
 try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel)
 {
 	PushActiveSnapshot(GetLatestSnapshot());
