@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/table.h>
 #include <access/tsmapi.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
@@ -1647,6 +1648,26 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			{
 				ts_build_indexlist(root, rel);
 			}
+
+#if PG17_GE
+			/*
+			 * Postgres also skips filling rel->notnullattnums for an
+			 * inheritance parent. Fill it manually as well, it is used for e.g.
+			 * removing the always-false null tests.
+			 */
+			if (inhparent)
+			{
+				Relation relation = table_open(rte->relid, NoLock);
+				for (AttrNumber attno = 1; attno <= relation->rd_att->natts; attno++)
+				{
+					if (ts_tupdesc_attnotnull(relation->rd_att, attno))
+					{
+						rel->notnullattnums = bms_add_member(rel->notnullattnums, attno);
+					}
+				}
+				table_close(relation, NoLock);
+			}
+#endif
 
 			/*
 			 * Mark hypertable RTEs we'd like to expand ourselves. We do this
