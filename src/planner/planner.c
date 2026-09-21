@@ -1670,7 +1670,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 						rel->notnullattnums = bms_add_member(rel->notnullattnums, i + 1);
 					}
 #else
-					FormData_pg_attribute *attr = TupleDescAttr(&relation->rd_att, i);
+					FormData_pg_attribute *attr = TupleDescAttr(relation->rd_att, i);
 
 					if (attr->attnotnull)
 					{
