@@ -35,3 +35,15 @@ GAPFILL_TIMEBUCKET_WRAPPER(date);
 GAPFILL_TIMEBUCKET_WRAPPER(timestamp);
 GAPFILL_TIMEBUCKET_WRAPPER(timestamptz);
 GAPFILL_TIMEBUCKET_WRAPPER(timestamptz_timezone);
+
+#define GAPFILL_TIMEBUCKET_OFFSET_WRAPPER(datatype)                                                \
+	TS_FUNCTION_INFO_V1(ts_gapfill_##datatype##_bucket_offset);                                    \
+	Datum ts_gapfill_##datatype##_bucket_offset(PG_FUNCTION_ARGS)                                  \
+	{                                                                                              \
+		return ts_cm_functions->gapfill_##datatype##_offset_bucket(fcinfo);                        \
+	}
+
+GAPFILL_TIMEBUCKET_OFFSET_WRAPPER(date);
+GAPFILL_TIMEBUCKET_OFFSET_WRAPPER(timestamp);
+GAPFILL_TIMEBUCKET_OFFSET_WRAPPER(timestamptz);
+GAPFILL_TIMEBUCKET_OFFSET_WRAPPER(timestamptz_timezone);

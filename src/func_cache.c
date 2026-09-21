@@ -92,10 +92,13 @@ time_bucket_gapfill_sort_transform(FuncExpr *func)
 	 * proof: time_bucket(const1, time1) >= time_bucket(const1,time2) iff time1
 	 * > time2
 	 */
-	Assert(list_length(func->args) == 4 || list_length(func->args) == 5);
+	Assert(list_length(func->args) >= 4);
 
+	bool is_integer_bucket = (func->funcresulttype == INT2OID || func->funcresulttype == INT4OID ||
+							  func->funcresulttype == INT8OID);
 	if (!time_bucket_has_const_period(func) ||
-		(list_length(func->args) == 5 && !time_bucket_has_const_timezone(func)))
+		(!is_integer_bucket && (list_length(func->args) == 5 || list_length(func->args) == 7) &&
+		 !time_bucket_has_const_timezone(func)))
 	{
 		return (Expr *) func;
 	}
@@ -428,8 +431,38 @@ static FuncInfo funcinfo[] = {
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
+		.nargs = 6,
+		.arg_types = { INTERVALOID,
+					   TIMESTAMPOID,
+					   INTERVALOID,
+					   TIMESTAMPOID,
+					   TIMESTAMPOID,
+					   TIMESTAMPOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
+		.nargs = 6,
+		.arg_types = { INTERVALOID,
+					   TIMESTAMPTZOID,
+					   INTERVALOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
@@ -448,8 +481,34 @@ static FuncInfo funcinfo[] = {
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
+		.nargs = 7,
+		.arg_types = { INTERVALOID,
+					   TIMESTAMPTZOID,
+					   TEXTOID,
+					   INTERVALOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INTERVALOID, DATEOID, DATEOID, DATEOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
+		.nargs = 6,
+		.arg_types = { INTERVALOID, DATEOID, INTERVALOID, DATEOID, DATEOID, DATEOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
@@ -468,6 +527,16 @@ static FuncInfo funcinfo[] = {
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
+		.nargs = 5,
+		.arg_types = { INT2OID, INT2OID, INT2OID, INT2OID, INT2OID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INT4OID, INT4OID, INT4OID, INT4OID },
 		.group_estimate = time_bucket_group_estimate,
@@ -478,8 +547,28 @@ static FuncInfo funcinfo[] = {
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
+		.nargs = 5,
+		.arg_types = { INT4OID, INT4OID, INT4OID, INT4OID, INT4OID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INT8OID, INT8OID, INT8OID, INT8OID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_gapfill_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket_gapfill",
+		.nargs = 5,
+		.arg_types = { INT8OID, INT8OID, INT8OID, INT8OID, INT8OID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
