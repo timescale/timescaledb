@@ -683,7 +683,14 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		return;
 	}
 
-	/* Prefer our paths */
+	/*
+	 * We unconditionally discard the Postgres paths that work on the whole
+	 * table without partial aggregation. One of the main reasons we need the
+	 * chunkwise aggregation is that it is a prerequisite for using
+	 * vectorized aggregation. The vectorized aggregation is applied at late
+	 * stages of planning and is not reflected in the cost model, so we can't
+	 * make a cost-based decision here.
+	 */
 	output_rel->pathlist = NIL;
 	output_rel->partial_pathlist = NIL;
 
