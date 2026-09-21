@@ -35,8 +35,10 @@
  *   ts_tenant_tracker_get_or_attach() find-or-inserts and, on first insert,
  *   dsa_allocate0 + init_tracker while holding the dshash exclusive lock.  The
  *   dshash lock protects only the MAPPING; the tracker has its own concurrency
- *   and is never moved or freed, so a dsa_pointer stays valid after the
- *   dshash lock is released.
+ *   and is never moved, so a dsa_pointer stays valid after the dshash lock is
+ *   released.  A tracker is freed only via ts_tenant_tracker_remove_at_commit(),
+ *   which requires the caller to hold AccessExclusiveLock on the hypertable so
+ *   that no backend can be holding such a pointer -- see the comment there.
  *
  * LAYOUT (one tracker per hypertable; per-tracker sizes are compile-time
  *   constants: TENANT_TRACKER_CAPACITY=4096, TENANT_TRACKER_NUM_PARTITIONS=16,
@@ -169,10 +171,12 @@
 
 #include <postgres.h>
 
+#include <access/xact.h>
 #include <common/hashfn.h>
 #include <fmgr.h>
 #include <lib/dshash.h>
 #include <miscadmin.h>
+#include <nodes/pg_list.h>
 #include <port/atomics.h>
 #include <storage/lwlock.h>
 #include <utils/dsa.h>
@@ -181,6 +185,7 @@
 
 #include "debug_assert.h"
 #include "debug_point.h"
+#include "insert.h"
 #include "loader/tenant_tracker_shmem.h"
 #include "tenant_tracker.h"
 #include "ts_catalog/continuous_aggs_tenant_tracking.h"
@@ -745,8 +750,10 @@ ts_tenant_tracker_lookup_wstate(int32 hypertable_id, TenantLookupState *state)
 
 	TenantMapKey key = { .database_id = MyDatabaseId, .hypertable_id = hypertable_id };
 
-	/* Hold the dshash lock only to read the dsa_pointer; the tracker itself is
-	 * never moved/freed, so it stays valid after we release. */
+	/* Hold the dshash lock only to read the dsa_pointer; the tracker is never
+	 * moved, so it stays valid after we release.  The deferred removal at commit
+	 * is the one thing that can free it, and it cannot run concurrently with a
+	 * caller that reached here through the DML or refresh path. */
 	entry = dshash_find(tracker_map, &key, false /* shared */);
 
 	if (entry == NULL)
@@ -849,9 +856,9 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
 		 * this large allocation on every subsequent commit (a retry/log storm
 		 * that also keeps re-exercising the throwing dshash insert path).  With
 		 * the marker, later inserts find the entry, see the marker, and skip
-		 * tracking.  The marker persists until restart.
-		 * matches the current design where trackers are never freed; tracking for
-		 * this hypertable stays off and the refresh falls back to the full log.
+		 * tracking.  The marker persists until restart, or until
+		 * the deferred removal at commit deletes the entry; tracking for this
+		 * hypertable stays off and the refresh falls back to the full log.
 		 */
 
 		entry->tracker = InvalidDsaPointer;
@@ -881,7 +888,267 @@ ts_tenant_tracker_get_or_attach(int32 hypertable_id, int64 late_threshold_start,
 }
 
 /*
- * Fill *info with a read-only snapshot of the tracker's current state: seqnum
+ * Drop the tenant tracking entry for the hypertable and clean
+ * up allocated memory in DSA,
+ *
+ * Static on purpose: the only legitimate caller is the commit callback below.
+ * Everything else goes through ts_tenant_tracker_remove_at_commit(), which is
+ * what makes the two halves of the contract hold:
+ *
+ *  1. No backend may be writing or reading this entry.  Every path drops the
+ *     dshash lock before dereferencing the pointer, so that lock cannot be used
+ *     to gain exclusive access; callers coordinate by holding
+ *     AccessExclusiveLock on the raw hypertable instead, which locks out every
+ *     tracker writer (they all lock main_table_relid first).
+ *
+ *  2. The free must not happen inline in a DDL.  Shared-memory frees are not
+ *     transactional, so a DDL that rolls back would restore the catalog while
+ *     the tracker stayed freed.
+ *
+ * Backends that already resolved this tracker cache the raw pointer
+ * (tenant_tracker_resolved_htab in insert.c).  The DDL invalidates the
+ * hypertable's relcache entry so they drop it; see remove_at_commit below.
+ */
+static bool
+tenant_tracker_remove(int32 hypertable_id)
+{
+	TenantMapEntry *entry;
+	dsa_pointer dp;
+
+	if (!tenant_tracker_attach())
+	{
+		return false; /* loader not present -> nothing was ever tracked */
+	}
+
+	TenantMapKey key = { .database_id = MyDatabaseId, .hypertable_id = hypertable_id };
+
+	/* get the entry with Exclusive lock as we are going to delete it*/
+	entry = dshash_find(tracker_map, &key, true /* exclusive */);
+
+	if (entry == NULL)
+	{
+		return false; /* no entry found */
+	}
+
+	/* when we are in this function, we have 0 writers and 0 readers.
+	 * No caggs still have granular refresh enabled.
+	 * We have an exclusive lock on the hypertable. So no writers
+	 * are active. So it is safe to delete the shared mem allocated to
+	 * the hypertable.
+	 * the hash entry is [ ht , <shared mem alloc ptr> ].
+	 * <shared mem alloc ptr> could be NULL, if we ran out of shared memory.
+	 */
+	dp = entry->tracker;
+
+	if (DsaPointerIsValid(dp))
+	{
+		/* Free the alloc-ed mem under the same partition lock that get_or_attach
+		 * allocates under.
+		 */
+		dsa_free(tracker_area, dp);
+	}
+
+	/* this call also releases the exclusive lock we acquired earlier*/
+	dshash_delete_entry(tracker_map, entry);
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Deferred removal: free the tracker at commit, not inline in the DDL.       */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * One queued removal.  subxid is the subtransaction that queued it, so a
+ * ROLLBACK TO SAVEPOINT can drop just the entries that subtransaction added.
+ */
+typedef struct PendingTrackerRemoval
+{
+	int32 hypertable_id;
+	Oid main_table_relid; /* key of this backend's resolved-tracker cache */
+	SubTransactionId subxid;
+} PendingTrackerRemoval;
+
+/* Allocated in TopMemoryContext; always emptied by the xact callback below. */
+static List *pending_removals = NIL;
+
+static void
+pending_removals_reset(void)
+{
+	list_free_deep(pending_removals);
+	pending_removals = NIL;
+}
+
+/*
+ * Queue a tracker free for XACT_EVENT_COMMIT.
+ *
+ * The caller must hold AccessExclusiveLock on the raw hypertable and
+ * delete entry from hypertable_cagg_settings that turns tracking off
+ *
+ * Note: we call dsa_attach here as it can throw. We should not throw
+ * during the actual commit callback
+ *
+ * CALLER CONTRACT: the caller must also delete the hypertable_cagg_settings row
+ * and call CacheInvalidateRelcacheByRelid(main_table_relid) in this txn.  The
+ * relcache message tells other backends to drop their cached pointer to this
+ * tracker (continuous_agg_tenant_tracker_cache_invalidate in insert.c).
+ * Why this works: the txn holds AccessExclusiveLock on the hypertable until
+ * after the message is sent (so no other user of the tracker is alive), and any
+ * backend that later wants the tracker must first lock the hypertable (DML takes
+ * RowExclusiveLock), which makes LockRelationOid process the message.  So the
+ * invalidation is never missed.
+ */
+void
+ts_tenant_tracker_remove_at_commit(int32 hypertable_id, Oid main_table_relid)
+{
+	MemoryContext oldcxt;
+	PendingTrackerRemoval *pending;
+	ListCell *lc;
+
+	if (!tenant_tracker_attach())
+	{
+		return;
+	}
+
+	/* Two disables of the same hypertable in one transaction queue once. */
+	foreach (lc, pending_removals)
+	{
+		if (((PendingTrackerRemoval *) lfirst(lc))->hypertable_id == hypertable_id)
+		{
+			return;
+		}
+	}
+
+	oldcxt = MemoryContextSwitchTo(TopMemoryContext);
+	pending = palloc(sizeof(*pending));
+	pending->hypertable_id = hypertable_id;
+	pending->main_table_relid = main_table_relid;
+	pending->subxid = GetCurrentSubTransactionId();
+	pending_removals = lappend(pending_removals, pending);
+	MemoryContextSwitchTo(oldcxt);
+}
+
+/*
+ * Apply the queued frees once the transaction is durable, and drop the queue on
+ * any other end state.
+ */
+static void
+tenant_tracker_removal_xact_callback(XactEvent event, void *arg)
+{
+	ListCell *lc;
+
+	if (pending_removals == NIL)
+	{
+		return;
+	}
+
+	switch (event)
+	{
+		case XACT_EVENT_PRE_PREPARE:
+
+			/* No 2 PC support */
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot PREPARE a transaction that disables granular refresh")));
+			break;
+
+		case XACT_EVENT_COMMIT:
+			foreach (lc, pending_removals)
+			{
+				PendingTrackerRemoval *pending = lfirst(lc);
+
+				tenant_tracker_remove(pending->hypertable_id);
+				/* Other backends learn of the free from the relcache invalidation
+				 * the DDL sent.  This backend only reads its own message back from
+				 * the shared queue at its next lock acquisition, so mark its cached
+				 * pointer stale directly, from the moment of the free. */
+				continuous_agg_tenant_tracker_cache_invalidate(pending->main_table_relid);
+			}
+			pending_removals_reset();
+			break;
+
+		case XACT_EVENT_ABORT:
+		case XACT_EVENT_PARALLEL_COMMIT:
+		case XACT_EVENT_PARALLEL_ABORT:
+			pending_removals_reset();
+			break;
+
+		default:
+			break;
+	}
+}
+
+/*
+ * Keep each queued removal owned by the subtransaction its catalog change
+ * currently belongs to, the way AtEOSubXact_on_commit_actions does for
+ * ON COMMIT actions.
+ *
+ * On subtransaction commit the catalog change becomes the parent's, so the
+ * entry is re-parented; without this a later rollback of the parent would undo
+ * the DDL but leave the free queued.  On subtransaction abort the catalog
+ * change is undone, so the entries it owns are dropped.  The hypertable lock is
+ * not released on abort -- subtransaction locks are reassigned to the parent
+ * until top-level end.
+ */
+static void
+tenant_tracker_removal_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
+										SubTransactionId parentSubid, void *arg)
+{
+	ListCell *lc;
+
+	if (pending_removals == NIL)
+	{
+		return;
+	}
+
+	switch (event)
+	{
+		case SUBXACT_EVENT_COMMIT_SUB:
+			foreach (lc, pending_removals)
+			{
+				PendingTrackerRemoval *pending = lfirst(lc);
+
+				if (pending->subxid == mySubid)
+				{
+					pending->subxid = parentSubid;
+				}
+			}
+			break;
+
+		case SUBXACT_EVENT_ABORT_SUB:
+			foreach (lc, pending_removals)
+			{
+				PendingTrackerRemoval *pending = lfirst(lc);
+
+				if (pending->subxid == mySubid)
+				{
+					pending_removals = foreach_delete_current(pending_removals, lc);
+					pfree(pending);
+				}
+			}
+			break;
+
+		default:
+			break;
+	}
+}
+
+void
+_tenant_tracker_init(void)
+{
+	RegisterXactCallback(tenant_tracker_removal_xact_callback, NULL);
+	RegisterSubXactCallback(tenant_tracker_removal_subxact_callback, NULL);
+}
+
+void
+_tenant_tracker_fini(void)
+{
+	UnregisterXactCallback(tenant_tracker_removal_xact_callback, NULL);
+	UnregisterSubXactCallback(tenant_tracker_removal_subxact_callback, NULL);
+}
+
+/*
+ * Fill info with a read-only snapshot of the tracker's current state: seqnum
  * and active_gen at the tracker level, and nentries/status/window from the
  * active generation.  A best-effort diagnostic read -- not synchronized against
  * concurrent writers or a flush, so fields may be momentarily inconsistent with
@@ -919,7 +1186,7 @@ tenant_tracker_map_scan(TenantTrackerMapEntry *result, int capacity)
 	TenantMapEntry *entry;
 	int nentries = 0;
 
-	dshash_seq_init(&status, tracker_map, false /* exclusive */);
+	dshash_seq_init(&status, tracker_map, false /* shared */);
 
 	while ((entry = (TenantMapEntry *) dshash_seq_next(&status)) != NULL)
 	{
@@ -952,9 +1219,10 @@ tenant_tracker_map_scan(TenantTrackerMapEntry *result, int capacity)
  * tracker layout and the map internals private to this file.
  *
  * Count first, then allocate, then fill: allocation cannot happen inside the
- * scan (see tenant_tracker_map_scan).  Map entries are only ever added and never
- * removed, so the count can only grow between the two scans; the slack covers
- * the usual case, and a listing is a best-effort snapshot anyway -- if more
+ * scan (see tenant_tracker_map_scan).  The count can move either way between
+ * the two scans -- entries are added on first touch and removed by
+ * the deferred removal at commit -- so the slack covers growth and a shrink just
+ * fills fewer slots.  A listing is a best-effort snapshot either way: if more
  * entries appear than fit, the extras are simply left out.
  */
 int

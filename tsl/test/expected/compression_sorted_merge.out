@@ -1576,3 +1576,266 @@ drop table test_with_defined_null cascade;
 drop table test_costs cascade;
 drop table insert_test cascade;
 reset timescaledb.debug_require_batch_sorted_merge;
+-- Sorting on a column cast to a binary coercible type with a different sort
+-- order. int4 and oid compare differently for negative values, so the sort
+-- cannot be pushed below the ColumnarScan.
+CREATE TABLE sort_cast(time timestamptz not null, grp int not null, seq int not null, val int not null);
+SELECT FROM create_hypertable('sort_cast','time',chunk_time_interval => interval '1 year');
+--
+
+ALTER TABLE sort_cast SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='seq asc');
+INSERT INTO sort_cast VALUES
+  ('2000-01-01', -2, -3, 10), ('2000-01-01', -2, -2, 20), ('2000-01-01', -2, -1, 30),
+  ('2000-01-01', -2,  0, 40), ('2000-01-01', -2,  1, 50), ('2000-01-01', -2,  2, 60),
+  ('2000-01-01', -2,  3, 70),
+  ('2000-01-01',  1, -1, 80), ('2000-01-01',  1,  0, 90), ('2000-01-01',  1,  1, 100);
+SELECT count(compress_chunk(ch)) FROM show_chunks('sort_cast') ch;
+ count 
+-------
+     1
+
+ANALYZE sort_cast;
+-- orderby column, oid order starts at 0
+EXPLAIN (buffers off, costs off) SELECT seq::oid AS seq_oid, val FROM sort_cast WHERE grp = -2 ORDER BY seq::oid LIMIT 3;
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Sort
+               Sort Key: _hyper_9_14_chunk.seq USING <
+               ->  Custom Scan (ColumnarScan) on _hyper_9_14_chunk
+                     ->  Seq Scan on _hyper_9_14_chunk_compressed
+                           Filter: (grp = '-2'::integer)
+
+SELECT seq::oid AS seq_oid, val FROM sort_cast WHERE grp = -2 ORDER BY seq::oid LIMIT 3;
+ seq_oid | val 
+---------+-----
+       0 |  40
+       1 |  50
+       2 |  60
+
+-- without the cast the sort is still pushed down
+EXPLAIN (buffers off, costs off) SELECT seq, val FROM sort_cast WHERE grp = -2 ORDER BY seq LIMIT 3;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarScan) on _hyper_9_14_chunk
+         ->  Sort
+               Sort Key: _hyper_9_14_chunk_compressed._ts_meta_v2_first_seq, _hyper_9_14_chunk_compressed._ts_meta_v2_last_seq
+               ->  Seq Scan on _hyper_9_14_chunk_compressed
+                     Filter: (grp = '-2'::integer)
+
+SELECT seq, val FROM sort_cast WHERE grp = -2 ORDER BY seq LIMIT 3;
+ seq | val 
+-----+-----
+  -3 |  10
+  -2 |  20
+  -1 |  30
+
+-- segmentby columns are re-sorted with the requested operator, still pushed down
+EXPLAIN (buffers off, costs off) SELECT grp::oid AS grp_oid, seq FROM sort_cast ORDER BY grp::oid, seq LIMIT 3;
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ColumnarScan) on _hyper_9_14_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_14_chunk_compressed.grp USING <, _hyper_9_14_chunk_compressed._ts_meta_v2_first_seq, _hyper_9_14_chunk_compressed._ts_meta_v2_last_seq
+                     ->  Seq Scan on _hyper_9_14_chunk_compressed
+
+SELECT grp::oid AS grp_oid, seq FROM sort_cast ORDER BY grp::oid, seq LIMIT 3;
+ grp_oid | seq 
+---------+-----
+       1 |  -1
+       1 |   0
+       1 |   1
+
+drop table sort_cast cascade;
+-- Sorting with an operator from another family than the one the data was
+-- sorted with. The two families compare differently for values that differ in
+-- case, which depends on the database collation, so only check the plans here.
+CREATE TABLE sort_pattern(time timestamptz not null, grp text not null, name text not null);
+SELECT FROM create_hypertable('sort_pattern','time',chunk_time_interval => interval '1 year');
+--
+
+ALTER TABLE sort_pattern SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='name asc');
+INSERT INTO sort_pattern VALUES
+  ('2000-01-01','g','a'), ('2000-01-01','g','b'), ('2000-01-01','g','c'), ('2000-01-01','g','d');
+SELECT count(compress_chunk(ch)) FROM show_chunks('sort_pattern') ch;
+ count 
+-------
+     1
+
+ANALYZE sort_pattern;
+-- orderby column sorted by byte order
+EXPLAIN (buffers off, costs off) SELECT name FROM sort_pattern WHERE grp = 'g' ORDER BY name USING ~<~ LIMIT 2;
+--- QUERY PLAN ---
+ Limit
+   ->  Sort
+         Sort Key: _hyper_10_15_chunk.name USING ~<~
+         ->  Custom Scan (ColumnarScan) on _hyper_10_15_chunk
+               ->  Seq Scan on _hyper_10_15_chunk_compressed
+                     Filter: (grp = 'g'::text)
+
+SELECT name FROM sort_pattern WHERE grp = 'g' ORDER BY name USING ~<~ LIMIT 2;
+ name 
+------
+ a
+ b
+
+-- and with the collation aware operator the sort is still pushed down
+EXPLAIN (buffers off, costs off) SELECT name FROM sort_pattern WHERE grp = 'g' ORDER BY name LIMIT 2;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarScan) on _hyper_10_15_chunk
+         ->  Sort
+               Sort Key: _hyper_10_15_chunk_compressed._ts_meta_v2_first_name, _hyper_10_15_chunk_compressed._ts_meta_v2_last_name
+               ->  Seq Scan on _hyper_10_15_chunk_compressed
+                     Filter: (grp = 'g'::text)
+
+SELECT name FROM sort_pattern WHERE grp = 'g' ORDER BY name LIMIT 2;
+ name 
+------
+ a
+ b
+
+-- segmentby columns are re-sorted with the requested operator
+EXPLAIN (buffers off, costs off) SELECT grp, name FROM sort_pattern ORDER BY grp USING ~<~, name LIMIT 2;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarScan) on _hyper_10_15_chunk
+         ->  Sort
+               Sort Key: _hyper_10_15_chunk_compressed.grp USING ~<~, _hyper_10_15_chunk_compressed._ts_meta_v2_first_name, _hyper_10_15_chunk_compressed._ts_meta_v2_last_name
+               ->  Seq Scan on _hyper_10_15_chunk_compressed
+
+SELECT grp, name FROM sort_pattern ORDER BY grp USING ~<~, name LIMIT 2;
+ grp | name 
+-----+------
+ g   | a
+ g   | b
+
+drop table sort_pattern cascade;
+-- Sort keys of a type whose operator family declares its operators on a
+-- polymorphic type. The sort operator has to be looked up with the type of the
+-- sort key, there is none for the concrete type.
+CREATE TYPE sort_poly_enum AS ENUM ('a','b','c');
+CREATE TABLE sort_poly_e(time timestamptz not null, grp int not null, v sort_poly_enum);
+SELECT FROM create_hypertable('sort_poly_e','time',chunk_time_interval => interval '1 year');
+--
+
+ALTER TABLE sort_poly_e SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='v asc');
+INSERT INTO sort_poly_e VALUES ('2000-01-01',1,'b'), ('2000-01-01',1,'a'), ('2000-01-01',1,'c');
+SELECT count(compress_chunk(ch)) FROM show_chunks('sort_poly_e') ch;
+ count 
+-------
+     1
+
+ANALYZE sort_poly_e;
+SELECT min(v), max(v) FROM sort_poly_e;
+ min | max 
+-----+-----
+ a   | c
+
+set timescaledb.debug_require_batch_sorted_merge to 'force';
+SELECT v FROM sort_poly_e ORDER BY v LIMIT 1;
+ v 
+---
+ a
+
+reset timescaledb.debug_require_batch_sorted_merge;
+CREATE TABLE sort_poly_a(time timestamptz not null, grp int not null, v int[]);
+SELECT FROM create_hypertable('sort_poly_a','time',chunk_time_interval => interval '1 year');
+--
+
+ALTER TABLE sort_poly_a SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='v asc');
+INSERT INTO sort_poly_a VALUES ('2000-01-01',1,'{2}'), ('2000-01-01',1,'{1}'), ('2000-01-01',1,'{3}');
+SELECT count(compress_chunk(ch)) FROM show_chunks('sort_poly_a') ch;
+ count 
+-------
+     1
+
+ANALYZE sort_poly_a;
+SELECT min(v), max(v) FROM sort_poly_a;
+ min | max 
+-----+-----
+ {1} | {3}
+
+set timescaledb.debug_require_batch_sorted_merge to 'force';
+SELECT v FROM sort_poly_a ORDER BY v LIMIT 1;
+  v  
+-----
+ {1}
+
+reset timescaledb.debug_require_batch_sorted_merge;
+drop table sort_poly_e cascade;
+drop table sort_poly_a cascade;
+DROP TYPE sort_poly_enum;
+-- A segmentby column equated to a relabeled parameter is still recognized as
+-- constant, so the batches do not have to be merged.
+CREATE TABLE seg_param(time timestamptz not null, device text not null, value float);
+SELECT FROM create_hypertable('seg_param','time',chunk_time_interval => interval '1 year');
+--
+
+ALTER TABLE seg_param SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time desc');
+INSERT INTO seg_param
+SELECT '2000-01-01'::timestamptz + i * interval '1 hour', 'd' || d, d
+FROM generate_series(1,3) d, generate_series(1,5) i;
+SELECT count(compress_chunk(ch)) FROM show_chunks('seg_param') ch;
+ count 
+-------
+     1
+
+ANALYZE seg_param;
+set plan_cache_mode to 'force_generic_plan';
+PREPARE seg_param_vc(varchar) AS SELECT time, value FROM seg_param WHERE device = $1 ORDER BY time DESC LIMIT 2;
+EXPLAIN (buffers off, costs off, verbose) EXECUTE seg_param_vc('d2');
+--- QUERY PLAN ---
+ Limit
+   Output: seg_param."time", seg_param.value
+   ->  Custom Scan (ChunkAppend) on public.seg_param
+         Output: seg_param."time", seg_param.value
+         Order: seg_param."time" DESC
+         Startup Exclusion: true
+         Runtime Exclusion: false
+         Chunks excluded during startup: 0
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_13_18_chunk
+               Output: _hyper_13_18_chunk."time", _hyper_13_18_chunk.value
+               ->  Sort
+                     Output: _hyper_13_18_chunk_compressed._ts_meta_count, _hyper_13_18_chunk_compressed.device, _hyper_13_18_chunk_compressed._ts_meta_min_1, _hyper_13_18_chunk_compressed._ts_meta_max_1, _hyper_13_18_chunk_compressed._ts_meta_v2_first_time, _hyper_13_18_chunk_compressed._ts_meta_v2_last_time, _hyper_13_18_chunk_compressed."time", _hyper_13_18_chunk_compressed.value
+                     Sort Key: _hyper_13_18_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_13_18_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _timescaledb_internal._hyper_13_18_chunk_compressed
+                           Output: _hyper_13_18_chunk_compressed._ts_meta_count, _hyper_13_18_chunk_compressed.device, _hyper_13_18_chunk_compressed._ts_meta_min_1, _hyper_13_18_chunk_compressed._ts_meta_max_1, _hyper_13_18_chunk_compressed._ts_meta_v2_first_time, _hyper_13_18_chunk_compressed._ts_meta_v2_last_time, _hyper_13_18_chunk_compressed."time", _hyper_13_18_chunk_compressed.value
+                           Filter: (_hyper_13_18_chunk_compressed.device = ($1)::text)
+
+EXECUTE seg_param_vc('d2');
+             time             | value 
+------------------------------+-------
+ Sat Jan 01 05:00:00 2000 PST |     2
+ Sat Jan 01 04:00:00 2000 PST |     2
+
+-- the same query without the relabel
+PREPARE seg_param_text(text) AS SELECT time, value FROM seg_param WHERE device = $1 ORDER BY time DESC LIMIT 2;
+EXPLAIN (buffers off, costs off, verbose) EXECUTE seg_param_text('d2');
+--- QUERY PLAN ---
+ Limit
+   Output: seg_param."time", seg_param.value
+   ->  Custom Scan (ChunkAppend) on public.seg_param
+         Output: seg_param."time", seg_param.value
+         Order: seg_param."time" DESC
+         Startup Exclusion: true
+         Runtime Exclusion: false
+         Chunks excluded during startup: 0
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_13_18_chunk
+               Output: _hyper_13_18_chunk."time", _hyper_13_18_chunk.value
+               ->  Sort
+                     Output: _hyper_13_18_chunk_compressed._ts_meta_count, _hyper_13_18_chunk_compressed.device, _hyper_13_18_chunk_compressed._ts_meta_min_1, _hyper_13_18_chunk_compressed._ts_meta_max_1, _hyper_13_18_chunk_compressed._ts_meta_v2_first_time, _hyper_13_18_chunk_compressed._ts_meta_v2_last_time, _hyper_13_18_chunk_compressed."time", _hyper_13_18_chunk_compressed.value
+                     Sort Key: _hyper_13_18_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_13_18_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _timescaledb_internal._hyper_13_18_chunk_compressed
+                           Output: _hyper_13_18_chunk_compressed._ts_meta_count, _hyper_13_18_chunk_compressed.device, _hyper_13_18_chunk_compressed._ts_meta_min_1, _hyper_13_18_chunk_compressed._ts_meta_max_1, _hyper_13_18_chunk_compressed._ts_meta_v2_first_time, _hyper_13_18_chunk_compressed._ts_meta_v2_last_time, _hyper_13_18_chunk_compressed."time", _hyper_13_18_chunk_compressed.value
+                           Filter: (_hyper_13_18_chunk_compressed.device = $1)
+
+EXECUTE seg_param_text('d2');
+             time             | value 
+------------------------------+-------
+ Sat Jan 01 05:00:00 2000 PST |     2
+ Sat Jan 01 04:00:00 2000 PST |     2
+
+reset plan_cache_mode;
+drop table seg_param cascade;

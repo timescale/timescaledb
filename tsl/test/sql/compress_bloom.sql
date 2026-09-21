@@ -831,6 +831,68 @@ ON CONFLICT (a, b, x, ts) DO NOTHING;
 
 DROP TABLE multi_unique_composite_shared CASCADE;
 
+-- A single column bloom index cannot filter NULL values, so a NULL conflict
+-- value must not prune a batch when NULLS are NOT DISTINCT.
+CREATE TABLE upsert_null_bloom(ts timestamptz NOT NULL, a int, b int);
+SELECT create_hypertable('upsert_null_bloom', 'ts');
+CREATE UNIQUE INDEX upsert_null_bloom_u ON upsert_null_bloom (a, ts) NULLS NOT DISTINCT;
+ALTER TABLE upsert_null_bloom SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(a)'
+);
+
+INSERT INTO upsert_null_bloom
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i, i
+FROM generate_series(1, 500) i;
+INSERT INTO upsert_null_bloom VALUES ('2024-01-01 09:00', NULL, 1);
+SELECT compress_chunk(c) FROM show_chunks('upsert_null_bloom') c;
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO upsert_null_bloom VALUES ('2024-01-01 09:00', NULL, 2)
+ON CONFLICT (a, ts) DO NOTHING;
+
+SELECT count(*) FROM upsert_null_bloom WHERE a IS NULL;
+
+-- a non-NULL value is still pruned
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO upsert_null_bloom VALUES ('2024-01-01 00:05', 9999, 3)
+ON CONFLICT (a, ts) DO NOTHING;
+
+DROP TABLE upsert_null_bloom CASCADE;
+
+-------------------------------------------------------------------
+-- A composite bloom filter does record NULLs, so it can still be used.
+CREATE TABLE upsert_null_composite(ts timestamptz NOT NULL, a int, b int, c int);
+SELECT create_hypertable('upsert_null_composite', 'ts');
+CREATE UNIQUE INDEX upsert_null_composite_u
+    ON upsert_null_composite (a, b, ts) NULLS NOT DISTINCT;
+ALTER TABLE upsert_null_composite SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(a, b)'
+);
+INSERT INTO upsert_null_composite
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i, i, i
+FROM generate_series(1, 500) i;
+INSERT INTO upsert_null_composite VALUES ('2024-01-01 09:00', NULL, NULL, 1);
+INSERT INTO upsert_null_composite VALUES ('2024-01-01 09:01', NULL, 7, 1);
+SELECT compress_chunk(c) FROM show_chunks('upsert_null_composite') c;
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO upsert_null_composite VALUES ('2024-01-01 09:00', NULL, NULL, 2)
+ON CONFLICT (a, b, ts) DO NOTHING;
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO upsert_null_composite VALUES ('2024-01-01 09:01', NULL, 7, 2)
+ON CONFLICT (a, b, ts) DO NOTHING;
+
+SELECT count(*) FROM upsert_null_composite WHERE a IS NULL;
+
+DROP TABLE upsert_null_composite CASCADE;
+
 -------------------------------------------------------------------
 -- Hashed bloom filters over various column types
 -------------------------------------------------------------------

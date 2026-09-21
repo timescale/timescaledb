@@ -1958,6 +1958,129 @@ ON CONFLICT (a, b, x, ts) DO NOTHING;
 ERROR:  duplicate key value violates unique constraint "30_multi_unique_composite_shared_a_b_y_ts_key"
 \set ON_ERROR_STOP 1
 DROP TABLE multi_unique_composite_shared CASCADE;
+-- A single column bloom index cannot filter NULL values, so a NULL conflict
+-- value must not prune a batch when NULLS are NOT DISTINCT.
+CREATE TABLE upsert_null_bloom(ts timestamptz NOT NULL, a int, b int);
+SELECT create_hypertable('upsert_null_bloom', 'ts');
+        create_hypertable        
+---------------------------------
+ (20,public,upsert_null_bloom,t)
+
+CREATE UNIQUE INDEX upsert_null_bloom_u ON upsert_null_bloom (a, ts) NULLS NOT DISTINCT;
+ALTER TABLE upsert_null_bloom SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(a)'
+);
+WARNING:  column "a" should be used for segmenting or ordering
+INSERT INTO upsert_null_bloom
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i, i
+FROM generate_series(1, 500) i;
+INSERT INTO upsert_null_bloom VALUES ('2024-01-01 09:00', NULL, 1);
+SELECT compress_chunk(c) FROM show_chunks('upsert_null_bloom') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_20_31_chunk
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO upsert_null_bloom VALUES ('2024-01-01 09:00', NULL, 2)
+ON CONFLICT (a, ts) DO NOTHING;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
+   Batches without bloom: 1
+   ->  Insert on upsert_null_bloom (actual rows=0.00 loops=1)
+         Conflict Resolution: NOTHING
+         Conflict Arbiter Indexes: upsert_null_bloom_u
+         Tuples Inserted: 0
+         Conflicting Tuples: 1
+         ->  Result (actual rows=1.00 loops=1)
+
+SELECT count(*) FROM upsert_null_bloom WHERE a IS NULL;
+ count 
+-------
+     1
+
+-- a non-NULL value is still pruned
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO upsert_null_bloom VALUES ('2024-01-01 00:05', 9999, 3)
+ON CONFLICT (a, ts) DO NOTHING;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
+   Batches checked by bloom: 1
+   Batches pruned by bloom: 1
+   ->  Insert on upsert_null_bloom (actual rows=0.00 loops=1)
+         Conflict Resolution: NOTHING
+         Conflict Arbiter Indexes: upsert_null_bloom_u
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         ->  Result (actual rows=1.00 loops=1)
+
+DROP TABLE upsert_null_bloom CASCADE;
+-------------------------------------------------------------------
+-- A composite bloom filter does record NULLs, so it can still be used.
+CREATE TABLE upsert_null_composite(ts timestamptz NOT NULL, a int, b int, c int);
+SELECT create_hypertable('upsert_null_composite', 'ts');
+          create_hypertable          
+-------------------------------------
+ (21,public,upsert_null_composite,t)
+
+CREATE UNIQUE INDEX upsert_null_composite_u
+    ON upsert_null_composite (a, b, ts) NULLS NOT DISTINCT;
+ALTER TABLE upsert_null_composite SET (
+    timescaledb.compress,
+    timescaledb.order_by = 'ts',
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_index = 'bloom(a, b)'
+);
+WARNING:  column "a" should be used for segmenting or ordering
+WARNING:  column "b" should be used for segmenting or ordering
+INSERT INTO upsert_null_composite
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i, i, i
+FROM generate_series(1, 500) i;
+INSERT INTO upsert_null_composite VALUES ('2024-01-01 09:00', NULL, NULL, 1);
+INSERT INTO upsert_null_composite VALUES ('2024-01-01 09:01', NULL, 7, 1);
+SELECT compress_chunk(c) FROM show_chunks('upsert_null_composite') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_21_32_chunk
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO upsert_null_composite VALUES ('2024-01-01 09:00', NULL, NULL, 2)
+ON CONFLICT (a, b, ts) DO NOTHING;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
+   Batches checked by bloom: 1
+   ->  Insert on upsert_null_composite (actual rows=0.00 loops=1)
+         Conflict Resolution: NOTHING
+         Conflict Arbiter Indexes: upsert_null_composite_u
+         Tuples Inserted: 0
+         Conflicting Tuples: 1
+         ->  Result (actual rows=1.00 loops=1)
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO upsert_null_composite VALUES ('2024-01-01 09:01', NULL, 7, 2)
+ON CONFLICT (a, b, ts) DO NOTHING;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
+   Batches checked by bloom: 1
+   ->  Insert on upsert_null_composite (actual rows=0.00 loops=1)
+         Conflict Resolution: NOTHING
+         Conflict Arbiter Indexes: upsert_null_composite_u
+         Tuples Inserted: 0
+         Conflicting Tuples: 1
+         ->  Result (actual rows=1.00 loops=1)
+
+SELECT count(*) FROM upsert_null_composite WHERE a IS NULL;
+ count 
+-------
+     2
+
+DROP TABLE upsert_null_composite CASCADE;
 -------------------------------------------------------------------
 -- Hashed bloom filters over various column types
 -------------------------------------------------------------------
@@ -2025,7 +2148,7 @@ INSERT INTO int2_crosstype SELECT i, (-1 * (i % 100))::smallint, i % 100 FROM ge
 SELECT compress_chunk(c) FROM show_chunks('int2_crosstype') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_21_32_chunk
+ _timescaledb_internal._hyper_23_34_chunk
 
 SELECT count(*) FROM int2_crosstype WHERE i2 = 1::smallint;
  count 
