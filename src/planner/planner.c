@@ -1658,11 +1658,13 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			if (inhparent)
 			{
 				Relation relation = table_open(rte->relid, NoLock);
-				for (AttrNumber attno = 1; attno <= relation->rd_att->natts; attno++)
+				for (int i = 0; i < relation->rd_att->natts; i++)
 				{
-					if (ts_tupdesc_attnotnull(relation->rd_att, attno))
+					FormData_pg_attribute *attr = &relation->rd_att->attrs[i];
+
+					if (attr->attnotnull)
 					{
-						rel->notnullattnums = bms_add_member(rel->notnullattnums, attno);
+						rel->notnullattnums = bms_add_member(rel->notnullattnums, attr->attnum);
 					}
 				}
 				table_close(relation, NoLock);
