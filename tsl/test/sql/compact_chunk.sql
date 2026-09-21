@@ -1248,3 +1248,108 @@ SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('metrics_rm_
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_rm_seg') chunk;
 SELECT count(*) FROM metrics_rm_seg;
 DROP TABLE metrics_rm_seg;
+
+-- Compaction is maintenance, not user activity, so it must leave the chunk's
+-- operation statistics alone.
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_sort_batches = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = false;
+
+CREATE TABLE metrics_stats (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.chunk_interval='1 year');
+
+INSERT INTO metrics_stats SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,3000) i;
+INSERT INTO metrics_stats SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,3000) i;
+
+SELECT ch.relid::regclass::text AS "STATS_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_stats'
+ORDER BY ch.id LIMIT 1 \gset
+
+-- A real SELECT, so the operation counters and the last-operation snapshot
+-- hold something that compaction could overwrite.
+SELECT count(*) FROM metrics_stats WHERE value = 42;
+
+SELECT n_selects, n_inserts, n_updates, n_deletes,
+       total_batches_decompressed, total_tuples_decompressed,
+       last_op_batches_decompressed, last_op_tuples_decompressed
+FROM _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK');
+
+CREATE TEMP TABLE stats_before AS
+SELECT * FROM _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK');
+
+-- Overlapping batches, so this run does real work.
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_stats') chunk;
+SELECT _timescaledb_functions.compact_chunk(:'STATS_CHUNK');
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_stats') chunk;
+
+-- Every operation counter unchanged and stats before compaction kept.
+SELECT a.n_selects - b.n_selects AS n_selects_delta,
+       a.n_inserts - b.n_inserts AS n_inserts_delta,
+       a.n_updates - b.n_updates AS n_updates_delta,
+       a.n_deletes - b.n_deletes AS n_deletes_delta,
+       a.total_batches_decompressed - b.total_batches_decompressed AS total_batches_delta,
+       a.total_tuples_decompressed - b.total_tuples_decompressed AS total_tuples_delta,
+       a.last_op_batches_decompressed = b.last_op_batches_decompressed AS last_op_batches_kept,
+       a.last_op_tuples_decompressed = b.last_op_tuples_decompressed AS last_op_tuples_kept,
+       a.last_update = b.last_update AS last_update_kept
+FROM stats_before b,
+     LATERAL _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK') a;
+
+DROP TABLE stats_before;
+
+-- A compaction run with nothing to merge must be just as invisible.
+CREATE TEMP TABLE stats_before AS
+SELECT * FROM _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK');
+
+SELECT _timescaledb_functions.compact_chunk(:'STATS_CHUNK');
+
+SELECT a.n_selects - b.n_selects AS n_selects_delta,
+       a.total_batches_decompressed - b.total_batches_decompressed AS total_batches_delta,
+       a.last_op_batches_decompressed = b.last_op_batches_decompressed AS last_op_batches_kept,
+       a.last_update = b.last_update AS last_update_kept
+FROM stats_before b,
+     LATERAL _timescaledb_functions.chunk_statistics(uncompressed_relid => :'STATS_CHUNK') a;
+
+DROP TABLE stats_before;
+DROP TABLE metrics_stats;
+
+-- Segmentwise recompression is maintenance as well and decompresses batches
+-- the same way, so it must stay out of the operation statistics too.
+SET timescaledb.enable_direct_compress_insert = false;
+
+CREATE TABLE metrics_rc_stats (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.chunk_interval='1 year');
+
+INSERT INTO metrics_rc_stats SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,3000) i;
+SELECT compress_chunk(chunk) FROM show_chunks('metrics_rc_stats') chunk;
+
+-- Out-of-order rows leave the chunk partially compressed, which is what
+-- segmentwise recompression folds back in.
+INSERT INTO metrics_rc_stats SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,500) i;
+
+SELECT ch.relid::regclass::text AS "RC_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_rc_stats'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT count(*) FROM metrics_rc_stats WHERE value = 42;
+
+CREATE TEMP TABLE stats_before AS
+SELECT * FROM _timescaledb_functions.chunk_statistics(uncompressed_relid => :'RC_CHUNK');
+
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'RC_CHUNK');
+
+SELECT a.n_selects - b.n_selects AS n_selects_delta,
+       a.total_batches_decompressed - b.total_batches_decompressed AS total_batches_delta,
+       a.total_tuples_decompressed - b.total_tuples_decompressed AS total_tuples_delta,
+       a.last_op_batches_decompressed = b.last_op_batches_decompressed AS last_op_batches_kept,
+       a.last_op_tuples_decompressed = b.last_op_tuples_decompressed AS last_op_tuples_kept,
+       a.last_update = b.last_update AS last_update_kept
+FROM stats_before b,
+     LATERAL _timescaledb_functions.chunk_statistics(uncompressed_relid => :'RC_CHUNK') a;
+
+DROP TABLE stats_before;
+DROP TABLE metrics_rc_stats;
