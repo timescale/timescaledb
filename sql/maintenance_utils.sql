@@ -64,6 +64,11 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.rebuild_sparse_index(
     force BOOLEAN = false
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_rebuild_sparse_index' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.move_to_columnstore(
+    chunk REGCLASS,
+    fallback BOOLEAN = false
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_to_columnstore' LANGUAGE C VOLATILE;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.chunk_rewrite_cleanup()
 LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_chunk_rewrite_cleanup';
 

@@ -73,6 +73,7 @@ set(TEST_FILES
     direct_compress_insert.sql
     direct_compress_policy.sql
     move.sql
+    move_to_columnstore.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql

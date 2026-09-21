@@ -77,6 +77,7 @@ bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
+TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit = 30000;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
@@ -569,6 +570,22 @@ _guc_init(void)
 							"single transaction. Setting this to 0 would make it unlimited.",
 							&ts_guc_direct_compress_copy_tuple_sort_limit,
 							100000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("move_to_columnstore_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once when moving a chunk "
+							"to the columnstore",
+							"This is mainly used to keep the memory footprint down when moving "
+							"large amounts of uncompressed data in a single transaction. "
+							"Setting this to 0 would make it unlimited.",
+							&ts_guc_move_to_columnstore_tuple_sort_limit,
+							30000,
 							0,
 							2147483647,
 							PGC_USERSET,

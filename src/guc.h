@@ -46,6 +46,7 @@ extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
 extern int ts_guc_direct_compress_copy_tuple_sort_limit;
+extern TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert;
 extern bool ts_guc_enable_direct_compress_insert_sort_batches;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted;
