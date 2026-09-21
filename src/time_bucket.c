@@ -95,14 +95,6 @@ ts_int64_bucket(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(result);
 }
 
-#define JAN_3_2000 (2 * USECS_PER_DAY)
-
-/*
- * The default origin is Monday 2000-01-03. We don't use PG epoch since it starts on a saturday.
- * This makes time-buckets by a week more intuitive and aligns it with date_trunc. Since month
- * bucketing ignores the day component this makes origin for month buckets 2000-01-01.
- */
-#define DEFAULT_ORIGIN (JAN_3_2000)
 #define TIME_BUCKET_TS(period, timestamp, result, shift)                                           \
 	do                                                                                             \
 	{                                                                                              \
