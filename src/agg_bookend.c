@@ -5,15 +5,17 @@
  */
 #include <postgres.h>
 #include <access/htup_details.h>
+#include <access/stratnum.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
-#include <nodes/value.h>
+#include <parser/parse_oper.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/lsyscache.h>
+#include <utils/sortsupport.h>
 #include <utils/syscache.h>
 
 #include "export.h"
@@ -234,7 +236,6 @@ typedef struct TransCache
 {
 	TypeInfoCache value_type_cache;
 	TypeInfoCache cmp_type_cache;
-	FmgrInfo cmp_proc;
 } TransCache;
 
 /* Internal state for bookend aggregates */
@@ -287,47 +288,46 @@ typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *outp
 	}
 }
 
-inline static void
-cmpproc_init(FunctionCallInfo fcinfo, FmgrInfo *cmp_proc, Oid type_oid, char *opname)
+/*
+ * Sort support for the comparison element, ordered by the type's default btree
+ * sort operator. That is the same order the planner uses when it turns
+ * first/last into an index scan. The ordering only depends on the type, the
+ * collation and the direction, so it is cached per call site and shared by all
+ * groups.
+ */
+inline static SortSupport
+cmp_sortsupport(FunctionCallInfo fcinfo, Oid type_oid, StrategyNumber strategy)
 {
-	Oid cmp_op, cmp_regproc;
+	SortSupport ssup = (SortSupport) fcinfo->flinfo->fn_extra;
+	bool is_lt = (strategy == BTLessStrategyNumber);
+	Oid lt_opr, gt_opr;
+
+	if (ssup != NULL)
+	{
+		return ssup;
+	}
 
 	if (!OidIsValid(type_oid))
 	{
 		elog(ERROR, "could not determine the type of the comparison_element");
 	}
 
-	cmp_op = OpernameGetOprid(list_make1(makeString(opname)), type_oid, type_oid);
-	if (!OidIsValid(cmp_op))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_FUNCTION),
-				 errmsg("could not find a %s operator for type %s",
-						opname,
-						format_type_be(type_oid))));
-	}
-	cmp_regproc = get_opcode(cmp_op);
-	if (!OidIsValid(cmp_regproc))
-	{
-		elog(ERROR,
-			 "could not find the procedure for the %s operator for type %d",
-			 opname,
-			 type_oid);
-	}
-	fmgr_info_cxt(cmp_regproc, cmp_proc, fcinfo->flinfo->fn_mcxt);
-}
+	get_sort_group_operators(type_oid, is_lt, false, !is_lt, &lt_opr, NULL, &gt_opr, NULL);
 
-inline static bool
-cmpproc_cmp(FmgrInfo *cmp_proc, FunctionCallInfo fcinfo, PolyDatum left, PolyDatum right)
-{
-	return DatumGetBool(FunctionCall2Coll(cmp_proc, fcinfo->fncollation, left.datum, right.datum));
+	ssup = MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(SortSupportData));
+	ssup->ssup_cxt = fcinfo->flinfo->fn_mcxt;
+	ssup->ssup_collation = fcinfo->fncollation;
+	PrepareSortSupportFromOrderingOp(is_lt ? lt_opr : gt_opr, ssup);
+	fcinfo->flinfo->fn_extra = ssup;
+
+	return ssup;
 }
 
 /*
  * bookend_sfunc - internal function called by ts_last_sfunc and ts_first_sfunc;
  */
 static inline Datum
-bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, char *opname,
+bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, StrategyNumber strategy,
 			  FunctionCallInfo fcinfo)
 {
 	PolyDatum value = polydatum_from_arg(1, fcinfo);
@@ -356,14 +356,11 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, char *opname
 	else if (!cmp.is_null)
 	{
 		TransCache *cache = &state->aggstate_type_cache;
-
-		if (cache->cmp_proc.fn_addr == NULL)
-		{
-			cmpproc_init(fcinfo, &cache->cmp_proc, cache->cmp_type_cache.typoid, opname);
-		}
+		SortSupport ssup = cmp_sortsupport(fcinfo, cache->cmp_type_cache.typoid, strategy);
 
 		/* only do comparison if cmp is not NULL */
-		if (state->cmp.is_null || cmpproc_cmp(&cache->cmp_proc, fcinfo, cmp, state->cmp))
+		if (state->cmp.is_null ||
+			ApplySortComparator(cmp.datum, false, state->cmp.datum, false, ssup) < 0)
 		{
 			typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 			typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
@@ -379,7 +376,7 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, char *opname
  */
 static inline Datum
 bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
-					InternalCmpAggStore *state2, char *opname, FunctionCallInfo fcinfo)
+					InternalCmpAggStore *state2, StrategyNumber strategy, FunctionCallInfo fcinfo)
 {
 	MemoryContext old_context;
 
@@ -401,14 +398,8 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 		Assert(OidIsValid(state2->aggstate_type_cache.cmp_type_cache.typoid));
 		TransCache *cache1 = &state1->aggstate_type_cache;
 		TransCache *cache2 = &state2->aggstate_type_cache;
-		/*
-		 * Initialize the type information from the right-hand state. Note that
-		 * we will have to re-lookup the comparison procedure on demand, because
-		 * the comparison procedure from the right-hand state might have been
-		 * allocated in a different memory context.
-		 */
-		cache1->value_type_cache = cache2->value_type_cache;
-		cache1->cmp_type_cache = cache2->cmp_type_cache;
+		/* Take the type information from the right-hand state. */
+		*cache1 = *cache2;
 
 		typeinfocache_polydatumcopy(&cache1->value_type_cache, state2->value, &state1->value);
 		typeinfocache_polydatumcopy(&cache1->cmp_type_cache, state2->cmp, &state1->cmp);
@@ -434,11 +425,9 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 	}
 
 	TransCache *cache1 = &state1->aggstate_type_cache;
-	if (cache1->cmp_proc.fn_addr == NULL)
-	{
-		cmpproc_init(fcinfo, &cache1->cmp_proc, cache1->cmp_type_cache.typoid, opname);
-	}
-	if (cmpproc_cmp(&cache1->cmp_proc, fcinfo, state2->cmp, state1->cmp))
+	SortSupport ssup = cmp_sortsupport(fcinfo, cache1->cmp_type_cache.typoid, strategy);
+
+	if (ApplySortComparator(state2->cmp.datum, false, state1->cmp.datum, false, ssup) < 0)
 	{
 		old_context = MemoryContextSwitchTo(aggcontext);
 		typeinfocache_polydatumcopy(&cache1->value_type_cache, state2->value, &state1->value);
@@ -463,7 +452,7 @@ ts_first_sfunc(PG_FUNCTION_ARGS)
 		elog(ERROR, "first_sfun called in non-aggregate context");
 	}
 
-	return bookend_sfunc(aggcontext, store, "<", fcinfo);
+	return bookend_sfunc(aggcontext, store, BTLessStrategyNumber, fcinfo);
 }
 
 /* last(internal internal_state, anyelement value, "any" comparison_element) */
@@ -480,7 +469,7 @@ ts_last_sfunc(PG_FUNCTION_ARGS)
 		elog(ERROR, "last_sfun called in non-aggregate context");
 	}
 
-	return bookend_sfunc(aggcontext, store, ">", fcinfo);
+	return bookend_sfunc(aggcontext, store, BTGreaterStrategyNumber, fcinfo);
 }
 
 /* first_combinerfunc(internal, internal) => internal */
@@ -498,7 +487,7 @@ ts_first_combinefunc(PG_FUNCTION_ARGS)
 		/* cannot be called directly because of internal-type argument */
 		elog(ERROR, "ts_first_combinefunc called in non-aggregate context");
 	}
-	return bookend_combinefunc(aggcontext, state1, state2, "<", fcinfo);
+	return bookend_combinefunc(aggcontext, state1, state2, BTLessStrategyNumber, fcinfo);
 }
 
 /* last_combinerfunc(internal, internal) => internal */
@@ -516,7 +505,7 @@ ts_last_combinefunc(PG_FUNCTION_ARGS)
 		/* cannot be called directly because of internal-type argument */
 		elog(ERROR, "ts_last_combinefunc called in non-aggregate context");
 	}
-	return bookend_combinefunc(aggcontext, state1, state2, ">", fcinfo);
+	return bookend_combinefunc(aggcontext, state1, state2, BTGreaterStrategyNumber, fcinfo);
 }
 
 /* ts_bookend_serializefunc(internal) => bytea */

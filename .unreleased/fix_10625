@@ -1,0 +1,1 @@
+Fixes: #10625 Wrong error for first and last on varchar and other binary coercible types
