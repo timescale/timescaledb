@@ -17,9 +17,10 @@ CREATE TABLE sensors (time timestamptz NOT NULL, sensor_id integer, temp float8)
 SELECT create_hypertable('sensors', 'time', chunk_time_interval => '1 day'::interval);
 
 ALTER TABLE sensors SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = '1 day',
-    timescaledb.granular_refresh_end_offset = '1 hour'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = '1 day',
+    timescaledb.cagg_granular_refresh_end_offset = '1 hour'
 );
 
 CREATE MATERIALIZED VIEW sensors_hourly
@@ -52,9 +53,10 @@ WHERE ca.user_view_name = 'sensors_hourly' \gset
 
 \set ON_ERROR_STOP 0
 ALTER TABLE :mat_ht_qualified SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = '1 day',
-    timescaledb.granular_refresh_end_offset = '1 hour'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = '1 day',
+    timescaledb.cagg_granular_refresh_end_offset = '1 hour'
 );
 \set ON_ERROR_STOP 1
 

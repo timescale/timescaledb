@@ -117,33 +117,33 @@ dca_create_dest(DeferredChunkAppendState *state)
 	return (DestReceiver *) dest;
 }
 
-static Plan *deferred_chunk_scan_plan_create(PlannerInfo *root, RelOptInfo *rel,
-											 CustomPath *best_path, List *tlist, List *clauses,
-											 List *custom_plans);
-static Node *deferred_chunk_scan_state_create(CustomScan *cscan);
-static void deferred_chunk_scan_begin(CustomScanState *node, EState *estate, int eflags);
-static TupleTableSlot *deferred_chunk_scan_exec(CustomScanState *node);
-static void deferred_chunk_scan_end(CustomScanState *node);
-static void deferred_chunk_scan_rescan(CustomScanState *node);
-static void deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es);
+static Plan *deferred_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel,
+											   CustomPath *best_path, List *tlist, List *clauses,
+											   List *custom_plans);
+static Node *deferred_chunk_append_state_create(CustomScan *cscan);
+static void deferred_chunk_append_begin(CustomScanState *node, EState *estate, int eflags);
+static TupleTableSlot *deferred_chunk_append_exec(CustomScanState *node);
+static void deferred_chunk_append_end(CustomScanState *node);
+static void deferred_chunk_append_rescan(CustomScanState *node);
+static void deferred_chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es);
 
-static CustomPathMethods deferred_chunk_scan_path_methods = {
+static CustomPathMethods deferred_chunk_append_path_methods = {
 	.CustomName = "DeferredChunkAppend",
-	.PlanCustomPath = deferred_chunk_scan_plan_create,
+	.PlanCustomPath = deferred_chunk_append_plan_create,
 };
 
-static CustomScanMethods deferred_chunk_scan_plan_methods = {
+static CustomScanMethods deferred_chunk_append_plan_methods = {
 	.CustomName = "DeferredChunkAppend",
-	.CreateCustomScanState = deferred_chunk_scan_state_create,
+	.CreateCustomScanState = deferred_chunk_append_state_create,
 };
 
-static CustomExecMethods deferred_chunk_scan_exec_methods = {
+static CustomExecMethods deferred_chunk_append_exec_methods = {
 	.CustomName = "DeferredChunkAppend",
-	.BeginCustomScan = deferred_chunk_scan_begin,
-	.ExecCustomScan = deferred_chunk_scan_exec,
-	.EndCustomScan = deferred_chunk_scan_end,
-	.ReScanCustomScan = deferred_chunk_scan_rescan,
-	.ExplainCustomScan = deferred_chunk_scan_explain,
+	.BeginCustomScan = deferred_chunk_append_begin,
+	.ExecCustomScan = deferred_chunk_append_exec,
+	.EndCustomScan = deferred_chunk_append_end,
+	.ReScanCustomScan = deferred_chunk_append_rescan,
+	.ExplainCustomScan = deferred_chunk_append_explain,
 };
 
 /* Returns the leading ORDER BY key if it sorts by the primary dimension in the column's
@@ -238,8 +238,31 @@ qual_walker(Node *node, QualSupportContext *ctx)
 			return expression_tree_walker(node, qual_walker, ctx);
 		}
 
-		case T_List:
 		case T_Const:
+		{
+			/*
+			 * The walked expression is the WHERE clause after preprocessing,
+			 * so eval_const_expressions has already run over it. That clause is
+			 * deparsed into the per-chunk query once at plan time and parsed
+			 * back for every scanned chunk, so every Const has to survive the
+			 * round trip. That requires a literal syntax for its type, and we
+			 * use pseudo-type as a proxy for it.
+			 *
+			 * A cstring Const comes from eval_const_expressions on a CoerceViaIO
+			 * into any type whose input function is not immutable. It rewrites
+			 * 'x'::text::myenum into 'x'::cstring::myenum
+			 *
+			 */
+			Const *con = (Const *) node;
+			if (get_typtype(con->consttype) == TYPTYPE_PSEUDO)
+			{
+				ctx->supported = false;
+				return true;
+			}
+			return false;
+		}
+
+		case T_List:
 		case T_OpExpr:
 		case T_DistinctExpr:
 		case T_NullIfExpr:
@@ -270,7 +293,7 @@ qual_walker(Node *node, QualSupportContext *ctx)
 }
 
 static bool
-deferred_chunk_scan_quals_supported(Node *quals, Index rtindex, Bitmapset *dimension_attnos)
+deferred_chunk_append_quals_supported(Node *quals, Index rtindex, Bitmapset *dimension_attnos)
 {
 	if (quals == NULL)
 	{
@@ -284,7 +307,7 @@ deferred_chunk_scan_quals_supported(Node *quals, Index rtindex, Bitmapset *dimen
 }
 
 static bool
-deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
+deferred_chunk_append_is_candidate(const Query *query, const Hypertable *ht)
 {
 	if (!ts_guc_enable_optimizations || !ts_guc_enable_deferred_chunk_append || ht == NULL)
 	{
@@ -350,7 +373,7 @@ deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
 	{
 		dimension_attnos = bms_add_member(dimension_attnos, ht->space->dimensions[i].column_attno);
 	}
-	if (!deferred_chunk_scan_quals_supported(query->jointree->quals, rtindex, dimension_attnos))
+	if (!deferred_chunk_append_quals_supported(query->jointree->quals, rtindex, dimension_attnos))
 	{
 		return false;
 	}
@@ -410,7 +433,7 @@ deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
 			SortGroupClause *sgc = lfirst_node(SortGroupClause, lc);
 			sort_exprs = lappend(sort_exprs, get_sortgroupclause_tle(sgc, query->targetList)->expr);
 		}
-		if (!deferred_chunk_scan_quals_supported((Node *) sort_exprs, rtindex, NULL))
+		if (!deferred_chunk_append_quals_supported((Node *) sort_exprs, rtindex, NULL))
 		{
 			return false;
 		}
@@ -420,24 +443,24 @@ deferred_chunk_scan_is_candidate(const Query *query, const Hypertable *ht)
 }
 
 bool
-ts_should_deferred_chunk_scan(const Query *query, const Hypertable *ht)
+ts_should_deferred_chunk_append(const Query *query, const Hypertable *ht)
 {
-	bool used = deferred_chunk_scan_is_candidate(query, ht);
+	bool used = deferred_chunk_append_is_candidate(query, ht);
 
 #ifdef TS_DEBUG
-	if (!used && ts_guc_debug_require_deferred_chunk_scan == DRO_Require)
+	if (!used && ts_guc_debug_require_deferred_chunk_append == DRO_Require)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("DeferredChunkAppend not used when required by the "
-						"debug_require_deferred_chunk_scan GUC")));
+						"debug_require_deferred_chunk_append GUC")));
 	}
-	if (used && ts_guc_debug_require_deferred_chunk_scan == DRO_Forbid)
+	if (used && ts_guc_debug_require_deferred_chunk_append == DRO_Forbid)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("DeferredChunkAppend used when forbidden by the "
-						"debug_require_deferred_chunk_scan GUC")));
+						"debug_require_deferred_chunk_append GUC")));
 	}
 #endif
 
@@ -449,7 +472,7 @@ ts_should_deferred_chunk_scan(const Query *query, const Hypertable *ht)
  * into each per-chunk query.
  */
 static int64
-deferred_chunk_scan_push_limit(const Query *query)
+deferred_chunk_append_push_limit(const Query *query)
 {
 	Node *lc = query->limitCount;
 	Node *lo = query->limitOffset;
@@ -484,8 +507,38 @@ deferred_chunk_scan_push_limit(const Query *query)
 	return sum;
 }
 
+/*
+ * Pin the GUCs affecting how literals are written, so the clause survives the
+ * trip through text.
+ */
+static void
+dca_set_literal_gucs(void)
+{
+	static const struct
+	{
+		const char *name;
+		const char *value;
+	} settings[] = {
+		{ "extra_float_digits", "3" },			 { "DateStyle", "ISO" },
+		{ "IntervalStyle", "postgres" },		 { "bytea_output", "hex" },
+		{ "standard_conforming_strings", "on" }, { "array_nulls", "on" },
+	};
+
+	for (size_t i = 0; i < lengthof(settings); i++)
+	{
+		set_config_option(settings[i].name,
+						  settings[i].value,
+						  PGC_USERSET,
+						  PGC_S_SESSION,
+						  GUC_ACTION_SAVE,
+						  true,
+						  ERROR,
+						  false);
+	}
+}
+
 static char *
-deferred_chunk_scan_deparse_quals(RelOptInfo *rel, Oid ht_relid)
+deferred_chunk_append_deparse_quals(RelOptInfo *rel, Oid ht_relid)
 {
 	if (rel->baserestrictinfo == NIL)
 	{
@@ -516,7 +569,7 @@ deferred_chunk_scan_deparse_quals(RelOptInfo *rel, Oid ht_relid)
 /* Deparse the full ORDER BY for the per-chunk query, following ruleutils
  * get_rule_orderby (implicit ASC, explicit DESC/USING/NULLS). */
 static char *
-deferred_chunk_scan_deparse_orderby(const Query *query, RelOptInfo *rel, Oid ht_relid)
+deferred_chunk_append_deparse_orderby(const Query *query, RelOptInfo *rel, Oid ht_relid)
 {
 	List *context = deparse_context_for(get_rel_name(ht_relid), ht_relid);
 	StringInfoData buf;
@@ -577,11 +630,11 @@ deferred_chunk_scan_deparse_orderby(const Query *query, RelOptInfo *rel, Oid ht_
 }
 
 void
-ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht)
+ts_deferred_chunk_append_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht)
 {
 	CustomPath *cpath = makeNode(CustomPath);
 	bool descending = false;
-	int64 push_limit = deferred_chunk_scan_push_limit(root->parse);
+	int64 push_limit = deferred_chunk_append_push_limit(root->parse);
 
 	cpath->path.pathtype = T_CustomScan;
 	cpath->path.parent = rel;
@@ -591,7 +644,7 @@ ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypert
 	cpath->path.startup_cost = random_page_cost;
 	/* total_cost grows with rows so an enclosing Limit scales it */
 	cpath->path.total_cost = cpath->path.startup_cost + cpath->path.rows * 2 * cpu_tuple_cost;
-	cpath->methods = &deferred_chunk_scan_path_methods;
+	cpath->methods = &deferred_chunk_append_path_methods;
 
 	SortGroupClause *sgc = primary_dimension_sort_key(root->parse, ht);
 	if (sgc != NULL)
@@ -611,10 +664,12 @@ ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypert
 	/* Deparse under a locked-down search_path so names come out fully qualified. */
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
-	char *where_clause = deferred_chunk_scan_deparse_quals(rel, ht->main_table_relid);
+	dca_set_literal_gucs();
+	char *where_clause = deferred_chunk_append_deparse_quals(rel, ht->main_table_relid);
 	char *order_by =
-		sgc != NULL ? deferred_chunk_scan_deparse_orderby(root->parse, rel, ht->main_table_relid) :
-					  NULL;
+		sgc != NULL ?
+			deferred_chunk_append_deparse_orderby(root->parse, rel, ht->main_table_relid) :
+			NULL;
 	AtEOXact_GUC(false, save_nestlevel);
 
 	List *ints = list_make3_int(sgc != NULL, (int) push_limit, descending);
@@ -630,8 +685,8 @@ ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel, const Hypert
 }
 
 static Plan *
-deferred_chunk_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
-								List *tlist, List *clauses, List *custom_plans)
+deferred_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
+								  List *tlist, List *clauses, List *custom_plans)
 {
 	CustomScan *cscan = makeNode(CustomScan);
 
@@ -642,18 +697,18 @@ deferred_chunk_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *
 	cscan->custom_plans = custom_plans;
 	cscan->custom_private = best_path->custom_private;
 	cscan->custom_scan_tlist = NIL;
-	cscan->methods = &deferred_chunk_scan_plan_methods;
+	cscan->methods = &deferred_chunk_append_plan_methods;
 
 	return &cscan->scan.plan;
 }
 
 static Node *
-deferred_chunk_scan_state_create(CustomScan *cscan)
+deferred_chunk_append_state_create(CustomScan *cscan)
 {
 	DeferredChunkAppendState *state =
 		(DeferredChunkAppendState *) newNode(sizeof(DeferredChunkAppendState), T_CustomScanState);
 
-	state->css.methods = &deferred_chunk_scan_exec_methods;
+	state->css.methods = &deferred_chunk_append_exec_methods;
 
 	List *ints = linitial(cscan->custom_private);
 	Assert(list_length(ints) == DCA_PRIV_COUNT);
@@ -684,7 +739,7 @@ compute_fetch_columns(DeferredChunkAppendState *state, CustomScanState *node)
 	/*
 	 * A whole-row reference (attno 0) needs every column; expand it to all live
 	 * columns so it goes through the same by-attno assignment as any other column
-	 * set. (System columns, attno < 0, are rejected in ts_should_deferred_chunk_scan.)
+	 * set. (System columns, attno < 0, are rejected in ts_should_deferred_chunk_append.)
 	 */
 	bool whole_row = bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, attrs);
 
@@ -742,7 +797,7 @@ dca_close_all_qds(DeferredChunkAppendState *state)
 
 /* Reset the scan position to the start */
 static void
-deferred_chunk_scan_reset(DeferredChunkAppendState *state)
+deferred_chunk_append_reset(DeferredChunkAppendState *state)
 {
 	dca_close_all_qds(state);
 	state->cur_nrows = 0;
@@ -755,7 +810,7 @@ deferred_chunk_scan_reset(DeferredChunkAppendState *state)
 }
 
 static void
-deferred_chunk_scan_begin(CustomScanState *node, EState *estate, int eflags)
+deferred_chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	DeferredChunkAppendState *state = (DeferredChunkAppendState *) node;
 	Oid ht_relid = RelationGetRelid(node->ss.ss_currentRelation);
@@ -765,7 +820,7 @@ deferred_chunk_scan_begin(CustomScanState *node, EState *estate, int eflags)
 											  "DeferredChunkAppend chunk",
 											  ALLOCSET_DEFAULT_SIZES);
 	state->dest = dca_create_dest(state);
-	deferred_chunk_scan_reset(state);
+	deferred_chunk_append_reset(state);
 
 	state->scan_slot =
 		MakeSingleTupleTableSlot(RelationGetDescr(node->ss.ss_currentRelation), &TTSOpsVirtual);
@@ -798,7 +853,7 @@ deferred_chunk_scan_begin(CustomScanState *node, EState *estate, int eflags)
  * Build the per-chunk query.
  */
 static char *
-deferred_chunk_scan_chunk_sql(DeferredChunkAppendState *state, Oid reloid)
+deferred_chunk_append_chunk_sql(DeferredChunkAppendState *state, Oid reloid)
 {
 	TupleDesc desc = RelationGetDescr(state->css.ss.ss_currentRelation);
 	char *qualified = quote_qualified_identifier(get_namespace_name(get_rel_namespace(reloid)),
@@ -999,11 +1054,12 @@ open_next_chunk(DeferredChunkAppendState *state)
 	}
 	state->chunks_scanned++;
 
-	char *sql = deferred_chunk_scan_chunk_sql(state, reloid);
+	char *sql = deferred_chunk_append_chunk_sql(state, reloid);
 
-	/* Reparse under the same locked-down search_path used to deparse the quals. */
+	/* Reparse under the same settings used to deparse the quals. */
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
+	dca_set_literal_gucs();
 	List *parsetree = pg_parse_query(sql);
 	RawStmt *raw = linitial_node(RawStmt, parsetree);
 	List *querytree = pg_analyze_and_rewrite_fixedparams(raw, sql, NULL, 0, NULL);
@@ -1093,7 +1149,7 @@ next_chunk_row(DeferredChunkAppendState *state)
 }
 
 static TupleTableSlot *
-deferred_chunk_scan_next(ScanState *ss)
+deferred_chunk_append_next(ScanState *ss)
 {
 	DeferredChunkAppendState *state = (DeferredChunkAppendState *) ss;
 
@@ -1127,21 +1183,21 @@ deferred_chunk_scan_next(ScanState *ss)
 }
 
 static bool
-deferred_chunk_scan_recheck(ScanState *ss, TupleTableSlot *slot)
+deferred_chunk_append_recheck(ScanState *ss, TupleTableSlot *slot)
 {
 	return true;
 }
 
 static TupleTableSlot *
-deferred_chunk_scan_exec(CustomScanState *node)
+deferred_chunk_append_exec(CustomScanState *node)
 {
 	return ExecScan(&node->ss,
-					(ExecScanAccessMtd) deferred_chunk_scan_next,
-					(ExecScanRecheckMtd) deferred_chunk_scan_recheck);
+					(ExecScanAccessMtd) deferred_chunk_append_next,
+					(ExecScanRecheckMtd) deferred_chunk_append_recheck);
 }
 
 static void
-deferred_chunk_scan_end(CustomScanState *node)
+deferred_chunk_append_end(CustomScanState *node)
 {
 	DeferredChunkAppendState *state = (DeferredChunkAppendState *) node;
 
@@ -1159,15 +1215,15 @@ deferred_chunk_scan_end(CustomScanState *node)
 }
 
 static void
-deferred_chunk_scan_rescan(CustomScanState *node)
+deferred_chunk_append_rescan(CustomScanState *node)
 {
-	deferred_chunk_scan_reset((DeferredChunkAppendState *) node);
+	deferred_chunk_append_reset((DeferredChunkAppendState *) node);
 }
 
 /* Show the ORDER BY key (ordered mode) and, under ANALYZE, the number of chunks
  * the LIMIT visited followed by each chunk's actual per-chunk plan. */
 static void
-deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+deferred_chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	DeferredChunkAppendState *state = (DeferredChunkAppendState *) node;
 
@@ -1204,7 +1260,7 @@ deferred_chunk_scan_explain(CustomScanState *node, List *ancestors, ExplainState
 }
 
 void
-_deferred_chunk_scan_init(void)
+_deferred_chunk_append_init(void)
 {
-	TryRegisterCustomScanMethods(&deferred_chunk_scan_plan_methods);
+	TryRegisterCustomScanMethods(&deferred_chunk_append_plan_methods);
 }

@@ -53,10 +53,8 @@ explain (buffers off, costs off) select * from t where high_card = 1 order by ts
 explain (buffers off, costs off) select * from t where low_card = 1 and high_card = 1 order by ts;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-   ->  Sort
-         Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_ts, _hyper_1_1_chunk_compressed._ts_meta_v2_last_ts
-         ->  Index Scan using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
-               Index Cond: ((low_card = 1) AND (high_card = 1))
+   ->  Index Scan Backward using _hyper_1_1_chunk_compressed_low_card_high_card__ts_meta_v2__idx on _hyper_1_1_chunk_compressed
+         Index Cond: ((low_card = 1) AND (high_card = 1))
 
 -- Test that batch sorted merge is not disabled by enable_sort. We have another
 -- GUC to disable it.

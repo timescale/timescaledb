@@ -6,6 +6,7 @@ name: pg_upgrade test
       - ?.*.x
       - prerelease_test
   pull_request:
+  workflow_call:
 
 jobs:
   check_paths:
@@ -13,11 +14,13 @@ jobs:
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
+          || github.event_name == 'workflow_call'
           || (steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        if: github.event_name != 'workflow_call'
         id: filter
         with:
           filters: .github/filters.yaml
@@ -150,4 +153,3 @@ jobs:
             exit 1
           fi
           echo "All checks passed or were safely skipped."
-
