@@ -336,9 +336,10 @@ settings_rows
 
 step hc_configure: 
     ALTER TABLE conditions SET (
-        timescaledb.granular_refresh_column = 'sensor_id',
-        timescaledb.granular_refresh_start_offset = '2 years',
-        timescaledb.granular_refresh_end_offset = '1 day');
+        timescaledb.cagg_enable_granular_refresh = true,
+        timescaledb.cagg_granular_refresh_column = 'sensor_id',
+        timescaledb.cagg_granular_refresh_start_offset = '2 years',
+        timescaledb.cagg_granular_refresh_end_offset = '1 day');
 
 step he_enable: ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
 step s_insert_b: INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 'sensor_b', 2);

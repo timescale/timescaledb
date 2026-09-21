@@ -1,0 +1,1 @@
+Implements: #10613 Rename the granular refresh options to timescaledb.cagg_granular_refresh_*

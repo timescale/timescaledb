@@ -128,21 +128,15 @@ VACUUM ANALYZE metrics_ordered_idx2;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=10.00 loops=1)
-         ->  Sort (actual rows=1.00 loops=1)
-               Sort Key: _hyper_2_6_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_2_6_chunk_compressed._ts_meta_v2_last_time DESC
-               Sort Method: quicksort 
-               ->  Index Scan using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed (actual rows=5.00 loops=1)
-                     Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+         ->  Index Scan Backward using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed (actual rows=1.00 loops=1)
+               Index Cond: ((device_id = 3) AND (device_id_peer = 3))
 
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 asc LIMIT 10;
 --- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=10.00 loops=1)
-         ->  Sort (actual rows=1.00 loops=1)
-               Sort Key: _hyper_2_6_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_2_6_chunk_compressed._ts_meta_v2_last_time DESC, _hyper_2_6_chunk_compressed._ts_meta_v2_first_v0, _hyper_2_6_chunk_compressed._ts_meta_v2_last_v0
-               Sort Method: quicksort 
-               ->  Index Scan using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed (actual rows=5.00 loops=1)
-                     Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+         ->  Index Scan Backward using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed (actual rows=1.00 loops=1)
+               Index Cond: ((device_id = 3) AND (device_id_peer = 3))
 
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC , v0 desc LIMIT 10;
 --- QUERY PLAN ---
@@ -243,33 +237,20 @@ ORDER BY 1,
          ->  Custom Scan (ChunkAppend) on metrics_ordered_idx (actual rows=10.00 loops=1)
                Order: metrics_ordered_idx."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk (actual rows=0.00 loops=1)
-                     ->  Sort (actual rows=0.00 loops=1)
-                           Sort Key: _hyper_1_5_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_5_chunk_compressed._ts_meta_v2_last_time DESC
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_1_5_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_5_chunk_compressed (actual rows=0.00 loops=1)
-                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+                     ->  Index Scan Backward using _hyper_1_5_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_5_chunk_compressed (actual rows=0.00 loops=1)
+                           Index Cond: ((device_id = 3) AND (device_id_peer = 3))
                ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk (actual rows=0.00 loops=1)
-                     ->  Sort (actual rows=0.00 loops=1)
-                           Sort Key: _hyper_1_4_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_4_chunk_compressed._ts_meta_v2_last_time DESC
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_1_4_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_4_chunk_compressed (actual rows=0.00 loops=1)
-                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+                     ->  Index Scan Backward using _hyper_1_4_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_4_chunk_compressed (actual rows=0.00 loops=1)
+                           Index Cond: ((device_id = 3) AND (device_id_peer = 3))
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=10.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: _hyper_1_3_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_3_chunk_compressed._ts_meta_v2_last_time DESC
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=1.00 loops=1)
-                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+                     ->  Index Scan Backward using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=1.00 loops=1)
+                           Index Cond: ((device_id = 3) AND (device_id_peer = 3))
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time DESC
-                           ->  Index Scan using _hyper_1_2_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_2_chunk_compressed (never executed)
-                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+                     ->  Index Scan Backward using _hyper_1_2_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_2_chunk_compressed (never executed)
+                           Index Cond: ((device_id = 3) AND (device_id_peer = 3))
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time DESC
-                           ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (never executed)
-                                 Index Cond: ((device_id = 3) AND (device_id_peer = 3))
+                     ->  Index Scan Backward using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (never executed)
+                           Index Cond: ((device_id = 3) AND (device_id_peer = 3))
 
 :PREFIX SELECT DISTINCT ON (d.device_id)
     *
