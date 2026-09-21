@@ -1660,12 +1660,23 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 				Relation relation = table_open(rte->relid, NoLock);
 				for (int i = 0; i < relation->rd_att->natts; i++)
 				{
-					FormData_pg_attribute *attr = &relation->rd_att->attrs[i];
+#if PG18_GE
+					CompactAttribute *attr = TupleDescCompactAttr(relation->rd_att, i);
+
+					Assert(attr->attnullability != ATTNULLABLE_UNKNOWN);
+
+					if (attr->attnullability == ATTNULLABLE_VALID)
+					{
+						rel->notnullattnums = bms_add_member(rel->notnullattnums, i + 1);
+					}
+#else
+					FormData_pg_attribute *attr = TupleDescAttr(&relation->rd_att, i);
 
 					if (attr->attnotnull)
 					{
 						rel->notnullattnums = bms_add_member(rel->notnullattnums, attr->attnum);
 					}
+#endif
 				}
 				table_close(relation, NoLock);
 			}
