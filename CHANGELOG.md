@@ -2,6 +2,21 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.30.1 (2026-09-17)
+
+This release contains bug fixes since the 2.30.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#10580](https://github.com/timescale/timescaledb/pull/10580) Fix missing conflicts for `INSERT ... ON CONFLICT` with multiple unique constraints
+* [#10583](https://github.com/timescale/timescaledb/pull/10583) Fix `NULL` conflict resolution on single-column bloom filtering
+* [#10592](https://github.com/timescale/timescaledb/pull/10592) Fix duplicate rows from `DeferredChunkAppend` when `LIMIT` is not pushed down
+* [#10593](https://github.com/timescale/timescaledb/pull/10593) Fix `cannot cast type cstring` error in `DeferredChunkAppend` queries
+
+**Thanks**
+* @davidecentioni for reporting the problem with a LIMIT query on a hypertable returning duplicate rows once the plan goes generic [#10584](https://github.com/timescale/timescaledb/issues/10584)
+* @vincentrolfs for reporting the problem of LIMIT query with enum columns and casting [#10590](https://github.com/timescale/timescaledb/issues/10590)
+
+
 ## 2.30.0 (2026-09-08)
 
 This release contains performance improvements and bug fixes since the 2.29.2 release. We recommend that you upgrade at the next available opportunity.
@@ -755,10 +770,10 @@ We will continue supporting PostgreSQL 15 until June 2026. Closer to that time, 
 
 ## 2.22.1 (2025-09-30)
 
-This release contains performance improvements and bug fixes since the [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.20.0) release. We recommend that you upgrade at the next available opportunity.
+This release contains performance improvements and bug fixes since the [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0) release. We recommend that you upgrade at the next available opportunity.
 
 This release blocks the ability to leverage **concurrent refresh policies** in **hierarchical continuous aggregates**, as potential deadlocks can occur.
-[Concurrent refresh policies](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/refresh-policies/#add-concurrent-refresh-policies) were introduced in [2.21.0](https://github.com/timescale/timescaledb/releases/tag/2.20.0) and allow users to define multiple time ranges, to refresh, e.g. data from the last hour in policy and the last day in a second policy.
+[Concurrent refresh policies](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/refresh-policies/#add-concurrent-refresh-policies) were introduced in [2.21.0](https://github.com/timescale/timescaledb/releases/tag/2.21.0) and allow users to define multiple time ranges, to refresh, e.g. data from the last hour in policy and the last day in a second policy.
 If you are using this feature with **hierarchical** continuous aggregates, please [remove the existing policies](https://docs.tigerdata.com/api/latest/jobs-automation/delete_job/#samples) and [create a new policy](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/refresh-policies/#change-the-refresh-policy) for the full range you want to refresh, of the continuous aggregate as follows:
 ```
 --- Find the job ID's of the concurrent refresh policies
@@ -1025,6 +1040,10 @@ This release contains performance improvements and bug fixes since the 2.19.3 re
 **PostgreSQL 14 support removal announcement**
 
 Following the deprecation announcement for PostgreSQL 14 in TimescaleDB v2.19.0, PostgreSQL 14 is no longer supported in TimescaleDB v2.20.0. The currently supported PostgreSQL major versions are 15, 16, and 17.
+
+**Continuous aggregate `WITH` option rename**
+
+On continuous aggregates, `timescaledb.chunk_time_interval` is renamed to `timescaledb.chunk_interval`. The old name fails with `unrecognized parameter`.
 
 **Features**
 * [#7638](https://github.com/timescale/timescaledb/pull/7638) Bloom filter sparse indexes for compressed columns. Can be disabled with the GUC `timescaledb.enable_sparse_index_bloom`

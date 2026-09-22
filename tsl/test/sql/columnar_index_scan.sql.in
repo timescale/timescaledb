@@ -40,6 +40,8 @@ INSERT INTO metrics VALUES
 -- Compress all chunks
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
+VACUUM ANALYZE metrics;
+
 -- first run with hypertable with 1 fully compressed chunk
 
 -- get query plans
@@ -71,6 +73,8 @@ INSERT INTO metrics VALUES
 ('2025-01-01 00:00:00 PST', 'd1', 'A', 1.0, 1.1, 11.0),
 ('2025-01-01 00:00:00 PST', 'd3', 'A', 50.0, 50.1, 500.0),
 ('2025-01-01 00:00:00 PST', 'd3', 'B', 52.0, 52.1, 520.0);
+
+VACUUM ANALYZE metrics;
 
 -- second run with hypertable with 1 partial chunk
 
@@ -107,6 +111,8 @@ INSERT INTO metrics VALUES
 
 SELECT compress_chunk(c) FROM show_chunks('metrics') c LIMIT 1 OFFSET 1;
 
+VACUUM ANALYZE metrics;
+
 -- third run with hypertable with 1 partial and 1 fully compressed chunk
 
 -- get query plans
@@ -139,6 +145,8 @@ CREATE TABLE cast_grp(ts timestamptz NOT NULL, device_id int) WITH (
     tsdb.hypertable, tsdb.orderby='ts', tsdb.segmentby='device_id');
 INSERT INTO cast_grp VALUES ('2025-01-01', 1), ('2025-01-01', 2);
 SELECT compress_chunk(c) FROM show_chunks('cast_grp') c;
+
+VACUUM ANALYZE cast_grp;
 
 SELECT format('%I.%I', chunk_schema, chunk_name) AS "CAST_CHUNK"
 FROM timescaledb_information.chunks WHERE hypertable_name = 'cast_grp' \gset
@@ -174,6 +182,8 @@ INSERT INTO metrics_nullable_orderby VALUES
 
 SELECT compress_chunk(c) FROM show_chunks('metrics_nullable_orderby') c;
 
+VACUUM ANALYZE metrics_nullable_orderby;
+
 SET timescaledb.enable_columnarindexscan = on;
 -- first/last(value, priority) should NOT optimize because priority is nullable
 EXPLAIN (costs off) SELECT device, first(value, priority) FROM metrics_nullable_orderby GROUP BY device ORDER BY device;
@@ -199,6 +209,8 @@ INSERT INTO metrics_multi_orderby VALUES
 
 SELECT compress_chunk(c) FROM show_chunks('metrics_multi_orderby') c;
 
+VACUUM ANALYZE metrics_multi_orderby;
+
 SET timescaledb.enable_columnarindexscan = on;
 -- first/last(value, time) should optimize (time is first orderby column)
 EXPLAIN (costs off) SELECT device, first(value, time) FROM metrics_multi_orderby GROUP BY device ORDER BY device;
@@ -216,6 +228,8 @@ SELECT device, first(value, time), last(value, time) FROM metrics_multi_orderby 
 -- Repeat all queries with ASC orderby to test the DESC flip logic
 ALTER TABLE metrics SET (timescaledb.compress_orderby = 'time asc');
 SELECT compress_chunk(decompress_chunk(c)) FROM show_chunks('metrics') c;
+
+VACUUM ANALYZE metrics;
 
 -- get query plans
 \set PREFIX 'EXPLAIN (costs off)'
@@ -241,3 +255,84 @@ SET timescaledb.enable_columnarindexscan = on;
 -- compare optimized vs non-optimized results
 :DIFF_CMD
 
+
+\set ECHO all
+-- The sparse index metadata is built with the default operator class of the
+-- column type and the collation of the column. Aggregates that ask for a
+-- different order cannot be answered from it.
+CREATE TABLE agg_order(time timestamptz not null, grp int not null, seq int not null, name text not null);
+SELECT FROM create_hypertable('agg_order','time',chunk_time_interval => interval '1 year');
+ALTER TABLE agg_order SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='seq asc, name asc');
+
+INSERT INTO agg_order VALUES
+  ('2000-01-01',1,-3,'a'), ('2000-01-01',1,-2,'B'),
+  ('2000-01-01',1, 2,'c'), ('2000-01-01',1, 3,'D');
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_order') ch;
+ANALYZE agg_order;
+
+-- answered from the metadata
+EXPLAIN (costs off) SELECT min(seq), max(seq) FROM agg_order;
+SELECT min(seq), max(seq) FROM agg_order;
+
+-- a relabel to a type that sorts differently, oid compares unsigned so the
+-- answer is 2 and not -3
+EXPLAIN (costs off) SELECT min(seq::oid) FROM agg_order;
+SELECT min(seq::oid) FROM agg_order;
+
+-- a different collation, in byte order 'B' sorts before 'a'
+EXPLAIN (costs off) SELECT min(name COLLATE "C") FROM agg_order;
+SELECT min(name COLLATE "C") FROM agg_order;
+
+-- first and last order by their second argument, a relabel there asks for
+-- another order as well. In oid order the first value is 2 and the last -2.
+EXPLAIN (costs off) SELECT first(seq::oid, seq::oid), last(seq::oid, seq::oid) FROM agg_order;
+SELECT first(seq::oid, seq::oid), last(seq::oid, seq::oid) FROM agg_order;
+
+-- without the casts they are answered from the metadata
+EXPLAIN (costs off) SELECT first(seq, seq), last(seq, seq) FROM agg_order;
+SELECT first(seq, seq), last(seq, seq) FROM agg_order;
+
+-- a cast of the value but not of the order argument keeps the order
+EXPLAIN (costs off) SELECT first(seq::oid, seq) FROM agg_order;
+SELECT first(seq::oid, seq) FROM agg_order;
+
+-- a relabel that keeps the order is still answered from the metadata
+CREATE TABLE agg_order_vc(time timestamptz not null, grp int not null, vc varchar not null);
+SELECT FROM create_hypertable('agg_order_vc','time',chunk_time_interval => interval '1 year');
+ALTER TABLE agg_order_vc SET (timescaledb.compress, timescaledb.compress_segmentby='grp', timescaledb.compress_orderby='vc asc');
+INSERT INTO agg_order_vc VALUES ('2000-01-01',1,'b'), ('2000-01-01',1,'c'), ('2000-01-01',1,'d');
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_order_vc') ch;
+ANALYZE agg_order_vc;
+
+EXPLAIN (costs off) SELECT min(vc), min(vc::text) FROM agg_order_vc;
+SELECT min(vc), min(vc::text) FROM agg_order_vc;
+
+DROP TABLE agg_order_vc;
+
+DROP TABLE agg_order;
+
+-- first and last compare the order argument with the input collation of the
+-- aggregate while the metadata is built with the collation of the column
+CREATE TABLE agg_coll(time timestamptz not null, grp int not null, name text not null, txt text not null)
+ WITH (tsdb.hypertable,tsdb.orderby='time',tsdb.segmentby='grp',tsdb.index='minmax(name), firstlast(txt)');
+
+INSERT INTO agg_coll VALUES
+  ('2000-01-01',1,'a','a'), ('2000-01-02',1,'b','b'),
+  ('2000-01-03',1,'c','c'), ('2000-01-04',1,'d','d');
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_coll') ch;
+ANALYZE agg_coll;
+
+-- answered from the metadata
+EXPLAIN (costs off) SELECT grp, first(name, name), last(name, name) FROM agg_coll GROUP BY grp;
+SELECT grp, first(name, name), last(name, name) FROM agg_coll GROUP BY grp;
+
+-- another collation asks for another order, which the metadata does not answer
+EXPLAIN (costs off) SELECT grp, first(name COLLATE "C", name COLLATE "C"), last(name COLLATE "C", name COLLATE "C") FROM agg_coll GROUP BY grp;
+SELECT grp, first(name COLLATE "C", name COLLATE "C"), last(name COLLATE "C", name COLLATE "C") FROM agg_coll GROUP BY grp;
+
+-- a non collatable order argument is answered from the metadata even when the
+-- value argument brings a collation
+EXPLAIN (costs off) SELECT grp, first(txt COLLATE "C", time) FROM agg_coll GROUP BY grp;
+SELECT grp, first(txt COLLATE "C", time) FROM agg_coll GROUP BY grp;
+
+DROP TABLE agg_coll;

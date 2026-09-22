@@ -64,7 +64,7 @@ INSERT INTO metrics_ord VALUES
   ('2021-01-02 00:00', 5, 'a', 50), ('2021-01-02 00:00', 4, 'b', 40),  ('2021-01-02 00:00', 6, 'c', NULL);
 SET timescaledb.enable_deferred_chunk_append TO on;
 -- queries expected to use DeferredChunkAppend
-SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics ORDER BY time LIMIT 1) x;  -- ordered
  ok 
 ----
@@ -185,8 +185,8 @@ SELECT count(x) >= 0 AS ok FROM (SELECT gg FROM generate_series(1, 3) g, LATERAL
 ----
  t
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
-SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
+RESET timescaledb.debug_require_deferred_chunk_append;
+SET timescaledb.debug_require_deferred_chunk_append TO 'forbid';
 -- queries not currently supported with DeferredChunkAppend
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics) x;  -- no LIMIT
  ok 
@@ -367,7 +367,7 @@ SELECT time FROM metrics ORDER BY time LIMIT 1;  -- modifying CTE
 ------------------------------
  Wed Jan 01 00:00:00 2020 PST
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 -- RLS attaches to the hypertable, not its chunks, so the node must stay off to
 -- avoid bypassing the policy with a direct chunk scan. RLS is not allowed on a
 -- columnstore hypertable, so build a plain one.
@@ -380,7 +380,7 @@ FROM generate_series(0, 4) d, generate_series(0, 3) s;
 ALTER TABLE metrics_rls ENABLE ROW LEVEL SECURITY;
 ALTER TABLE metrics_rls FORCE ROW LEVEL SECURITY; -- apply the policy to the owner too
 CREATE POLICY device_one ON metrics_rls FOR SELECT USING (device = 1);
-SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
+SET timescaledb.debug_require_deferred_chunk_append TO 'forbid';
 -- the node must stay off; the policy must filter to device = 1 (no leaked rows)
 SELECT count(*) AS visible, count(*) FILTER (WHERE device <> 1) AS leaked
 FROM (SELECT device FROM metrics_rls LIMIT 100) x;
@@ -388,7 +388,7 @@ FROM (SELECT device FROM metrics_rls LIMIT 100) x;
 ---------+--------
        5 |      0
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 -- Column privileges: the node scans chunks directly, so per-column SELECT grants
 -- on the hypertable must still be enforced.
 CREATE TABLE metrics_colpriv (time timestamptz NOT NULL, device int, value float8)
@@ -402,13 +402,13 @@ GRANT SELECT (time, device) ON metrics_colpriv TO :ROLE_DEFAULT_PERM_USER_2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 SET timescaledb.enable_deferred_chunk_append TO on;
 -- granted columns: the node is used and returns rows
-SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
 SELECT count(x) >= 0 AS ok FROM (SELECT device FROM metrics_colpriv ORDER BY time LIMIT 5) x;
  ok 
 ----
  t
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 -- ungranted column: denied at the hypertable before the node runs
 \set ON_ERROR_STOP 0
 SELECT value FROM metrics_colpriv ORDER BY time LIMIT 1;
@@ -428,7 +428,7 @@ CREATE VIEW metrics_barrier WITH (security_barrier) AS SELECT * FROM metrics;
 GRANT SELECT ON metrics_barrier TO :ROLE_DEFAULT_PERM_USER_2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 SET timescaledb.enable_deferred_chunk_append TO on;
-SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
+SET timescaledb.debug_require_deferred_chunk_append TO 'forbid';
 -- reads through the views succeed without any direct grant on the hypertable
 SELECT count(*) = 5 AS ok FROM (SELECT device FROM metrics_view ORDER BY time LIMIT 5) x;
  ok 
@@ -440,27 +440,27 @@ SELECT count(*) = 5 AS ok FROM (SELECT device FROM metrics_barrier ORDER BY time
 ----
  t
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SET timescaledb.enable_deferred_chunk_append TO on;
 -- the view owner querying their own view: checkAsUser matches the current user,
 -- so the node is safe to use
-SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
 SELECT count(x) >= 0 AS ok FROM (SELECT device FROM metrics_view ORDER BY time LIMIT 5) x;
  ok 
 ----
  t
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 -- Feature off: node is never chosen, even for an accepted shape.
 SET timescaledb.enable_deferred_chunk_append TO off;
-SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
+SET timescaledb.debug_require_deferred_chunk_append TO 'forbid';
 SELECT count(x) >= 0 AS ok FROM (SELECT * FROM metrics ORDER BY time LIMIT 1) x;
  ok 
 ----
  t
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 SET timescaledb.enable_deferred_chunk_append TO on;
 EXPLAIN (COSTS OFF) SELECT time FROM metrics ORDER BY time LIMIT 3;
 --- QUERY PLAN ---
@@ -511,7 +511,7 @@ EXPLAIN (COSTS OFF) SELECT time, grp FROM metrics_ord ORDER BY time DESC, grp US
 CREATE FUNCTION dcs_nonneg(int) RETURNS boolean LANGUAGE plpgsql STABLE AS 'BEGIN RETURN $1 >= 0; END';
 CREATE FUNCTION dcs_eq(int, int) RETURNS boolean LANGUAGE plpgsql STABLE AS 'BEGIN RETURN $1 = $2; END';
 CREATE OPERATOR === (LEFTARG = int, RIGHTARG = int, FUNCTION = dcs_eq);
-SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
 EXPLAIN (COSTS OFF) SELECT time FROM metrics WHERE dcs_nonneg(device) ORDER BY time LIMIT 3;  -- function schema-qualified
 --- QUERY PLAN ---
  Limit
@@ -531,7 +531,7 @@ SELECT count(x) >= 0 AS ok FROM (SELECT time FROM metrics WHERE dcs_nonneg(devic
 ----
  t
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 -- a mid-query search_path change must not swap in a shadowing function and bypass the filter.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.enable_deferred_chunk_append TO on;
@@ -543,13 +543,13 @@ CREATE TABLE dcs_flip (time timestamptz NOT NULL, device int)
   WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
 INSERT INTO dcs_flip SELECT '2020-01-01'::timestamptz + d * interval '1 day', g FROM generate_series(0, 4) d, generate_series(1, 3) g;
 SET search_path TO dcs_trusted, public;
-SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
 SELECT count(*) AS returned, count(*) FILTER (WHERE device <> 1) AS leaked FROM (SELECT device FROM dcs_flip WHERE allow(device) LIMIT 1000) x;  -- leaked must be 0
  returned | leaked 
 ----------+--------
         5 |      0
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 RESET search_path;
 -- A noncontiguous OSM (tiered) chunk must disqualify the node.
 CREATE EXTENSION postgres_fdw;
@@ -568,10 +568,10 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('metrics_osm');  -- ma
 -----------------------------
  f
 
-SET timescaledb.debug_require_deferred_chunk_scan TO 'forbid';
+SET timescaledb.debug_require_deferred_chunk_append TO 'forbid';
 -- EXECUTE hides the version-specific foreign-scan plan; planning still trips the GUC.
 DO $$ BEGIN EXECUTE 'EXPLAIN (COSTS OFF) SELECT * FROM metrics_osm ORDER BY time LIMIT 3'; END $$;
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SET timescaledb.enable_deferred_chunk_append TO on;
 -- test correctness by diffing optimized and unoptimized results
@@ -580,7 +580,7 @@ SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
        format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_UNOPTIMIZED" \gset
 SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') AS "DIFF_CMD" \gset
 SET timescaledb.enable_deferred_chunk_append TO on;
-SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -999,7 +999,7 @@ SELECT g, l.gg, l.value FROM generate_series(1, 3) g, LATERAL (SELECT g AS gg, v
  2 |  2 |     0
  3 |  3 |     0
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 -- Node output must match the expanded plan: run with the node on then off and diff.
 \o :TEST_RESULTS_OPTIMIZED
 \ir :TEST_QUERY_NAME
@@ -1128,7 +1128,7 @@ SET timescaledb.enable_deferred_chunk_append TO on;
 :DIFF_CMD
 -- EXPLAIN ANALYZE prints the actual per-chunk plan for every chunk the LIMIT visited.
 SET enable_material = off;
-SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics LIMIT 3;  -- stops in the first non-empty chunk
 --- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
@@ -1248,5 +1248,131 @@ EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT value,
                        Filter: ("time" < m."time")
                        Rows Removed by Filter: 1
 
-RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET timescaledb.debug_require_deferred_chunk_append;
 RESET enable_material;
+-- A parameterized LIMIT in a generic plan, or a LIMIT too large to push down,
+-- leaves the per-chunk query unbounded so each chunk is read in batches.
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+PREPARE p(int) AS SELECT time, device FROM metrics ORDER BY time DESC LIMIT $1;
+SET plan_cache_mode TO force_generic_plan;
+EXECUTE p(6);
+             time             | device 
+------------------------------+--------
+ Sun Jan 05 03:00:00 2020 PST |      3
+ Sun Jan 05 02:00:00 2020 PST |      2
+ Sun Jan 05 01:00:00 2020 PST |      1
+ Sun Jan 05 00:00:00 2020 PST |      0
+ Sat Jan 04 03:00:00 2020 PST |      3
+ Sat Jan 04 02:00:00 2020 PST |      2
+
+RESET plan_cache_mode;
+DEALLOCATE p;
+SELECT count(*), count(DISTINCT time) FROM (SELECT time FROM metrics ORDER BY time DESC LIMIT 3000000000) q;
+ count | count 
+-------+-------
+    20 |    20
+
+RESET timescaledb.debug_require_deferred_chunk_append;
+-- casts from text, and a bare ROW
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TYPE dca_enum AS ENUM ('Val1', 'Val2');
+CREATE TYPE dca_row AS (a int, b int);
+CREATE TABLE enum_metrics (time timestamptz NOT NULL, kind dca_enum NOT NULL, seen timestamptz)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO enum_metrics VALUES ('2020-01-01', 'Val1', '2021-01-01'), ('2020-01-02', 'Val2', '2021-01-02');
+-- cast inlined from a SQL function
+CREATE FUNCTION dca_to_enum(text) RETURNS dca_enum AS $$ SELECT $1::dca_enum $$ LANGUAGE sql STABLE;
+SET timescaledb.debug_require_deferred_chunk_append TO 'forbid';
+EXPLAIN (COSTS OFF) SELECT kind::text FROM enum_metrics WHERE kind = CAST('Val2'::text AS dca_enum) LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ChunkAppend) on enum_metrics
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_10_52_chunk
+                     Filter: (kind = ('Val2'::cstring)::dca_enum)
+               ->  Seq Scan on _hyper_10_53_chunk
+                     Filter: (kind = ('Val2'::cstring)::dca_enum)
+
+SELECT kind::text FROM enum_metrics WHERE kind = CAST('Val2'::text AS dca_enum) LIMIT 1;
+ kind 
+------
+ Val2
+
+SELECT kind::text FROM enum_metrics WHERE kind = dca_to_enum('Val1') LIMIT 1;
+ kind 
+------
+ Val1
+
+SELECT seen FROM enum_metrics WHERE seen = CAST('2021-01-02'::text AS timestamptz) LIMIT 1;
+             seen             
+------------------------------
+ Sat Jan 02 00:00:00 2021 PST
+
+-- bare ROW
+SELECT kind::text FROM enum_metrics WHERE kind::text = (ROW(1,2))::text LIMIT 1;
+ kind 
+------
+
+RESET timescaledb.debug_require_deferred_chunk_append;
+-- literals, a named composite and NULL
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+SELECT kind::text FROM enum_metrics WHERE kind = 'Val2' LIMIT 1;
+ kind 
+------
+ Val2
+
+SELECT kind::text FROM enum_metrics WHERE kind = 'Val2'::dca_enum LIMIT 1;
+ kind 
+------
+ Val2
+
+SELECT kind::text FROM enum_metrics WHERE kind::text = 'Val2' LIMIT 1;
+ kind 
+------
+ Val2
+
+SELECT kind::text FROM enum_metrics WHERE kind::text = (ROW(1,2)::dca_row)::text LIMIT 1;
+ kind 
+------
+
+-- NULL input
+SELECT kind::text FROM enum_metrics WHERE kind = CAST(NULL::text AS dca_enum) LIMIT 1;
+ kind 
+------
+
+RESET timescaledb.debug_require_deferred_chunk_append;
+-- float literals under a lossy extra_float_digits
+CREATE TABLE float_metrics (time timestamptz NOT NULL, val float8 NOT NULL)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO float_metrics VALUES ('2020-01-01', 1.0), ('2020-01-02', 0.30000000000000004);
+SET extra_float_digits = 0;
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+SELECT time FROM float_metrics WHERE val = '1.0000000000000002'::float8 ORDER BY time LIMIT 1;
+ time 
+------
+
+SELECT val FROM float_metrics WHERE val = 0.30000000000000004::float8 ORDER BY time LIMIT 1;
+ val 
+-----
+ 0.3
+
+RESET timescaledb.debug_require_deferred_chunk_append;
+RESET extra_float_digits;
+-- array literals with a NULL element under array_nulls = off
+CREATE TABLE array_metrics (time timestamptz NOT NULL, tags text[])
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO array_metrics VALUES ('2020-01-01', ARRAY['hello', 'NULL']::text[]);
+SET array_nulls = off;
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+SELECT tags FROM array_metrics WHERE tags = ARRAY['hello', NULL]::text[] ORDER BY time LIMIT 1;
+ tags 
+------
+
+SELECT tags FROM array_metrics WHERE tags = ARRAY['hello', 'NULL']::text[] ORDER BY time LIMIT 1;
+      tags      
+----------------
+ {hello,"NULL"}
+
+RESET timescaledb.debug_require_deferred_chunk_append;
+RESET array_nulls;

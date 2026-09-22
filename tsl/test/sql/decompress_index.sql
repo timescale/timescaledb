@@ -113,3 +113,74 @@ explain (buffers off, costs off) SELECT DISTINCT ON(device_id, parameter_id) * F
 drop table log_numeric cascade;
 
 
+
+-- Join condition on a segmentby column is pushed down to the compressed index
+-- when the column is explicitly cast.
+CREATE TABLE reading(time timestamptz not null, device varchar not null, value float);
+SELECT table_name FROM create_hypertable('reading','time',chunk_time_interval => interval '1 day');
+ALTER TABLE reading SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time desc');
+
+INSERT INTO reading
+SELECT time, 'dev' || device, random()
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time),
+generate_series(1,10) device;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('reading') ch;
+
+CREATE TABLE device(name varchar not null primary key);
+INSERT INTO device VALUES ('dev3');
+ANALYZE reading, device;
+
+explain (buffers off, costs off) SELECT count(*) FROM reading r JOIN device d ON r.device::text = d.name::text;
+explain (buffers off, costs off) SELECT count(*) FROM reading r JOIN device d ON r.device = d.name;
+
+drop table reading cascade;
+drop table device;
+
+-- A coercion that is not a relabel cannot be pushed down, the join condition
+-- is checked after decompression.
+CREATE TABLE reading_num(time timestamptz not null, device int not null, value float);
+SELECT table_name FROM create_hypertable('reading_num','time',chunk_time_interval => interval '1 day');
+ALTER TABLE reading_num SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time desc');
+
+INSERT INTO reading_num
+SELECT time, device, random()
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time),
+generate_series(1,10) device;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('reading_num') ch;
+
+CREATE TABLE device_num(val numeric not null primary key);
+INSERT INTO device_num VALUES (3);
+ANALYZE reading_num, device_num;
+
+explain (buffers off, costs off) SELECT count(*) FROM reading_num r JOIN device_num d ON r.device = d.val;
+SELECT count(*) FROM reading_num r JOIN device_num d ON r.device = d.val;
+explain (buffers off, costs off) SELECT count(*) FROM reading_num r JOIN device_num d ON r.device::numeric = d.val;
+SELECT count(*) FROM reading_num r JOIN device_num d ON r.device::numeric = d.val;
+
+drop table reading_num cascade;
+drop table device_num;
+
+-- Two segmentby columns where only the first one can be pushed down. The
+-- condition on the second one is checked on the decompressed tuple.
+CREATE TABLE reading_mixed(time timestamptz not null, ident varchar not null, device int not null, value float);
+SELECT table_name FROM create_hypertable('reading_mixed','time',chunk_time_interval => interval '1 day');
+ALTER TABLE reading_mixed SET (timescaledb.compress, timescaledb.compress_segmentby='ident,device', timescaledb.compress_orderby='time desc');
+
+INSERT INTO reading_mixed
+SELECT time, 'dev' || device, device, random()
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time),
+generate_series(1,10) device;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('reading_mixed') ch;
+
+CREATE TABLE device_mixed(ident varchar not null, val numeric not null);
+INSERT INTO device_mixed VALUES ('dev3', 3);
+ANALYZE reading_mixed, device_mixed;
+
+explain (buffers off, costs off) SELECT count(*) FROM reading_mixed r JOIN device_mixed d ON r.ident = d.ident AND r.device = d.val;
+SELECT count(*) FROM reading_mixed r JOIN device_mixed d ON r.ident = d.ident AND r.device = d.val;
+
+drop table reading_mixed cascade;
+drop table device_mixed;
