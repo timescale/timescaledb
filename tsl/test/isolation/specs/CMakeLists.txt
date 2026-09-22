@@ -57,6 +57,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_freeze.spec
     compression_merge_race.spec
     compression_recompress.spec
+    recompress_concurrent_dml.spec
     decompression_chunk_and_parallel_query_wo_idx.spec
     merge_chunks_concurrent.spec
     split_chunk_concurrent.spec

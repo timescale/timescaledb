@@ -1176,6 +1176,37 @@ ExecDeletePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 }
 
 /*
+ * A row moved from uncompressed to compressed chunk is deleted with
+ * TABLE_DELETE_CHANGING_PARTITION, resulting with table_tuple_lock()
+ * reporting an incorrect error message
+ *
+ * Intercept and throw correct error message.
+ */
+static void
+error_if_row_moved_to_columnstore(ItemPointer ctid, Relation chunk_rel)
+{
+	if (!ItemPointerIndicatesMovedPartitions(ctid))
+	{
+		return;
+	}
+
+	/* Only a compressed chunk can have moved the row to the columnstore. */
+	const Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(chunk_rel), false);
+
+	if (chunk == NULL || !ts_chunk_is_compressed(chunk))
+	{
+		return;
+	}
+
+	ereport(ERROR,
+			(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+			 errmsg("could not modify row in chunk \"%s\" because it was concurrently moved to "
+					"the columnstore",
+					RelationGetRelationName(chunk_rel)),
+			 errhint("Retry the transaction.")));
+}
+
+/*
  * ExecDeleteAct -- subroutine for ExecDelete
  *
  * Actually delete the tuple from a plain table.
@@ -1382,6 +1413,9 @@ ldelete:
 					EvalPlanQualBegin(context->epqstate);
 					inputslot = EvalPlanQualSlot(context->epqstate, resultRelationDesc,
 												 resultRelInfo->ri_RangeTableIndex);
+
+					error_if_row_moved_to_columnstore(&context->tmfd.ctid,
+													  resultRelationDesc);
 
 					result = table_tuple_lock(resultRelationDesc, tupleid,
 											  estate->es_snapshot,
@@ -1916,6 +1950,9 @@ redo_act:
 					 */
 					inputslot = EvalPlanQualSlot(context->epqstate, resultRelationDesc,
 												 resultRelInfo->ri_RangeTableIndex);
+
+					error_if_row_moved_to_columnstore(&context->tmfd.ctid,
+													  resultRelationDesc);
 
 					result = table_tuple_lock(resultRelationDesc, tupleid,
 											  estate->es_snapshot,

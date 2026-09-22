@@ -2036,6 +2036,8 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 					 errmsg("aborting recompression due to concurrent updates on "
 							"uncompressed data, retrying with next policy run")));
 		}
+
+		DEBUG_WAITPOINT("recompress_after_delete");
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	table_endscan(scan);
