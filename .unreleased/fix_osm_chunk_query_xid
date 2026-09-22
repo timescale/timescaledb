@@ -1,0 +1,1 @@
+Fixes: no XID assigned when querying a hypertable with an OSM chunk, unblocking CREATE_REPLICATION_SLOT

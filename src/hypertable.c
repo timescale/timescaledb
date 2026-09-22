@@ -2476,9 +2476,16 @@ ts_hypertable_unset_direct_compress(Hypertable *ht)
 }
 
 DimensionSlice *
-ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTupleMode tuplockmode,
+ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, const ScanTupLock *tuplock,
 								LOCKMODE tablelockmode)
 {
+	/*
+	 * Acquiring a tuple lock requires assigning a transaction id, so it
+	 * is not possible in recovery mode. Callers that pass a tuple lock
+	 * must therefore not run on a read-only secondary.
+	 */
+	Assert(tuplock == NULL || !RecoveryInProgress());
+
 	List *slices = ts_dimension_slice_scan_by_chunk_id(osm_chunk_id, CurrentMemoryContext);
 	ListCell *lc;
 
@@ -2491,28 +2498,21 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTuple
 			continue;
 		}
 
-		ScanTupLock tuplock = {
-			.lockmode = tuplockmode,
-			.waitpolicy = LockWaitBlock,
-		};
-		/*
-		 * We cannot acquire a tuple lock when running in recovery mode
-		 * since that prevents scans on tiered hypertables from running
-		 * on a read-only secondary. Acquiring a tuple lock requires
-		 * assigning a transaction id for the current transaction state
-		 * which is not possible in recovery mode. So we only acquire the
-		 * lock if we are not in recovery mode.
-		 */
-		ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
+		ScanTupLock tuplock_copy = { 0 };
 
-		if (!IsolationUsesXactSnapshot())
+		if (tuplock != NULL)
 		{
-			/* in read committed mode, we follow all updates to this tuple */
-			tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+			tuplock_copy = *tuplock;
+
+			if (!IsolationUsesXactSnapshot())
+			{
+				/* in read committed mode, we follow all updates to this tuple */
+				tuplock_copy.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+			}
 		}
 
 		return ts_dimension_slice_scan_by_id_and_lock(slice->fd.id,
-													  tuplock_ptr,
+													  tuplock != NULL ? &tuplock_copy : NULL,
 													  CurrentMemoryContext,
 													  tablelockmode);
 	}
@@ -2640,10 +2640,12 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	bool overlap = false, range_invalid = false;
 
 	/* Lock tuple FOR UPDATE */
-	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
-															time_dim->fd.id,
-															LockTupleExclusive,
-															RowShareLock);
+	ScanTupLock slice_lock = {
+		.lockmode = LockTupleExclusive,
+		.waitpolicy = LockWaitBlock,
+	};
+	DimensionSlice *slice =
+		ts_chunk_get_osm_slice_and_lock(osm_chunk_id, time_dim->fd.id, &slice_lock, RowShareLock);
 
 	if (!slice)
 	{
@@ -2751,10 +2753,12 @@ ts_lock_osm_chunk_dimension_slice(PG_FUNCTION_ARGS)
 	 * Lock the OSM chunk's dimension slice tuple FOR UPDATE. The row lock is
 	 * held until the end of the current transaction.
 	 */
-	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
-															time_dim->fd.id,
-															LockTupleExclusive,
-															RowShareLock);
+	ScanTupLock slice_lock = {
+		.lockmode = LockTupleExclusive,
+		.waitpolicy = LockWaitBlock,
+	};
+	DimensionSlice *slice =
+		ts_chunk_get_osm_slice_and_lock(osm_chunk_id, time_dim->fd.id, &slice_lock, RowShareLock);
 
 	if (!slice)
 	{

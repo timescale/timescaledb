@@ -951,10 +951,11 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 				 * it either.
 				 */
 				const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
-				DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
-																		time_dim->fd.id,
-																		LockTupleKeyShare,
-																		RowShareLock);
+				DimensionSlice *slice =
+					ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
+													time_dim->fd.id,
+													NULL, /* no tuple lock: avoids xid on queries */
+													RowShareLock);
 				bool range_invalid =
 					ts_osm_chunk_range_is_invalid(slice->fd.range_start, slice->fd.range_end);
 
