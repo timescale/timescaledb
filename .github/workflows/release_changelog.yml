@@ -1,0 +1,116 @@
+# Validates that the release CHANGELOG pull request is correct and keeps the
+# pull request body synchronized with the release section in CHANGELOG.md.
+name: Release changelog
+"on":
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+    branches:
+      - '2.*.x'
+    paths:
+      - CHANGELOG.md
+      - '.unreleased/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  update_pr_description:
+    name: Update release changelog PR
+    if: startsWith(github.event.pull_request.head.ref, 'release/') && endsWith(github.event.pull_request.head.ref, '-changelog') && startsWith(github.event.pull_request.title, 'Release ')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release changelog PR shape
+        id: release
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          version="${PR_TITLE#Release }"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release changelog PR title must be 'Release {version}', got '$PR_TITLE'"
+            exit 1
+          fi
+
+          expected_head_ref="release/${version}-changelog"
+          if [ "$HEAD_REF" != "$expected_head_ref" ]; then
+            echo "::error::Release changelog PR head branch must be '$expected_head_ref', got '$HEAD_REF'"
+            exit 1
+          fi
+
+          major="${version%%.*}"
+          minor_patch="${version#*.}"
+          minor="${minor_patch%%.*}"
+          expected_base_ref="${major}.${minor}.x"
+          if [ "$BASE_REF" != "$expected_base_ref" ]; then
+            echo "::error::Release changelog PR base branch must be '$expected_base_ref', got '$BASE_REF'"
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pull request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: PR must modify CHANGELOG.md
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          changed_files="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+
+          if ! grep -Fxq CHANGELOG.md <<< "$changed_files"; then
+            echo "::error::Release changelog PR must modify CHANGELOG.md"
+            exit 1
+          fi
+
+      - name: No .unreleased files are left behind
+        run: |
+          ! compgen -G '.unreleased/*'
+
+      - name: Update pull request description from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          changelog = Path("CHANGELOG.md").read_text()
+
+          section_pattern = re.compile(
+              rf"(^##\s+{re.escape(version)}(?:\s|\(|$).*?)(?=^##\s+\S|\Z)",
+              re.MULTILINE | re.DOTALL,
+          )
+          match = section_pattern.search(changelog)
+          if not match:
+              print(
+                  f"::error::CHANGELOG.md does not contain a section for release {version}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          section = match.group(1).strip()
+          Path("next_pr_body.md").write_text(f"{section}\n")
+          PY
+
+          gh pr edit "$PR_NUMBER" \
+            --repo "$REPOSITORY" \
+            --body-file next_pr_body.md
