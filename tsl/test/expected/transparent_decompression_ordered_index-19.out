@@ -400,29 +400,27 @@ GROUP BY device_id;
                ->  Partial HashAggregate (actual rows=1.00 loops=1)
                      Group Key: nd.start_time, nd.node, nd.stop_time
                      ->  Seq Scan on nodetime nd (actual rows=1.00 loops=1)
-               ->  Append (actual rows=48.00 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk mt_1 (actual rows=0.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=48.00 loops=1)
+                     Chunks excluded during runtime: 4
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk mt_1 (never executed)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
-                           Rows Removed by Filter: 96
-                           ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+                           ->  Index Scan using _hyper_1_1_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_1_chunk_compressed (never executed)
                                  Index Cond: (device_id = nd.node)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk mt_2 (actual rows=0.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk mt_2 (never executed)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
-                           Rows Removed by Filter: 192
-                           ->  Index Scan using _hyper_1_2_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_2_chunk_compressed (actual rows=1.00 loops=1)
+                           ->  Index Scan using _hyper_1_2_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_2_chunk_compressed (never executed)
                                  Index Cond: (device_id = nd.node)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk mt_3 (actual rows=0.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk mt_3 (never executed)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
-                           ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (actual rows=0.00 loops=1)
+                           ->  Index Scan using _hyper_1_3_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_3_chunk_compressed (never executed)
                                  Index Cond: (device_id = nd.node)
                      ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk mt_4 (actual rows=48.00 loops=1)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
                            ->  Index Scan using _hyper_1_4_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_4_chunk_compressed (actual rows=1.00 loops=1)
                                  Index Cond: (device_id = nd.node)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (actual rows=0.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (never executed)
                            Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time))
-                           Rows Removed by Filter: 1
-                           ->  Index Scan using _hyper_1_5_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_5_chunk_compressed (actual rows=1.00 loops=1)
+                           ->  Index Scan using _hyper_1_5_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_1_5_chunk_compressed (never executed)
                                  Index Cond: (device_id = nd.node)
 
 :PREFIX

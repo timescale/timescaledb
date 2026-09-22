@@ -33,6 +33,7 @@
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
+#include "expression_utils.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
@@ -192,24 +193,6 @@ append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr 
 		bms_add_member(info->compressed_rel->eclass_indexes, root->eq_classes->length - 1);
 
 	return ec;
-}
-
-/*
- * Remove any RelabelType from the expression to get at the underlying
- * expression. Unlike strip_implicit_coercions we also strip explicit casts
- * since a RelabelType never changes the value. Note that it does not have to
- * keep the sort order, so callers that rely on an order have to check the
- * operator family separately.
- */
-Node *
-ts_strip_relabel_types(Node *node)
-{
-	while (node != NULL && IsA(node, RelabelType))
-	{
-		node = (Node *) castNode(RelabelType, node)->arg;
-	}
-
-	return node;
 }
 
 static List *
@@ -1145,9 +1128,9 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 			   colname,
 			   compression_info->compressed_rte->relid);
 		Var *var = palloc(sizeof(Var));
-		*var = (Var){ .xpr.type = T_Var,
-					  .varno = compression_info->compressed_rel->relid,
-					  .varattno = compressed_attno };
+		*var = (Var) { .xpr.type = T_Var,
+					   .varno = compression_info->compressed_rel->relid,
+					   .varattno = compressed_attno };
 		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
 	}
 	const double open_batches_estimated =
@@ -1851,8 +1834,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 										/* rel = */ chunk_rel,
 #if PG19_GE
 										/* input = */
-										(AppendPathInput){ .subpaths = sequential_paths,
-														   .partial_subpaths = parallel_paths },
+										(AppendPathInput) { .subpaths = sequential_paths,
+															.partial_subpaths = parallel_paths },
 #else
 										/* subpaths = */ sequential_paths,
 										/* partial_subpaths = */ parallel_paths,

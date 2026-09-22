@@ -56,6 +56,9 @@ extern Plan *ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, Cus
 										 List *tlist, List *clauses, List *custom_plans);
 extern Node *ts_chunk_append_state_create(CustomScan *cscan);
 
+extern bool ts_chunk_append_clauses_allow_exclusion(PlannerInfo *root, List *clauses, Index relid,
+													const Hypertable *ht);
+
 extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 											  int *order_attno, bool *reverse);
 

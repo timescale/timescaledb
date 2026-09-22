@@ -2046,21 +2046,6 @@ ts_hypertables_rename_schema_name(const char *old_name, const char *new_name)
 }
 
 bool
-ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
-{
-	uint16 i;
-
-	for (i = 0; i < ht->space->num_dimensions; i++)
-	{
-		if (column_attno == ht->space->dimensions[i].column_attno)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-bool
 ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name)
 {
 	uint16 i;

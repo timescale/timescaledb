@@ -8,14 +8,18 @@
 #include <access/xact.h>
 #include <datatype/timestamp.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/pg_list.h>
 #include <optimizer/optimizer.h>
+#include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <utils/fmgroids.h>
+#include <utils/lsyscache.h>
 #include <utils/typcache.h>
 
 #include "cache.h"
 #include "dimension.h"
+#include "expression_utils.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "partitioning.h"
@@ -25,7 +29,7 @@
  * Returns space dimension for a specific column. Returns NULL
  * if the column is not a space dimension.
  */
-static Dimension *
+static const Dimension *
 get_space_dimension(Oid relid, AttrNumber varattno)
 {
 	Hypertable *ht = ts_planner_get_hypertable(relid, CACHE_FLAG_CHECK);
@@ -34,15 +38,7 @@ get_space_dimension(Oid relid, AttrNumber varattno)
 		return NULL;
 	}
 
-	for (uint16 i = 0; i < ht->space->num_dimensions; i++)
-	{
-		Dimension *dim = &ht->space->dimensions[i];
-		if (dim->type == DIMENSION_TYPE_CLOSED && dim->column_attno == varattno)
-		{
-			return dim;
-		}
-	}
-	return NULL;
+	return ts_hyperspace_get_dimension_by_attno(ht->space, DIMENSION_TYPE_CLOSED, varattno);
 }
 
 /*
@@ -114,7 +110,7 @@ is_valid_space_constraint(OpExpr *op, List *rtable)
 	 */
 	Assert((int) var->varno <= list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
+	const Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 
 	if (!dim)
 	{
@@ -156,7 +152,7 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 	 */
 	Assert((int) var->varno <= list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
+	const Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 
 	if (!dim)
 	{
@@ -213,7 +209,7 @@ transform_space_constraint(PlannerInfo *root, List *rtable, OpExpr *op)
 	Const *value = lsecond_node(Const, op->args);
 	Const *part_value;
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
+	const Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 	Oid rettype = dim->partitioning->partfunc.rettype;
 	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
 
@@ -253,7 +249,7 @@ transform_scalar_space_constraint(PlannerInfo *root, List *rtable, ScalarArrayOp
 {
 	Var *var = linitial_node(Var, op->args);
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
+	const Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 	Oid rettype = dim->partitioning->partfunc.rettype;
 	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
 	List *part_values = NIL;
@@ -401,4 +397,149 @@ ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node)
 	}
 
 	return node;
+}
+
+/*
+ * Check whether the expression is a column of the given relation.
+ */
+static bool
+is_column_of_rel(Node *node, Index relid)
+{
+	return IsA(node, Var) && (Index) castNode(Var, node)->varno == relid &&
+		   castNode(Var, node)->varlevelsup == 0;
+}
+
+/*
+ * Build a constraint on the partition hash for an equality clause on a space
+ * partitioning column whose value is only known when the query runs, e.g. a
+ * parameter from a join or from a prepared statement.
+ *
+ * Applying the partitioning function to both sides of the equality gives a
+ * constraint that matches the constraints on the chunks, so startup and runtime
+ * chunk exclusion can use it once the value is known:
+ *
+ * device_id = $1 => get_partition_hash(device_id) = get_partition_hash($1)
+ *
+ * Returns NULL when no such constraint can be built.
+ */
+Expr *
+ts_space_constraint_for_param(PlannerInfo *root, Index relid, Expr *clause)
+{
+	if (!IsA(clause, OpExpr) || list_length(castNode(OpExpr, clause)->args) != 2)
+	{
+		return NULL;
+	}
+
+	OpExpr *op = castNode(OpExpr, clause);
+	Node *left = linitial(op->args);
+	Node *right = lsecond(op->args);
+
+	/*
+	 * A comparison between binary coercible types puts a relabel around the
+	 * column, for example when a varchar column is compared against text. Both
+	 * sides can be a column when the value comes from an outer relation.
+	 */
+	Node *column = ts_strip_relabel_types(left);
+	Node *value = right;
+
+	if (!is_column_of_rel(column, relid))
+	{
+		column = ts_strip_relabel_types(right);
+		value = left;
+	}
+
+	if (!is_column_of_rel(column, relid))
+	{
+		return NULL;
+	}
+
+	Var *var = castNode(Var, column);
+
+	/*
+	 * The value has to come from outside the hypertable, either from a
+	 * parameter of a prepared statement or from an outer relation of a join.
+	 * When this runs before the outer references have been turned into
+	 * parameters they are still plain Vars, so we only reject the columns of
+	 * the hypertable itself.
+	 */
+	if (bms_is_member(relid, pull_varnos(root, value)))
+	{
+		return NULL;
+	}
+
+	/* the types are looked up in operand order as the operator is not commuted */
+	if (!ts_is_equality_operator(op->opno, exprType(left), exprType(right)) || !op_strict(op->opno))
+	{
+		return NULL;
+	}
+
+	/*
+	 * Under a nondeterministic collation values that hash to different
+	 * partitions can be equal, so the hash of the value would exclude chunks
+	 * with matching rows.
+	 */
+	if (OidIsValid(op->inputcollid) && !get_collation_isdeterministic(op->inputcollid))
+	{
+		return NULL;
+	}
+
+	RangeTblEntry *rte = planner_rt_fetch(var->varno, root);
+	const Dimension *dim = get_space_dimension(rte->relid, var->varattno);
+
+	if (dim == NULL)
+	{
+		return NULL;
+	}
+
+	value = copyObject(value);
+
+	/*
+	 * The partitioning function is applied to values of the column type, so the
+	 * other side has to be coerced for cross type comparisons. We only use
+	 * implicit coercions because narrowing casts can fail at runtime.
+	 */
+	if (exprType(value) != var->vartype)
+	{
+		value = coerce_to_target_type(NULL,
+									  value,
+									  exprType(value),
+									  var->vartype,
+									  -1,
+									  COERCION_IMPLICIT,
+									  COERCE_IMPLICIT_CAST,
+									  -1);
+
+		if (value == NULL)
+		{
+			return NULL;
+		}
+	}
+
+	Oid rettype = dim->partitioning->partfunc.rettype;
+	Oid partfunc = dim->partitioning->partfunc.func_fmgr.fn_oid;
+	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
+
+	/*
+	 * The call on the column has to match the chunk constraint, which applies
+	 * the partitioning function to the bare column.
+	 */
+	FuncExpr *column_hash =
+		make_partfunc_call(partfunc, rettype, list_make1(copyObject(var)), var->varcollid);
+	/*
+	 * Fold the hash of the value when the value is already known, so it is not
+	 * computed again for every chunk whenever the plan runs.
+	 */
+	Node *value_hash = eval_const_expressions(root,
+											  (Node *) make_partfunc_call(partfunc,
+																		  rettype,
+																		  list_make1(value),
+																		  var->varcollid));
+
+	return make_opclause(tce->eq_opr,
+						 BOOLOID,
+						 false,
+						 (Expr *) column_hash,
+						 (Expr *) value_hash,
+						 InvalidOid,
+						 InvalidOid);
 }

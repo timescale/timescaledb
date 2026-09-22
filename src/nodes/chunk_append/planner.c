@@ -225,6 +225,27 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	 */
 	if (capath->startup_exclusion || capath->runtime_exclusion_children)
 	{
+		List *exclusion_clauses = NIL;
+		ListCell *lc;
+
+		foreach (lc, clauses)
+		{
+			Expr *clause = castNode(RestrictInfo, lfirst(lc))->clause;
+
+			exclusion_clauses = lappend(exclusion_clauses, clause);
+
+			/*
+			 * Clauses on a space partitioning column need an additional clause
+			 * on the partition hash to be able to exclude chunks.
+			 */
+			Expr *hash_clause = ts_space_constraint_for_param(root, rel->relid, clause);
+
+			if (hash_clause != NULL)
+			{
+				exclusion_clauses = lappend(exclusion_clauses, hash_clause);
+			}
+		}
+
 		foreach (lc_child, cscan->custom_plans)
 		{
 			Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_child));
@@ -237,13 +258,11 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			else
 			{
 				List *chunk_clauses = NIL;
-				ListCell *lc;
 				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scan->scanrelid, false);
 
-				foreach (lc, clauses)
+				foreach (lc, exclusion_clauses)
 				{
-					Node *clause = (Node *) ts_transform_cross_datatype_comparison(
-						castNode(RestrictInfo, lfirst(lc))->clause);
+					Node *clause = (Node *) ts_transform_cross_datatype_comparison(lfirst(lc));
 					clause = adjust_appendrel_attrs(root, clause, 1, &appinfo);
 					chunk_clauses = lappend(chunk_clauses, clause);
 				}

@@ -148,7 +148,6 @@ extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_
 extern TSDLLEXPORT bool ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode);
 extern TSDLLEXPORT bool ts_hypertable_has_noncontiguous_osm_chunk(const Hypertable *ht);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
-extern bool ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno);
 extern bool ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name);
 extern TSDLLEXPORT bool ts_hypertable_set_compression(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_unset_compression(Hypertable *ht);
