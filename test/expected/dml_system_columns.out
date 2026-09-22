@@ -558,7 +558,7 @@ VACUUM FREEZE ANALYZE ht_dummy;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.ht_dummy (actual rows=0.00 loops=1)
          ->  Result (actual rows=0.00 loops=1)
-               Output: 99, NULL::oid, NULL::tid
+               Output: 99, ctid
                One-Time Filter: false
 
 :PREFIX
