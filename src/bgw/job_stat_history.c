@@ -7,6 +7,7 @@
 
 #include <access/xact.h>
 #include <utils/jsonb.h>
+#include <utils/memutils.h>
 
 #include "compat/compat.h"
 #include "guc.h"
@@ -23,6 +24,45 @@ typedef struct BgwJobStatHistoryContext
 	BgwJob *job;
 	Jsonb *edata;
 } BgwJobStatHistoryContext;
+
+/*
+ * Information about what the job the current process is executing did. It is
+ * cleared when an execution starts and when it ends, so it always belongs to
+ * the execution whose history entry is being written.
+ */
+static Jsonb *job_stat_history_info = NULL;
+
+/*
+ * Forget the information set for the execution that is currently running in
+ * this process, so that it cannot end up in the history entry of an unrelated
+ * execution.
+ */
+static void
+bgw_job_stat_history_clear_info(void)
+{
+	if (job_stat_history_info != NULL)
+	{
+		pfree(job_stat_history_info);
+	}
+
+	job_stat_history_info = NULL;
+}
+
+void
+ts_bgw_job_stat_history_set_info(const Jsonb *info)
+{
+	Assert(info != NULL);
+
+	/* Whatever was set before for this execution is superseded */
+	bgw_job_stat_history_clear_info();
+
+	/* The job execution commits before its history entry is written, so keep
+	 * the information in the per-process memory of the background worker */
+	MemoryContext oldcontext = MemoryContextSwitchTo(TopMemoryContext);
+	job_stat_history_info = palloc(VARSIZE(info));
+	memcpy(job_stat_history_info, info, VARSIZE(info));
+	MemoryContextSwitchTo(oldcontext);
+}
 
 static Jsonb *
 build_job_info(BgwJob *job)
@@ -96,6 +136,13 @@ ts_bgw_job_stat_history_build_data_info(BgwJobStatHistoryContext *context)
 		/* error information jsonb */
 		JsonbToJsonbValue(context->edata, &value);
 		ts_jsonb_add_value(&parse_state, "error_data", &value);
+	}
+
+	if (job_stat_history_info != NULL)
+	{
+		/* execution information jsonb */
+		JsonbToJsonbValue(job_stat_history_info, &value);
+		ts_jsonb_add_value(&parse_state, "info", &value);
 	}
 
 	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
@@ -334,9 +381,17 @@ ts_bgw_job_stat_history_update(BgwJobStatHistoryUpdateType update_type, BgwJob *
 	switch (update_type)
 	{
 		case JOB_STAT_HISTORY_UPDATE_START:
+			/* An execution that is just starting has not reported anything
+			 * yet. Drop what a previous execution in this process left behind
+			 * so that it does not end up in the entry of this one. */
+			bgw_job_stat_history_clear_info();
 			bgw_job_stat_history_mark_start(&context);
 			break;
 		case JOB_STAT_HISTORY_UPDATE_END:
+			bgw_job_stat_history_update(&context);
+			/* The execution is over and its information has been written out */
+			bgw_job_stat_history_clear_info();
+			break;
 		case JOB_STAT_HISTORY_UPDATE_PID:
 			bgw_job_stat_history_update(&context);
 			break;

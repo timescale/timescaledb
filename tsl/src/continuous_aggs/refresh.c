@@ -16,10 +16,12 @@
 #include <utils/date.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
+#include <utils/json.h>
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
 
+#include "bgw/job_stat_history.h"
 #include "bgw_policy/policies_v2.h"
 #include "debug_point.h"
 #include "dimension.h"
@@ -731,6 +733,88 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 
+typedef struct CaggRefreshStats
+{
+	/* Number of batches the refresh window was split into */
+	int32 total_batches;
+	/* Number of those batches this execution actually processed. It is lower
+	 * than total_batches when max_batches_per_execution ended the execution
+	 * early. */
+	int32 batches_processed;
+	/* Time range covered by the batches that were processed, i.e. what this
+	 * execution worked on rather than the window that was requested */
+	Oid range_type;
+	int64 range_start;
+	int64 range_end;
+} CaggRefreshStats;
+
+/*
+ * Add one refresh range boundary to the information object.
+ *
+ * The boundary is reported in the time type of the refreshed hypertable, so
+ * integer based ranges show up as JSON numbers. The timestamp types are
+ * rendered as ISO-8601 strings, the same representation `to_jsonb` produces,
+ * so that the value does not depend on the DateStyle of the background worker
+ * that happened to run the refresh.
+ */
+static void
+cagg_refresh_stats_add_boundary(JsonbInState *parse_state, const char *key, Oid range_type,
+								int64 boundary)
+{
+	JsonbValue value = { 0 };
+	Datum datum = ts_internal_to_time_value(boundary, range_type);
+
+	switch (range_type)
+	{
+		case DATEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+		{
+			char *str = JsonEncodeDateTime(NULL, datum, range_type, NULL);
+
+			value.type = jbvString;
+			value.val.string.val = str;
+			value.val.string.len = strlen(str);
+			break;
+		}
+
+		default:
+			ts_jsonb_set_value_by_type(&value, range_type, datum);
+			break;
+	}
+
+	ts_jsonb_add_value(parse_state, key, &value);
+}
+
+/*
+ * Report what a refresh did in the execution history of the job that ran it.
+ */
+static void
+cagg_refresh_stats_report(int32 job_id, const CaggRefreshStats *stats)
+{
+	/* Only jobs have an execution history, manual refreshes don't have a job id */
+	if (job_id <= 0)
+	{
+		return;
+	}
+
+	JsonbInState parse_state = { 0 };
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+
+	ts_jsonb_add_int32(&parse_state, "total_batches", stats->total_batches);
+	ts_jsonb_add_int32(&parse_state, "batches_processed", stats->batches_processed);
+
+	cagg_refresh_stats_add_boundary(&parse_state,
+									"range_start",
+									stats->range_type,
+									stats->range_start);
+	cagg_refresh_stats_add_boundary(&parse_state, "range_end", stats->range_type, stats->range_end);
+
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+
+	ts_bgw_job_stat_history_set_info(JsonbValueToJsonb(parse_state.result));
+}
+
 /*
  * Refresh a continuous aggregate over a window, splitting it into batches when
  * incremental refresh is enabled.
@@ -788,6 +872,11 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	int32 batch_end = context.refresh_newest_first ? -1 : nbatches;
 	int32 batch_step = context.refresh_newest_first ? -1 : 1;
 	bool any_refreshed = false;
+	/* Union of the windows of the batches processed below. Starts out as the
+	 * requested window for the degenerate case of no batch at all being
+	 * processed. */
+	int64 processed_range_start = refresh_window->start;
+	int64 processed_range_end = refresh_window->end;
 	for (int32 batch_idx = batch_start; batch_idx != batch_end; batch_idx += batch_step)
 	{
 		InternalTimeRange *batch_window =
@@ -800,6 +889,17 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 			 ts_internal_to_time_string(batch_window->end, batch_window->type));
 
 		context.processing_batch = ++processing_batch;
+
+		if (processing_batch == 1)
+		{
+			processed_range_start = batch_window->start;
+			processed_range_end = batch_window->end;
+		}
+		else
+		{
+			processed_range_start = Min(processed_range_start, batch_window->start);
+			processed_range_end = Max(processed_range_end, batch_window->end);
+		}
 
 		/* extend_last_bucket must only apply to the boundary batch -- the one
 		 * whose window abuts the adjacent policy.  For newest-first ordering
@@ -833,6 +933,16 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	{
 		emit_up_to_date_notice(cagg, context);
 	}
+
+	CaggRefreshStats stats = {
+		.total_batches = context.number_of_batches,
+		.batches_processed = processing_batch,
+		.range_type = refresh_window->type,
+		.range_start = processed_range_start,
+		.range_end = processed_range_end,
+	};
+
+	cagg_refresh_stats_report(context.job_id, &stats);
 }
 
 /*
