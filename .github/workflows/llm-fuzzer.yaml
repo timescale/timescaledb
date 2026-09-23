@@ -341,6 +341,7 @@ jobs:
 
         export PGDATABASE=repro_database
         psql -c "create extension postgres_fdw"
+        psql -c "grant usage on foreign data wrapper postgres_fdw to repro_user"
 
         export PGUSER=repro_user
         psql -c "create extension timescaledb"
