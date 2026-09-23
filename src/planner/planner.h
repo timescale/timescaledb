@@ -130,12 +130,6 @@ ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 	Hypertable *ht;
 	TsRelType rel_type = ts_classify_relation(root, rel, &ht);
 
-	if (ht == NULL)
-	{
-		/* Not related to any hypertables at all. */
-		return NULL;
-	}
-
 	if (rel_type == TS_REL_HYPERTABLE || rel_type == TS_REL_HYPERTABLE_CHILD)
 	{
 		/* Hypertable relation, not a Chunk. */
@@ -147,10 +141,13 @@ ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 	if (rel_type == TS_REL_OTHER)
 	{
 		/*
-		 * A relation that has TS_REL_OTHER type but still belongs to a
-		 * hypertable must be the OSM chunk. We have to look up the Chunk for it
-		 * anew because we don't manage its RelOptInfo and don't have anywhere
-		 * to cache it.
+		 * This must be the OSM chunk. We have to look up the Chunk for it anew
+		 * because we don't manage its RelOptInfo and don't have anywhere to
+		 * cache it.
+		 * Theoretically, TS_REL_OTHER can be some other kind of relation, like
+		 * a plain Postgres table or a foreign table, but this function is not
+		 * supposed to be called for these cases. The chunk search will error
+		 * out.
 		 */
 		return ts_chunk_get_by_relid_locked(rte->relid,
 										 AccessShareLock,
