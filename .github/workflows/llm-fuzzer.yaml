@@ -340,11 +340,10 @@ jobs:
         psql -c "create database repro_database owner repro_user"
 
         export PGDATABASE=repro_database
+        psql -c "create extension postgres_fdw"
+
         export PGUSER=repro_user
-        psql -c "create extension timescaledb;"
-        for ext in ${EXTENSIONS}; do
-          psql -c "create extension ${ext};"
-        done
+        psql -c "create extension timescaledb"
 
         printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
         cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
