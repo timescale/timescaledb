@@ -1,0 +1,1 @@
+Implements: #10609 Fix race while updating granular refresh setting for hypertable
