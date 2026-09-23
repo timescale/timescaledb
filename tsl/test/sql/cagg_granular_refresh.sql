@@ -815,7 +815,6 @@ DROP TABLE conditions;
 -- Test: oversized tenant value (> TENANT_TRACKER_KEY_MAXLEN = 64 bytes)
 -- introduced via UPDATE.  This should invalidate the shared mem contents
 -- and revert to a full refresh
--- TODO: do not write out any invalid marker entries.
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
@@ -872,7 +871,8 @@ CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 -- sensor_a+ sensor_b are in 2020. we should see tracking entries
 SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
 
--- no invalid marker for seq_num=3
+-- nothing for seq_num=3: its generation went INVALID and an INVALID generation
+-- persists no rows at all.
 -- tracking entry in 2020 for sensor_b; seqnum 1 is garbage-collected.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view

@@ -401,6 +401,21 @@ SELECT '2025-01-10 12:30:00+00'::timestamptz - INTERVAL '3 days' AS window_start
        time_bucket('1 hour', '2025-01-10 12:30:00+00'::timestamptz - INTERVAL '3 days')
          AS containing_bucket;
 
+-- The refresh above had no tenant to persist, so it did not flush and the
+-- tracker still gates on the window from before the clock moved.
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics');
+
+-- A tracked write gives the next refresh something to flush, and that flush is
+-- what installs the moved window.
+INSERT INTO metrics VALUES ('2025-01-07 13:00:00+00', 'w', 50);
+CALL refresh_continuous_aggregate('metrics_hourly', '2025-01-07 13:00:00+00', '2025-01-07 14:00:00+00');
+
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics');
+
 SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('m','n') ORDER BY tenant;
 
 -- m sits below W and n above it

@@ -77,7 +77,7 @@ step r_check_tracking2:
 
 tenant_id    |seqnum
 -------------+------
-sensor_anchor|     4
+sensor_anchor|     2
 
 
 starting permutation: wp_pin_enable v_register_pid v_insert k_cancel k_noop wp_pin_release r_anchor_insert r_refresh r_check_conditions r_check_tracking r_refresh2 r_check_cagg

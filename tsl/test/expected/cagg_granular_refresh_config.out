@@ -469,6 +469,26 @@ SELECT '2025-01-10 12:30:00+00'::timestamptz - INTERVAL '3 days' AS window_start
 ------------------------------+------------------------------
  Tue Jan 07 12:30:00 2025 UTC | Tue Jan 07 12:00:00 2025 UTC
 
+-- The refresh above had no tenant to persist, so it did not flush and the
+-- tracker still gates on the window from before the clock moved.
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics');
+         window_start         |          window_end          
+------------------------------+------------------------------
+ Tue Jan 07 12:00:00 2025 UTC | Fri Jan 10 11:00:00 2025 UTC
+
+-- A tracked write gives the next refresh something to flush, and that flush is
+-- what installs the moved window.
+INSERT INTO metrics VALUES ('2025-01-07 13:00:00+00', 'w', 50);
+CALL refresh_continuous_aggregate('metrics_hourly', '2025-01-07 13:00:00+00', '2025-01-07 14:00:00+00');
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('metrics');
+         window_start         |          window_end          
+------------------------------+------------------------------
+ Tue Jan 07 12:30:00 2025 UTC | Fri Jan 10 11:30:00 2025 UTC
+
 SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('m','n') ORDER BY tenant;
  tenant | bucket | avg 
 --------+--------+-----
@@ -490,7 +510,7 @@ ORDER BY lowest_modified_value;
             lowest            |              greatest               | seqnum 
 ------------------------------+-------------------------------------+--------
  Tue Jan 07 11:10:00 2025 UTC | Tue Jan 07 12:29:59.999999 2025 UTC |       
- Tue Jan 07 12:30:00 2025 UTC | Tue Jan 07 12:50:00 2025 UTC        |      9
+ Tue Jan 07 12:30:00 2025 UTC | Tue Jan 07 12:50:00 2025 UTC        |      6
 
 -- Refreshing the other cagg to move invalidations from hypertable inval. log to
 -- cagg invalidation log, expanding both halves to bucket
@@ -514,7 +534,7 @@ ORDER BY lowest_modified_value, seqnum;
 ------------------------------+-------------------------------------+--------
  -infinity                    | Tue Dec 31 23:59:59.999999 2019 UTC |       
  Tue Jan 07 11:00:00 2025 UTC | Tue Jan 07 12:59:59.999999 2025 UTC |       
- Tue Jan 07 12:00:00 2025 UTC | Tue Jan 07 12:59:59.999999 2025 UTC |      9
+ Tue Jan 07 12:00:00 2025 UTC | Tue Jan 07 12:59:59.999999 2025 UTC |      6
  Sun Jan 12 04:00:00 2025 UTC | infinity                            |       
 
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:30:00+00');
@@ -570,7 +590,7 @@ ORDER BY lowest_modified_value;
             lowest            |              greatest               | seqnum 
 ------------------------------+-------------------------------------+--------
  Tue Jan 07 11:00:00 2025 UTC | Tue Jan 07 12:29:59.999999 2025 UTC |       
- Tue Jan 07 12:30:00 2025 UTC | Fri Jan 10 11:29:59.999999 2025 UTC |     10
+ Tue Jan 07 12:30:00 2025 UTC | Fri Jan 10 11:29:59.999999 2025 UTC |      7
  Fri Jan 10 11:30:00 2025 UTC | Fri Jan 10 11:45:00 2025 UTC        |       
 
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:30:00+00');
@@ -584,7 +604,7 @@ WHERE hypertable_id = (
 ORDER BY seqnum, tenant_id;
  tenant_id | seqnum 
 -----------+--------
- inside    |     10
+ inside    |      7
 
 --cagg content should match the corresponding query from the raw table
 SELECT tenant, bucket, avg FROM metrics_hourly
