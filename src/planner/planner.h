@@ -127,35 +127,49 @@ TsRelType TSDLLEXPORT ts_classify_relation(const PlannerInfo *root, const RelOpt
 static inline const Chunk *
 ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 {
-	TimescaleDBPrivate *rel_private;
+	Hypertable *ht;
+	TsRelType rel_type = ts_classify_relation(root, rel, &ht);
 
-	/* The rel can only be a chunk if it is part of a hypertable expansion
-	 * (RELOPT_OTHER_MEMBER_REL) or a directly query on the chunk
-	 * (RELOPT_BASEREL) */
-	if (rel->reloptkind != RELOPT_OTHER_MEMBER_REL && rel->reloptkind != RELOPT_BASEREL)
+	if (ht == NULL)
 	{
+		/* Not related to any hypertables at all. */
 		return NULL;
 	}
 
-	/* The rel_private entry should have been created as part of classifying
-	 * the relation in timescaledb_get_relation_info_hook(). Therefore,
-	 * ts_get_private_reloptinfo() asserts that it is already set but falls
-	 * back to creating rel_private in release builds for safety. */
-	rel_private = ts_get_private_reloptinfo(rel);
+	if (rel_type == TS_REL_HYPERTABLE || rel_type == TS_REL_HYPERTABLE_CHILD)
+	{
+		/* Hypertable relation, not a Chunk. */
+		return NULL;
+	}
 
+	if (rel_type == TS_REL_OTHER)
+	{
+		/*
+		 * A relation that has TS_REL_OTHER type but still belongs to a
+		 * hypertable must be the OSM chunk. We have to look up the Chunk for it
+		 * anew because we don't manage its RelOptInfo and don't have anywhere
+		 * to cache it.
+		 */
+		return ts_chunk_get_by_relid_locked(rte->relid,
+										 AccessShareLock,
+										 /* slice_lock = */ NULL,
+										 /* fail_if_not_found = */ true);
+	}
+
+	/*
+	 * Normal chunk. Return the cached Chunk struct if we have one, otherwise
+	 * look it up. Do not use a slice tuple lock because that will assign a
+	 * transaction ID, which is not necessary for queries.
+	 */
+	TimescaleDBPrivate *rel_private = ts_get_private_reloptinfo(rel);
 	if (NULL == rel_private->cached_chunk_struct)
 	{
 		RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
-		/*
-		 * Get the chunk and cache it. Do not use a slice tuple lock because
-		 * that will assign a transaction ID, which is not necessary for
-		 * queries.
-		 */
 		rel_private->cached_chunk_struct =
 			ts_chunk_get_by_relid_locked(rte->relid,
 										 AccessShareLock,
-										 NULL,
+										 /* slice_lock = */ NULL,
 										 /* fail_if_not_found = */ true);
 	}
 
