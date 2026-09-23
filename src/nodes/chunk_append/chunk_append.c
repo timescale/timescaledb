@@ -51,6 +51,7 @@ has_joins(FromExpr *jointree)
 static List *
 build_nested_oids(PlannerInfo *root, List *children)
 {
+	/* LOOK HERE */
 	List *nested_oids = NIL;
 	List *slice_oids = NIL;
 	const DimensionSlice *prev_slice = NULL;
