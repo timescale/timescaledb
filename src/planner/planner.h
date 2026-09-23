@@ -142,6 +142,8 @@ ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 		return NULL;
 	}
 
+	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+
 	if (rel_type == TS_REL_OTHER)
 	{
 		/*
