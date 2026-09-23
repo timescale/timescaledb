@@ -685,7 +685,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 
 	/*
 	 * We unconditionally discard the Postgres paths that work on the whole
-	 * table without partial aggregation. One of the main reasons we need the
+	 * table without chunkwise aggregation. One of the main reasons we need the
 	 * chunkwise aggregation is that it is a prerequisite for using
 	 * vectorized aggregation. The vectorized aggregation is applied at late
 	 * stages of planning and is not reflected in the cost model, so we can't
