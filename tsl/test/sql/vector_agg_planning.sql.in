@@ -74,3 +74,35 @@ SET timescaledb.enable_vectorized_aggregation = on;
 -- compare optimized vs non-optimized results
 :DIFF_CMD
 
+
+\set ECHO all
+
+-- A primary key makes an ungrouped column functionally dependent on
+-- the GROUP BY keys, so the select list can use it without
+-- aggregation.
+CREATE TABLE fdmetrics(
+    ts timestamptz NOT NULL,
+    id int NOT NULL,
+    label text,
+    value float,
+    PRIMARY KEY (id, ts)
+) WITH (tsdb.hypertable, tsdb.partition_column='ts', tsdb.segmentby='id', tsdb.orderby='ts');
+
+INSERT INTO fdmetrics
+SELECT '2025-01-01'::timestamptz + format('%s h', i / 5)::interval,
+       i % 5, 'label ' || (i % 5)::text, i
+FROM generate_series(1, 20) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('fdmetrics') c;
+
+EXPLAIN (costs off) SELECT id, ts, label, sum(value) FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+SELECT id, ts, label, sum(value) FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+SET timescaledb.enable_vectorized_aggregation = off;
+SELECT id, ts, label, sum(value) FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+RESET timescaledb.enable_vectorized_aggregation;
+
+-- The aggregate listed before the functionally-dependent column.
+EXPLAIN (costs off) SELECT sum(value), label FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+SELECT sum(value), label FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+SET timescaledb.enable_vectorized_aggregation = off;
+SELECT sum(value), label FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+RESET timescaledb.enable_vectorized_aggregation;

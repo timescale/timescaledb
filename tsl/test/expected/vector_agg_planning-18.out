@@ -195,6 +195,59 @@ SHOW timescaledb.enable_vectorized_aggregation;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                ->  Seq Scan on _hyper_1_1_chunk_compressed
 
+-- Expression over a grouping column in the select list.
+:EXPLAIN SELECT value + 1 AS vp1, sum(value) FROM metrics GROUP BY value ORDER BY vp1;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((_hyper_1_1_chunk.value + '1'::double precision))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Non-injective expression over a grouping column, without the bare
+-- column in the select list.
+:EXPLAIN SELECT floor(value / 10) AS vf, sum(value) AS s FROM metrics GROUP BY value ORDER BY vf, s;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (floor((_hyper_1_1_chunk.value / '10'::double precision))), (sum(_hyper_1_1_chunk.value))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Expression over a text grouping column, collapsing all groups to one value.
+:EXPLAIN SELECT length(device) AS ld, sum(value) AS s FROM metrics GROUP BY device ORDER BY ld, s;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (length(_hyper_1_1_chunk.device)), (sum(_hyper_1_1_chunk.value))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.device
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Constant in the select list of a grouped aggregate.
+:EXPLAIN SELECT 42 AS c, value, sum(value) FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.value
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Stable expression without column references in the select list.
+:EXPLAIN SELECT current_setting('timezone') AS tz, sum(value) FROM metrics;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   ->  Custom Scan (VectorAgg)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
 -- Correlated Subquery on single chunk
 :EXPLAIN SELECT FROM (SELECT 12 AS c7 FROM pg_class LIMIT 1) AS subq_1 WHERE EXISTS(SELECT FROM _timescaledb_internal._hyper_1_1_chunk WHERE subq_1.c7 = CASE WHEN value = 1 THEN NULL::int2 END);
 --- QUERY PLAN ---
@@ -208,6 +261,159 @@ SHOW timescaledb.enable_vectorized_aggregation;
    ->  Hash
          ->  Limit
                ->  Seq Scan on pg_class
+
+-- Correlated subquery deduplicated on two expressions: a grouping
+-- without a GROUP BY clause, whose grouping expressions appear in no
+-- select list.
+:EXPLAIN SELECT FROM (SELECT 12 AS c7, 13 AS c8 FROM pg_class LIMIT 1) AS subq_1 WHERE EXISTS(SELECT FROM _timescaledb_internal._hyper_1_1_chunk WHERE subq_1.c7 = CASE WHEN value = 1 THEN NULL::int2 END AND subq_1.c8 = CASE WHEN value = 2 THEN NULL::int2 END);
+--- QUERY PLAN ---
+ Hash Join
+   Hash Cond: ((CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END = (12)) AND (CASE WHEN (_hyper_1_1_chunk.value = '2'::double precision) THEN NULL::smallint ELSE NULL::smallint END = (13)))
+   ->  Finalize HashAggregate
+         Group Key: (CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END), (CASE WHEN (_hyper_1_1_chunk.value = '2'::double precision) THEN NULL::smallint ELSE NULL::smallint END)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+   ->  Hash
+         ->  Limit
+               ->  Seq Scan on pg_class
+
+-- Expression over an aggregate in the select list.
+:EXPLAIN SELECT sum(value) + 1 AS sp1 FROM metrics GROUP BY value ORDER BY sp1;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((sum(_hyper_1_1_chunk.value) + '1'::double precision))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Expression over both a grouping column and an aggregate.
+:EXPLAIN SELECT value + sum(value) AS vs FROM metrics GROUP BY value ORDER BY vs;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((_hyper_1_1_chunk.value + sum(_hyper_1_1_chunk.value)))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Duplicate identical aggregates.
+:EXPLAIN SELECT sum(value), sum(value), value FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.value
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Aggregate listed before the grouping column in the select list.
+:EXPLAIN SELECT sum(value) AS s, device FROM metrics GROUP BY device ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.device
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Aggregate whose partial state type differs from its result type.
+:EXPLAIN SELECT value, avg(value) FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.value
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Grouping by a system column is not vectorized.
+:EXPLAIN SELECT tableoid::regclass::text AS chunk, count(*) FROM metrics GROUP BY tableoid ORDER BY chunk;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (((_hyper_1_1_chunk.tableoid)::regclass)::text)
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.tableoid
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Volatile expression over a grouping column in the select list.
+:EXPLAIN SELECT value + random() * 0 AS vr, sum(value) FROM metrics GROUP BY value ORDER BY vr;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((_hyper_1_1_chunk.value + (random() * '0'::double precision)))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Expressions over a grouping column computed by the finalize
+-- aggregate.
+:EXPLAIN SELECT coalesce(value, 0) AS cv, sum(value) FROM metrics GROUP BY value ORDER BY cv;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (COALESCE(_hyper_1_1_chunk.value, '0'::double precision))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+:EXPLAIN SELECT CASE value WHEN 0 THEN -1 ELSE value END AS sw, sum(value) FROM metrics GROUP BY value ORDER BY sw;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (CASE _hyper_1_1_chunk.value WHEN '0'::double precision THEN '-1'::double precision ELSE _hyper_1_1_chunk.value END)
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Volatile grouping expression is not vectorized.
+:EXPLAIN SELECT sum(value) FROM metrics GROUP BY value + (random() * 0)::int;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: (_hyper_1_1_chunk.value + (((random() * '0'::double precision))::integer)::double precision)
+   ->  Result
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Volatile aggregate argument is not vectorized.
+:EXPLAIN SELECT sum(value + (random() * 0)::int) FROM metrics GROUP BY value;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: _hyper_1_1_chunk.value
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Volatile aggregate filter is not vectorized.
+:EXPLAIN SELECT sum(value) FILTER (WHERE random() < 2) FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Result
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.value
+         ->  HashAggregate
+               Group Key: _hyper_1_1_chunk.value
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Volatile expression over an aggregate, computed once per group.
+:EXPLAIN SELECT sum(value) * (1 + random() * 0) AS sr FROM metrics GROUP BY value ORDER BY sr;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((sum(_hyper_1_1_chunk.value) * ('1'::double precision + (random() * '0'::double precision))))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
 
 -- run queries with single chunk
 \set EXPLAIN ''
@@ -484,6 +690,79 @@ SHOW timescaledb.enable_vectorized_aggregation;
                      ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
                            ->  Seq Scan on _hyper_1_2_chunk_compressed
 
+-- Expression over a grouping column in the select list.
+:EXPLAIN SELECT value + 1 AS vp1, sum(value) FROM metrics GROUP BY value ORDER BY vp1;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.value + '1'::double precision))
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Non-injective expression over a grouping column, without the bare
+-- column in the select list.
+:EXPLAIN SELECT floor(value / 10) AS vf, sum(value) AS s FROM metrics GROUP BY value ORDER BY vf, s;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (floor((metrics.value / '10'::double precision))), (sum(metrics.value))
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Expression over a text grouping column, collapsing all groups to one value.
+:EXPLAIN SELECT length(device) AS ld, sum(value) AS s FROM metrics GROUP BY device ORDER BY ld, s;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (length(metrics.device)), (sum(metrics.value))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Constant in the select list of a grouped aggregate.
+:EXPLAIN SELECT 42 AS c, value, sum(value) FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.value
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Stable expression without column references in the select list.
+:EXPLAIN SELECT current_setting('timezone') AS tz, sum(value) FROM metrics;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                     ->  Seq Scan on _hyper_1_2_chunk_compressed
+
 -- Correlated Subquery on single chunk
 :EXPLAIN SELECT FROM (SELECT 12 AS c7 FROM pg_class LIMIT 1) AS subq_1 WHERE EXISTS(SELECT FROM _timescaledb_internal._hyper_1_1_chunk WHERE subq_1.c7 = CASE WHEN value = 1 THEN NULL::int2 END);
 --- QUERY PLAN ---
@@ -498,6 +777,222 @@ SHOW timescaledb.enable_vectorized_aggregation;
          ->  Limit
                ->  Seq Scan on pg_class
 
+-- Correlated subquery deduplicated on two expressions: a grouping
+-- without a GROUP BY clause, whose grouping expressions appear in no
+-- select list.
+:EXPLAIN SELECT FROM (SELECT 12 AS c7, 13 AS c8 FROM pg_class LIMIT 1) AS subq_1 WHERE EXISTS(SELECT FROM _timescaledb_internal._hyper_1_1_chunk WHERE subq_1.c7 = CASE WHEN value = 1 THEN NULL::int2 END AND subq_1.c8 = CASE WHEN value = 2 THEN NULL::int2 END);
+--- QUERY PLAN ---
+ Hash Join
+   Hash Cond: ((CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END = (12)) AND (CASE WHEN (_hyper_1_1_chunk.value = '2'::double precision) THEN NULL::smallint ELSE NULL::smallint END = (13)))
+   ->  Finalize HashAggregate
+         Group Key: (CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END), (CASE WHEN (_hyper_1_1_chunk.value = '2'::double precision) THEN NULL::smallint ELSE NULL::smallint END)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+   ->  Hash
+         ->  Limit
+               ->  Seq Scan on pg_class
+
+-- Expression over an aggregate in the select list.
+:EXPLAIN SELECT sum(value) + 1 AS sp1 FROM metrics GROUP BY value ORDER BY sp1;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((sum(metrics.value) + '1'::double precision))
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Expression over both a grouping column and an aggregate.
+:EXPLAIN SELECT value + sum(value) AS vs FROM metrics GROUP BY value ORDER BY vs;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.value + sum(metrics.value)))
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Duplicate identical aggregates.
+:EXPLAIN SELECT sum(value), sum(value), value FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.value
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Aggregate listed before the grouping column in the select list.
+:EXPLAIN SELECT sum(value) AS s, device FROM metrics GROUP BY device ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Aggregate whose partial state type differs from its result type.
+:EXPLAIN SELECT value, avg(value) FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.value
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Grouping by a system column is not vectorized.
+:EXPLAIN SELECT tableoid::regclass::text AS chunk, count(*) FROM metrics GROUP BY tableoid ORDER BY chunk;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (((metrics.tableoid)::regclass)::text)
+   ->  Finalize HashAggregate
+         Group Key: metrics.tableoid
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: _hyper_1_1_chunk.tableoid
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: _hyper_1_2_chunk.tableoid
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile expression over a grouping column in the select list.
+:EXPLAIN SELECT value + random() * 0 AS vr, sum(value) FROM metrics GROUP BY value ORDER BY vr;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.value + (random() * '0'::double precision)))
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Expressions over a grouping column computed by the finalize
+-- aggregate.
+:EXPLAIN SELECT coalesce(value, 0) AS cv, sum(value) FROM metrics GROUP BY value ORDER BY cv;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (COALESCE(metrics.value, '0'::double precision))
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+:EXPLAIN SELECT CASE value WHEN 0 THEN -1 ELSE value END AS sw, sum(value) FROM metrics GROUP BY value ORDER BY sw;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: (CASE metrics.value WHEN '0'::double precision THEN '-1'::double precision ELSE metrics.value END)
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile grouping expression is not vectorized.
+:EXPLAIN SELECT sum(value) FROM metrics GROUP BY value + (random() * 0)::int;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: ((metrics.value + (((random() * '0'::double precision))::integer)::double precision))
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: (_hyper_1_1_chunk.value + (((random() * '0'::double precision))::integer)::double precision)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+         ->  Partial HashAggregate
+               Group Key: (_hyper_1_2_chunk.value + (((random() * '0'::double precision))::integer)::double precision)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                     ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile aggregate argument is not vectorized.
+:EXPLAIN SELECT sum(value + (random() * 0)::int) FROM metrics GROUP BY value;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: metrics.value
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: _hyper_1_1_chunk.value
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+         ->  Partial HashAggregate
+               Group Key: _hyper_1_2_chunk.value
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                     ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile aggregate filter is not vectorized.
+:EXPLAIN SELECT sum(value) FILTER (WHERE random() < 2) FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Result
+   ->  Sort
+         Sort Key: metrics.value
+         ->  Finalize HashAggregate
+               Group Key: metrics.value
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_1_1_chunk.value
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                                 ->  Seq Scan on _hyper_1_1_chunk_compressed
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_1_2_chunk.value
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                                 ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile expression over an aggregate, computed once per group.
+:EXPLAIN SELECT sum(value) * (1 + random() * 0) AS sr FROM metrics GROUP BY value ORDER BY sr;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((sum(metrics.value) * ('1'::double precision + (random() * '0'::double precision))))
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
 \set EXPLAIN ''
 \set ECHO errors
 --- Unoptimized results
@@ -509,3 +1004,139 @@ SHOW timescaledb.enable_vectorized_aggregation;
 + on
  
                mx              | mn  | device 
+-- A primary key makes an ungrouped column functionally dependent on
+-- the GROUP BY keys, so the select list can use it without
+-- aggregation.
+CREATE TABLE fdmetrics(
+    ts timestamptz NOT NULL,
+    id int NOT NULL,
+    label text,
+    value float,
+    PRIMARY KEY (id, ts)
+) WITH (tsdb.hypertable, tsdb.partition_column='ts', tsdb.segmentby='id', tsdb.orderby='ts');
+INSERT INTO fdmetrics
+SELECT '2025-01-01'::timestamptz + format('%s h', i / 5)::interval,
+       i % 5, 'label ' || (i % 5)::text, i
+FROM generate_series(1, 20) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('fdmetrics') c;
+ count 
+-------
+     1
+
+EXPLAIN (costs off) SELECT id, ts, label, sum(value) FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+--- QUERY PLAN ---
+ Finalize GroupAggregate
+   Group Key: _hyper_2_3_chunk.id, _hyper_2_3_chunk.ts
+   ->  Custom Scan (VectorAgg)
+         ->  Custom Scan (ColumnarScan) on _hyper_2_3_chunk
+               ->  Index Scan using _hyper_2_3_chunk_compressed_id__ts_meta_v2_first_ts__ts_met_idx on _hyper_2_3_chunk_compressed
+
+SELECT id, ts, label, sum(value) FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+ id |              ts              |  label  | sum 
+----+------------------------------+---------+-----
+  0 | Wed Jan 01 01:00:00 2025 PST | label 0 |   5
+  0 | Wed Jan 01 02:00:00 2025 PST | label 0 |  10
+  0 | Wed Jan 01 03:00:00 2025 PST | label 0 |  15
+  0 | Wed Jan 01 04:00:00 2025 PST | label 0 |  20
+  1 | Wed Jan 01 00:00:00 2025 PST | label 1 |   1
+  1 | Wed Jan 01 01:00:00 2025 PST | label 1 |   6
+  1 | Wed Jan 01 02:00:00 2025 PST | label 1 |  11
+  1 | Wed Jan 01 03:00:00 2025 PST | label 1 |  16
+  2 | Wed Jan 01 00:00:00 2025 PST | label 2 |   2
+  2 | Wed Jan 01 01:00:00 2025 PST | label 2 |   7
+  2 | Wed Jan 01 02:00:00 2025 PST | label 2 |  12
+  2 | Wed Jan 01 03:00:00 2025 PST | label 2 |  17
+  3 | Wed Jan 01 00:00:00 2025 PST | label 3 |   3
+  3 | Wed Jan 01 01:00:00 2025 PST | label 3 |   8
+  3 | Wed Jan 01 02:00:00 2025 PST | label 3 |  13
+  3 | Wed Jan 01 03:00:00 2025 PST | label 3 |  18
+  4 | Wed Jan 01 00:00:00 2025 PST | label 4 |   4
+  4 | Wed Jan 01 01:00:00 2025 PST | label 4 |   9
+  4 | Wed Jan 01 02:00:00 2025 PST | label 4 |  14
+  4 | Wed Jan 01 03:00:00 2025 PST | label 4 |  19
+
+SET timescaledb.enable_vectorized_aggregation = off;
+SELECT id, ts, label, sum(value) FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+ id |              ts              |  label  | sum 
+----+------------------------------+---------+-----
+  0 | Wed Jan 01 01:00:00 2025 PST | label 0 |   5
+  0 | Wed Jan 01 02:00:00 2025 PST | label 0 |  10
+  0 | Wed Jan 01 03:00:00 2025 PST | label 0 |  15
+  0 | Wed Jan 01 04:00:00 2025 PST | label 0 |  20
+  1 | Wed Jan 01 00:00:00 2025 PST | label 1 |   1
+  1 | Wed Jan 01 01:00:00 2025 PST | label 1 |   6
+  1 | Wed Jan 01 02:00:00 2025 PST | label 1 |  11
+  1 | Wed Jan 01 03:00:00 2025 PST | label 1 |  16
+  2 | Wed Jan 01 00:00:00 2025 PST | label 2 |   2
+  2 | Wed Jan 01 01:00:00 2025 PST | label 2 |   7
+  2 | Wed Jan 01 02:00:00 2025 PST | label 2 |  12
+  2 | Wed Jan 01 03:00:00 2025 PST | label 2 |  17
+  3 | Wed Jan 01 00:00:00 2025 PST | label 3 |   3
+  3 | Wed Jan 01 01:00:00 2025 PST | label 3 |   8
+  3 | Wed Jan 01 02:00:00 2025 PST | label 3 |  13
+  3 | Wed Jan 01 03:00:00 2025 PST | label 3 |  18
+  4 | Wed Jan 01 00:00:00 2025 PST | label 4 |   4
+  4 | Wed Jan 01 01:00:00 2025 PST | label 4 |   9
+  4 | Wed Jan 01 02:00:00 2025 PST | label 4 |  14
+  4 | Wed Jan 01 03:00:00 2025 PST | label 4 |  19
+
+RESET timescaledb.enable_vectorized_aggregation;
+-- The aggregate listed before the functionally-dependent column.
+EXPLAIN (costs off) SELECT sum(value), label FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+--- QUERY PLAN ---
+ Finalize GroupAggregate
+   Group Key: _hyper_2_3_chunk.id, _hyper_2_3_chunk.ts
+   ->  Custom Scan (VectorAgg)
+         ->  Custom Scan (ColumnarScan) on _hyper_2_3_chunk
+               ->  Index Scan using _hyper_2_3_chunk_compressed_id__ts_meta_v2_first_ts__ts_met_idx on _hyper_2_3_chunk_compressed
+
+SELECT sum(value), label FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+ sum |  label  
+-----+---------
+   5 | label 0
+  10 | label 0
+  15 | label 0
+  20 | label 0
+   1 | label 1
+   6 | label 1
+  11 | label 1
+  16 | label 1
+   2 | label 2
+   7 | label 2
+  12 | label 2
+  17 | label 2
+   3 | label 3
+   8 | label 3
+  13 | label 3
+  18 | label 3
+   4 | label 4
+   9 | label 4
+  14 | label 4
+  19 | label 4
+
+SET timescaledb.enable_vectorized_aggregation = off;
+SELECT sum(value), label FROM fdmetrics GROUP BY id, ts ORDER BY id, ts;
+ sum |  label  
+-----+---------
+   5 | label 0
+  10 | label 0
+  15 | label 0
+  20 | label 0
+   1 | label 1
+   6 | label 1
+  11 | label 1
+  16 | label 1
+   2 | label 2
+   7 | label 2
+  12 | label 2
+  17 | label 2
+   3 | label 3
+   8 | label 3
+  13 | label 3
+  18 | label 3
+   4 | label 4
+   9 | label 4
+  14 | label 4
+  19 | label 4
+
+RESET timescaledb.enable_vectorized_aggregation;
