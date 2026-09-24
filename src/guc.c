@@ -77,7 +77,7 @@ bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
-TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit = 30000;
+TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit = 0;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
@@ -585,7 +585,7 @@ _guc_init(void)
 							"large amounts of uncompressed data in a single transaction. "
 							"Setting this to 0 would make it unlimited.",
 							&ts_guc_move_to_columnstore_tuple_sort_limit,
-							30000,
+							0,
 							0,
 							2147483647,
 							PGC_USERSET,

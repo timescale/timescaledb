@@ -1515,9 +1515,9 @@ SELECT pg_typeof(_timescaledb_functions.chunk_status_text(0));
 
 -- Test hypertable_status and hypertable_status_text functions
 CREATE TABLE hypertable_status_test(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=false);
-SELECT _timescaledb_functions.hypertable_status_text(i) FROM generate_series(0,15) i;
-                  hypertable_status_text                   
------------------------------------------------------------
+SELECT _timescaledb_functions.hypertable_status_text(i) FROM generate_series(0,31) i;
+                            hypertable_status_text                             
+-------------------------------------------------------------------------------
  {}
  {OSM}
  {OSM_CHUNK_NONCONTIGUOUS}
@@ -1534,6 +1534,22 @@ SELECT _timescaledb_functions.hypertable_status_text(i) FROM generate_series(0,1
  {OSM,COMPRESSION,DIRECT_COMPRESS}
  {OSM_CHUNK_NONCONTIGUOUS,COMPRESSION,DIRECT_COMPRESS}
  {OSM,OSM_CHUNK_NONCONTIGUOUS,COMPRESSION,DIRECT_COMPRESS}
+ {CONCURRENT_COMPRESS}
+ {OSM,CONCURRENT_COMPRESS}
+ {OSM_CHUNK_NONCONTIGUOUS,CONCURRENT_COMPRESS}
+ {OSM,OSM_CHUNK_NONCONTIGUOUS,CONCURRENT_COMPRESS}
+ {COMPRESSION,CONCURRENT_COMPRESS}
+ {OSM,COMPRESSION,CONCURRENT_COMPRESS}
+ {OSM_CHUNK_NONCONTIGUOUS,COMPRESSION,CONCURRENT_COMPRESS}
+ {OSM,OSM_CHUNK_NONCONTIGUOUS,COMPRESSION,CONCURRENT_COMPRESS}
+ {DIRECT_COMPRESS,CONCURRENT_COMPRESS}
+ {OSM,DIRECT_COMPRESS,CONCURRENT_COMPRESS}
+ {OSM_CHUNK_NONCONTIGUOUS,DIRECT_COMPRESS,CONCURRENT_COMPRESS}
+ {OSM,OSM_CHUNK_NONCONTIGUOUS,DIRECT_COMPRESS,CONCURRENT_COMPRESS}
+ {COMPRESSION,DIRECT_COMPRESS,CONCURRENT_COMPRESS}
+ {OSM,COMPRESSION,DIRECT_COMPRESS,CONCURRENT_COMPRESS}
+ {OSM_CHUNK_NONCONTIGUOUS,COMPRESSION,DIRECT_COMPRESS,CONCURRENT_COMPRESS}
+ {OSM,OSM_CHUNK_NONCONTIGUOUS,COMPRESSION,DIRECT_COMPRESS,CONCURRENT_COMPRESS}
 
 SELECT _timescaledb_functions.hypertable_status('hypertable_status_test');
  hypertable_status 
@@ -1558,8 +1574,8 @@ SELECT _timescaledb_functions.hypertable_status_text(NULL::regclass);
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_status_text(-1);
 ERROR:  invalid hypertable status -1
-SELECT _timescaledb_functions.hypertable_status_text(16);
-ERROR:  invalid hypertable status 16
+SELECT _timescaledb_functions.hypertable_status_text(36);
+ERROR:  invalid hypertable status 36
 SELECT _timescaledb_functions.hypertable_status('pg_class'::regclass);
 ERROR:  table "pg_class" is not a hypertable
 \set ON_ERROR_STOP 1

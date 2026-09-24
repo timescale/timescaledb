@@ -12,6 +12,7 @@
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
+#include "bgw_policy/move_to_columnstore_api.h"
 #include "bgw_policy/policies_v2.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
@@ -86,6 +87,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_check = policy_reorder_check,
 	.policy_reorder_remove = policy_reorder_remove,
+	.policy_move_to_columnstore_add = policy_move_to_columnstore_add,
+	.policy_move_to_columnstore_check = policy_move_to_columnstore_check,
+	.policy_move_to_columnstore_remove = policy_move_to_columnstore_remove,
 	.policy_compaction_add = policy_compaction_add,
 	.policy_compaction_check = policy_compaction_check,
 	.policy_compaction_remove = policy_compaction_remove,

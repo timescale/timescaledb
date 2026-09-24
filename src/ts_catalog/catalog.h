@@ -1421,6 +1421,9 @@ typedef struct CatalogSecurityContext
 /* flag set when the hypertable has opted into direct compress on insert/copy,
  * independent of the instance-wide direct compress GUCs */
 #define HYPERTABLE_STATUS_DIRECT_COMPRESS 8
+/* flag set when the hypertable converts chunks to the columnstore as DML,
+ * via the concurrent_compress option */
+#define HYPERTABLE_STATUS_CONCURRENT_COMPRESS 16
 
 extern void ts_catalog_table_info_init(CatalogTableInfo *tables, int max_table,
 									   const TableInfoDef *table_ary,

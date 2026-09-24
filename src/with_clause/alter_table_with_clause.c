@@ -83,6 +83,15 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 			.arg_names = {"direct_compress_schedule_interval", NULL},
 			 .type_id = INTERVALOID,
 		},
+		[AlterTableFlagConcurrentCompress] = {
+			.arg_names = {"concurrent_compress", NULL},
+			.type_id = BOOLOID,
+			.default_val = (Datum)false,
+		},
+		[AlterTableFlagConcurrentCompressScheduleInterval] = {
+			.arg_names = {"concurrent_compress_schedule_interval", NULL},
+			 .type_id = INTERVALOID,
+		},
 };
 
 static const WithClauseDefinition sparse_index_with_clause_def[] = {
