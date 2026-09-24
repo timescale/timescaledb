@@ -572,12 +572,7 @@ finalize_agg_reference_mutator(Node *node, void *context)
 		TargetEntry *partial_agg_tle = tlist_member((Expr *) aggref, partial_agg_targetlist);
 		Assert(partial_agg_tle != NULL);
 
-		Var *partial_state_var = makeVar(OUTER_VAR,
-										 partial_agg_tle->resno,
-										 exprType((Node *) partial_agg_tle->expr),
-										 -1,
-										 aggref->aggcollid,
-										 0);
+		Var *partial_state_var = makeVarFromTargetEntry(OUTER_VAR, partial_agg_tle);
 
 		Aggref *combining_aggref = makeNode(Aggref);
 		memcpy(combining_aggref, aggref, sizeof(Aggref));
@@ -670,10 +665,10 @@ insert_vector_agg(Plan *plan, void *context)
 	}
 
 	/*
-	 * VectorAgg can only replaces a partial aggregation node. Normally these
-	 * are created by chunkwise aggregation, but it is not applied when we have
-	 * only one chunk. To handle this case, we split a single-chunk Agg node
-	 * here into a final and partial aggregate nodes, if we find out that we can
+	 * VectorAgg can only replace a partial aggregation node. Normally these are
+	 * created by chunkwise aggregation, but it is not applied when we have only
+	 * one chunk. To handle this case, we split a single-chunk Agg node here
+	 * into final and partial aggregate nodes, if we find out that we can
 	 * replace the partial aggregate with VectorAgg. First, we have to prepare
 	 * the targetlists for both the final and partial aggregate nodes, to be
 	 * able to perform the remaining checks.
@@ -682,7 +677,7 @@ insert_vector_agg(Plan *plan, void *context)
 	 * expression mixing aggregates and columns, and a grouping key does not
 	 * have to appear there at all. This makes it complicated to build the
 	 * partial agg targetlist by following the grouping targetlist layout.
-	 * Instead, we pull all aggregates and variables from grouping targetlist,
+	 * Instead, we pull all aggregates and variables from grouping targetlist.
 	 * In addition, we consult the list of grouping columns in the aggregation
 	 * node, because some grouping columns might not be present in the final
 	 * output, but they still must be produced by the partial aggregation node.
