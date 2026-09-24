@@ -198,7 +198,7 @@ bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
 #endif
 
-int ts_guc_debug_toast_tuple_target = 128;
+int ts_guc_debug_toast_tuple_target = 256;
 
 static const struct config_enum_entry debug_require_options[] = { { "allow", DRO_Allow, false },
 																  { "forbid", DRO_Forbid, false },
@@ -1684,7 +1684,7 @@ _guc_init(void)
 							/* short_desc= */ "set toast tuple target on compressed chunks",
 							/* long_desc= */ "this is for debugging purposes",
 							/* valueAddr= */ &ts_guc_debug_toast_tuple_target,
-							/* bootValue = */ 128,
+							/* bootValue = */ 256,
 							/* minValue = */ 1,
 							/* maxValue = */ 65535,
 							/* context= */ PGC_USERSET,

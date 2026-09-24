@@ -383,7 +383,7 @@ detoaster_detoast_attr_copy(struct varlena *attr, Detoaster *detoaster, MemoryCo
 	{
 		/*
 		 * This is a compressed value stored inline in the main tuple. It rarely
-		 * occurs in practice, because we set a low toast_tuple_target = 128
+		 * occurs in practice, because we set a low toast_tuple_target = 256
 		 * for the compressed chunks, but is still technically possible.
 		 *
 		 * Note that the attr comes from the compressed tuple slot here, so we
