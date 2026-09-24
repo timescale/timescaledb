@@ -890,9 +890,7 @@ SHOW timescaledb.enable_vectorized_aggregation;
 + on
  
                mx              | mn  | device 
--- A primary key makes an ungrouped column functionally dependent on
--- the GROUP BY keys, so the select list can use it without
--- aggregation.
+-- Grouping by the primary key allows selecting any column of the table.
 CREATE TABLE fdmetrics(
     ts timestamptz NOT NULL,
     id int NOT NULL,
