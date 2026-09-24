@@ -1,5 +1,6 @@
 set(TEST_FILES
     deadlock_dropchunks_select.spec
+    drop_extension_cache_reset.spec
     insert_dropchunks_race.spec
     isolation_nop.spec
     read_committed_insert.spec

@@ -75,3 +75,14 @@ SET client_min_messages=error;
 CREATE EXTENSION timescaledb;
 RESET client_min_messages;
 SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
+
+-- Full cache resets must not make the extension look uninstalled
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE discard_test(time timestamptz NOT NULL, temp float8);
+SELECT create_hypertable('discard_test', 'time');
+SET debug_discard_caches = 1;
+INSERT INTO discard_test VALUES ('2024-01-01', 1), ('2024-02-01', 2);
+SELECT count(*) FROM ONLY discard_test;
+SELECT count(*) FROM show_chunks('discard_test');
+RESET debug_discard_caches;
+DROP TABLE discard_test;
