@@ -1,0 +1,2 @@
+Fixes: #10649 Fix "could not open relation" error in sessions that were busy during DROP EXTENSION
+Thanks: @rimbi For reporting an error in sessions that were busy during DROP EXTENSION

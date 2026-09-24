@@ -1,0 +1,30 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s1_query_hypertable s3_lock s1_wait s2_drop_extension s3_unlock s1_query_plain
+step s1_query_hypertable: SELECT count(*) FROM ts_root;
+count
+-----
+   20
+
+step s3_lock: SELECT pg_advisory_lock(1);
+pg_advisory_lock
+----------------
+                
+
+step s1_wait: SELECT pg_advisory_xact_lock(1); <waiting ...>
+step s2_drop_extension: DROP EXTENSION timescaledb CASCADE;
+step s3_unlock: SELECT pg_advisory_unlock(1);
+pg_advisory_unlock
+------------------
+t                 
+
+step s1_wait: <... completed>
+pg_advisory_xact_lock
+---------------------
+                     
+
+step s1_query_plain: SELECT count(*) FROM plain_t;
+count
+-----
+    1
+

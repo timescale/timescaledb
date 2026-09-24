@@ -160,8 +160,8 @@ extension_set_state(enum ExtensionState newstate)
 	return true;
 }
 
-/* Updates the state based on the current state, returning whether there had been a change. */
-static void
+/* Updates the state based on the current state, returning the new state. */
+static enum ExtensionState
 extension_update_state()
 {
 	enum ExtensionState new_state =
@@ -184,12 +184,14 @@ extension_update_state()
 		new_state = EXTENSION_STATE_UNKNOWN;
 	}
 
-	extension_set_state(new_state);
 	/*
 	 * Update the extension oid. Note that it is only safe to run
 	 * get_extension_oid() when the extension state is 'CREATED' or
 	 * 'TRANSITIONING', because otherwise we might not be even able to do a
 	 * catalog lookup because we are not in transaction state, and the like.
+	 *
+	 * Do this before setting the state since a catalog lookup can process
+	 * a cache reset that invalidates the state again.
 	 */
 	if (new_state == EXTENSION_STATE_CREATED || new_state == EXTENSION_STATE_TRANSITIONING)
 	{
@@ -200,6 +202,9 @@ extension_update_state()
 	{
 		ts_extension_oid = InvalidOid;
 	}
+
+	extension_set_state(new_state);
+	return new_state;
 }
 
 Oid
@@ -284,13 +289,16 @@ ts_extension_invalidate(void)
 bool
 ts_extension_is_loaded(void)
 {
-	if (EXTENSION_STATE_UNKNOWN == extstate || EXTENSION_STATE_TRANSITIONING == extstate)
+	enum ExtensionState state = extstate;
+
+	if (EXTENSION_STATE_UNKNOWN == state || EXTENSION_STATE_TRANSITIONING == state)
 	{
 		/* status may have updated without a relcache invalidate event */
-		extension_update_state();
+		state = extension_update_state();
 	}
 
-	switch (extstate)
+	/* Use the computed state since a cache reset may have invalidated it */
+	switch (state)
 	{
 		case EXTENSION_STATE_CREATED:
 			Assert(OidIsValid(ts_extension_oid));
@@ -307,7 +315,7 @@ ts_extension_is_loaded(void)
 			 */
 			return false;
 		default:
-			elog(ERROR, "unknown state: %d", extstate);
+			elog(ERROR, "unknown state: %d", state);
 			return false;
 	}
 }

@@ -81,12 +81,8 @@ ts_cache_invalidate_set_proxy_tables(Oid hypertable_proxy_oid, Oid bgw_proxy_oid
 static void
 cache_invalidate_relcache_callback(Datum arg, Oid relid)
 {
-	if (!OidIsValid(relid))
-	{
-		cache_invalidate_relcache_all();
-		ts_cm_functions->tenant_tracker_cache_invalidate(InvalidOid);
-	}
-	else if (ts_extension_is_proxy_table_relid(relid))
+	/* A full reset may have discarded the proxy table invalidation */
+	if (!OidIsValid(relid) || ts_extension_is_proxy_table_relid(relid))
 	{
 		ts_extension_invalidate();
 		cache_invalidate_relcache_all();
