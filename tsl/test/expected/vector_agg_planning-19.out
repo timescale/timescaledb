@@ -370,6 +370,45 @@ SHOW timescaledb.enable_vectorized_aggregation;
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      ->  Seq Scan on _hyper_1_1_chunk_compressed
 
+-- Volatile grouping expression is not vectorized.
+:EXPLAIN SELECT sum(value) FROM metrics GROUP BY value + (random() * 0)::int;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: (_hyper_1_1_chunk.value + (((random() * '0'::double precision))::integer)::double precision)
+   ->  Result
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Volatile aggregate argument is not vectorized.
+:EXPLAIN SELECT sum(value + (random() * 0)::int) FROM metrics GROUP BY value;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: _hyper_1_1_chunk.value
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Volatile aggregate filter is not vectorized.
+:EXPLAIN SELECT sum(value) FILTER (WHERE random() < 2) FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Result
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.value
+         ->  HashAggregate
+               Group Key: _hyper_1_1_chunk.value
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Volatile expression over an aggregate, computed once per group.
+:EXPLAIN SELECT sum(value) * (1 + random() * 0) AS sr FROM metrics GROUP BY value ORDER BY sr;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((sum(_hyper_1_1_chunk.value) * ('1'::double precision + (random() * '0'::double precision))))
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.value
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+
 -- run queries with single chunk
 \set EXPLAIN ''
 \set ECHO errors
@@ -869,6 +908,69 @@ SHOW timescaledb.enable_vectorized_aggregation;
 --- QUERY PLAN ---
  Sort
    Sort Key: (CASE metrics.value WHEN '0'::double precision THEN '-1'::double precision ELSE metrics.value END)
+   ->  Finalize HashAggregate
+         Group Key: metrics.value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile grouping expression is not vectorized.
+:EXPLAIN SELECT sum(value) FROM metrics GROUP BY value + (random() * 0)::int;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: ((metrics.value + (((random() * '0'::double precision))::integer)::double precision))
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: (_hyper_1_1_chunk.value + (((random() * '0'::double precision))::integer)::double precision)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+         ->  Partial HashAggregate
+               Group Key: (_hyper_1_2_chunk.value + (((random() * '0'::double precision))::integer)::double precision)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                     ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile aggregate argument is not vectorized.
+:EXPLAIN SELECT sum(value + (random() * 0)::int) FROM metrics GROUP BY value;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: metrics.value
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: _hyper_1_1_chunk.value
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on _hyper_1_1_chunk_compressed
+         ->  Partial HashAggregate
+               Group Key: _hyper_1_2_chunk.value
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                     ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile aggregate filter is not vectorized.
+:EXPLAIN SELECT sum(value) FILTER (WHERE random() < 2) FROM metrics GROUP BY value ORDER BY value;
+--- QUERY PLAN ---
+ Result
+   ->  Sort
+         Sort Key: metrics.value
+         ->  Finalize HashAggregate
+               Group Key: metrics.value
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_1_1_chunk.value
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                                 ->  Seq Scan on _hyper_1_1_chunk_compressed
+                     ->  Partial HashAggregate
+                           Group Key: _hyper_1_2_chunk.value
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
+                                 ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Volatile expression over an aggregate, computed once per group.
+:EXPLAIN SELECT sum(value) * (1 + random() * 0) AS sr FROM metrics GROUP BY value ORDER BY sr;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((sum(metrics.value) * ('1'::double precision + (random() * '0'::double precision))))
    ->  Finalize HashAggregate
          Group Key: metrics.value
          ->  Append
