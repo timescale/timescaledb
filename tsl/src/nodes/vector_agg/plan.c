@@ -50,11 +50,11 @@ ts_is_vector_agg_plan(Plan *plan)
  * node.
  */
 static Plan *
-vector_agg_plan_create(Plan *aggregation_input, Agg *agg, List *resolved_targetlist,
+vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 					   List *resolved_postgres_quals, VectorAggGroupingType grouping_type)
 {
 	CustomScan *vector_agg = (CustomScan *) makeNode(CustomScan);
-	vector_agg->custom_plans = list_make1(aggregation_input);
+	vector_agg->custom_plans = list_make1(childplan);
 	vector_agg->methods = &scan_methods;
 
 	vector_agg->custom_scan_tlist = resolved_targetlist;
@@ -79,7 +79,7 @@ vector_agg_plan_create(Plan *aggregation_input, Agg *agg, List *resolved_targetl
 	vector_agg->scan.plan.total_cost = agg->plan.total_cost;
 
 	vector_agg->scan.plan.parallel_aware = false;
-	vector_agg->scan.plan.parallel_safe = aggregation_input->parallel_safe;
+	vector_agg->scan.plan.parallel_safe = childplan->parallel_safe;
 	vector_agg->scan.plan.async_capable = false;
 
 	vector_agg->scan.plan.plan_node_id = agg->plan.plan_node_id;
@@ -519,22 +519,22 @@ has_vector_agg_node(Plan *plan, bool *has_some_agg)
 }
 
 /*
- * Check if a VectorAgg is possible on top of the given aggregation input.
+ * Check if a VectorAgg is possible on top of the given child plan.
  *
- * If the aggregation input is compatible, also initialize the VectorQualInfo struct
+ * If the child plan is compatible, also initialize the VectorQualInfo struct
  * for aggregation FILTER clauses.
  *
- * Returns true if the given plan is a supported aggregation input, otherwise false.
+ * Returns true if the scan node is a supported child, otherwise false.
  */
 static bool
-vectoragg_plan_possible(Plan *aggregation_input, VectorQualInfo *vqinfo)
+vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqinfo)
 {
-	if (!ts_is_columnar_scan_plan(aggregation_input))
+	if (!ts_is_columnar_scan_plan(childplan))
 	{
 		return false;
 	}
 
-	vectoragg_plan_columnar_scan(aggregation_input, vqinfo);
+	vectoragg_plan_columnar_scan(childplan, vqinfo);
 	return true;
 }
 
