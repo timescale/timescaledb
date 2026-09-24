@@ -674,7 +674,7 @@ insert_vector_agg(Plan *plan, void *context)
 	 * are created by chunkwise aggregation, but it is not applied when we have
 	 * only one chunk. To handle this case, we split a single-chunk Agg node
 	 * here into a final and partial aggregate nodes, if we find out that we can
-	 * replace the partial aggregate wiht VectorAgg. First, we have to prepare
+	 * replace the partial aggregate with VectorAgg. First, we have to prepare
 	 * the targetlists for both the final and partial aggregate nodes, to be
 	 * able to perform the remaining checks.
 	 *
