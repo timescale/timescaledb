@@ -552,62 +552,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 }
 
 /*
- Is the provided path a agg path that uses a sorted or plain agg strategy?
-*/
-pg_nodiscard static bool
-is_path_sorted_or_plain_agg_path(Path *path)
-{
-	AggPath *agg_path = castNode(AggPath, path);
-	Assert(agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN ||
-		   agg_path->aggstrategy == AGG_HASHED);
-	return agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN;
-}
-
-/*
- * Check if this path belongs to a plain or sorted aggregation
- */
-static bool
-contains_path_plain_or_sorted_agg(Path *path)
-{
-	List *subpaths = NIL;
-	Path *append = NULL;
-	Path *gather = NULL;
-	get_subpaths_from_append_path(path, &subpaths, &append, &gather);
-
-	Ensure(subpaths != NIL, "Unable to determine aggregation type");
-
-	ListCell *lc;
-	foreach (lc, subpaths)
-	{
-		Path *subpath = lfirst(lc);
-
-		if (IsA(subpath, AggPath))
-		{
-			return is_path_sorted_or_plain_agg_path(subpath);
-		}
-	}
-
-	/*
-	 * No dedicated aggregation nodes found directly underneath the append node. This could be
-	 * due to two reasons.
-	 *
-	 * (1) Only vectorized aggregation is used and we don't have dedicated Aggregation nods.
-	 * (2) The query plan uses multi-level appends to keep a certain sorting
-	 *     - ChunkAppend
-	 *          - Merge Append
-	 *             - Agg Chunk 1
-	 *             - Agg Chunk 2
-	 *          - Merge Append
-	 *             - Agg Chunk 3
-	 *             - Agg Chunk 4
-	 *
-	 * in both cases, we use a sorted aggregation node to finalize the partial aggregation and
-	 * produce a proper sorting.
-	 */
-	return true;
-}
-
-/*
  * Replan the aggregation and create a partial aggregation at chunk level and finalize the
  * aggregation on top of an append node.
  *
@@ -739,7 +683,14 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		return;
 	}
 
-	/* Prefer our paths */
+	/*
+	 * We unconditionally discard the Postgres paths that work on the whole
+	 * table without chunkwise aggregation. One of the main reasons we need the
+	 * chunkwise aggregation is that it is a prerequisite for using
+	 * vectorized aggregation. The vectorized aggregation is applied at late
+	 * stages of planning and is not reflected in the cost model, so we can't
+	 * make a cost-based decision here.
+	 */
 	output_rel->pathlist = NIL;
 	output_rel->partial_pathlist = NIL;
 
@@ -752,25 +703,55 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	foreach (lc, partially_grouped_paths)
 	{
 		Path *partially_aggregated_path = lfirst(lc);
-		AggStrategy final_strategy;
-		if (contains_path_plain_or_sorted_agg(partially_aggregated_path))
-		{
-			const bool is_sorted =
-				pathkeys_contained_in(root->group_pathkeys, partially_aggregated_path->pathkeys);
-			if (!is_sorted)
-			{
-				partially_aggregated_path = (Path *) create_sort_path(root,
-																	  output_rel,
-																	  partially_aggregated_path,
-																	  root->group_pathkeys,
-																	  -1.0);
-			}
 
-			final_strategy = parse->groupClause ? AGG_SORTED : AGG_PLAIN;
+		const bool partial_agg_is_sorted =
+			pathkeys_contained_in(root->group_pathkeys, partially_aggregated_path->pathkeys);
+
+		/*
+		 * Try the final Group Aggregate if the append over the partial
+		 * aggregation results produces the output that is appropriately
+		 * sorted for this aggregation. Otherwise, it needs a costly Sort
+		 * node. Group Aggregate mostly makes sense if the input is already
+		 * cheaply sorted, and if we have to re-sort all input, it's normally
+		 * inferior to Hash Aggregate.
+		 *
+		 * Also use it as a fallback for types that can't be
+		 * hashed.
+		 *
+		 * Also use it if hash aggregation is disabled by GUC.
+		 */
+		const bool prefer_sorted_strategy = partial_agg_is_sorted ||
+											!(extra_data->flags & GROUPING_CAN_USE_HASH) ||
+											!enable_hashagg;
+		const bool can_use_sorted_strategy = extra_data->flags & GROUPING_CAN_USE_SORT;
+
+		AggStrategy final_strategy;
+		if (parse->groupClause == NIL)
+		{
+			final_strategy = AGG_PLAIN;
+		}
+		else if (prefer_sorted_strategy && can_use_sorted_strategy)
+		{
+			Assert(extra_data->flags & GROUPING_CAN_USE_SORT);
+			final_strategy = AGG_SORTED;
 		}
 		else
 		{
+			Assert(extra_data->flags & GROUPING_CAN_USE_HASH);
 			final_strategy = AGG_HASHED;
+		}
+
+		/*
+		 * If we chose GroupAggregate but the input is not properly sorted, we
+		 * have to account for sorting it.
+		 */
+		if (final_strategy == AGG_SORTED && !partial_agg_is_sorted && root->group_pathkeys != NIL)
+		{
+			partially_aggregated_path = (Path *) create_sort_path(root,
+																  output_rel,
+																  partially_aggregated_path,
+																  root->group_pathkeys,
+																  -1.0);
 		}
 
 		/*
