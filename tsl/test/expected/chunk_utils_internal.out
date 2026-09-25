@@ -1537,11 +1537,33 @@ SELECT * FROM test.show_constraints('test_chunkapp_fdw_child');
  test_chunkapp_a_check | c    | {a}     | -     | (a > 0) | f          | f        | t
 
 \set ON_ERROR_STOP 1
+-- smoke test for space partitioning
+SELECT add_dimension('test_chunkapp', 'a', number_partitions => 2);
+         add_dimension         
+-------------------------------
+ (19,public,test_chunkapp,a,t)
+
+:EXPLAIN SELECT * FROM test_chunkapp WHERE a >= 0 ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on test_chunkapp
+   Order: test_chunkapp."time"
+   ->  Index Scan Backward using _hyper_18_29_chunk_test_chunkapp_time_idx on _hyper_18_29_chunk
+         Filter: (a >= 0)
+   ->  Index Scan Backward using _hyper_18_30_chunk_test_chunkapp_time_idx on _hyper_18_30_chunk
+         Filter: (a >= 0)
+   ->  Foreign Scan on test_chunkapp_fdw_child
+
+SELECT * FROM test_chunkapp WHERE a >= 0 ORDER BY 1;
+             time             | a 
+------------------------------+---
+ Wed Jan 01 01:00:00 2020 PST | 1
+ Thu Jan 02 01:00:00 2020 PST | 2
+
 -- test wrong/incompatible data types with hypertable time dimension
 -- update range of int2 with int4
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_int2', range_start => 65540::int4, range_end => 100000::int4);
-psql:include/chunk_utils_internal_orderedappend.sql:137: ERROR:  invalid time argument type "integer"
+psql:include/chunk_utils_internal_orderedappend.sql:144: ERROR:  invalid time argument type "integer"
 -- update range of int8 with int4
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_int8', 120, 150);
  hypertable_osm_range_update 
@@ -1556,7 +1578,7 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', '2020-01-0
 
 -- udpate range of timestamp with bigint
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', 9223372036854771806, 9223372036854775406);
-psql:include/chunk_utils_internal_orderedappend.sql:143: ERROR:  invalid time argument type "bigint"
+psql:include/chunk_utils_internal_orderedappend.sql:150: ERROR:  invalid time argument type "bigint"
 \set ON_ERROR_STOP 1
 -- test dimension slice tuple visibility
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -1578,9 +1600,9 @@ ROLLBACK;
 -- should show 0 10 as range
 \set ON_ERROR_STOP 0
 INSERT INTO osm_slice_update VALUES (1);
-psql:include/chunk_utils_internal_orderedappend.sql:164: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
+psql:include/chunk_utils_internal_orderedappend.sql:171: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
 INSERT INTO osm_slice_update VALUES (1);
-psql:include/chunk_utils_internal_orderedappend.sql:165: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
+psql:include/chunk_utils_internal_orderedappend.sql:172: ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
 \set ON_ERROR_STOP 1
 --TEST hypertable with foreign key into it
 \c :TEST_DBNAME :ROLE_4

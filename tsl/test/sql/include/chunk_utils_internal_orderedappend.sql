@@ -131,6 +131,13 @@ ALTER TABLE test_chunkapp ADD CHECK (a > 0);
 SELECT * FROM test.show_constraints('test_chunkapp_fdw_child');
 \set ON_ERROR_STOP 1
 
+
+-- smoke test for space partitioning
+SELECT add_dimension('test_chunkapp', 'a', number_partitions => 2);
+:EXPLAIN SELECT * FROM test_chunkapp WHERE a >= 0 ORDER BY 1;
+SELECT * FROM test_chunkapp WHERE a >= 0 ORDER BY 1;
+
+
 -- test wrong/incompatible data types with hypertable time dimension
 -- update range of int2 with int4
 \set ON_ERROR_STOP 0
