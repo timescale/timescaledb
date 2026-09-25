@@ -731,6 +731,43 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 
+typedef struct CaggRefreshStats
+{
+	/* Number of batches the refresh window was split into */
+	int32 total_batches;
+	/* Number of those batches this execution actually processed. It is lower
+	 * than total_batches when max_batches_per_execution ended the execution
+	 * early. */
+	int32 batches_processed;
+	/* Time range covered by the batches that were processed, i.e. what this
+	 * execution worked on rather than the window that was requested */
+	Oid range_type;
+	int64 range_start;
+	int64 range_end;
+} CaggRefreshStats;
+
+/*
+ * Report what a refresh did.
+ */
+static void
+cagg_refresh_stats_report(int32 job_id, const CaggRefreshStats *stats)
+{
+	/* Don't report stats for manual refreshes */
+	if (job_id <= 0)
+	{
+		return;
+	}
+
+	elog(LOG,
+		 "continuous aggregate refresh job %d: processed %d batch(es) of %d in "
+		 "window [ %s, %s ]",
+		 job_id,
+		 stats->batches_processed,
+		 stats->total_batches,
+		 ts_internal_to_time_string(stats->range_start, stats->range_type),
+		 ts_internal_to_time_string(stats->range_end, stats->range_type));
+}
+
 /*
  * Refresh a continuous aggregate over a window, splitting it into batches when
  * incremental refresh is enabled.
@@ -788,6 +825,11 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	int32 batch_end = context.refresh_newest_first ? -1 : nbatches;
 	int32 batch_step = context.refresh_newest_first ? -1 : 1;
 	bool any_refreshed = false;
+	/* Union of the windows of the batches processed below. Starts out as the
+	 * requested window for the degenerate case of no batch at all being
+	 * processed. */
+	int64 processed_range_start = refresh_window->start;
+	int64 processed_range_end = refresh_window->end;
 	for (int32 batch_idx = batch_start; batch_idx != batch_end; batch_idx += batch_step)
 	{
 		InternalTimeRange *batch_window =
@@ -800,6 +842,17 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 			 ts_internal_to_time_string(batch_window->end, batch_window->type));
 
 		context.processing_batch = ++processing_batch;
+
+		if (processing_batch == 1)
+		{
+			processed_range_start = batch_window->start;
+			processed_range_end = batch_window->end;
+		}
+		else
+		{
+			processed_range_start = Min(processed_range_start, batch_window->start);
+			processed_range_end = Max(processed_range_end, batch_window->end);
+		}
 
 		/* extend_last_bucket must only apply to the boundary batch -- the one
 		 * whose window abuts the adjacent policy.  For newest-first ordering
@@ -833,6 +886,16 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	{
 		emit_up_to_date_notice(cagg, context);
 	}
+
+	CaggRefreshStats stats = {
+		.total_batches = context.number_of_batches,
+		.batches_processed = processing_batch,
+		.range_type = refresh_window->type,
+		.range_start = processed_range_start,
+		.range_end = processed_range_end,
+	};
+
+	cagg_refresh_stats_report(context.job_id, &stats);
 }
 
 /*
