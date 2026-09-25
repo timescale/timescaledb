@@ -1,0 +1,13 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\pset tuples_only on
+
+CREATE TABLE vector_qual_empty_all(ts int, v int);
+ALTER TABLE vector_qual_empty_all SET (timescaledb.compress);
+INSERT 0 3
+3
+0
+RESET
+DROP TABLE vector_qual_empty_all;
