@@ -51,6 +51,20 @@ batch_array_enlarge(BatchArray *array, int new_number)
 	/* Request additional memory */
 	array->batch_states = repalloc(array->batch_states, array->n_batch_state_bytes * new_number);
 
+	/*
+	 * The repalloc above may have moved the whole array. Rebind the decompressor
+	 * core's wrapper alias of every initialized batch state to its new
+	 * compressed_columns address, without touching live column state.
+	 */
+	for (int i = 0; i < array->n_batch_states; i++)
+	{
+		DecompressBatchState *batch_state = batch_array_get_at(array, i);
+		if (batch_state->per_batch_context != NULL)
+		{
+			batch_state->decompressor.values = batch_state->compressed_columns;
+		}
+	}
+
 	/* Zero out the tail. The batch states are initialized on first use. */
 	memset(((char *) array->batch_states) + (array->n_batch_state_bytes * array->n_batch_states),
 		   0x0,

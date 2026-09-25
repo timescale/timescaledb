@@ -45,8 +45,6 @@
 #include "chunk.h"
 #include "chunk_insert_state.h"
 #include "compression.h"
-#include "compression/batch_decompressor.h"
-#include "compression/column_values.h"
 #include "compression/sparse_index_bloom1.h"
 #include "continuous_aggs/insert.h"
 #include "create.h"
@@ -2099,10 +2097,6 @@ build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid
 		.decompressed_slots = (TupleTableSlot **) palloc0(sizeof(void *) * default_allocated_slots),
 		.decompressed_slots_capacity = default_allocated_slots,
 		.attrmap = attrmap,
-		.batch_decompressor = NULL,
-		.batch_initialized = false,
-		.qual_iterators_consumed = NULL,
-		.bulk_scratch_context = NULL,
 	};
 
 	create_per_compressed_column(&decompressor, internal_error);
@@ -2145,12 +2139,6 @@ row_decompressor_init_stats(RowDecompressor *decompressor, Oid compressed_relid,
 void
 row_decompressor_reset(RowDecompressor *decompressor)
 {
-	decompressor->batch_initialized = false;
-	decompressor->qual_iterators_consumed = NULL;
-	if (decompressor->batch_decompressor != NULL)
-	{
-		batch_decompressor_discard(decompressor->batch_decompressor);
-	}
 	MemoryContextReset(decompressor->per_compressed_row_ctx);
 	decompressor->unprocessed_tuples = 0;
 	decompressor->batches_decompressed = 0;
@@ -2184,12 +2172,6 @@ row_decompressor_close(RowDecompressor *decompressor)
 	pfree(decompressor->decompressed_is_nulls);
 	pfree((void *) decompressor->decompressed_slots);
 	pfree(decompressor->per_compressed_cols);
-	if (decompressor->batch_decompressor != NULL)
-	{
-		pfree((void *) decompressor->batch_decompressor->columns);
-		pfree(decompressor->batch_decompressor->values);
-		pfree(decompressor->batch_decompressor);
-	}
 }
 
 void
@@ -2325,168 +2307,93 @@ create_per_compressed_column(RowDecompressor *decompressor, bool internal_error)
 	}
 }
 
-/*
- * Prepare the shared batch decompressor for the current compressed tuple.
- * Idempotent per batch: sets up the dense column array and output pointers
- * on first use, validates the batch row count, installs segmentby values,
- * and marks every core column DT_Invalid. Segmentby and metadata handling
- * stays here, mirroring the retired init_batch(); the compressed data
- * columns are decompressed lazily by the core.
- */
-void
-row_decompressor_prepare_batch(RowDecompressor *decompressor)
+static void
+init_iterator(RowDecompressor *decompressor, CompressedDataHeader *header, int input_column)
 {
-	if (decompressor->batch_initialized)
+	Assert(decompressor->in_desc->natts > input_column);
+	PerCompressedColumn *column_info = &decompressor->per_compressed_cols[input_column];
+
+	/* Special compression block with the NULL compression algorithm,
+	 * tells that all values in the compressed block are NULLs.
+	 */
+	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
 	{
+		column_info->iterator = NULL;
+		decompressor->compressed_is_nulls[input_column] = true;
+		decompressor->decompressed_is_nulls[column_info->decompressed_column_offset] = true;
 		return;
 	}
 
+	column_info->iterator =
+		definitions[header->compression_algorithm]
+			.iterator_init_forward(PointerGetDatum(header), column_info->decompressed_type);
+}
+
+static void
+init_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
+{
 	/*
-	 * One-time core setup. This must happen after build_decompressor_common
-	 * returned its struct by value: the pointers to decompressor members
-	 * (detoaster, bulk scratch) would otherwise point into the constructor's
-	 * stack-local struct.
+	 * Set segmentbys and compressed columns with default value.
 	 */
-	if (decompressor->batch_decompressor == NULL)
-	{
-		int ncols = 0;
-		for (int col = 0; col < decompressor->in_desc->natts; col++)
-		{
-			PerCompressedColumn *column_info = &decompressor->per_compressed_cols[col];
-			if (column_info->is_compressed && column_info->decompressed_column_offset >= 0)
-			{
-				ncols++;
-			}
-		}
-
-		BatchDecompressorColumn *columns = palloc0(sizeof(BatchDecompressorColumn) * ncols);
-		CompressedColumnValues *values = palloc0(sizeof(CompressedColumnValues) * ncols);
-		int i = 0;
-		for (int col = 0; col < decompressor->in_desc->natts; col++)
-		{
-			PerCompressedColumn *column_info = &decompressor->per_compressed_cols[col];
-			if (!column_info->is_compressed || column_info->decompressed_column_offset < 0)
-			{
-				continue;
-			}
-			columns[i] = (BatchDecompressorColumn){
-				.input_attno = col + 1,
-				.uncompressed_attno = column_info->decompressed_column_offset + 1,
-				.typid = column_info->decompressed_type,
-				.bulk_decompression_supported =
-					tsl_get_decompress_all_function(compression_get_default_algorithm(column_info->decompressed_type),
-													column_info->decompressed_type) != NULL,
-			};
-			values[i].output_value =
-				&decompressor->decompressed_datums[column_info->decompressed_column_offset];
-			values[i].output_isnull =
-				&decompressor->decompressed_is_nulls[column_info->decompressed_column_offset];
-			i++;
-		}
-
-		decompressor->batch_decompressor = palloc0(sizeof(BatchDecompressor));
-		batch_decompressor_init(decompressor->batch_decompressor,
-								ncols,
-								columns,
-								values,
-								decompressor->out_desc,
-								&decompressor->detoaster,
-								decompressor->per_compressed_row_ctx,
-								&decompressor->bulk_scratch_context,
-								ts_guc_enable_optimizations && ts_guc_enable_bulk_decompression,
-								false /* reverse */);
-	}
-
-	/* Install segmentby values for the current batch. */
 	for (int input_column = 0; input_column < decompressor->in_desc->natts; input_column++)
 	{
 		PerCompressedColumn *column_info = &decompressor->per_compressed_cols[input_column];
 		const int output_index = column_info->decompressed_column_offset;
 
-		if (output_index < 0 || column_info->is_compressed)
+		/* Metadata column. */
+		if (output_index < 0)
 		{
 			continue;
 		}
 
-		decompressor->decompressed_datums[output_index] =
-			decompressor->compressed_datums[input_column];
-		decompressor->decompressed_is_nulls[output_index] =
-			decompressor->compressed_is_nulls[input_column];
-	}
-
-	const int n_batch_rows =
-		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
-	batch_decompressor_begin(decompressor->batch_decompressor,
-							 n_batch_rows,
-							 GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	decompressor->batch_initialized = true;
-}
-
-/*
- * Decompress one dense core column of the current batch on demand.
- * Idempotent per batch (the core guards on DT_Invalid).
- */
-void
-row_decompressor_decompress_column(RowDecompressor *decompressor, int column)
-{
-	BatchDecompressor *batch_decompressor = decompressor->batch_decompressor;
-	const BatchDecompressorColumn *column_info = &batch_decompressor->columns[column];
-
-	(void) batch_decompressor_column(batch_decompressor,
-									 column,
-									 decompressor->compressed_datums[AttrNumberGetAttrOffset(
-										 column_info->input_attno)],
-									 decompressor->compressed_is_nulls[AttrNumberGetAttrOffset(
-										 column_info->input_attno)]);
-}
-
-/*
- * Restart every iterator column that DML qualification advanced (D7). Arrow
- * and scalar columns are untouched and are reused without re-decompression.
- */
-void
-row_decompressor_rewind_qual_iterators(RowDecompressor *decompressor)
-{
-	if (decompressor->qual_iterators_consumed == NULL)
-	{
-		return;
-	}
-
-	BatchDecompressor *batch_decompressor = decompressor->batch_decompressor;
-	for (int i = bms_next_member(decompressor->qual_iterators_consumed, -1); i >= 0;
-		 i = bms_next_member(decompressor->qual_iterators_consumed, i))
-	{
-		CompressedColumnValues *column_values = &batch_decompressor->values[i];
-		if (column_values->decompression_type == DT_Iterator)
+		/* Segmentby column. */
+		if (!column_info->is_compressed)
 		{
-			column_values->decompression_type = DT_Invalid;
-			column_values->arrow = NULL;
-			column_values->buffers[0] = NULL;
-		}
-	}
-
-	decompressor->qual_iterators_consumed = NULL;
-}
-
-/*
- * Verify that all iterator columns of the batch have ended, i.e. their
- * length is consistent with the count metadata column. Mirrors the retired
- * per-iterator end check, now over the core wrappers.
- */
-void
-row_decompressor_check_iterator_ends(RowDecompressor *decompressor)
-{
-	BatchDecompressor *batch_decompressor = decompressor->batch_decompressor;
-	for (int i = 0; i < batch_decompressor->num_columns; i++)
-	{
-		CompressedColumnValues *column_values = &batch_decompressor->values[i];
-		if (column_values->decompression_type != DT_Iterator)
-		{
+			decompressor->decompressed_datums[output_index] =
+				decompressor->compressed_datums[input_column];
+			decompressor->decompressed_is_nulls[output_index] =
+				decompressor->compressed_is_nulls[input_column];
 			continue;
 		}
-		DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
-		const DecompressResult value = iterator->try_next(iterator);
-		CheckCompressedData(value.is_done);
+
+		/* Compressed column with default value. */
+		if (decompressor->compressed_is_nulls[input_column])
+		{
+			column_info->iterator = NULL;
+			decompressor->decompressed_datums[output_index] =
+				getmissingattr(decompressor->out_desc,
+							   output_index + 1,
+							   &decompressor->decompressed_is_nulls[output_index]);
+
+			continue;
+		}
+
+		/* Only initialize required columns if specified. */
+		bool found = num_attnos == 0;
+		for (int i = 0; i < num_attnos; i++)
+		{
+			if (output_index == AttrNumberGetAttrOffset(attnos[i]))
+			{
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+		{
+			column_info->iterator = NULL;
+			continue;
+		}
+
+		/* Normal compressed column. */
+		Datum compressed_datum = PointerGetDatum(
+			detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
+											decompressor->compressed_datums[input_column]),
+										&decompressor->detoaster,
+										CurrentMemoryContext));
+		CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
+
+		init_iterator(decompressor, header, input_column);
 	}
 }
 
@@ -2502,24 +2409,17 @@ decompress_batch(RowDecompressor *decompressor)
 		return decompressor->unprocessed_tuples;
 	}
 
-	/*
-	 * Decompress all data columns of the batch once, bulk where available
-	 * (per-column iterator fallback for gap types), into the shared core.
-	 */
-	row_decompressor_prepare_batch(decompressor);
-
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
-	for (int i = 0; i < decompressor->batch_decompressor->num_columns; i++)
-	{
-		row_decompressor_decompress_column(decompressor, i);
-	}
+	init_batch(decompressor, NULL, 0);
 
 	/*
-	 * The batch row count was validated from the count metadata column by
-	 * batch_decompressor_begin().
+	 * Set the number of batch rows from count metadata column.
 	 */
-	const int n_batch_rows = decompressor->batch_decompressor->total_batch_rows;
+	const int n_batch_rows =
+		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+	CheckCompressedData(n_batch_rows > 0);
+	CheckCompressedData(n_batch_rows <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	/*
 	 * Ensure decompressed_slots array is large enough for this batch.
@@ -2552,13 +2452,25 @@ decompress_batch(RowDecompressor *decompressor)
 	}
 
 	/*
-	 * Convert all columns of each row of the batch into the output arrays.
+	 * Decompress all compressed columns for each row of the batch.
 	 */
 	for (int current_row = 0; current_row < n_batch_rows; current_row++)
 	{
-		compressed_columns_to_postgres_data(decompressor->batch_decompressor->values,
-											decompressor->batch_decompressor->num_columns,
-											current_row);
+		for (int col = 0; col < decompressor->in_desc->natts; col++)
+		{
+			PerCompressedColumn *column_info = &decompressor->per_compressed_cols[col];
+			if (column_info->iterator == NULL)
+			{
+				continue;
+			}
+			Assert(column_info->is_compressed);
+
+			const int output_index = column_info->decompressed_column_offset;
+			const DecompressResult value = column_info->iterator->try_next(column_info->iterator);
+			CheckCompressedData(!value.is_done);
+			decompressor->decompressed_datums[output_index] = value.val;
+			decompressor->decompressed_is_nulls[output_index] = value.is_null;
+		}
 
 		/*
 		 * Form the heap tuple for this decompressed rows and save it for later
@@ -2586,10 +2498,20 @@ decompress_batch(RowDecompressor *decompressor)
 	}
 
 	/*
-	 * Verify that all iterator columns have ended, i.e. their length is
-	 * consistent with the count metadata column.
+	 * Verify that all other columns have ended, i.e. their length is consistent
+	 * with the count metadata column.
 	 */
-	row_decompressor_check_iterator_ends(decompressor);
+	for (int col = 0; col < decompressor->in_desc->natts; col++)
+	{
+		PerCompressedColumn *column_info = &decompressor->per_compressed_cols[col];
+		if (column_info->iterator == NULL)
+		{
+			continue;
+		}
+		Assert(column_info->is_compressed);
+		const DecompressResult value = column_info->iterator->try_next(column_info->iterator);
+		CheckCompressedData(value.is_done);
+	}
 	MemoryContextSwitchTo(old_ctx);
 
 	decompressor->batches_decompressed++;
@@ -2598,6 +2520,128 @@ decompress_batch(RowDecompressor *decompressor)
 	decompressor->unprocessed_tuples = n_batch_rows;
 
 	return n_batch_rows;
+}
+
+/*
+ * Decompresses a single row from current compressed batch
+ * into decompressed_values and decompressed_is_nulls based on the
+ * attnos provided.
+ *
+ * Returns true if the row was decompressed or false if it finished the batch.
+ */
+bool
+decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
+{
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+
+	if (decompressor->unprocessed_tuples > 0)
+	{
+		decompressor->unprocessed_tuples--;
+		if (decompressor->unprocessed_tuples == 0)
+		{
+			MemoryContextSwitchTo(old_ctx);
+			return false;
+		}
+	}
+	else
+	{
+		decompressor->batches_decompressed++;
+		init_batch(decompressor, attnos, num_attnos);
+
+		/*
+		 * Set the number of batch rows from count metadata column.
+		 */
+		decompressor->unprocessed_tuples =
+			DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+		CheckCompressedData(decompressor->unprocessed_tuples > 0);
+		CheckCompressedData(decompressor->unprocessed_tuples <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	}
+
+	for (int col = 0; col < decompressor->in_desc->natts; col++)
+	{
+		PerCompressedColumn *column_info = &decompressor->per_compressed_cols[col];
+		if (column_info->iterator == NULL)
+		{
+			continue;
+		}
+		Assert(column_info->is_compressed);
+
+		const int output_index = column_info->decompressed_column_offset;
+		const DecompressResult value = column_info->iterator->try_next(column_info->iterator);
+		Assert(!value.is_done);
+		decompressor->decompressed_datums[output_index] = value.val;
+		decompressor->decompressed_is_nulls[output_index] = value.is_null;
+	}
+
+	decompressor->tuples_decompressed++;
+
+	MemoryContextSwitchTo(old_ctx);
+
+	return true;
+}
+
+/* Decompress single column using vectorized decompression */
+ArrowArray *
+decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *single_value)
+{
+	int16 target_col = -1;
+	PerCompressedColumn *column_info = NULL;
+
+	for (int col = 0; col < decompressor->in_desc->natts; col++)
+	{
+		column_info = &decompressor->per_compressed_cols[col];
+		if (!column_info->is_compressed)
+		{
+			continue;
+		}
+
+		if (column_info->decompressed_column_offset == AttrNumberGetAttrOffset(attno))
+		{
+			target_col = col;
+			break;
+		}
+	}
+	Assert(column_info && target_col > -1);
+
+	if (decompressor->compressed_is_nulls[target_col])
+	{
+		/* Compressed column has a default value, handle it by generating
+		 * a single-value ArrowArray based on the default value. This will have to
+		 * be handled specially because of the assumption that the whole row has
+		 * this default value.
+		 */
+		*single_value = true;
+		bool isnull;
+		Datum default_datum = getmissingattr(decompressor->out_desc, attno, &isnull);
+
+		return make_single_value_arrow(column_info->decompressed_type, default_datum, isnull);
+	}
+
+	*single_value = false;
+
+	Datum compressed_datum = PointerGetDatum(
+		detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
+										decompressor->compressed_datums[target_col]),
+									&decompressor->detoaster,
+									CurrentMemoryContext));
+	CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
+
+	/* Handle NULL compression algorithm */
+	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		*single_value = true;
+		return make_single_value_arrow(column_info->decompressed_type, (Datum) NULL, true);
+	}
+
+	DecompressAllFunction decompress_all =
+		tsl_get_decompress_all_function(header->compression_algorithm,
+										column_info->decompressed_type);
+
+	Assert(decompress_all);
+
+	return decompress_all(compressed_datum,
+						  column_info->decompressed_type,
+						  decompressor->per_compressed_row_ctx);
 }
 
 int
