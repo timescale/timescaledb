@@ -1205,6 +1205,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				 * an array or enum family are declared on anyarray or anyenum
 				 * and there is none for the concrete type.
 				 */
+
 				Oid sortop = get_opfamily_member(pk->pk_opfamily,
 												 em->em_datatype,
 												 em->em_datatype,
