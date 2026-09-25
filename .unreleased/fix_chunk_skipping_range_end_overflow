@@ -1,0 +1,1 @@
+Fixes: #0000 Fix wrong query results when a chunk skipping column holds the largest value of its type
