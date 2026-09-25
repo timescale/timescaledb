@@ -1730,7 +1730,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * in cases when these functions don't run, we have to do it here.
 			 */
 			const bool use_columnar_scan =
-				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
+				ts_guc_debug_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
 			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);

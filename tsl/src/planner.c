@@ -115,7 +115,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 static inline bool
 use_columnar_scan(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
 {
-	if (!ts_guc_enable_columnarscan)
+	if (!ts_guc_debug_enable_columnarscan)
 	{
 		return false;
 	}
