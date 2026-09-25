@@ -1,0 +1,3 @@
+DROP VIEW IF EXISTS timescaledb_information.hypertable_granular_refresh_settings;
+
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;

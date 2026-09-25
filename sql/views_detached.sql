@@ -68,7 +68,8 @@ SELECT
   NULL::boolean AS compression_enabled,
   NULL::name AS materialization_hypertable_schema,
   NULL::name AS materialization_hypertable_name,
-  NULL::text AS view_definition;
+  NULL::text AS view_definition,
+  NULL::name AS granular_refresh_column;
 
 CREATE OR REPLACE VIEW timescaledb_information.chunks AS
 SELECT
@@ -175,6 +176,13 @@ SELECT
   NULL::text AS segmentby,
   NULL::text AS orderby,
   NULL::jsonb AS index;
+
+CREATE OR REPLACE VIEW timescaledb_information.hypertable_granular_refresh_settings AS
+SELECT
+    NULL::regclass AS hypertable,
+    NULL::name AS refresh_column,
+    NULL::text AS start_offset,
+    NULL::text AS end_offset;
 
 DO $$
 BEGIN
