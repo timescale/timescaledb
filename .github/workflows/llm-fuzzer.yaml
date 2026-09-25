@@ -43,6 +43,8 @@ env:
     print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
 
+  # These extensions can be used by the fuzzer to simulate OSM chunks and test
+  # logical decoding.
   EXTENSIONS: "postgres_fdw test_decoding"
 
 jobs:
@@ -289,7 +291,14 @@ jobs:
       if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
-        cd ~/$PG_SRC_DIR && make install
+
+        cd ~/$PG_SRC_DIR
+        make install
+        for ext in ${EXTENSIONS}; do
+          make -C contrib/${ext} install
+        done
+        ~/$PG_INSTALL_DIR/bin/pg_config --version
+
         cd $GITHUB_WORKSPACE
         git checkout -f ${{ github.sha }}
         git reset --hard
@@ -331,8 +340,11 @@ jobs:
         psql -c "create database repro_database owner repro_user"
 
         export PGDATABASE=repro_database
+        psql -c "create extension postgres_fdw"
+        psql -c "grant usage on foreign data wrapper postgres_fdw to repro_user"
+
         export PGUSER=repro_user
-        psql -c "create extension timescaledb;"
+        psql -c "create extension timescaledb"
 
         printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
         cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
