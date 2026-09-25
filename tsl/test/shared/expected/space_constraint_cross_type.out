@@ -1,0 +1,14 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\pset tuples_only on
+
+CREATE TABLE space_constraint_cross_type(departs_at timestamptz NOT NULL, route_added_on date NOT NULL);
+INSERT 0 1
+BEGIN;
+DELETE 1
+0
+
+ROLLBACK;
+DROP TABLE space_constraint_cross_type;

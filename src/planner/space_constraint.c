@@ -10,6 +10,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/pg_list.h>
 #include <optimizer/optimizer.h>
+#include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <utils/fmgroids.h>
 #include <utils/typcache.h>
@@ -201,6 +202,43 @@ make_partfunc_call(Oid funcid, Oid rettype, List *args, Oid inputcollid)
 						COERCE_EXPLICIT_CALL /* fformat */);
 }
 
+static Const *
+coerce_space_constraint_value(PlannerInfo *root, Node *value, Oid target_type, Oid inputcollid)
+{
+	Node *evaluated = eval_const_expressions(root, copyObject(value));
+	if (!IsA(evaluated, Const) || castNode(Const, evaluated)->constisnull)
+	{
+		return NULL;
+	}
+
+	Const *result = castNode(Const, evaluated);
+	if (result->consttype == target_type)
+	{
+		return result;
+	}
+
+	Oid funcid;
+	if (find_coercion_pathway(target_type, result->consttype, COERCION_IMPLICIT, &funcid) !=
+		COERCION_PATH_FUNC)
+	{
+		return NULL;
+	}
+
+	FuncExpr *coerce = makeFuncExpr(funcid,
+									target_type,
+									list_make1(result),
+									InvalidOid,
+									inputcollid,
+									COERCE_IMPLICIT_CAST);
+	evaluated = eval_const_expressions(root, (Node *) coerce);
+	if (!IsA(evaluated, Const) || castNode(Const, evaluated)->constisnull)
+	{
+		return NULL;
+	}
+
+	return castNode(Const, evaluated);
+}
+
 /*
  * Transform a constraint like: device_id = 1
  * into
@@ -217,10 +255,17 @@ transform_space_constraint(PlannerInfo *root, List *rtable, OpExpr *op)
 	Oid rettype = dim->partitioning->partfunc.rettype;
 	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
 
+	part_value =
+		coerce_space_constraint_value(root, (Node *) value, var->vartype, var->varcollid);
+	if (part_value == NULL)
+	{
+		return NULL;
+	}
+
 	/* build FuncExpr to use in eval_const_expressions */
 	FuncExpr *partcall = make_partfunc_call(dim->partitioning->partfunc.func_fmgr.fn_oid,
 											rettype,
-											list_make1(value),
+											list_make1(part_value),
 											var->varcollid);
 
 	/*
@@ -280,8 +325,14 @@ transform_scalar_space_constraint(PlannerInfo *root, List *rtable, ScalarArrayOp
 			continue;
 		}
 
-		List *args = list_make1(lfirst(lc));
-		partcall->args = args;
+		Const *coerced_value =
+			coerce_space_constraint_value(root, lfirst(lc), var->vartype, var->varcollid);
+		if (coerced_value == NULL)
+		{
+			return NULL;
+		}
+
+		partcall->args = list_make1(coerced_value);
 		part_values =
 			lappend(part_values, castNode(Const, eval_const_expressions(root, (Node *) partcall)));
 	}
@@ -327,13 +378,13 @@ ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node)
 		{
 			if (is_valid_scalar_space_constraint(castNode(ScalarArrayOpExpr, node), rtable))
 			{
-				List *args =
-					list_make2(node,
-							   transform_scalar_space_constraint(root,
-																 rtable,
-																 castNode(ScalarArrayOpExpr,
-																		  node)));
-				return (Node *) makeBoolExpr(AND_EXPR, args, -1);
+				ScalarArrayOpExpr *transformed =
+					transform_scalar_space_constraint(root, rtable, castNode(ScalarArrayOpExpr, node));
+				if (transformed != NULL)
+				{
+					List *args = list_make2(node, transformed);
+					return (Node *) makeBoolExpr(AND_EXPR, args, -1);
+				}
 			}
 
 			break;
@@ -341,10 +392,13 @@ ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node)
 		case T_OpExpr:
 			if (is_valid_space_constraint(castNode(OpExpr, node), rtable))
 			{
-				List *args =
-					list_make2(node,
-							   transform_space_constraint(root, rtable, castNode(OpExpr, node)));
-				return (Node *) makeBoolExpr(AND_EXPR, args, -1);
+				OpExpr *transformed =
+					transform_space_constraint(root, rtable, castNode(OpExpr, node));
+				if (transformed != NULL)
+				{
+					List *args = list_make2(node, transformed);
+					return (Node *) makeBoolExpr(AND_EXPR, args, -1);
+				}
 			}
 			break;
 		case T_BoolExpr:
@@ -368,8 +422,11 @@ ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node)
 							OpExpr *op = lfirst_node(OpExpr, lc);
 							if (is_valid_space_constraint(op, rtable))
 							{
-								additions = lappend(additions,
-													transform_space_constraint(root, rtable, op));
+								OpExpr *transformed = transform_space_constraint(root, rtable, op);
+								if (transformed != NULL)
+								{
+									additions = lappend(additions, transformed);
+								}
 							}
 							break;
 						}
@@ -378,9 +435,12 @@ ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node)
 							ScalarArrayOpExpr *op = lfirst_node(ScalarArrayOpExpr, lc);
 							if (is_valid_scalar_space_constraint(op, rtable))
 							{
-								additions =
-									lappend(additions,
-											transform_scalar_space_constraint(root, rtable, op));
+								ScalarArrayOpExpr *transformed =
+									transform_scalar_space_constraint(root, rtable, op);
+								if (transformed != NULL)
+								{
+									additions = lappend(additions, transformed);
+								}
 							}
 							break;
 						}
