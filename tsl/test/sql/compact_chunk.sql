@@ -1353,3 +1353,202 @@ FROM stats_before b,
 
 DROP TABLE stats_before;
 DROP TABLE metrics_rc_stats;
+
+-- compact_chunk on an ordered chunk merges runs of consecutive undersized
+-- batches. client_sorted keeps the chunk ordered, so each insert adds one batch.
+SET timescaledb.enable_direct_compress_insert_client_sorted = true;
+
+-- Five 300-row batches become 1000 + 500.
+CREATE TABLE rb_basic (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.direct_compress, tsdb.orderby='time');
+
+INSERT INTO rb_basic SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,300) i;
+INSERT INTO rb_basic SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(301,600) i;
+INSERT INTO rb_basic SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(601,900) i;
+INSERT INTO rb_basic SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(901,1200) i;
+INSERT INTO rb_basic SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1201,1500) i;
+
+SELECT cs.compress_relid::regclass::text AS "RB_BASIC_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'rb_basic'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('rb_basic') chunk;
+SELECT _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_BASIC_CHUNK ORDER BY _ts_meta_min_1;
+BEGIN;
+SELECT pg_current_xact_id() AS "XID" \gset
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('rb_basic') chunk;
+COMMIT;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('rb_basic') chunk;
+SELECT xmin::text = :'XID' AS rewritten, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1, _ts_meta_v2_first_time, _ts_meta_v2_last_time
+FROM :RB_BASIC_CHUNK ORDER BY _ts_meta_min_1;
+SELECT count(*), sum(value) FROM rb_basic;
+
+-- A second call finds nothing to merge and leaves every batch in place.
+BEGIN;
+SELECT pg_current_xact_id() AS "XID" \gset
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('rb_basic') chunk;
+COMMIT;
+SELECT xmin::text = :'XID' AS rewritten, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_BASIC_CHUNK ORDER BY _ts_meta_min_1;
+DROP TABLE rb_basic;
+
+-- Two 600-row batches cannot fit in fewer batches, so they are left alone.
+CREATE TABLE rb_no_gain (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.direct_compress, tsdb.orderby='time');
+
+INSERT INTO rb_no_gain SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,600) i;
+INSERT INTO rb_no_gain SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(601,1200) i;
+
+SELECT cs.compress_relid::regclass::text AS "RB_NO_GAIN_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'rb_no_gain'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_NO_GAIN_CHUNK ORDER BY _ts_meta_min_1;
+BEGIN;
+SELECT pg_current_xact_id() AS "XID" \gset
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('rb_no_gain') chunk;
+COMMIT;
+SELECT xmin::text = :'XID' AS rewritten, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_NO_GAIN_CHUNK ORDER BY _ts_meta_min_1;
+DROP TABLE rb_no_gain;
+
+-- A full batch splits the undersized batches into two runs:
+-- 300, 300, 1000, 300, 300 becomes 600, 1000, 600.
+CREATE TABLE rb_split (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.direct_compress, tsdb.orderby='time');
+
+INSERT INTO rb_split SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,300) i;
+INSERT INTO rb_split SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(301,600) i;
+INSERT INTO rb_split SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(601,1600) i;
+INSERT INTO rb_split SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1601,1900) i;
+INSERT INTO rb_split SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1901,2200) i;
+
+SELECT cs.compress_relid::regclass::text AS "RB_SPLIT_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'rb_split'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_SPLIT_CHUNK ORDER BY _ts_meta_min_1;
+BEGIN;
+SELECT pg_current_xact_id() AS "XID" \gset
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('rb_split') chunk;
+COMMIT;
+SELECT xmin::text = :'XID' AS rewritten, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_SPLIT_CHUNK ORDER BY _ts_meta_min_1;
+SELECT count(*), sum(value) FROM rb_split;
+DROP TABLE rb_split;
+
+-- Runs do not cross segment groups: d1's four small batches merge, d2's
+-- single small batch after a full one is left alone.
+CREATE TABLE rb_seg (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.direct_compress, tsdb.orderby='time', tsdb.segmentby='device');
+
+INSERT INTO rb_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,200) i;
+INSERT INTO rb_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(201,400) i;
+INSERT INTO rb_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(401,600) i;
+INSERT INTO rb_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(601,800) i;
+INSERT INTO rb_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd2', i FROM generate_series(1,1000) i;
+INSERT INTO rb_seg SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd2', i FROM generate_series(1001,1200) i;
+
+SELECT cs.compress_relid::regclass::text AS "RB_SEG_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'rb_seg'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_SEG_CHUNK ORDER BY device, _ts_meta_min_1;
+BEGIN;
+SELECT pg_current_xact_id() AS "XID" \gset
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('rb_seg') chunk;
+COMMIT;
+SELECT xmin::text = :'XID' AS rewritten, device, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_SEG_CHUNK ORDER BY device, _ts_meta_min_1;
+SELECT device, count(*), sum(value) FROM rb_seg GROUP BY device ORDER BY device;
+DROP TABLE rb_seg;
+
+-- DESC orderby: merged batches stay in descending order.
+CREATE TABLE rb_desc (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.direct_compress, tsdb.orderby='time DESC');
+
+INSERT INTO rb_desc SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1200,901,-1) i;
+INSERT INTO rb_desc SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(900,601,-1) i;
+INSERT INTO rb_desc SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(600,301,-1) i;
+INSERT INTO rb_desc SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(300,1,-1) i;
+
+SELECT cs.compress_relid::regclass::text AS "RB_DESC_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'rb_desc'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT _ts_meta_count, _ts_meta_v2_first_time, _ts_meta_v2_last_time FROM :RB_DESC_CHUNK ORDER BY _ts_meta_v2_first_time DESC;
+BEGIN;
+SELECT pg_current_xact_id() AS "XID" \gset
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('rb_desc') chunk;
+COMMIT;
+SELECT xmin::text = :'XID' AS rewritten, _ts_meta_count, _ts_meta_v2_first_time, _ts_meta_v2_last_time FROM :RB_DESC_CHUNK ORDER BY _ts_meta_v2_first_time DESC;
+SELECT count(*), sum(value) FROM rb_desc;
+DROP TABLE rb_desc;
+
+-- Nullable orderby: NULLs in the last batch stay at the end after merging.
+CREATE TABLE rb_nulls (time TIMESTAMPTZ NOT NULL, value float)
+  WITH (tsdb.hypertable, tsdb.direct_compress, tsdb.orderby='value NULLS LAST');
+
+INSERT INTO rb_nulls SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(1,300) i;
+INSERT INTO rb_nulls SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, i FROM generate_series(301,600) i;
+INSERT INTO rb_nulls SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, CASE WHEN i > 800 THEN NULL ELSE i END FROM generate_series(601,900) i;
+
+SELECT cs.compress_relid::regclass::text AS "RB_NULLS_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'rb_nulls'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT _ts_meta_count, _ts_meta_v2_first_value, _ts_meta_v2_last_value FROM :RB_NULLS_CHUNK ORDER BY _ts_meta_v2_first_value;
+BEGIN;
+SELECT pg_current_xact_id() AS "XID" \gset
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('rb_nulls') chunk;
+COMMIT;
+SELECT xmin::text = :'XID' AS rewritten, _ts_meta_count, _ts_meta_v2_first_value, _ts_meta_v2_last_value FROM :RB_NULLS_CHUNK ORDER BY _ts_meta_v2_first_value;
+SELECT count(*), count(value), sum(value) FROM rb_nulls;
+DROP TABLE rb_nulls;
+
+-- Rebatching only needs batch row counts, so legacy chunks without firstlast
+-- metadata are rebatched too.
+CREATE TABLE rb_legacy (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+  WITH (tsdb.hypertable, tsdb.direct_compress, tsdb.orderby='time', tsdb.index='minmax(time)');
+
+INSERT INTO rb_legacy SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(1,300) i;
+INSERT INTO rb_legacy SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(301,600) i;
+INSERT INTO rb_legacy SELECT '2025-07-07'::timestamptz + (i || ' minute')::interval, 'd1', i FROM generate_series(601,900) i;
+
+SELECT cs.compress_relid::regclass::text AS "RB_LEGACY_CHUNK"
+FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.compression_settings cs
+        ON cs.relid = ch.relid
+    JOIN _timescaledb_catalog.hypertable ht ON ch.hypertable_id = ht.id
+WHERE ht.table_name = 'rb_legacy'
+ORDER BY ch.id LIMIT 1 \gset
+
+SELECT _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_LEGACY_CHUNK ORDER BY _ts_meta_min_1;
+BEGIN;
+SELECT pg_current_xact_id() AS "XID" \gset
+SELECT _timescaledb_functions.compact_chunk(chunk) FROM show_chunks('rb_legacy') chunk;
+COMMIT;
+SELECT xmin::text = :'XID' AS rewritten, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :RB_LEGACY_CHUNK ORDER BY _ts_meta_min_1;
+DROP TABLE rb_legacy;
+
+RESET timescaledb.enable_direct_compress_insert_client_sorted;
