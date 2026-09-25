@@ -17,6 +17,7 @@
 #include "bgw_policy/retention_api.h"
 #include "chunk.h"
 #include "chunk_api.h"
+#include "compression/algorithms/aic.h"
 #include "compression/algorithms/array.h"
 #include "compression/algorithms/bool_compress.h"
 #include "compression/algorithms/deltadelta.h"
@@ -153,6 +154,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compressed_data_has_nulls = tsl_compressed_data_has_nulls,
 	.deltadelta_compressor_append = tsl_deltadelta_compressor_append,
 	.deltadelta_compressor_finish = tsl_deltadelta_compressor_finish,
+	.aic_compressor_append = tsl_aic_compressor_append,
+	.aic_compressor_finish = tsl_aic_compressor_finish,
 	.gorilla_compressor_append = tsl_gorilla_compressor_append,
 	.gorilla_compressor_finish = tsl_gorilla_compressor_finish,
 	.dictionary_compressor_append = tsl_dictionary_compressor_append,
