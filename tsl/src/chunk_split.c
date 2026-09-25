@@ -1125,7 +1125,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		 * split_at value needs to produce partition ranges of at least length
 		 * 1.
 		 */
-		if (split_at < (slice->fd.range_start + 1) || split_at > (slice->fd.range_end - 2))
+		if (split_at < (slice->fd.range_start + 1) || split_at > (slice->fd.range_end - 1))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
