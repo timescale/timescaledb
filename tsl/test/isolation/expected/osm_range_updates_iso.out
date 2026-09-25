@@ -1,4 +1,4 @@
-Parsed test spec with 11 sessions
+Parsed test spec with 13 sessions
 
 starting permutation: LockDimSliceTuple LockDimSliceTuple2 UnlockDimSliceTuple UnlockDimSliceTuple2
 step LockDimSliceTuple: 
@@ -203,3 +203,22 @@ step DR1c: COMMIT;
 step DR2drop: <... completed>
 ERROR:  chunk deleted by other transaction
 step DR2c: COMMIT;
+
+starting permutation: RUb RUu QRselect RUc QRselect
+step RUb: BEGIN;
+step RUu: SELECT _timescaledb_functions.hypertable_osm_range_update('osm_test', 100, 200);
+hypertable_osm_range_update
+---------------------------
+f                          
+
+step QRselect: SELECT count(*) FROM osm_test WHERE time < 100;
+count
+-----
+    1
+
+step RUc: COMMIT;
+step QRselect: SELECT count(*) FROM osm_test WHERE time < 100;
+count
+-----
+    0
+

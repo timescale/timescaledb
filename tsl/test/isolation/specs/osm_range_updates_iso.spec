@@ -104,6 +104,16 @@ step DR2b { BEGIN; }
 step DR2drop { SELECT _timescaledb_functions.drop_osm_chunk('test_drop'); }
 step DR2c { COMMIT; }
 
+# session that runs a chunk exclusion query on the hypertable
+session "QR"
+step "QRselect" { SELECT count(*) FROM osm_test WHERE time < 100; }
+
+# session that updates the OSM chunk range
+session "RU"
+step "RUb" { BEGIN; }
+step "RUu" { SELECT _timescaledb_functions.hypertable_osm_range_update('osm_test', 100, 200); }
+step "RUc" { COMMIT; }
+
 # Two concurrent locks on the same OSM chunk dimension_slice tuple block one
 # another. The second lock can only be acquired after the first session rolls
 # back and releases its lock.
@@ -129,5 +139,12 @@ permutation "Ab" "UR1b" "Aadd" "UR1u" "UR1c" "Ac"
 # test with two hypertables both having osm chunks. Should not block one another. So once tuple of hypertable1 is unlocked, 
 permutation "LHTb" "Utest2b" "UR1b" "LockHypertableTuple" "UR1u" "Utest2u" "Utest2c" "UnlockHypertableTuple" "UR1c"
 
+
 # test two sessions concurrently dropping the OSM chunk
 permutation "DR1b" "DR2b" "DR1drop" "DR2drop" "DR1c" "DR2c"
+
+# a reader that runs chunk exclusion on the hypertable while the OSM
+# chunk's range update is in-flight does not wait for the writer's
+# transaction, but reads the currently committed state of the range.
+# it sees the updated range only after the writer commits.
+permutation "RUb" "RUu" "QRselect" "RUc" "QRselect"

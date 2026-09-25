@@ -340,8 +340,10 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try','2020-01-01 0
 SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table');
 -- check hypertable status
 SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
--- must also update the range since the created chunk contains data
-BEGIN;
+-- must also update the range since the created chunk contains data.
+-- use repeatable read to also exercise taking the slice tuple lock
+-- without the TUPLE_LOCK_FLAG_FIND_LAST_VERSION flag
+BEGIN ISOLATION LEVEL REPEATABLE READ;
 SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('ht_try');
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-01'::timestamptz, '2020-01-02');
 COMMIT;
@@ -376,6 +378,42 @@ SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1;
 SELECT * from ht_try WHERE  timec > '2000-01-01 01:00' and timec < '2022-01-01 01:00' ORDER BY 1;
 
 SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1;
+
+--TEST no transaction id is assigned when querying a hypertable with an OSM chunk
+BEGIN;
+SELECT * from ht_try WHERE timec = '2020-01-01 01:00' ORDER BY 1;
+SELECT txid_current_if_assigned() IS NULL;
+COMMIT;
+
+--TEST error when the OSM chunk has no dimension slice for the time dimension.
+-- catch the errors so they do not show up as internal errors in the
+-- server log, which the flaky CI lane checks
+\c :TEST_DBNAME :ROLE_SUPERUSER
+BEGIN;
+DELETE FROM _timescaledb_catalog.dimension_slice
+WHERE chunk_id IN (SELECT c.id FROM _timescaledb_catalog.chunk c
+                   JOIN _timescaledb_catalog.hypertable ht ON ht.id = c.hypertable_id
+                   WHERE ht.table_name = 'ht_try' AND c.osm_chunk);
+DO $$
+BEGIN
+    PERFORM _timescaledb_functions.hypertable_osm_range_update('ht_try', NULL::timestamptz, NULL::timestamptz);
+    RAISE EXCEPTION 'hypertable_osm_range_update did not fail';
+EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'could not find time dimension slice for chunk 10' THEN
+        RAISE;
+    END IF;
+END $$;
+DO $$
+BEGIN
+    PERFORM _timescaledb_functions.lock_osm_chunk_dimension_slice('ht_try');
+    RAISE EXCEPTION 'lock_osm_chunk_dimension_slice did not fail';
+EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'could not find time dimension slice for chunk 10' THEN
+        RAISE;
+    END IF;
+END $$;
+ROLLBACK;
+\c :TEST_DBNAME :ROLE_4
 
 -- test ordered append
 BEGIN;
