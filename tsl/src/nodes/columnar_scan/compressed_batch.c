@@ -307,8 +307,9 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		 * Postgres expects for text.
 		 */
 		const int maxbytes = get_max_varlena_bytes(arrow);
-		*column_values->output_value =
-			PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+		column_values->by_ref_storage =
+			MemoryContextAlloc(batch_state->per_batch_context, maxbytes);
+		*column_values->output_value = PointerGetDatum(column_values->by_ref_storage);
 
 		/*
 		 * Set up the datum conversion based on whether we use the dictionary.
@@ -1116,10 +1117,6 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
-	compressed_columns_to_postgres_data(batch_state->compressed_columns,
-										num_data_columns,
-										arrow_row);
-
 	/*
 	 * It's a virtual tuple slot, so no point in clearing/storing it
 	 * per each row, we can just update the values in-place. This saves
@@ -1130,10 +1127,27 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 	 * safe to violate this protocol.
 	 */
 	Assert(TTS_IS_VIRTUAL(decompressed_scan_slot));
+
+	if (TTS_SHOULDFREE(decompressed_scan_slot))
+	{
+		for (int i = 0; i < num_data_columns; i++)
+		{
+			CompressedColumnValues *column = &batch_state->compressed_columns[i];
+			if (column->by_ref_storage != NULL)
+			{
+				*column->output_value = PointerGetDatum(column->by_ref_storage);
+			}
+		}
+	}
+
 	if (TTS_EMPTY(decompressed_scan_slot))
 	{
 		ExecStoreVirtualTuple(decompressed_scan_slot);
 	}
+
+	compressed_columns_to_postgres_data(batch_state->compressed_columns,
+										num_data_columns,
+										arrow_row);
 }
 
 static bool
