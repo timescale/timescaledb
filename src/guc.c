@@ -145,7 +145,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
-TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
+TSDLLEXPORT bool ts_guc_debug_enable_columnarscan = true;
 TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
 #if PG19_LT
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
@@ -1383,12 +1383,10 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
-							 "Enable ColumnarScan for columnar storage",
-							 "Transparently decompress columnar data using ColumnarScan custom "
-							 "node. Disabling columnar scan will ignore data stored in columnar "
-							 "format in queries.",
-							 &ts_guc_enable_columnarscan,
+	DefineCustomBoolVariable(MAKE_EXTOPTION("debug_enable_columnarscan"),
+							 "this setting is used for debugging",
+							 "Do not use",
+							 &ts_guc_debug_enable_columnarscan,
 							 true,
 							 PGC_USERSET,
 							 0,
