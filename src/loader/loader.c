@@ -771,16 +771,6 @@ do_load(TsExtension *const ext)
 	}
 
 	/*
-	 * Set the config option to let versions 0.9.0 and 0.9.1 know that the
-	 * loader was preloaded, newer versions use rendezvous variables instead.
-	 */
-	if ((strcmp(version, "0.9.0") == 0 || strcmp(version, "0.9.1") == 0) &&
-		strcmp(ext->name, EXTENSION_NAME) == 0)
-	{
-		SetConfigOption(MAKE_EXTOPTION("loader_present"), "on", PGC_USERSET, PGC_S_SESSION);
-	}
-
-	/*
 	 * Save and restore post_parse_analyze_hook around the load so that
 	 * loading the versioned extension cannot modify our hook chain.
 	 */
