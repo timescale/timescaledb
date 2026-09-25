@@ -1,0 +1,40 @@
+name: Start release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to use"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run, uncheck to run full release"
+        default: true
+        type: boolean
+
+
+jobs:
+  validation:
+    secrets: inherit
+    with:
+      version: ${{ inputs.version }}
+    uses: ./.github/workflows/release_sanity.yml
+
+  release:
+    name: Release mechanism
+    needs: validation
+    if: ${{ !inputs.dry_run }}
+    secrets: inherit
+    with:
+      version: ${{ inputs.version }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release_release.yml
+
+  build_packages:
+    name: Build release packages
+    needs: release
+    if: ${{ !inputs.dry_run }}
+    uses: ./.github/workflows/release_build_packages.yml
+    with:
+      version: ${{ inputs.version }}
+    secrets: inherit

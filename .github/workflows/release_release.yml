@@ -1,0 +1,129 @@
+# Runs the mechanical part of creating a release:
+# - Creating a GitHub draft release
+# - Build and upload Windows binaries
+# - Publish the GitHub release
+
+name: Release
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+
+jobs:
+  create_release:
+    name: Release creation
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
+
+      # git user config timescale-automation
+      - run: |
+          git config user.name "timescale-automation"
+          git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create tag
+        run: |
+          tsdb_version="$(awk -F ' = ' '$1 == "version" { print $2 }' version.config)"
+
+          echo "Release version is ${{ inputs.version }}"
+          echo "Current local tsdb version is $tsdb_version"
+
+          git remote -v
+          git status
+
+          git tag "${{ inputs.version }}"
+          git push origin "${{ inputs.version }}"
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_date="$(date +%F)"
+          title="${{ inputs.version }} ($release_date)"
+
+          gh release create "${{ inputs.version }}" \
+            --draft \
+            --title "${title}" \
+            --notes "Draft release for ${{ inputs.version }}"
+
+  build_windows:
+    name: Build Windows binaries
+    needs: create_release
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-windows.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
+  publish_release:
+    needs:
+      - create_release
+      - build_windows
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
+    steps:
+      - name: Check windows binaries are uploaded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets="$(gh release view "${{ inputs.version }}" --json assets --jq '.assets[].name')"
+
+          windows_assets="$(
+            grep -E '^timescaledb-postgresql-[0-9]+-windows-amd64\.zip$' <<< "$assets" || true
+          )"
+
+          if [ -z "$windows_assets" ]; then
+            echo "Windows binaries were not uploaded to the draft release, aborting."
+            exit 1
+          fi
+
+          echo "Found Windows assets: $windows_assets"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "${{ inputs.version }}" \
+            --draft=false \
+            --latest
+
+  build_docker_image:
+    name: Build Docker image
+    needs: publish_release
+    uses: timescale/timescaledb-docker/.github/workflows/docker-image.yml@main
+    with:
+      version: ${{ inputs.version }}
+      tag_latest: true
+      registry: prod
+    secrets: inherit
+
+  build_apt_packages:
+    name: Build APT packages
+    needs: publish_release
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-apt.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
+
+  build_rpm_packages:
+    name: Build RPM packages
+    needs: publish_release
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-rpm.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
+
+  build_homebrew_packages:
+    name: Build Homebrew package
+    needs: publish_release
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-homebrew.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
