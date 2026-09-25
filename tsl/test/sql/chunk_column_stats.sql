@@ -381,4 +381,31 @@ SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged >= 9223372036854775806;
 SELECT count(*) FROM chunk_skip_bigint_max WHERE ranged > 9223372036854775805;
 
 
+-- Test chunk skipping with -infinity timestamp (NOBEGIN)
+-- When a chunk holds only '-infinity' in the tracked column, queries filtering
+-- on that column should not fail with "timestamp out of range".
+SET timescaledb.enable_chunk_skipping = on;
+
+CREATE TABLE loyalty_members(
+    joined       timestamptz NOT NULL,
+    member_since timestamptz
+);
+SELECT create_hypertable('loyalty_members', 'joined');
+SELECT enable_chunk_skipping('loyalty_members', 'member_since');
+ALTER TABLE loyalty_members SET (timescaledb.compress);
+
+INSERT INTO loyalty_members VALUES ('2025-01-01', '-infinity');
+SELECT count(compress_chunk(c)) FROM show_chunks('loyalty_members') c;
+
+SELECT chunk_id, column_name, range_start, range_end, valid
+FROM _timescaledb_catalog.chunk_column_stats
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
+                       WHERE table_name = 'loyalty_members')
+  AND chunk_id IS NOT NULL;
+
+SELECT count(*) FROM loyalty_members
+    WHERE joined > now() - interval '10 years'
+        AND member_since < '2020-01-01';
+
+DROP TABLE loyalty_members;
 RESET timescaledb.enable_chunk_skipping;

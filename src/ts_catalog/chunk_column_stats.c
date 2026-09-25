@@ -581,7 +581,8 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	List *compexprs = NIL;
 	Oid col_type;
 
-	if (info->range_start == PG_INT64_MIN && info->range_end == PG_INT64_MAX)
+	if (info->range_start == PG_INT64_MIN &&
+		(info->range_end == PG_INT64_MAX || info->range_end == PG_INT64_MIN))
 	{
 		return NULL;
 	}
@@ -946,7 +947,7 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 			int64 max = ts_time_value_to_internal(minmax[1], col_type);
 
 			/* The end value is exclusive to the range, so incr by 1 */
-			if (max != DIMENSION_SLICE_MAXVALUE)
+			if (max != DIMENSION_SLICE_MAXVALUE && max != TS_TIME_NOBEGIN)
 			{
 				max++;
 			}
@@ -1344,9 +1345,11 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 		}
 
 		/* range_start checks didn't match, check for range_end now */
-		/* range_end is exclusive except when DIMENSION_SLICE_MAXVALUE */
+		/* range_end is exclusive except when DIMENSION_SLICE_MAXVALUE or NOBEGIN */
 		int64 range_end =
-			(fd.range_end == DIMENSION_SLICE_MAXVALUE) ? fd.range_end : (fd.range_end - 1);
+			(fd.range_end == DIMENSION_SLICE_MAXVALUE || fd.range_end == PG_INT64_MIN)
+				? fd.range_end
+				: (fd.range_end - 1);
 		switch (open->lower_strategy)
 		{
 			case BTGreaterEqualStrategyNumber:
