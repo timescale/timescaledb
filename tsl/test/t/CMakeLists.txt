@@ -9,10 +9,8 @@ if((PG_VERSION_MAJOR EQUAL 17 AND PG_VERSION_MINOR GREATER_EQUAL 11)
   list(APPEND PROVE_TEST_FILES 007_custom_toaster.pl)
 endif()
 
-set(PROVE_DEBUG_TEST_FILES 003_mvcc_cagg.pl 005_recompression_spin_lock_test.pl)
-if(TMP_ENABLE_GRANULAR_REFRESH_TESTS)
-  list(APPEND PROVE_DEBUG_TEST_FILES 006_granular_refresh_restart.pl)
-endif()
+set(PROVE_DEBUG_TEST_FILES 003_mvcc_cagg.pl 005_recompression_spin_lock_test.pl
+                           006_granular_refresh_restart.pl)
 
 # The API for PostgreSQL::Cluster::BackgroundPsql was changed in PG16. We only
 # use the new version of the API, so run TAP tests that use it only on later
