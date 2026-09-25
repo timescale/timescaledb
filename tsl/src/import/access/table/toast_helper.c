@@ -26,7 +26,8 @@
  * This is a copy of toast_tuple_externalize() in backend/access/table/toast_helper.c
  * from PG 18.6, git commit sha 724edf9bde9d356724ad384a2e196edc3c9f80f7. It
  * has one modification: it calls compression_toast_save_datum_multi() instead
- * of toast_save_datum().
+ * of toast_save_datum(), passing the attribute index so the deferred chunk
+ * flush can order values by column.
  */
 void
 compression_toast_tuple_externalize(BulkWriter *writer, ToastTupleContext *ttc, int attribute)
@@ -36,7 +37,8 @@ compression_toast_tuple_externalize(BulkWriter *writer, ToastTupleContext *ttc, 
 	ToastAttrInfo *attr = &ttc->ttc_attr[attribute];
 
 	attr->tai_colflags |= TOASTCOL_IGNORE;
-	*value = compression_toast_save_datum_multi(writer, old_value, attr->tai_oldexternal);
+	*value = compression_toast_save_datum_multi(writer, old_value, attr->tai_oldexternal,
+												attribute);
 	if ((attr->tai_colflags & TOASTCOL_NEEDS_FREE) != 0)
 		pfree(DatumGetPointer(old_value));
 	attr->tai_colflags |= TOASTCOL_NEEDS_FREE;

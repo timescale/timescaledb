@@ -15,6 +15,13 @@
  * call instead, so the WAL and buffer-lock overhead is amortized across all
  * chunks that fit on a page rather than paid once per chunk.
  *
+ * On top of that, the chunk writes are deferred: externalizing a value only
+ * allocates its value id and queues the payload on the BulkWriter, and the
+ * queued values are written when the queue is flushed (see
+ * compression_toast_flush_pending()). Deferral decouples the chunk write
+ * order from the batch order, which is what allows the flush to lay out the
+ * toast table column-major.
+ *
  * Everything here is forked from (and should stay behaviorally identical to)
  * the corresponding core function. The forked code lives under access/, in
  * files named after the core file each function was copied from, so it can be
@@ -65,7 +72,8 @@ extern HeapTuple compression_toast_insert_or_update(BulkWriter *writer, HeapTupl
 extern void compression_toast_tuple_externalize(BulkWriter *writer, ToastTupleContext *ttc,
 												int attribute);
 extern Datum compression_toast_save_datum_multi(BulkWriter *writer, Datum value,
-												struct varlena *oldexternal);
+												struct varlena *oldexternal, int attno);
+extern void compression_toast_flush_pending(BulkWriter *writer);
 
 #else
 

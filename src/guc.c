@@ -86,7 +86,7 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby = true;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 30000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows = 5000;
 TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit = 500;
-TSDLLEXPORT bool ts_guc_use_custom_toaster = false;
+TSDLLEXPORT bool ts_guc_use_custom_toaster = true;
 bool ts_guc_enable_deprecation_warnings = true;
 TSDLLEXPORT bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -200,6 +200,9 @@ char *ts_current_timestamp_mock = NULL;
 #endif
 
 int ts_guc_debug_toast_tuple_target = 128;
+
+TSDLLEXPORT int ts_guc_compression_toast_buffer_batches = 4;
+TSDLLEXPORT int ts_guc_compression_toast_buffer_size = 8192;
 
 static const struct config_enum_entry debug_require_options[] = { { "allow", DRO_Allow, false },
 																  { "forbid", DRO_Forbid, false },
@@ -657,7 +660,7 @@ _guc_init(void)
 							 "This setting is only used for compression. It has no effect on "
 							 "PostgreSQL 19 and above.",
 							 &ts_guc_use_custom_toaster,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -1706,6 +1709,35 @@ _guc_init(void)
 							/* maxValue = */ 65535,
 							/* context= */ PGC_USERSET,
 							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
+
+	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("compression_toast_buffer_batches"),
+							/* short_desc= */ "number of compressed batches buffered before flushing toast chunks",
+							/* long_desc= */ "the custom toaster defers toast chunk writes and "
+							"flushes them after this many batches, so the same column of "
+							"consecutive batches lands on adjacent toast pages",
+							/* valueAddr= */ &ts_guc_compression_toast_buffer_batches,
+							/* bootValue = */ 4,
+							/* minValue = */ 1,
+							/* maxValue = */ 20,
+							/* context= */ PGC_USERSET,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
+
+	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("compression_toast_buffer_size"),
+							/* short_desc= */ "bytes of buffered toast payload that force an early flush, in kB",
+							/* long_desc= */ "safety valve bounding the memory held by the "
+							"custom toaster's deferred chunk buffer",
+							/* valueAddr= */ &ts_guc_compression_toast_buffer_size,
+							/* bootValue = */ 8192,
+							/* minValue = */ 128,
+							/* maxValue = */ 8388608,
+							/* context= */ PGC_USERSET,
+							/* flags= */ GUC_UNIT_KB,
 							/* check_hook= */ NULL,
 							/* assign_hook= */ NULL,
 							/* show_hook= */ NULL);

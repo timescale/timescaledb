@@ -139,6 +139,8 @@ extern char *ts_current_timestamp_mock;
 #endif
 
 extern TSDLLEXPORT int ts_guc_debug_toast_tuple_target;
+extern TSDLLEXPORT int ts_guc_compression_toast_buffer_batches;
+extern TSDLLEXPORT int ts_guc_compression_toast_buffer_size;
 
 typedef enum DebugRequireOption
 {

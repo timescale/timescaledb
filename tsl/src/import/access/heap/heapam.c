@@ -36,6 +36,7 @@
 #include <utils/snapmgr.h>
 
 #include "debug_assert.h"
+#include "guc.h"
 #include "import/compression_toast.h"
 
 static HeapTuple
@@ -76,6 +77,9 @@ compression_assert_has_snapshot_for_toast(Relation rel)
  * dealing with catalog tables and logical decoding which is not applicable
  * here. It also opens with an Ensure() that this path is supported on the
  * running version, since callers are expected to keep it off where it is not.
+ * After the insert it maintains the writer's deferred-toast batch count and
+ * flushes the buffered toast chunks when
+ * timescaledb.compression_toast_buffer_batches is reached.
  */
 void
 compression_heap_insert(BulkWriter *writer, HeapTuple tup)
@@ -295,6 +299,18 @@ compression_heap_insert(BulkWriter *writer, HeapTuple tup)
 	{
 		tup->t_self = heaptup->t_self;
 		heap_freetuple(heaptup);
+	}
+
+	/*
+	 * One compressed row is one batch. Flush the deferred toast chunks once
+	 * the configured number of batches is buffered, so the flush can lay the
+	 * chunks out grouped by column. The byte-threshold bound is checked per
+	 * value in compression_toast_save_datum_multi().
+	 */
+	writer->pending_batches++;
+	if (writer->pending_batches >= ts_guc_compression_toast_buffer_batches)
+	{
+		compression_toast_flush_pending(writer);
 	}
 }
 

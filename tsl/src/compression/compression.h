@@ -147,6 +147,23 @@ typedef struct PerCompressedColumn
 	int16 decompressed_column_offset;
 } PerCompressedColumn;
 
+/*
+ * A toasted value whose chunk rows have not been written yet. The custom
+ * compression toaster defers chunk writes so that a later flush can order
+ * them by column instead of by batch. The payload is allocated in the
+ * BulkWriter's executor query context, which outlives the per-batch memory
+ * context of the row compressor.
+ */
+typedef struct PendingToastValue
+{
+	Oid valueid;		 /* va_valueid embedded in the main tuple's toast pointer */
+	int attno;			 /* 0-based attribute index in the compressed tuple */
+	int32 rank;		 /* flush ordering rank, see compression_toast_value_rank() */
+	uint64 seq;		 /* queue sequence number, tie-breaks the unstable list_sort */
+	int32 data_len;		 /* payload bytes in data[] */
+	char data[FLEXIBLE_ARRAY_MEMBER];
+} PendingToastValue;
+
 typedef struct BulkWriter
 {
 	Relation out_rel;
@@ -169,6 +186,17 @@ typedef struct BulkWriter
 	int num_toast_indexes;
 	int toast_valid_index;
 	BulkInsertState toast_bistate;
+	/*
+	 * Deferred toast chunk writes, flushed by
+	 * compression_toast_writer_close(). List of PendingToastValue, payload
+	 * included; pending_toast_bytes is the sum of their data_len.
+	 */
+	List *pending_toast;
+	int64 pending_toast_bytes;
+	/* Batches (compressed rows) inserted since the last flush. */
+	int pending_batches;
+	/* Queue sequence counter for PendingToastValue.seq. */
+	uint64 pending_seq;
 } BulkWriter;
 
 typedef struct RowDecompressor
