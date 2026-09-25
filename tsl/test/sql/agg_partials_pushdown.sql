@@ -205,4 +205,11 @@ GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
 SELECT ts, sensor_id, count(*) FROM sensor_readings
 GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
 
+SELECT ts, (sensor_id % 16)::bit(4), count(*) FROM sensor_readings
+GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 5;
+
+:PREFIX
+SELECT ts, (sensor_id % 16)::bit(4), count(*) FROM sensor_readings
+GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 5;
+
 RESET enable_seqscan;

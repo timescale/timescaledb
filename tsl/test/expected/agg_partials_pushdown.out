@@ -629,4 +629,44 @@ GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
                                  ->  Index Scan Backward using _hyper_4_20_chunk_sensor_readings_ts_idx on _timescaledb_internal._hyper_4_20_chunk (actual rows=1.00 loops=1)
                                        Output: _hyper_4_20_chunk.ts, _hyper_4_20_chunk.sensor_id
 
+SELECT ts, (sensor_id % 16)::bit(4), count(*) FROM sensor_readings
+GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 5;
+ ts | bit  | count 
+----+------+-------
+  1 | 0001 |     1
+  2 | 0010 |     1
+  3 | 0011 |     1
+  4 | 0100 |     1
+  5 | 0101 |     1
+
+:PREFIX
+SELECT ts, (sensor_id % 16)::bit(4), count(*) FROM sensor_readings
+GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 5;
+--- QUERY PLAN ---
+ Limit (actual rows=5.00 loops=1)
+   Output: sensor_readings.ts, (((sensor_readings.sensor_id % '16'::bigint))::bit(4)), (count(*))
+   ->  GroupAggregate (actual rows=5.00 loops=1)
+         Output: sensor_readings.ts, (((sensor_readings.sensor_id % '16'::bigint))::bit(4)), count(*)
+         Group Key: sensor_readings.ts, (((sensor_readings.sensor_id % '16'::bigint))::bit(4))
+         ->  Incremental Sort (actual rows=6.00 loops=1)
+               Output: sensor_readings.ts, (((sensor_readings.sensor_id % '16'::bigint))::bit(4))
+               Sort Key: sensor_readings.ts, (((sensor_readings.sensor_id % '16'::bigint))::bit(4))
+               Presorted Key: sensor_readings.ts
+               Full-sort Groups: 1  Sort Method: quicksort 
+               ->  Result (actual rows=33.00 loops=1)
+                     Output: sensor_readings.ts, ((sensor_readings.sensor_id % '16'::bigint))::bit(4)
+                     ->  Custom Scan (ChunkAppend) on public.sensor_readings (actual rows=33.00 loops=1)
+                           Output: sensor_readings.ts, sensor_readings.sensor_id
+                           Order: sensor_readings.ts
+                           Startup Exclusion: false
+                           Runtime Exclusion: false
+                           ->  Index Scan Backward using _hyper_4_17_chunk_sensor_readings_ts_idx on _timescaledb_internal._hyper_4_17_chunk (actual rows=33.00 loops=1)
+                                 Output: _hyper_4_17_chunk.ts, _hyper_4_17_chunk.sensor_id
+                           ->  Index Scan Backward using _hyper_4_18_chunk_sensor_readings_ts_idx on _timescaledb_internal._hyper_4_18_chunk (never executed)
+                                 Output: _hyper_4_18_chunk.ts, _hyper_4_18_chunk.sensor_id
+                           ->  Index Scan Backward using _hyper_4_19_chunk_sensor_readings_ts_idx on _timescaledb_internal._hyper_4_19_chunk (never executed)
+                                 Output: _hyper_4_19_chunk.ts, _hyper_4_19_chunk.sensor_id
+                           ->  Index Scan Backward using _hyper_4_20_chunk_sensor_readings_ts_idx on _timescaledb_internal._hyper_4_20_chunk (never executed)
+                                 Output: _hyper_4_20_chunk.ts, _hyper_4_20_chunk.sensor_id
+
 RESET enable_seqscan;
