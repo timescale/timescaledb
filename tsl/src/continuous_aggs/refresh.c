@@ -812,7 +812,7 @@ cagg_refresh_stats_report(int32 job_id, const CaggRefreshStats *stats)
 
 	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
 
-	ts_bgw_job_stat_history_set_info(JsonbValueToJsonb(parse_state.result));
+	ts_bgw_job_execution_set_info(JsonbValueToJsonb(parse_state.result));
 }
 
 /*
