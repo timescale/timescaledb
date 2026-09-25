@@ -1,0 +1,1 @@
+Fixes: #10384 Use a user-visible error code when attempting to disable a continuous aggregate
