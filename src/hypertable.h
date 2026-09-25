@@ -55,6 +55,9 @@ typedef struct ChunkRangeSpace ChunkRangeSpace;
 #define TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht)                                              \
 	(((ht)->fd.status & HYPERTABLE_STATUS_DIRECT_COMPRESS) != 0)
 
+#define TS_HYPERTABLE_HAS_CONCURRENT_COMPRESS_ENABLED(ht)                                          \
+	(((ht)->fd.status & HYPERTABLE_STATUS_CONCURRENT_COMPRESS) != 0)
+
 typedef struct Hypertable
 {
 	FormData_hypertable fd;
@@ -163,6 +166,8 @@ extern TSDLLEXPORT bool ts_hypertable_set_compression(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_unset_compression(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_set_direct_compress(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_unset_direct_compress(Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_set_concurrent_compress(Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_unset_concurrent_compress(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
 															int64 compress_interval);
 extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *ht,

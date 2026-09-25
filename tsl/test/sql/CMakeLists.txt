@@ -23,6 +23,7 @@ set(TEST_FILES
     cagg_utils.sql
     chunk_publication_compression.sql
     columnstore_aliases.sql
+    concurrent_compress.sql
     compact_chunk.sql
     compaction_policy.sql
     compress_auto_sparse_index.sql
@@ -74,6 +75,7 @@ set(TEST_FILES
     direct_compress_policy.sql
     move.sql
     move_to_columnstore.sql
+    move_to_columnstore_policy.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql

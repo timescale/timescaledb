@@ -52,6 +52,9 @@ typedef struct CrossModuleFunctions
 	PGFunction policy_reorder_proc;
 	PGFunction policy_reorder_check;
 	PGFunction policy_reorder_remove;
+	PGFunction policy_move_to_columnstore_add;
+	PGFunction policy_move_to_columnstore_check;
+	PGFunction policy_move_to_columnstore_remove;
 	PGFunction policy_compaction_add;
 	PGFunction policy_compaction_check;
 	PGFunction policy_compaction_remove;

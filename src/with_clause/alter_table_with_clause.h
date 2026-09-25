@@ -27,6 +27,8 @@ typedef enum AlterTableFlags
 	AlterTableFlagCaggEnableGranularRefresh,
 	AlterTableFlagDirectCompress,
 	AlterTableFlagDirectCompressScheduleInterval,
+	AlterTableFlagConcurrentCompress,
+	AlterTableFlagConcurrentCompressScheduleInterval,
 	AlterTableFlagsMax
 } AlterTableFlags;
 

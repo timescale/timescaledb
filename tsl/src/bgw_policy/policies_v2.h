@@ -39,6 +39,12 @@
 #define POL_RETENTION_CONF_KEY_DROP_AFTER "drop_after"
 #define POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE "drop_created_before"
 
+#define POLICY_MOVE_TO_COLUMNSTORE_PROC_NAME "policy_move_to_columnstore"
+#define DEFAULT_MOVE_TO_COLUMNSTORE_SCHEDULE_INTERVAL "1 hour"
+#define POLICY_MOVE_TO_COLUMNSTORE_CHECK_NAME "policy_move_to_columnstore_check"
+#define POL_MOVE_TO_COLUMNSTORE_CONF_KEY_MAXCHUNKS_TO_MOVE "maxchunks_to_move"
+#define POL_MOVE_TO_COLUMNSTORE_CONF_KEY_ALLOW_BLOCKING_COMPRESSION "allow_blocking_compression"
+
 #define POLICY_COMPACTION_PROC_NAME "policy_compaction"
 #define POLICY_COMPACTION_CHECK_NAME "policy_compaction_check"
 #define POL_COMPACTION_CONF_KEY_MAX_CHUNKS "max_chunks"

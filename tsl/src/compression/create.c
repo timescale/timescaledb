@@ -41,6 +41,7 @@
 #include "compat/compat.h"
 #include "bgw/job.h"
 #include "bgw_policy/compaction_api.h"
+#include "bgw_policy/move_to_columnstore_api.h"
 #include "bgw_policy/policies_v2.h"
 #include "chunk.h"
 #include "chunk_index.h"
@@ -110,6 +111,7 @@ static Interval *direct_compress_default_schedule_interval(void);
 static void enable_direct_compress_policies(Hypertable *ht, Interval *schedule_interval,
 											Datum compress_after_datum, Oid compress_after_type);
 static void disable_direct_compress_policies(Hypertable *ht);
+static void disable_concurrent_compress_policies(Hypertable *ht);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -1250,8 +1252,14 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 		disable_direct_compress_policies(ht);
 	}
 
+	if (TS_HYPERTABLE_HAS_CONCURRENT_COMPRESS_ENABLED(ht))
+	{
+		disable_concurrent_compress_policies(ht);
+	}
+
 	ts_hypertable_unset_compression(ht);
 	ts_hypertable_unset_direct_compress(ht);
+	ts_hypertable_unset_concurrent_compress(ht);
 	ts_compression_settings_delete(ht->main_table_relid);
 
 	return true;
@@ -1512,6 +1520,87 @@ disable_direct_compress_policies(Hypertable *ht)
 	policy_compression_remove_internal(ht->main_table_relid, true /* if_exists */);
 }
 
+static Interval *
+concurrent_compress_default_schedule_interval(void)
+{
+	return DatumGetIntervalP(
+		DirectFunctionCall3(interval_in,
+							CStringGetDatum(DEFAULT_MOVE_TO_COLUMNSTORE_SCHEDULE_INTERVAL),
+							InvalidOid,
+							-1));
+}
+
+static void
+enable_concurrent_compress_policies(Hypertable *ht, Interval *schedule_interval)
+{
+	policy_move_to_columnstore_add_internal(ht->main_table_relid,
+											schedule_interval,
+											true /* if_not_exists */,
+											false /* fixed_schedule */,
+											DT_NOBEGIN,
+											NULL /* timezone */,
+											0 /* max_chunks */,
+											false /* allow_blocking_compression */);
+
+	List *move_jobs =
+		ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_MOVE_TO_COLUMNSTORE_PROC_NAME,
+												  FUNCTIONS_SCHEMA_NAME,
+												  ht->fd.id);
+	Assert(list_length(move_jobs) == 1);
+	BgwJob *move_job = linitial(move_jobs);
+	move_job->fd.schedule_interval = *schedule_interval;
+	ts_bgw_job_update_by_id(move_job->fd.id, move_job);
+
+	policy_compaction_add_internal(ht->main_table_relid,
+								   true /* if_not_exists */,
+								   schedule_interval,
+								   DT_NOBEGIN,
+								   false /* fixed_schedule */,
+								   NULL /* timezone */,
+								   0 /* max_chunks */,
+								   0 /* max_batches */,
+								   NULL /* inactive_for */);
+
+	List *compaction_jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPACTION_PROC_NAME,
+																	  FUNCTIONS_SCHEMA_NAME,
+																	  ht->fd.id);
+	Assert(list_length(compaction_jobs) == 1);
+	BgwJob *compaction_job = linitial(compaction_jobs);
+	compaction_job->fd.schedule_interval = *schedule_interval;
+	ts_bgw_job_update_by_id(compaction_job->fd.id, compaction_job);
+}
+
+static void
+disable_concurrent_compress_policies(Hypertable *ht)
+{
+	policy_move_to_columnstore_remove_internal(ht->main_table_relid, true /* if_exists */);
+	policy_compaction_remove_internal(ht->main_table_relid, true /* if_exists */);
+}
+
+/*
+ * Cannot have both direct compress and columstore dml option enabled
+ */
+static void
+error_if_conflicting_columnstore_alter_options(const Hypertable *ht,
+											   const WithClauseResult *with_clause_options)
+{
+	bool enable_direct_compress =
+		!with_clause_options[AlterTableFlagDirectCompress].is_default &&
+		DatumGetBool(with_clause_options[AlterTableFlagDirectCompress].parsed);
+	bool enable_as_dml = !with_clause_options[AlterTableFlagConcurrentCompress].is_default &&
+						 DatumGetBool(with_clause_options[AlterTableFlagConcurrentCompress].parsed);
+
+	if ((enable_direct_compress && enable_as_dml) ||
+		(enable_direct_compress && TS_HYPERTABLE_HAS_CONCURRENT_COMPRESS_ENABLED(ht)) ||
+		(enable_as_dml && TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht)))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"direct_compress\" and \"concurrent_compress\" cannot both be enabled"),
+				 errhint("Disable one before enabling the other.")));
+	}
+}
+
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
@@ -1604,6 +1693,8 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		ts_hypertable_set_compression(ht);
 	}
 
+	error_if_conflicting_columnstore_alter_options(ht, with_clause_options);
+
 	if (!with_clause_options[AlterTableFlagDirectCompressScheduleInterval].is_default &&
 		with_clause_options[AlterTableFlagDirectCompress].is_default)
 	{
@@ -1651,6 +1742,42 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		{
 			disable_direct_compress_policies(ht);
 			ts_hypertable_unset_direct_compress(ht);
+		}
+	}
+
+	if (!with_clause_options[AlterTableFlagConcurrentCompressScheduleInterval].is_default &&
+		with_clause_options[AlterTableFlagConcurrentCompress].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg(
+					 "\"concurrent_compress_schedule_interval\" requires \"concurrent_compress\" "
+					 "to be set in the same clause")));
+	}
+
+	if (!with_clause_options[AlterTableFlagConcurrentCompress].is_default)
+	{
+		bool enable_as_dml =
+			DatumGetBool(with_clause_options[AlterTableFlagConcurrentCompress].parsed);
+
+		if (enable_as_dml)
+		{
+			Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+
+			Interval *schedule_interval =
+				!with_clause_options[AlterTableFlagConcurrentCompressScheduleInterval].is_default ?
+					DatumGetIntervalP(
+						with_clause_options[AlterTableFlagConcurrentCompressScheduleInterval]
+							.parsed) :
+					concurrent_compress_default_schedule_interval();
+
+			ts_hypertable_set_concurrent_compress(ht);
+			enable_concurrent_compress_policies(ht, schedule_interval);
+		}
+		else if (TS_HYPERTABLE_HAS_CONCURRENT_COMPRESS_ENABLED(ht))
+		{
+			disable_concurrent_compress_policies(ht);
+			ts_hypertable_unset_concurrent_compress(ht);
 		}
 	}
 
@@ -2755,6 +2882,31 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 }
 
 /*
+ * Cannot have both direct compress and columstore dml option enabled
+ */
+static void
+error_if_conflicting_columnstore_create_options(const Hypertable *ht,
+												const WithClauseResult *with_clause_options)
+{
+	bool enable_direct_compress =
+		!with_clause_options[CreateTableFlagDirectCompress].is_default &&
+		DatumGetBool(with_clause_options[CreateTableFlagDirectCompress].parsed);
+	bool enable_as_dml =
+		!with_clause_options[CreateTableFlagConcurrentCompress].is_default &&
+		DatumGetBool(with_clause_options[CreateTableFlagConcurrentCompress].parsed);
+
+	if ((enable_direct_compress && enable_as_dml) ||
+		(enable_direct_compress && TS_HYPERTABLE_HAS_CONCURRENT_COMPRESS_ENABLED(ht)) ||
+		(enable_as_dml && TS_HYPERTABLE_HAS_DIRECT_COMPRESS_ENABLED(ht)))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"direct_compress\" and \"concurrent_compress\" cannot both be enabled"),
+				 errhint("Disable one before enabling the other.")));
+	}
+}
+
+/*
  * Enables compression for a hypertable without creating initial configuration
  *
  * This is used when creating a hypertable with CREATE TABLE ... WITH (timescaledb.hypertable)
@@ -2774,6 +2926,10 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 	compression_settings_set_manually_for_create(ht, settings, with_clause_options);
 	ts_hypertable_set_compression(ht);
 
+	bool enable_as_dml =
+		!with_clause_options[CreateTableFlagConcurrentCompress].is_default &&
+		DatumGetBool(with_clause_options[CreateTableFlagConcurrentCompress].parsed);
+
 	/* Add default compression policy when compression is enabled via CREATE TABLE WITH */
 	/* Use the chunk interval as the compression interval */
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
@@ -2790,19 +2946,26 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 		compress_after_datum =
 			ts_internal_to_interval_value(time_dim->fd.interval_length, compress_after_type);
 
-		policy_compression_add_internal(
-			ht->main_table_relid,
-			compress_after_datum,
-			compress_after_type,
-			NULL,								   /* created_before */
-			DEFAULT_COMPRESSION_SCHEDULE_INTERVAL, /* default_schedule_interval
-													*/
-			true,								   /* user_defined_schedule_interval */
-			true,								   /* if_not_exists */
-			false,								   /* fixed_schedule */
-			GetCurrentTimestamp() + USECS_PER_DAY, /* initial_start */
-			NULL /* timezone */);
+		/* The move policy replaces the columnstore policy, so don't add one it
+		 * would immediately have to remove. */
+		if (!enable_as_dml)
+		{
+			policy_compression_add_internal(
+				ht->main_table_relid,
+				compress_after_datum,
+				compress_after_type,
+				NULL,								   /* created_before */
+				DEFAULT_COMPRESSION_SCHEDULE_INTERVAL, /* default_schedule_interval
+														*/
+				true,								   /* user_defined_schedule_interval */
+				true,								   /* if_not_exists */
+				false,								   /* fixed_schedule */
+				GetCurrentTimestamp() + USECS_PER_DAY, /* initial_start */
+				NULL /* timezone */);
+		}
 	}
+
+	error_if_conflicting_columnstore_create_options(ht, with_clause_options);
 
 	if (!with_clause_options[CreateTableFlagDirectCompressScheduleInterval].is_default &&
 		with_clause_options[CreateTableFlagDirectCompress].is_default)
@@ -2827,5 +2990,27 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 										schedule_interval,
 										compress_after_datum,
 										compress_after_type);
+	}
+
+	if (!with_clause_options[CreateTableFlagConcurrentCompressScheduleInterval].is_default &&
+		with_clause_options[CreateTableFlagConcurrentCompress].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg(
+					 "\"concurrent_compress_schedule_interval\" requires \"concurrent_compress\" "
+					 "to be set in the same clause")));
+	}
+
+	if (enable_as_dml)
+	{
+		Interval *schedule_interval =
+			!with_clause_options[CreateTableFlagConcurrentCompressScheduleInterval].is_default ?
+				DatumGetIntervalP(
+					with_clause_options[CreateTableFlagConcurrentCompressScheduleInterval].parsed) :
+				concurrent_compress_default_schedule_interval();
+
+		ts_hypertable_set_concurrent_compress(ht);
+		enable_concurrent_compress_policies(ht, schedule_interval);
 	}
 }
