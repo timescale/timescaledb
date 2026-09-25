@@ -663,3 +663,35 @@ CALL merge_chunks(:'mso_c1'::regclass, :'mso_c2'::regclass);
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
 
 DROP TABLE merge_sparse_order;
+
+-- Merge chunks with different attribute layouts due to dropped columns
+CREATE TABLE merge_layout(time timestamptz NOT NULL, removed text, amount numeric, count int);
+SELECT create_hypertable('merge_layout', by_range('time', interval '1 day'));
+INSERT INTO merge_layout VALUES ('2026-01-01 12:00+00', 'old', 12.5, 1);
+ALTER TABLE merge_layout DROP COLUMN removed;
+INSERT INTO merge_layout VALUES ('2026-01-02 12:00+00', 25.5, 2);
+INSERT INTO merge_layout VALUES ('2026-01-03 12:00+00', 37.5, 3);
+ALTER TABLE merge_layout DROP COLUMN count;
+ALTER TABLE merge_layout ADD COLUMN count int;
+INSERT INTO merge_layout VALUES ('2026-01-04 12:00+00', 50.5, 4);
+INSERT INTO merge_layout VALUES ('2026-01-05 12:00+00', 62.5, 5);
+SELECT array_agg(c ORDER BY c) AS chunks FROM show_chunks('merge_layout') c \gset
+
+-- Result chunk has more attributes than the other chunk
+CALL merge_chunks((:'chunks'::text[])[1]::regclass, (:'chunks'::text[])[2]::regclass);
+-- Compressed result chunk has fewer attributes than the other chunk
+ALTER TABLE merge_layout SET (timescaledb.compress, timescaledb.compress_orderby = 'time');
+SELECT compress_chunk((:'chunks'::text[])[4]::regclass);
+CALL merge_chunks_concurrently(ARRAY[(:'chunks'::text[])[3]::regclass, (:'chunks'::text[])[4]::regclass]);
+SELECT * FROM merge_layout ORDER BY time;
+
+-- Compressed relations with different attribute layouts
+SELECT compress_chunk(show_chunks('merge_layout'));
+ALTER TABLE merge_layout DROP COLUMN amount;
+INSERT INTO merge_layout VALUES ('2026-01-06 12:00+00', 6);
+SELECT compress_chunk(show_chunks('merge_layout', newer_than => '2026-01-06 00:00+00'::timestamptz));
+SELECT array_agg(c ORDER BY c) AS chunks FROM show_chunks('merge_layout') c \gset
+CALL merge_chunks(:'chunks'::regclass[]);
+SELECT * FROM merge_layout ORDER BY time;
+
+DROP TABLE merge_layout;

@@ -1158,3 +1158,66 @@ SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY reli
  mergeme                                 | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE merge_sparse_order;
+-- Merge chunks with different attribute layouts due to dropped columns
+CREATE TABLE merge_layout(time timestamptz NOT NULL, removed text, amount numeric, count int);
+SELECT create_hypertable('merge_layout', by_range('time', interval '1 day'));
+ create_hypertable 
+-------------------
+ (8,t)
+
+INSERT INTO merge_layout VALUES ('2026-01-01 12:00+00', 'old', 12.5, 1);
+ALTER TABLE merge_layout DROP COLUMN removed;
+INSERT INTO merge_layout VALUES ('2026-01-02 12:00+00', 25.5, 2);
+INSERT INTO merge_layout VALUES ('2026-01-03 12:00+00', 37.5, 3);
+ALTER TABLE merge_layout DROP COLUMN count;
+ALTER TABLE merge_layout ADD COLUMN count int;
+INSERT INTO merge_layout VALUES ('2026-01-04 12:00+00', 50.5, 4);
+INSERT INTO merge_layout VALUES ('2026-01-05 12:00+00', 62.5, 5);
+SELECT array_agg(c ORDER BY c) AS chunks FROM show_chunks('merge_layout') c \gset
+-- Result chunk has more attributes than the other chunk
+CALL merge_chunks((:'chunks'::text[])[1]::regclass, (:'chunks'::text[])[2]::regclass);
+-- Compressed result chunk has fewer attributes than the other chunk
+ALTER TABLE merge_layout SET (timescaledb.compress, timescaledb.compress_orderby = 'time');
+SELECT compress_chunk((:'chunks'::text[])[4]::regclass);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_28_chunk
+
+CALL merge_chunks_concurrently(ARRAY[(:'chunks'::text[])[3]::regclass, (:'chunks'::text[])[4]::regclass]);
+SELECT * FROM merge_layout ORDER BY time;
+             time             | amount | count 
+------------------------------+--------+-------
+ Thu Jan 01 04:00:00 2026 PST |   12.5 |      
+ Fri Jan 02 04:00:00 2026 PST |   25.5 |      
+ Sat Jan 03 04:00:00 2026 PST |   37.5 |      
+ Sun Jan 04 04:00:00 2026 PST |   50.5 |     4
+ Mon Jan 05 04:00:00 2026 PST |   62.5 |     5
+
+-- Compressed relations with different attribute layouts
+SELECT compress_chunk(show_chunks('merge_layout'));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_25_chunk
+ _timescaledb_internal._hyper_8_28_chunk
+ _timescaledb_internal._hyper_8_29_chunk
+
+ALTER TABLE merge_layout DROP COLUMN amount;
+INSERT INTO merge_layout VALUES ('2026-01-06 12:00+00', 6);
+SELECT compress_chunk(show_chunks('merge_layout', newer_than => '2026-01-06 00:00+00'::timestamptz));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_30_chunk
+
+SELECT array_agg(c ORDER BY c) AS chunks FROM show_chunks('merge_layout') c \gset
+CALL merge_chunks(:'chunks'::regclass[]);
+SELECT * FROM merge_layout ORDER BY time;
+             time             | count 
+------------------------------+-------
+ Thu Jan 01 04:00:00 2026 PST |      
+ Fri Jan 02 04:00:00 2026 PST |      
+ Sat Jan 03 04:00:00 2026 PST |      
+ Sun Jan 04 04:00:00 2026 PST |     4
+ Mon Jan 05 04:00:00 2026 PST |     5
+ Tue Jan 06 04:00:00 2026 PST |     6
+
+DROP TABLE merge_layout;

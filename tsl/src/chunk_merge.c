@@ -4,7 +4,10 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/heapam.h>
 #include <access/multixact.h>
+#include <access/rewriteheap.h>
+#include <access/tupconvert.h>
 #include <access/xact.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
@@ -34,6 +37,7 @@
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "debug_point.h"
@@ -528,6 +532,97 @@ update_relstats(Relation catrel, Oid relid, BlockNumber num_pages, double ntuple
 	heap_freetuple(reltup);
 }
 
+/*
+ * Copy tuples between relations with different attribute layouts, e.g.,
+ * when one chunk was created before a column was dropped and the other
+ * after. Loop adapted from heapam_relation_copy_for_cluster().
+ */
+static void
+copy_table_data_with_map(Relation fromrel, Relation torel, TupleConversionMap *map,
+						 struct VacuumCutoffs *cutoffs, double *num_tuples, double *tups_vacuumed,
+						 double *tups_recently_dead)
+{
+	RewriteState rwstate = begin_heap_rewrite(fromrel,
+											  torel,
+											  cutoffs->OldestXmin,
+											  cutoffs->FreezeLimit,
+											  cutoffs->MultiXactCutoff);
+	TableScanDesc scan = table_beginscan_compat(fromrel, SnapshotAny, 0, NULL, 0);
+	TupleTableSlot *slot = table_slot_create(fromrel, NULL);
+	BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) slot;
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
+	{
+		HeapTuple tuple;
+		HeapTuple newtuple;
+		Buffer buf = hslot->buffer;
+		bool isdead = false;
+
+		CHECK_FOR_INTERRUPTS();
+
+		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
+
+		/* Exclusive lock so that hint bits get set, which the rewrite needs */
+		LockBuffer(buf, BUFFER_LOCK_EXCLUSIVE);
+
+		switch (HeapTupleSatisfiesVacuum(tuple, cutoffs->OldestXmin, buf))
+		{
+			case HEAPTUPLE_DEAD:
+				isdead = true;
+				break;
+			case HEAPTUPLE_RECENTLY_DEAD:
+				*tups_recently_dead += 1;
+				break;
+			case HEAPTUPLE_LIVE:
+				break;
+			case HEAPTUPLE_INSERT_IN_PROGRESS:
+				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
+				{
+					elog(WARNING,
+						 "concurrent insert in progress within table \"%s\"",
+						 RelationGetRelationName(fromrel));
+				}
+				break;
+			case HEAPTUPLE_DELETE_IN_PROGRESS:
+				if (!TransactionIdIsCurrentTransactionId(
+						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
+				{
+					elog(WARNING,
+						 "concurrent delete in progress within table \"%s\"",
+						 RelationGetRelationName(fromrel));
+				}
+				*tups_recently_dead += 1;
+				break;
+			default:
+				elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
+				break;
+		}
+
+		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+
+		if (isdead)
+		{
+			*tups_vacuumed += 1;
+			/* The rewrite module still needs to see dead tuples */
+			if (rewrite_heap_dead_tuple(rwstate, tuple))
+			{
+				*tups_vacuumed += 1;
+				*tups_recently_dead -= 1;
+			}
+			continue;
+		}
+
+		*num_tuples += 1;
+		newtuple = execute_attr_map_tuple(tuple, map);
+		rewrite_heap_tuple(rwstate, tuple, newtuple);
+		heap_freetuple(newtuple);
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	table_endscan(scan);
+	end_heap_rewrite(rwstate);
+}
+
 static double
 copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 				struct VacuumCutoffs *merged_cutoffs)
@@ -535,20 +630,36 @@ copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 	double num_tuples = 0.0;
 	double tups_vacuumed = 0.0;
 	double tups_recently_dead = 0.0;
+	TupleConversionMap *map =
+		convert_tuples_by_name(RelationGetDescr(fromrel), RelationGetDescr(torel));
 
-	table_relation_copy_for_cluster(fromrel,
-									torel,
-									NULL,
-									false,
-									cutoffs->OldestXmin,
+	if (map != NULL)
+	{
+		copy_table_data_with_map(fromrel,
+								 torel,
+								 map,
+								 cutoffs,
+								 &num_tuples,
+								 &tups_vacuumed,
+								 &tups_recently_dead);
+		free_conversion_map(map);
+	}
+	else
+	{
+		table_relation_copy_for_cluster(fromrel,
+										torel,
+										NULL,
+										false,
+										cutoffs->OldestXmin,
 #if PG19_GE
-									NULL, /* snapshot (only used by REPACK CONCURRENTLY) */
+										NULL, /* snapshot (only used by REPACK CONCURRENTLY) */
 #endif
-									&cutoffs->FreezeLimit,
-									&cutoffs->MultiXactCutoff,
-									&num_tuples,
-									&tups_vacuumed,
-									&tups_recently_dead);
+										&cutoffs->FreezeLimit,
+										&cutoffs->MultiXactCutoff,
+										&num_tuples,
+										&tups_vacuumed,
+										&tups_recently_dead);
+	}
 
 	elog(LOG,
 		 "merged rows from \"%s\" into \"%s\": tuples %lf vacuumed %lf recently dead %lf",

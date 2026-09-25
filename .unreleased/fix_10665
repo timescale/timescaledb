@@ -1,0 +1,1 @@
+Fixes: #10665 Fix crash when merging chunks with different column layouts
