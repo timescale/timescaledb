@@ -18,7 +18,7 @@ jobs:
   update_pr_description:
     name: Update release changelog PR
     if: startsWith(github.event.pull_request.head.ref, 'release/') && endsWith(github.event.pull_request.head.ref, '-changelog') && startsWith(github.event.pull_request.title, 'Release ')
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
     steps:
       - name: Validate release changelog PR shape
         id: release

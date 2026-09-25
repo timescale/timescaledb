@@ -18,7 +18,7 @@ permissions:
 jobs:
   create_release:
     name: Release creation
-    runs-on: ubuntu-latest #runs-on/fleet=linux-2cpu/env=prod
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
 
@@ -64,7 +64,7 @@ jobs:
     needs:
       - create_release
       - build_windows
-    runs-on: ubuntu-latest #runs-on/fleet=linux-2cpu/env=prod
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
     steps:
       - name: Check windows binaries are uploaded
         env:

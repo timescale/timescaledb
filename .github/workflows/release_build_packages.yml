@@ -20,7 +20,7 @@ jobs:
   docker_image_cooldown:
     name: Docker image propagation cooldown
     needs: build_docker_image
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
     steps:
       - name: Wait for image propagation
         run: sleep 15
@@ -41,7 +41,7 @@ jobs:
   apt_packages_cooldown:
     name: APT package propagation cooldown
     needs: build_apt_packages
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
     steps:
       - name: Wait for package propagation
         run: sleep 15
@@ -62,7 +62,7 @@ jobs:
   rpm_package_cooldown:
     name: RPM package propagation cooldown
     needs: build_rpm_packages
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
     steps:
       - name: Wait for package propagation
         run: sleep 15
@@ -83,7 +83,7 @@ jobs:
   homebrew_package_cooldown:
     name: Homebrew package propagation cooldown
     needs: build_homebrew_packages
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
     steps:
       - name: Wait for package propagation
         run: sleep 15

@@ -16,7 +16,7 @@ jobs:
   # Tests that the release has a releaseable state.
   release_sanity:
     name: Validate release conditions
-    runs-on: ubuntu-latest #runs-on/fleet=linux-2cpu/env=prod
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
     permissions:
       contents: read
       issues: read
