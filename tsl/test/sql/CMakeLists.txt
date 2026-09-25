@@ -225,6 +225,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_segmentby.sql
     vector_agg_uuid.sql
     vector_qual_default.sql
+    vector_qual_empty_all.sql
     vacuum.sql)
 
   list(APPEND TEST_TEMPLATES attach_chunk.sql.in

@@ -8,6 +8,7 @@
 
 #include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/timestamp.h>
@@ -490,6 +491,7 @@ compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
 	BooleanTest *booltest = NULL;
 	Var *bool_var = NULL;
 	bool negate_bool_var = false;
+	bool empty_all = false;
 	if (IsA(qual, NullTest))
 	{
 		nulltest = castNode(NullTest, qual);
@@ -600,6 +602,12 @@ compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
 			return;
 		}
 
+		if (saop && !saop->useOr)
+		{
+			ArrayType *array = DatumGetArrayTypeP(constnode->constvalue);
+			empty_all = ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)) == 0;
+		}
+
 		/*
 		 * If the data is dictionary-encoded, we are going to compute the
 		 * predicate on dictionary and then translate the results.
@@ -655,16 +663,19 @@ compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
 		Assert((predicate_result != default_value_predicate_result) ||
 			   n_vector_result_words == 1); /* to placate Coverity. */
 		const uint64 *validity = (const uint64 *) vector->buffers[0];
-		if (validity)
+		if (!empty_all)
 		{
-			for (size_t i = 0; i < n_vector_result_words; i++)
+			if (validity)
 			{
-				predicate_result[i] &= validity[i];
+				for (size_t i = 0; i < n_vector_result_words; i++)
+				{
+					predicate_result[i] &= validity[i];
+				}
 			}
-		}
-		else
-		{
-			Assert(vector->null_count == 0);
+			else
+			{
+				Assert(vector->null_count == 0);
+			}
 		}
 	}
 
