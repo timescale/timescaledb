@@ -36,8 +36,8 @@ ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = tr
 
 -- ============================================================================
 -- Overflow: more than TT_CAPACITY * 3/4 (>= 3073) distinct late tenants in one
--- generation trips it INVALID.  The flush writes a marker instead of per-tenant
--- rows, so the refresh falls back to a full refresh -- which must still
+-- generation trips it INVALID.  The flush then writes no per-tenant rows at
+-- all, so the refresh falls back to a full refresh -- which must still
 -- materialize every one of the 4000 sensors correctly.
 -- ============================================================================
 INSERT INTO conditions
@@ -48,11 +48,9 @@ INSERT INTO conditions
 INSERT INTO conditions VALUES ( '2025-03-01 10:00+00', 'sensor_b', 20);
 CALL refresh_continuous_aggregate('cond_daily', '2025-03-01 00:00+00', NULL);
 
--- Note that before the above refresh, invalidation threshold was set as min int64,
--- So the inserts doesn't write invalidations. Therefore, although the invalid marker
--- is written, it does not have an associated invalidation in the invalidation log.
---invalid marker is cleaned up after refresh because there are no more invalidations
---with the same seqnum, so we don't see it here.
+-- The overflow tripped the generation INVALID, and an INVALID generation
+-- persists nothing, so the table is empty here.  The refresh falls back to the
+-- full invalidation log instead of scoping to tenants.
 SELECT *
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
 WHERE hypertable_id = (
@@ -155,6 +153,17 @@ FROM cond_daily
 WHERE bucket = '2020-06-01 00:00+00'
 ORDER BY sensor_id NULLS LAST;
 
+-- An INVALID generation is flushed even when it holds nothing, because only a
+-- flush clears the status and it clears the generation it activates. So the
+-- refresh above left the tracker usable again.
+SELECT nentries, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::regclass);
+
+-- A late write is collected again.
+INSERT INTO conditions VALUES ('2020-07-01 00:00+00', 'after_invalid', 60);
+SELECT nentries > 0 AS tracking_resumed, status
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::regclass);
+
 -- ============================================================================
 -- Tracking not configured: a hypertable with no granular refresh
 -- configuration skips the collection hook and granular filter entirely, so
@@ -183,7 +192,8 @@ WHERE bucket = '2020-03-01 00:00+00'
 ORDER BY sensor_id;
 
 -- No per-tenant rows are left behind: a granular refresh consumes them, and the
--- fall-back paths above never wrote any (they recorded invalid markers instead).
+-- fall-back paths above never wrote any, since an INVALID generation persists
+-- nothing.
 SELECT count(*) AS leftover_tenant_rows
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
 WHERE hypertable_id = (
@@ -191,9 +201,12 @@ WHERE hypertable_id = (
     WHERE user_view_name = 'cond_daily')
   AND tenant_id IS NOT NULL;
 
--- The two INVALID flushes (overflow, unstorable key) each persisted an invalid
--- marker (tenant_id NULL).  The seqnum-aware cleanup during refresh removes a
--- marker once its seqnum's cagg invalidation has been consumed, so none remain.
+-- An INVALID generation persists nothing at all. We used to write invalid
+-- marker with null tenant_id and seqnum, but now we don't write anything
+-- at all. Refresh will fallback to full refresh for an invalidation if there
+-- is no trackings with the same seqnum as that invalidation. Checking the
+-- tracking table here to confirm there is no longer any invalid marker.
+
 SELECT count(*) AS leftover_marker_rows
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
 WHERE hypertable_id = (

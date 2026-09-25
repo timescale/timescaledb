@@ -159,15 +159,14 @@ SELECT * FROM live_seqnums ORDER BY seqnum;
 
 -- Retire the Feb invalidations.Seqnum 7 and 9 are dead after the refresh but won't be
 -- collected until the next refresh.
--- This also pump in-memory seqnum to 12 without inserting any trackings with seqnum 11,
--- As there is no new data between this and the previous refresh.
+-- This does not pump in-memory seqnum (stay at 11), because there is no new data
+-- between this and the previous refresh, so the tracker generation has no rows to flush.
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-02-10');
 
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
 SELECT * FROM live_seqnums ORDER BY seqnum;
 
---Max seqnum = 10. Although the in-memory seqnum is 12, the max seqnum in the tracking table
--- is 10 because there was no tracking with seqnum 11.
+--Max seqnum = 10
 --7 and 9 are collected
 INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 'a4', 4);
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
