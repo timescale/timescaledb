@@ -342,3 +342,20 @@ DROP FUNCTION gf_userfn.time_bucket_gapfill(int, text);
 DROP FUNCTION gf_userfn.locf(int);
 DROP FUNCTION gf_userfn.interpolate(int);
 DROP SCHEMA gf_userfn;
+
+-- interpolate lookup queries may return a named composite type, not only an anonymous record
+CREATE TYPE gf_interp_sample AS (time int, value int);
+
+SELECT
+  time_bucket_gapfill(1,time,1,5),
+  interpolate(min(time),prev=>(SELECT ROW(0,0)::gf_interp_sample))
+FROM (VALUES (3),(4)) v(time)
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill(1,time,1,5),
+  interpolate(min(time),next=>(SELECT ROW(9,9)::gf_interp_sample))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+
+DROP TYPE gf_interp_sample;
