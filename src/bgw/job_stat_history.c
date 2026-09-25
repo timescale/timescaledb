@@ -7,6 +7,7 @@
 
 #include <access/xact.h>
 #include <utils/jsonb.h>
+#include <utils/memutils.h>
 
 #include "compat/compat.h"
 #include "guc.h"
@@ -23,6 +24,63 @@ typedef struct BgwJobStatHistoryContext
 	BgwJob *job;
 	Jsonb *edata;
 } BgwJobStatHistoryContext;
+
+/*
+ * The job execution currently running in this process, if any. Opened and
+ * closed by the background worker around the execution of the job, see
+ * ts_bgw_job_entrypoint().
+ */
+typedef struct BgwJobExecution
+{
+	Jsonb *info;
+} BgwJobExecution;
+
+static BgwJobExecution *current_execution = NULL;
+
+void
+ts_bgw_job_execution_begin(void)
+{
+	Assert(current_execution == NULL);
+	current_execution = MemoryContextAllocZero(TopMemoryContext, sizeof(BgwJobExecution));
+}
+
+void
+ts_bgw_job_execution_end(void)
+{
+	Assert(current_execution != NULL);
+
+	if (current_execution->info != NULL)
+	{
+		pfree(current_execution->info);
+	}
+
+	pfree(current_execution);
+	current_execution = NULL;
+}
+
+void
+ts_bgw_job_execution_set_info(const Jsonb *info)
+{
+	Assert(info != NULL);
+
+	/* Not running inside a background worker, so there is no history entry
+	 * to attach the information to */
+	if (current_execution == NULL)
+	{
+		return;
+	}
+
+	/* Whatever was set before for this execution is superseded */
+	if (current_execution->info != NULL)
+	{
+		pfree(current_execution->info);
+	}
+
+	/* The job commits between batches, so the copy must outlive the
+	 * transaction it is made in */
+	current_execution->info = MemoryContextAlloc(TopMemoryContext, VARSIZE(info));
+	memcpy(current_execution->info, info, VARSIZE(info));
+}
 
 static Jsonb *
 build_job_info(BgwJob *job)
@@ -96,6 +154,12 @@ ts_bgw_job_stat_history_build_data_info(BgwJobStatHistoryContext *context)
 		/* error information jsonb */
 		JsonbToJsonbValue(context->edata, &value);
 		ts_jsonb_add_value(&parse_state, "error_data", &value);
+	}
+
+	if (current_execution != NULL && current_execution->info != NULL)
+	{
+		JsonbToJsonbValue(current_execution->info, &value);
+		ts_jsonb_add_value(&parse_state, "info", &value);
 	}
 
 	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);

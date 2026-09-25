@@ -160,6 +160,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     scheduler_fixed.sql
     cagg_policy_concurrent.sql
     cagg_policy_incremental.sql
+    cagg_policy_job_history.sql
     cagg_refresh_cleanup.sql
     cagg_refresh_incremental.sql
     chunk_column_stats.sql
@@ -279,6 +280,7 @@ set(SOLO_TESTS
     cagg_ddl
     cagg_dump
     cagg_policy_incremental
+    cagg_policy_job_history
     explain_wal
     move
     reorder
