@@ -12,9 +12,7 @@ INSERT INTO integer_retention_created_before SELECT g, 1 FROM generate_series(1,
 INSERT 0 500
 SELECT add_retention_policy('integer_retention_created_before', drop_created_before => interval '1 second') AS job_id \gset
 DO $$ BEGIN PERFORM pg_sleep(2); END $$;
-DO
 CALL run_job(:job_id);
-CALL
 SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = 'integer_retention_created_before';
 0
 DROP TABLE integer_retention_created_before;
