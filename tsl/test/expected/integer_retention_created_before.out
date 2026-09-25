@@ -1,0 +1,14 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\pset tuples_only on
+
+CREATE TABLE integer_retention_created_before(time bigint NOT NULL, value int);
+CREATE FUNCTION integer_retention_now() RETURNS bigint LANGUAGE SQL STABLE AS $$ SELECT extract(epoch from now())::bigint $$;
+INSERT 0 500
+DO
+CALL
+0
+DROP TABLE integer_retention_created_before;
+DROP FUNCTION integer_retention_now();

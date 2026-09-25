@@ -1,0 +1,1 @@
+Fixes: #10355 Support drop_created_before for integer hypertables with integer_now
