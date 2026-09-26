@@ -24,8 +24,8 @@
 
 #include <compat/compat.h>
 #include "debug_point.h"
-#include "nodes/columnar_scan/compressed_batch_util.h"
 #include "foreach_ptr.h"
+#include "nodes/columnar_scan/compressed_batch_util.h"
 #include "ts_stats/ts_stats_record.h"
 #include <chunk_insert_state.h>
 #include <compression/arrow_c_data_interface.h>
@@ -362,6 +362,15 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		cdst->compression_settings = compression_settings;
 
 		Relation in_rel = relation_open(compression_settings->fd.compress_relid, RowExclusiveLock);
+
+		/*
+		 * The batch decompression state used by decompress_batches_for_insert()
+		 * is built once per chunk insert state (in cis->mctx, the current
+		 * context here) rather than once per inserted row. Its Detoaster is
+		 * closed after every scan, so no relation reference outlives a call,
+		 * and the memory goes away together with cis->mctx.
+		 */
+		cdst->emit = utility_emit_create(cis->rel, in_rel, compression_settings);
 
 		Bitmapset *columns_with_null_check = NULL;
 		Bitmapset *key_columns = constraints->key_columns;
@@ -1089,6 +1098,25 @@ decompress_batch_endscan(DecompressBatchScanDesc scan)
 }
 
 /*
+ * Release the batch decompression state at the end of a
+ * decompress_batches_scan() call: destroy it if it was built for this call
+ * (UPDATE/DELETE), otherwise it is the chunk insert state's cached one and is
+ * only reset for the next call.
+ */
+static inline void
+release_emit_state(UtilityEmitState *emit, bool owned)
+{
+	if (owned)
+	{
+		utility_emit_destroy(emit);
+	}
+	else
+	{
+		utility_emit_reset(emit);
+	}
+}
+
+/*
  * This method will:
  *  1.Scan the index created with SEGMENT BY columns or the entire compressed chunk
  *  2.Fetch matching rows and decompress the row
@@ -1106,7 +1134,14 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 {
 	HeapTuple compressed_tuple;
 	BulkWriter writer;
-	UtilityEmitState *emit = NULL;
+	/*
+	 * INSERT/UPSERT reuses the batch decompression state cached in the chunk
+	 * insert state across the per-row calls of this function; UPDATE/DELETE
+	 * has no cache and builds one per statement below.
+	 */
+	UtilityEmitState *emit = cdst->emit;
+	bool emit_owned = false;
+	bool sink_initialized = false;
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	Datum *compressed_datums = NULL;
 	bool *compressed_is_nulls = NULL;
@@ -1238,15 +1273,20 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			bloom_passed = true;
 		}
 
-		if (emit == NULL)
+		if (!sink_initialized)
 		{
 			compressed_datums = palloc(sizeof(Datum) * in_desc->natts);
 			compressed_is_nulls = palloc(sizeof(bool) * in_desc->natts);
-			emit = utility_emit_create(out_rel, in_rel, NULL);
+			if (emit == NULL)
+			{
+				emit = utility_emit_create(out_rel, in_rel, NULL);
+				emit_owned = true;
+			}
 			writer = bulk_writer_build(out_rel, 0);
-			meta_count_attno = TupleDescGetAttrNumber(in_desc,
-													  COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+			meta_count_attno =
+				TupleDescGetAttrNumber(in_desc, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 			Assert(meta_count_attno != InvalidAttrNumber);
+			sink_initialized = true;
 		}
 
 		heap_deform_tuple(compressed_tuple, in_desc, compressed_datums, compressed_is_nulls);
@@ -1310,7 +1350,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		bool batch_prepared = false;
 		if (num_mem_scankeys)
 		{
-			compressed_batch_prepare(emit->dcontext, emit->batch_state, slot);
+			utility_emit_prepare(emit, slot);
 			batch_prepared = true;
 
 			summary = dml_qual_eval(emit,
@@ -1343,9 +1383,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		if (skip_current_tuple && *skip_current_tuple)
 		{
 			record_decompression_stats(in_rel, out_rel, cmd_type, &stats);
-			if (emit != NULL)
+			if (sink_initialized)
 			{
-				utility_emit_destroy(emit);
+				release_emit_state(emit, emit_owned);
 				pfree(compressed_datums);
 				pfree(compressed_is_nulls);
 			}
@@ -1426,9 +1466,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		{
 			write_logical_replication_msg_decompression_end();
 			record_decompression_stats(in_rel, out_rel, cmd_type, &stats);
-			if (emit != NULL)
+			if (sink_initialized)
 			{
-				utility_emit_destroy(emit);
+				release_emit_state(emit, emit_owned);
 				pfree(compressed_datums);
 				pfree(compressed_is_nulls);
 			}
@@ -1442,16 +1482,16 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		if (complete_batch_delete)
 		{
 			stats.batches_deleted++;
-			stats.tuples_deleted += DatumGetInt32(
-				compressed_datums[AttrNumberGetAttrOffset(meta_count_attno)]);
+			stats.tuples_deleted +=
+				DatumGetInt32(compressed_datums[AttrNumberGetAttrOffset(meta_count_attno)]);
 
 			/* Track time range for continuous aggregate invalidation if needed */
 			if (invalidation_ctx)
 			{
-				Datum min_time_datum = compressed_datums[AttrNumberGetAttrOffset(
-					invalidation_ctx->min_time_attno)];
-				Datum max_time_datum = compressed_datums[AttrNumberGetAttrOffset(
-					invalidation_ctx->max_time_attno)];
+				Datum min_time_datum =
+					compressed_datums[AttrNumberGetAttrOffset(invalidation_ctx->min_time_attno)];
+				Datum max_time_datum =
+					compressed_datums[AttrNumberGetAttrOffset(invalidation_ctx->max_time_attno)];
 				int64 batch_min =
 					ts_time_value_to_internal(min_time_datum, invalidation_ctx->time_type_oid);
 				int64 batch_max =
@@ -1494,13 +1534,10 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			 */
 			if (!batch_prepared)
 			{
-				compressed_batch_prepare(emit->dcontext, emit->batch_state, slot);
+				utility_emit_prepare(emit, slot);
 			}
 			dml_rewind_consumed_iterators(emit->batch_state, consumed_iterators);
-			compressed_batch_decode_remaining(emit->dcontext,
-											  emit->batch_state,
-											  slot,
-											  summary);
+			compressed_batch_decode_remaining(emit->dcontext, emit->batch_state, slot, summary);
 			const int nrows = utility_emit_rows(emit);
 			write_slots_to_table(&writer, emit->slots, nrows);
 			stats.tuples_decompressed += nrows;
@@ -1514,9 +1551,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	decompress_batch_endscan(scan);
 	record_decompression_stats(in_rel, out_rel, cmd_type, &stats);
 
-	if (emit != NULL)
+	if (sink_initialized)
 	{
-		utility_emit_destroy(emit);
+		release_emit_state(emit, emit_owned);
 		pfree(compressed_datums);
 		pfree(compressed_is_nulls);
 		bulk_writer_close(&writer);
@@ -1603,9 +1640,10 @@ dml_qual_eval_vector(DecompressContext *dcontext, DecompressBatchState *batch_st
 		ArrowArray *arrow;
 		if (single_value)
 		{
-			arrow = make_single_value_arrow(dcontext->compressed_chunk_columns[column].typid,
-											PointerGetDatum(column_values->buffers[1]),
-											DatumGetBool(PointerGetDatum(column_values->buffers[0])));
+			arrow =
+				make_single_value_arrow(dcontext->compressed_chunk_columns[column].typid,
+										PointerGetDatum(column_values->buffers[1]),
+										DatumGetBool(PointerGetDatum(column_values->buffers[0])));
 		}
 		else
 		{
@@ -1764,11 +1802,11 @@ dml_qual_eval_rowwise(DecompressContext *dcontext, DecompressBatchState *batch_s
 									get_rel_name(constraints->index_relid))
 
 								 ));
-			}
-			if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
-			{
-				*skip_current_tuple = true;
-			}
+				}
+				if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
+				{
+					*skip_current_tuple = true;
+				}
 			}
 			if (!check_full_match)
 			{
@@ -1868,7 +1906,7 @@ dml_qual_eval(UtilityEmitState *emit, TupleTableSlot *compressed_slot, ScanKeyDa
 						 errmsg("duplicate key value violates unique constraint \"%s\"",
 								get_rel_name(constraints->index_relid))
 
-						 ));
+							 ));
 			}
 			if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
 			{
@@ -3082,4 +3120,3 @@ can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 
 	return true;
 }
-

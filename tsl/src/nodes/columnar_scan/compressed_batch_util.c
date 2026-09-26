@@ -6,7 +6,9 @@
 #include <postgres.h>
 
 #include <access/attnum.h>
+#include <access/tupdesc.h>
 #include <catalog/namespace.h>
+#include <utils/builtins.h>
 #include <utils/lsyscache.h>
 
 #include "compression/compression.h"
@@ -59,12 +61,23 @@ utility_find_uncompressed_attno(TupleDesc uncompressed_desc, const char *name)
  * branches that call InstrCount* are not taken).
  */
 DecompressContext *
-decompress_context_create_utility_desc(TupleDesc uncompressed_desc, TupleDesc compressed_desc)
+decompress_context_create_utility_desc(TupleDesc uncompressed_desc, TupleDesc compressed_desc,
+									   bool internal_error)
 {
 	DecompressContext *dcontext = palloc0(sizeof(DecompressContext));
 	const Oid compressed_data_type_oid =
 		ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	Assert(OidIsValid(compressed_data_type_oid));
+
+	/*
+	 * Private, non-reference-counted copy of the output descriptor, including
+	 * the constraints that carry the missing/default attribute values used by
+	 * getmissingattr(). A relcache descriptor is reference counted, and a
+	 * tuple slot pinning it for as long as a cached DML state lives would be
+	 * reported as a TupleDesc reference leak at the end of the statement. The
+	 * RowDecompressor made the same copy.
+	 */
+	TupleDesc out_desc = CreateTupleDescCopyConstr(uncompressed_desc);
 
 	/*
 	 * First pass: data columns (segmentby and compressed), in compressed
@@ -81,12 +94,13 @@ decompress_context_create_utility_desc(TupleDesc uncompressed_desc, TupleDesc co
 		{
 			continue;
 		}
-		if (strncmp(name, COMPRESSION_COLUMN_METADATA_PREFIX,
+		if (strncmp(name,
+					COMPRESSION_COLUMN_METADATA_PREFIX,
 					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
 		{
 			continue;
 		}
-		if (utility_find_uncompressed_attno(uncompressed_desc, name) == InvalidAttrNumber)
+		if (utility_find_uncompressed_attno(out_desc, name) == InvalidAttrNumber)
 		{
 			/* Column dropped in the uncompressed chunk, nothing to produce. */
 			continue;
@@ -124,22 +138,38 @@ decompress_context_create_utility_desc(TupleDesc uncompressed_desc, TupleDesc co
 		Form_pg_attribute attr = TupleDescAttr(compressed_desc, attno - 1);
 		const char *name = NameStr(attr->attname);
 
-		if (attr->attisdropped ||
-			strncmp(name, COMPRESSION_COLUMN_METADATA_PREFIX,
-					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+		if (attr->attisdropped || strncmp(name,
+										  COMPRESSION_COLUMN_METADATA_PREFIX,
+										  strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
 		{
 			continue;
 		}
 
-		const AttrNumber out_attno = utility_find_uncompressed_attno(uncompressed_desc, name);
+		const AttrNumber out_attno = utility_find_uncompressed_attno(out_desc, name);
 		if (out_attno == InvalidAttrNumber)
 		{
 			continue;
 		}
 
-		Form_pg_attribute out_attr = TupleDescAttr(uncompressed_desc, out_attno - 1);
+		Form_pg_attribute out_attr = TupleDescAttr(out_desc, out_attno - 1);
 		const bool is_segmentby = attr->atttypid != compressed_data_type_oid;
 		CompressionColumnDescription *column = &dcontext->compressed_chunk_columns[data_i++];
+
+		/*
+		 * A segmentby value is passed through as is, so its type must match
+		 * on both sides (same check as the retired create_per_compressed_column).
+		 */
+		if (is_segmentby && attr->atttypid != out_attr->atttypid)
+		{
+			ereport(ERROR,
+					(errcode(internal_error ? ERRCODE_INTERNAL_ERROR :
+											  ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("compressed table type '%s' does not match decompressed "
+							"table type '%s' for segment-by column \"%s\"",
+							format_type_be(attr->atttypid),
+							format_type_be(out_attr->atttypid),
+							name)));
+		}
 
 		column->type = is_segmentby ? SEGMENTBY_COLUMN : COMPRESSED_COLUMN;
 		column->typid = out_attr->atttypid;
@@ -184,8 +214,8 @@ decompress_context_create_utility_desc(TupleDesc uncompressed_desc, TupleDesc co
 	}
 	Assert(meta_i == num_data + num_meta);
 
-	dcontext->custom_scan_slot = MakeSingleTupleTableSlot(uncompressed_desc, &TTSOpsVirtual);
-	dcontext->uncompressed_chunk_tdesc = uncompressed_desc;
+	dcontext->custom_scan_slot = MakeSingleTupleTableSlot(out_desc, &TTSOpsVirtual);
+	dcontext->uncompressed_chunk_tdesc = out_desc;
 	dcontext->ps = NULL;
 	dcontext->vectorized_quals_constified = NIL;
 	dcontext->enable_bulk_decompression =
@@ -201,14 +231,31 @@ decompress_context_create_utility(Relation uncompressed_rel, Relation compressed
 								  CompressionSettings *settings)
 {
 	return decompress_context_create_utility_desc(RelationGetDescr(uncompressed_rel),
-												  RelationGetDescr(compressed_rel));
+												  RelationGetDescr(compressed_rel),
+												  /* internal_error = */ true);
 }
 
 void
 decompress_context_destroy_utility(DecompressContext *dcontext)
 {
+	TupleDesc out_desc = dcontext->uncompressed_chunk_tdesc;
+
 	ExecDropSingleTupleTableSlot(dcontext->custom_scan_slot);
 	detoaster_close(&dcontext->detoaster);
+
+	/*
+	 * The bulk decompression scratch context is created lazily by
+	 * decompress_column() as a sibling of the per-batch context. The scan
+	 * leaves it to the executor's per-query context; a utility context has to
+	 * delete it itself.
+	 */
+	if (dcontext->bulk_decompression_context != NULL)
+	{
+		MemoryContextDelete(dcontext->bulk_decompression_context);
+		dcontext->bulk_decompression_context = NULL;
+	}
+
+	FreeTupleDesc(out_desc);
 	pfree(dcontext->compressed_chunk_columns);
 	pfree(dcontext);
 }
@@ -227,27 +274,32 @@ decompress_batch_state_destroy_utility(DecompressBatchState *batch_state)
 	pfree(batch_state);
 }
 
-UtilityEmitState *
-utility_emit_create(Relation uncompressed_rel, Relation compressed_rel,
-					CompressionSettings *settings)
+static UtilityEmitState *
+utility_emit_create_common(DecompressContext *dcontext)
 {
 	UtilityEmitState *state = palloc0(sizeof(UtilityEmitState));
-	state->dcontext = decompress_context_create_utility(uncompressed_rel, compressed_rel, settings);
-	state->batch_state = decompress_batch_state_create_utility(state->dcontext);
+	state->dcontext = dcontext;
+	state->batch_state = decompress_batch_state_create_utility(dcontext);
 	state->slots = (TupleTableSlot **) palloc0(sizeof(void *) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	state->slots_capacity = GLOBAL_MAX_ROWS_PER_COMPRESSION;
+	state->mctx = CurrentMemoryContext;
 	return state;
 }
 
 UtilityEmitState *
-utility_emit_create_desc(TupleDesc uncompressed_desc, TupleDesc compressed_desc)
+utility_emit_create(Relation uncompressed_rel, Relation compressed_rel,
+					CompressionSettings *settings)
 {
-	UtilityEmitState *state = palloc0(sizeof(UtilityEmitState));
-	state->dcontext = decompress_context_create_utility_desc(uncompressed_desc, compressed_desc);
-	state->batch_state = decompress_batch_state_create_utility(state->dcontext);
-	state->slots = (TupleTableSlot **) palloc0(sizeof(void *) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	state->slots_capacity = GLOBAL_MAX_ROWS_PER_COMPRESSION;
-	return state;
+	return utility_emit_create_common(
+		decompress_context_create_utility(uncompressed_rel, compressed_rel, settings));
+}
+
+UtilityEmitState *
+utility_emit_create_desc(TupleDesc uncompressed_desc, TupleDesc compressed_desc,
+						 bool internal_error)
+{
+	return utility_emit_create_common(
+		decompress_context_create_utility_desc(uncompressed_desc, compressed_desc, internal_error));
 }
 
 void
@@ -266,13 +318,34 @@ utility_emit_destroy(UtilityEmitState *state)
 	pfree(state);
 }
 
+void
+utility_emit_prepare(UtilityEmitState *state, TupleTableSlot *compressed_slot)
+{
+	/*
+	 * The first prepare lazily creates the per-batch memory context and the
+	 * virtual slot's value arrays in CurrentMemoryContext, and the bulk
+	 * scratch context is later created as a sibling of the per-batch context.
+	 * Those must live as long as this state, not as long as the caller's
+	 * context (the DML path runs in the executor's per-tuple context).
+	 */
+	MemoryContext old_ctx = MemoryContextSwitchTo(state->mctx);
+	compressed_batch_prepare(state->dcontext, state->batch_state, compressed_slot);
+	MemoryContextSwitchTo(old_ctx);
+
+	/*
+	 * The scan accepts batches of up to UINT16_MAX rows; the utility paths
+	 * keep the RowDecompressor's stricter limit on the count metadata.
+	 */
+	CheckCompressedData(state->batch_state->total_batch_rows <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+}
+
 int
 utility_emit_batch(UtilityEmitState *state, TupleTableSlot *compressed_slot)
 {
 	DecompressBatchState *batch_state = state->batch_state;
 	DecompressContext *dcontext = state->dcontext;
 
-	compressed_batch_prepare(dcontext, batch_state, compressed_slot);
+	utility_emit_prepare(state, compressed_slot);
 	compressed_batch_decode_remaining(dcontext, batch_state, compressed_slot, AllRowsPass);
 
 	return utility_emit_rows(state);
@@ -280,7 +353,7 @@ utility_emit_batch(UtilityEmitState *state, TupleTableSlot *compressed_slot)
 
 /*
  * Produce the rows of the prepared and decoded batch into state->slots and
- * return the row count. Caller must have run compressed_batch_prepare() and
+ * return the row count. Caller must have run utility_emit_prepare() and
  * decompressed the wanted columns. DML uses this after its own qual
  * evaluation and iterator rewind.
  */
@@ -289,6 +362,7 @@ utility_emit_rows(UtilityEmitState *state)
 {
 	DecompressBatchState *batch_state = state->batch_state;
 	DecompressContext *dcontext = state->dcontext;
+	const int num_data_columns = dcontext->num_data_columns;
 	const uint16 n_rows = batch_state->total_batch_rows;
 
 	if (n_rows > state->slots_capacity)
@@ -314,10 +388,10 @@ utility_emit_rows(UtilityEmitState *state)
 		{
 			/*
 			 * The slots must outlive the per-batch context (which the next
-			 * batch's prepare resets), so allocate them in the caller's
+			 * batch's prepare resets), so allocate them in the state's own
 			 * context, mirroring the RowDecompressor's slot allocation.
 			 */
-			MemoryContextSwitchTo(old_ctx);
+			MemoryContextSwitchTo(state->mctx);
 			state->slots[row] =
 				MakeSingleTupleTableSlot(dcontext->custom_scan_slot->tts_tupleDescriptor,
 										 &TTSOpsHeapTuple);
@@ -328,10 +402,26 @@ utility_emit_rows(UtilityEmitState *state)
 			ExecClearTuple(state->slots[row]);
 		}
 
-		make_next_tuple(batch_state, row, dcontext->num_data_columns);
+		make_next_tuple(batch_state, row, num_data_columns);
 		bool should_free;
 		HeapTuple tuple = ExecFetchSlotHeapTuple(out_slot, false, &should_free);
 		ExecStoreHeapTuple(tuple, state->slots[row], /* should_free = */ false);
+	}
+
+	/*
+	 * Verify that the iterator columns are exhausted, i.e. their length is
+	 * consistent with the count metadata column. The scan does this in
+	 * compressed_batch_advance(), which the utility paths bypass; bulk
+	 * columns were length-checked when they were decompressed.
+	 */
+	for (int i = 0; i < num_data_columns; i++)
+	{
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+		if (column_values->decompression_type == DT_Iterator)
+		{
+			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
+			CheckCompressedData(iterator->try_next(iterator).is_done);
+		}
 	}
 	MemoryContextSwitchTo(old_ctx);
 
@@ -339,9 +429,22 @@ utility_emit_rows(UtilityEmitState *state)
 	 * Mark the virtual slot empty for the next prepare. The per-batch
 	 * context is deliberately NOT reset here: the heap tuple copies in
 	 * state->slots are consumed by the caller's sink after this function
-	 * returns, and the next batch's compressed_batch_prepare() resets the
-	 * context (mirroring row_decompressor_reset() after the write).
+	 * returns, and the next batch's prepare (or utility_emit_reset()) resets
+	 * the context, mirroring row_decompressor_reset() after the write.
 	 */
 	ExecClearTuple(out_slot);
 	return n_rows;
+}
+
+void
+utility_emit_reset(UtilityEmitState *state)
+{
+	compressed_batch_discard_tuples(state->batch_state);
+
+	/*
+	 * Release the toast relation if the Detoaster opened one, so that no
+	 * relation reference outlives the caller's scan. The Detoaster stays
+	 * initialized and reopens the relation on demand.
+	 */
+	detoaster_close(&state->dcontext->detoaster);
 }

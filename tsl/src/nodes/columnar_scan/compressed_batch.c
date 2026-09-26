@@ -244,21 +244,31 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 				MemoryContextGetParent(batch_state->per_batch_context));
 		}
 
+		/*
+		 * bulk_decompression_supported is derived from the default compression
+		 * algorithm for the column type (planner.c, and the utility builder in
+		 * compressed_batch_util.c). A batch compressed with another algorithm,
+		 * or a corrupt record passed to the decompress_batch() SRF, may have no
+		 * bulk function for the actual algorithm/type pair. Fall back to the
+		 * row-by-row path below in that case; its iterator validates the stored
+		 * element type.
+		 */
 		DecompressAllFunction decompress_all =
 			tsl_get_decompress_all_function(header->compression_algorithm,
 											column_description->typid);
-		Assert(decompress_all != NULL);
+		if (decompress_all != NULL)
+		{
+			MemoryContext context_before_decompression =
+				MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
-		MemoryContext context_before_decompression =
-			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
+			arrow = decompress_all(PointerGetDatum(header),
+								   column_description->typid,
+								   batch_state->per_batch_context);
 
-		arrow = decompress_all(PointerGetDatum(header),
-							   column_description->typid,
-							   batch_state->per_batch_context);
+			MemoryContextSwitchTo(context_before_decompression);
 
-		MemoryContextSwitchTo(context_before_decompression);
-
-		MemoryContextReset(dcontext->bulk_decompression_context);
+			MemoryContextReset(dcontext->bulk_decompression_context);
+		}
 	}
 
 	if (arrow == NULL)
@@ -276,10 +286,12 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 
 	/* Should have been filled from the count metadata column. */
 	Assert(batch_state->total_batch_rows != 0);
-	if (batch_state->total_batch_rows != arrow->length)
-	{
-		elog(ERROR, "compressed column out of sync with batch counter");
-	}
+
+	/*
+	 * A column whose length disagrees with the count metadata is corrupt
+	 * data; report it the same way the row-by-row path does.
+	 */
+	CheckCompressedData(batch_state->total_batch_rows == arrow->length);
 
 	column_values->arrow = arrow;
 
@@ -1041,7 +1053,6 @@ compressed_batch_prepare(DecompressContext *dcontext, DecompressBatchState *batc
 
 	dcontext->tuples_decompressed += batch_state->total_batch_rows;
 	ts_stats_compression_acc_batch(&dcontext->observ_acc, batch_state->total_batch_rows);
-
 }
 
 /*

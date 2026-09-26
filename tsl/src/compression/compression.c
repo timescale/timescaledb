@@ -1946,7 +1946,6 @@ segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_n
 	return DatumGetBool(data_is_eq);
 }
 
-
 BulkWriter
 bulk_writer_build(Relation out_rel, int insert_options)
 {
@@ -2296,7 +2295,8 @@ tsl_decompress_batch(PG_FUNCTION_ARGS)
 		}
 
 		decompress_ctx = palloc0(sizeof(DecompressBatchSRFContext));
-		decompress_ctx->emit = utility_emit_create_desc(out_desc, in_desc);
+		decompress_ctx->emit =
+			utility_emit_create_desc(out_desc, in_desc, /* internal_error = */ false);
 		decompress_ctx->compressed_slot = MakeSingleTupleTableSlot(in_desc, &TTSOpsHeapTuple);
 
 		HeapTupleData compressed_tuple;
@@ -2305,7 +2305,8 @@ tsl_decompress_batch(PG_FUNCTION_ARGS)
 		compressed_tuple.t_tableOid = InvalidOid;
 		compressed_tuple.t_data = td;
 
-		ExecStoreHeapTuple(&compressed_tuple, decompress_ctx->compressed_slot,
+		ExecStoreHeapTuple(&compressed_tuple,
+						   decompress_ctx->compressed_slot,
 						   /* should_free = */ false);
 
 		ReleaseTupleDesc(in_desc);

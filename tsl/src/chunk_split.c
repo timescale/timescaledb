@@ -25,11 +25,11 @@
 #include "chunk.h"
 #include "compression/api.h"
 #include "compression/compression.h"
-#include "nodes/columnar_scan/compressed_batch_util.h"
 #include "compression/create.h"
 #include "debug_point.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
+#include "nodes/columnar_scan/compressed_batch_util.h"
 #include "partitioning.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
@@ -415,8 +415,9 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 		CompressionSettings *csettings =
 			ts_compression_settings_get_by_compress_relid(RelationGetRelid(scontext->rel));
 
-		UtilityEmitState *emit =
-			utility_emit_create_desc(csp->noncompressed_tupdesc, slot->tts_tupleDescriptor);
+		UtilityEmitState *emit = utility_emit_create_desc(csp->noncompressed_tupdesc,
+														  slot->tts_tupleDescriptor,
+														  /* internal_error = */ true);
 
 		int nrows = utility_emit_batch(emit, slot);
 

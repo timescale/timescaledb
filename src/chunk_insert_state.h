@@ -17,6 +17,7 @@ typedef struct ChunkTupleRouting ChunkTupleRouting;
 typedef struct CompressionSettings CompressionSettings;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
 typedef struct Bloom1Hasher Bloom1Hasher;
+typedef struct UtilityEmitState UtilityEmitState;
 
 /*
  * Bundle the ScanKey and the attribute numbers together
@@ -62,6 +63,15 @@ typedef struct CachedDecompressionState
 
 	/* Pre-computed bloom filter checks for UPDATE/DELETE (List of BloomFilterCheck) */
 	List *bloom_filters;
+
+	/*
+	 * Batch decompression state reused across the repeated
+	 * `decompress_batches_for_insert` calls on this chunk (one per inserted
+	 * row). Allocated in the chunk insert state's memory context and freed
+	 * with it. NULL for the UPDATE/DELETE path, which builds a per-statement
+	 * state instead.
+	 */
+	UtilityEmitState *emit;
 } CachedDecompressionState;
 
 typedef struct SharedCounters
