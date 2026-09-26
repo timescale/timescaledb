@@ -48,6 +48,15 @@ typedef struct CachedDecompressionState
 	ScanKeyWithAttnos heap_scankeys;
 	ScanKeyWithAttnos index_scankeys;
 	ScanKeyWithAttnos mem_scankeys;
+	/*
+	 * Whether mem_scankeys can be evaluated with the vector predicates on the
+	 * bulk-decompressed key columns (every key has a vector predicate, every
+	 * key column has a bulk decompressor and, for text, a deterministic
+	 * collation). Decided once per statement by can_vectorize_scankeys() for
+	 * INSERT/UPSERT and UPDATE/DELETE alike; a batch whose key column ends up
+	 * decoded through an iterator still falls back to row-wise evaluation.
+	 */
+	bool mem_scankeys_vectorized;
 	Oid index_relid;
 
 	/*

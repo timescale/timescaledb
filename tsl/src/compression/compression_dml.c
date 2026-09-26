@@ -65,7 +65,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 
 static BatchQualSummary dml_qual_eval(UtilityEmitState *emit, TupleTableSlot *compressed_slot,
 									  ScanKeyData *scankeys, int num_scankeys,
-									  tuple_filtering_constraints *constraints,
+									  tuple_filtering_constraints *constraints, bool vectorized,
 									  bool check_full_match, bool *skip_current_tuple,
 									  Bitmapset **consumed_iterators);
 static void dml_rewind_consumed_iterators(DecompressBatchState *batch_state,
@@ -94,9 +94,8 @@ static bool key_column_is_null(tuple_filtering_constraints *constraints, Relatio
 							   Oid ht_relid, TupleTableSlot *slot);
 static bool is_null_or_contains_nulls(Const *const_value);
 static bool direct_delete_prerequisites(ModifyHypertableState *ht_state);
-static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
-											CompressionSettings *settings, Relation chunk_rel,
-											Oid ht_relid, ScanKeyWithAttnos *mem_scankeys);
+static bool can_vectorize_scankeys(const ScanKeyWithAttnos *mem_scankeys,
+								   CompressionSettings *settings, Relation chunk_rel);
 static void update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
 static void init_upsert_bloom_state(ChunkInsertState *cis);
 static Bitmapset *get_arbiter_index_attnums(ChunkInsertState *cis);
@@ -389,12 +388,8 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 											 &cdst->mem_scankeys.num_scankeys,
 											 &cdst->mem_scankeys.attnos);
 
-			cdst->constraints->vectorized_filtering =
-				can_vectorize_constraint_checks(constraints,
-												compression_settings,
-												cis->rel,
-												cis->hypertable_relid,
-												&cdst->mem_scankeys);
+			cdst->mem_scankeys_vectorized =
+				can_vectorize_scankeys(&cdst->mem_scankeys, compression_settings, cis->rel);
 
 			cdst->index_scankeys.scankeys =
 				build_index_scankeys_using_slot(cis->hypertable_relid,
@@ -965,6 +960,15 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	temp_cdst.heap_scankeys.num_scankeys = num_scankeys;
 	temp_cdst.mem_scankeys.scankeys = mem_scankeys;
 	temp_cdst.mem_scankeys.num_scankeys = num_mem_scankeys;
+	/*
+	 * Same decision as for INSERT: evaluate the in-memory predicates with the
+	 * vector predicates on the bulk-decompressed columns when every key allows
+	 * it. The batch summary is all UPDATE/DELETE need from matching, so the
+	 * vector path serves them without the ON CONFLICT parts.
+	 */
+	temp_cdst.mem_scankeys_vectorized =
+		ts_guc_enable_optimizations &&
+		can_vectorize_scankeys(&temp_cdst.mem_scankeys, settings, chunk_rel);
 	temp_cdst.constraints = NULL;
 	temp_cdst.columns_with_null_check = null_columns;
 	temp_cdst.bloom_filters = bloom_filters;
@@ -1373,6 +1377,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 									mem_scankeys,
 									num_mem_scankeys,
 									constraints,
+									cdst->mem_scankeys_vectorized,
 									delete_only, /* need to check full batch for direct DELETEs */
 									skip_current_tuple,
 									&consumed_iterators);
@@ -1859,15 +1864,18 @@ dml_qual_eval_rowwise(DecompressContext *dcontext, DecompressBatchState *batch_s
 
 /*
  * Evaluate the in-memory quals for one compressed batch over the shared scan
- * batch state: vector predicates on Arrow buffers when the constraints
- * object permits vectorized filtering and every key column is Arrow/scalar,
- * row-wise ScanKey evaluation otherwise. The summary only decides
- * skip/delete/produce; production reuses the same batch state.
+ * batch state: vector predicates on Arrow buffers when the statement's keys
+ * were found vectorizable (can_vectorize_scankeys) and every key column of
+ * this batch is Arrow/scalar, row-wise ScanKey evaluation otherwise. The
+ * summary only decides skip/delete/produce; production reuses the same batch
+ * state. The constraints object is only needed for the INSERT/UPSERT side
+ * effects (unique violation, ON CONFLICT DO NOTHING) and is NULL for
+ * UPDATE/DELETE.
  */
 static BatchQualSummary
 dml_qual_eval(UtilityEmitState *emit, TupleTableSlot *compressed_slot, ScanKeyData *scankeys,
-			  int num_scankeys, tuple_filtering_constraints *constraints, bool check_full_match,
-			  bool *skip_current_tuple, Bitmapset **consumed_iterators)
+			  int num_scankeys, tuple_filtering_constraints *constraints, bool vectorized,
+			  bool check_full_match, bool *skip_current_tuple, Bitmapset **consumed_iterators)
 {
 	DecompressContext *dcontext = emit->dcontext;
 	DecompressBatchState *batch_state = emit->batch_state;
@@ -1907,12 +1915,12 @@ dml_qual_eval(UtilityEmitState *emit, TupleTableSlot *compressed_slot, ScanKeyDa
 		}
 	}
 
-	if (constraints != NULL && constraints->vectorized_filtering && all_vector_capable)
+	if (vectorized && all_vector_capable)
 	{
 		BatchQualSummary summary =
 			dml_qual_eval_vector(dcontext, batch_state, scankeys, num_scankeys, sk_columns);
 
-		if (summary != NoRowsPass)
+		if (constraints != NULL && summary != NoRowsPass)
 		{
 			if (constraints->on_conflict == ONCONFLICT_NONE)
 			{
@@ -3068,55 +3076,53 @@ direct_delete_prerequisites(ModifyHypertableState *ht_state)
 	return true;
 }
 
+/*
+ * Decide once per statement whether the in-memory scan keys can be evaluated
+ * with the vector predicates on the bulk-decompressed key columns. Shared by
+ * INSERT/UPSERT (the unique-constraint keys) and UPDATE/DELETE (the WHERE
+ * predicates that no metadata can prune on): every key needs a vector
+ * predicate for its operator, and its column needs a bulk decompressor and,
+ * for text, a deterministic collation. dml_qual_eval() still falls back to
+ * row-wise evaluation for a batch whose key column ends up decoded through an
+ * iterator.
+ */
 static bool
-can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
-								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid,
-								ScanKeyWithAttnos *mem_scankeys)
+can_vectorize_scankeys(const ScanKeyWithAttnos *mem_scankeys, CompressionSettings *settings,
+					   Relation chunk_rel)
 {
-	AttrNumber chunk_attno = -1;
-	Oid typoid, collid;
-	int32 typmod;
-
 	if (mem_scankeys == NULL || mem_scankeys->num_scankeys == 0)
 	{
 		return false;
 	}
 
-	/* We can only vectorize if a vectorized check is available for all scankeys */
 	for (int sk = 0; sk < mem_scankeys->num_scankeys; sk++)
 	{
 		/*
-		 * Here we cannot check for NULL flags even if that is
-		 * handled separately, because this code is called from
-		 * the `init_decompress_state_for_insert` which sets the
-		 * flag based on the first record to be inserted and the
-		 * value may change for the subsequent records.
-		 *
-		 * The `fn_oid` doesn't get updated so it is valid to check
-		 * it here.
+		 * Here we cannot check for NULL flags even if that is handled
+		 * separately, because for INSERT this is called from
+		 * init_decompress_state_for_insert(), which sets the flag based on
+		 * the first record to be inserted and the value may change for the
+		 * subsequent records. The fn_oid doesn't get updated so it is valid
+		 * to check it here.
 		 */
-		ScanKeyData *scankey = &mem_scankeys->scankeys[sk];
+		const ScanKeyData *scankey = &mem_scankeys->scankeys[sk];
 		if (get_vector_const_predicate(scankey->sk_func.fn_oid) == NULL)
 		{
 			return false;
 		}
-	}
 
-	while ((chunk_attno = bms_next_member(constraints->key_columns, chunk_attno)) > 0)
-	{
-		/*
-		 * slot has the physical layout of the hypertable, so we need to
-		 * get the attribute number of the hypertable for the column.
-		 */
-		char *attname = get_attname(chunk_rel->rd_id, chunk_attno, false);
+		/* sk_attno is the attribute number in the uncompressed chunk. */
+		char *attname = get_attname(chunk_rel->rd_id, scankey->sk_attno, false);
 
-		/* Ignore segmentby columns, they aren't compressed */
+		/* Segmentby columns aren't compressed and never need decompression. */
 		if (ts_array_is_member(settings->fd.segmentby, attname))
 		{
 			continue;
 		}
 
-		get_atttypetypmodcoll(chunk_rel->rd_id, chunk_attno, &typoid, &typmod, &collid);
+		Oid typoid, collid;
+		int32 typmod;
+		get_atttypetypmodcoll(chunk_rel->rd_id, scankey->sk_attno, &typoid, &typmod, &collid);
 
 		/* No bulk decompression function, no vectorized filtering */
 		if (tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) ==
@@ -3125,8 +3131,10 @@ can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 			return false;
 		}
 
-		/* For text types, check for non-deterministic collation which
-		 * prevents vectorized filtering */
+		/*
+		 * For text types, check for non-deterministic collation which
+		 * prevents vectorized filtering
+		 */
 		if (typoid == TEXTOID && OidIsValid(collid) && !get_collation_isdeterministic(collid))
 		{
 			return false;
