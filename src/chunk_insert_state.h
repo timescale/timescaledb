@@ -67,10 +67,12 @@ typedef struct CachedDecompressionState
 	/*
 	 * Batch decompression state reused across the repeated
 	 * `decompress_batches_for_insert` calls on this chunk (one per inserted
-	 * row). Allocated in the chunk insert state's memory context and freed
-	 * with it. NULL for the UPDATE/DELETE path, which builds a per-statement
-	 * state instead.
+	 * row). Created lazily by the first call that has a batch to decompress,
+	 * in mctx (the chunk insert state's memory context) so that it is freed
+	 * with it. Both stay NULL for the UPDATE/DELETE path, which builds a
+	 * per-statement state instead.
 	 */
+	MemoryContext mctx;
 	UtilityEmitState *emit;
 } CachedDecompressionState;
 

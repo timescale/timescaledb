@@ -67,6 +67,17 @@ typedef struct CompressedColumnValues
 	 * amount of indirections. However, it is used for vectorized filters.
 	 */
 	ArrowArray *arrow;
+
+	/*
+	 * For the arrow text types: the varlena buffer, owned by whoever set up
+	 * this column, that receives the current row's value. Each row the Datum
+	 * pointing to it is assigned to *output_value. The value must never be
+	 * written through *output_value itself: a consumer that materializes our
+	 * virtual output slot in place (e.g. CREATE TABLE AS inserting the scan
+	 * slot into a heap) repoints the slot entry at its own copy of the
+	 * previous row, and writing there corrupts that copy.
+	 */
+	struct varlena *text_buffer;
 } CompressedColumnValues;
 
 /*
@@ -129,8 +140,7 @@ extern void compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
  * utility consumers that need to interleave their own decisions (e.g. DML
  * batch summaries before remaining-column decode).
  */
-extern void compressed_batch_prepare(DecompressContext *dcontext,
-									 DecompressBatchState *batch_state,
+extern void compressed_batch_prepare(DecompressContext *dcontext, DecompressBatchState *batch_state,
 									 TupleTableSlot *compressed_slot);
 extern BatchQualSummary compressed_batch_run_quals(DecompressContext *dcontext,
 												   DecompressBatchState *batch_state,
@@ -184,6 +194,14 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 
 extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 
+/*
+ * Initialize a zero-initialized batch state with a caller-provided per-batch
+ * memory context (the scan creates its own on demand).
+ */
+extern void compressed_batch_init_with_context(DecompressContext *dcontext,
+											   DecompressBatchState *batch_state,
+											   MemoryContext per_batch_context);
+
 extern void compressed_batch_discard_tuples(DecompressBatchState *batch_state);
 
 /*
@@ -232,11 +250,16 @@ store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 	Assert(value_bytes >= 0);
 
 	const int total_bytes = value_bytes + VARHDRSZ;
-	Assert(DatumGetPointer(*column_values->output_value) != NULL);
-	SET_VARSIZE(DatumGetPointer(*column_values->output_value), total_bytes);
-	memcpy(VARDATA(DatumGetPointer(*column_values->output_value)),
-		   &((uint8 *) column_values->buffers[2])[start],
-		   value_bytes);
+	struct varlena *dest = column_values->text_buffer;
+	Assert(dest != NULL);
+	SET_VARSIZE(dest, total_bytes);
+	memcpy(VARDATA(dest), &((uint8 *) column_values->buffers[2])[start], value_bytes);
+
+	/*
+	 * Assign the Datum every row rather than writing through the slot entry,
+	 * see the comment on text_buffer.
+	 */
+	*column_values->output_value = PointerGetDatum(dest);
 }
 
 static pg_attribute_always_inline void

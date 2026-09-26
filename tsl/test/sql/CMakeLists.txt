@@ -22,6 +22,7 @@ set(TEST_FILES
     cagg_union_view.sql
     cagg_utils.sql
     chunk_publication_compression.sql
+    columnar_scan_materialize.sql
     columnstore_aliases.sql
     compact_chunk.sql
     compaction_policy.sql

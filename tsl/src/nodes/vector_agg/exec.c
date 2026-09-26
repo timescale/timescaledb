@@ -348,8 +348,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			arg_value.decompression_type == DT_ArrowTextDict)
 		{
 			const int maxbytes = get_max_varlena_bytes(arg_value.arrow);
-			*arg_value.output_value =
-				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+			arg_value.text_buffer = MemoryContextAlloc(batch_state->per_batch_context, maxbytes);
+			*arg_value.output_value = PointerGetDatum(arg_value.text_buffer);
 		}
 		else if (arg_value.decompression_type == DT_Scalar)
 		{
@@ -575,8 +575,9 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 			 */
 			Ensure(branch_values[i].arrow != NULL, "no arrow for arg %d", i);
 			const int maxbytes = get_max_varlena_bytes(branch_values[i].arrow);
-			*branch_values[i].output_value =
-				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+			branch_values[i].text_buffer =
+				MemoryContextAlloc(batch_state->per_batch_context, maxbytes);
+			*branch_values[i].output_value = PointerGetDatum(branch_values[i].text_buffer);
 		}
 		else if (branch_values[i].decompression_type == DT_Scalar)
 		{

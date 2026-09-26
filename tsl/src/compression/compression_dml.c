@@ -364,13 +364,14 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		Relation in_rel = relation_open(compression_settings->fd.compress_relid, RowExclusiveLock);
 
 		/*
-		 * The batch decompression state used by decompress_batches_for_insert()
-		 * is built once per chunk insert state (in cis->mctx, the current
-		 * context here) rather than once per inserted row. Its Detoaster is
-		 * closed after every scan, so no relation reference outlives a call,
-		 * and the memory goes away together with cis->mctx.
+		 * decompress_batches_for_insert() builds its batch decompression state
+		 * lazily, on the first batch that survives the pre-filters, and caches
+		 * it in cdst->emit for the following calls on this chunk. It must live
+		 * in cis->mctx rather than in the executor's per-tuple context those
+		 * calls run in; its Detoaster is closed after every scan, so no
+		 * relation reference outlives a call.
 		 */
-		cdst->emit = utility_emit_create(cis->rel, in_rel, compression_settings);
+		cdst->mctx = cis->mctx;
 
 		Bitmapset *columns_with_null_check = NULL;
 		Bitmapset *key_columns = constraints->key_columns;
@@ -1279,8 +1280,22 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			compressed_is_nulls = palloc(sizeof(bool) * in_desc->natts);
 			if (emit == NULL)
 			{
-				emit = utility_emit_create(out_rel, in_rel, NULL);
-				emit_owned = true;
+				if (cdst->mctx != NULL)
+				{
+					/*
+					 * INSERT/UPSERT: build the state once per chunk insert state,
+					 * on first need, in the insert state's memory context.
+					 */
+					MemoryContext old_ctx = MemoryContextSwitchTo(cdst->mctx);
+					cdst->emit = utility_emit_create(out_rel, in_rel, NULL);
+					MemoryContextSwitchTo(old_ctx);
+					emit = cdst->emit;
+				}
+				else
+				{
+					emit = utility_emit_create(out_rel, in_rel, NULL);
+					emit_owned = true;
+				}
 			}
 			writer = bulk_writer_build(out_rel, 0);
 			meta_count_attno =

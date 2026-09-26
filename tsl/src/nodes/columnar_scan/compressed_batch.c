@@ -313,14 +313,15 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	else
 	{
 		/*
-		 * Text column. Pre-allocate memory for its text Datum in the
-		 * decompressed scan slot. We can't put direct references to Arrow
-		 * memory there, because it doesn't have the varlena headers that
-		 * Postgres expects for text.
+		 * Text column. Pre-allocate memory for its text Datum. We can't put
+		 * direct references to Arrow memory into the decompressed scan slot,
+		 * because it doesn't have the varlena headers that Postgres expects
+		 * for text. The buffer is owned by the batch, and the slot entry is
+		 * pointed at it for every row (see store_text_datum()).
 		 */
 		const int maxbytes = get_max_varlena_bytes(arrow);
-		*column_values->output_value =
-			PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+		column_values->text_buffer = MemoryContextAlloc(batch_state->per_batch_context, maxbytes);
+		*column_values->output_value = PointerGetDatum(column_values->text_buffer);
 
 		/*
 		 * Set up the datum conversion based on whether we use the dictionary.
@@ -870,16 +871,19 @@ compressed_batch_discard_tuples(DecompressBatchState *batch_state)
 }
 
 /*
- * Initializes the zero-initialized batch state. We do this on demand, because
- * it involves the creation of memory context and tuple slots, which are
- * relatively expensive.
+ * Initialize the zero-initialized batch state with the given per-batch memory
+ * context. The virtual output slot and its value arrays are allocated in
+ * CurrentMemoryContext. The scan calls this on demand with its own context
+ * policy (compressed_batch_lazy_init); utility consumers call it directly so
+ * that they can choose the allocator for their batch context.
  */
-static void
-compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *batch_state)
+void
+compressed_batch_init_with_context(DecompressContext *dcontext, DecompressBatchState *batch_state,
+								   MemoryContext per_batch_context)
 {
-	/* Init memory context */
-	batch_state->per_batch_context = create_per_batch_mctx(dcontext);
-	Assert(batch_state->per_batch_context != NULL);
+	Assert(batch_state->per_batch_context == NULL);
+	Assert(per_batch_context != NULL);
+	batch_state->per_batch_context = per_batch_context;
 
 	/* Get a reference to the decompressed scan TupleTableSlot */
 	TupleTableSlot *decompressed_slot = dcontext->custom_scan_slot;
@@ -922,6 +926,19 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	 */
 	*((const TupleTableSlotOps **) &slot->tts_ops) = &TTSOpsVirtual;
 	slot->tts_ops->init(slot);
+}
+
+/*
+ * Initializes the zero-initialized batch state. We do this on demand, because
+ * it involves the creation of memory context and tuple slots, which are
+ * relatively expensive.
+ */
+static void
+compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *batch_state)
+{
+	/* The macro expands to a statement, so it cannot be used as an argument. */
+	MemoryContext per_batch_context = create_per_batch_mctx(dcontext);
+	compressed_batch_init_with_context(dcontext, batch_state, per_batch_context);
 }
 
 /*

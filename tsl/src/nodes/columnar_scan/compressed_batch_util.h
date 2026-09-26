@@ -43,10 +43,10 @@ extern void decompress_batch_state_destroy_utility(DecompressBatchState *batch_s
  * decompressed_slots (grown on demand, tuples owned by the batch context,
  * slots never own them).
  *
- * Everything the state allocates lazily (the per-batch memory context, the
- * bulk decompression scratch context, the output slots) goes into mctx, the
- * memory context that was current when the state was created, so that the
- * state can be reused from a shorter-lived context (the DML path calls it
+ * All memory of the state hangs off mctx, the memory context that was current
+ * when it was created: the per-batch and bulk scratch contexts are children
+ * of it, and the output slots are allocated in it on first use. The state can
+ * therefore be reused from a shorter-lived context (the DML path calls it
  * from the executor's per-tuple context).
  */
 typedef struct UtilityEmitState

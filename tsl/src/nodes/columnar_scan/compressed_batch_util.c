@@ -10,6 +10,7 @@
 #include <catalog/namespace.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/memutils.h>
 
 #include "compression/compression.h"
 #include "compression/create.h"
@@ -283,6 +284,23 @@ utility_emit_create_common(DecompressContext *dcontext)
 	state->slots = (TupleTableSlot **) palloc0(sizeof(void *) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	state->slots_capacity = GLOBAL_MAX_ROWS_PER_COMPRESSION;
 	state->mctx = CurrentMemoryContext;
+
+	/*
+	 * Initialize the batch state up front, with AllocSet contexts of the
+	 * default sizes for both the per-batch data and the bulk decompression
+	 * scratch. Unlike the scan's 64 KiB Generation contexts, these are served
+	 * from PostgreSQL's context freelist, which matters for the DML path where
+	 * a state can live for a single statement (a one-row INSERT ... ON
+	 * CONFLICT). CurrentMemoryContext is mctx here, so the slot value arrays
+	 * land in mctx as well.
+	 */
+	compressed_batch_init_with_context(dcontext,
+									   state->batch_state,
+									   AllocSetContextCreate(state->mctx,
+															 "utility decompression per-batch",
+															 ALLOCSET_DEFAULT_SIZES));
+	dcontext->bulk_decompression_context =
+		AllocSetContextCreate(state->mctx, "utility bulk decompression", ALLOCSET_DEFAULT_SIZES);
 	return state;
 }
 
@@ -321,16 +339,8 @@ utility_emit_destroy(UtilityEmitState *state)
 void
 utility_emit_prepare(UtilityEmitState *state, TupleTableSlot *compressed_slot)
 {
-	/*
-	 * The first prepare lazily creates the per-batch memory context and the
-	 * virtual slot's value arrays in CurrentMemoryContext, and the bulk
-	 * scratch context is later created as a sibling of the per-batch context.
-	 * Those must live as long as this state, not as long as the caller's
-	 * context (the DML path runs in the executor's per-tuple context).
-	 */
-	MemoryContext old_ctx = MemoryContextSwitchTo(state->mctx);
+	/* The batch state was initialized at creation; prepare allocates only in it. */
 	compressed_batch_prepare(state->dcontext, state->batch_state, compressed_slot);
-	MemoryContextSwitchTo(old_ctx);
 
 	/*
 	 * The scan accepts batches of up to UINT16_MAX rows; the utility paths

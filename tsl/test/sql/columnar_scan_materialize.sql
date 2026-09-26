@@ -1,0 +1,82 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Consumers that insert the ColumnarScan output slot straight into a heap
+-- relation (CREATE TABLE AS, SELECT INTO, materialized views) materialize
+-- the scan's virtual slot in place. The bulk-decompressed text columns used
+-- to write the following rows' values through the materialized slot entries,
+-- corrupting the values whenever a value was longer than the first value of
+-- the batch and another by-reference column followed it in the tuple.
+-- The reference table is taken before compression.
+
+CREATE TABLE mat_test (
+    ts  timestamptz NOT NULL,
+    dev int         NOT NULL,
+    val numeric,
+    txt text,
+    big text
+);
+SELECT table_name FROM create_hypertable('mat_test', 'ts', chunk_time_interval => interval '1 year');
+ALTER TABLE mat_test SET (timescaledb.compress,
+                          timescaledb.compress_segmentby = 'dev',
+                          timescaledb.compress_orderby = 'ts');
+
+-- txt mixes 4- and 5-character values inside every batch, and every batch
+-- starts with a 4-character value; big is a by-reference column after it.
+INSERT INTO mat_test
+SELECT '2020-01-01'::timestamptz + (i || ' minutes')::interval,
+       i % 3,
+       i * 1.5,
+       'txt' || (i % 50),
+       repeat(md5(i::text), 4)
+FROM generate_series(1, 6000) i;
+
+CREATE TABLE mat_expected AS SELECT * FROM mat_test;
+
+SELECT count(compress_chunk(c)) FROM show_chunks('mat_test') c;
+
+CREATE FUNCTION mat_diff(rel regclass) RETURNS bigint LANGUAGE plpgsql AS $$
+DECLARE
+    n bigint;
+BEGIN
+    EXECUTE format('SELECT count(*) FROM ((SELECT * FROM %s EXCEPT ALL SELECT * FROM mat_expected) '
+                   'UNION ALL (SELECT * FROM mat_expected EXCEPT ALL SELECT * FROM %s)) d', rel, rel)
+    INTO n;
+    RETURN n;
+END
+$$;
+
+-- Reading the compressed chunk directly.
+SELECT count(*) AS plain_select_diff
+FROM ((SELECT * FROM mat_test EXCEPT ALL SELECT * FROM mat_expected)
+      UNION ALL (SELECT * FROM mat_expected EXCEPT ALL SELECT * FROM mat_test)) d;
+
+-- Consumers that materialize the scan slot in place.
+CREATE TABLE mat_ctas AS SELECT * FROM mat_test;
+SELECT mat_diff('mat_ctas') AS ctas_diff;
+
+SELECT * INTO mat_into FROM mat_test;
+SELECT mat_diff('mat_into') AS select_into_diff;
+
+CREATE MATERIALIZED VIEW mat_mv AS SELECT * FROM mat_test;
+SELECT mat_diff('mat_mv') AS create_matview_diff;
+
+REFRESH MATERIALIZED VIEW mat_mv;
+SELECT mat_diff('mat_mv') AS refresh_matview_diff;
+
+-- With a vectorized qual, the scan slot is still handed to the receiver.
+CREATE TABLE mat_ctas_where AS SELECT * FROM mat_test WHERE dev > 0;
+SELECT count(*) AS ctas_where_diff
+FROM ((SELECT * FROM mat_ctas_where EXCEPT ALL SELECT * FROM mat_expected WHERE dev > 0)
+      UNION ALL (SELECT * FROM mat_expected WHERE dev > 0 EXCEPT ALL SELECT * FROM mat_ctas_where)) d;
+
+-- Row-by-row decompression assigns a fresh Datum per row and was never affected.
+SET timescaledb.enable_bulk_decompression = off;
+CREATE TABLE mat_ctas_rowbyrow AS SELECT * FROM mat_test;
+SELECT mat_diff('mat_ctas_rowbyrow') AS ctas_rowbyrow_diff;
+RESET timescaledb.enable_bulk_decompression;
+
+DROP MATERIALIZED VIEW mat_mv;
+DROP TABLE mat_ctas, mat_into, mat_ctas_where, mat_ctas_rowbyrow, mat_expected, mat_test;
+DROP FUNCTION mat_diff(regclass);
