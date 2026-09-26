@@ -156,11 +156,11 @@ typedef struct PerCompressedColumn
  */
 typedef struct PendingToastValue
 {
-	Oid valueid;		 /* va_valueid embedded in the main tuple's toast pointer */
-	int attno;			 /* 0-based attribute index in the compressed tuple */
-	int32 rank;		 /* flush ordering rank, see compression_toast_value_rank() */
-	uint64 seq;		 /* queue sequence number, tie-breaks the unstable list_sort */
-	int32 data_len;		 /* payload bytes in data[] */
+	Oid valueid;	/* va_valueid embedded in the main tuple's toast pointer */
+	int attno;		/* 0-based attribute index in the compressed tuple */
+	int32 rank;		/* flush ordering rank, see compression_toast_value_rank() */
+	uint64 seq;		/* queue sequence number, tie-breaks the unstable list_sort */
+	int32 data_len; /* payload bytes in data[] */
 	char data[FLEXIBLE_ARRAY_MEMBER];
 } PendingToastValue;
 
@@ -197,6 +197,12 @@ typedef struct BulkWriter
 	int pending_batches;
 	/* Queue sequence counter for PendingToastValue.seq. */
 	uint64 pending_seq;
+	/*
+	 * Flush rank of each attribute of out_rel, indexed like its tuple
+	 * descriptor. Built lazily by the first deferred toast write (see
+	 * compression_toast_build_attr_ranks()); NULL until then.
+	 */
+	int32 *toast_attr_rank;
 } BulkWriter;
 
 typedef struct RowDecompressor

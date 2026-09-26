@@ -29,6 +29,7 @@
 #include <catalog/index.h>
 #include <executor/tuptable.h>
 #include <miscadmin.h>
+#include <utils/lsyscache.h>
 #include <utils/rel.h>
 #include <varatt.h>
 
@@ -36,6 +37,7 @@
 #include "debug_assert.h"
 #include "guc.h"
 #include "import/compression_toast.h"
+#include "ts_catalog/compression_settings.h"
 
 /*
  * Rank above all type-ladder ranks: values whose batch fell back to the
@@ -45,10 +47,96 @@
 #define TOAST_COLD_RANK 1000
 
 /*
+ * Type-ladder rank of a column type, smallest first: bool < int2 < int4 <
+ * int8 (and the int8-compressed date/time types) < float4 < float8 < text
+ * family < json/bson < bytea. Types not in the ladder sort with the text
+ * family.
+ */
+static int32
+compression_toast_type_rank(Oid typoid)
+{
+	switch (typoid)
+	{
+		case BOOLOID:
+			return 0;
+		case INT2OID:
+			return 1;
+		case INT4OID:
+			return 2;
+		case INT8OID:
+		case DATEOID:
+		case TIMEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			return 3;
+		case FLOAT4OID:
+			return 4;
+		case FLOAT8OID:
+			return 5;
+		case JSONOID:
+		case JSONBOID:
+			return 7;
+		case BYTEAOID:
+			return 8;
+		default:
+			/* text family and everything unlisted */
+			return 6;
+	}
+}
+
+/*
+ * Build writer->toast_attr_rank: the type-ladder rank of every attribute of
+ * the output relation, indexed like its tuple descriptor.
+ *
+ * The ladder needs the column's uncompressed type, and the output relation
+ * usually does not carry it: when out_rel is a compressed chunk, every
+ * compressed column is typed compresseddata. So the compressed chunk is
+ * mapped back to its uncompressed relation through the compression settings
+ * catalog and the type is looked up there by column name (compressed columns
+ * keep the names of the columns they compress). Attributes without a
+ * counterpart keep the type from out_rel's own descriptor: the _ts_meta_*
+ * metadata columns, and every attribute when out_rel is not a compressed
+ * chunk at all (the DML decompression path writes through a BulkWriter on
+ * the uncompressed chunk).
+ *
+ * Runs once per writer, on the first deferred toast write. The table lives
+ * in the executor query context like the rest of the deferred queue.
+ */
+static void
+compression_toast_build_attr_ranks(BulkWriter *writer)
+{
+	TupleDesc	desc = RelationGetDescr(writer->out_rel);
+	Oid			uncompressed_relid =
+		ts_relation_get_uncompressed_relid(RelationGetRelid(writer->out_rel));
+	int32	   *ranks;
+
+	ranks = MemoryContextAlloc(writer->estate->es_query_cxt, desc->natts * sizeof(int32));
+
+	for (int i = 0; i < desc->natts; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(desc, i);
+		Oid			typoid = attr->atttypid;
+
+		if (OidIsValid(uncompressed_relid) && !attr->attisdropped)
+		{
+			AttrNumber	uattno = get_attnum(uncompressed_relid, NameStr(attr->attname));
+
+			if (uattno != InvalidAttrNumber)
+			{
+				typoid = get_atttype(uncompressed_relid, uattno);
+			}
+		}
+
+		ranks[i] = compression_toast_type_rank(typoid);
+	}
+
+	writer->toast_attr_rank = ranks;
+}
+
+/*
  * Flush-order rank for a toasted value. The primary ordering is the type
- * ladder of the column, smallest first: bool < int2 < int4 < int8 (and the
- * int8-compressed date/time types) < float4 < float8 < text family <
- * json/bson < bytea. Types not in the ladder sort with the text family.
+ * ladder of the column's uncompressed type, see
+ * compression_toast_build_attr_ranks().
  *
  * On top of that, a value whose batch actually used the array fallback
  * algorithm is demoted to TOAST_COLD_RANK regardless of the column's type.
@@ -57,54 +145,26 @@
  * dictionary columns use EXTENDED storage and may be, but their types
  * (json/bson/text/bytea) already rank at the cold end of the ladder, so the
  * demotion only needs to catch EXTERNAL-storage columns (e.g. uuid) whose
- * batch fell back.
+ * batch fell back. The header byte is only looked at for compresseddata
+ * attributes; anything else is a plain user value.
  */
 static int32
-compression_toast_value_rank(Relation out_rel, int attno, const char *data_p, int32 data_todo,
+compression_toast_value_rank(BulkWriter *writer, int attno, const char *data_p, int32 data_todo,
 							 bool pg_compressed)
 {
-	Oid			typoid = TupleDescAttr(out_rel->rd_att, attno)->atttypid;
+	TupleDesc	desc = RelationGetDescr(writer->out_rel);
 	int32		rank;
 
-	switch (typoid)
+	if (writer->toast_attr_rank == NULL)
 	{
-		case BOOLOID:
-			rank = 0;
-			break;
-		case INT2OID:
-			rank = 1;
-			break;
-		case INT4OID:
-			rank = 2;
-			break;
-		case INT8OID:
-		case DATEOID:
-		case TIMEOID:
-		case TIMESTAMPOID:
-		case TIMESTAMPTZOID:
-			rank = 3;
-			break;
-		case FLOAT4OID:
-			rank = 4;
-			break;
-		case FLOAT8OID:
-			rank = 5;
-			break;
-		case JSONOID:
-		case JSONBOID:
-			rank = 7;
-			break;
-		case BYTEAOID:
-			rank = 8;
-			break;
-		default:
-			/* text family and everything unlisted */
-			rank = 6;
-			break;
+		compression_toast_build_attr_ranks(writer);
 	}
+	Assert(attno >= 0 && attno < desc->natts);
+	rank = writer->toast_attr_rank[attno];
 
 	if (!pg_compressed && data_todo > 0 &&
-		typoid == ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid &&
+		TupleDescAttr(desc, attno)->atttypid ==
+			ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid &&
 		(uint8) data_p[0] == COMPRESSION_ALGORITHM_ARRAY)
 	{
 		rank = TOAST_COLD_RANK;
@@ -409,7 +469,7 @@ compression_toast_save_datum_multi(BulkWriter *writer, Datum value, struct varle
 
 		pending->valueid = toast_pointer.va_valueid;
 		pending->attno = attno;
-		pending->rank = compression_toast_value_rank(rel, attno, data_p, data_todo,
+		pending->rank = compression_toast_value_rank(writer, attno, data_p, data_todo,
 													 VARATT_IS_COMPRESSED(dval));
 		pending->seq = writer->pending_seq++;
 		pending->data_len = data_todo;

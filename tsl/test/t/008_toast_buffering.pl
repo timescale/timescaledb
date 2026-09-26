@@ -22,6 +22,9 @@ use Test::More;
 # 3. The flushed layout really is column-major: the number of chunk_id runs
 #    in ctid order over the compressed chunk's toast table drops when batches
 #    are buffered, compared to flushing after every batch (N = 1).
+# 4. Within a flushed group the columns come out in type-ladder order, not
+#    in attribute order: the test table declares the text payload column
+#    first, yet its chunks land after the timestamp and float columns.
 
 my $node = TimescaleNode->create('toast_buffering');
 
@@ -53,12 +56,15 @@ sub fill_table
 {
 	my ($name) = @_;
 
+	# payload is deliberately the first attribute: attribute order puts it
+	# ahead of time and val while the type ladder puts it behind them, so
+	# the flush-order check can tell the two orders apart.
 	$node->safe_psql(
 		'postgres', qq[
-		CREATE TABLE $name(time timestamptz, device_id int, val double precision, payload text);
+		CREATE TABLE $name(payload text, time timestamptz, device_id int, val double precision);
 		SELECT create_hypertable('$name', 'time');
 		ALTER TABLE $name SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id', timescaledb.compress_orderby = 'time');
-		INSERT INTO $name
+		INSERT INTO $name(time, device_id, val, payload)
 		SELECT t, (extract(epoch from t)::int % 4), random(), repeat(md5(t::text), 10)
 		FROM generate_series('2024-01-01'::timestamptz, '2024-01-01 03:00:00'::timestamptz, interval '1 sec') t;
 		]);
@@ -70,8 +76,9 @@ sub fill_table
 }
 
 # Compress with the given buffer GUCs and return the post-compression
-# checksum plus the number of chunk_id runs in ctid order over the
-# compressed chunk's toast table.
+# checksum, the number of chunk_id runs in ctid order over the compressed
+# chunk's toast table, and the column classes of the first and the last
+# chunk in that order.
 sub compress_and_measure
 {
 	my ($name, $batches, $size_kb) = @_;
@@ -96,23 +103,26 @@ sub compress_and_measure
 		JOIN pg_class toast ON toast.oid = c.reltoastrelid
 		WHERE cs.relid IN (SELECT show_chunks('$name'))]);
 
-	# Map each toasted value to its column class by the algorithm byte at
-	# the start of its first chunk: DELTADELTA (4) is time, GORILLA (3) is
-	# val, anything else is payload. The byte sits at the start of the
-	# chunk payload for values PG did not compress; the payload column's
-	# exact encoding does not matter as long as it is neither 3 nor 4.
+	# Map each toasted value to its column class by the number of toast
+	# chunks it occupies; the classes differ by more than an order of
+	# magnitude. A delta-delta time value of regularly spaced timestamps is
+	# tiny (1 chunk), a gorilla float8 value of up to 1000 rows is ~8 KB
+	# (3-5 chunks of ~2 KB), and a payload value of up to 1000 320-character
+	# strings is at least ~32 KB (16+ chunks) even after PG's own toast
+	# compression. Unlike the algorithm byte at the start of the value, the
+	# chunk count is also meaningful for values that PG compressed on the
+	# way out.
 	my %class;
 	foreach my $line (
 		split(
 			/\n/,
 			$node->safe_psql(
 				'postgres', qq[
-				SELECT chunk_id, get_byte(chunk_data, 0)
-				FROM $toast WHERE chunk_seq = 0])))
+				SELECT chunk_id, count(*) FROM $toast GROUP BY chunk_id])))
 	{
-		my ($chunk_id, $byte) = split(/\|/, $line);
+		my ($chunk_id, $nchunks) = split(/\|/, $line);
 		$class{$chunk_id} =
-			$byte == 4 ? 'time' : $byte == 3 ? 'val' : 'payload';
+			$nchunks <= 2 ? 'time' : $nchunks <= 8 ? 'val' : 'payload';
 	}
 
 	# Count column-class transitions in ctid (= write) order. Batch-major
@@ -120,6 +130,7 @@ sub compress_and_measure
 	# flush costs one per column per buffered group.
 	my $runs = 0;
 	my $prev = '';
+	my $first;
 	foreach my $chunk_id (
 		split(
 			/\n/,
@@ -129,9 +140,10 @@ sub compress_and_measure
 		my $class = $class{$chunk_id};
 		$runs++ if !defined $class || $class ne $prev;
 		$prev = $class;
+		$first //= $class;
 	}
 
-	return ($checksum, $runs);
+	return ($checksum, $runs, $first, $prev);
 }
 
 # Reference data: identical contents for both layout-comparison tables.
@@ -149,8 +161,17 @@ is($sum_n1, $ref_n1, 'N=1: decompressed data is correct');
 
 # N = 4 flushes after four batches: column-major layout, one run per column
 # per four batches.
-my ($sum_n4, $runs_n4) = compress_and_measure('metrics_n4', 4, 8192);
+my ($sum_n4, $runs_n4, $first_n4, $last_n4) =
+	compress_and_measure('metrics_n4', 4, 8192);
 is($sum_n4, $ref_n4, 'N=4: decompressed data is correct');
+
+# Flush order follows the type ladder (timestamp < float8 < text), not the
+# attribute order (payload first): every flushed group starts with a
+# time/val value and ends with a payload value, so the first chunk of the
+# toast table is a hot column and the last one is the cold payload column.
+isnt($first_n4, 'payload',
+	"N=4: first toast chunk belongs to a hot column ($first_n4)");
+is($last_n4, 'payload', 'N=4: last toast chunk belongs to the payload column');
 
 # The run count must drop clearly when buffering. The ideal factor is the
 # batch count ratio (4x); demand 2x to stay robust against uneven batch

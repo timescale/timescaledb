@@ -1714,14 +1714,16 @@ _guc_init(void)
 							/* show_hook= */ NULL);
 
 	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("compression_toast_buffer_batches"),
-							/* short_desc= */ "number of compressed batches buffered before flushing toast chunks",
-							/* long_desc= */ "the custom toaster defers toast chunk writes and "
+							/* short_desc= */
+							"number of compressed batches buffered before flushing toast chunks",
+							/* long_desc= */
+							"the custom toaster defers toast chunk writes and "
 							"flushes them after this many batches, so the same column of "
 							"consecutive batches lands on adjacent toast pages",
 							/* valueAddr= */ &ts_guc_compression_toast_buffer_batches,
 							/* bootValue = */ 2,
 							/* minValue = */ 1,
-							/* maxValue = */ 20,
+							/* maxValue = */ 4,
 							/* context= */ PGC_USERSET,
 							/* flags= */ 0,
 							/* check_hook= */ NULL,
@@ -1729,8 +1731,10 @@ _guc_init(void)
 							/* show_hook= */ NULL);
 
 	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("compression_toast_buffer_size"),
-							/* short_desc= */ "bytes of buffered toast payload that force an early flush, in kB",
-							/* long_desc= */ "safety valve bounding the memory held by the "
+							/* short_desc= */
+							"bytes of buffered toast payload that force an early flush, in kB",
+							/* long_desc= */
+							"safety valve bounding the memory held by the "
 							"custom toaster's deferred chunk buffer",
 							/* valueAddr= */ &ts_guc_compression_toast_buffer_size,
 							/* bootValue = */ 8192,
