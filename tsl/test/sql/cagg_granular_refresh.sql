@@ -717,16 +717,19 @@ COPY conditions FROM STDIN WITH (DELIMITER ',');
 \.
 -- A second COPY batch where the same tenant appears multiple times: must
 -- fold into one [min,max] entry, not one row per COPY line.
+-- Exercise tenant tracking in the unbuffered COPY path too.
+SET timescaledb.enable_optimizations = off;
 COPY conditions FROM STDIN WITH (DELIMITER ',');
 2020-01-05 00:00+00,sensor_c,4
 2020-01-02 00:00+00,sensor_d,5
 2020-01-04 00:00+00,sensor_d,6
 2020-01-03 00:00+00,sensor_d,7
 \.
+RESET timescaledb.enable_optimizations;
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 
--- Expect all 4 tenants tracked from the single COPY batch.
+-- Expect all 4 tenants tracked from both COPY batches.
 -- sensor_c and sensor_d have wider min-max
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
