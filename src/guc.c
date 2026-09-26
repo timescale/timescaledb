@@ -201,7 +201,7 @@ char *ts_current_timestamp_mock = NULL;
 
 int ts_guc_debug_toast_tuple_target = 128;
 
-TSDLLEXPORT int ts_guc_compression_toast_buffer_batches = 2;
+TSDLLEXPORT int ts_guc_compression_toast_buffer_batches = 8;
 TSDLLEXPORT int ts_guc_compression_toast_buffer_size = 8192;
 
 static const struct config_enum_entry debug_require_options[] = { { "allow", DRO_Allow, false },
@@ -1721,9 +1721,9 @@ _guc_init(void)
 							"flushes them after this many batches, so the same column of "
 							"consecutive batches lands on adjacent toast pages",
 							/* valueAddr= */ &ts_guc_compression_toast_buffer_batches,
-							/* bootValue = */ 2,
+							/* bootValue = */ 8,
 							/* minValue = */ 1,
-							/* maxValue = */ 4,
+							/* maxValue = */ 16,
 							/* context= */ PGC_USERSET,
 							/* flags= */ 0,
 							/* check_hook= */ NULL,
