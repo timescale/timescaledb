@@ -174,7 +174,9 @@ decompress_context_create_utility_desc(TupleDesc uncompressed_desc, TupleDesc co
 
 		column->type = is_segmentby ? SEGMENTBY_COLUMN : COMPRESSED_COLUMN;
 		column->typid = out_attr->atttypid;
-		get_typlenbyval(column->typid, &column->value_bytes, &column->by_value);
+		/* The descriptor already has the type length and by-value flag. */
+		column->value_bytes = out_attr->attlen;
+		column->by_value = out_attr->attbyval;
 		column->custom_scan_attno = out_attno;
 		column->uncompressed_chunk_attno = out_attno;
 		column->compressed_scan_attno = attno;
