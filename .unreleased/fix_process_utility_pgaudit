@@ -1,0 +1,2 @@
+Fixes: #7667 Fix crash on hypertable COPY with pgAudit
+Thanks: @AdrianAcala for fixing a crash with hypertable COPY when pgAudit is enabled

@@ -42,7 +42,8 @@
  *
  *   1. _PG_init starts up cluster-wide background worker stuff, and sets the
  *      post_parse_analyze_hook (a postgres-defined hook which is called after
- *      every statement is parsed) to our function post_analyze_hook
+ *      every statement is parsed) to our function post_analyze_hook, plus a
+ *      ProcessUtility shim keeping TimescaleDB last in the hook chain.
  *   2. When a command is run with timescale not loaded, post_analyze_hook:
  *        a. Gets the extension version.
  *        b. Loads the versioned extension.
@@ -51,6 +52,8 @@
  *           post_analyze_hook, but may not be our function, for instance, if
  *           another extension is loaded).
  *        d. Calls the prev_post_parse_analyze_hook.
+ *   3. When the versioned extension loads, do_load captures its ProcessUtility
+ *      handler into the shim slot (see loader_process_utility).
  *
  * Some notes on design:
  *
@@ -99,6 +102,8 @@ int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 static shmem_startup_hook_type prev_shmem_startup_hook;
 static shmem_request_hook_type prev_shmem_request_hook;
+static ProcessUtility_hook_type prev_ProcessUtility_hook;
+static ProcessUtility_hook_type versioned_ProcessUtility_hook;
 
 typedef struct TsExtension
 {
@@ -661,6 +666,35 @@ timescaledb_shmem_request_hook(void)
 	ts_stats_shmem_request();
 }
 
+/*
+ * Loader ProcessUtility shim, installed at preload time so later-preloaded
+ * hooks (e.g., pgaudit) run first. Needed because TimescaleDB handles some
+ * commands itself (e.g., hypertable COPY) without chaining. The handler is
+ * captured at load time (see do_load); until then chain to the previous hook.
+ */
+static void
+loader_process_utility(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
+					   ProcessUtilityContext context, ParamListInfo params,
+					   QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
+{
+	ProcessUtility_hook_type hook;
+
+	if (versioned_ProcessUtility_hook != NULL)
+	{
+		hook = versioned_ProcessUtility_hook;
+	}
+	else if (prev_ProcessUtility_hook != NULL)
+	{
+		hook = prev_ProcessUtility_hook;
+	}
+	else
+	{
+		hook = standard_ProcessUtility;
+	}
+
+	hook(pstmt, queryString, readOnlyTree, context, params, queryEnv, dest, qc);
+}
+
 static void
 extension_mark_loader_present()
 {
@@ -729,6 +763,10 @@ _PG_init(void)
 
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = timescaledb_shmem_request_hook;
+
+	/* Install the ProcessUtility shim (see loader_process_utility). */
+	prev_ProcessUtility_hook = ProcessUtility_hook;
+	ProcessUtility_hook = loader_process_utility;
 }
 
 inline static void
@@ -737,6 +775,8 @@ do_load(TsExtension *const ext)
 	char *version = extension_version(ext->name);
 	char soname[MAX_SO_NAME_LEN];
 	post_parse_analyze_hook_type old_hook;
+	ProcessUtility_hook_type saved_pu_hook = NULL;
+	bool capture_pu_hook = false;
 
 	/* If the right version of the library is already loaded, we will just
 	 * skip the actual loading. If the wrong version of the library is loaded,
@@ -777,10 +817,33 @@ do_load(TsExtension *const ext)
 	old_hook = post_parse_analyze_hook;
 	post_parse_analyze_hook = NULL;
 
+	/*
+	 * Capture the versioned handler (reverse of the post_parse_analyze save above):
+	 * load with the head pointed at our preload-time predecessor so the extension
+	 * chains to the right tail, stash its handler in the shim slot, restore the
+	 * saved head. Later-preloaded hooks thus stay ahead of TimescaleDB. Main
+	 * extension only; OSM/lake keep the classic behavior.
+	 */
+	capture_pu_hook = (strcmp(ext->name, EXTENSION_NAME) == 0);
+	if (capture_pu_hook)
+	{
+		saved_pu_hook = ProcessUtility_hook;
+		ProcessUtility_hook = prev_ProcessUtility_hook;
+	}
+
 	PG_TRY();
 	{
 		PGFunction ts_post_load_init =
 			load_external_function(soname, POST_LOAD_INIT_FN, false, NULL);
+		/*
+		 * Capture now so later loads (e.g., TSL below) aren't mistaken for the
+		 * versioned handler. If the head is unchanged the library was already
+		 * loaded uncontrolled; leave the shim unset rather than capture wrong.
+		 */
+		if (capture_pu_hook && ProcessUtility_hook != prev_ProcessUtility_hook)
+		{
+			versioned_ProcessUtility_hook = ProcessUtility_hook;
+		}
 		if (ts_post_load_init != NULL)
 		{
 			DirectFunctionCall1(ts_post_load_init, CharGetDatum(0));
@@ -789,6 +852,21 @@ do_load(TsExtension *const ext)
 	PG_CATCH();
 	{
 		post_parse_analyze_hook = old_hook;
+		if (capture_pu_hook)
+		{
+			/*
+			 * A handler installed before a failed load won't be reinstalled
+			 * (library already marked loaded), so capture it to keep it
+			 * reachable via the shim. Skip if TRY already captured; never
+			 * capture anything installed later.
+			 */
+			if (versioned_ProcessUtility_hook == NULL &&
+				ProcessUtility_hook != prev_ProcessUtility_hook)
+			{
+				versioned_ProcessUtility_hook = ProcessUtility_hook;
+			}
+			ProcessUtility_hook = saved_pu_hook;
+		}
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
@@ -797,6 +875,11 @@ do_load(TsExtension *const ext)
 	 * the loader would silently drop it when restoring old_hook below. */
 	Assert(post_parse_analyze_hook == NULL);
 	post_parse_analyze_hook = old_hook;
+
+	if (capture_pu_hook)
+	{
+		ProcessUtility_hook = saved_pu_hook;
+	}
 }
 
 inline static void
