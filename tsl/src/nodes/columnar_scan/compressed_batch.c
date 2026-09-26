@@ -183,7 +183,7 @@ decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnul
 	*column->output_value = value;
 }
 
-static void
+void
 decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state,
 				  TupleTableSlot *compressed_slot, int i)
 {
@@ -913,12 +913,14 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 }
 
 /*
- * Initialize the batch decompression state with the new compressed  tuple.
+ * Prepare the batch decompression state with the new compressed tuple:
+ * lazy initialization, per-batch context reset, scalar columns, and the
+ * count metadata. Shared by the scan (via
+ * compressed_batch_set_compressed_tuple) and utility consumers.
  */
 void
-compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
-									  DecompressBatchState *batch_state,
-									  TupleTableSlot *compressed_slot)
+compressed_batch_prepare(DecompressContext *dcontext, DecompressBatchState *batch_state,
+						 TupleTableSlot *compressed_slot)
 {
 	Assert(TupIsNull(compressed_batch_current_tuple(batch_state)));
 
@@ -1040,6 +1042,17 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	dcontext->tuples_decompressed += batch_state->total_batch_rows;
 	ts_stats_compression_acc_batch(&dcontext->observ_acc, batch_state->total_batch_rows);
 
+}
+
+/*
+ * Evaluate the vectorized quals for the prepared batch and return the
+ * summary. On NoRowsPass without batch sorted merge, the batch is discarded
+ * eagerly, avoiding decompression of the remaining columns.
+ */
+BatchQualSummary
+compressed_batch_run_quals(DecompressContext *dcontext, DecompressBatchState *batch_state,
+						   TupleTableSlot *compressed_slot)
+{
 	CompressedBatchVectorQualState cbvqstate = {
 		.vqstate = {
 			.vectorized_quals_constified = dcontext->vectorized_quals_constified,
@@ -1075,32 +1088,62 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		InstrCountTuples2(dcontext->ps, 1);
 		InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows);
 	}
-	else
-	{
-		/*
-		 * We have some rows in the batch that pass the vectorized filters, so
-		 * we have to decompress the rest of the compressed columns.
-		 */
-		const int num_data_columns = dcontext->num_data_columns;
-		for (int i = 0; i < num_data_columns; i++)
-		{
-			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-			if (column_values->decompression_type == DT_Invalid)
-			{
-				decompress_column(dcontext, batch_state, compressed_slot, i);
-				Assert(column_values->decompression_type != DT_Invalid);
-			}
-		}
 
-		/*
-		 * If all rows pass, no need to test the vector qual for each row. This
-		 * is a common case for time range conditions.
-		 */
-		if (vector_qual_summary == AllRowsPass)
+	return vector_qual_summary;
+}
+
+/*
+ * Decompress the remaining (not yet decompressed) data columns of a batch
+ * that passed the vectorized filters.
+ */
+void
+compressed_batch_decode_remaining(DecompressContext *dcontext, DecompressBatchState *batch_state,
+								  TupleTableSlot *compressed_slot,
+								  BatchQualSummary vector_qual_summary)
+{
+	const int num_data_columns = dcontext->num_data_columns;
+	for (int i = 0; i < num_data_columns; i++)
+	{
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+		if (column_values->decompression_type == DT_Invalid)
 		{
-			batch_state->vector_qual_result = NULL;
-			vqstate->vector_qual_result = NULL;
+			decompress_column(dcontext, batch_state, compressed_slot, i);
+			Assert(column_values->decompression_type != DT_Invalid);
 		}
+	}
+
+	/*
+	 * If all rows pass, no need to test the vector qual for each row. This
+	 * is a common case for time range conditions.
+	 */
+	if (vector_qual_summary == AllRowsPass)
+	{
+		batch_state->vector_qual_result = NULL;
+	}
+}
+
+/*
+ * Initialize the batch decompression state with the new compressed tuple:
+ * prepare, run the vectorized quals, and decode the remaining columns if
+ * the batch passed. This is the compatibility wrapper preserving the
+ * original behavior for the columnar scan.
+ */
+void
+compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
+									  DecompressBatchState *batch_state,
+									  TupleTableSlot *compressed_slot)
+{
+	compressed_batch_prepare(dcontext, batch_state, compressed_slot);
+
+	BatchQualSummary vector_qual_summary =
+		compressed_batch_run_quals(dcontext, batch_state, compressed_slot);
+
+	if (vector_qual_summary != NoRowsPass || dcontext->batch_sorted_merge)
+	{
+		compressed_batch_decode_remaining(dcontext,
+										  batch_state,
+										  compressed_slot,
+										  vector_qual_summary);
 	}
 }
 
@@ -1108,7 +1151,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
  * Construct the next tuple in the decompressed scan slot.
  * Doesn't check the quals.
  */
-static void
+void
 make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_data_columns)
 {
 	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;

@@ -113,40 +113,6 @@ typedef struct CompressedSegmentInfo
 #define MAX_SEGMENTBY_CANDIDATES 10
 #define MAX_SEGMENTBY_DISTINCT 20
 
-typedef struct DistinctEntry
-{
-	Datum value;
-	bool is_null;
-	int64 count;
-} DistinctEntry;
-
-typedef struct ColumnAnalysis
-{
-	SegmentInfo *seg_info;
-	int n_distinct;
-	bool rejected;
-	DistinctEntry entries[MAX_SEGMENTBY_DISTINCT];
-} ColumnAnalysis;
-
-typedef struct PerCompressedColumn
-{
-	Oid decompressed_type;
-
-	/* the compressor to use for compressed columns, always NULL for segmenters
-	 * only use if is_compressed
-	 */
-	DecompressionIterator *iterator;
-
-	/* is this a compressed column or a segment-by column */
-	bool is_compressed;
-
-	/*
-	 * the index in the decompressed table of the data -1,
-	 * if the data is metadata not found in the decompressed table
-	 */
-	int16 decompressed_column_offset;
-} PerCompressedColumn;
-
 typedef struct BulkWriter
 {
 	Relation out_rel;
@@ -171,35 +137,22 @@ typedef struct BulkWriter
 	BulkInsertState toast_bistate;
 } BulkWriter;
 
-typedef struct RowDecompressor
+typedef struct DistinctEntry
 {
-	PerCompressedColumn *per_compressed_cols;
-	int16 count_compressed_attindex;
+	Datum value;
+	bool is_null;
+	int64 count;
+} DistinctEntry;
 
-	TupleDesc in_desc;
+typedef struct ColumnAnalysis
+{
+	SegmentInfo *seg_info;
+	int n_distinct;
+	bool rejected;
+	DistinctEntry entries[MAX_SEGMENTBY_DISTINCT];
+} ColumnAnalysis;
 
-	TupleDesc out_desc;
-	Datum *compressed_datums;
-	bool *compressed_is_nulls;
 
-	Datum *decompressed_datums;
-	bool *decompressed_is_nulls;
-
-	MemoryContext per_compressed_row_ctx;
-	int64 batches_decompressed;
-	int64 tuples_decompressed;
-
-	TupleTableSlot **decompressed_slots;
-	int decompressed_slots_capacity;
-	int unprocessed_tuples;
-	AttrMap *attrmap;
-
-	Detoaster detoaster;
-
-	TsStatsRelids cached_relids;
-	CmdType cmd_type;
-	SharedCounters observ_counters;
-} RowDecompressor;
 
 /*
  * TOAST_STORAGE_EXTENDED for out of line storage.
@@ -417,10 +370,6 @@ extern bool decompress_target_segments(ModifyHypertableState *ht_state);
 
 extern SegmentInfo *segment_info_new(Form_pg_attribute column_attr);
 extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_null);
-extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor,
-													BulkWriter *writer);
-extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
-														 Tuplesortstate *tuplesortstate);
 extern void compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings,
 														 Oid table, const char *attname,
 														 AttrNumber *att_nums, Oid *sort_operator,
@@ -456,19 +405,9 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 extern BulkWriter bulk_writer_build(Relation out_rel, int insert_options);
 extern BulkWriter *bulk_writer_alloc(Relation out_rel, int insert_options);
 extern void bulk_writer_close(BulkWriter *writer);
-extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc,
-										  Oid in_oid, Oid out_oid);
 
-extern void row_decompressor_reset(RowDecompressor *decompressor);
-extern void row_decompressor_close(RowDecompressor *decompressor);
-extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compressed_relid,
-										Oid uncompressed_relid, CmdType cmd_type);
-extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
-extern int decompress_batch(RowDecompressor *decompressor);
-extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
-									  int num_attnos);
-extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
-											bool *single_value);
+extern void write_slots_to_table(BulkWriter *writer, TupleTableSlot **slots,
+												   int n_batch_rows);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not

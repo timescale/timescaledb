@@ -124,6 +124,30 @@ extern void compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 												  DecompressBatchState *batch_state,
 												  TupleTableSlot *compressed_slot);
 
+/*
+ * Phases of compressed_batch_set_compressed_tuple(), exported separately for
+ * utility consumers that need to interleave their own decisions (e.g. DML
+ * batch summaries before remaining-column decode).
+ */
+extern void compressed_batch_prepare(DecompressContext *dcontext,
+									 DecompressBatchState *batch_state,
+									 TupleTableSlot *compressed_slot);
+extern BatchQualSummary compressed_batch_run_quals(DecompressContext *dcontext,
+												   DecompressBatchState *batch_state,
+												   TupleTableSlot *compressed_slot);
+extern void compressed_batch_decode_remaining(DecompressContext *dcontext,
+											  DecompressBatchState *batch_state,
+											  TupleTableSlot *compressed_slot,
+											  BatchQualSummary vector_qual_summary);
+
+/* Decompress one column of the current batch on demand (lazy per column). */
+extern void decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state,
+							  TupleTableSlot *compressed_slot, int i);
+
+/* Construct the next tuple in the decompressed scan slot; no qual checks. */
+extern void make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row,
+							int num_data_columns);
+
 extern void compressed_batch_advance(DecompressContext *dcontext,
 									 DecompressBatchState *batch_state);
 

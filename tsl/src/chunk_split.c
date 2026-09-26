@@ -25,6 +25,7 @@
 #include "chunk.h"
 #include "compression/api.h"
 #include "compression/compression.h"
+#include "nodes/columnar_scan/compressed_batch_util.h"
 #include "compression/create.h"
 #include "debug_point.h"
 #include "hypercube.h"
@@ -411,23 +412,13 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 		 * to be split across the partitions by decompressing and
 		 * recompressing into sub-segments.
 		 */
-		HeapTuple tuple;
 		CompressionSettings *csettings =
 			ts_compression_settings_get_by_compress_relid(RelationGetRelid(scontext->rel));
 
-		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
+		UtilityEmitState *emit =
+			utility_emit_create_desc(csp->noncompressed_tupdesc, slot->tts_tupleDescriptor);
 
-		RowDecompressor decompressor = build_decompressor(slot->tts_tupleDescriptor,
-														  csp->noncompressed_tupdesc,
-														  csettings->fd.compress_relid,
-														  csettings->fd.relid);
-
-		heap_deform_tuple(tuple,
-						  decompressor.in_desc,
-						  decompressor.compressed_datums,
-						  decompressor.compressed_is_nulls);
-
-		int nrows = decompress_batch(&decompressor);
+		int nrows = utility_emit_batch(emit, slot);
 
 		/*
 		 * Initialize a compressor for each new partition.
@@ -447,7 +438,7 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 		 */
 		for (int i = 0; i < nrows; i++)
 		{
-			int routing_index = route_tuple(decompressor.decompressed_slots[i], scontext->sp);
+			int routing_index = route_tuple(emit->slots[i], scontext->sp);
 			Assert(routing_index == 0 || routing_index == 1);
 			RelationWriteState *rws = &scontext->rws[routing_index];
 			/*
@@ -456,11 +447,10 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 			 * the segments getting too big since we are only making segments
 			 * smaller.
 			 */
-			row_compressor_append_ordered_slot(&rws->compressor,
-											   decompressor.decompressed_slots[i]);
+			row_compressor_append_ordered_slot(&rws->compressor, emit->slots[i]);
 		}
 
-		row_decompressor_close(&decompressor);
+		utility_emit_destroy(emit);
 		scontext->rws_index = 0;
 
 		/*

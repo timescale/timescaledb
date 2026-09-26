@@ -27,6 +27,7 @@
 #include "api.h"
 #include "batch_metadata_builder.h"
 #include "compression.h"
+#include "nodes/columnar_scan/compressed_batch_util.h"
 #include "compression_dml.h"
 #include "create.h"
 #include "debug_assert.h"
@@ -157,8 +158,7 @@ static void save_new_last(CompactChunkScanState *state, RecompressContext *recom
 static bool batches_overlap_firstlast(RecompressContext *recompress_ctx, Datum *prev_last,
 									  bool *prev_last_isnull, Datum *curr_first,
 									  bool *curr_first_isnull);
-static void decompress_batch_to_tuplesort(TupleTableSlot *slot, TupleDesc tupdesc,
-										  RowDecompressor *decompressor,
+static void decompress_batch_to_tuplesort(UtilityEmitState *emit, TupleTableSlot *slot,
 										  Tuplesortstate *recompress_tuplesortstate,
 										  Relation compressed_chunk_rel, Snapshot snapshot,
 										  int *processed_batches);
@@ -169,7 +169,7 @@ static bool compact_chunk_find_overlapping_batches(Relation compressed_chunk_rel
 static bool compact_chunk_recompress_overlapping_batches(
 	Relation compressed_chunk_rel, IndexScanDesc index_scan, Snapshot snapshot,
 	RecompressContext *recompress_ctx, CompactChunkScanState *state, RowCompressor *compressor,
-	RowDecompressor *decompressor, Tuplesortstate *recompress_tuplesortstate, BulkWriter *writer,
+	UtilityEmitState *emit, Tuplesortstate *recompress_tuplesortstate, BulkWriter *writer,
 	int max_batches);
 
 /*
@@ -536,14 +536,11 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 		ts_chunk_column_stats_calculate(ht, uncompressed_chunk);
 	}
 
-	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
 	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
-	/******************** row decompressor **************/
+	/******************** decompression via the utility scan state **************/
 
-	RowDecompressor decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
-													  RelationGetDescr(uncompressed_chunk_rel),
-													  RelationGetRelid(compressed_chunk_rel),
-													  RelationGetRelid(uncompressed_chunk_rel));
+	UtilityEmitState *emit =
+		utility_emit_create(uncompressed_chunk_rel, compressed_chunk_rel, settings);
 
 	/********** row compressor *******************/
 	RowCompressor row_compressor;
@@ -785,13 +782,11 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 
 				compressed_tuple = ExecFetchSlotHeapTuple(compressed_slot, false, &should_free);
 
-				heap_deform_tuple(compressed_tuple,
-								  compressed_rel_tupdesc,
-								  decompressor.compressed_datums,
-								  decompressor.compressed_is_nulls);
-
-				row_decompressor_decompress_row_to_tuplesort(&decompressor,
-															 recompress_tuplesortstate);
+				const int nrows = utility_emit_batch(emit, compressed_slot);
+				for (int row = 0; row < nrows; row++)
+				{
+					tuplesort_puttupleslot(recompress_tuplesortstate, emit->slots[row]);
+				}
 
 				if (!delete_tuple_for_recompression(compressed_chunk_rel,
 													&(compressed_slot->tts_tid),
@@ -890,7 +885,7 @@ finish:
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
 	index_close(index_rel, NoLock);
-	row_decompressor_close(&decompressor);
+	utility_emit_destroy(emit);
 
 	tuplesort_end(input_tuplesortstate);
 	tuplesort_end(recompress_tuplesortstate);
@@ -1094,8 +1089,7 @@ batches_overlap_firstlast(RecompressContext *recompress_ctx, Datum *prev_last,
  * special handling.
  */
 static void
-decompress_batch_to_tuplesort(TupleTableSlot *slot, TupleDesc tupdesc,
-							  RowDecompressor *decompressor,
+decompress_batch_to_tuplesort(UtilityEmitState *emit, TupleTableSlot *slot,
 							  Tuplesortstate *recompress_tuplesortstate,
 							  Relation compressed_chunk_rel, Snapshot snapshot,
 							  int *processed_batches)
@@ -1103,19 +1097,12 @@ decompress_batch_to_tuplesort(TupleTableSlot *slot, TupleDesc tupdesc,
 	bool should_free;
 	HeapTuple compressed_tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
 
-	heap_deform_tuple(compressed_tuple,
-					  tupdesc,
-					  decompressor->compressed_datums,
-					  decompressor->compressed_is_nulls);
-
-	int n_rows = decompress_batch(decompressor);
+	int n_rows = utility_emit_batch(emit, slot);
 
 	for (int i = 0; i < n_rows; i++)
 	{
-		tuplesort_puttupleslot(recompress_tuplesortstate, decompressor->decompressed_slots[i]);
+		tuplesort_puttupleslot(recompress_tuplesortstate, emit->slots[i]);
 	}
-
-	row_decompressor_reset(decompressor);
 
 	if (!delete_tuple_for_recompression(compressed_chunk_rel, &slot->tts_tid, snapshot))
 	{
@@ -1213,13 +1200,12 @@ static bool
 compact_chunk_recompress_overlapping_batches(
 	Relation compressed_chunk_rel, IndexScanDesc index_scan, Snapshot snapshot,
 	RecompressContext *recompress_ctx, CompactChunkScanState *state, RowCompressor *compressor,
-	RowDecompressor *decompressor, Tuplesortstate *recompress_tuplesortstate, BulkWriter *writer,
+	UtilityEmitState *emit, Tuplesortstate *recompress_tuplesortstate, BulkWriter *writer,
 	int max_batches)
 {
 	TupleTableSlot *previous_compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
 	TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
 
-	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
 	bool overlapping = false;
 	bool found_overlaps = false;
 	/* Counts decompressed batches */
@@ -1242,9 +1228,7 @@ compact_chunk_recompress_overlapping_batches(
 										&call_again,
 										&all_dead);
 		Assert(found);
-		decompress_batch_to_tuplesort(previous_compressed_slot,
-									  compressed_rel_tupdesc,
-									  decompressor,
+		decompress_batch_to_tuplesort(emit, previous_compressed_slot,
 									  recompress_tuplesortstate,
 									  compressed_chunk_rel,
 									  snapshot,
@@ -1257,9 +1241,7 @@ compact_chunk_recompress_overlapping_batches(
 										&call_again,
 										&all_dead);
 		Assert(found);
-		decompress_batch_to_tuplesort(previous_compressed_slot,
-									  compressed_rel_tupdesc,
-									  decompressor,
+		decompress_batch_to_tuplesort(emit, previous_compressed_slot,
 									  recompress_tuplesortstate,
 									  compressed_chunk_rel,
 									  snapshot,
@@ -1339,9 +1321,7 @@ compact_chunk_recompress_overlapping_batches(
 											NULL);
 				Assert(found);
 
-				decompress_batch_to_tuplesort(previous_compressed_slot,
-											  compressed_rel_tupdesc,
-											  decompressor,
+				decompress_batch_to_tuplesort(emit, previous_compressed_slot,
 											  recompress_tuplesortstate,
 											  compressed_chunk_rel,
 											  snapshot,
@@ -1351,9 +1331,7 @@ compact_chunk_recompress_overlapping_batches(
 				found_overlaps = true;
 			}
 
-			decompress_batch_to_tuplesort(compressed_slot,
-										  compressed_rel_tupdesc,
-										  decompressor,
+			decompress_batch_to_tuplesort(emit, compressed_slot,
 										  recompress_tuplesortstate,
 										  compressed_chunk_rel,
 										  snapshot,
@@ -1536,17 +1514,14 @@ compact_chunk_impl(Chunk *uncompressed_chunk, int max_batches)
 	{
 		/* Recompress the overlaps */
 		RowCompressor compressor;
-		RowDecompressor decompressor;
+		UtilityEmitState *emit =
+			utility_emit_create(uncompressed_chunk_rel, compressed_chunk_rel, settings);
 		Tuplesortstate *recompress_tuplesortstate;
 
 		row_compressor_init(&compressor,
 							settings,
 							RelationGetDescr(uncompressed_chunk_rel),
 							RelationGetDescr(compressed_chunk_rel));
-		decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
-										  RelationGetDescr(uncompressed_chunk_rel),
-										  RelationGetRelid(compressed_chunk_rel),
-										  RelationGetRelid(uncompressed_chunk_rel));
 		/* Used for gathering and resorting the tuples that should be recompressed together.
 		 * Since we are working on a per-segment level here, we only need to sort them
 		 * based on the orderby settings.
@@ -1568,12 +1543,12 @@ compact_chunk_impl(Chunk *uncompressed_chunk, int max_batches)
 													 recompress_ctx,
 													 state,
 													 &compressor,
-													 &decompressor,
+													 emit,
 													 recompress_tuplesortstate,
 													 &writer,
 													 max_batches);
 		row_compressor_close(&compressor);
-		row_decompressor_close(&decompressor);
+		utility_emit_destroy(emit);
 		tuplesort_end(recompress_tuplesortstate);
 	}
 
@@ -1640,7 +1615,7 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 					  Relation uncompressed_chunk_rel, Relation index_rel,
 					  CompressionSettings *new_settings, Relation new_compressed_chunk_rel)
 {
-	RowDecompressor decompressor;
+	UtilityEmitState *emit;
 	Tuplesortstate *tuplesortstate;
 	RowCompressor row_compressor;
 	BulkWriter writer;
@@ -1651,10 +1626,7 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
-									  RelationGetDescr(uncompressed_chunk_rel),
-									  RelationGetRelid(compressed_chunk_rel),
-									  RelationGetRelid(uncompressed_chunk_rel));
+	emit = utility_emit_create(uncompressed_chunk_rel, compressed_chunk_rel, new_settings);
 
 	/*
 	 * Need to sort with the new settings
@@ -1715,12 +1687,11 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 
 		compressed_tuple = ExecFetchSlotHeapTuple(compressed_slot, false, &should_free);
 
-		heap_deform_tuple(compressed_tuple,
-						  RelationGetDescr(compressed_chunk_rel),
-						  decompressor.compressed_datums,
-						  decompressor.compressed_is_nulls);
-
-		row_decompressor_decompress_row_to_tuplesort(&decompressor, tuplesortstate);
+		const int nrows = utility_emit_batch(emit, compressed_slot);
+		for (int row = 0; row < nrows; row++)
+		{
+			tuplesort_puttupleslot(tuplesortstate, emit->slots[row]);
+		}
 
 		if (should_free)
 		{
@@ -1734,7 +1705,7 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 	bulk_writer_close(&writer);
 	ExecDropSingleTupleTableSlot(compressed_slot);
 	index_endscan(index_scan);
-	row_decompressor_close(&decompressor);
+	utility_emit_destroy(emit);
 	tuplesort_end(tuplesortstate);
 	PopActiveSnapshot();
 }
@@ -2601,13 +2572,17 @@ modify_compressed_table(Chunk *chunk, bool force)
  * values.
  */
 static void
-populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompressor,
+populate_sparse_index_columns(Relation compressed_rel, UtilityEmitState *emit,
 							  List *builders, bool *repl)
 {
 	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
 	TableScanDesc scan = table_beginscan_compat(compressed_rel, GetActiveSnapshot(), 0, NULL, 0);
 	TupleTableSlot *scan_slot = table_slot_create(compressed_rel, NULL);
 	CatalogIndexState indstate = CatalogOpenIndexes(compressed_rel);
+
+	/* Deformed compressed tuple, for the sparse-index metadata updates. */
+	Datum *compressed_datums = palloc(sizeof(Datum) * compressed_desc->natts);
+	bool *compressed_is_nulls = palloc(sizeof(bool) * compressed_desc->natts);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, scan_slot))
 	{
@@ -2618,17 +2593,17 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 
 		heap_deform_tuple(compressed_tuple,
 						  compressed_desc,
-						  decompressor->compressed_datums,
-						  decompressor->compressed_is_nulls);
+						  compressed_datums,
+						  compressed_is_nulls);
 
-		int n_batch_rows = decompress_batch(decompressor);
+		int n_batch_rows = utility_emit_batch(emit, scan_slot);
 
 		/* Feed each decompressed row through the builders */
 		for (int i = 0; i < n_batch_rows; i++)
 		{
 			foreach_ptr(BatchMetadataBuilder, builder, builders)
 			{
-				builder->update_row(builder, decompressor->decompressed_slots[i]);
+				builder->update_row(builder, emit->slots[i]);
 			}
 		}
 
@@ -2636,16 +2611,16 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 		foreach_ptr(BatchMetadataBuilder, builder, builders)
 		{
 			builder->insert_to_compressed_row(builder,
-											  decompressor->compressed_datums,
-											  decompressor->compressed_is_nulls);
+											  compressed_datums,
+											  compressed_is_nulls);
 		}
 
 		/* Update the compressed tuple in-place */
 		ItemPointerData tid = scan_slot->tts_tid;
 		HeapTuple new_tuple = heap_modify_tuple(compressed_tuple,
 												compressed_desc,
-												decompressor->compressed_datums,
-												decompressor->compressed_is_nulls,
+												compressed_datums,
+												compressed_is_nulls,
 												repl);
 
 		/*
@@ -2668,11 +2643,9 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 		foreach_ptr(BatchMetadataBuilder, builder, builders)
 		{
 			builder->reset(builder,
-						   decompressor->compressed_datums,
-						   decompressor->compressed_is_nulls);
+						   compressed_datums,
+						   compressed_is_nulls);
 		}
-
-		row_decompressor_reset(decompressor);
 
 		if (should_free)
 		{
@@ -2750,15 +2723,13 @@ rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
 	List *builders =
 		create_sparse_index_builders(uncompressed_rel, compressed_relid, added_indexes, repl);
 
-	RowDecompressor decompressor = build_decompressor(compressed_desc,
-													  RelationGetDescr(uncompressed_rel),
-													  compressed_relid,
-													  uncompressed_chunk->fd.relid);
+	UtilityEmitState *emit =
+		utility_emit_create(uncompressed_rel, compressed_rel, chunk_settings);
 
 	/* Step 3: scan, decompress, populate, update */
-	populate_sparse_index_columns(compressed_rel, &decompressor, builders, repl);
+	populate_sparse_index_columns(compressed_rel, emit, builders, repl);
 
-	row_decompressor_close(&decompressor);
+	utility_emit_destroy(emit);
 	table_close(uncompressed_rel, AccessShareLock);
 	table_close(compressed_rel, RowExclusiveLock);
 }
