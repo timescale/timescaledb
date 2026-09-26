@@ -283,8 +283,14 @@ utility_emit_create_common(DecompressContext *dcontext)
 	UtilityEmitState *state = palloc0(sizeof(UtilityEmitState));
 	state->dcontext = dcontext;
 	state->batch_state = decompress_batch_state_create_utility(dcontext);
-	state->slots = (TupleTableSlot **) palloc0(sizeof(void *) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	state->slots_capacity = GLOBAL_MAX_ROWS_PER_COMPRESSION;
+	/*
+	 * The output slot array is allocated by utility_emit_rows() on the first
+	 * batch that is actually produced. DML statements whose batches are all
+	 * pruned or skipped never need it, and for a per-statement state the
+	 * 8 KB allocation is a measurable share of such a statement.
+	 */
+	state->slots = NULL;
+	state->slots_capacity = 0;
 	state->mctx = CurrentMemoryContext;
 
 	/*
@@ -332,7 +338,10 @@ utility_emit_destroy(UtilityEmitState *state)
 			ExecDropSingleTupleTableSlot(state->slots[row]);
 		}
 	}
-	pfree(state->slots);
+	if (state->slots != NULL)
+	{
+		pfree(state->slots);
+	}
 	decompress_batch_state_destroy_utility(state->batch_state);
 	decompress_context_destroy_utility(state->dcontext);
 	pfree(state);
@@ -376,6 +385,18 @@ utility_emit_rows(UtilityEmitState *state)
 	DecompressContext *dcontext = state->dcontext;
 	const int num_data_columns = dcontext->num_data_columns;
 	const uint16 n_rows = batch_state->total_batch_rows;
+
+	if (state->slots == NULL)
+	{
+		/*
+		 * First produced batch: allocate the array for the maximum batch size
+		 * (the count was validated against it in utility_emit_prepare()), in
+		 * the state's own context so that it outlives the per-batch context.
+		 */
+		state->slots = (TupleTableSlot **)
+			MemoryContextAllocZero(state->mctx, sizeof(void *) * GLOBAL_MAX_ROWS_PER_COMPRESSION);
+		state->slots_capacity = GLOBAL_MAX_ROWS_PER_COMPRESSION;
+	}
 
 	if (n_rows > state->slots_capacity)
 	{
