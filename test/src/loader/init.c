@@ -6,6 +6,7 @@
 #include <postgres.h>
 
 #include <access/xact.h>
+#include <catalog/namespace.h>
 #include <config.h>
 #ifndef WIN32
 #include <access/parallel.h>
@@ -15,9 +16,13 @@
 #include "extension.h"
 #include <commands/extension.h>
 #include <miscadmin.h>
+#include <nodes/nodes.h>
+#include <nodes/parsenodes.h>
 #include <parser/analyze.h>
+#include <tcop/utility.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
+#include <utils/lsyscache.h>
 
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)
@@ -31,6 +36,8 @@ void ts_license_guc_assign_hook(const char *newval, void *extra);
 
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
+static ProcessUtility_hook_type prev_ProcessUtility_hook;
+
 static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
@@ -38,6 +45,54 @@ cache_invalidate_callback(Datum arg, Oid relid)
 	{
 		ts_extension_invalidate();
 	}
+}
+
+/* Mock hook to verify TimescaleDB stays last via the shim when another extension is head. */
+static void
+mock_process_utility_hook(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
+						  ProcessUtilityContext context, ParamListInfo params,
+						  QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
+{
+	if (nodeTag(pstmt->utilityStmt) == T_DropStmt)
+	{
+		DropStmt *stmt = (DropStmt *) pstmt->utilityStmt;
+
+		if (stmt->removeType == OBJECT_TABLE)
+		{
+			ListCell *lc;
+
+			foreach (lc, stmt->objects)
+			{
+				RangeVar *relation = makeRangeVarFromNameList(lfirst(lc));
+
+				if (relation != NULL)
+				{
+					Oid relid = RangeVarGetRelid(relation, NoLock, true);
+
+					if (OidIsValid(relid))
+					{
+						elog(NOTICE,
+							 "mock-%s got DROP TABLE '%s'",
+							 TIMESCALEDB_VERSION_MOD,
+							 get_rel_name(relid));
+					}
+				}
+			}
+		}
+	}
+
+	ProcessUtility_hook_type hook;
+
+	if (prev_ProcessUtility_hook != NULL)
+	{
+		hook = prev_ProcessUtility_hook;
+	}
+	else
+	{
+		hook = standard_ProcessUtility;
+	}
+
+	hook(pstmt, queryString, readOnlyTree, context, params, queryEnv, dest, qc);
 }
 
 void
@@ -66,6 +121,17 @@ _PG_init(void)
 	}
 #endif
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
+
+	/* Head install like the real extension; the current loader captures it into the shim. */
+	prev_ProcessUtility_hook = ProcessUtility_hook;
+	ProcessUtility_hook = mock_process_utility_hook;
+
+	/* Fail after hook install to exercise the loader error path. */
+
+	if (strcmp(TIMESCALEDB_VERSION_MOD, "mock-pu-fail") == 0)
+	{
+		elog(ERROR, "mock-pu-fail: failing after ProcessUtility hook install");
+	}
 }
 
 /* mock for extension.c */
