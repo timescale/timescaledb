@@ -11,6 +11,9 @@ add_library(${PROJECT_NAME}-mock-3 MODULE ${SOURCES} config.h)
 add_library(${PROJECT_NAME}-mock-4 MODULE ${SOURCES} config.h)
 add_library(${PROJECT_NAME}-mock-5 MODULE ${SOURCES} config.h)
 add_library(${PROJECT_NAME}-mock-broken MODULE ${SOURCES} config.h)
+# mock-pu-fail installs its ProcessUtility hook and then fails, exercising the
+# loader's error path during extension load
+add_library(${PROJECT_NAME}-mock-pu-fail MODULE ${SOURCES} config.h)
 add_library(${PROJECT_NAME}-mock-6 MODULE ${SOURCES} config.h)
 
 target_compile_definitions(${PROJECT_NAME}-mock-1
@@ -26,6 +29,8 @@ target_compile_definitions(${PROJECT_NAME}-mock-5
                            PRIVATE TIMESCALEDB_VERSION_MOD="mock-5")
 target_compile_definitions(${PROJECT_NAME}-mock-broken
                            PRIVATE TIMESCALEDB_VERSION_MOD="mock-broken")
+target_compile_definitions(${PROJECT_NAME}-mock-pu-fail
+                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-pu-fail")
 target_compile_definitions(${PROJECT_NAME}-mock-6
                            PRIVATE TIMESCALEDB_VERSION_MOD="mock-6")
 
@@ -36,6 +41,7 @@ foreach(
   mock-3
   mock-4
   mock-broken
+  mock-pu-fail
   mock-5
   mock-6)
   set_target_properties(
@@ -51,6 +57,27 @@ endforeach(MOCK_VERSION)
 add_library(${PROJECT_NAME}_osm-mock-1 MODULE osm_init.c)
 target_compile_definitions(${PROJECT_NAME}_osm-mock-1
                            PRIVATE OSM_VERSION_MOD="mock-1")
+
+# Mock of a pre-v6 loader (API version 5, no ProcessUtility shim), preloaded by
+# the old-loader TAP test instead of the real loader.
+add_library(${PROJECT_NAME}_mock_old_loader MODULE mock_old_loader.c)
+set_target_properties(
+  ${PROJECT_NAME}_mock_old_loader
+  PROPERTIES OUTPUT_NAME ${PROJECT_NAME}_mock_old_loader PREFIX "")
+install(
+  TARGETS ${PROJECT_NAME}_mock_old_loader
+  DESTINATION ${PG_PKGLIBDIR}
+  OPTIONAL)
+
+# Standalone ProcessUtility probe (no timescaledb dependency) used to verify
+# that TimescaleDB remains last when a prior hook was installed first.
+add_library(${PROJECT_NAME}_pu_probe MODULE pu_probe.c)
+set_target_properties(${PROJECT_NAME}_pu_probe
+                      PROPERTIES OUTPUT_NAME ${PROJECT_NAME}_pu_probe PREFIX "")
+install(
+  TARGETS ${PROJECT_NAME}_pu_probe
+  DESTINATION ${PG_PKGLIBDIR}
+  OPTIONAL)
 
 foreach(MOCK_VERSION mock-1)
   set_target_properties(

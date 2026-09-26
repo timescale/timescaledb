@@ -208,10 +208,30 @@ SET debug_parallel_query = 'on';
 SET max_parallel_workers_per_gather = 1;
 SELECT count(*) FROM test;
 
-CREATE EXTENSION timescaledb_osm VERSION 'mock-1';
+--Probe loaded before the versioned mock must stay head (shim keeps TimescaleDB last).
+DROP EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+LOAD '$libdir/timescaledb_pu_probe';
+CREATE EXTENSION timescaledb VERSION 'mock-2';
+CREATE TABLE pu_probe_test(i int);
+DROP TABLE pu_probe_test;
 
--- Test that OSM process utility hook works:  it should see this DROP TABLE.
-DROP TABLE test;
+--OSM loaded after TimescaleDB stays an outer head. Fresh backend to drop the probe above.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE EXTENSION timescaledb_osm VERSION 'mock-1';
+CREATE TABLE osm_hook_test(i int);
+DROP TABLE osm_hook_test;
+
+--Failed load must still capture its handler into the shim, not orphan it. Fresh backend.
+DROP EXTENSION timescaledb_osm;
+DROP EXTENSION timescaledb;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\set ON_ERROR_STOP 0
+CREATE EXTENSION timescaledb VERSION 'mock-pu-fail';
+\set ON_ERROR_STOP 1
+--captured handler stays reachable via the shim
+CREATE TABLE pu_fail_test(i int);
+DROP TABLE pu_fail_test;
 
 -- clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
