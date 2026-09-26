@@ -10,6 +10,7 @@
 #include <nodes/primnodes.h>
 
 #include "compression/arrow_c_data_interface.h"
+#include "compression/column_values.h"
 #include "vector_predicates.h"
 
 /*
@@ -66,4 +67,3 @@ typedef struct VectorQualState
 
 extern Node *vector_qual_make(Node *qual, const VectorQualInfo *vqinfo);
 extern BatchQualSummary vector_qual_compute(VectorQualState *vqstate);
-extern ArrowArray *make_single_value_arrow(Oid pgtype, Datum datum, bool isnull);

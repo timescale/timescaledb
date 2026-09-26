@@ -13,7 +13,7 @@
 #include <nodes/pg_list.h>
 
 #include "batch_array.h"
-#include "detoaster.h"
+#include "compression/batch_service.h"
 #include "ts_stats/ts_stats_record.h"
 
 typedef enum CompressionColumnType
@@ -95,7 +95,8 @@ typedef struct DecompressContext
 
 	PlanState *ps; /* Set for filtering and instrumentation */
 
-	Detoaster detoaster;
+	/* Shared owned batch decompression service for this scan. */
+	BatchDecompressOwner *decoder;
 
 	int32 chunk_status;
 

@@ -28,6 +28,8 @@
 #include "ts_stats/ts_stats_record.h"
 #include <chunk_insert_state.h>
 #include <compression/arrow_c_data_interface.h>
+#include <compression/batch_service.h>
+#include <compression/column_values.h>
 #include <compression/compression.h>
 #include <compression/compression_dml.h>
 #include <compression/create.h>
@@ -56,23 +58,16 @@ typedef struct InvalidationContext
 	AttrNumber max_time_attno; /* compressed chunk column for time max */
 } InvalidationContext;
 
-typedef BatchQualSummary(BatchMatcher)(RowDecompressor *decompressor, ScanKeyData *scankeys,
-									   int num_scankeys, tuple_filtering_constraints *constraints,
-									   bool check_full_match, bool *skip_current_tuple);
-
 static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
 						TupleTableSlot *insert_slot, CmdType cmd_type);
 
-static BatchQualSummary batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys,
-									  int num_scankeys, tuple_filtering_constraints *constraints,
-									  bool check_full_match, bool *skip_current_tuple);
-static BatchQualSummary batch_matches_vectorized(RowDecompressor *decompressor,
-												 ScanKeyData *scankeys, int num_scankeys,
-												 tuple_filtering_constraints *constraints,
-												 bool check_full_match, bool *skip_current_tuple);
+static BatchQualSummary batch_qual_eval(RowDecompressor *decompressor, ScanKeyData *scankeys,
+										int num_scankeys, tuple_filtering_constraints *constraints,
+										bool check_full_match, bool *skip_current_tuple,
+										const BatchDecompressColumnSet **qual_set_out);
 static void process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 							   ScanKeyData **mem_scankeys, int *num_mem_scankeys,
 							   List **heap_filters, List **index_filters, List **is_null,
@@ -1123,8 +1118,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	tuple_filtering_constraints *constraints = cdst->constraints;
 	Bitmapset *null_columns = cdst->columns_with_null_check;
 
-	BatchMatcher *batch_matcher =
-		constraints && constraints->vectorized_filtering ? batch_matches_vectorized : batch_matches;
+	const BatchDecompressColumnSet *qual_set = NULL;
 	AttrNumber meta_count_attno = InvalidAttrNumber;
 
 	struct decompress_batches_stats stats = { 0 };
@@ -1328,12 +1322,20 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		BatchQualSummary summary = AllRowsPass;
 		if (num_mem_scankeys)
 		{
-			summary = batch_matcher(&decompressor,
-									mem_scankeys,
-									num_mem_scankeys,
-									constraints,
-									delete_only, /* need to check full batch for direct DELETEs */
-									skip_current_tuple);
+			/*
+			 * Quals run over the shared batch service: vector predicates on
+			 * Arrow buffers, or row-wise ScanKey evaluation on converted
+			 * Datums. Columns decompress lazily and are reused by
+			 * production (H3); consumed iterators rewind there (D7).
+			 */
+			row_decompressor_prepare_batch(&decompressor);
+			summary = batch_qual_eval(&decompressor,
+									  mem_scankeys,
+									  num_mem_scankeys,
+									  constraints,
+									  delete_only, /* need to check full batch for direct DELETEs */
+									  skip_current_tuple,
+									  &qual_set);
 
 			/* If no rows pass, complete batch gets filtered */
 			if (summary == NoRowsPass)
@@ -1349,8 +1351,11 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		}
 		complete_batch_delete = (delete_only && summary == AllRowsPass);
 
-		row_decompressor_reset(&decompressor);
-
+		/*
+		 * No reset here: the decompressed columns stay in the payload for
+		 * production; the payload tracks iterator positions and rewinds
+		 * them there.
+		 */
 		if (skip_current_tuple && *skip_current_tuple)
 		{
 			copy_stats_to_observ_counters(&decompressor, &stats);
@@ -1385,6 +1390,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		{
 			write_logical_replication_msg_decompression_end();
 			stats.batches_decompressed++;
+			row_decompressor_reset(&decompressor);
 			continue;
 		}
 		/*
@@ -1469,9 +1475,21 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 												batch_max,
 												true /* tenants_unknown */);
 			}
+
+			/*
+			 * This branch never reaches production, so discard the payload
+			 * state explicitly.
+			 */
+			row_decompressor_reset(&decompressor);
 		}
 		else
 		{
+			/*
+			 * Rewind iterators consumed by matching (D7), then produce the
+			 * whole batch from the same payload. Arrow and scalar columns
+			 * are reused without re-decompression.
+			 */
+			decompressed_batch_rewind_consumed(decompressor.payload);
 			stats.tuples_decompressed +=
 				row_decompressor_decompress_row_to_table(&decompressor, &writer);
 			stats.batches_decompressed++;
@@ -1515,102 +1533,24 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	return stats;
 }
 
-static BatchQualSummary
-batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
-			  tuple_filtering_constraints *constraints, bool check_full_match,
-			  bool *skip_current_tuple)
+/*
+ * Resolve one mem scankey column to its dense index in the shared batch
+ * service. ScanKeys reference uncompressed chunk attnos.
+ */
+static int
+batch_qual_column_index(BatchDecompressOwner *decoder, AttrNumber uncompressed_attno)
 {
-	AttrNumber *attnos = palloc0(sizeof(AttrNumber) * num_scankeys);
-	for (int i = 0; i < num_scankeys; i++)
+	const int ncols = batch_decompress_owner_num_columns(decoder);
+	for (int i = 0; i < ncols; i++)
 	{
-		attnos[i] = scankeys[i].sk_attno;
-	}
-
-	bool next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
-	ScanKey key;
-	bool match;
-
-	/* Default values are set like this because of binary operations
-	 * used to calculate these flags.
-	 */
-	bool match_any = false;
-	bool match_all = true;
-
-	while (next_tuple)
-	{
-		match = true;
-		for (int i = 0; i < num_scankeys; i++)
+		const BatchDecompressColumnSpec *spec = batch_decompress_owner_spec(decoder, i);
+		if (spec->source_attno == uncompressed_attno)
 		{
-			key = &scankeys[i];
-
-			if (key->sk_flags & SK_ISNULL)
-			{
-				if (!decompressor->decompressed_is_nulls[AttrNumberGetAttrOffset(key->sk_attno)])
-				{
-					match = false;
-					break;
-				}
-				continue;
-			}
-			else if (decompressor->decompressed_is_nulls[AttrNumberGetAttrOffset(key->sk_attno)])
-			{
-				match = false;
-				break;
-			}
-
-			if (!DatumGetBool(
-					FunctionCall2Coll(&key->sk_func,
-									  key->sk_collation,
-									  decompressor->decompressed_datums[AttrNumberGetAttrOffset(
-										  key->sk_attno)],
-									  key->sk_argument)))
-			{
-				match = false;
-				break;
-			}
+			return i;
 		}
-
-		match_any |= match;
-		match_all &= match;
-
-		if (match)
-		{
-			match_any = true;
-			if (constraints)
-			{
-				if (constraints->on_conflict == ONCONFLICT_NONE)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_UNIQUE_VIOLATION),
-							 errmsg("duplicate key value violates unique constraint \"%s\"",
-									get_rel_name(constraints->index_relid))
-
-								 ));
-				}
-				if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
-				{
-					*skip_current_tuple = true;
-				}
-			}
-			if (!check_full_match)
-			{
-				return SomeRowsPass;
-			}
-		}
-		next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
 	}
-
-	if (match_all)
-	{
-		return AllRowsPass;
-	}
-
-	if (match_any)
-	{
-		return SomeRowsPass;
-	}
-
-	return NoRowsPass;
+	elog(ERROR, "could not find scankey column %d in the compressed batch", uncompressed_attno);
+	pg_unreachable();
 }
 
 static void
@@ -1631,31 +1571,47 @@ apply_validity_bitmap(const ArrowArray *arrow, uint64 *restrict result)
 	}
 }
 
+/*
+ * Vectorized qual evaluation over the shared batch state: the same
+ * predicate math as the retired batch_matches_vectorized, reading the
+ * payload's wrappers (including scalar columns via single-value Arrow
+ * arrays) instead of decompressing key columns a second time.
+ */
 static BatchQualSummary
-batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
-						 tuple_filtering_constraints *constraints, bool check_full_match,
-						 bool *skip_current_tuple)
+batch_qual_eval_vector(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+					   const int *sk_columns)
 {
-	const int n_rows =
-		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+	DecompressedBatch *payload = decompressor->payload;
+	const CompressedColumnValues *columns = decompressed_batch_columns(payload);
+	const int n_rows = decompressed_batch_rows(payload);
 	const int bitmap_bytes = sizeof(uint64) * ((n_rows + 63) / 64);
+
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 	uint64 *restrict result =
 		MemoryContextAlloc(decompressor->per_compressed_row_ctx, bitmap_bytes);
 	uint64 dict_result[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
 	memset(result, 0xFF, bitmap_bytes);
-	bool single_value = false;
 	bool batch_failed = false;
-
-	/* batch_matches() calls decompress_batch_next_row() which increments
-	 * the decompressor's batched_decompressed variable. To match that
-	 * behaviour we need to bump it here.
-	 */
-	decompressor->batches_decompressed++;
 
 	for (int sk = 0; sk < num_scankeys; sk++)
 	{
-		ArrowArray *arrow =
-			decompress_single_column(decompressor, scankeys[sk].sk_attno, &single_value);
+		const int column = sk_columns[sk];
+		const CompressedColumnValues *column_values = &columns[column];
+		const bool single_value = column_values->decompression_type == DT_Scalar;
+		ArrowArray *arrow;
+		if (single_value)
+		{
+			const BatchDecompressColumnSpec *spec =
+				batch_decompress_owner_spec(decompressor->decoder, column);
+			arrow = make_single_value_arrow(spec->typid,
+											PointerGetDatum(column_values->buffers[1]),
+											DatumGetBool(PointerGetDatum(column_values->buffers[0])));
+		}
+		else
+		{
+			Assert(column_values->arrow != NULL);
+			arrow = column_values->arrow;
+		}
 
 		/* Handle null check */
 		if (scankeys[sk].sk_flags & SK_ISNULL)
@@ -1678,14 +1634,15 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 		}
 
 		VectorPredicate *predicate = get_vector_const_predicate(scankeys[sk].sk_func.fn_oid);
+		Assert(predicate != NULL);
 
 		if (single_value)
 		{
 			/*
-			 * For single-value columns (default values), use a separate bitmap
-			 * to avoid corrupting the main result. The predicate and validity
-			 * bitmap operate on a 1-element arrow, which would clear bits 1-63
-			 * of result[0] if applied directly.
+			 * For single-value columns, use a separate bitmap to avoid
+			 * corrupting the main result. The predicate and validity bitmap
+			 * operate on a 1-element arrow, which would clear bits 1-63 of
+			 * result[0] if applied directly.
 			 */
 			uint64 single_value_result = 1;
 			predicate(arrow, scankeys[sk].sk_argument, &single_value_result);
@@ -1705,8 +1662,8 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 		}
 		else
 		{
-			/* Handle dictionary compressed data by decompressing the dictionary
-			 * first and then translating the results to actual results */
+			/* Handle dictionary compressed data by evaluating the predicate
+			 * on the dictionary first and then translating the results. */
 			const size_t dict_rows = arrow->dictionary->length;
 			const size_t dict_result_words = (dict_rows + 63) / 64;
 			memset(dict_result, 0xFF, dict_result_words * 8);
@@ -1717,16 +1674,163 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 		apply_validity_bitmap(arrow, result);
 	}
 
+	MemoryContextSwitchTo(old_ctx);
+
 	if (batch_failed)
 	{
 		return NoRowsPass;
 	}
 
-	BatchQualSummary summary = get_vector_qual_summary(result, n_rows);
+	return get_vector_qual_summary(result, n_rows);
+}
 
-	if (summary != NoRowsPass)
+/*
+ * Row-wise qual evaluation over converted Datums, preserving the ScanKey
+ * semantics of the retired batch_matches: NULL tests, collation-aware
+ * FunctionCall2Coll, unique-violation reporting and ON CONFLICT side
+ * effects. Each distinct qual column is read exactly once per row through
+ * the shared service, which tracks iterator positions for the D7 rewind.
+ */
+static BatchQualSummary
+batch_qual_eval_rowwise(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+						const BatchDecompressColumnSet *qual_set,
+						tuple_filtering_constraints *constraints, bool check_full_match,
+						bool *skip_current_tuple)
+{
+	DecompressedBatch *payload = decompressor->payload;
+	const int n_rows = decompressed_batch_rows(payload);
+	bool match_any = false;
+	bool match_all = true;
+
+	for (int row = 0; row < n_rows; row++)
 	{
-		if (constraints)
+		decompressed_batch_read(payload, qual_set, row);
+
+		bool match = true;
+		for (int i = 0; i < num_scankeys; i++)
+		{
+			ScanKey key = &scankeys[i];
+			const int offset = AttrNumberGetAttrOffset(key->sk_attno);
+
+			if (key->sk_flags & SK_ISNULL)
+			{
+				if (!decompressor->decompressed_is_nulls[offset])
+				{
+					match = false;
+					break;
+				}
+				continue;
+			}
+			else if (decompressor->decompressed_is_nulls[offset])
+			{
+				match = false;
+				break;
+			}
+
+			if (!DatumGetBool(FunctionCall2Coll(&key->sk_func,
+												key->sk_collation,
+												decompressor->decompressed_datums[offset],
+												key->sk_argument)))
+			{
+				match = false;
+				break;
+			}
+		}
+
+		match_any |= match;
+		match_all &= match;
+
+		if (match)
+		{
+			match_any = true;
+			if (constraints)
+			{
+				if (constraints->on_conflict == ONCONFLICT_NONE)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_UNIQUE_VIOLATION),
+							 errmsg("duplicate key value violates unique constraint \"%s\"",
+									get_rel_name(constraints->index_relid))
+
+								 ));
+			}
+			if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
+			{
+				*skip_current_tuple = true;
+			}
+			}
+			if (!check_full_match)
+			{
+				return SomeRowsPass;
+			}
+		}
+	}
+
+	/*
+	 * Full row-wise scan: the service tracks iterator positions, so check
+	 * the ends of the qual columns now. Partial scans (early SomeRowsPass
+	 * above) defer this to the rewind and whole-batch production.
+	 */
+	decompressed_batch_finish(payload, qual_set);
+
+	if (match_all)
+	{
+		return AllRowsPass;
+	}
+	if (match_any)
+	{
+		return SomeRowsPass;
+	}
+	return NoRowsPass;
+}
+
+/*
+ * Evaluate the in-memory quals for one compressed batch over the shared
+ * batch service (H3): vector predicates on Arrow buffers when the
+ * constraints object permits vectorized filtering and every key column is
+ * Arrow/scalar, row-wise ScanKey evaluation otherwise. The summary only
+ * decides skip/delete/produce; production reuses the same payload.
+ */
+static BatchQualSummary
+batch_qual_eval(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+				tuple_filtering_constraints *constraints, bool check_full_match,
+				bool *skip_current_tuple, const BatchDecompressColumnSet **qual_set_out)
+{
+	BatchDecompressOwner *decoder = decompressor->decoder;
+	const CompressedColumnValues *columns = decompressed_batch_columns(decompressor->payload);
+
+	/*
+	 * Resolve the qual columns to dense indexes and decompress them lazily.
+	 * sk_columns stays aligned with the scankeys; the de-duplicated set is
+	 * created once per scan and reused across batches.
+	 */
+	int *sk_columns = palloc(sizeof(int) * num_scankeys);
+	AttrNumber *qual_attnos = palloc(sizeof(AttrNumber) * num_scankeys);
+	bool all_vector_capable = true;
+
+	for (int sk = 0; sk < num_scankeys; sk++)
+	{
+		const int column = batch_qual_column_index(decoder, scankeys[sk].sk_attno);
+		sk_columns[sk] = column;
+		qual_attnos[sk] = scankeys[sk].sk_attno;
+		row_decompressor_load_column(decompressor, column);
+		if (columns[column].decompression_type == DT_Iterator)
+		{
+			all_vector_capable = false;
+		}
+	}
+
+	if (*qual_set_out == NULL)
+	{
+		*qual_set_out = batch_decompress_owner_columns(decoder, qual_attnos, num_scankeys);
+	}
+
+	if (constraints != NULL && constraints->vectorized_filtering && all_vector_capable)
+	{
+		BatchQualSummary summary =
+			batch_qual_eval_vector(decompressor, scankeys, num_scankeys, sk_columns);
+
+		if (summary != NoRowsPass)
 		{
 			if (constraints->on_conflict == ONCONFLICT_NONE)
 			{
@@ -1735,7 +1839,7 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 						 errmsg("duplicate key value violates unique constraint \"%s\"",
 								get_rel_name(constraints->index_relid))
 
-							 ));
+						 ));
 			}
 			if (constraints->on_conflict == ONCONFLICT_NOTHING && skip_current_tuple)
 			{
@@ -1745,7 +1849,13 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 		return summary;
 	}
 
-	return summary;
+	return batch_qual_eval_rowwise(decompressor,
+								   scankeys,
+								   num_scankeys,
+								   *qual_set_out,
+								   constraints,
+								   check_full_match,
+								   skip_current_tuple);
 }
 
 /*

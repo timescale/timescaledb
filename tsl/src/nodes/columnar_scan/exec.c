@@ -383,6 +383,34 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	Assert(current_not_compressed == num_columns_with_metadata);
 
 	/*
+	 * Shared owned batch decompression service for this scan: copied column
+	 * layout, defaults descriptor, Detoaster, and shared bulk scratch.
+	 */
+	BatchDecompressColumnSpec *decode_specs =
+		palloc0(sizeof(BatchDecompressColumnSpec) * dcontext->num_data_columns);
+	for (int i = 0; i < dcontext->num_data_columns; i++)
+	{
+		CompressionColumnDescription *column = &dcontext->compressed_chunk_columns[i];
+		decode_specs[i] = (BatchDecompressColumnSpec){
+			.input_attno = column->compressed_scan_attno,
+			.source_attno = column->uncompressed_chunk_attno,
+			.output_attno = column->custom_scan_attno,
+			.typid = column->typid,
+			.segmentby = column->type == SEGMENTBY_COLUMN,
+			.bulk_supported = column->bulk_decompression_supported,
+		};
+	}
+	dcontext->decoder = batch_decompress_owner_create(CurrentMemoryContext,
+													  dcontext->uncompressed_chunk_tdesc,
+													  decode_specs,
+													  dcontext->num_data_columns,
+													  desc->natts,
+													  UINT16_MAX,
+													  dcontext->enable_bulk_decompression,
+													  dcontext->reverse,
+													  BATCH_DECOMPRESS_MEMORY_SCAN);
+
+	/*
 	 * Choose which batch queue we are going to use: heap for batch sorted
 	 * merge, and one-element FIFO for normal decompression.
 	 */
@@ -434,7 +462,6 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 			lappend(dcontext->vectorized_quals_constified, constified);
 	}
 
-	detoaster_init(&dcontext->detoaster, CurrentMemoryContext);
 }
 
 /*
@@ -518,7 +545,7 @@ columnar_scan_end(CustomScanState *node)
 	bq->funcs->free(bq);
 	ExecEndNode(linitial(node->custom_ps));
 
-	detoaster_close(&chunk_state->decompress_context.detoaster);
+	batch_decompress_owner_destroy(dcontext->decoder);
 
 	/* Finish the observability aggregates. */
 	SharedCounters sc = { 0 };

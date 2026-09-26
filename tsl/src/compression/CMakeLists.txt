@@ -1,5 +1,6 @@
 set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/api.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/batch_service.c
     ${CMAKE_CURRENT_SOURCE_DIR}/batch_metadata_builder_bloom1.c
     ${CMAKE_CURRENT_SOURCE_DIR}/batch_metadata_builder_firstlast.c
     ${CMAKE_CURRENT_SOURCE_DIR}/batch_metadata_builder_minmax.c

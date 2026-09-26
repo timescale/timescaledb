@@ -63,6 +63,11 @@ typedef struct DecompressResult
 typedef struct FormData_hypertable ChunkCompressionSettings;
 
 typedef struct Compressor Compressor;
+
+/* Shared owned batch decompression service, defined in compression/batch_service.h. */
+typedef struct BatchDecompressOwner BatchDecompressOwner;
+typedef struct DecompressedBatch DecompressedBatch;
+
 struct Compressor
 {
 	void (*append_null)(Compressor *compressord);
@@ -184,6 +189,18 @@ typedef struct RowDecompressor
 
 	Datum *decompressed_datums;
 	bool *decompressed_is_nulls;
+
+	/*
+	 * Shared batch service state for the full-batch path (H2): dense over the
+	 * compressed data columns, output arrays bound to
+	 * decompressed_datums/is_nulls. Created lazily on first prepare (the
+	 * constructor returns this struct by value, so member addresses cannot be
+	 * taken inside it). The legacy matching path keeps per_compressed_row_ctx
+	 * and detoaster until the DML moves to the shared owner (H3).
+	 */
+	BatchDecompressOwner *decoder;
+	DecompressedBatch *payload;
+	bool batch_prepared;
 
 	MemoryContext per_compressed_row_ctx;
 	int64 batches_decompressed;
@@ -465,10 +482,8 @@ extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compr
 										Oid uncompressed_relid, CmdType cmd_type);
 extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
 extern int decompress_batch(RowDecompressor *decompressor);
-extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
-									  int num_attnos);
-extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
-											bool *single_value);
+extern void row_decompressor_prepare_batch(RowDecompressor *decompressor);
+extern void row_decompressor_load_column(RowDecompressor *decompressor, int column);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
