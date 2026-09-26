@@ -1,0 +1,1 @@
+Fixes: Missing continuous aggregate invalidations for unbuffered COPY
