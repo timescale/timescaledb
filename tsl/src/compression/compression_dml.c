@@ -95,9 +95,8 @@ static bool key_column_is_null(tuple_filtering_constraints *constraints, Relatio
 							   Oid ht_relid, TupleTableSlot *slot);
 static bool is_null_or_contains_nulls(Const *const_value);
 static bool direct_delete_prerequisites(ModifyHypertableState *ht_state);
-static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
-											CompressionSettings *settings, Relation chunk_rel,
-											Oid ht_relid, ScanKeyWithAttnos *mem_scankeys);
+static bool can_vectorize_scankeys(const ScanKeyWithAttnos *mem_scankeys,
+								   CompressionSettings *settings, Relation chunk_rel);
 static void update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
 static void init_upsert_bloom_state(ChunkInsertState *cis);
 static Bitmapset *get_arbiter_index_attnums(ChunkInsertState *cis);
@@ -382,12 +381,8 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 											 &cdst->mem_scankeys.num_scankeys,
 											 &cdst->mem_scankeys.attnos);
 
-			cdst->constraints->vectorized_filtering =
-				can_vectorize_constraint_checks(constraints,
-												compression_settings,
-												cis->rel,
-												cis->hypertable_relid,
-												&cdst->mem_scankeys);
+			cdst->mem_scankeys.vectorized =
+				can_vectorize_scankeys(&cdst->mem_scankeys, compression_settings, cis->rel);
 
 			cdst->index_scankeys.scankeys =
 				build_index_scankeys_using_slot(cis->hypertable_relid,
@@ -958,6 +953,14 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	temp_cdst.heap_scankeys.num_scankeys = num_scankeys;
 	temp_cdst.mem_scankeys.scankeys = mem_scankeys;
 	temp_cdst.mem_scankeys.num_scankeys = num_mem_scankeys;
+	/*
+	 * like for INSERTs, evaluate bulk-decompressed key columns for in-memory
+	 * scan keys with vector predicates when every key and predicate
+	 * allows it.
+	 */
+	temp_cdst.mem_scankeys.vectorized =
+		ts_guc_enable_optimizations &&
+		can_vectorize_scankeys(&temp_cdst.mem_scankeys, settings, chunk_rel);
 	temp_cdst.constraints = NULL;
 	temp_cdst.columns_with_null_check = null_columns;
 	temp_cdst.bloom_filters = bloom_filters;
@@ -1124,7 +1127,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	Bitmapset *null_columns = cdst->columns_with_null_check;
 
 	BatchMatcher *batch_matcher =
-		constraints && constraints->vectorized_filtering ? batch_matches_vectorized : batch_matches;
+		cdst->mem_scankeys.vectorized ? batch_matches_vectorized : batch_matches;
 	AttrNumber meta_count_attno = InvalidAttrNumber;
 
 	struct decompress_batches_stats stats = { 0 };
@@ -2824,55 +2827,52 @@ direct_delete_prerequisites(ModifyHypertableState *ht_state)
 	return true;
 }
 
+/*
+ * decide once per statement whether the in-memory scan keys can be
+ * evaluated with vector predicates on the bulk-decompressed key columns
+ */
 static bool
-can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
-								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid,
-								ScanKeyWithAttnos *mem_scankeys)
+can_vectorize_scankeys(const ScanKeyWithAttnos *mem_scankeys, CompressionSettings *settings,
+					   Relation chunk_rel)
 {
-	AttrNumber chunk_attno = -1;
-	Oid typoid, collid;
-	int32 typmod;
-
 	if (mem_scankeys == NULL || mem_scankeys->num_scankeys == 0)
 	{
 		return false;
 	}
 
-	/* We can only vectorize if a vectorized check is available for all scankeys */
+	if (!ts_guc_enable_bulk_decompression)
+	{
+		return false;
+	}
+
 	for (int sk = 0; sk < mem_scankeys->num_scankeys; sk++)
 	{
 		/*
-		 * Here we cannot check for NULL flags even if that is
-		 * handled separately, because this code is called from
-		 * the `init_decompress_state_for_insert` which sets the
-		 * flag based on the first record to be inserted and the
-		 * value may change for the subsequent records.
-		 *
-		 * The `fn_oid` doesn't get updated so it is valid to check
-		 * it here.
+		 * Here we cannot check for NULL flags even if that is handled
+		 * separately, because for INSERT this is called from
+		 * init_decompress_state_for_insert(), which sets the flag based on
+		 * the first record to be inserted and the value may change for the
+		 * subsequent records. The fn_oid doesn't get updated so it is valid
+		 * to check it here.
 		 */
-		ScanKeyData *scankey = &mem_scankeys->scankeys[sk];
+		const ScanKeyData *scankey = &mem_scankeys->scankeys[sk];
 		if (get_vector_const_predicate(scankey->sk_func.fn_oid) == NULL)
 		{
 			return false;
 		}
-	}
 
-	while ((chunk_attno = bms_next_member(constraints->key_columns, chunk_attno)) > 0)
-	{
-		/*
-		 * slot has the physical layout of the hypertable, so we need to
-		 * get the attribute number of the hypertable for the column.
-		 */
-		char *attname = get_attname(chunk_rel->rd_id, chunk_attno, false);
+		/* sk_attno is the attribute number in the uncompressed chunk */
+		char *attname = get_attname(chunk_rel->rd_id, scankey->sk_attno, false);
 
-		/* Ignore segmentby columns, they aren't compressed */
+		/* Segmentby columns are stored uncompressed and never need decompression. */
 		if (ts_array_is_member(settings->fd.segmentby, attname))
 		{
 			continue;
 		}
 
-		get_atttypetypmodcoll(chunk_rel->rd_id, chunk_attno, &typoid, &typmod, &collid);
+		Oid typoid, collid;
+		int32 typmod;
+		get_atttypetypmodcoll(chunk_rel->rd_id, scankey->sk_attno, &typoid, &typmod, &collid);
 
 		/* No bulk decompression function, no vectorized filtering */
 		if (tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) ==
