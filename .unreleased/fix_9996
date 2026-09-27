@@ -1,0 +1,1 @@
+Fixes: #9996 Domain constraints not respected in vectorized filter

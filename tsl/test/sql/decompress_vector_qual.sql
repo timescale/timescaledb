@@ -882,3 +882,29 @@ reset timescaledb.enable_columnarscan;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;
 
+-- Domain constraints on the constant side of a vectorizable qual must be
+-- enforced, not silently dropped (see #9996). The out-of-domain value has
+-- to raise an error instead of matching no rows.
+create domain d_int as int check (value between 0 and 1000);
+
+create table domain_check_vectorized_filter(
+    ts timestamptz not null,
+    k int not null
+);
+select create_hypertable('domain_check_vectorized_filter', 'ts');
+
+insert into domain_check_vectorized_filter
+select '2024-01-01'::timestamptz + (g || ' min')::interval, g
+from generate_series(1, 100) g;
+
+alter table domain_check_vectorized_filter set (timescaledb.compress);
+select count(compress_chunk(c)) from show_chunks('domain_check_vectorized_filter') c;
+
+\set ON_ERROR_STOP 0
+-- 99999 violates the d_int check, so this must fail.
+select count(*) from domain_check_vectorized_filter where k = 99999::d_int;
+\set ON_ERROR_STOP 1
+
+-- A valid domain value still works.
+select count(*) from domain_check_vectorized_filter where k = 42::d_int;
+

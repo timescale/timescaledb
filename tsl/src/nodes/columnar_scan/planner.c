@@ -653,6 +653,31 @@ is_not_runtime_constant(Node *node)
 }
 
 /*
+ * Check if the expression contains a domain coercion. Domain constraints
+ * must be enforced when the qual is evaluated, but the vectorized filter
+ * constifies the constant side with estimate_expression_value(), which can
+ * fold CoerceToDomain on a constant to a plain value without enforcing the
+ * domain constraints. This silently returns wrong results instead of
+ * raising an error (see #9996), so such quals are left to the normal
+ * filter path.
+ */
+static bool
+contains_coerce_to_domain_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, CoerceToDomain))
+	{
+		return true;
+	}
+
+	return expression_tree_walker(node, contains_coerce_to_domain_walker, context);
+}
+
+/*
  * Try to check if the current qual is vectorizable, and if needed make a
  * commuted copy. If not, return NULL.
  */
@@ -862,6 +887,15 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	 */
 	Assert(arg2);
 	if (is_not_runtime_constant(arg2))
+	{
+		return NULL;
+	}
+
+	/*
+	 * Domain coercions on the constant side must be enforced at execution,
+	 * so don't vectorize them (see contains_coerce_to_domain_walker).
+	 */
+	if (contains_coerce_to_domain_walker(arg2, NULL))
 	{
 		return NULL;
 	}
