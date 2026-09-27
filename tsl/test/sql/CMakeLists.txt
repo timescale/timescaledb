@@ -34,6 +34,7 @@ set(TEST_FILES
     compress_dml_aux.sql
     compress_dml_bitmap_rescan.sql
     compress_dml_copy.sql
+    compress_dml_vectorized.sql
     compress_explain.sql
     compress_firstlast_sparse.sql
     compress_float8_corrupt.sql
