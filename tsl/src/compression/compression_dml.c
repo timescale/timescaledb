@@ -36,6 +36,7 @@
 #include <continuous_aggs/insert.h>
 #include <expression_utils.h>
 #include <indexing.h>
+#include <nodes/columnar_scan/compressed_batch.h>
 #include <nodes/columnar_scan/vector_dict.h>
 #include <nodes/columnar_scan/vector_predicates.h>
 #include <nodes/modify_hypertable.h>
@@ -1531,7 +1532,13 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 		attnos[i] = scankeys[i].sk_attno;
 	}
 
-	bool next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
+	/*
+	 * Set up the key columns of the batch, then walk its rows here, converting
+	 * only those columns for each row. The RowDecompressor puts the values into
+	 * decompressed_datums and decompressed_is_nulls.
+	 */
+	const int n_rows = row_decompressor_prepare_batch(decompressor, attnos, num_scankeys);
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 	ScanKey key;
 	bool match;
 
@@ -1541,8 +1548,15 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 	bool match_any = false;
 	bool match_all = true;
 
-	while (next_tuple)
+	for (int row = 0; row < n_rows; row++)
 	{
+		for (int i = 0; i < decompressor->num_set_up_columns; i++)
+		{
+			CompressedColumnValues *column_values =
+				&decompressor->column_values[decompressor->set_up_columns[i]];
+			compressed_columns_to_postgres_data(column_values, 1, row);
+		}
+
 		match = true;
 		for (int i = 0; i < num_scankeys; i++)
 		{
@@ -1599,11 +1613,12 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 			}
 			if (!check_full_match)
 			{
+				MemoryContextSwitchTo(old_ctx);
 				return SomeRowsPass;
 			}
 		}
-		next_tuple = decompress_batch_next_row(decompressor, attnos, num_scankeys);
 	}
+	MemoryContextSwitchTo(old_ctx);
 
 	if (match_all)
 	{
@@ -1651,9 +1666,8 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 	bool single_value = false;
 	bool batch_failed = false;
 
-	/* batch_matches() calls decompress_batch_next_row() which increments
-	 * the decompressor's batched_decompressed variable. To match that
-	 * behaviour we need to bump it here.
+	/* batch_matches() counts the batch through row_decompressor_prepare_batch();
+	 * do the same here.
 	 */
 	decompressor->batches_decompressed++;
 

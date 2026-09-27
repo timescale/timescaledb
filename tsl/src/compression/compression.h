@@ -188,7 +188,6 @@ typedef struct RowDecompressor
 
 	TupleTableSlot **decompressed_slots;
 	int decompressed_slots_capacity;
-	int unprocessed_tuples;
 	AttrMap *attrmap;
 
 	/*
@@ -209,17 +208,24 @@ typedef struct RowDecompressor
 	MemoryContext bulk_decompression_context;
 
 	/*
-	 * Set when decompress_batch_next_row() advanced the iterators of the
-	 * current batch. decompress_batch() then creates them again from the
-	 * start, while the columns decompressed in bulk are reused as they are.
+	 * Set by row_decompressor_prepare_batch(): the row-by-row pass that
+	 * follows it, batch_matches() in compression_dml.c, advances the iterators
+	 * of the columns it set up. decompress_batch() then creates them again
+	 * from the start, while the columns decompressed in bulk are reused as
+	 * they are.
 	 */
 	bool iterators_advanced;
 
+	/* The row count of the current batch, read from the count metadata column by init_batch(). */
+	int batch_rows;
+
 	/*
-	 * The columns whose column_values are set up for the current batch, so
-	 * that row_decompressor_reset() clears only those. A batch sets up only
-	 * the compressed columns it needs; an UPSERT that matches many batches
-	 * per inserted row sets up just the key column of each.
+	 * The columns whose column_values are set up for the current batch. The
+	 * per-row conversion in decompress_row(), the row-by-row matching in
+	 * batch_matches() (compression_dml.c) and row_decompressor_reset() only
+	 * touch these. A batch sets up only the compressed columns it needs: an
+	 * UPDATE that matches batches row by row, or an UPSERT that matches many
+	 * batches per inserted row, sets up just the key columns of each batch.
 	 */
 	int *set_up_columns;
 	int num_set_up_columns;
@@ -495,8 +501,8 @@ extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compr
 										Oid uncompressed_relid, CmdType cmd_type);
 extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
 extern int decompress_batch(RowDecompressor *decompressor);
-extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
-									  int num_attnos);
+extern int row_decompressor_prepare_batch(RowDecompressor *decompressor, AttrNumber *attnos,
+										  int num_attnos);
 extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
 											bool *single_value);
 /*
