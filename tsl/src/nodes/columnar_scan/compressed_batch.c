@@ -190,7 +190,12 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressionColumnDescription *column_description = &dcontext->compressed_chunk_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
-	const int value_bytes = get_typlen(column_description->typid);
+	/*
+	 * The type length was looked up when the column description was built.
+	 * Calling get_typlen() here would do a syscache lookup for every column
+	 * of every batch.
+	 */
+	const int value_bytes = column_description->value_bytes;
 	Assert(value_bytes != 0);
 
 	bool isnull;

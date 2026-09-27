@@ -20,6 +20,26 @@
 #include "nodes/columnar_scan/exec.h"
 
 /*
+ * Size of the first memory block of the two memory contexts that belong to a
+ * UtilityEmitState: the per-batch context and the bulk decompression scratch
+ * context.
+ *
+ * Both contexts are reset once per batch (the scratch context once per
+ * decompressed column). A reset frees every block except the first one, so
+ * if the allocations of one batch do not fit into the first block, every
+ * batch pays for allocating and freeing an extra block. The largest scratch
+ * allocation of the bulk decompression functions is the Simple8bRLE buffer of
+ * sizeof(uint64) * (rows + 63) bytes. From 450 rows on, the memory context
+ * rounds this request up to 8 KiB, which does not fit into the default first
+ * block of 8 KiB. 32 KiB holds this buffer together with the other scratch
+ * memory of one column, and the decompressed columns of a typical batch.
+ * Requests above 8 KiB, such as the Simple8bRLE buffer of a 1000-row batch,
+ * always get a block of their own; that is also the case in the memory
+ * contexts of the columnar scan.
+ */
+#define UTILITY_MCTX_INIT_BLOCK_SIZE (32 * 1024)
+
+/*
  * Resolve a data column name to its attno in the uncompressed chunk
  * descriptor. Column names are shared between the compressed and
  * uncompressed chunk. Dropped columns are skipped, so a name that only
@@ -294,21 +314,28 @@ utility_emit_create_common(DecompressContext *dcontext)
 	state->mctx = CurrentMemoryContext;
 
 	/*
-	 * Initialize the batch state up front, with AllocSet contexts of the
-	 * default sizes for both the per-batch data and the bulk decompression
-	 * scratch. Unlike the scan's 64 KiB Generation contexts, these are served
-	 * from PostgreSQL's context freelist, which matters for the DML path where
-	 * a state can live for a single statement (a one-row INSERT ... ON
-	 * CONFLICT). CurrentMemoryContext is mctx here, so the slot value arrays
-	 * land in mctx as well.
+	 * Create the batch state with its two memory contexts. The columnar scan
+	 * uses Generation contexts with 64 KiB blocks for these. Here AllocSet
+	 * contexts are used instead: they serve requests of up to 8 KiB from their
+	 * blocks (a 64 KiB Generation context only up to 4 KiB), and their first
+	 * block can be made large enough for a whole batch, see
+	 * UTILITY_MCTX_INIT_BLOCK_SIZE. The DML path may create one of these
+	 * states per statement (a one-row INSERT ... ON CONFLICT), and the two
+	 * 32 KiB allocations are cheap enough for that. CurrentMemoryContext is
+	 * mctx here, so the slot value arrays land in mctx as well.
 	 */
 	compressed_batch_init_with_context(dcontext,
 									   state->batch_state,
 									   AllocSetContextCreate(state->mctx,
 															 "utility decompression per-batch",
-															 ALLOCSET_DEFAULT_SIZES));
-	dcontext->bulk_decompression_context =
-		AllocSetContextCreate(state->mctx, "utility bulk decompression", ALLOCSET_DEFAULT_SIZES);
+															 0,
+															 UTILITY_MCTX_INIT_BLOCK_SIZE,
+															 ALLOCSET_DEFAULT_MAXSIZE));
+	dcontext->bulk_decompression_context = AllocSetContextCreate(state->mctx,
+																 "utility bulk decompression",
+																 0,
+																 UTILITY_MCTX_INIT_BLOCK_SIZE,
+																 ALLOCSET_DEFAULT_MAXSIZE);
 	return state;
 }
 

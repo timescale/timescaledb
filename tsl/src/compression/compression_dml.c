@@ -57,6 +57,33 @@ typedef struct InvalidationContext
 	AttrNumber max_time_attno; /* compressed chunk column for time max */
 } InvalidationContext;
 
+/*
+ * Which batch columns the in-memory scan keys refer to.
+ *
+ * A scan key identifies its column by the attribute number in the
+ * uncompressed chunk. The batch state instead numbers its columns by their
+ * index in dcontext->compressed_chunk_columns (batch_state->compressed_columns
+ * uses the same indexes). The arrays below translate between the two. They
+ * depend only on the scan keys and the layout of the compressed chunk, so
+ * they are filled once per decompress_batches_scan() call instead of once per
+ * batch. This matters because a poorly chosen key can make every inserted
+ * row match against every batch of its chunk.
+ */
+typedef struct DmlQualColumns
+{
+	/* For each scan key, the index of its column. Same order as the keys. */
+	int *sk_columns;
+	/*
+	 * The indexes of all columns the keys refer to, each listed once even if
+	 * several keys use the same column. These are the columns to decompress.
+	 */
+	int *qual_indexes;
+	int num_qual_columns;
+} DmlQualColumns;
+
+static void dml_qual_columns_init(DmlQualColumns *qc, DecompressContext *dcontext,
+								  ScanKeyData *scankeys, int num_scankeys);
+
 static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
@@ -65,6 +92,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 
 static BatchQualSummary dml_qual_eval(UtilityEmitState *emit, TupleTableSlot *compressed_slot,
 									  ScanKeyData *scankeys, int num_scankeys,
+									  const DmlQualColumns *qual_columns,
 									  tuple_filtering_constraints *constraints, bool vectorized,
 									  bool check_full_match, bool *skip_current_tuple,
 									  Bitmapset **consumed_iterators);
@@ -1148,8 +1176,13 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	bool emit_owned = false;
 	bool sink_initialized = false;
 	TupleDesc in_desc = RelationGetDescr(in_rel);
+	/*
+	 * The column values and null flags of the current compressed tuple. They
+	 * point into the scan slot, see slot_getallattrs() below.
+	 */
 	Datum *compressed_datums = NULL;
 	bool *compressed_is_nulls = NULL;
+	DmlQualColumns qual_columns = { 0 };
 	bool valid = false;
 	TM_Result result;
 	DecompressBatchScanDesc scan = NULL;
@@ -1280,8 +1313,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 
 		if (!sink_initialized)
 		{
-			compressed_datums = palloc(sizeof(Datum) * in_desc->natts);
-			compressed_is_nulls = palloc(sizeof(bool) * in_desc->natts);
 			if (emit == NULL)
 			{
 				if (cdst->mctx != NULL)
@@ -1305,10 +1336,23 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			meta_count_attno =
 				TupleDescGetAttrNumber(in_desc, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 			Assert(meta_count_attno != InvalidAttrNumber);
+			if (num_mem_scankeys > 0)
+			{
+				dml_qual_columns_init(&qual_columns,
+									  emit->dcontext,
+									  mem_scankeys,
+									  num_mem_scankeys);
+			}
 			sink_initialized = true;
 		}
 
-		heap_deform_tuple(compressed_tuple, in_desc, compressed_datums, compressed_is_nulls);
+		/*
+		 * Split the compressed tuple into its columns. The batch state reads
+		 * the columns from this same slot, so this happens once per batch.
+		 */
+		slot_getallattrs(slot);
+		compressed_datums = slot->tts_values;
+		compressed_is_nulls = slot->tts_isnull;
 
 		/* Bloom pre-filtering for UPSERT conflict detection */
 		if (insert_slot != NULL && cdst->bloom_hasher != NULL)
@@ -1347,10 +1391,10 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 					stats.batches_checked_by_bloom++;
 					if (!bloom1_contains_hash(bloom_datum, hash))
 					{
-						if (emit != NULL)
-						{
-							compressed_batch_discard_tuples(emit->batch_state);
-						}
+						/*
+						 * The batch state was not touched for this batch, so
+						 * there is nothing to clean up.
+						 */
 						stats.batches_pruned_by_bloom++;
 						continue;
 					}
@@ -1376,6 +1420,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 									slot,
 									mem_scankeys,
 									num_mem_scankeys,
+									&qual_columns,
 									constraints,
 									cdst->mem_scankeys_vectorized,
 									delete_only, /* need to check full batch for direct DELETEs */
@@ -1389,7 +1434,12 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 				{
 					stats.batches_bloom_false_positives++;
 				}
-				compressed_batch_discard_tuples(emit->batch_state);
+				/*
+				 * The batch state still holds the decompressed key columns,
+				 * but nothing was written to the output slot. The next
+				 * utility_emit_prepare(), or the reset at the end of the scan,
+				 * frees them, so no separate cleanup is needed here.
+				 */
 				stats.batches_filtered_decompressed++;
 				continue;
 			}
@@ -1406,8 +1456,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			if (sink_initialized)
 			{
 				release_emit_state(emit, emit_owned);
-				pfree(compressed_datums);
-				pfree(compressed_is_nulls);
 			}
 			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
@@ -1489,8 +1537,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			if (sink_initialized)
 			{
 				release_emit_state(emit, emit_owned);
-				pfree(compressed_datums);
-				pfree(compressed_is_nulls);
 			}
 			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
@@ -1574,8 +1620,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	if (sink_initialized)
 	{
 		release_emit_state(emit, emit_owned);
-		pfree(compressed_datums);
-		pfree(compressed_is_nulls);
 		bulk_writer_close(&writer);
 	}
 
@@ -1596,8 +1640,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 }
 
 /*
- * Resolve one mem scankey column to its dense data-column index in the
- * decompression context. ScanKeys reference uncompressed chunk attnos.
+ * Find the index in dcontext->compressed_chunk_columns of the column a scan
+ * key refers to. Scan keys use the attribute numbers of the uncompressed
+ * chunk.
  */
 static int
 dml_qual_column_index(DecompressContext *dcontext, AttrNumber uncompressed_attno)
@@ -1863,6 +1908,39 @@ dml_qual_eval_rowwise(DecompressContext *dcontext, DecompressBatchState *batch_s
 }
 
 /*
+ * Fill a DmlQualColumns for the given scan keys. See the comment on the
+ * struct.
+ */
+static void
+dml_qual_columns_init(DmlQualColumns *qc, DecompressContext *dcontext, ScanKeyData *scankeys,
+					  int num_scankeys)
+{
+	qc->sk_columns = palloc(sizeof(int) * num_scankeys);
+	qc->qual_indexes = palloc(sizeof(int) * num_scankeys);
+	qc->num_qual_columns = 0;
+
+	for (int sk = 0; sk < num_scankeys; sk++)
+	{
+		const int column = dml_qual_column_index(dcontext, scankeys[sk].sk_attno);
+		qc->sk_columns[sk] = column;
+
+		bool found = false;
+		for (int q = 0; q < qc->num_qual_columns; q++)
+		{
+			if (qc->qual_indexes[q] == column)
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			qc->qual_indexes[qc->num_qual_columns++] = column;
+		}
+	}
+}
+
+/*
  * Evaluate the in-memory quals for one compressed batch over the shared scan
  * batch state: vector predicates on Arrow buffers when the statement's keys
  * were found vectorizable (can_vectorize_scankeys) and every key column of
@@ -1874,44 +1952,25 @@ dml_qual_eval_rowwise(DecompressContext *dcontext, DecompressBatchState *batch_s
  */
 static BatchQualSummary
 dml_qual_eval(UtilityEmitState *emit, TupleTableSlot *compressed_slot, ScanKeyData *scankeys,
-			  int num_scankeys, tuple_filtering_constraints *constraints, bool vectorized,
-			  bool check_full_match, bool *skip_current_tuple, Bitmapset **consumed_iterators)
+			  int num_scankeys, const DmlQualColumns *qual_columns,
+			  tuple_filtering_constraints *constraints, bool vectorized, bool check_full_match,
+			  bool *skip_current_tuple, Bitmapset **consumed_iterators)
 {
 	DecompressContext *dcontext = emit->dcontext;
 	DecompressBatchState *batch_state = emit->batch_state;
-
-	/*
-	 * Resolve the qual columns to dense indexes and decompress them lazily.
-	 * sk_columns stays aligned with the scankeys; qual_indexes is the
-	 * de-duplicated list used for row-wise conversion.
-	 */
-	int *sk_columns = palloc(sizeof(int) * num_scankeys);
-	int *qual_indexes = palloc(sizeof(int) * num_scankeys);
-	int num_qual_columns = 0;
+	const int *sk_columns = qual_columns->sk_columns;
+	const int *qual_indexes = qual_columns->qual_indexes;
+	const int num_qual_columns = qual_columns->num_qual_columns;
 	bool all_vector_capable = true;
 
-	for (int sk = 0; sk < num_scankeys; sk++)
+	/* Decompress the columns the scan keys refer to. */
+	for (int q = 0; q < num_qual_columns; q++)
 	{
-		const int column = dml_qual_column_index(dcontext, scankeys[sk].sk_attno);
-		sk_columns[sk] = column;
+		const int column = qual_indexes[q];
 		decompress_column(dcontext, batch_state, compressed_slot, column);
 		if (batch_state->compressed_columns[column].decompression_type == DT_Iterator)
 		{
 			all_vector_capable = false;
-		}
-
-		bool found = false;
-		for (int q = 0; q < num_qual_columns; q++)
-		{
-			if (qual_indexes[q] == column)
-			{
-				found = true;
-				break;
-			}
-		}
-		if (!found)
-		{
-			qual_indexes[num_qual_columns++] = column;
 		}
 	}
 
