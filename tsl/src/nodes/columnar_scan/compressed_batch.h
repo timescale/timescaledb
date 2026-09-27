@@ -200,6 +200,14 @@ const ArrowArray *compressed_batch_get_arrow_array(VectorQualState *vqstate, Exp
 												   bool *is_default_value);
 int get_max_varlena_bytes(ArrowArray *text_array);
 
+/*
+ * Set up the column values of a column that was decompressed in bulk, from
+ * its Arrow array. Also called by init_column() in compression.c.
+ */
+extern void compressed_column_values_from_arrow(CompressedColumnValues *column_values,
+												ArrowArray *arrow, Oid typid, int value_bytes,
+												MemoryContext text_context);
+
 inline static void
 store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 {

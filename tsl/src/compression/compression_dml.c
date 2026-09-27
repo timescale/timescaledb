@@ -1268,6 +1268,13 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			Assert(meta_count_attno != InvalidAttrNumber);
 		}
 
+		/*
+		 * Start a new batch. This frees the columns decompressed for the
+		 * previous batch. Within a batch nothing is freed: the columns
+		 * decompressed to match it are reused when it is decompressed in full.
+		 */
+		row_decompressor_reset(&decompressor);
+
 		heap_deform_tuple(compressed_tuple,
 						  decompressor.in_desc,
 						  decompressor.compressed_datums,
@@ -1348,8 +1355,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			}
 		}
 		complete_batch_delete = (delete_only && summary == AllRowsPass);
-
-		row_decompressor_reset(&decompressor);
 
 		if (skip_current_tuple && *skip_current_tuple)
 		{
@@ -1656,6 +1661,20 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 	{
 		ArrowArray *arrow =
 			decompress_single_column(decompressor, scankeys[sk].sk_attno, &single_value);
+
+		if (arrow == NULL)
+		{
+			/*
+			 * The compression algorithm of this batch has no bulk decompression
+			 * function for the type of this column. Match the batch row by row.
+			 */
+			return batch_matches(decompressor,
+								 scankeys,
+								 num_scankeys,
+								 constraints,
+								 check_full_match,
+								 skip_current_tuple);
+		}
 
 		/* Handle null check */
 		if (scankeys[sk].sk_flags & SK_ISNULL)
