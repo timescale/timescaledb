@@ -15,6 +15,20 @@ CREATE ROLE test_cagg_refresh_policy_user WITH LOGIN;
 ALTER ROLE test_cagg_refresh_policy_user SET timezone TO 'UTC';
 ALTER ROLE test_cagg_refresh_policy_user SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
 GRANT ALL ON SCHEMA public TO test_cagg_refresh_policy_user;
+-- The parameter that controls the background worker log level differs by
+-- PostgreSQL version: timescaledb.bgw_log_level before PG19, and the native
+-- per-backend-type log_min_messages from PG19 on.
+SELECT CASE WHEN current_setting('server_version_num')::int >= 190000
+            THEN 'log_min_messages' ELSE 'timescaledb.bgw_log_level' END AS bgw_log_param,
+       CASE WHEN current_setting('server_version_num')::int >= 190000
+            THEN 'warning, bgworker:warning' ELSE 'warning' END AS bgw_log_value
+\gset
+ALTER SYSTEM SET :bgw_log_param TO :'bgw_log_value';
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+
 \c :TEST_DBNAME test_cagg_refresh_policy_user
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -1623,3 +1637,9 @@ RESET timezone;
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
 DROP ROLE test_cagg_refresh_policy_user;
+ALTER SYSTEM RESET :bgw_log_param;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+
