@@ -630,3 +630,107 @@ order by id, ts desc, value
  03-03-2022 | 20 |  8.25849 |        30 | t
 
 drop table test8;
+-- Test memory handling of by-reference column when the output tuple of
+-- ColumnarScan is overwritten.
+create table source_table(ts int, tag text, value float) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.chunk_interval = 2500, tsdb.compress);
+insert into source_table
+select ts, repeat((ts / 100)::text, 10 * (ts % 100)), mix(ts)
+from generate_series(1, 5000) ts
+;
+alter table source_table set (tsdb.compress_segmentby = '', tsdb.compress_orderby = 'ts');
+NOTICE:  updated compression settings will only apply to future compressions
+select compress_chunk(x) from show_chunks('source_table') x;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_56_chunk
+ _timescaledb_internal._hyper_8_57_chunk
+ _timescaledb_internal._hyper_8_58_chunk
+
+create table dest as select * from source_table;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
+create table dest as select * from source_table order by t;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
+create table dest as select * from source_table order by value;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
+alter table source_table set (tsdb.compress_segmentby = 'tag');
+NOTICE:  updated compression settings will only apply to future compressions
+select compress_chunk(decompress_chunk(x)) from show_chunks('source_table') x;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_56_chunk
+ _timescaledb_internal._hyper_8_57_chunk
+ _timescaledb_internal._hyper_8_58_chunk
+ _timescaledb_internal._hyper_8_59_chunk
+ _timescaledb_internal._hyper_8_60_chunk
+ _timescaledb_internal._hyper_8_61_chunk
+
+create table dest as select * from source_table;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
+create table dest as select * from source_table order by t;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
+create table dest as select * from source_table order by value;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
+alter table source_table set (tsdb.compress_segmentby = '', tsdb.compress_orderby = 'value');
+NOTICE:  updated compression settings will only apply to future compressions
+select compress_chunk(decompress_chunk(x)) from show_chunks('source_table') x;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_56_chunk
+ _timescaledb_internal._hyper_8_57_chunk
+ _timescaledb_internal._hyper_8_58_chunk
+ _timescaledb_internal._hyper_8_59_chunk
+ _timescaledb_internal._hyper_8_60_chunk
+ _timescaledb_internal._hyper_8_61_chunk
+
+create table dest as select * from source_table;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
+create table dest as select * from source_table order by t;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
+create table dest as select * from source_table order by value;
+select count(distinct tag) from dest;
+ count 
+-------
+  4755
+
+drop table dest;
