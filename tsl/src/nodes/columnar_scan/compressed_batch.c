@@ -1119,17 +1119,29 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
 	/*
-	 * It's a virtual tuple slot, so no point in clearing/storing it
-	 * per each row, we can just update the values in-place. This saves
-	 * some CPU. We have to store it after ExecQual returns false (the tuple
-	 * didn't pass the filter), or after a new batch. The standard protocol
-	 * is to clear and set the tuple slot for each row, but our output tuple
-	 * slots are read-only, and the memory is owned by this node, so it is
-	 * safe to violate this protocol.
+	 * The typical Postgres protocol is to re-construct each output tuple anew
+	 * because it might have been modified by the caller. We know we're working
+	 * with a virtual tuple here, so we can make some simplifications below to
+	 * speed things up.
 	 */
 	Assert(TTS_IS_VIRTUAL(decompressed_scan_slot));
 
+	/*
+	 * If the caller materialized the tuple into caller's memory context, have
+	 * to free it. Materializing it also overwrites the attribute values in
+	 * place, see tts_virtual_materialize().
+	 */
 	if (TTS_SHOULDFREE(decompressed_scan_slot))
+	{
+		ExecClearTuple(decompressed_scan_slot);
+	}
+
+	/*
+	 * If the tuple was cleared, have to mark it valid again. Also have to reset
+	 * the pointers for by-refrence data in the tuple, that might have been
+	 * overwritten by materialization.
+	 */
+	if (TTS_EMPTY(decompressed_scan_slot))
 	{
 		for (int i = 0; i < num_data_columns; i++)
 		{
@@ -1139,10 +1151,6 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 				*column->output_value = PointerGetDatum(column->by_ref_storage);
 			}
 		}
-	}
-
-	if (TTS_EMPTY(decompressed_scan_slot))
-	{
 		ExecStoreVirtualTuple(decompressed_scan_slot);
 	}
 
