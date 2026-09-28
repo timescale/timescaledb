@@ -1012,21 +1012,12 @@ chunk_cmp_reverse(const void *c1, const void *c2)
  *
  * if "chunks" is NULL, we get all the chunks from the catalog. Otherwise we
  * restrict ourselves to the passed in chunks list.
- *
- * nested_oids is a list of lists, chunks that occupy the same time slice will be
- * in the same list. In the list [[1,2,3],[4,5,6]] chunks 1, 2 and 3 are space partitions of
- * the same time slice and 4, 5 and 6 are space partitions of the next time slice.
- *
  */
 Chunk **
 ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hypertable *ht,
 											   bool include_osm, Chunk **chunks, bool reverse,
-											   List **nested_oids, unsigned int *num_chunks)
+											   unsigned int *num_chunks)
 {
-	List *slot_chunk_oids = NIL;
-	DimensionSlice *slice = NULL;
-	unsigned int i;
-
 	if (chunks == NULL)
 	{
 		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, include_osm, num_chunks);
@@ -1047,30 +1038,6 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 	else
 	{
 		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp);
-	}
-
-	for (i = 0; i < *num_chunks; i++)
-	{
-		Chunk *chunk = chunks[i];
-
-		if (NULL != slice && ts_dimension_slice_cmp(slice, chunk->cube->slices[0]) != 0 &&
-			slot_chunk_oids != NIL)
-		{
-			*nested_oids = lappend(*nested_oids, slot_chunk_oids);
-			slot_chunk_oids = NIL;
-		}
-
-		if (NULL != nested_oids)
-		{
-			slot_chunk_oids = lappend_oid(slot_chunk_oids, chunk->fd.relid);
-		}
-
-		slice = chunk->cube->slices[0];
-	}
-
-	if (slot_chunk_oids != NIL)
-	{
-		*nested_oids = lappend(*nested_oids, slot_chunk_oids);
 	}
 
 	return chunks;
