@@ -30,7 +30,7 @@
  */
 
 #define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
-#define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
+#define is_supported_pg_version_17(version) ((version >= 170003) && (version < 180000))
 #define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
 #define is_supported_pg_version_19(version) ((version >= 190000) && (version < 200000))
 

@@ -1,0 +1,26 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Vectorized text comparison must respect a non-deterministic collation given
+-- in the query, not only one declared on the column
+create collation nocase (provider = icu, locale = 'und-u-ks-level2', deterministic = false);
+
+create table t_nocase (
+    ts    int not null,
+    label text not null
+);
+select count(*) from create_hypertable('t_nocase', 'ts', chunk_time_interval => 1000);
+alter table t_nocase set (timescaledb.compress);
+insert into t_nocase values (1, 'merlot');
+select count(compress_chunk(ch)) from show_chunks('t_nocase') ch;
+
+-- the comparison cannot be a vectorized filter
+explain (costs off) select label from t_nocase where label = 'MERLOT' collate nocase;
+select count(*) from t_nocase where label = 'MERLOT' collate nocase;
+select count(*) from t_nocase where label <> 'MERLOT' collate nocase;
+select count(*) from t_nocase where label collate nocase in ('MERLOT', 'x');
+select count(*) filter (where label = 'MERLOT' collate nocase) from t_nocase;
+
+drop table t_nocase cascade;
+drop collation nocase;

@@ -645,5 +645,17 @@ INSERT INTO readings VALUES (now(), 3, 3.0);
 CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
 SELECT count(*) FROM readings_hourly;
 
+-- Dropping the hypertable releases its tracker as well, and that free is
+-- deferred the same way, so a rolled back DROP TABLE leaves it alone.
+BEGIN;
+DROP TABLE readings CASCADE;
+ROLLBACK;
+:GRC 'readings';
+
+-- Tracking still works in this backend after the rolled back drop.
+INSERT INTO readings VALUES (now(), 4, 4.0);
+CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
+SELECT count(*) FROM readings_hourly;
+
 DROP MATERIALIZED VIEW readings_hourly;
 DROP TABLE readings;

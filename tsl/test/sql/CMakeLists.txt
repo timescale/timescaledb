@@ -34,6 +34,7 @@ set(TEST_FILES
     compress_dml_aux.sql
     compress_dml_bitmap_rescan.sql
     compress_dml_copy.sql
+    compress_dml_vectorized.sql
     compress_explain.sql
     compress_firstlast_sparse.sql
     compress_float8_corrupt.sql
@@ -43,6 +44,7 @@ set(TEST_FILES
     compress_stats.sql
     compress_unordered_sort.sql
     compressed_collation.sql
+    compressed_collation_icu.sql
     compressed_detoaster.sql
     compression.sql
     compression_allocation.sql
@@ -73,6 +75,7 @@ set(TEST_FILES
     direct_compress_insert.sql
     direct_compress_policy.sql
     move.sql
+    move_to_columnstore.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql

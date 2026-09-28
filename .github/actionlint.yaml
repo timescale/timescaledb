@@ -2,6 +2,12 @@ self-hosted-runner:
   labels:
     - timescaledb-runner-arm64
     - cloud-image-runner-ubuntu-24-arm64
+    - runs-on/fleet=linux-2cpu/env=prod
+    - runs-on/fleet=linux-8cpu/env=prod
+    - runs-on/fleet=linux-2cpu-x64/env=prod
+    - runs-on/fleet=linux-8cpu-x64/env=prod
+    - runs-on/fleet=linux-2cpu-ondemand/env=prod
+    - runs-on/fleet=linux-8cpu-x64-ondemand/env=prod
 
 config-variables: null
 

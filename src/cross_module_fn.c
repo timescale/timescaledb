@@ -84,6 +84,7 @@ CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(rebuild_columnstore);
 CROSSMODULE_WRAPPER(rebuild_sparse_index);
+CROSSMODULE_WRAPPER(move_to_columnstore);
 CROSSMODULE_WRAPPER(bloom1_contains);
 CROSSMODULE_WRAPPER(bloom1_contains_any);
 CROSSMODULE_WRAPPER(bloom1_contains_any_hashes);
@@ -292,6 +293,12 @@ tenant_tracker_cache_invalidate_default(Oid relid)
 	/* No op in community licensed code */
 }
 
+static void
+tenant_tracker_remove_at_commit_default(int32 hypertable_id, Oid main_table_relid)
+{
+	/* No op in community licensed code: nothing is tracked without TSL. */
+}
+
 static PGFunction
 bloom1_get_hash_function_default(Oid type, FmgrInfo **finfo)
 {
@@ -366,6 +373,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
 	.tenant_tracker_cache_invalidate = tenant_tracker_cache_invalidate_default,
+	.tenant_tracker_remove_at_commit = tenant_tracker_remove_at_commit_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_add_column = continuous_agg_add_column_default,
 	.continuous_agg_apply_rewrites_tsl = NULL,
@@ -386,6 +394,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.decompress_chunk = error_no_default_fn_pg_community,
 	.rebuild_columnstore = error_no_default_fn_pg_community,
 	.rebuild_sparse_index = error_no_default_fn_pg_community,
+	.move_to_columnstore = error_no_default_fn_pg_community,
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.compressed_data_column_size = error_no_default_fn_pg_community,

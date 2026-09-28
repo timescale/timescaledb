@@ -203,14 +203,15 @@ ORDER BY h.table_name;
 ------------+------------
  conditions | t
 
--- Entries for hypertables dropped earlier in this test outlive them.
+-- Dropping a hypertable releases its tracker, so no entry outlives the
+-- hypertable it belongs to.
 SELECT count(*) > 0 AS dropped_hypertables_still_listed
 FROM _timescaledb_functions.tenant_tracking_map() m
 WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
   AND NOT EXISTS (SELECT 1 FROM _timescaledb_catalog.hypertable h WHERE h.id = m.hypertable_id);
  dropped_hypertables_still_listed 
 ----------------------------------
- t
+ f
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 DROP MATERIALIZED VIEW cond_daily;

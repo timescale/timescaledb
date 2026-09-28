@@ -107,6 +107,7 @@ typedef struct CrossModuleFunctions
 										  HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
 										  bool update);
 	void (*tenant_tracker_cache_invalidate)(Oid relid);
+	void (*tenant_tracker_remove_at_commit)(int32 hypertable_id, Oid main_table_relid);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	void (*continuous_agg_add_column)(ContinuousAgg *cagg, AlterTableStmt *stmt);
@@ -131,6 +132,7 @@ typedef struct CrossModuleFunctions
 	PGFunction decompress_chunk;
 	PGFunction rebuild_columnstore;
 	PGFunction rebuild_sparse_index;
+	PGFunction move_to_columnstore;
 	void (*decompress_batches_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);

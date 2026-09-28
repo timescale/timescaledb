@@ -1297,3 +1297,37 @@ ALTER TABLE alter_col_type_test ALTER COLUMN device_id TYPE text;
 
 DROP TABLE alter_col_type_test;
 
+
+-- Dropping the schema of a hypertable should also drop its compressed chunks
+-- and evict their chunk statistics, including those of a continuous aggregate
+-- in the same schema
+CREATE SCHEMA drop_schema_test;
+CREATE TABLE drop_schema_test.t(time timestamptz NOT NULL, value int)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
+INSERT INTO drop_schema_test.t
+  SELECT t, 1 FROM generate_series('2025-01-01'::timestamptz, '2025-01-03', '1 hour') t;
+CREATE MATERIALIZED VIEW drop_schema_test.agg WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, sum(value) FROM drop_schema_test.t GROUP BY 1
+  WITH DATA;
+ALTER MATERIALIZED VIEW drop_schema_test.agg SET (timescaledb.compress);
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_schema_test.t') c;
+SELECT count(compress_chunk(c)) FROM show_chunks('drop_schema_test.agg') c;
+SELECT count(*) FROM drop_schema_test.t WHERE value > 0;
+SELECT count(*) FROM drop_schema_test.agg WHERE sum > 0;
+
+CREATE TEMP TABLE drop_schema_compressed AS
+  SELECT compress_relid::oid AS relid
+  FROM _timescaledb_catalog.compression_settings
+  WHERE relid IN (SELECT show_chunks('drop_schema_test.t')
+                  UNION ALL SELECT show_chunks('drop_schema_test.agg'));
+SELECT count(*) AS compressed_chunks FROM drop_schema_compressed;
+SELECT count(*) AS stats FROM _timescaledb_functions.chunk_statistics() s
+  WHERE s.compressed_relid::oid IN (SELECT relid FROM drop_schema_compressed);
+
+DROP SCHEMA drop_schema_test CASCADE;
+
+SELECT count(*) AS leftover_compressed_chunks FROM pg_class
+  WHERE oid IN (SELECT relid FROM drop_schema_compressed);
+SELECT count(*) AS leftover_stats FROM _timescaledb_functions.chunk_statistics() s
+  WHERE s.compressed_relid::oid IN (SELECT relid FROM drop_schema_compressed);
+DROP TABLE drop_schema_compressed;

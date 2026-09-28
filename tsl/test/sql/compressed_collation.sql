@@ -144,3 +144,4 @@ update t9997 set note = 99 where actor = 'alice' collate "C";
 select note from t9997 where actor = 'alice' collate "C";
 
 drop table t9997 cascade;
+

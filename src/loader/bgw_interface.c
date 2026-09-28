@@ -22,8 +22,11 @@
  * xxxx. RENDEZVOUS_BGW_LOADER_API_VERSION is used to verify if the loader in use is compatible with
  * the current TimescaleDB version. This check happens in bgw/bgw_launcher.c When
  * ts_bgw_loader_api_version is updated, check the compatibility in bgw/bgw_launcher.c as well
+ *
+ * API 6 adds the loader ProcessUtility shim (keeps TimescaleDB last in the hook
+ * chain). Older loaders lack it but stay compatible, so the minimum is unchanged.
  */
-const int32 ts_bgw_loader_api_version = 5;
+const int32 ts_bgw_loader_api_version = 6;
 
 TS_FUNCTION_INFO_V1(ts_bgw_worker_reserve);
 TS_FUNCTION_INFO_V1(ts_bgw_worker_release);

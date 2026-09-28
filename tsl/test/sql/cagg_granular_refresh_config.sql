@@ -181,7 +181,8 @@ JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
 WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
 ORDER BY h.table_name;
 
--- Entries for hypertables dropped earlier in this test outlive them.
+-- Dropping a hypertable releases its tracker, so no entry outlives the
+-- hypertable it belongs to.
 SELECT count(*) > 0 AS dropped_hypertables_still_listed
 FROM _timescaledb_functions.tenant_tracking_map() m
 WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())

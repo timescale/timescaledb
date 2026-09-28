@@ -838,6 +838,26 @@ SELECT count(*) FROM readings_hourly;
 -------
      3
 
+-- Dropping the hypertable releases its tracker as well, and that free is
+-- deferred the same way, so a rolled back DROP TABLE leaves it alone.
+BEGIN;
+DROP TABLE readings CASCADE;
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_2_chunk
+ROLLBACK;
+:GRC 'readings';
+ table_name | granular_refresh_column | granular_refresh_start_offset | granular_refresh_end_offset 
+------------+-------------------------+-------------------------------+-----------------------------
+ readings   | sensor_id               | 30 days                       | 0 days
+
+-- Tracking still works in this backend after the rolled back drop.
+INSERT INTO readings VALUES (now(), 4, 4.0);
+CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
+SELECT count(*) FROM readings_hourly;
+ count 
+-------
+     4
+
 DROP MATERIALIZED VIEW readings_hourly;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_2_chunk
 DROP TABLE readings;
