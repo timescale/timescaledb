@@ -2,6 +2,31 @@
 
 **Please note: When updating your database, you should connect using `psql` with the `-X` flag to prevent any `.psqlrc` commands from accidentally triggering the load of a previous TimescaleDB version.**
 
+## 2.30.2 (2026-09-28)
+
+This release contains performance improvements and bug fixes since the 2.30.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.30.2**
+* 
+
+**Backward-Incompatible Changes**
+
+**Features**
+* [#10609](https://github.com/timescale/timescaledb/pull/10609) Fix race while updating granular refresh setting for hypertable
+* [#10613](https://github.com/timescale/timescaledb/pull/10613) Rename the granular refresh options to timescaledb.cagg_granular_refresh_*
+* [#10636](https://github.com/timescale/timescaledb/pull/10636) Free the tenant tracker's shared memory when its hypertable is dropped
+
+**Bugfixes**
+* [#10665](https://github.com/timescale/timescaledb/pull/10665) Fix crash when merging chunks with different column layouts
+* [#10668](https://github.com/timescale/timescaledb/pull/10668) Fix DROP SCHEMA CASCADE leaving orphaned compressed chunks
+* [#10682](https://github.com/timescale/timescaledb/pull/10682) Vectorized text comparison ignored a non-deterministic collation given in the query
+
+**New Settings**
+
+**GUCs**
+
+**Thanks**
+
 ## 2.30.1 (2026-09-17)
 
 This release contains bug fixes since the 2.30.0 release. We recommend that you upgrade at the next available opportunity.
