@@ -43,6 +43,7 @@ set(TEST_FILES
     compress_stats.sql
     compress_unordered_sort.sql
     compressed_collation.sql
+    compressed_collation_icu.sql
     compressed_detoaster.sql
     compression.sql
     compression_allocation.sql
