@@ -77,6 +77,7 @@ jobs:
           compress_qualpushdown_saop
           compress_sort_transform
           compression_allocation
+          compressed_collation_icu
           merge_append_partially_compressed
           net
           pg_dump
