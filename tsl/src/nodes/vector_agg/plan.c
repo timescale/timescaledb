@@ -565,6 +565,7 @@ typedef struct MakeFinalizeAggContext
 static Node *
 make_finalize_agg_mutator(Node *node, void *context)
 {
+	/* LOOK HERE */
 	if (node == NULL)
 	{
 		return NULL;
