@@ -84,6 +84,7 @@ CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(rebuild_columnstore);
 CROSSMODULE_WRAPPER(rebuild_sparse_index);
+CROSSMODULE_WRAPPER(move_to_columnstore);
 CROSSMODULE_WRAPPER(bloom1_contains);
 CROSSMODULE_WRAPPER(bloom1_contains_any);
 CROSSMODULE_WRAPPER(bloom1_contains_any_hashes);
@@ -393,6 +394,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.decompress_chunk = error_no_default_fn_pg_community,
 	.rebuild_columnstore = error_no_default_fn_pg_community,
 	.rebuild_sparse_index = error_no_default_fn_pg_community,
+	.move_to_columnstore = error_no_default_fn_pg_community,
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.compressed_data_column_size = error_no_default_fn_pg_community,

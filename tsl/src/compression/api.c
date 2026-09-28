@@ -48,6 +48,7 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "indexing.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "recompress.h"
 #include "scan_iterator.h"
@@ -1060,6 +1061,107 @@ tsl_rebuild_columnstore(PG_FUNCTION_ARGS)
 			 ts_chunk_get_table_name(chunk));
 		decompress_chunk_impl(chunk, false);
 		compress_chunk_impl(chunk->hypertable_relid, chunk->fd.relid);
+	}
+
+	PG_RETURN_VOID();
+}
+
+static bool
+can_use_move_to_columnstore(Chunk *chunk)
+{
+	if (!ts_guc_enable_optimizations)
+	{
+		elog(DEBUG1, "timescaledb.enable_optimizations is disabled");
+		return false;
+	}
+
+	/*
+	 * TODO: add support for these
+	 */
+	Relation chunk_rel = table_open(chunk->fd.relid, AccessShareLock);
+	bool can_move = true;
+
+	if (ts_indexing_relation_has_primary_or_unique_index(chunk_rel))
+	{
+		ereport(WARNING,
+				(errmsg("disabling move to columnstore because the chunk has unique constraints")));
+		can_move = false;
+	}
+	else if (ts_indexing_relation_has_exclusion_constraint(chunk_rel))
+	{
+		ereport(WARNING,
+				(errmsg(
+					"disabling move to columnstore because the chunk has exclusion constraints")));
+		can_move = false;
+	}
+	else if (chunk_rel->trigdesc != NULL)
+	{
+		ereport(WARNING, (errmsg("disabling move to columnstore because the chunk has triggers")));
+		can_move = false;
+	}
+
+	table_close(chunk_rel, AccessShareLock);
+
+	return can_move;
+}
+
+Datum
+tsl_move_to_columnstore(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	bool fallback = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (!OidIsValid(chunk_relid))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk OID")));
+	}
+
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
+
+	Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+	if (!ht || !TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("columnstore not enabled on \"%s\"", get_rel_name(chunk->hypertable_relid)),
+				 errhint("Enable columnstore using ALTER TABLE with the "
+						 "timescaledb.enable_columnstore option.")));
+	}
+
+	if (ts_chunk_is_frozen(chunk))
+	{
+		ereport(NOTICE,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s.%s\" is frozen, skipping",
+						ts_chunk_get_schema_name(chunk),
+						ts_chunk_get_table_name(chunk))));
+		PG_RETURN_VOID();
+	}
+
+	/* Try the DML path first, fall back to regular compression if not usable */
+	if (!can_use_move_to_columnstore(chunk) || !move_to_columnstore_impl(chunk))
+	{
+		if (fallback)
+		{
+			ereport((DEBUG1),
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("chunk \"%s\" could not be moved to the columnstore, fallback to "
+							"compress",
+							get_rel_name(chunk->fd.relid))));
+			tsl_compress_chunk_wrapper(chunk, true, false);
+		}
+		else
+		{
+			ereport((NOTICE),
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("chunk \"%s\" could not be moved to the columnstore, skipping",
+							get_rel_name(chunk->fd.relid))));
+		}
 	}
 
 	PG_RETURN_VOID();
