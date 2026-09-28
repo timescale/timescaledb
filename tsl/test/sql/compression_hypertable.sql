@@ -5,7 +5,6 @@
 \ir include/rand_generator.sql
 \c :TEST_DBNAME :ROLE_SUPERUSER
 \ir include/compression_utils.sql
-
 CREATE TYPE customtype;
 
 SET client_min_messages TO WARNING;
@@ -314,7 +313,7 @@ from generate_series(1, 5000) ts
 
 
 alter table source_table set (tsdb.compress_segmentby = 'tag', tsdb.compress_orderby = 'ts');
-select compress_chunk(decompress_chunk(x)) from show_chunks('source_table') x;
+select compress_chunk(x) from show_chunks('source_table') x;
 
 create table dest as select * from source_table;
 select count(distinct tag) from dest;
@@ -336,7 +335,7 @@ create table dest as select * from source_table;
 select count(distinct tag) from dest;
 drop table dest;
 
-create table dest as select * from source_table order by ts
+create table dest as select * from source_table order by ts;
 select count(distinct tag) from dest;
 drop table dest;
 

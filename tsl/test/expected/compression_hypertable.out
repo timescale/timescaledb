@@ -638,7 +638,7 @@ insert into source_table
 select ts, repeat((ts / 100)::text, 10 * (ts % 100)), mix(ts)
 from generate_series(1, 5000) ts
 ;
-alter table source_table set (tsdb.compress_segmentby = '', tsdb.compress_orderby = 'ts');
+alter table source_table set (tsdb.compress_segmentby = 'tag', tsdb.compress_orderby = 'ts');
 NOTICE:  updated compression settings will only apply to future compressions
 select compress_chunk(x) from show_chunks('source_table') x;
              compress_chunk              
@@ -654,7 +654,7 @@ select count(distinct tag) from dest;
   4755
 
 drop table dest;
-create table dest as select * from source_table order by t;
+create table dest as select * from source_table order by ts;
 select count(distinct tag) from dest;
  count 
 -------
@@ -668,17 +668,17 @@ select count(distinct tag) from dest;
   4755
 
 drop table dest;
-alter table source_table set (tsdb.compress_segmentby = 'tag');
+alter table source_table set (tsdb.compress_segmentby = '', tsdb.compress_orderby = 'ts');
 NOTICE:  updated compression settings will only apply to future compressions
-select compress_chunk(decompress_chunk(x)) from show_chunks('source_table') x;
+select compress_chunk(x) from show_chunks('source_table') x;
+NOTICE:  chunk "_hyper_8_56_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_8_57_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_8_58_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_8_56_chunk
  _timescaledb_internal._hyper_8_57_chunk
  _timescaledb_internal._hyper_8_58_chunk
- _timescaledb_internal._hyper_8_59_chunk
- _timescaledb_internal._hyper_8_60_chunk
- _timescaledb_internal._hyper_8_61_chunk
 
 create table dest as select * from source_table;
 select count(distinct tag) from dest;
@@ -687,7 +687,7 @@ select count(distinct tag) from dest;
   4755
 
 drop table dest;
-create table dest as select * from source_table order by t;
+create table dest as select * from source_table order by ts;
 select count(distinct tag) from dest;
  count 
 -------
@@ -709,9 +709,6 @@ select compress_chunk(decompress_chunk(x)) from show_chunks('source_table') x;
  _timescaledb_internal._hyper_8_56_chunk
  _timescaledb_internal._hyper_8_57_chunk
  _timescaledb_internal._hyper_8_58_chunk
- _timescaledb_internal._hyper_8_59_chunk
- _timescaledb_internal._hyper_8_60_chunk
- _timescaledb_internal._hyper_8_61_chunk
 
 create table dest as select * from source_table;
 select count(distinct tag) from dest;
@@ -720,7 +717,7 @@ select count(distinct tag) from dest;
   4755
 
 drop table dest;
-create table dest as select * from source_table order by t;
+create table dest as select * from source_table order by ts;
 select count(distinct tag) from dest;
  count 
 -------
