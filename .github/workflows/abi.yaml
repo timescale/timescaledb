@@ -18,6 +18,7 @@ name: ABI Test
   pull_request:
     paths: .github/workflows/abi.yaml
   workflow_dispatch:
+  workflow_call:
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -135,4 +136,3 @@ jobs:
       with:
         name: PostgreSQL log ABI Breakage PG${{ matrix.pg }}
         path: postmaster.log
-
