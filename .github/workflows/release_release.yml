@@ -94,7 +94,7 @@ jobs:
   build_docker_image:
     name: Build Docker image
     needs: publish_release
-    uses: timescale/timescaledb-docker/.github/workflows/docker-image.yml@main
+    uses: timescale/timescaledb-docker/.github/workflows/docker-image.yml@588610831e6da7eda540ee3e9348b62638eaf70a # main
     with:
       version: ${{ inputs.version }}
       tag_latest: true
