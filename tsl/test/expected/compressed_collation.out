@@ -181,3 +181,51 @@ select note from t9997 where actor = 'alice' collate "C";
    99
 
 drop table t9997 cascade;
+-- Vectorized text comparison must respect a non-deterministic collation given
+-- in the query, not only one declared on the column
+create collation nocase (provider = icu, locale = 'und-u-ks-level2', deterministic = false);
+create table t_nocase (
+    ts    int not null,
+    label text not null
+);
+select count(*) from create_hypertable('t_nocase', 'ts', chunk_time_interval => 1000);
+ count 
+-------
+     1
+
+alter table t_nocase set (timescaledb.compress);
+insert into t_nocase values (1, 'merlot');
+select count(compress_chunk(ch)) from show_chunks('t_nocase') ch;
+ count 
+-------
+     1
+
+-- the comparison cannot be a vectorized filter
+explain (costs off) select label from t_nocase where label = 'MERLOT' collate nocase;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_6_12_chunk
+   Filter: (label = 'MERLOT'::text COLLATE nocase)
+   ->  Seq Scan on _hyper_6_12_chunk_compressed
+
+select count(*) from t_nocase where label = 'MERLOT' collate nocase;
+ count 
+-------
+     1
+
+select count(*) from t_nocase where label <> 'MERLOT' collate nocase;
+ count 
+-------
+     0
+
+select count(*) from t_nocase where label collate nocase in ('MERLOT', 'x');
+ count 
+-------
+     1
+
+select count(*) filter (where label = 'MERLOT' collate nocase) from t_nocase;
+ count 
+-------
+     1
+
+drop table t_nocase cascade;
+drop collation nocase;

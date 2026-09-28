@@ -1,0 +1,1 @@
+Fixes: #10682 Vectorized text comparison ignored a non-deterministic collation given in the query
