@@ -1,0 +1,1 @@
+Implements: #10412 When a hypertable is on the inner side of a nested loop join, try to exclude its chunks at query run time.
