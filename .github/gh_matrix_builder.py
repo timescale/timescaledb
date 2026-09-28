@@ -153,6 +153,7 @@ def macos_config(overrides):
         "pg_dump",
         "compression_bgw",
         "compressed_collation",
+        "compressed_collation_icu",
     }
     openssl_path = "/usr/local/opt/openssl@3"
     base_config = dict(
