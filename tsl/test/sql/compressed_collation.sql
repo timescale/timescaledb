@@ -145,3 +145,26 @@ select note from t9997 where actor = 'alice' collate "C";
 
 drop table t9997 cascade;
 
+-- The min/max metadata of an orderby text column follow the column collation,
+-- and so does the batch filtering of an INSERT with a unique index on it.
+-- Under en_US the batch spans 'á' .. 'ç' and contains 'b'; under "C" byte
+-- order 'b' would lie before 'á' and the duplicate would slip through.
+create table t_minmax (
+    ts   timestamptz not null,
+    name text collate :"COLLATION" not null,
+    unique (name, ts)
+);
+select count(*) from create_hypertable('t_minmax', 'ts');
+alter table t_minmax set (timescaledb.compress, timescaledb.compress_orderby = 'name');
+insert into t_minmax values ('2024-01-01', 'á'), ('2024-01-01', 'b'), ('2024-01-01', 'ç');
+select count(compress_chunk(ch)) from show_chunks('t_minmax') ch;
+
+\set ON_ERROR_STOP 0
+insert into t_minmax values ('2024-01-01', 'b');
+\set ON_ERROR_STOP 1
+-- a name outside the batch range does not decompress it
+explain (analyze, buffers off, costs off, timing off, summary off) insert into t_minmax values ('2024-01-01', 'a');
+select name from t_minmax order by name collate "C";
+
+drop table t_minmax cascade;
+

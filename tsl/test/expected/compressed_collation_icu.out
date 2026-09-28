@@ -47,5 +47,185 @@ select count(*) filter (where label = 'MERLOT' collate nocase) from t_nocase;
 -------
      1
 
-drop table t_nocase cascade;
+create table t10297 (
+    batch_date int not null,
+    label text not null,
+    score int
+);
+select count(*) from create_hypertable('t10297', 'batch_date', chunk_time_interval => 1000);
+ count 
+-------
+     1
+
+insert into t10297 values (10, 'merlot', 90);
+alter table t10297 set (timescaledb.compress);
+select count(compress_chunk(ch)) from show_chunks('t10297') ch;
+ count 
+-------
+     1
+
+create unique index t10297_uq on t10297 (label collate nocase, batch_date);
+-- rejected, like on a plain table
+\set ON_ERROR_STOP 0
+insert into t10297 values (10, 'MERLOT', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_t10297_uq"
+\set ON_ERROR_STOP 1
+insert into t10297 values (10, 'MERLOT', 85) on conflict do nothing;
+insert into t10297 values (10, 'MERLOT', 85)
+    on conflict (label collate nocase, batch_date) do update set score = excluded.score;
+select * from t10297;
+ batch_date | label  | score 
+------------+--------+-------
+         10 | merlot |    85
+
+-- the same with label as segmentby column and with label as orderby column
+create table t10297_segmentby (like t10297);
+select count(*) from create_hypertable('t10297_segmentby', 'batch_date', chunk_time_interval => 1000);
+ count 
+-------
+     1
+
+create unique index t10297_segmentby_uq on t10297_segmentby (label collate nocase, batch_date);
+alter table t10297_segmentby set (timescaledb.compress, timescaledb.compress_segmentby = 'label');
+insert into t10297_segmentby values (10, 'merlot', 90);
+select count(compress_chunk(ch)) from show_chunks('t10297_segmentby') ch;
+ count 
+-------
+     1
+
+create table t10297_orderby (like t10297);
+select count(*) from create_hypertable('t10297_orderby', 'batch_date', chunk_time_interval => 1000);
+ count 
+-------
+     1
+
+create unique index t10297_orderby_uq on t10297_orderby (label collate nocase, batch_date);
+alter table t10297_orderby set (timescaledb.compress, timescaledb.compress_orderby = 'label, batch_date');
+insert into t10297_orderby values (10, 'merlot', 90);
+select count(compress_chunk(ch)) from show_chunks('t10297_orderby') ch;
+ count 
+-------
+     1
+
+\set ON_ERROR_STOP 0
+insert into t10297_segmentby values (10, 'MERLOT', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_3_3_chunk_t10297_segmentby_uq"
+insert into t10297_orderby values (10, 'MERLOT', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_4_4_chunk_t10297_orderby_uq"
+\set ON_ERROR_STOP 1
+select count(*) from t10297_segmentby;
+ count 
+-------
+     1
+
+select count(*) from t10297_orderby;
+ count 
+-------
+     1
+
+-- UPDATE and DELETE compare with the collation of the WHERE clause, so the
+-- vector predicates cannot be used for a non-deterministic one
+create table t10297_dml (like t10297);
+select count(*) from create_hypertable('t10297_dml', 'batch_date', chunk_time_interval => 1000);
+ count 
+-------
+     1
+
+alter table t10297_dml set (timescaledb.compress);
+insert into t10297_dml values (10, 'merlot', 90);
+select count(compress_chunk(ch)) from show_chunks('t10297_dml') ch;
+ count 
+-------
+     1
+
+update t10297_dml set score = 0 where label = 'MERLOT' collate nocase;
+select * from t10297_dml;
+ batch_date | label  | score 
+------------+--------+-------
+         10 | merlot |     0
+
+select count(compress_chunk(ch)) from show_chunks('t10297_dml') ch;
+ count 
+-------
+     1
+
+delete from t10297_dml where label = 'MERLOT' collate nocase;
+select count(*) from t10297_dml;
+ count 
+-------
+     0
+
+-- a deterministic unique index on the same column does not weaken the check
+create unique index t10297_det on t10297 (label, batch_date);
+\set ON_ERROR_STOP 0
+insert into t10297 values (10, 'MERLOT', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_t10297_uq"
+insert into t10297 values (10, 'merlot', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_t10297_uq"
+\set ON_ERROR_STOP 1
+select count(*) from t10297;
+ count 
+-------
+     1
+
+-- two unique indexes with different non-deterministic collations on the same
+-- column, each one matching rows the other does not
+create collation noaccent (provider = icu, locale = 'und-u-kc-ks-level1', deterministic = false);
+create table t10297_mixed (like t10297);
+select count(*) from create_hypertable('t10297_mixed', 'batch_date', chunk_time_interval => 1000);
+ count 
+-------
+     1
+
+alter table t10297_mixed set (timescaledb.compress);
+insert into t10297_mixed values (10, 'cafe', 90);
+select count(compress_chunk(ch)) from show_chunks('t10297_mixed') ch;
+ count 
+-------
+     1
+
+create unique index t10297_mixed_nocase on t10297_mixed (label collate nocase, batch_date);
+create unique index t10297_mixed_noaccent on t10297_mixed (label collate noaccent, batch_date);
+\set ON_ERROR_STOP 0
+insert into t10297_mixed values (10, 'CAFE', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_6_6_chunk_t10297_mixed_nocase"
+insert into t10297_mixed values (10, 'café', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_6_6_chunk_t10297_mixed_noaccent"
+\set ON_ERROR_STOP 1
+select count(*) from t10297_mixed;
+ count 
+-------
+     1
+
+-- the same with the deterministic unique index created first, and a second
+-- index with the same non-deterministic collation changes nothing
+create table t10297_det_first (like t10297);
+select count(*) from create_hypertable('t10297_det_first', 'batch_date', chunk_time_interval => 1000);
+ count 
+-------
+     1
+
+alter table t10297_det_first set (timescaledb.compress);
+insert into t10297_det_first values (10, 'merlot', 90);
+select count(compress_chunk(ch)) from show_chunks('t10297_det_first') ch;
+ count 
+-------
+     1
+
+create unique index t10297_det_first_det on t10297_det_first (label, batch_date);
+create unique index t10297_det_first_nocase on t10297_det_first (label collate nocase, batch_date);
+create unique index t10297_det_first_nocase2 on t10297_det_first (label collate nocase, batch_date, score);
+\set ON_ERROR_STOP 0
+insert into t10297_det_first values (10, 'MERLOT', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_7_7_chunk_t10297_det_first_nocase"
+insert into t10297_det_first values (10, 'merlot', 85);
+ERROR:  duplicate key value violates unique constraint "_hyper_7_7_chunk_t10297_det_first_det"
+\set ON_ERROR_STOP 1
+select count(*) from t10297_det_first;
+ count 
+-------
+     1
+
+drop table t_nocase, t10297, t10297_segmentby, t10297_orderby, t10297_dml, t10297_det_first, t10297_mixed cascade;
+drop collation noaccent;
 drop collation nocase;

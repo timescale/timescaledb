@@ -226,6 +226,16 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 	 */
 	Assert(cdst->constraints != NULL);
 	conflict_attnums = bms_intersect(conflict_attnums, cdst->constraints->key_columns);
+
+	/* the bloom filter hashes bytes and cannot match a case or accent variant */
+	int attno = -1;
+	while ((attno = bms_next_member(conflict_attnums, attno)) > 0)
+	{
+		if (!collation_is_deterministic(cdst->constraints->key_collations[attno]))
+		{
+			conflict_attnums = bms_del_member(conflict_attnums, attno);
+		}
+	}
 	if (bms_is_empty(conflict_attnums))
 	{
 		return;
@@ -389,6 +399,7 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 												in_rel,
 												cis->rel,
 												constraints->key_columns,
+												constraints->key_collations,
 												slot,
 												&index_rel,
 												&index_columns,
@@ -415,6 +426,7 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 														   cis->rel,
 														   compression_settings,
 														   key_columns,
+														   constraints->key_collations,
 														   &columns_with_null_check,
 														   slot,
 														   &cdst->heap_scankeys.num_scankeys,
@@ -1946,6 +1958,7 @@ get_batch_keys_for_unique_constraints(Relation relation)
 	tuple_filtering_constraints *constraints = palloc0(sizeof(tuple_filtering_constraints));
 	constraints->on_conflict = ONCONFLICT_UPDATE;
 	constraints->nullsnotdistinct = false;
+	Bitmapset *mixed_collations = NULL;
 	ListCell *lc;
 
 	/* Fast path if definitely no indexes */
@@ -1961,6 +1974,9 @@ get_batch_keys_for_unique_constraints(Relation relation)
 	{
 		return constraints;
 	}
+
+	constraints->key_collations =
+		palloc0(sizeof(Oid) * (RelationGetNumberOfAttributes(relation) + 1));
 
 	foreach (lc, indexoidlist)
 	{
@@ -1994,6 +2010,31 @@ get_batch_keys_for_unique_constraints(Relation relation)
 
 			Assert(AttrNumberIsForUserDefinedAttr(attno));
 			idx_attrs = bms_add_member(idx_attrs, attno);
+
+			/*
+			 * Batches are matched with one collation per column, and it has
+			 * to find every row that any of the unique indexes considers
+			 * equal. A non-deterministic collation also matches everything a
+			 * deterministic one does, so it wins over a deterministic one.
+			 * Two different non-deterministic collations each match rows the
+			 * other does not, so such a column cannot filter batches and is
+			 * removed from the key columns below.
+			 */
+			Oid collation = indexDesc->rd_indcollation[i];
+			Oid key_collation = constraints->key_collations[attno];
+			if (!OidIsValid(key_collation))
+			{
+				/* first unique index with this column */
+				constraints->key_collations[attno] = collation;
+			}
+			else if (!collation_is_deterministic(collation))
+			{
+				if (key_collation != collation && !collation_is_deterministic(key_collation))
+				{
+					mixed_collations = bms_add_member(mixed_collations, attno);
+				}
+				constraints->key_collations[attno] = collation;
+			}
 		}
 		index_close(indexDesc, AccessShareLock);
 
@@ -2032,6 +2073,7 @@ get_batch_keys_for_unique_constraints(Relation relation)
 		}
 	}
 
+	constraints->key_columns = bms_del_members(constraints->key_columns, mixed_collations);
 	return constraints;
 }
 
@@ -2861,6 +2903,12 @@ can_vectorize_scankeys(const ScanKeyWithAttnos *mem_scankeys, CompressionSetting
 			return false;
 		}
 
+		/* vector predicates compare bytes */
+		if (!collation_is_deterministic(scankey->sk_collation))
+		{
+			return false;
+		}
+
 		/* sk_attno is the attribute number in the uncompressed chunk */
 		char *attname = get_attname(chunk_rel->rd_id, scankey->sk_attno, false);
 
@@ -2870,20 +2918,11 @@ can_vectorize_scankeys(const ScanKeyWithAttnos *mem_scankeys, CompressionSetting
 			continue;
 		}
 
-		Oid typoid, collid;
-		int32 typmod;
-		get_atttypetypmodcoll(chunk_rel->rd_id, scankey->sk_attno, &typoid, &typmod, &collid);
+		Oid typoid = get_atttype(chunk_rel->rd_id, scankey->sk_attno);
 
 		/* No bulk decompression function, no vectorized filtering */
 		if (tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) ==
 			NULL)
-		{
-			return false;
-		}
-
-		/* For text types, check for non-deterministic collation which
-		 * prevents vectorized filtering */
-		if (typoid == TEXTOID && OidIsValid(collid) && !get_collation_isdeterministic(collid))
 		{
 			return false;
 		}
