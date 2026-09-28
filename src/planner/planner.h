@@ -150,9 +150,9 @@ ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 		 * out.
 		 */
 		return ts_chunk_get_by_relid_locked(rte->relid,
-										 AccessShareLock,
-										 /* slice_lock = */ NULL,
-										 /* fail_if_not_found = */ true);
+											AccessShareLock,
+											/* slice_lock = */ NULL,
+											/* fail_if_not_found = */ true);
 	}
 
 	/*
