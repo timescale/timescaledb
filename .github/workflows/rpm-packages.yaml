@@ -13,6 +13,7 @@ name: "Packaging tests: RPM"
     - release_test
     - trigger/package_test
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   rpm_tests:
@@ -125,5 +126,4 @@ jobs:
       if: matrix.image == 'rockylinux:8'
       run: |
         yum --showduplicates list timescaledb-toolkit-postgresql-${{ matrix.pg }}
-
 
