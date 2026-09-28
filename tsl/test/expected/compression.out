@@ -865,7 +865,9 @@ SELECT
   count(*) AS cnt
 FROM metrics
 GROUP BY 1 WITH NO DATA;
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
+RESET client_min_messages;
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 | cnt  
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------+------
@@ -1534,7 +1536,9 @@ CREATE MATERIALIZED VIEW tidrangescan_expr WITH (timescaledb.continuous)
    count(*) AS cnt
  FROM tidrangescan_test
  WHERE ctid < '(1,1)'::tid GROUP BY 1 WITH NO DATA;
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('tidrangescan_expr', NULL, NULL);
+RESET client_min_messages;
 SET timescaledb.enable_chunk_append to off;
 SET enable_indexscan to off;
 SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY time LIMIT 5;

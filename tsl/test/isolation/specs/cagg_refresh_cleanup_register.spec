@@ -64,6 +64,7 @@ teardown {
 # Session R1: stores its PID then runs a refresh that will left PID behind.
 session "R1"
 setup {
+    SET client_min_messages TO warning;
     SET ROLE cagg_user;
     SET SESSION lock_timeout = '2s';
     INSERT INTO cancelpid SELECT pg_backend_pid();
@@ -97,6 +98,7 @@ step "K1_terminate" {
 # Refresh sessions
 session "R2"
 setup {
+    SET client_min_messages TO warning;
     SET ROLE cagg_user;
     SET SESSION lock_timeout = '2s';
 }
@@ -106,6 +108,7 @@ step "R2_refresh" {
 
 session "R3"
 setup {
+    SET client_min_messages TO warning;
     SET ROLE cagg_user;
     SET SESSION lock_timeout = '2s';
 }
@@ -115,6 +118,7 @@ step "R3_refresh" {
 
 session "R4"
 setup {
+    SET client_min_messages TO warning;
     SET ROLE cagg_user;
     SET SESSION lock_timeout = '2s';
 }
@@ -146,6 +150,7 @@ step "A1_revoke_mat_perm" {
 
 # Check session for jobs and locks
 session "CHECK"
+setup { SET client_min_messages TO warning; }
 step "check_jobs" {
     SELECT ca.user_view_name,
            _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
@@ -193,6 +198,7 @@ step "check_jobs_metadata_policy" {
 # Session P1: runs a policy refresh via run_job
 session "P1"
 setup {
+    SET client_min_messages TO warning;
     SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
 }

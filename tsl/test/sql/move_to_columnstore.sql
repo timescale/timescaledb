@@ -176,7 +176,9 @@ INSERT INTO cagg_src SELECT '2026-01-01'::timestamptz + (i || 's')::interval, i 
 CREATE MATERIALIZED VIEW cagg_hourly WITH (timescaledb.continuous) AS
 SELECT time_bucket(INTERVAL '1 hour', time) AS bucket, device, max(value)
 FROM cagg_src GROUP BY bucket, device WITH NO DATA;
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('cagg_hourly', '2026-01-01', '2026-01-02');
+RESET client_min_messages;
 
 SELECT _timescaledb_functions.move_to_columnstore(c) FROM show_chunks('cagg_src') c;
 SELECT _timescaledb_functions.chunk_status_text(c) AS status FROM show_chunks('cagg_src') c;

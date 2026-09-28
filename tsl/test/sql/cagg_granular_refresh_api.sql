@@ -642,7 +642,9 @@ ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh
 
 INSERT INTO readings VALUES (now(), 3, 3.0);
 
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
+RESET client_min_messages;
 SELECT count(*) FROM readings_hourly;
 
 -- Dropping the hypertable releases its tracker as well, and that free is
@@ -654,7 +656,9 @@ ROLLBACK;
 
 -- Tracking still works in this backend after the rolled back drop.
 INSERT INTO readings VALUES (now(), 4, 4.0);
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
+RESET client_min_messages;
 SELECT count(*) FROM readings_hourly;
 
 DROP MATERIALIZED VIEW readings_hourly;

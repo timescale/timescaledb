@@ -26,7 +26,9 @@ SELECT * FROM chunks_detailed_size('hypersize_cagg') ORDER BY node_name;
 SELECT * FROM approximate_row_count('hypersize_cagg');
 
 -- Test size functions on non-empty countinuous aggregate
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('hypersize_cagg', NULL, NULL);
+RESET client_min_messages;
 SELECT * FROM hypertable_size('hypersize_cagg');
 SELECT * FROM hypertable_detailed_size('hypersize_cagg') ORDER BY node_name;
 SELECT * FROM chunks_detailed_size('hypersize_cagg') ORDER BY node_name;

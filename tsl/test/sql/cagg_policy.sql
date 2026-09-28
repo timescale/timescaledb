@@ -603,7 +603,10 @@ WHERE hypertable_name = :'MAT_TABLE_NAME' ORDER BY 1;
 --add some new data into metrics_cagg so that cagg policy job has something to do
 INSERT INTO metrics (time, device_id, device_id_peer, v0, v1, v2, v3)
 SELECT now() - '5 day'::interval, 102, 0, 10, 10, 10, 10;
+-- The refresh window is relative to now(), so hide the unstable statistics notice
+SET client_min_messages TO warning;
 CALL run_job(:REFRESH_JOB);
+RESET client_min_messages;
 --now we have a new chunk and it is not compressed
 SELECT count(*), count(*) FILTER ( WHERE is_compressed is TRUE  )
 FROM timescaledb_information.chunks
@@ -717,6 +720,8 @@ SELECT add_continuous_aggregate_policy (
   initial_start => now() + INTERVAL '12 hour'
 ) AS job_id \gset
 
+-- The refresh window is relative to now(), so hide the unstable statistics notice
+SET client_min_messages TO warning;
 -- 181 rows
 CALL run_job(:job_id);
 SELECT count(*) FROM issue_6902;
@@ -740,6 +745,7 @@ SELECT t, 1 FROM generate_series(now() - interval '3 hours', now(), interval '1 
 -- run again without and should have 362 rows
 CALL run_job(:job_id);
 SELECT count(*) FROM issue_6902;
+RESET client_min_messages;
 
 -- test untyped interval error handling
 CREATE TABLE m(time timestamptz) WITH (tsdb.hypertable);
