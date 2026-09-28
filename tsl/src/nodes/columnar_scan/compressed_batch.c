@@ -178,6 +178,7 @@ decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnul
 	column->decompression_type = DT_Scalar;
 	column->buffers[0] = DatumGetPointer(BoolGetDatum(isnull));
 	column->buffers[1] = DatumGetPointer(value);
+	column->by_ref_storage = DatumGetPointer(value);
 
 	*column->output_isnull = isnull;
 	*column->output_value = value;
