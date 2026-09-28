@@ -519,6 +519,25 @@ ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id, int64 lat
 	int32 seqnum;
 
 	/*
+	 * If the generation is VALID but has no rows, return early, i.e. no flipping
+	 * generation and no flushing, so the seqnum is not increased. If the generation
+	 * is INVALID, even if it has no rows, we need to flip the generation (and
+	 * increase seqnum) so that the tracker's status is reset back to VALID.
+	 *
+	 * Note that if the granular tracking threshold is changed (via alter table set
+	 * cagg_granular_refresh_start_offset or cagg_granular_refresh_end_offset),
+	 * the new thresholds will not be applied until the table's tracker is flipped
+	 * to a new generation. So skipping flushing can result in delay in applying the
+	 * new thresholds. For now we accept such delay, thinking it's OK in practice.
+	 */
+
+	if (pg_atomic_read_u32(&old->nentries) == 0 &&
+		pg_atomic_read_u32(&old->status) == TENANT_TRACKER_VALID)
+	{
+		return;
+	}
+
+	/*
 	 * `old`'s epoch: drained rows are stamped with it, and the generation we
 	 * activate below gets the next one.  No barrier needed -- only the flush
 	 * writes seqnum, and flushes are serialized by the caller's per-cagg lock.

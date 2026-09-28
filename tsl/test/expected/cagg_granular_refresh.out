@@ -965,7 +965,6 @@ DROP TABLE conditions;
 -- Test: oversized tenant value (> TENANT_TRACKER_KEY_MAXLEN = 64 bytes)
 -- introduced via UPDATE.  This should invalidate the shared mem contents
 -- and revert to a full refresh
--- TODO: do not write out any invalid marker entries.
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
     create_hypertable     
@@ -1043,7 +1042,8 @@ SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
  Wed Jan 01 00:00:00 2025 UTC | sensor_z  |   0
  Thu Jan 02 00:00:00 2025 UTC | sensor_z  |   0
 
--- no invalid marker for seq_num=3
+-- nothing for seq_num=3: its generation went INVALID and an INVALID generation
+-- persists no rows at all.
 -- tracking entry in 2020 for sensor_b; seqnum 1 is garbage-collected.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -1356,7 +1356,7 @@ INSERT INTO metrics VALUES ('2020-07-01 00:00+00', 'B', 1);
 SELECT * FROM hyper_invlog_view;
  hyper_id |            start             |             end              | seqnum 
 ----------+------------------------------+------------------------------+--------
-       33 | Wed Jul 01 00:00:00 2020 UTC | Wed Jul 01 00:00:00 2020 UTC |      4
+       33 | Wed Jul 01 00:00:00 2020 UTC | Wed Jul 01 00:00:00 2020 UTC |      3
 
 -- Trigger the hyper->cagg move WITHOUT consuming this entry: refresh a
 -- non-granular cagg over an earlier, already-materialized, non-overlapping
@@ -1368,7 +1368,7 @@ SELECT * FROM mat_invlog_view;
   cagg  |            start             |                 end                 | seqnum 
 --------+------------------------------+-------------------------------------+--------
  m_gran | -infinity                    | -infinity                           |       
- m_gran | Wed Jul 01 00:00:00 2020 UTC | Wed Jul 01 23:59:59.999999 2020 UTC |      4
+ m_gran | Wed Jul 01 00:00:00 2020 UTC | Wed Jul 01 23:59:59.999999 2020 UTC |      3
  m_gran | Thu May 01 00:00:00 2025 UTC | infinity                            |       
  m_ng1  | -infinity                    | -infinity                           |       
  m_ng1  | Wed Jul 01 00:00:00 2020 UTC | Wed Jul 01 23:59:59.999999 2020 UTC |       
@@ -1412,8 +1412,8 @@ SELECT * FROM mat_invlog_view;
   cagg  |            start             |                 end                 | seqnum 
 --------+------------------------------+-------------------------------------+--------
  m_gran | -infinity                    | -infinity                           |       
- m_gran | Sat Aug 01 00:00:00 2020 UTC | Sat Aug 01 23:59:59.999999 2020 UTC |      5
- m_gran | Sun Aug 02 00:00:00 2020 UTC | Sun Aug 02 23:59:59.999999 2020 UTC |      6
+ m_gran | Sat Aug 01 00:00:00 2020 UTC | Sat Aug 01 23:59:59.999999 2020 UTC |      4
+ m_gran | Sun Aug 02 00:00:00 2020 UTC | Sun Aug 02 23:59:59.999999 2020 UTC |      5
  m_gran | Thu May 01 00:00:00 2025 UTC | infinity                            |       
  m_ng1  | -infinity                    | -infinity                           |       
  m_ng1  | Sat Aug 01 00:00:00 2020 UTC | Sat Aug 01 23:59:59.999999 2020 UTC |       
