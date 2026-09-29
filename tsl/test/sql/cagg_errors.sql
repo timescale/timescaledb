@@ -473,7 +473,9 @@ timescaledb.compress_orderby = 'bucket');
 --enable compression and test re-enabling compression
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress);
 insert into i2980 select now();
+SET client_min_messages TO warning;
 call refresh_continuous_aggregate('i2980_cagg2', NULL, NULL);
+RESET client_min_messages;
 SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'true');

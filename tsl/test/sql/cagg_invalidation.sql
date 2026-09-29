@@ -877,7 +877,10 @@ SELECT add_continuous_aggregate_policy('i5474_summary_daily',
 ) new_job_id \gset
 
 -- Check that start_offset = NULL is handled properly by the refresh job...
+-- The refresh window is relative to now(), so hide the unstable statistics notice
+SET client_min_messages TO warning;
 CALL run_job(:new_job_id);
+RESET client_min_messages;
 
 -- ...and the CAgg can be refreshed afterward
 CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-03-21 05:00:00+00');

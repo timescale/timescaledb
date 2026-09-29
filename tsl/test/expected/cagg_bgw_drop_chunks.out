@@ -62,6 +62,7 @@ SELECT set_chunk_time_interval('_timescaledb_internal._materialized_hypertable_2
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(1, 39) AS i;
 \set ON_ERROR_STOP 1
 CALL refresh_continuous_aggregate('drop_chunks_view1', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 --TEST1  specify drop chunks policy on mat. hypertable by
 -- directly does not work
 \set ON_ERROR_STOP 0

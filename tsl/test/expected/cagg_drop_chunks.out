@@ -115,6 +115,7 @@ WHERE hypertable_name = 'records' ORDER BY range_start;
  _hyper_1_32_chunk | Sat Apr 01 00:00:00 2000 PST | Sat Apr 01 01:00:00 2000 PST
 
 CALL refresh_continuous_aggregate('records_monthly', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 \set VERBOSITY default
 SELECT drop_chunks('records', '2000-03-16'::timestamptz);
                drop_chunks               
@@ -206,6 +207,7 @@ UPDATE conditions SET value = 4.00 WHERE time_int = 0;
 UPDATE conditions SET value = 4.00 WHERE time_int = 6;
 CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', 4);
 INFO:  range_start=0 range_end=4
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 5 ]
 SELECT drop_chunks('conditions', 4);
                drop_chunks               
 -----------------------------------------
@@ -227,6 +229,7 @@ SELECT * FROM conditions_2 ORDER BY bucket;
 
 CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', 8);
 INFO:  range_start=4 range_end=8
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 4, 9 ]
 SELECT * FROM conditions_2 ORDER BY bucket;
  bucket | sum | count 
 --------+-----+-------
@@ -249,6 +252,7 @@ SELECT drop_chunks('conditions', 8);
 
 CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', 12);
 INFO:  range_start=8 range_end=12
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 8, 13 ]
 SELECT * FROM conditions_2 ORDER BY bucket;
  bucket | sum | count 
 --------+-----+-------
@@ -265,6 +269,7 @@ SELECT * FROM conditions_2 ORDER BY bucket;
 
 CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', NULL);
 INFO:  range_start=8 range_end=20
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 8, 21 ]
 SELECT * FROM conditions_2 ORDER BY bucket;
  bucket | sum | count 
 --------+-----+-------

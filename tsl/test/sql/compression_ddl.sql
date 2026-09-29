@@ -331,7 +331,9 @@ AS SELECT time_bucket('1 hour', "Time"), SUM(i)
    FROM test1
    GROUP BY 1 WITH NO DATA;
 SELECT add_continuous_aggregate_policy('test1_cont_view', NULL, '1 hour'::interval, '1 day'::interval);
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('test1_cont_view', NULL, NULL);
+RESET client_min_messages;
 
 SELECT count(*) FROM test1_cont_view;
 

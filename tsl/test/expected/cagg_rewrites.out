@@ -1219,6 +1219,7 @@ psql:include/cagg_rewrites_materialize.sql:19: INFO:  Query cannot be rewritten 
 -- while hypertable invalidation logs are cleared
 SET timescaledb.cagg_rewrites_debug_info = 0;
 CALL refresh_continuous_aggregate('cagg2', NULL, NULL);
+psql:include/cagg_rewrites_materialize.sql:25: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SET timescaledb.cagg_rewrites_debug_info = 1;
 SELECT time_bucket(INTERVAL '2 day', day) AS bucket,
    count(device_id)

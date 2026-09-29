@@ -812,6 +812,7 @@ INSERT INTO smallint_tab VALUES(5);
 INSERT INTO smallint_tab VALUES(10);
 INSERT INTO smallint_tab VALUES(20);
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 5, 20 ]
 SELECT * FROM mat_smallint ORDER BY 1;
  a  | countb 
 ----+--------
@@ -821,6 +822,7 @@ SELECT * FROM mat_smallint ORDER BY 1;
 --remove all the data--
 TRUNCATE table smallint_tab;
 CALL refresh_continuous_aggregate('mat_smallint', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -32768, 32767 ]
 SELECT * FROM mat_smallint ORDER BY 1;
  a | countb 
 ---+--------
@@ -855,6 +857,7 @@ SELECT maxval, maxval - 10, maxval -5 FROM integer_now_smallint_tab() as maxval;
  -32760 |   -32770 |   -32765
 
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -32768, -32765 ]
 SELECT * FROM mat_smallint ORDER BY 1;
    a    | countb 
 --------+--------
@@ -863,6 +866,7 @@ SELECT * FROM mat_smallint ORDER BY 1;
 --remove all the data--
 TRUNCATE table smallint_tab;
 CALL refresh_continuous_aggregate('mat_smallint', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -32768, 32767 ]
 SELECT * FROM mat_smallint ORDER BY 1;
  a | countb 
 ---+--------
@@ -904,6 +908,7 @@ SELECT maxval, maxval - (1), maxval - (-2) FROM integer_now_smallint_tab() as ma
 SELECT add_continuous_aggregate_policy('mat_smallint', 1::smallint, -3::smallint , '1 h'::interval) as job_id \gset
 \set ON_ERROR_STOP 0
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 32766, 32767 ]
 SELECT * FROM mat_smallint ORDER BY 1;
    a   | countb 
 -------+--------
@@ -985,6 +990,7 @@ INSERT INTO bigint_tab VALUES(5);
 INSERT INTO bigint_tab VALUES(10);
 INSERT INTO bigint_tab VALUES(20);
 CALL run_job(:job_mid);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 5, 20 ]
 SELECT * FROM mat_bigint ORDER BY 1;
  a  | countb 
 ----+--------
@@ -1000,6 +1006,7 @@ SELECT remove_continuous_aggregate_policy('mat_bigint');
 SELECT add_continuous_aggregate_policy('mat_bigint', 1::smallint, NULL , '1 h'::interval) as job_id \gset
 INSERT INTO bigint_tab VALUES(500);
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 20, 9223372036854775807 ]
 SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
   a  | countb 
 -----+--------
@@ -1144,6 +1151,7 @@ WHERE hypertable_name = :'VIEW_NAME';
 
 --exec the cagg compression job --
 CALL refresh_continuous_aggregate('metrics_cagg', NULL, '2001-02-01 00:00:00+0');
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Wed Jan 31 16:00:00 2001 PST ]
 CALL run_job(:COMP_JOB);
 SELECT count(*), count(*) FILTER ( WHERE is_compressed is TRUE  )
 FROM timescaledb_information.chunks
@@ -1155,7 +1163,10 @@ WHERE hypertable_name = :'MAT_TABLE_NAME' ORDER BY 1;
 --add some new data into metrics_cagg so that cagg policy job has something to do
 INSERT INTO metrics (time, device_id, device_id_peer, v0, v1, v2, v3)
 SELECT now() - '5 day'::interval, 102, 0, 10, 10, 10, 10;
+-- The refresh window is relative to now(), so hide the unstable statistics notice
+SET client_min_messages TO warning;
 CALL run_job(:REFRESH_JOB);
+RESET client_min_messages;
 --now we have a new chunk and it is not compressed
 SELECT count(*), count(*) FILTER ( WHERE is_compressed is TRUE  )
 FROM timescaledb_information.chunks
@@ -1215,12 +1226,14 @@ ALTER materialized view deals_best_weekly set (timescaledb.materialized_only=tru
 ALTER materialized view deals_best_daily set (timescaledb.materialized_only=true);
 -- we have data from 6 weeks before to May 5 2022 (Thu)
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-03');
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Apr 24 00:00:00 2022 PDT, Tue May 03 00:00:00 2022 PDT ]
 SELECT * FROM deals_best_weekly ORDER BY bucket;
             bucket            |     avg_temp     | max_rating 
 ------------------------------+------------------+------------
  Sun Apr 24 17:00:00 2022 PDT | 117.764705882353 |          6
 
 CALL refresh_continuous_aggregate('deals_best_daily', '2022-04-20', '2022-05-04');
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Wed Apr 20 17:00:00 2022 PDT, Tue May 03 17:00:00 2022 PDT ]
 SELECT * FROM deals_best_daily ORDER BY bucket LIMIT 2;
             bucket            | avg_temp | max_rating 
 ------------------------------+----------+------------
@@ -1294,6 +1307,8 @@ SELECT add_continuous_aggregate_policy (
   schedule_interval => INTERVAL '12 hour',
   initial_start => now() + INTERVAL '12 hour'
 ) AS job_id \gset
+-- The refresh window is relative to now(), so hide the unstable statistics notice
+SET client_min_messages TO warning;
 -- 181 rows
 CALL run_job(:job_id);
 SELECT count(*) FROM issue_6902;
@@ -1328,6 +1343,7 @@ SELECT count(*) FROM issue_6902;
 -------
    362
 
+RESET client_min_messages;
 -- test untyped interval error handling
 CREATE TABLE m(time timestamptz) WITH (tsdb.hypertable);
 NOTICE:  using column "time" as partitioning column
