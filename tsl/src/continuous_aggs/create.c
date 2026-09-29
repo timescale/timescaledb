@@ -906,7 +906,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 													&refresh_window,
 													context,
 													true, /* bucketing_refresh_window */
-													false /*extend_last_bucket*/);
+													false /*extend_last_bucket*/,
+													NULL /* mat_stats: not reported here */);
 		if (!refreshed)
 		{
 			emit_up_to_date_notice(cagg, context);
