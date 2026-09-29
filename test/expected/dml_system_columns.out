@@ -65,11 +65,9 @@ SELECT * FROM updated
            ->  Update on public.ht_update_join (actual rows=1.00 loops=1)
                  Output: ht_update_join_1."time", ht_update_join_1.val
                  Update on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1
-                 ->  Result (actual rows=1.00 loops=1)
+                 ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                        Output: 99, ht_update_join_1.tableoid, ht_update_join_1.ctid
-                       ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
-                             Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                             Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+                       Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
 ROLLBACK;
 -- RETURNING ctid explicitly
@@ -84,11 +82,9 @@ RETURNING ctid, time, val
    ->  Update on public.ht_update_join (actual rows=1.00 loops=1)
          Output: ht_update_join_1.ctid, ht_update_join_1."time", ht_update_join_1.val
          Update on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1
-         ->  Result (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                Output: 98, ht_update_join_1.tableoid, ht_update_join_1.ctid
-               ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
-                     Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                     Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+               Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
 ROLLBACK;
 -- DELETE with ctid self-join
@@ -252,11 +248,9 @@ RETURNING xmin, ctid, val
    ->  Update on public.ht_update_join (actual rows=1.00 loops=1)
          Output: ht_update_join_1.xmin, ht_update_join_1.ctid, ht_update_join_1.val
          Update on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1
-         ->  Result (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                Output: 161, ht_update_join_1.tableoid, ht_update_join_1.ctid
-               ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
-                     Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                     Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+               Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
 ROLLBACK;
 -- UPDATE with xmax in WHERE (system column, not row-identity)
@@ -321,11 +315,9 @@ RETURNING ht_update_join.*, ctid
    ->  Update on public.ht_update_join (actual rows=1.00 loops=1)
          Output: ht_update_join_1."time", ht_update_join_1.val, ht_update_join_1.ctid
          Update on _timescaledb_internal._hyper_1_3_chunk ht_update_join_1
-         ->  Result (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_3_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                Output: 164, ht_update_join_1.tableoid, ht_update_join_1.ctid
-               ->  Index Scan using _hyper_1_3_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_3_chunk ht_update_join_1 (actual rows=1.00 loops=1)
-                     Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                     Index Cond: (ht_update_join_1."time" = 'Sat Feb 15 00:00:00 2020 PST'::timestamp with time zone)
+               Index Cond: (ht_update_join_1."time" = 'Sat Feb 15 00:00:00 2020 PST'::timestamp with time zone)
 
 ROLLBACK;
 -- UPDATE that joins on ctid AND filters on xmin: ctid+tableoid get
@@ -440,11 +432,9 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.ht_update_join (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1
-         ->  Result (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                Output: 30, ht_update_join_1.tableoid, ht_update_join_1.ctid
-               ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
-                     Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                     Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+               Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
 ROLLBACK;
 -- DELETE with ctid+tableoid self-join
