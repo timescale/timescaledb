@@ -168,33 +168,27 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int2 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_9_chunk metrics_int2_1
-         ->  Result (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_1_9_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_9_chunk metrics_int2_1 (actual rows=0.00 loops=1)
                Output: '0.5'::double precision, metrics_int2_1.tableoid, metrics_int2_1.ctid
-               ->  Index Scan using _hyper_1_9_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_9_chunk metrics_int2_1 (actual rows=0.00 loops=1)
-                     Output: metrics_int2_1.tableoid, metrics_int2_1.ctid
-                     Index Cond: (metrics_int2_1."time" = 15)
+               Index Cond: (metrics_int2_1."time" = 15)
 
 :PREFIX UPDATE metrics_int4 SET value = 0.5 WHERE time = 15;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_10_chunk metrics_int4_1
-         ->  Result (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_2_10_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_10_chunk metrics_int4_1 (actual rows=0.00 loops=1)
                Output: '0.5'::double precision, metrics_int4_1.tableoid, metrics_int4_1.ctid
-               ->  Index Scan using _hyper_2_10_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_10_chunk metrics_int4_1 (actual rows=0.00 loops=1)
-                     Output: metrics_int4_1.tableoid, metrics_int4_1.ctid
-                     Index Cond: (metrics_int4_1."time" = 15)
+               Index Cond: (metrics_int4_1."time" = 15)
 
 :PREFIX UPDATE metrics_int8 SET value = 0.5 WHERE time = 15;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int8 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_3_11_chunk metrics_int8_1
-         ->  Result (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_3_11_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_11_chunk metrics_int8_1 (actual rows=0.00 loops=1)
                Output: '0.5'::double precision, metrics_int8_1.tableoid, metrics_int8_1.ctid
-               ->  Index Scan using _hyper_3_11_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_11_chunk metrics_int8_1 (actual rows=0.00 loops=1)
-                     Output: metrics_int8_1.tableoid, metrics_int8_1.ctid
-                     Index Cond: (metrics_int8_1."time" = 15)
+               Index Cond: (metrics_int8_1."time" = 15)
 
 ROLLBACK;
 -- stable constraints
@@ -558,44 +552,36 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_date (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_4_4_chunk metrics_date_1
-         ->  Result (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_4_4_chunk_metrics_date_time_idx on _timescaledb_internal._hyper_4_4_chunk metrics_date_1 (actual rows=1.00 loops=1)
                Output: '0.6'::double precision, metrics_date_1.tableoid, metrics_date_1.ctid
-               ->  Index Scan using _hyper_4_4_chunk_metrics_date_time_idx on _timescaledb_internal._hyper_4_4_chunk metrics_date_1 (actual rows=1.00 loops=1)
-                     Output: metrics_date_1.tableoid, metrics_date_1.ctid
-                     Index Cond: (metrics_date_1."time" = '01-01-2000'::date)
+               Index Cond: (metrics_date_1."time" = '01-01-2000'::date)
 
 :PREFIX UPDATE metrics_timestamp SET value = 0.6 WHERE time = '2000-01-01';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_timestamp (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1
-         ->  Result (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_5_5_chunk_metrics_timestamp_time_idx on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1 (actual rows=1.00 loops=1)
                Output: '0.6'::double precision, metrics_timestamp_1.tableoid, metrics_timestamp_1.ctid
-               ->  Index Scan using _hyper_5_5_chunk_metrics_timestamp_time_idx on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1 (actual rows=1.00 loops=1)
-                     Output: metrics_timestamp_1.tableoid, metrics_timestamp_1.ctid
-                     Index Cond: (metrics_timestamp_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone)
+               Index Cond: (metrics_timestamp_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX UPDATE metrics_timestamptz SET value = 0.6 WHERE time = '2000-01-01';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_timestamptz (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1
-         ->  Result (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_6_6_chunk_metrics_timestamptz_time_idx on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1 (actual rows=1.00 loops=1)
                Output: '0.6'::double precision, metrics_timestamptz_1.tableoid, metrics_timestamptz_1.ctid
-               ->  Index Scan using _hyper_6_6_chunk_metrics_timestamptz_time_idx on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1 (actual rows=1.00 loops=1)
-                     Output: metrics_timestamptz_1.tableoid, metrics_timestamptz_1.ctid
-                     Index Cond: (metrics_timestamptz_1."time" = 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone)
+               Index Cond: (metrics_timestamptz_1."time" = 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX UPDATE metrics_space SET value = 0.6 WHERE time = '2000-01-01' AND device = '1';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_space (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
-         ->  Result (actual rows=1.00 loops=1)
+         ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1.00 loops=1)
                Output: '0.6'::double precision, metrics_space_1.tableoid, metrics_space_1.ctid
-               ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1.00 loops=1)
-                     Output: metrics_space_1.tableoid, metrics_space_1.ctid
-                     Index Cond: ((metrics_space_1.device = '1'::text) AND (metrics_space_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
+               Index Cond: ((metrics_space_1.device = '1'::text) AND (metrics_space_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
 
 :PREFIX UPDATE metrics_space SET value = 0.6 WHERE time = '2000-01-01';
 --- QUERY PLAN ---

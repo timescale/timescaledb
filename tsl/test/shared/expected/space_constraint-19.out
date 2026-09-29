@@ -697,10 +697,9 @@ BEGIN;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on space_constraint (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk space_constraint_1
-         ->  Result (actual rows=1.00 loops=1)
-               ->  Index Scan using _hyper_X_X_chunk_space_constraint_time_idx on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
-                     Index Cond: ("time" > 'Thu Jun 01 00:00:00 2000 PDT'::timestamp with time zone)
-                     Filter: ((s1 = 's1_2'::text) AND (s2 = 1.23) AND (s3 = 2))
+         ->  Index Scan using _hyper_X_X_chunk_space_constraint_time_idx on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
+               Index Cond: ("time" > 'Thu Jun 01 00:00:00 2000 PDT'::timestamp with time zone)
+               Filter: ((s1 = 's1_2'::text) AND (s2 = 1.23) AND (s3 = 2))
 
 ROLLBACK;
 BEGIN;

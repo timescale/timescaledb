@@ -236,3 +236,66 @@ select count(*) from (select b, count(*) from groupnotinto group by a, b) g;
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 
+
+-- Grouping by a computed expression on a single chunk.
+create table onechunkbucket(ts timestamptz not null, host text, v float8)
+    with (tsdb.hypertable, tsdb.segmentby = 'host', tsdb.orderby = 'ts desc',
+        tsdb.chunk_interval = '1 day');
+insert into onechunkbucket
+select '2026-01-01 00:00:00+00'::timestamptz + g * interval '1 min', 'h' || (g % 4), g
+from generate_series(0, 1439) g;
+select count(compress_chunk(x)) from show_chunks('onechunkbucket') x;
+vacuum analyze onechunkbucket;
+
+set timescaledb.debug_require_vector_agg = 'require';
+-- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+
+explain (costs off)
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b;
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket group by b order by b;
+select time_bucket('1 hour', ts) b, host, max(v) from onechunkbucket
+group by b, host order by b, host limit 3;
+select date_bin('6 hours', ts, '2000-01-01 00:00:00+00') b, count(*), min(v)
+from onechunkbucket group by b order by b;
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
+
+-- Sorted grouping by a computed expression on a single chunk.
+set enable_hashagg to off;
+set timescaledb.debug_require_vector_agg = 'require';
+explain (costs off)
+select time_bucket('1 hour', ts) b, host, sum(v) from onechunkbucket
+group by host, b order by host, b desc;
+select time_bucket('1 hour', ts) b, host, sum(v) from onechunkbucket
+where host = 'h0' group by host, b order by host, b desc;
+
+-- Reverse order and sorted merge are not vectorized, but need no Result node.
+set timescaledb.debug_require_vector_agg = 'allow';
+explain (costs off)
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b order by b;
+explain (costs off)
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b order by b desc;
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b order by b desc limit 3;
+
+reset enable_hashagg;
+reset timescaledb.debug_require_vector_agg;
+
+-- Single chunk under ChunkAppend with a one-time filter.
+explain (costs off)
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket
+where current_setting('datestyle') <> '' group by b;
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket
+where current_setting('datestyle') <> '' group by b order by b;
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket
+where current_setting('datestyle') = '' group by b order by b;
+
+prepare onechunk_param(int) as
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket where $1 > 0 group by b order by b;
+set plan_cache_mode to force_generic_plan;
+explain (costs off) execute onechunk_param(1);
+execute onechunk_param(1);
+execute onechunk_param(0);
+reset plan_cache_mode;
+deallocate onechunk_param;

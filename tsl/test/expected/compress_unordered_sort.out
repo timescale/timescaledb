@@ -274,9 +274,8 @@ select device, sensor, count(*) from metrics group by device, sensor having coun
    Sort Key: _hyper_1_1_chunk.device, ((_hyper_1_1_chunk.sensor || '1'::text))
    ->  HashAggregate
          Group Key: _hyper_1_1_chunk.device, (_hyper_1_1_chunk.sensor || '1'::text)
-         ->  Result
-               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using _hyper_1_1_chunk_compressed_device_sensor__ts_meta_v2_first_idx on _hyper_1_1_chunk_compressed
 
 select device, sensor||'1', min(time), max(time) from metrics group by device, sensor||'1' order by 1,2;
  device | ?column? |             min              |             max              

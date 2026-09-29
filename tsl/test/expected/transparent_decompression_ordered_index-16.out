@@ -157,13 +157,12 @@ VACUUM ANALYZE metrics_ordered_idx2;
    ->  Subquery Scan on m (actual rows=1.00 loops=4291)
          Filter: (d.device_id_peer = m.device_id_peer)
          ->  Limit (actual rows=1.00 loops=4291)
-               ->  Result (actual rows=1.00 loops=4291)
-                     ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 m_1 (actual rows=1.00 loops=4291)
-                           Order: m_1."time" DESC
-                           Hypertables excluded during runtime: 0
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk m_2 (actual rows=1.00 loops=4291)
-                                 ->  Index Scan Backward using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed _hyper_2_6_chunk_compressed_1 (actual rows=1.00 loops=4291)
-                                       Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
+               ->  Custom Scan (ChunkAppend) on metrics_ordered_idx2 m_1 (actual rows=1.00 loops=4291)
+                     Order: m_1."time" DESC
+                     Hypertables excluded during runtime: 0
+                     ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk m_2 (actual rows=1.00 loops=4291)
+                           ->  Index Scan Backward using _hyper_2_6_chunk_compressed_device_id_device_id_peer__ts_me_idx on _hyper_2_6_chunk_compressed _hyper_2_6_chunk_compressed_1 (actual rows=1.00 loops=4291)
+                                 Index Cond: ((device_id = d.device_id) AND (device_id_peer = 3))
 
 SET enable_seqscan = FALSE;
 \ir include/transparent_decompression_ordered_index.sql
