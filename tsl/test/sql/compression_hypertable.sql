@@ -298,3 +298,63 @@ order by id, ts desc, value
 ;
 
 drop table test8;
+
+
+-- Test memory handling of by-reference column when the output tuple of
+-- ColumnarScan is overwritten.
+
+create table source_table(ts int, tag text, value float) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.chunk_interval = 2500, tsdb.compress);
+
+insert into source_table
+select ts, repeat((ts / 100)::text, 10 * (ts % 100)), mix(ts)
+from generate_series(1, 5000) ts
+;
+
+
+alter table source_table set (tsdb.compress_segmentby = 'tag', tsdb.compress_orderby = 'ts');
+select compress_chunk(x) from show_chunks('source_table') x;
+
+create table dest as select * from source_table;
+select count(distinct tag) from dest;
+drop table dest;
+
+create table dest as select * from source_table order by ts;
+select count(distinct tag) from dest;
+drop table dest;
+
+create table dest as select * from source_table order by value;
+select count(distinct tag) from dest;
+drop table dest;
+
+
+alter table source_table set (tsdb.compress_segmentby = '', tsdb.compress_orderby = 'ts');
+select compress_chunk(x) from show_chunks('source_table') x;
+
+create table dest as select * from source_table;
+select count(distinct tag) from dest;
+drop table dest;
+
+create table dest as select * from source_table order by ts;
+select count(distinct tag) from dest;
+drop table dest;
+
+create table dest as select * from source_table order by value;
+select count(distinct tag) from dest;
+drop table dest;
+
+
+alter table source_table set (tsdb.compress_segmentby = '', tsdb.compress_orderby = 'value');
+select compress_chunk(decompress_chunk(x)) from show_chunks('source_table') x;
+
+create table dest as select * from source_table;
+select count(distinct tag) from dest;
+drop table dest;
+
+create table dest as select * from source_table order by ts;
+select count(distinct tag) from dest;
+drop table dest;
+
+create table dest as select * from source_table order by value;
+select count(distinct tag) from dest;
+drop table dest;
