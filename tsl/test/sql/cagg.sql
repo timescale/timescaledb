@@ -11,6 +11,9 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION test.continuous_aggs_find_view(cagg REGCLASS) RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_continuous_agg_find_by_view_name' LANGUAGE C;
 
+CREATE FUNCTION test.copy_invalidation(REGCLASS) RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_test_copy_invalidation' LANGUAGE C STRICT;
+
 \set WAIT_ON_JOB 0
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
@@ -1517,3 +1520,23 @@ SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 -- Parallel planning
 EXPLAIN (BUFFERS OFF, COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket >= '2023-07-01';
+
+-- A virtual slot must be invalidated without leaking its temporary heap tuple.
+CREATE TABLE copy_slot_test(time bigint NOT NULL);
+SELECT table_name FROM create_hypertable('copy_slot_test', 'time', chunk_time_interval => 10);
+CREATE FUNCTION copy_slot_now() RETURNS bigint LANGUAGE SQL STABLE AS $$ SELECT 110::bigint $$;
+SELECT set_integer_now_func('copy_slot_test', 'copy_slot_now');
+INSERT INTO copy_slot_test VALUES (1), (100);
+CREATE MATERIALIZED VIEW copy_slot_sum WITH (timescaledb.continuous) AS
+SELECT time_bucket(10::bigint, time) AS bucket, count(*) FROM copy_slot_test GROUP BY 1;
+
+-- The tested chunk contains one row, so only that timestamp should be invalidated.
+SELECT test.copy_invalidation(tableoid) FROM copy_slot_test WHERE time = 1;
+SELECT lowest_modified_value, greatest_modified_value
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'copy_slot_test')
+ORDER BY 1, 2;
+
+DROP MATERIALIZED VIEW copy_slot_sum;
+DROP TABLE copy_slot_test;
+DROP FUNCTION copy_slot_now();

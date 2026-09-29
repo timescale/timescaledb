@@ -408,6 +408,20 @@ copy_invalidate_cagg(TSCopyMultiInsertInfo *miinfo, Relation rel, TupleTableSlot
 	}
 }
 
+#ifdef TS_DEBUG
+/* Exercise tuple ownership with slot types not produced by heap COPY. */
+void
+ts_copy_invalidate_cagg_test(Hypertable *ht, Relation rel, TupleTableSlot *slot)
+{
+	TSCopyMultiInsertInfo miinfo = {
+		.ht = ht,
+		.has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(ht->fd.id),
+	};
+
+	copy_invalidate_cagg(&miinfo, rel, slot);
+}
+#endif
+
 /*
  * Write the tuples stored in 'buffer' out to the table.
  */
