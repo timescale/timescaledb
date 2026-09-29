@@ -20,6 +20,7 @@ endforeach(TEMPLATE_FILE)
 list(
   APPEND
   TEST_FILES
+  chunk_skipping_recompress.spec
   compression_ddl_iso.spec
   compression_conflicts_iso.spec
   cagg_insert.spec
