@@ -24,7 +24,8 @@ extern void continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRang
 extern bool continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 											const InternalTimeRange *refresh_window,
 											const ContinuousAggRefreshContext context,
-											bool bucketing_refresh_window, bool extend_last_bucket);
+											bool bucketing_refresh_window, bool extend_last_bucket,
+											MaterializationStats *mat_stats);
 extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
 												 InternalTimeRange *original_refresh_window,
 												 int32 buckets_per_batch, bool force);
