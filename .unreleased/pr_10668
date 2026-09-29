@@ -1,1 +1,0 @@
-Fixes: #10668 Fix DROP SCHEMA CASCADE leaving orphaned compressed chunks

@@ -1,1 +1,0 @@
-Fixes: #10585 Potential crash in `CREATE TABLE AS` query selecting from a compressed hypertable
