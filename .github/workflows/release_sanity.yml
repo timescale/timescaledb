@@ -139,3 +139,45 @@ jobs:
     name: ABI Test
     needs: release_sanity
     uses: ./.github/workflows/abi.yaml
+
+# TODO: uncomment when workflow is tested successfully (pk)
+#  compat:
+#    name: Compatibility
+#    needs: release_sanity
+#    uses: ./.github/workflows/compat-tests-downstream-extensions.yml
+#    with:
+#      tsdb-git-ref: ${{ github.sha }}
+#    secrets: inherit
+
+
+  # The latest published release is the version the E2E test upgrades from.
+  get_previous_tag:
+    name: Get previous timescaledb release tag
+    runs-on: runs-on/fleet=linux-2cpu/env=prod
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
+    steps:
+      - name: Get latest timescaledb tag
+        id: get_tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST_TAG="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "::error::Could not determine the latest release tag"
+            exit 1
+          fi
+          echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+
+# TODO: uncomment when downstream is completed
+#  tiger_lake_e2e:
+#    name: "Tiger Lake: E2E tests"
+#    needs: [release_sanity, get_previous_tag]
+#    uses: timescale/timescaledb-lake/.github/workflows/tsdb-e2e-prerelease.yml@main
+#    with:
+#      timescaledb-version: ${{ inputs.version }}
+#      timescaledb-base-version: ${{ needs.get_previous_tag.outputs.tag }}
+#    secrets: inherit
