@@ -178,6 +178,11 @@ def macos_config(overrides):
             ),
         }
     )
+    if "ignored_tests" in overrides:
+        overrides = dict(overrides)
+        overrides["ignored_tests"] = overrides["ignored_tests"].union(
+            macos_ignored_tests
+        )
     base_config.update(overrides)
     return base_config
 
