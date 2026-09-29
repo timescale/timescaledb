@@ -13,6 +13,7 @@ This release contains bug fixes since the 2.30.1 release. We recommend that you 
 * [#10609](https://github.com/timescale/timescaledb/pull/10609) Fix race while updating granular refresh setting for hypertable
 * [#10613](https://github.com/timescale/timescaledb/pull/10613) Rename the granular refresh options to `timescaledb.cagg_granular_refresh_*`
 * [#10636](https://github.com/timescale/timescaledb/pull/10636) Free the tenant tracker's shared memory when its hypertable is dropped
+* [#10585](https://github.com/timescale/timescaledb/pull/10585) Potential crash in `CREATE TABLE AS` query selecting from a compressed hypertable
 
 ## 2.30.1 (2026-09-17)
 
