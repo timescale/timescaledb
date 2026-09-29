@@ -1697,6 +1697,14 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 
 	info->ht = ts_hypertable_cache_get_cache_and_entry(info->table_relid, CACHE_FLAG_NONE, &hcache);
 
+	if (ts_chunk_get_osm_chunk_id(info->ht->fd.id) != INVALID_CHUNK_ID)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("multiple dimensions not supported for hypertables with data tiering "
+						"enabled")));
+	}
+
 	if (info->num_slices_is_set && OidIsValid(info->chunk_interval.type))
 	{
 		ereport(ERROR,
