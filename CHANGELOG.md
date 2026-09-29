@@ -4,7 +4,7 @@
 
 ## 2.30.2 (2026-09-29)
 
-This release contains performance improvements and bug fixes since the 2.30.1 release. We recommend that you upgrade at the next available opportunity.
+This release contains bug fixes since the 2.30.1 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
 * [#10665](https://github.com/timescale/timescaledb/pull/10665) Fix crash when merging chunks with different column layouts
