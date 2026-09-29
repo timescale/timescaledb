@@ -1554,6 +1554,19 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 	 */
 	const int n_rows = row_decompressor_prepare_batch(decompressor, attnos, num_scankeys);
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+
+	/* The key columns that are read per row, collected once per batch. */
+	CompressedColumnValues **key_columns =
+		palloc(sizeof(CompressedColumnValues *) * decompressor->in_desc->natts);
+	int num_key_columns = 0;
+	for (int i = 0; i < decompressor->in_desc->natts; i++)
+	{
+		if (decompressor->column_values[i].decompression_type != DT_Invalid)
+		{
+			key_columns[num_key_columns++] = &decompressor->column_values[i];
+		}
+	}
+
 	ScanKey key;
 	bool match;
 
@@ -1565,11 +1578,9 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 
 	for (int row = 0; row < n_rows; row++)
 	{
-		for (int i = 0; i < decompressor->num_set_up_columns; i++)
+		for (int i = 0; i < num_key_columns; i++)
 		{
-			CompressedColumnValues *column_values =
-				&decompressor->column_values[decompressor->set_up_columns[i]];
-			compressed_columns_to_postgres_data(column_values, 1, row);
+			compressed_columns_to_postgres_data(key_columns[i], 1, row);
 		}
 
 		match = true;
@@ -1628,11 +1639,13 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 			}
 			if (!check_full_match)
 			{
+				pfree(key_columns);
 				MemoryContextSwitchTo(old_ctx);
 				return SomeRowsPass;
 			}
 		}
 	}
+	pfree(key_columns);
 	MemoryContextSwitchTo(old_ctx);
 
 	if (match_all)

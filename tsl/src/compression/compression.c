@@ -2143,10 +2143,9 @@ row_decompressor_reset(RowDecompressor *decompressor)
 	MemoryContextReset(decompressor->per_compressed_row_ctx);
 
 	/* The Arrow arrays and iterators of the batch lived in that context. */
-	for (int i = 0; i < decompressor->num_set_up_columns; i++)
+	for (int i = 0; i < decompressor->in_desc->natts; i++)
 	{
-		CompressedColumnValues *column_values =
-			&decompressor->column_values[decompressor->set_up_columns[i]];
+		CompressedColumnValues *column_values = &decompressor->column_values[i];
 		column_values->decompression_type = DT_Invalid;
 		column_values->arrow = NULL;
 		column_values->by_ref_storage = NULL;
@@ -2155,8 +2154,7 @@ row_decompressor_reset(RowDecompressor *decompressor)
 			column_values->buffers[j] = NULL;
 		}
 	}
-	decompressor->num_set_up_columns = 0;
-	decompressor->iterators_advanced = false;
+	decompressor->iterators_valid = false;
 	decompressor->batches_decompressed = 0;
 	decompressor->tuples_decompressed = 0;
 }
@@ -2193,7 +2191,6 @@ row_decompressor_close(RowDecompressor *decompressor)
 	pfree((void *) decompressor->decompressed_slots);
 	pfree(decompressor->per_compressed_cols);
 	pfree(decompressor->column_values);
-	pfree(decompressor->set_up_columns);
 }
 
 void
@@ -2276,7 +2273,6 @@ create_per_compressed_column(RowDecompressor *decompressor, bool internal_error)
 		palloc(sizeof(*decompressor->per_compressed_cols) * decompressor->in_desc->natts);
 	decompressor->column_values =
 		palloc0(sizeof(*decompressor->column_values) * decompressor->in_desc->natts);
-	decompressor->set_up_columns = palloc(sizeof(int) * decompressor->in_desc->natts);
 
 	Assert(OidIsValid(compressed_data_type_oid));
 
@@ -2361,15 +2357,14 @@ batch_row_count(RowDecompressor *decompressor)
  * use_bulk is true; otherwise a decompression iterator is created. Either
  * way the column's CompressedColumnValues describe how to read the rows, in
  * the same way as in the columnar scan, so that the rows are converted with
- * the scan's compressed_columns_to_postgres_data(). The column is added to
- * set_up_columns, except when already_listed is true: init_batch() passes
- * that when it creates the iterator of a column again, because the column
- * is in the list from the first time.
+ * the scan's compressed_columns_to_postgres_data().
+ *
+ * TODO (dbeck) revise
  *
  * Must run with per_compressed_row_ctx as the current memory context.
  */
 static void
-init_column(RowDecompressor *decompressor, int input_column, bool use_bulk, bool already_listed)
+init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 {
 	PerCompressedColumn *column_info = &decompressor->per_compressed_cols[input_column];
 	CompressedColumnValues *column_values = &decompressor->column_values[input_column];
@@ -2381,10 +2376,6 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk, bool
 	if (column_values->decompression_type != DT_Invalid)
 	{
 		return;
-	}
-	if (!already_listed)
-	{
-		decompressor->set_up_columns[decompressor->num_set_up_columns++] = input_column;
 	}
 
 	Datum compressed_datum = PointerGetDatum(
@@ -2468,7 +2459,7 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk, bool
 static void
 init_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
 {
-	decompressor->batch_rows = batch_row_count(decompressor);
+	decompressor->current_batch_row_count = batch_row_count(decompressor);
 
 	for (int input_column = 0; input_column < decompressor->in_desc->natts; input_column++)
 	{
@@ -2503,12 +2494,10 @@ init_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
 			continue;
 		}
 
-		bool restart = false;
-		if (decompressor->iterators_advanced && column_values->decompression_type == DT_Iterator)
+		if (decompressor->iterators_valid && column_values->decompression_type == DT_Iterator)
 		{
 			column_values->decompression_type = DT_Invalid;
 			column_values->buffers[0] = NULL;
-			restart = true;
 		}
 
 		/* Only initialize required columns if specified. */
@@ -2529,27 +2518,30 @@ init_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
 
 		init_column(decompressor,
 					input_column,
-					ts_guc_enable_bulk_decompression,
-					/* already_listed = */ restart);
+					ts_guc_enable_bulk_decompression);
 	}
 
-	decompressor->iterators_advanced = false;
+	decompressor->iterators_valid = false;
 }
 
 /*
  * Convert one row of the current batch into decompressed_datums and
- * decompressed_is_nulls. Only the columns set up for this batch are
- * converted, so a row-by-row match on one key column costs one conversion
- * per row, not a pass over every column of the compressed tuple.
+ * decompressed_is_nulls. Columns that are not set up for this batch are
+ * skipped.
+ *
+ * TODO (dbeck) revise
  */
 static void
 decompress_row(RowDecompressor *decompressor, int row)
 {
-	for (int i = 0; i < decompressor->num_set_up_columns; i++)
+	for (int i = 0; i < decompressor->in_desc->natts; i++)
 	{
-		CompressedColumnValues *column_values =
-			&decompressor->column_values[decompressor->set_up_columns[i]];
+		CompressedColumnValues *column_values = &decompressor->column_values[i];
 
+		if (column_values->decompression_type == DT_Invalid)
+		{
+			continue;
+		}
 		if (column_values->decompression_type == DT_Iterator)
 		{
 			/*
@@ -2589,7 +2581,7 @@ decompress_batch(RowDecompressor *decompressor)
 	 */
 	init_batch(decompressor, NULL, 0);
 
-	const int n_batch_rows = decompressor->batch_rows;
+	const int n_batch_rows = decompressor->current_batch_row_count;
 
 	/*
 	 * Ensure decompressed_slots array is large enough for this batch.
@@ -2658,10 +2650,9 @@ decompress_batch(RowDecompressor *decompressor)
 	 * consistent with the count metadata column. The columns decompressed in
 	 * bulk were checked when they were decompressed.
 	 */
-	for (int i = 0; i < decompressor->num_set_up_columns; i++)
+	for (int i = 0; i < decompressor->in_desc->natts; i++)
 	{
-		CompressedColumnValues *column_values =
-			&decompressor->column_values[decompressor->set_up_columns[i]];
+		CompressedColumnValues *column_values = &decompressor->column_values[i];
 		if (column_values->decompression_type != DT_Iterator)
 		{
 			continue;
@@ -2678,11 +2669,11 @@ decompress_batch(RowDecompressor *decompressor)
 	return n_batch_rows;
 }
 
-/*
+/* TODO (dbeck) revise
  * Set up the columns in attnos for a row-by-row pass over the current batch
  * and return its row count. batch_matches() in compression_dml.c calls this
  * and then converts the rows itself, with the scan's
- * compressed_columns_to_postgres_data() on the columns in set_up_columns,
+ * compressed_columns_to_postgres_data() on the columns that are set up,
  * into decompressed_datums and decompressed_is_nulls. Any iterator among
  * those columns is advanced by that pass, so decompress_batch() creates the
  * iterators again if the whole batch is decompressed afterwards.
@@ -2692,10 +2683,10 @@ row_decompressor_prepare_batch(RowDecompressor *decompressor, AttrNumber *attnos
 {
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 	init_batch(decompressor, attnos, num_attnos);
-	decompressor->iterators_advanced = true;
+	decompressor->iterators_valid = true;
 	decompressor->batches_decompressed++;
 	MemoryContextSwitchTo(old_ctx);
-	return decompressor->batch_rows;
+	return decompressor->current_batch_row_count;
 }
 
 /*
@@ -2749,7 +2740,7 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 	}
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
-	init_column(decompressor, target_col, /* use_bulk = */ true, /* already_listed = */ false);
+	init_column(decompressor, target_col, /* use_bulk = */ true);
 	MemoryContextSwitchTo(old_ctx);
 
 	CompressedColumnValues *column_values = &decompressor->column_values[target_col];

@@ -63,8 +63,8 @@ typedef struct DecompressResult
 typedef struct FormData_hypertable ChunkCompressionSettings;
 
 typedef struct Compressor Compressor;
-/* How the columnar scan reads one column of a batch, see compressed_batch.h. */
 typedef struct CompressedColumnValues CompressedColumnValues;
+
 struct Compressor
 {
 	void (*append_null)(Compressor *compressord);
@@ -191,44 +191,28 @@ typedef struct RowDecompressor
 	AttrMap *attrmap;
 
 	/*
-	 * How to read each column of the current batch, one entry per column of
-	 * in_desc. A compressed column is decompressed in bulk into an Arrow array
-	 * when its compression algorithm and type have a bulk decompression
-	 * function, and through a decompression iterator otherwise. This is the
-	 * same struct the columnar scan uses (see compressed_batch.h), so the rows
-	 * are converted with the scan's compressed_columns_to_postgres_data(). The
-	 * output pointers point into decompressed_datums and decompressed_is_nulls.
+	 * The column_values is a polymorphic construct that allows mixing bulk
+	 * and iteraror based decompression in the same batch. In general, bulk
+	 * decompression is preferred, but there are situation where it is not
+	 * possible, not desired or explicitly disabled.
 	 */
 	CompressedColumnValues *column_values;
 
 	/*
-	 * Scratch memory of the bulk decompression functions, reset after every
-	 * decompressed column. Created on first use.
+	 * The decompressors and in particular the bulk decompressors leave garbage
+	 * memory behind (TODO : get this fixed), so I use this context so we can
+	 * throw away all of them after each decompression.
 	 */
 	MemoryContext bulk_decompression_context;
 
 	/*
-	 * Set by row_decompressor_prepare_batch(): the row-by-row pass that
-	 * follows it, batch_matches() in compression_dml.c, advances the iterators
-	 * of the columns it set up. decompress_batch() then creates them again
-	 * from the start, while the columns decompressed in bulk are reused as
-	 * they are.
+	 * In some cases we need to read the data multiple times and the current
+	 * iterator interface does not support rewinding, so we need a state to
+	 * tell us that the iterator needs to be reinitialized (no longer valid).
+	 * The bulk decompressed data does not have this problem.
 	 */
-	bool iterators_advanced;
-
-	/* The row count of the current batch, read from the count metadata column by init_batch(). */
-	int batch_rows;
-
-	/*
-	 * The columns whose column_values are set up for the current batch. The
-	 * per-row conversion in decompress_row(), the row-by-row matching in
-	 * batch_matches() (compression_dml.c) and row_decompressor_reset() only
-	 * touch these. A batch sets up only the compressed columns it needs: an
-	 * UPDATE that matches batches row by row, or an UPSERT that matches many
-	 * batches per inserted row, sets up just the key columns of each batch.
-	 */
-	int *set_up_columns;
-	int num_set_up_columns;
+	bool iterators_valid;
+	int current_batch_row_count;
 
 	Detoaster detoaster;
 
