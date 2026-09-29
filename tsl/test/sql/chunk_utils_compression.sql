@@ -58,3 +58,14 @@ ORDER BY table_name DESC;
 SELECT show_chunks('public.uncompressed_table');
 SELECT show_chunks('public.table_to_compress');
 
+
+-- truncate a partially compressed chunk
+CREATE TABLE trunc_partial(time timestamptz NOT NULL, device int, value float) WITH (tsdb.hypertable, tsdb.segmentby = 'device');
+INSERT INTO trunc_partial SELECT '2025-01-01'::timestamptz + i * interval '1 minute', i % 3, i FROM generate_series(1, 100) i;
+SELECT compress_chunk(show_chunks('trunc_partial')) AS "CHNAME" \gset
+INSERT INTO trunc_partial VALUES ('2025-01-01 00:30', 1, 1.0);
+SELECT count(*) FROM :CHNAME;
+TRUNCATE TABLE :CHNAME;
+SELECT count(*) FROM :CHNAME;
+SELECT count(*) FROM ONLY :CHNAME;
+DROP TABLE trunc_partial;

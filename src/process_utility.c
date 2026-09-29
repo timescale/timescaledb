@@ -1579,7 +1579,8 @@ process_truncate(ProcessUtilityArgs *args)
 								char *schema_name =
 									get_namespace_name(get_rel_namespace(compressed_relid));
 								char *table_name = get_rel_name(compressed_relid);
-								rv = makeRangeVar(schema_name, table_name, -1);
+								relations =
+									lappend(relations, makeRangeVar(schema_name, table_name, -1));
 								MemoryContextSwitchTo(oldctx);
 								list_changed = true;
 							}
