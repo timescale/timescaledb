@@ -893,8 +893,8 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 	Oid uncompressed_relid = PG_GETARG_OID(0);
 	if (uncompressed_relid == InvalidOid)
 	{
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			errmsg("Invalid chunk argument given")));
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk argument given")));
 	}
 
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
@@ -969,8 +969,8 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	Oid uncompressed_relid = PG_GETARG_OID(0);
 	if (uncompressed_relid == InvalidOid)
 	{
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			errmsg("Invalid chunk argument given")));
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk argument given")));
 	}
 
 	bool if_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
