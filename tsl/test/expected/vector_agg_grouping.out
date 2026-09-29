@@ -2042,3 +2042,58 @@ select count(*) from (select b, count(*) from groupnotinto group by a, b) g;
 
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
+-- Grouping by a computed expression on a single chunk.
+create table onechunkbucket(ts timestamptz not null, host text, v float8)
+    with (tsdb.hypertable, tsdb.segmentby = 'host', tsdb.orderby = 'ts desc',
+        tsdb.chunk_interval = '1 day');
+NOTICE:  using column "ts" as partitioning column
+insert into onechunkbucket
+select '2026-01-01 00:00:00+00'::timestamptz + g * interval '1 min', 'h' || (g % 4), g
+from generate_series(0, 1439) g;
+select count(compress_chunk(x)) from show_chunks('onechunkbucket') x;
+ count 
+-------
+     1
+
+vacuum analyze onechunkbucket;
+set timescaledb.debug_require_vector_agg = 'require';
+-- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+explain (costs off)
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: (time_bucket('@ 1 hour'::interval, _hyper_7_11_chunk.ts))
+   ->  Custom Scan (VectorAgg)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_11_chunk
+               ->  Seq Scan on _hyper_7_11_chunk_compressed
+
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket group by b order by b;
+              b               |  sum   
+------------------------------+--------
+ Wed Dec 31 16:00:00 2025 PST |  28680
+ Wed Dec 31 20:00:00 2025 PST |  86280
+ Thu Jan 01 00:00:00 2026 PST | 143880
+ Thu Jan 01 04:00:00 2026 PST | 201480
+ Thu Jan 01 08:00:00 2026 PST | 259080
+ Thu Jan 01 12:00:00 2026 PST | 316680
+
+select time_bucket('1 hour', ts) b, host, max(v) from onechunkbucket
+group by b, host order by b, host limit 3;
+              b               | host | max 
+------------------------------+------+-----
+ Wed Dec 31 16:00:00 2025 PST | h0   |  56
+ Wed Dec 31 16:00:00 2025 PST | h1   |  57
+ Wed Dec 31 16:00:00 2025 PST | h2   |  58
+
+select date_bin('6 hours', ts, '2000-01-01 00:00:00+00') b, count(*), min(v)
+from onechunkbucket group by b order by b;
+              b               | count | min  
+------------------------------+-------+------
+ Wed Dec 31 16:00:00 2025 PST |   360 |    0
+ Wed Dec 31 22:00:00 2025 PST |   360 |  360
+ Thu Jan 01 04:00:00 2026 PST |   360 |  720
+ Thu Jan 01 10:00:00 2026 PST |   360 | 1080
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;

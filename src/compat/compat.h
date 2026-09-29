@@ -189,6 +189,30 @@ table_tuple_update_compat(Relation rel, ItemPointer otid, TupleTableSlot *slot, 
 	ExecutorRun(query_desc, direction, count, execute_once)
 #endif
 
+/* PG18 added a 'result_relation' argument to ReplaceVarsFromTargetList(). */
+#include <rewrite/rewriteManip.h>
+#if PG18_GE
+#define ReplaceVarsFromTargetList_compat ReplaceVarsFromTargetList
+#else
+#define ReplaceVarsFromTargetList_compat(node,                                                     \
+										 target_varno,                                             \
+										 sublevels_up,                                             \
+										 target_rte,                                               \
+										 targetlist,                                               \
+										 result_relation,                                          \
+										 nomatch_option,                                           \
+										 nomatch_varno,                                            \
+										 outer_hasSubLinks)                                        \
+	ReplaceVarsFromTargetList(node,                                                                \
+							  target_varno,                                                        \
+							  sublevels_up,                                                        \
+							  target_rte,                                                          \
+							  targetlist,                                                          \
+							  nomatch_option,                                                      \
+							  nomatch_varno,                                                       \
+							  outer_hasSubLinks)
+#endif
+
 /*
  * PG19 added a "flags" argument to MakeTupleTableSlot(). Provide a wrapper with
  * the new signature that drops the flags on earlier versions.

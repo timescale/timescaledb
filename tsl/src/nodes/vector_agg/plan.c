@@ -537,6 +537,32 @@ vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqinfo)
 	return true;
 }
 
+/* Move a projection-only Result into a copy of the ColumnarScan below it. */
+static Plan *
+fold_projection_into_columnar_scan(Plan *plan)
+{
+	if (!IsA(plan, Result) || castNode(Result, plan)->resconstantqual != NULL ||
+		plan->qual != NIL || plan->lefttree == NULL || !ts_is_columnar_scan_plan(plan->lefttree))
+	{
+		return plan;
+	}
+
+	CustomScan *scan = palloc(sizeof(CustomScan));
+	*scan = *castNode(CustomScan, plan->lefttree);
+	scan->scan.plan.targetlist =
+		(List *) ReplaceVarsFromTargetList_compat((Node *) plan->targetlist,
+												  OUTER_VAR,
+												  0,
+												  NULL,
+												  plan->lefttree->targetlist,
+												  0,
+												  REPLACEVARS_REPORT_ERROR,
+												  0,
+												  NULL);
+
+	return &scan->scan.plan;
+}
+
 static Node *
 mark_partial_aggref_mutator(Node *node, void *context)
 {
@@ -662,7 +688,8 @@ insert_vector_agg(Plan *plan, void *context)
 		return plan;
 	}
 
-	Plan *childplan = agg->plan.lefttree;
+	/* A single-chunk plan can have a Result that computes the grouping expressions. */
+	Plan *childplan = fold_projection_into_columnar_scan(agg->plan.lefttree);
 	VectorQualInfo vqinfo;
 	MemSet(&vqinfo, 0, sizeof(VectorQualInfo));
 
