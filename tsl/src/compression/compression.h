@@ -63,6 +63,8 @@ typedef struct DecompressResult
 typedef struct FormData_hypertable ChunkCompressionSettings;
 
 typedef struct Compressor Compressor;
+typedef struct CompressedColumnValues CompressedColumnValues;
+
 struct Compressor
 {
 	void (*append_null)(Compressor *compressord);
@@ -132,11 +134,6 @@ typedef struct PerCompressedColumn
 {
 	Oid decompressed_type;
 
-	/* the compressor to use for compressed columns, always NULL for segmenters
-	 * only use if is_compressed
-	 */
-	DecompressionIterator *iterator;
-
 	/* is this a compressed column or a segment-by column */
 	bool is_compressed;
 
@@ -191,8 +188,31 @@ typedef struct RowDecompressor
 
 	TupleTableSlot **decompressed_slots;
 	int decompressed_slots_capacity;
-	int unprocessed_tuples;
 	AttrMap *attrmap;
+
+	/*
+	 * The column_values is a polymorphic construct that allows mixing bulk
+	 * and iteraror based decompression in the same batch. In general, bulk
+	 * decompression is preferred, but there are situation where it is not
+	 * possible, not desired or explicitly disabled.
+	 */
+	CompressedColumnValues *column_values;
+
+	/*
+	 * The decompressors and in particular the bulk decompressors leave garbage
+	 * memory behind (TODO : get this fixed), so I use this context so we can
+	 * throw away all of them after each decompression.
+	 */
+	MemoryContext bulk_decompression_context;
+
+	/*
+	 * In some cases we need to read the data multiple times and the current
+	 * iterator interface does not support rewinding, so we need a state to
+	 * tell us that the iterator needs to be reinitialized (no longer valid).
+	 * The bulk decompressed data does not have this problem.
+	 */
+	bool iterators_valid;
+	int current_batch_row_count;
 
 	Detoaster detoaster;
 
@@ -465,8 +485,7 @@ extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compr
 										Oid uncompressed_relid, CmdType cmd_type);
 extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
 extern int decompress_batch(RowDecompressor *decompressor);
-extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
-									  int num_attnos);
+extern void row_decompressor_init_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos);
 extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
 											bool *single_value);
 /*
