@@ -9,6 +9,7 @@
 #include <executor/spi.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
+#include <lib/stringinfo.h>
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
@@ -55,6 +56,8 @@ typedef struct ContinuousAggMaterializationState
 	const char *tenant_column;
 	const char *tenant_coltype;
 	int32 raw_hypertable_id;
+	/*materialization stats, accumulated through the whole refresh, across batches*/
+	MaterializationStats *mat_stats;
 } ContinuousAggMaterializationState;
 
 typedef struct CaggRefreshSpiContext
@@ -71,7 +74,8 @@ compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh
 static void continuous_agg_refresh_init(ContinuousAggMaterializationState *refresh,
 										const ContinuousAgg *cagg,
 										const InternalTimeRange *refresh_window,
-										bool bucketing_refresh_window);
+										bool bucketing_refresh_window,
+										MaterializationStats *mat_stats);
 static void continuous_agg_refresh_execute(const ContinuousAggMaterializationState *refresh,
 										   const InternalTimeRange *bucketed_refresh_window,
 										   int32 seqnum);
@@ -86,14 +90,36 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
 											   const ContinuousAggRefreshContext *context,
-											   bool bucketing_refresh_window);
+											   bool bucketing_refresh_window,
+											   MaterializationStats *mat_stats);
 static ContinuousAgg *
 process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
 											const InternalTimeRange *refresh_window);
+
+typedef struct CaggRefreshStats
+{
+	/* Number of batches the refresh window was split into */
+	int32 total_batches;
+	/* Number of those batches this execution actually processed. It is lower
+	 * than total_batches when max_batches_per_execution ended the execution
+	 * early. */
+	int32 batches_processed;
+	/* Time range covered by the batches that were processed, i.e. what this
+	 * execution worked on rather than the window that was requested */
+	Oid range_type;
+	int64 range_start;
+	int64 range_end;
+	/* Whether the cagg does granular refresh. */
+	bool granular_enabled;
+	/* Accumulated, per-refresh materialization stats. */
+	MaterializationStats mat_stats;
+} CaggRefreshStats;
+
 static bool process_cagg_invalidations_and_refresh_txn3(const ContinuousAgg *cagg,
 														const InternalTimeRange *refresh_window,
 														const ContinuousAggRefreshContext *context,
-														bool bucketing_refresh_window);
+														bool bucketing_refresh_window,
+														MaterializationStats *mat_stats);
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
 {
@@ -445,9 +471,11 @@ compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const ref
  */
 static void
 continuous_agg_refresh_init(ContinuousAggMaterializationState *refresh, const ContinuousAgg *cagg,
-							const InternalTimeRange *refresh_window, bool bucketing_refresh_window)
+							const InternalTimeRange *refresh_window, bool bucketing_refresh_window,
+							MaterializationStats *mat_stats)
 {
 	MemSet(refresh, 0, sizeof(*refresh));
+	refresh->mat_stats = mat_stats;
 	refresh->cagg = *cagg;
 	refresh->cagg_ht = cagg_get_hypertable_or_fail(cagg->data.mat_hypertable_id);
 	refresh->refresh_window = *refresh_window;
@@ -569,7 +597,8 @@ continuous_agg_refresh_execute(const ContinuousAggMaterializationState *refresh,
 										  tenant_column,
 										  refresh->tenant_coltype,
 										  refresh->raw_hypertable_id,
-										  seqnum);
+										  seqnum,
+										  refresh->mat_stats);
 }
 
 static void
@@ -712,11 +741,15 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations,
 								   const ContinuousAggRefreshContext *context,
-								   bool bucketing_refresh_window)
+								   bool bucketing_refresh_window, MaterializationStats *mat_stats)
 {
 	ContinuousAggMaterializationState refresh;
 
-	continuous_agg_refresh_init(&refresh, cagg, refresh_window, bucketing_refresh_window);
+	continuous_agg_refresh_init(&refresh,
+								cagg,
+								refresh_window,
+								bucketing_refresh_window,
+								mat_stats);
 
 	long count pg_attribute_unused();
 	count = continuous_agg_scan_refresh_window_ranges(cagg,
@@ -730,21 +763,6 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 
-typedef struct CaggRefreshStats
-{
-	/* Number of batches the refresh window was split into */
-	int32 total_batches;
-	/* Number of those batches this execution actually processed. It is lower
-	 * than total_batches when max_batches_per_execution ended the execution
-	 * early. */
-	int32 batches_processed;
-	/* Time range covered by the batches that were processed, i.e. what this
-	 * execution worked on rather than the window that was requested */
-	Oid range_type;
-	int64 range_start;
-	int64 range_end;
-} CaggRefreshStats;
-
 /*
  * Report what a refresh did.
  */
@@ -756,12 +774,34 @@ cagg_refresh_stats_report(const CaggRefreshStats *stats)
 		return;
 	}
 
-	char *report = psprintf("continuous aggregate refresh: processed %d batch(es) of %d in "
-							"window [ %s, %s ]",
-							stats->batches_processed,
-							stats->total_batches,
-							ts_internal_to_time_string(stats->range_start, stats->range_type),
-							ts_internal_to_time_string(stats->range_end, stats->range_type));
+	StringInfoData msg;
+
+	initStringInfo(&msg);
+	appendStringInfo(&msg,
+					 "processed %d batch(es) of %d in window [ %s, %s ], "
+					 "materialized " UINT64_FORMAT " row(s), deleted " UINT64_FORMAT " row(s)",
+					 stats->batches_processed,
+					 stats->total_batches,
+					 ts_internal_to_time_string(stats->range_start, stats->range_type),
+					 ts_internal_to_time_string(stats->range_end, stats->range_type),
+					 stats->mat_stats.rows_materialized,
+					 stats->mat_stats.rows_deleted);
+
+	/* How the ranges that changed rows were materialized. Said only for a cagg
+	 * that does granular refresh. */
+	if (stats->granular_enabled)
+	{
+		if (stats->mat_stats.any_granular)
+		{
+			appendStringInfoString(&msg,
+								   stats->mat_stats.any_full ? ", partly granular" :
+															   ", fully granular");
+		}
+		else if (stats->mat_stats.any_full)
+		{
+			appendStringInfoString(&msg, ", no granular refresh");
+		}
+	}
 
 	/*
 	 * Reported both as NOTICE and to the server log. A background worker has
@@ -769,10 +809,10 @@ cagg_refresh_stats_report(const CaggRefreshStats *stats)
 	 * LOG_SERVER_ONLY is never sent to the client, so each audience sees the
 	 * summary exactly once whatever client_min_messages is set to.
 	 */
-	elog(NOTICE, "%s", report);
-	elog(LOG_SERVER_ONLY, "%s", report);
+	elog(NOTICE, "continuous aggregate refresh: %s", msg.data);
+	elog(LOG_SERVER_ONLY, "continuous aggregate refresh: %s", msg.data);
 
-	pfree(report);
+	pfree(msg.data);
 }
 
 /*
@@ -793,6 +833,10 @@ void
 continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_window,
 							   ContinuousAggRefreshContext *context)
 {
+	/* Accumulated across the batches below, which commit individually, so it
+	 * lives here rather than in anything the batches own. */
+	CaggRefreshStats stats = { 0 };
+
 	List *refresh_window_list =
 		continuous_agg_split_refresh_window(cagg,
 											refresh_window,
@@ -858,7 +902,11 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 				 context->execution.processing_batch == 1 :
 				 context->execution.processing_batch == context->execution.number_of_batches);
 
-		any_refreshed |= continuous_agg_refresh_internal(cagg, batch_window, context, apply_extend);
+		any_refreshed |= continuous_agg_refresh_internal(cagg,
+														 batch_window,
+														 context,
+														 apply_extend,
+														 &stats.mat_stats);
 		DEBUG_ERROR_INJECTION(
 			psprintf("cagg_policy_batch_%d_after_refresh", context->execution.processing_batch));
 
@@ -881,13 +929,12 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	}
 	else
 	{
-		CaggRefreshStats stats = {
-			.total_batches = context->execution.number_of_batches,
-			.batches_processed = context->execution.processing_batch,
-			.range_type = refresh_window->type,
-			.range_start = processed_range_start,
-			.range_end = processed_range_end,
-		};
+		stats.granular_enabled = cagg->data.granular_refresh_enabled;
+		stats.total_batches = context->execution.number_of_batches;
+		stats.batches_processed = context->execution.processing_batch;
+		stats.range_type = refresh_window->type;
+		stats.range_start = processed_range_start;
+		stats.range_end = processed_range_end;
 
 		cagg_refresh_stats_report(&stats);
 	}
@@ -1123,7 +1170,8 @@ static bool
 process_cagg_invalidations_and_refresh_txn3(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
 											const ContinuousAggRefreshContext *context,
-											bool bucketing_refresh_window)
+											bool bucketing_refresh_window,
+											MaterializationStats *mat_stats)
 {
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn3");
 	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
@@ -1148,7 +1196,8 @@ process_cagg_invalidations_and_refresh_txn3(const ContinuousAgg *cagg,
 										   refresh_window,
 										   invalidations,
 										   context,
-										   bucketing_refresh_window);
+										   bucketing_refresh_window,
+										   mat_stats);
 		invalidation_store_free(invalidations);
 
 		/*
@@ -1263,7 +1312,8 @@ rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ct
 bool
 continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 								const InternalTimeRange *refresh_window_arg,
-								const ContinuousAggRefreshContext *context, bool apply_extend)
+								const ContinuousAggRefreshContext *context, bool apply_extend,
+								MaterializationStats *mat_stats)
 {
 	const ContinuousAgg *volatile cagg = cagg_arg;
 	int32 mat_id = cagg->data.mat_hypertable_id;
@@ -1457,7 +1507,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			refreshed = process_cagg_invalidations_and_refresh_txn3(cagg,
 																	&refresh_window,
 																	context,
-																	bucketing_refresh_window);
+																	bucketing_refresh_window,
+																	mat_stats);
 
 			DEBUG_WAITPOINT("after_process_cagg_materializations");
 		}
