@@ -184,6 +184,60 @@ decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnul
 	*column->output_value = value;
 }
 
+void
+compressed_column_values_from_arrow(CompressedColumnValues *column_values, ArrowArray *arrow,
+									Oid typid, int value_bytes, MemoryContext text_context)
+{
+	column_values->arrow = arrow;
+
+	if (value_bytes > 0)
+	{
+		/* Fixed-width column. */
+		column_values->decompression_type = value_bytes;
+		column_values->buffers[0] = arrow->buffers[0];
+		column_values->buffers[1] = arrow->buffers[1];
+		column_values->buffers[2] = NULL;
+		column_values->buffers[3] = NULL;
+
+		if (typid == BOOLOID)
+		{
+			/* The bool columns have a dedicated storage format. */
+			column_values->decompression_type = DT_ArrowBits;
+		}
+	}
+	else
+	{
+		/*
+		 * Text column. Pre-allocate memory for its text Datum. We can't put
+		 * direct references to Arrow memory into the output, because it
+		 * doesn't have the varlena headers that Postgres expects for text.
+		 */
+		const int maxbytes = get_max_varlena_bytes(arrow);
+		column_values->by_ref_storage = MemoryContextAlloc(text_context, maxbytes);
+		*column_values->output_value = PointerGetDatum(column_values->by_ref_storage);
+
+		/*
+		 * Set up the datum conversion based on whether we use the dictionary.
+		 */
+		if (arrow->dictionary == NULL)
+		{
+			column_values->decompression_type = DT_ArrowText;
+			column_values->buffers[0] = arrow->buffers[0];
+			column_values->buffers[1] = arrow->buffers[1];
+			column_values->buffers[2] = arrow->buffers[2];
+			column_values->buffers[3] = NULL;
+		}
+		else
+		{
+			column_values->decompression_type = DT_ArrowTextDict;
+			column_values->buffers[0] = arrow->buffers[0];
+			column_values->buffers[1] = arrow->dictionary->buffers[1];
+			column_values->buffers[2] = arrow->dictionary->buffers[2];
+			column_values->buffers[3] = arrow->buffers[1];
+		}
+	}
+}
+
 static void
 decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state,
 				  TupleTableSlot *compressed_slot, int i)
@@ -282,56 +336,11 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		elog(ERROR, "compressed column out of sync with batch counter");
 	}
 
-	column_values->arrow = arrow;
-
-	if (value_bytes > 0)
-	{
-		/* Fixed-width column. */
-		column_values->decompression_type = value_bytes;
-		column_values->buffers[0] = arrow->buffers[0];
-		column_values->buffers[1] = arrow->buffers[1];
-		column_values->buffers[2] = NULL;
-		column_values->buffers[3] = NULL;
-
-		if (column_description->typid == BOOLOID)
-		{
-			/* The bool columns have a dedicated storage format. */
-			column_values->decompression_type = DT_ArrowBits;
-		}
-	}
-	else
-	{
-		/*
-		 * Text column. Pre-allocate memory for its text Datum in the
-		 * decompressed scan slot. We can't put direct references to Arrow
-		 * memory there, because it doesn't have the varlena headers that
-		 * Postgres expects for text.
-		 */
-		const int maxbytes = get_max_varlena_bytes(arrow);
-		column_values->by_ref_storage =
-			MemoryContextAlloc(batch_state->per_batch_context, maxbytes);
-		*column_values->output_value = PointerGetDatum(column_values->by_ref_storage);
-
-		/*
-		 * Set up the datum conversion based on whether we use the dictionary.
-		 */
-		if (arrow->dictionary == NULL)
-		{
-			column_values->decompression_type = DT_ArrowText;
-			column_values->buffers[0] = arrow->buffers[0];
-			column_values->buffers[1] = arrow->buffers[1];
-			column_values->buffers[2] = arrow->buffers[2];
-			column_values->buffers[3] = NULL;
-		}
-		else
-		{
-			column_values->decompression_type = DT_ArrowTextDict;
-			column_values->buffers[0] = arrow->buffers[0];
-			column_values->buffers[1] = arrow->dictionary->buffers[1];
-			column_values->buffers[2] = arrow->dictionary->buffers[2];
-			column_values->buffers[3] = arrow->buffers[1];
-		}
-	}
+	compressed_column_values_from_arrow(column_values,
+										arrow,
+										column_description->typid,
+										value_bytes,
+										batch_state->per_batch_context);
 }
 
 /*
