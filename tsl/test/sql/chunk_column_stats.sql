@@ -455,4 +455,63 @@ AND chunk_id IS NOT NULL;
 
 SELECT count(*) FROM chunk_skip_invalid WHERE ts > now() - interval '100 years' AND ranged = 1000;
 
+-- Test direct compress falls back to row inserts with chunk skipping enabled
+CREATE TABLE chunk_skip_direct(
+    ts timestamptz NOT NULL,
+    ranged int
+);
+SELECT * FROM create_hypertable('chunk_skip_direct', 'ts',
+                         chunk_time_interval => interval '1 day');
+SELECT * FROM enable_chunk_skipping('chunk_skip_direct', 'ranged');
+ALTER TABLE chunk_skip_direct SET (timescaledb.compress);
+
+INSERT INTO chunk_skip_direct VALUES
+    ('2025-01-01', 10),
+    ('2025-01-01 01:00', 20),
+    ('2025-01-02', 10),
+    ('2025-01-02 01:00', 20),
+    ('2025-01-03', 10),
+    ('2025-01-03 01:00', 20);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('chunk_skip_direct') c;
+
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO chunk_skip_direct
+SELECT '2025-01-01 02:00'::timestamptz + format('%s min', i)::interval, 1000
+FROM generate_series(1, 10) i;
+RESET timescaledb.enable_direct_compress_insert;
+
+SET timescaledb.enable_direct_compress_copy = true;
+COPY chunk_skip_direct FROM STDIN DELIMITER ',' CSV;
+2025-01-02 02:01,1000
+2025-01-02 02:02,1000
+2025-01-02 02:03,1000
+2025-01-02 02:04,1000
+2025-01-02 02:05,1000
+2025-01-02 02:06,1000
+2025-01-02 02:07,1000
+2025-01-02 02:08,1000
+2025-01-02 02:09,1000
+2025-01-02 02:10,1000
+\.
+RESET timescaledb.enable_direct_compress_copy;
+
+-- Direct compress with chunk skipping disabled in the session
+SET timescaledb.enable_chunk_skipping = off;
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO chunk_skip_direct
+SELECT '2025-01-03 02:00'::timestamptz + format('%s min', i)::interval, 1000
+FROM generate_series(1, 10) i;
+RESET timescaledb.enable_direct_compress_insert;
+SET timescaledb.enable_chunk_skipping = on;
+
+SELECT c.status, s.valid, s.range_start, s.range_end
+FROM _timescaledb_catalog.chunk_column_stats s
+JOIN _timescaledb_catalog.chunk c ON c.id = s.chunk_id
+WHERE s.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'chunk_skip_direct')
+ORDER BY s.chunk_id;
+
+SELECT count(*) FROM chunk_skip_direct WHERE ranged = 1000;
+SELECT count(*) FROM chunk_skip_direct WHERE ts > now() - interval '100 years' AND ranged = 1000;
+
 RESET timescaledb.enable_chunk_skipping;

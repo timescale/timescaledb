@@ -21,6 +21,7 @@
 #include "indexing.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/modify_hypertable.h"
+#include "ts_catalog/chunk_column_stats.h"
 
 #if PG18_GE
 #include <commands/explain_format.h>
@@ -70,6 +71,15 @@ should_use_direct_compress(ModifyHypertableState *state)
 		ereport(WARNING,
 				(errmsg("disabling direct compress because the destination table has exclusion "
 						"constraints")));
+		return false;
+	}
+
+	/* Direct compress does not maintain chunk skipping ranges */
+	if (ts_chunk_column_stats_enabled_for_hypertable(ht->fd.id))
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has chunk "
+						"skipping enabled")));
 		return false;
 	}
 

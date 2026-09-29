@@ -978,4 +978,73 @@ SELECT count(*) FROM chunk_skip_invalid WHERE ts > now() - interval '100 years' 
 -------
      1
 
+-- Test direct compress falls back to row inserts with chunk skipping enabled
+CREATE TABLE chunk_skip_direct(
+    ts timestamptz NOT NULL,
+    ranged int
+);
+SELECT * FROM create_hypertable('chunk_skip_direct', 'ts',
+                         chunk_time_interval => interval '1 day');
+ hypertable_id | schema_name |    table_name     | created 
+---------------+-------------+-------------------+---------
+            11 | public      | chunk_skip_direct | t
+
+SELECT * FROM enable_chunk_skipping('chunk_skip_direct', 'ranged');
+ column_stats_id | enabled 
+-----------------+---------
+              32 | t
+
+ALTER TABLE chunk_skip_direct SET (timescaledb.compress);
+INSERT INTO chunk_skip_direct VALUES
+    ('2025-01-01', 10),
+    ('2025-01-01 01:00', 20),
+    ('2025-01-02', 10),
+    ('2025-01-02 01:00', 20),
+    ('2025-01-03', 10),
+    ('2025-01-03 01:00', 20);
+SELECT count(compress_chunk(c)) FROM show_chunks('chunk_skip_direct') c;
+ count 
+-------
+     3
+
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO chunk_skip_direct
+SELECT '2025-01-01 02:00'::timestamptz + format('%s min', i)::interval, 1000
+FROM generate_series(1, 10) i;
+WARNING:  disabling direct compress because the destination table has chunk skipping enabled
+RESET timescaledb.enable_direct_compress_insert;
+SET timescaledb.enable_direct_compress_copy = true;
+COPY chunk_skip_direct FROM STDIN DELIMITER ',' CSV;
+WARNING:  disabling direct compress because the destination table has chunk skipping enabled
+RESET timescaledb.enable_direct_compress_copy;
+-- Direct compress with chunk skipping disabled in the session
+SET timescaledb.enable_chunk_skipping = off;
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO chunk_skip_direct
+SELECT '2025-01-03 02:00'::timestamptz + format('%s min', i)::interval, 1000
+FROM generate_series(1, 10) i;
+WARNING:  disabling direct compress because the destination table has chunk skipping enabled
+RESET timescaledb.enable_direct_compress_insert;
+SET timescaledb.enable_chunk_skipping = on;
+SELECT c.status, s.valid, s.range_start, s.range_end
+FROM _timescaledb_catalog.chunk_column_stats s
+JOIN _timescaledb_catalog.chunk c ON c.id = s.chunk_id
+WHERE s.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'chunk_skip_direct')
+ORDER BY s.chunk_id;
+ status | valid | range_start | range_end 
+--------+-------+-------------+-----------
+      9 | f     |          10 |        21
+      9 | f     |          10 |        21
+      9 | f     |          10 |        21
+
+SELECT count(*) FROM chunk_skip_direct WHERE ranged = 1000;
+ count 
+-------
+    30
+
+SELECT count(*) FROM chunk_skip_direct WHERE ts > now() - interval '100 years' AND ranged = 1000;
+ count 
+-------
+    30
+
 RESET timescaledb.enable_chunk_skipping;
