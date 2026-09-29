@@ -203,6 +203,10 @@ const ArrowArray *compressed_batch_get_arrow_array(VectorQualState *vqstate, Exp
 												   bool *is_default_value);
 int get_max_varlena_bytes(ArrowArray *text_array);
 
+extern void compressed_column_values_from_arrow(CompressedColumnValues *column_values,
+												ArrowArray *arrow, Oid typid, int value_bytes,
+												MemoryContext text_context);
+
 inline static void
 store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 {
@@ -233,11 +237,7 @@ compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_dat
 					(DecompressionIterator *) column_values->buffers[0];
 				DecompressResult result = iterator->try_next(iterator);
 
-				if (result.is_done)
-				{
-					elog(ERROR, "compressed column out of sync with batch counter");
-				}
-
+				CheckCompressedData(!result.is_done);
 				*column_values->output_isnull = result.is_null;
 				*column_values->output_value = result.val;
 				break;

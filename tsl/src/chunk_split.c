@@ -422,10 +422,7 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 														  csettings->fd.compress_relid,
 														  csettings->fd.relid);
 
-		heap_deform_tuple(tuple,
-						  decompressor.in_desc,
-						  decompressor.compressed_datums,
-						  decompressor.compressed_is_nulls);
+		row_decompressor_set_compressed_tuple(&decompressor, tuple);
 
 		int nrows = decompress_batch(&decompressor);
 
