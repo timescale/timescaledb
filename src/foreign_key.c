@@ -645,10 +645,9 @@ drop_fk_constraint(HeapTuple constraint_tuple)
 }
 
 void
-ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
+ts_chunk_drop_referencing_fk_by_relid(Oid relid)
 {
-	Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
-	List *fks = relation_get_referencing_fk(chunk->fd.relid);
+	List *fks = relation_get_referencing_fk(relid);
 	ListCell *lc;
 
 	foreach (lc, fks)
@@ -656,6 +655,13 @@ ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
 		HeapTuple fk_tuple = lfirst(lc);
 		drop_fk_constraint(fk_tuple);
 	}
+}
+
+void
+ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
+{
+	Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+	ts_chunk_drop_referencing_fk_by_relid(chunk->fd.relid);
 }
 
 /*
