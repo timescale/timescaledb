@@ -588,7 +588,6 @@ continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 			 ts_internal_to_time_string(bucketed_refresh_window->end,
 										bucketed_refresh_window->type),
 			 seqnum);
-
 	}
 
 	continuous_agg_update_materialization(refresh->cagg_ht,
@@ -801,6 +800,7 @@ cagg_refresh_stats_report(const CaggRefreshStats *stats)
 	}
 
 	elog(NOTICE, "continuous aggregate refresh: %s", msg.data);
+	elog(LOG, "continuous aggregate refresh: %s", msg.data);
 	pfree(msg.data);
 }
 
