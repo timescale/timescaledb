@@ -1284,11 +1284,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 			Assert(meta_count_attno != InvalidAttrNumber);
 		}
 
-		/*
-		 * Start a new batch. This frees the columns decompressed for the
-		 * previous batch. Within a batch nothing is freed: the columns
-		 * decompressed to match it are reused when it is decompressed in full.
-		 */
 		row_decompressor_reset(&decompressor);
 
 		heap_deform_tuple(compressed_tuple,
@@ -1536,6 +1531,11 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	return stats;
 }
 
+/*
+ * The `batch_matches` function does a non-vectorized clause check. It is a separate
+ * decision wether to use bulk decompression or not. We can still do bulk decompression
+ * even if we do not use vectorized clause checking (but the opposite is not true).
+ */
 static BatchQualSummary
 batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 			  tuple_filtering_constraints *constraints, bool check_full_match,
@@ -1547,15 +1547,11 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 		attnos[i] = scankeys[i].sk_attno;
 	}
 
-	/*
-	 * Set up the key columns of the batch, then walk its rows here, converting
-	 * only those columns for each row. The RowDecompressor puts the values into
-	 * decompressed_datums and decompressed_is_nulls.
-	 */
-	const int n_rows = row_decompressor_prepare_batch(decompressor, attnos, num_scankeys);
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+	row_decompressor_init_batch(decompressor, attnos, num_scankeys);
+	decompressor->batches_decompressed++;
+	const int n_rows = decompressor->current_batch_row_count;
 
-	/* The key columns that are read per row, collected once per batch. */
 	CompressedColumnValues **key_columns =
 		palloc(sizeof(CompressedColumnValues *) * decompressor->in_desc->natts);
 	int num_key_columns = 0;
@@ -1639,12 +1635,14 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 			}
 			if (!check_full_match)
 			{
+				decompressor->iterators_valid = false;
 				pfree(key_columns);
 				MemoryContextSwitchTo(old_ctx);
 				return SomeRowsPass;
 			}
 		}
 	}
+	decompressor->iterators_valid = false;
 	pfree(key_columns);
 	MemoryContextSwitchTo(old_ctx);
 
@@ -1694,9 +1692,7 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 	bool single_value = false;
 	bool batch_failed = false;
 
-	/* batch_matches() counts the batch through row_decompressor_prepare_batch();
-	 * do the same here.
-	 */
+	/* batch_matches() does the same */
 	decompressor->batches_decompressed++;
 
 	for (int sk = 0; sk < num_scankeys; sk++)
@@ -1704,19 +1700,7 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 		ArrowArray *arrow =
 			decompress_single_column(decompressor, scankeys[sk].sk_attno, &single_value);
 
-		if (arrow == NULL)
-		{
-			/*
-			 * The compression algorithm of this batch has no bulk decompression
-			 * function for the type of this column. Match the batch row by row.
-			 */
-			return batch_matches(decompressor,
-								 scankeys,
-								 num_scankeys,
-								 constraints,
-								 check_full_match,
-								 skip_current_tuple);
-		}
+		Ensure(arrow != NULL, "decompress_single_column returned NULL for attno %d", scankeys[sk].sk_attno);
 
 		/* Handle null check */
 		if (scankeys[sk].sk_flags & SK_ISNULL)

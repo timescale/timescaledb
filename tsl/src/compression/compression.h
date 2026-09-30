@@ -485,8 +485,7 @@ extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compr
 										Oid uncompressed_relid, CmdType cmd_type);
 extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
 extern int decompress_batch(RowDecompressor *decompressor);
-extern int row_decompressor_prepare_batch(RowDecompressor *decompressor, AttrNumber *attnos,
-										  int num_attnos);
+extern void row_decompressor_init_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos);
 extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
 											bool *single_value);
 /*
