@@ -40,7 +40,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_get_tenant_tracking
     OUT nentries int4,
     OUT status int4,
     OUT late_threshold_start int8,
-    OUT late_threshold_end int8)
+    OUT late_threshold_end int8,
+    OUT num_invalids int4)
 AS '@MODULE_PATHNAME@', 'ts_hypertable_get_tenant_tracking_info' LANGUAGE C VOLATILE;
 
 -- Lists hypertables in the per-tenant invalidation tracker.  The tracker map is

@@ -32,8 +32,8 @@ tsl_hypertable_get_tenant_tracking_info(PG_FUNCTION_ARGS)
 		OidIsValid(relid) ? ts_hypertable_relid_to_id(relid) : INVALID_HYPERTABLE_ID;
 	TenantTracking *tracking = NULL;
 	TupleDesc tupdesc;
-	Datum values[6];
-	bool nulls[6];
+	Datum values[7];
+	bool nulls[7];
 
 	if (hypertable_id != INVALID_HYPERTABLE_ID)
 	{
@@ -72,6 +72,7 @@ tsl_hypertable_get_tenant_tracking_info(PG_FUNCTION_ARGS)
 		values[3] = Int32GetDatum((int32) info.status);
 		values[4] = Int64GetDatum(info.late_threshold_start);
 		values[5] = Int64GetDatum(info.late_threshold_end);
+		values[6] = Int32GetDatum(info.num_invalids);
 	}
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(heap_form_tuple(tupdesc, values, nulls)));

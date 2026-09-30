@@ -1,9 +1,5 @@
 DROP FUNCTION IF EXISTS _timescaledb_functions.move_to_columnstore(REGCLASS, BOOLEAN);
 
-DROP VIEW IF EXISTS timescaledb_information.hypertable_granular_refresh_settings;
-
-DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
-
 -- Block the downgrade if any compressed chunk holds a batch compressed with
 -- the adaptive integer compression (AIC, algorithm id 8): the previous
 -- version cannot read such batches.
@@ -80,3 +76,13 @@ DROP FUNCTION _timescaledb_functions.compressed_data_prefix(_timescaledb_interna
 
 DELETE FROM _timescaledb_catalog.compression_algorithm WHERE id = 8 AND version = 1 AND name = 'COMPRESSION_ALGORITHM_AIC';
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_get_tenant_tracking_info(REGCLASS);
+CREATE FUNCTION _timescaledb_functions.hypertable_get_tenant_tracking_info(
+    hypertable REGCLASS,
+    OUT seq_num int4,
+    OUT active_generation int4,
+    OUT nentries int4,
+    OUT status int4,
+    OUT late_threshold_start int8,
+    OUT late_threshold_end int8)
+AS '@MODULE_PATHNAME@', 'ts_hypertable_get_tenant_tracking_info' LANGUAGE C VOLATILE;
