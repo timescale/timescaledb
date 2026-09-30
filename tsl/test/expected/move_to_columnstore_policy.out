@@ -1,0 +1,279 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE VIEW policy_jobs AS
+SELECT h.table_name, j.proc_name, j.schedule_interval, j.config
+FROM _timescaledb_catalog.hypertable h
+JOIN _timescaledb_config.bgw_job j ON j.hypertable_id = h.id;
+CREATE FUNCTION chunk_states(regclass) RETURNS TABLE(status text[]) LANGUAGE SQL AS $$
+  SELECT _timescaledb_functions.chunk_status_text(c) FROM show_chunks($1) c ORDER BY c::text;
+$$;
+-- Test 1 : Reject configs the check function cannot accept
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.policy_move_to_columnstore_check(NULL);
+ERROR:  config must not be NULL
+SELECT _timescaledb_functions.policy_move_to_columnstore_check('{}');
+ERROR:  could not find hypertable_id in config for job
+SELECT _timescaledb_functions.policy_move_to_columnstore_check('{"hypertable_id": 12345}');
+ERROR:  configuration hypertable id 12345 not found
+\set ON_ERROR_STOP 1
+-- Test 2 : Refuse to add the policy without columnstore enabled
+CREATE TABLE plain(time timestamptz NOT NULL, device int, value float8);
+SELECT table_name FROM create_hypertable('plain', 'time',
+    chunk_time_interval => interval '1 day');
+ table_name 
+------------
+ plain
+
+\set ON_ERROR_STOP 0
+SELECT add_move_to_columnstore_policy('plain');
+ERROR:  columnstore not enabled on "plain"
+\set ON_ERROR_STOP 1
+-- Test 3 : Add the policy and check its defaults
+ALTER TABLE plain SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT add_move_to_columnstore_policy('plain') AS job_id \gset
+SELECT proc_name, schedule_interval, config FROM policy_jobs WHERE table_name = 'plain';
+         proc_name          | schedule_interval |        config        
+----------------------------+-------------------+----------------------
+ policy_move_to_columnstore | @ 1 hour          | {"hypertable_id": 1}
+
+-- Test 4 : Adding twice errors, if_not_exists downgrades it to a notice
+\set ON_ERROR_STOP 0
+SELECT add_move_to_columnstore_policy('plain');
+ERROR:  move to columnstore policy already exists for hypertable "plain"
+\set ON_ERROR_STOP 1
+SELECT add_move_to_columnstore_policy('plain', if_not_exists => true);
+NOTICE:  move to columnstore policy already exists for hypertable "plain", skipping
+ add_move_to_columnstore_policy 
+--------------------------------
+                             -1
+
+-- Test 5 : Remove, and removing again
+SELECT remove_move_to_columnstore_policy('plain');
+ remove_move_to_columnstore_policy 
+-----------------------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT remove_move_to_columnstore_policy('plain');
+ERROR:  move to columnstore policy not found for hypertable "plain"
+\set ON_ERROR_STOP 1
+SELECT remove_move_to_columnstore_policy('plain', if_exists => true);
+NOTICE:  move to columnstore policy not found for hypertable "plain", skipping
+ remove_move_to_columnstore_policy 
+-----------------------------------
+ 
+
+-- Test 6 : Reject a negative max_chunks
+\set ON_ERROR_STOP 0
+SELECT add_move_to_columnstore_policy('plain', max_chunks => -1);
+ERROR:  maxchunks_to_move must be greater than or equal to 0
+\set ON_ERROR_STOP 1
+-- Test 7 : Non-default arguments are recorded in the config
+SELECT add_move_to_columnstore_policy('plain',
+    schedule_interval => INTERVAL '30 minutes',
+    max_chunks => 2,
+    allow_blocking_compression => true) AS job_id \gset
+SELECT proc_name, schedule_interval, config FROM policy_jobs WHERE table_name = 'plain';
+         proc_name          | schedule_interval |                                      config                                      
+----------------------------+-------------------+----------------------------------------------------------------------------------
+ policy_move_to_columnstore | @ 30 mins         | {"hypertable_id": 1, "maxchunks_to_move": 2, "allow_blocking_compression": true}
+
+SELECT remove_move_to_columnstore_policy('plain');
+ remove_move_to_columnstore_policy 
+-----------------------------------
+ 
+
+DROP TABLE plain;
+-- Test 8 : The policy replaces an existing columnstore policy
+CREATE TABLE metrics(time timestamptz NOT NULL, device int, value float8);
+SELECT table_name FROM create_hypertable('metrics', 'time',
+    chunk_time_interval => interval '1 day');
+ table_name 
+------------
+ metrics
+
+ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT add_compression_policy('metrics', INTERVAL '7 days') AS unused \gset
+SELECT add_move_to_columnstore_policy('metrics') AS job_id \gset
+SELECT proc_name FROM policy_jobs WHERE table_name = 'metrics' ORDER BY proc_name;
+         proc_name          
+----------------------------
+ policy_move_to_columnstore
+
+-- Test 9 : Run the policy over several chunks
+INSERT INTO metrics SELECT '2026-01-01'::timestamptz + (i || 'h')::interval, i % 5, i
+  FROM generate_series(1, 72) i;
+SELECT * FROM chunk_states('metrics');
+ status 
+--------
+ {}
+ {}
+ {}
+ {}
+
+CALL run_job(:job_id);
+SELECT * FROM chunk_states('metrics');
+         status         
+------------------------
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+
+SELECT count(*) AS total_rows FROM metrics;
+ total_rows 
+------------
+         72
+
+-- Test 10 : A second run is a no-op
+-- a recompress would clear UNORDERED, so the chunks still carrying it is
+-- enough to show the run left them alone
+CALL run_job(:job_id);
+SELECT * FROM chunk_states('metrics');
+         status         
+------------------------
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+
+SELECT count(*) AS total_rows FROM metrics;
+ total_rows 
+------------
+         72
+
+-- Test 11 : A partial chunk is picked up again
+INSERT INTO metrics SELECT '2026-01-01 00:30'::timestamptz + (i || 's')::interval, i % 5, i
+  FROM generate_series(1, 20) i;
+SELECT * FROM chunk_states('metrics');
+             status             
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+
+CALL run_job(:job_id);
+SELECT * FROM chunk_states('metrics');
+         status         
+------------------------
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {COMPRESSED,UNORDERED}
+
+-- Test 12 : max_chunks bounds a run
+SELECT remove_move_to_columnstore_policy('metrics');
+ remove_move_to_columnstore_policy 
+-----------------------------------
+ 
+
+INSERT INTO metrics SELECT '2026-02-01'::timestamptz + (i || 'h')::interval, i % 5, i
+  FROM generate_series(1, 72) i;
+SELECT add_move_to_columnstore_policy('metrics', max_chunks => 1) AS capped \gset
+SELECT count(*) AS uncompressed_before FROM show_chunks('metrics') c
+  WHERE NOT ('COMPRESSED' = ANY(_timescaledb_functions.chunk_status_text(c)));
+ uncompressed_before 
+---------------------
+                   4
+
+CALL run_job(:capped);
+SELECT count(*) AS uncompressed_after_one_run FROM show_chunks('metrics') c
+  WHERE NOT ('COMPRESSED' = ANY(_timescaledb_functions.chunk_status_text(c)));
+ uncompressed_after_one_run 
+----------------------------
+                          3
+
+-- Test 13 : Frozen chunks are left alone
+SELECT remove_move_to_columnstore_policy('metrics');
+ remove_move_to_columnstore_policy 
+-----------------------------------
+ 
+
+DROP TABLE metrics;
+CREATE TABLE frz(time timestamptz NOT NULL, device int);
+SELECT table_name FROM create_hypertable('frz', 'time',
+    chunk_time_interval => interval '100 years');
+ table_name 
+------------
+ frz
+
+ALTER TABLE frz SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO frz SELECT '2026-01-01'::timestamptz + (i || 's')::interval, i
+  FROM generate_series(1, 10) i;
+SELECT _timescaledb_functions.freeze_chunk(c) FROM show_chunks('frz') c;
+ freeze_chunk 
+--------------
+ t
+
+SELECT add_move_to_columnstore_policy('frz') AS frozen_job \gset
+CALL run_job(:frozen_job);
+SELECT * FROM chunk_states('frz');
+  status  
+----------
+ {FROZEN}
+
+SELECT _timescaledb_functions.unfreeze_chunk(c) FROM show_chunks('frz') c;
+ unfreeze_chunk 
+----------------
+ t
+
+DROP TABLE frz;
+-- Test 14 : A chunk the move refuses is skipped, unless blocking is allowed
+CREATE TABLE uniq(time timestamptz NOT NULL, device int);
+SELECT table_name FROM create_hypertable('uniq', 'time',
+    chunk_time_interval => interval '100 years');
+ table_name 
+------------
+ uniq
+
+CREATE UNIQUE INDEX ON uniq(device, time);
+ALTER TABLE uniq SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO uniq SELECT '2026-01-01'::timestamptz + (i || 's')::interval, i
+  FROM generate_series(1, 10) i;
+SELECT add_move_to_columnstore_policy('uniq') AS skip_job \gset
+CALL run_job(:skip_job);
+WARNING:  disabling move to columnstore because the chunk has unique constraints
+NOTICE:  chunk "_hyper_4_10_chunk" could not be moved to the columnstore, skipping
+SELECT * FROM chunk_states('uniq');
+ status 
+--------
+ {}
+
+SELECT remove_move_to_columnstore_policy('uniq');
+ remove_move_to_columnstore_policy 
+-----------------------------------
+ 
+
+SELECT add_move_to_columnstore_policy('uniq', allow_blocking_compression => true) AS block_job \gset
+CALL run_job(:block_job);
+WARNING:  disabling move to columnstore because the chunk has unique constraints
+SELECT * FROM chunk_states('uniq');
+    status    
+--------------
+ {COMPRESSED}
+
+SELECT count(*) AS total_rows FROM uniq;
+ total_rows 
+------------
+         10
+
+DROP TABLE uniq;
+-- Test 15 : Refuse the policy when direct compress is enabled
+CREATE TABLE dc(time timestamptz NOT NULL, device int);
+SELECT table_name FROM create_hypertable('dc', 'time',
+    chunk_time_interval => interval '1 day');
+ table_name 
+------------
+ dc
+
+ALTER TABLE dc SET (timescaledb.compress, timescaledb.compress_segmentby='device',
+                    timescaledb.direct_compress);
+\set ON_ERROR_STOP 0
+SELECT add_move_to_columnstore_policy('dc');
+ERROR:  "direct_compress" is enabled on "dc"
+\set ON_ERROR_STOP 1
+DROP TABLE dc;
+DROP FUNCTION chunk_states(regclass);
+DROP VIEW policy_jobs;

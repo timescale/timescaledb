@@ -1,0 +1,1 @@
+Implements: #10648 Add concurrent_compress option and move to columnstore policy

@@ -2464,8 +2464,18 @@ ts_hypertable_status_text(PG_FUNCTION_ARGS)
 								  CurrentMemoryContext);
 	}
 
+	if (status & HYPERTABLE_STATUS_CONCURRENT_COMPRESS)
+	{
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("CONCURRENT_COMPRESS"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+	}
+
 	if (status < 0 || status > (HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS |
-								HYPERTABLE_STATUS_COMPRESSION | HYPERTABLE_STATUS_DIRECT_COMPRESS))
+								HYPERTABLE_STATUS_COMPRESSION | HYPERTABLE_STATUS_DIRECT_COMPRESS |
+								HYPERTABLE_STATUS_CONCURRENT_COMPRESS))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -2487,6 +2497,20 @@ bool
 ts_hypertable_unset_direct_compress(Hypertable *ht)
 {
 	return ts_hypertable_clear_status(ht, HYPERTABLE_STATUS_DIRECT_COMPRESS);
+}
+
+/* Mark the hypertable as converting chunks to the columnstore as DML. */
+bool
+ts_hypertable_set_concurrent_compress(Hypertable *ht)
+{
+	return ts_hypertable_add_status(ht, HYPERTABLE_STATUS_CONCURRENT_COMPRESS);
+}
+
+/* Clear the columnstore as DML status flag on the hypertable. */
+bool
+ts_hypertable_unset_concurrent_compress(Hypertable *ht)
+{
+	return ts_hypertable_clear_status(ht, HYPERTABLE_STATUS_CONCURRENT_COMPRESS);
 }
 
 DimensionSlice *

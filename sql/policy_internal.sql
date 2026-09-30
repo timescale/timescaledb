@@ -18,6 +18,105 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_reorder_check(config JS
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_reorder_check'
 LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_move_to_columnstore_check(config JSONB)
+RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_move_to_columnstore_check'
+LANGUAGE C;
+
+CREATE OR REPLACE PROCEDURE
+_timescaledb_functions.policy_move_to_columnstore(job_id INTEGER, config JSONB)
+AS $$
+DECLARE
+  htid        INTEGER;
+  htoid       REGCLASS;
+  chunk_rec   RECORD;
+  maxchunks   INTEGER := 0;
+  verbose_log BOOL;
+  allow_blocking_compression BOOL;
+  numchunks_moved INTEGER := 0;
+  processed   INTEGER := 0;
+  chunks_failure INTEGER := 0;
+  _message     text;
+  _detail      text;
+  _sqlstate    text;
+  -- chunk status bits:
+  bit_compressed int := 1;
+  bit_frozen int := 4;
+  bit_compressed_partial int := 8;
+BEGIN
+
+  -- procedures with SET clause cannot execute transaction
+  -- control so we adjust search_path in procedure body
+  SET LOCAL search_path TO pg_catalog, pg_temp;
+
+  IF config IS NULL THEN
+    RAISE EXCEPTION 'job % has null config', job_id;
+  END IF;
+
+  htid := jsonb_object_field_text(config, 'hypertable_id')::INTEGER;
+  IF htid IS NULL THEN
+    RAISE EXCEPTION 'job % config must have hypertable_id', job_id;
+  END IF;
+
+  verbose_log := COALESCE(jsonb_object_field_text(config, 'verbose_log')::BOOLEAN, FALSE);
+  maxchunks   := COALESCE(jsonb_object_field_text(config, 'maxchunks_to_move')::INTEGER, 0);
+  -- compress_chunk takes an ExclusiveLock and blocks writes
+  allow_blocking_compression := COALESCE(jsonb_object_field_text(config, 'allow_blocking_compression')::BOOLEAN, FALSE);
+
+  SELECT format('%I.%I', schema_name, table_name) INTO htoid
+  FROM _timescaledb_catalog.hypertable
+  WHERE id = htid;
+
+  -- The schedule interval is what decides how much data accumulates
+  -- between runs before a move is triggered for a hypertable
+  FOR chunk_rec IN
+    SELECT ch.relid
+    FROM _timescaledb_catalog.chunk ch
+    WHERE ch.hypertable_id = htid
+      AND NOT ch.osm_chunk
+      -- move_to_columnstore skips frozen chunks
+      AND ch.status & bit_frozen = 0
+      -- Only chunks that still hold uncompressed rows. A chunk that is
+      -- compressed and not partial has nothing to move.
+      AND (ch.status & bit_compressed = 0
+           OR ch.status & bit_compressed_partial = bit_compressed_partial)
+  LOOP
+    BEGIN
+      PERFORM _timescaledb_functions.move_to_columnstore(chunk_rec.relid, allow_blocking_compression);
+      numchunks_moved := numchunks_moved + 1;
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS
+          _message = MESSAGE_TEXT,
+          _detail = PG_EXCEPTION_DETAIL,
+          _sqlstate = RETURNED_SQLSTATE;
+      RAISE WARNING 'move to columnstore policy failed to move chunk "%"',
+          chunk_rec.relid::regclass::text
+          USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
+                ERRCODE = _sqlstate;
+      chunks_failure := chunks_failure + 1;
+    END;
+    processed := processed + 1;
+    COMMIT;
+
+    -- SET LOCAL is only active until end of transaction. While we could use
+    -- SET at the start of the function we do not want to bleed out
+    -- search_path to caller, so we do SET LOCAL again after COMMIT
+    SET LOCAL search_path TO pg_catalog, pg_temp;
+    IF verbose_log THEN
+      RAISE LOG 'job % completed moving chunk %', job_id, chunk_rec.relid::regclass::text;
+    END IF;
+    -- maxchunks bounds the chunks processed per run, including ones that failed
+    IF maxchunks > 0 AND processed >= maxchunks THEN
+      EXIT;
+    END IF;
+  END LOOP;
+
+  IF chunks_failure > 0 THEN
+    RAISE WARNING 'move to columnstore policy completed with some failures'
+      USING DETAIL = format('Failed to move %L chunks. Successfully moved %L chunks.', chunks_failure, numchunks_moved);
+  END IF;
+END;
+$$ LANGUAGE PLPGSQL;
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_compaction_check(config JSONB)
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_compaction_check'
 LANGUAGE C;
