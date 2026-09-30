@@ -16,7 +16,7 @@ jobs:
   # Tests that the release has a releaseable state.
   release_sanity:
     name: Validate release conditions
-    runs-on: runs-on/fleet=linux-2cpu/env=prod
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     permissions:
       contents: read
       issues: read
@@ -153,7 +153,7 @@ jobs:
   # The latest published release is the version the E2E test upgrades from.
   get_previous_tag:
     name: Get previous timescaledb release tag
-    runs-on: runs-on/fleet=linux-2cpu/env=prod
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     permissions:
       contents: read
     outputs:
