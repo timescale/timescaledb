@@ -169,9 +169,7 @@ FROM cagg_analyze_src
 GROUP BY 1, 2
 WITH NO DATA;
 
-SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('cagg_analyze_view', NULL, NULL);
-RESET client_min_messages;
 
 -- Locate the materialization hypertable so we can check its stats.
 SELECT format('%I.%I', h.schema_name, h.table_name) AS mat_ht

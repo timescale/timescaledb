@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Report refresh statistics throughout.
+SET timescaledb.cagg_refresh_stats_level TO summary;
+
+
 -- Correctness when per-tenant tracking degrades to a full refresh.
 --
 -- The tracker is an optimization layered over the invalidation log: an
@@ -303,3 +307,5 @@ SELECT sensor_id, avg FROM readings_daily ORDER BY sensor_id;
 
 DROP MATERIALIZED VIEW readings_daily;
 DROP TABLE readings;
+
+RESET timescaledb.cagg_refresh_stats_level;

@@ -49,7 +49,6 @@ SELECT * FROM device_summary;
 -- Simulate a policy that refreshes with lag, i.e., it doesn't refresh
 -- the entire data set. In this case up to the given date.
 CALL refresh_continuous_aggregate('device_summary', NULL, '2018-12-30 22:00');
-NOTICE:  continuous aggregate refresh: processed 78 batch(es) of 78 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Sun Dec 30 22:00:00 2018 PST ]
 --Now you can run selects over your view as normal
 SELECT * FROM device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC, device_id LIMIT 10;
             bucket            | device_id | metric_avg | metric_spread 
@@ -124,7 +123,6 @@ SELECT max(bucket) FROM device_summary;
  Sun Dec 30 21:00:00 2018 PST
 
 CALL refresh_continuous_aggregate('device_summary', NULL, '2018-12-31 01:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Mon Dec 31 01:00:00 2018 PST ]
 SELECT max(observation_time) FROM device_readings;
              max              
 ------------------------------
@@ -153,7 +151,6 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
  Sun Dec 30 13:00:00 2018 PST | device_1  | 1546175700 |          1800
 
 CALL refresh_continuous_aggregate('device_summary', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 --But is reflected after.
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';
             bucket            | device_id |    metric_avg    | metric_spread 
@@ -266,9 +263,7 @@ SELECT * FROM device_readings_jit ORDER BY time_bucket;
 -- simulate a refresh policy with lag, i.e., one that doesn't refresh
 -- up to the latest data. Max value is 40.
 CALL refresh_continuous_aggregate('device_readings_mat_only', NULL, 30);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 30 ]
 CALL refresh_continuous_aggregate('device_readings_jit', NULL, 30);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 30 ]
 -- materialization only should have 2 rows
 SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
  time_bucket | avg 
@@ -313,9 +308,7 @@ $BODY$
 $BODY$;
 -- refresh should materialize all now
 CALL refresh_continuous_aggregate('device_readings_mat_only', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate('device_readings_jit', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- materialization only should have 6 rows
 SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
  time_bucket | avg 

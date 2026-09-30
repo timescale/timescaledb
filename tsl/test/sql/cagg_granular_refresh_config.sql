@@ -8,6 +8,10 @@
 -- this database has granular refresh enabled yet, so the map holds no entry for
 -- it and the listing comes back empty
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- Report refresh statistics throughout. Set on the database so it survives the
+-- reconnections below; that takes the database owner, hence doing it here.
+ALTER DATABASE :TEST_DBNAME SET timescaledb.cagg_refresh_stats_level TO summary;
+
 SELECT count(*) AS entries_for_this_database
 FROM _timescaledb_functions.tenant_tracking_map()
 WHERE database_id = (SELECT oid FROM pg_database WHERE datname = current_database());
@@ -1090,3 +1094,6 @@ ORDER BY bucket, sensor_id;
 DROP MATERIALIZED VIEW relabel_hourly;
 DROP TABLE relabel;
 RESET timezone;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME RESET timescaledb.cagg_refresh_stats_level;

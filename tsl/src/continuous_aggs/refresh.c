@@ -551,7 +551,9 @@ continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 			strategy = "granular tenant-scoped refresh";
 		}
 
-		elog(DEBUG1,
+		/* Part of the refresh statistics when those are enabled, otherwise only
+		 * of interest when debugging. */
+		elog(ts_guc_cagg_refresh_stats_level == CAGG_REFRESH_STATS_VERBOSE_LOG ? LOG : DEBUG1,
 			 "Continuous aggregate \"%s\": %s on [%s, %s] (seqnum %d)",
 			 NameStr(refresh->cagg.data.user_view_name),
 			 strategy,
@@ -752,13 +754,28 @@ typedef struct CaggRefreshStats
 static void
 cagg_refresh_stats_report(const CaggRefreshStats *stats)
 {
-	elog(NOTICE,
-		 "continuous aggregate refresh: processed %d batch(es) of %d in "
-		 "window [ %s, %s ]",
-		 stats->batches_processed,
-		 stats->total_batches,
-		 ts_internal_to_time_string(stats->range_start, stats->range_type),
-		 ts_internal_to_time_string(stats->range_end, stats->range_type));
+	if (ts_guc_cagg_refresh_stats_level == CAGG_REFRESH_STATS_OFF)
+	{
+		return;
+	}
+
+	char *report = psprintf("continuous aggregate refresh: processed %d batch(es) of %d in "
+							"window [ %s, %s ]",
+							stats->batches_processed,
+							stats->total_batches,
+							ts_internal_to_time_string(stats->range_start, stats->range_type),
+							ts_internal_to_time_string(stats->range_end, stats->range_type));
+
+	/*
+	 * Reported both as NOTICE and to the server log. A background worker has
+	 * no client, so a refresh policy job only has the log.
+	 * LOG_SERVER_ONLY is never sent to the client, so each audience sees the
+	 * summary exactly once whatever client_min_messages is set to.
+	 */
+	elog(NOTICE, "%s", report);
+	elog(LOG_SERVER_ONLY, "%s", report);
+
+	pfree(report);
 }
 
 /*

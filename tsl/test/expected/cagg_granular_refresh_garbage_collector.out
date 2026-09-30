@@ -1,6 +1,8 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- Report refresh statistics throughout.
+SET timescaledb.cagg_refresh_stats_level TO summary;
 -- Reclamation of tenant-tracking rows.
 --
 -- Each refresh flushes one generation, so its rows are written stamped with that
@@ -312,3 +314,4 @@ DROP TABLE conditions;
 DROP MATERIALIZED VIEW cond2_daily;
 NOTICE:  drop cascades to 2 other objects
 DROP TABLE conditions2;
+RESET timescaledb.cagg_refresh_stats_level;

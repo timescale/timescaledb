@@ -120,7 +120,6 @@ step "WP_before_release"
 session "L1"
 setup
 {
-    SET client_min_messages TO warning;
     SET SESSION deadlock_timeout = '500ms';
     SET timezone TO 'UTC';
 }
@@ -137,7 +136,6 @@ step "L1_refresh_full"
 session "L1b"
 setup
 {
-    SET client_min_messages TO warning;
     SET SESSION deadlock_timeout = '500ms';
     SET timezone TO 'UTC';
 }
@@ -154,7 +152,6 @@ step "L1b_refresh_jan3"
 session "L2"
 setup
 {
-    SET client_min_messages TO warning;
     SET SESSION deadlock_timeout = '500ms';
     SET timezone TO 'UTC';
 }
@@ -171,7 +168,6 @@ step "L2_refresh_jan1"
 session "L2b"
 setup
 {
-    SET client_min_messages TO warning;
     SET SESSION deadlock_timeout = '500ms';
     SET timezone TO 'UTC';
 }
