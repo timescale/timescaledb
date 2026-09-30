@@ -242,6 +242,7 @@ struct TenantTracking
 {
 	int32 hypertable_id;		 /* TS raw hypertable id */
 	pg_atomic_uint32 active_gen; /* 0 or 1: generation writers use now */
+	int32 num_invalids;			 /* # of times the tracker was marked as invalid */
 	TenantGeneration generations[2];
 };
 
@@ -476,6 +477,7 @@ retry_generation:
 	pg_atomic_write_u32(&generation->status, TENANT_TRACKER_INVALID);
 
 	pg_atomic_fetch_sub_u32(&generation->num_writers, 1);
+	tracking->num_invalids++;
 }
 
 /*
@@ -707,6 +709,7 @@ init_tracker(TenantTracking *tracker, int32 hypertable_id, int64 late_threshold_
 			 int64 late_threshold_end, int32 init_seqnum)
 {
 	tracker->hypertable_id = hypertable_id;
+	tracker->num_invalids = 0;
 	pg_atomic_init_u32(&tracker->active_gen, 0);
 
 	for (int gen = 0; gen < 2; gen++)
@@ -1167,6 +1170,7 @@ ts_tenant_tracker_get_info(TenantTracking *tracking, TenantTrackerInfo *info)
 	info->status = pg_atomic_read_u32(&generation->status);
 	info->late_threshold_start = (int64) pg_atomic_read_u64(&generation->late_threshold_start);
 	info->late_threshold_end = (int64) pg_atomic_read_u64(&generation->late_threshold_end);
+	info->num_invalids = tracking->num_invalids;
 }
 
 /*

@@ -29,6 +29,7 @@ typedef struct TenantTrackerInfo
 	uint32 status;
 	int64 late_threshold_start;
 	int64 late_threshold_end;
+	int32 num_invalids;
 } TenantTrackerInfo;
 
 /*
