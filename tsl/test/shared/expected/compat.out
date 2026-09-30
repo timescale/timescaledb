@@ -202,7 +202,11 @@ WARNING:  procedure public.recompress_chunk(regclass,boolean) is deprecated and 
 ERROR:  invalid chunk argument given
 CALL convert_to_columnstore(0);
 ERROR:  invalid chunk argument given
+CALL convert_to_columnstore(NULL);
+ERROR:  invalid chunk argument given
 CALL convert_to_rowstore(0);
+ERROR:  invalid chunk argument given
+CALL convert_to_rowstore(NULL);
 ERROR:  invalid chunk argument given
 \set ON_ERROR_STOP 1
 -- tests for the cagg invalidation trigger on the deprecated schema

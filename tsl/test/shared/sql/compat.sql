@@ -57,7 +57,9 @@ CALL _timescaledb_internal.policy_reorder(0,NULL);
 CALL _timescaledb_internal.policy_retention(0,NULL);
 CALL public.recompress_chunk(0);
 CALL convert_to_columnstore(0);
+CALL convert_to_columnstore(NULL);
 CALL convert_to_rowstore(0);
+CALL convert_to_rowstore(NULL);
 \set ON_ERROR_STOP 1
 
 -- tests for the cagg invalidation trigger on the deprecated schema
