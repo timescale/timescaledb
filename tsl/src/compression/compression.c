@@ -140,11 +140,11 @@ tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	}
 
-	if (type != TEXTOID && type != BOOLOID && type != UUIDOID &&
+	if (type != TEXTOID && type != BOOLOID && type != UUIDOID && type != BYTEAOID &&
 		(algorithm == COMPRESSION_ALGORITHM_DICTIONARY || algorithm == COMPRESSION_ALGORITHM_ARRAY))
 	{
 		/* Bulk decompression of array and dictionary is only supported for
-		 * text, bool and uuid */
+		 * text, bytea, bool and uuid */
 		return NULL;
 	}
 
