@@ -891,7 +891,7 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 	Assert(!PG_ARGISNULL(0));
 
 	Oid uncompressed_relid = PG_GETARG_OID(0);
-	if (uncompressed_relid == InvalidOid)
+	if (!OidIsValid(uncompressed_relid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk argument given")));
@@ -967,7 +967,7 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	Assert(!PG_ARGISNULL(0));
 
 	Oid uncompressed_relid = PG_GETARG_OID(0);
-	if (uncompressed_relid == InvalidOid)
+	if (!OidIsValid(uncompressed_relid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk argument given")));
