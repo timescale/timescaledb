@@ -26,10 +26,15 @@ insert into bytea_test select ts, 2, mix(ts), ts::text::bytea from generate_seri
 -- bytea with dictionary compression
 insert into bytea_test select ts, 3, mix(ts), (ts % 10)::text::bytea from generate_series(2001, 2999) ts;
 
+-- some values for testing zero byte in the middle (not possible for text)
+insert into bytea_test select 4000, 5, 0.5, '\x310031'::bytea;
+
+insert into bytea_test select 4001, 6, 0.6, '\x31'::bytea;
+
 select count(compress_chunk(x)) from show_chunks('bytea_test') x;
 
 -- bytea segmentby
-insert into bytea_test select ts, 4, mix(ts), (ts % 10)::text::bytea from generate_series(3001, 3999) ts;
+insert into bytea_test select ts, 4, mix(ts), (ts % 10)::text::bytea from generate_series(5001, 5999) ts;
 
 alter table bytea_test set (tsdb.compress_segmentby = 'tag');
 
@@ -41,6 +46,19 @@ select * from bytea_test;
 
 select s, count(distinct tag), min(tag::text), max(tag::text) from bytea_test
 group by s order by s;
+
+set timescaledb.debug_require_vector_qual to 'require';
+--/* uncomment to generate reference */ set timescaledb.enable_bulk_decompression to off; set timescaledb.debug_require_vector_qual to 'forbid';
+
+select count(*) from bytea_test where ts < 5000 and tag = '\x31'::bytea;
+
+select count(*) from bytea_test where ts < 5000 and tag != '\x31'::bytea;
+
+select count(*) from bytea_test where ts < 5000 and tag = '\x310031'::bytea;
+
+select count(*) from bytea_test where ts < 5000 and tag != '\x310031'::bytea;
+
+reset timescaledb.debug_require_vector_qual;
 
 
 
