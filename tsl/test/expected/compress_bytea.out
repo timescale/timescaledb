@@ -43,6 +43,7 @@ NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
 -------
      5
 
+vacuum analyze bytea_test;
 explain (costs off, verbose, analyze, buffers off, timing off, summary off)
 select * from bytea_test;
 --- QUERY PLAN ---
@@ -84,6 +85,7 @@ group by s order by s;
  5 |     1 | \x310031   | \x310031
  6 |     1 | \x31       | \x31
 
+-- Filters must be vectorized.
 set timescaledb.debug_require_vector_qual to 'require';
 --/* uncomment to generate reference */ set timescaledb.enable_bulk_decompression to off; set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from bytea_test where ts < 5000 and tag = '\x31'::bytea;
@@ -106,4 +108,24 @@ select count(*) from bytea_test where ts < 5000 and tag != '\x310031'::bytea;
 -------
   2998
 
+reset timescaledb.enable_bulk_decompression;
 reset timescaledb.debug_require_vector_qual;
+-- Grouping must be vectorized.
+set timescaledb.debug_require_vector_agg = 'require';
+--/* uncomment to generate reference */ set timescaledb.enable_bulk_decompression to off; set timescaledb.debug_require_vector_agg to 'forbid';
+select tag, min(value) from bytea_test group by tag order by min(value) limit 10;
+    tag     |        min         
+------------+--------------------
+ \x1234     | -0.499694682424888
+ \x34       | -0.499631919199601
+ \x33       | -0.499498116318136
+ \x39       |  -0.49924149364233
+ \x37       | -0.499115410260856
+ \x31313438 | -0.497002002550289
+ \x36       | -0.496185038238764
+ \x35       | -0.496127981692553
+ \x31393630 | -0.495526578277349
+ \x31303638 | -0.494831068208441
+
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.debug_require_vector_agg;
