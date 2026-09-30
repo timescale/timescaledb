@@ -2355,8 +2355,13 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 	 * https://github.com/postgres/postgres/commit/d69d45a5
 	 */
 	EquivalenceMemberIterator it;
-
-	setup_eclass_member_iterator(&it, cur_ec, bms_make_singleton(info->chunk_rel->relid));
+	Bitmapset *relids = bms_make_singleton(info->chunk_rel->relid);
+	/* If hypertable is itself a child, we need to look for it in child members iterator */
+	if (info->ht_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+	{
+		relids = bms_add_member(relids, info->ht_rel->relid);
+	}
+	setup_eclass_member_iterator(&it, cur_ec, relids);
 	while ((cur_em = eclass_member_iterator_next(&it)) != NULL)
 	{
 #else
