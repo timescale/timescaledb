@@ -1,0 +1,125 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Dictionary compression must not merge values that compare equal with the
+-- type's equality operator but are not identical, since they can still be
+-- distinguished (e.g. by their text output or by arithmetic). See #10709.
+CREATE DOMAIN dict_numeric AS numeric;
+CREATE TABLE dict_image_eq (
+	ts int NOT NULL,
+	i interval,
+	j jsonb,
+	n dict_numeric,
+	a float8[]
+);
+SELECT create_hypertable('dict_image_eq', 'ts', chunk_time_interval => 1000);
+     create_hypertable      
+----------------------------
+ (1,public,dict_image_eq,t)
+
+ALTER TABLE dict_image_eq SET (timescaledb.compress,
+	timescaledb.compress_segmentby = '',
+	timescaledb.compress_orderby = 'ts');
+-- repeat the values so that the dictionary compression is used
+INSERT INTO dict_image_eq
+SELECT g * 10 + v.k, v.i::interval, v.j::jsonb, v.n::dict_numeric, v.a::float8[]
+FROM generate_series(0, 49) g, (VALUES
+	(1, '30 days',         '{"a": 1.0}',  1.0,   '{0}'),
+	(2, '1 mon',           '{"a": 1.00}', 1.00,  '{-0}'),
+	(3, '24:00:00',        '{"a": 1}',    1,     '{0}'),
+	(4, '1 day',           '{"a": 1.0}',  1.000, '{-0}'),
+	(5, '-1 mons 30 days', '{"a": 1.00}', 1.0,   '{0}'),
+	(6, '0',               NULL,          NULL,  NULL),
+	(7, '1 mon',           '{"a": 1}',    1.00,  '{-0}')) v(k, i, j, n, a);
+-- keep a copy of the original values to compare with
+CREATE TABLE dict_image_eq_orig AS SELECT * FROM dict_image_eq;
+CREATE VIEW dict_image_eq_diff AS
+SELECT ts,
+	o.i AS orig_i, t.i,
+	o.j AS orig_j, t.j,
+	o.n AS orig_n, t.n,
+	o.a AS orig_a, t.a
+FROM dict_image_eq t FULL JOIN dict_image_eq_orig o USING (ts)
+WHERE t.i::text IS DISTINCT FROM o.i::text
+	OR t.j::text IS DISTINCT FROM o.j::text
+	OR t.n::text IS DISTINCT FROM o.n::text
+	OR t.a::text IS DISTINCT FROM o.a::text;
+SELECT ts, i, '2024-01-31'::date + i AS jan31_plus_i, j, n, a
+FROM dict_image_eq WHERE ts < 10 ORDER BY ts;
+ ts |          i           |       jan31_plus_i       |      j      |   n   |  a   
+----+----------------------+--------------------------+-------------+-------+------
+  1 | @ 30 days            | Fri Mar 01 00:00:00 2024 | {"a": 1.0}  |   1.0 | {0}
+  2 | @ 1 mon              | Thu Feb 29 00:00:00 2024 | {"a": 1.00} |  1.00 | {-0}
+  3 | @ 24 hours           | Thu Feb 01 00:00:00 2024 | {"a": 1}    |     1 | {0}
+  4 | @ 1 day              | Thu Feb 01 00:00:00 2024 | {"a": 1.0}  | 1.000 | {-0}
+  5 | @ 1 mon -30 days ago | Tue Jan 30 00:00:00 2024 | {"a": 1.00} |   1.0 | {0}
+  6 | @ 0                  | Wed Jan 31 00:00:00 2024 |             |       | 
+  7 | @ 1 mon              | Thu Feb 29 00:00:00 2024 | {"a": 1}    |  1.00 | {-0}
+
+SELECT count(compress_chunk(c)) FROM show_chunks('dict_image_eq') c;
+ count 
+-------
+     1
+
+SELECT cs.compress_relid AS "COMPRESSED_CHUNK"
+FROM show_chunks('dict_image_eq') c
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = c \gset
+-- all columns should use dictionary compression
+SELECT _timescaledb_functions.compressed_data_info(i) AS i,
+	_timescaledb_functions.compressed_data_info(j) AS j,
+	_timescaledb_functions.compressed_data_info(n) AS n,
+	_timescaledb_functions.compressed_data_info(a) AS a
+FROM :COMPRESSED_CHUNK;
+       i        |       j        |       n        |       a        
+----------------+----------------+----------------+----------------
+ (DICTIONARY,f) | (DICTIONARY,t) | (DICTIONARY,t) | (DICTIONARY,t)
+
+-- values must be unchanged, both with bulk and row-by-row decompression
+SELECT ts, i, '2024-01-31'::date + i AS jan31_plus_i, j, n, a
+FROM dict_image_eq WHERE ts < 10 ORDER BY ts;
+ ts |          i           |       jan31_plus_i       |      j      |   n   |  a   
+----+----------------------+--------------------------+-------------+-------+------
+  1 | @ 30 days            | Fri Mar 01 00:00:00 2024 | {"a": 1.0}  |   1.0 | {0}
+  2 | @ 1 mon              | Thu Feb 29 00:00:00 2024 | {"a": 1.00} |  1.00 | {-0}
+  3 | @ 24 hours           | Thu Feb 01 00:00:00 2024 | {"a": 1}    |     1 | {0}
+  4 | @ 1 day              | Thu Feb 01 00:00:00 2024 | {"a": 1.0}  | 1.000 | {-0}
+  5 | @ 1 mon -30 days ago | Tue Jan 30 00:00:00 2024 | {"a": 1.00} |   1.0 | {0}
+  6 | @ 0                  | Wed Jan 31 00:00:00 2024 |             |       | 
+  7 | @ 1 mon              | Thu Feb 29 00:00:00 2024 | {"a": 1}    |  1.00 | {-0}
+
+SELECT * FROM dict_image_eq_diff;
+ ts | orig_i | i | orig_j | j | orig_n | n | orig_a | a 
+----+--------+---+--------+---+--------+---+--------+---
+
+SET timescaledb.enable_bulk_decompression = off;
+SELECT * FROM dict_image_eq_diff;
+ ts | orig_i | i | orig_j | j | orig_n | n | orig_a | a 
+----+--------+---+--------+---+--------+---+--------+---
+
+RESET timescaledb.enable_bulk_decompression;
+-- filters on the compressed chunk still use the type's equality
+SELECT i::text, count(*) FROM dict_image_eq WHERE i = '1 mon' GROUP BY 1 ORDER BY 1;
+     i     | count 
+-----------+-------
+ @ 1 mon   |   100
+ @ 30 days |    50
+
+SELECT i::text, count(*) FROM dict_image_eq WHERE i = '1 day' GROUP BY 1 ORDER BY 1;
+     i      | count 
+------------+-------
+ @ 1 day    |    50
+ @ 24 hours |    50
+
+SELECT count(decompress_chunk(c)) FROM show_chunks('dict_image_eq') c;
+ count 
+-------
+     1
+
+SELECT * FROM dict_image_eq_diff;
+ ts | orig_i | i | orig_j | j | orig_n | n | orig_a | a 
+----+--------+---+--------+---+--------+---+--------+---
+
+DROP VIEW dict_image_eq_diff;
+DROP TABLE dict_image_eq;
+DROP TABLE dict_image_eq_orig;
+DROP DOMAIN dict_numeric;

@@ -52,6 +52,7 @@ set(TEST_FILES
     compression_constraints.sql
     compression_create_compressed_table.sql
     compression_defaults.sql
+    compression_dictionary_image_equality.sql
     compression_equivalent_sortkeys.sql
     compression_fks.sql
     compression_indexcreate.sql
