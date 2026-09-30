@@ -23,11 +23,11 @@ concurrency:
 
 jobs:
   # On nightly runs, take the git-ref of the current/latest release branch
-  # scheduled runs do not have a required input, and the git-ref's of 
+  # scheduled runs do not have a required input, and the git-ref's of
   # timescaldb and OSM must be resolved
   resolve_ref:
     name: "Resolve git-ref's"
-    runs-on: runs-on/fleet=linux-2cpu/env=prod
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     permissions:
       contents: read
     outputs:
@@ -76,7 +76,7 @@ jobs:
           echo "Latest timescaledb-osm release tag: $LATEST_TAG"
           echo "osm-git-ref=$LATEST_TAG" >> "$GITHUB_OUTPUT"
 
-  # Tiger Lake (ext) 
+  # Tiger Lake (ext)
   lake_regression:
     name: "Tiger Lake: regression"
     needs: resolve_ref
