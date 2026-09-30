@@ -200,6 +200,10 @@ WARNING:  procedure _timescaledb_internal.policy_retention(integer,jsonb) is dep
 CALL public.recompress_chunk(0);
 WARNING:  procedure public.recompress_chunk(regclass,boolean) is deprecated and the functionality is now included in public.compress_chunk. this compatibility function will be removed in a future version.
 ERROR:  invalid chunk argument given
+CALL convert_to_columnstore(0);
+ERROR:  invalid chunk argument given
+CALL convert_to_rowstore(0);
+ERROR:  invalid chunk argument given
 \set ON_ERROR_STOP 1
 -- tests for the cagg invalidation trigger on the deprecated schema
 CREATE TABLE sensor_data (

@@ -889,15 +889,13 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
-	Assert(!PG_ARGISNULL(0));
-
-	Oid uncompressed_relid = PG_GETARG_OID(0);
-	if (!OidIsValid(uncompressed_relid))
+	if (PG_ARGISNULL(0) || !OidIsValid(PG_GETARG_OID(0)))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk argument given")));
 	}
 
+	Oid uncompressed_relid = PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 
@@ -965,15 +963,13 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 Datum
 tsl_decompress_chunk(PG_FUNCTION_ARGS)
 {
-	Assert(!PG_ARGISNULL(0));
-
-	Oid uncompressed_relid = PG_GETARG_OID(0);
-	if (!OidIsValid(uncompressed_relid))
+	if (PG_ARGISNULL(0) || !OidIsValid(PG_GETARG_OID(0)))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk argument given")));
 	}
 
+	Oid uncompressed_relid = PG_GETARG_OID(0);
 	bool if_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	int32 chunk_id;
 
