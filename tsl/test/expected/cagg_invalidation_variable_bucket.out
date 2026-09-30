@@ -51,7 +51,6 @@ FROM generate_series('2024-01-01 00:00:00'::timestamptz,
                      '2024-12-31 23:59:59'::timestamptz,
                      '1 day'::interval) ts;
 CALL refresh_continuous_aggregate('cagg_monthly', '2024-01-01 00:00:00', '2025-01-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 2024-01-01 00:00:00+00, 2025-01-01 00:00:00+00 ]
 -- Verify data is materialized
 SELECT bucket, cnt FROM cagg_monthly ORDER BY bucket;
          bucket         | cnt 
@@ -88,7 +87,6 @@ SELECT * FROM hyper_inval_log;
 
 -- Refresh only February
 CALL refresh_continuous_aggregate('cagg_monthly', '2024-02-01 00:00:00', '2024-03-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-02-01 00:00:00+00, 2024-03-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_monthly WHERE bucket = '2024-02-01';
          bucket         | cnt 
 ------------------------+-----
@@ -116,7 +114,6 @@ SELECT * FROM hyper_inval_log;
 
 -- Refresh February only
 CALL refresh_continuous_aggregate('cagg_monthly', '2024-02-01 00:00:00', '2024-03-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-02-01 00:00:00+00, 2024-03-01 00:00:00+00 ]
 -- The remaining invalidation should only cover March
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_monthly';
   cagg_name   |      inval_start       |           inval_end           
@@ -127,7 +124,6 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_monthly';
 
 -- Now refresh March
 CALL refresh_continuous_aggregate('cagg_monthly', '2024-03-01 00:00:00', '2024-04-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-03-01 00:00:00+00, 2024-04-01 00:00:00+00 ]
 -- No invalidations should remain
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_monthly';
   cagg_name   |      inval_start       |           inval_end           
@@ -144,7 +140,6 @@ INSERT INTO monthly_data VALUES ('2024-03-31 12:00:00', 1, 200.0);  -- 31-day
 INSERT INTO monthly_data VALUES ('2024-04-30 23:59:59', 1, 300.0);  -- 30-day
 -- Refresh with a window that partially covers all three months.
 CALL refresh_continuous_aggregate('cagg_monthly', '2024-02-15 00:00:00', '2024-04-15 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-02-15 00:00:00+00, 2024-04-15 00:00:00+00 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_monthly';
   cagg_name   |      inval_start       |           inval_end           
 --------------+------------------------+-------------------------------
@@ -155,7 +150,6 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_monthly';
 
 -- Refresh the whole window to clear all invalidations
 CALL refresh_continuous_aggregate('cagg_monthly', '2024-02-01 00:00:00', '2024-05-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-02-01 00:00:00+00, 2024-05-01 00:00:00+00 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_monthly';
   cagg_name   |      inval_start       |           inval_end           
 --------------+------------------------+-------------------------------
@@ -171,7 +165,6 @@ FROM generate_series('2025-02-01 00:00:00'::timestamptz,
                      '2025-02-28 23:59:59'::timestamptz,
                      '1 day'::interval) ts;
 CALL refresh_continuous_aggregate('cagg_monthly', '2025-02-01 00:00:00', '2025-03-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-02-01 00:00:00+00, 2025-03-01 00:00:00+00 ]
 -- Verify Feb 2025 bucket has correct number of days
 SELECT bucket, cnt FROM cagg_monthly
 WHERE device = 2 AND bucket = '2025-02-01 00:00:00';
@@ -182,7 +175,6 @@ WHERE device = 2 AND bucket = '2025-02-01 00:00:00';
 -- Insert at Feb 28 boundary
 INSERT INTO monthly_data VALUES ('2025-02-28 23:59:59.999999', 2, 999.0);
 CALL refresh_continuous_aggregate('cagg_monthly', '2025-02-01 00:00:00', '2025-03-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-02-01 00:00:00+00, 2025-03-01 00:00:00+00 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_monthly';
   cagg_name   |      inval_start       |           inval_end           
 --------------+------------------------+-------------------------------
@@ -218,7 +210,6 @@ FROM generate_series('2024-01-01 00:00:00'::timestamptz,
                      '1 day'::interval) ts;
 -- Verify each year bucket has the right number of rows
 CALL refresh_continuous_aggregate('cagg_yearly', '2024-01-01 00:00:00', '2026-01-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-01-01 00:00:00+00, 2026-01-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_yearly ORDER BY bucket;
          bucket         | cnt 
 ------------------------+-----
@@ -239,7 +230,6 @@ SELECT * FROM hyper_inval_log;
 
 -- Refresh only 2023 - should leave 2024 invalidation in the log
 CALL refresh_continuous_aggregate('cagg_yearly', '2023-01-01 00:00:00', '2024-01-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2023-01-01 00:00:00+00, 2024-01-01 00:00:00+00 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_yearly';
   cagg_name  |      inval_start       |           inval_end           
 -------------+------------------------+-------------------------------
@@ -248,7 +238,6 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_yearly';
  cagg_yearly | 2026-01-01 00:00:00+00 | infinity
 
 CALL refresh_continuous_aggregate('cagg_yearly', '2024-01-01 00:00:00', '2025-01-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-01-01 00:00:00+00, 2025-01-01 00:00:00+00 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_yearly';
   cagg_name  |      inval_start       |           inval_end           
 -------------+------------------------+-------------------------------
@@ -286,7 +275,6 @@ FROM generate_series('2025-03-30 00:00:00'::timestamptz,
                      '1 hour'::interval) ts;
 -- Disabling incremental refresh as it's not the focus of the test and it's easier to read the test output without it.
 CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-03-01 00:00:00', '2025-05-01 00:00:00', options => '{"buckets_per_batch": 0}'::jsonb);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-03-01 00:00:00+01, 2025-05-01 00:00:00+02 ]
 -- March 30 should have 23 hours
 SELECT bucket, cnt FROM cagg_dst_daily
 ORDER BY bucket;
@@ -306,7 +294,6 @@ FROM generate_series('2025-10-26 00:00:00'::timestamptz,
                      '1 hour'::interval) ts;
 -- Wide window to cover all DST-shifted buckets
 CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-10-01 00:00:00', '2026-12-01 00:00:00', options => '{"buckets_per_batch": 0}'::jsonb);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-10-01 00:00:00+02, 2026-12-01 00:00:00+01 ]
 -- October bucket should have extra hour (25-hour day on Oct 26)
 SELECT bucket, cnt FROM cagg_dst_daily
 WHERE bucket >= '2025-10-01 00:00:00' AND bucket < '2026-01-01 00:00:00'
@@ -320,7 +307,6 @@ ORDER BY bucket;
 INSERT INTO dst_data VALUES ('2025-10-26 01:00:00', 888.0);  -- 2:00 AM Europe/Berlin (after fall-back)
 INSERT INTO dst_data VALUES ('2025-10-26 00:30:00', 777.0);  -- 2:30 AM Europe/Berlin (before fall-back)
 CALL refresh_continuous_aggregate('cagg_dst_daily', '2025-09-01 00:00:00', '2026-02-01 00:00:00', options => '{"buckets_per_batch": 0}'::jsonb);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-09-01 00:00:00+02, 2026-02-01 00:00:00+01 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_dst_daily';
    cagg_name    |      inval_start       |           inval_end           
 ----------------+------------------------+-------------------------------
@@ -357,7 +343,6 @@ FROM generate_series('2025-01-01 00:00:00'::timestamptz,
                      '2025-12-31 00:00:00'::timestamptz,
                      '1 day'::interval) ts;
 CALL refresh_continuous_aggregate('cagg_bimonthly', '2025-01-01 00:00:00', '2025-12-31 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-01-01 00:00:00+00, 2025-12-31 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_bimonthly ORDER BY bucket;
          bucket         | cnt 
 ------------------------+-----
@@ -375,7 +360,6 @@ INSERT INTO bimonthly_data VALUES ('2024-02-29 23:59:59.999999', 999);
 INSERT INTO bimonthly_data VALUES ('2024-03-01 00:00:00', 888);
 -- Refresh only the Jan-Feb bucket
 CALL refresh_continuous_aggregate('cagg_bimonthly', '2024-01-01 00:00:00', '2024-03-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-01-01 00:00:00+00, 2024-03-01 00:00:00+00 ]
 -- Mar-Apr invalidation should remain
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_bimonthly';
    cagg_name    |      inval_start       |           inval_end           
@@ -386,7 +370,6 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_bimonthly';
 
 -- Refresh Mar-Apr
 CALL refresh_continuous_aggregate('cagg_bimonthly', '2024-03-01 00:00:00', '2024-05-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-03-01 00:00:00+00, 2024-05-01 00:00:00+00 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_bimonthly';
    cagg_name    |      inval_start       |           inval_end           
 ----------------+------------------------+-------------------------------
@@ -425,7 +408,6 @@ FROM generate_series('2024-01-01 00:00:00'::timestamptz,
                      '2024-12-31 23:59:59'::timestamptz,
                      '1 day'::interval) ts;
 CALL refresh_continuous_aggregate('cagg_month_offset', '2024-01-01 00:00:00', '2025-01-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 2024-01-16 00:00:00+00, 2024-12-16 00:00:00+00 ]
 -- Buckets should be shifted to the 16th of each month:
 SELECT bucket, cnt FROM cagg_month_offset ORDER BY bucket;
          bucket         | cnt 
@@ -463,7 +445,6 @@ SELECT * FROM hyper_inval_log;
  offset_data | 2024-02-16 00:00:00+00        | 2024-02-16 00:00:00+00
 
 CALL refresh_continuous_aggregate('cagg_month_offset', '2024-01-01 00:00:00', '2024-04-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-01-01 00:00:00+00, 2024-04-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_month_offset
 WHERE bucket >= '2024-01-16 00:00:00' AND bucket <= '2024-02-16 00:00:00'
 ORDER BY bucket;
@@ -486,7 +467,6 @@ INSERT INTO offset_data VALUES ('2024-05-15 12:00:00', 1, 100.0);  -- in Apr 16 
 INSERT INTO offset_data VALUES ('2024-06-20 12:00:00', 1, 200.0);  -- in Jun 16 - Jul 16 bucket
 -- Refresh only May
 CALL refresh_continuous_aggregate('cagg_month_offset', '2024-04-01 00:00:00', '2024-06-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-04-01 00:00:00+00, 2024-06-01 00:00:00+00 ]
 -- Jun 16 - Jul 16 invalidation should remain
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_month_offset';
      cagg_name     |      inval_start       |           inval_end           
@@ -496,7 +476,6 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_month_offset';
  cagg_month_offset | 2024-12-16 00:00:00+00 | infinity
 
 CALL refresh_continuous_aggregate('cagg_month_offset', '2024-06-01 00:00:00', '2024-08-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2024-06-01 00:00:00+00, 2024-08-01 00:00:00+00 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_month_offset';
      cagg_name     |      inval_start       |           inval_end           
 -------------------+------------------------+-------------------------------
@@ -530,7 +509,6 @@ FROM generate_series('2025-03-28 00:00:00'::timestamptz,
                      '2025-04-01 23:59:59'::timestamptz,
                      '1 hour'::interval) ts;
 CALL refresh_continuous_aggregate('cagg_offset_tz', '2025-03-01 00:00:00', '2025-05-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ 2025-03-12 02:00:00+01, 2025-04-21 02:00:00+02 ]
 SELECT bucket, cnt FROM cagg_offset_tz ORDER BY bucket;
          bucket         | cnt 
 ------------------------+-----
@@ -544,7 +522,6 @@ SELECT bucket, cnt FROM cagg_offset_tz ORDER BY bucket;
 INSERT INTO offset_tz_data VALUES ('2025-03-30 01:59:59.999999', 888.0);
 INSERT INTO offset_tz_data VALUES ('2025-03-30 02:00:00', 777.0);
 CALL refresh_continuous_aggregate('cagg_offset_tz', '2025-03-01 00:00:00', '2025-06-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-03-01 00:00:00+01, 2025-06-01 00:00:00+02 ]
 SELECT bucket, cnt FROM cagg_offset_tz ORDER BY bucket;
          bucket         | cnt 
 ------------------------+-----
@@ -593,7 +570,6 @@ FROM generate_series('2025-01-01 00:00:00'::timestamptz,
                      '2025-12-31 23:59:59'::timestamptz,
                      '1 day'::interval) ts;
 CALL refresh_continuous_aggregate('cagg_bimonth_origin', '2025-01-01 00:00:00', '2026-01-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-01-01 00:00:00+00, 2026-01-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_bimonth_origin ORDER BY bucket;
          bucket         | cnt 
 ------------------------+-----
@@ -622,7 +598,6 @@ SELECT * FROM hyper_inval_log;
  origin_data | 2025-04-01 00:00:00+00        | 2025-04-01 00:00:00+00
 
 CALL refresh_continuous_aggregate('cagg_bimonth_origin', '2025-02-01 00:00:00', '2025-06-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-02-01 00:00:00+00, 2025-06-01 00:00:00+00 ]
 -- Verify Feb+Mar and Apr+May buckets are updated
 SELECT bucket, cnt FROM cagg_bimonth_origin
 WHERE bucket IN ('2025-02-01 00:00:00', '2025-04-01 00:00:00')
@@ -646,7 +621,6 @@ INSERT INTO origin_data VALUES ('2025-05-20 12:00:00', 1, 100.0);  -- in Apr+May
 INSERT INTO origin_data VALUES ('2025-07-10 12:00:00', 1, 200.0);  -- in Jun+Jul bucket
 -- Refresh only the Apr-May window
 CALL refresh_continuous_aggregate('cagg_bimonth_origin', '2025-04-01 00:00:00', '2025-06-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-04-01 00:00:00+00, 2025-06-01 00:00:00+00 ]
 -- Jun+Jul invalidation should remain
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_bimonth_origin';
       cagg_name      |      inval_start       |           inval_end           
@@ -656,7 +630,6 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_bimonth_origin';
  cagg_bimonth_origin | 2025-12-01 00:00:00+00 | infinity
 
 CALL refresh_continuous_aggregate('cagg_bimonth_origin', '2025-06-01 00:00:00', '2025-09-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-06-01 00:00:00+00, 2025-09-01 00:00:00+00 ]
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_bimonth_origin';
       cagg_name      |      inval_start       |           inval_end           
 ---------------------+------------------------+-------------------------------
@@ -693,7 +666,6 @@ FROM generate_series('2025-03-29 00:00:00'::timestamptz,
                      '2025-03-31 23:59:59'::timestamptz,
                      '1 hour'::interval) ts;
 CALL refresh_continuous_aggregate('cagg_origin_tz', '2025-02-01 00:00:00', '2025-04-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 2025-03-12 05:00:00+01, 2025-03-31 05:00:00+02 ]
 SELECT bucket, cnt FROM cagg_origin_tz ORDER BY bucket;
          bucket         | cnt 
 ------------------------+-----
@@ -743,9 +715,7 @@ FROM generate_series('2025-01-01 00:00:00'::timestamptz,
                      '2025-12-31 23:59:59'::timestamptz,
                      '1 day'::interval) ts;
 CALL refresh_continuous_aggregate('cagg_hier_monthly', '2025-01-01 00:00:00', '2026-01-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 2025-01-01 00:00:00+00, 2026-01-01 00:00:00+00 ]
 CALL refresh_continuous_aggregate('cagg_hier_quarterly', '2025-01-01 00:00:00', '2026-01-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-01-01 00:00:00+00, 2026-01-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_hier_monthly ORDER BY bucket;
          bucket         | cnt 
 ------------------------+-----
@@ -785,7 +755,6 @@ SELECT * FROM cagg_inval_log WHERE cagg_name IN ('cagg_hier_monthly', 'cagg_hier
 -----------------------------------------------------------------------
 INSERT INTO hier_data VALUES ('2025-02-15 12:00:00', 999.0);
 CALL refresh_continuous_aggregate('cagg_hier_monthly', '2025-02-01 00:00:00', '2025-03-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-02-01 00:00:00+00, 2025-03-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_hier_monthly WHERE bucket = '2025-02-01 00:00:00';
          bucket         | cnt 
 ------------------------+-----
@@ -804,7 +773,6 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_hier_quarterly';
 
 -- Refresh Level 2 for Q1
 CALL refresh_continuous_aggregate('cagg_hier_quarterly', '2025-01-01 00:00:00', '2025-04-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-01-01 00:00:00+00, 2025-04-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_hier_quarterly WHERE bucket = '2025-01-01 00:00:00';
          bucket         | cnt 
 ------------------------+-----
@@ -826,7 +794,6 @@ INSERT INTO hier_data VALUES ('2025-03-31 23:59:59.999999', 888.0);
 INSERT INTO hier_data VALUES ('2025-04-01 00:00:00', 777.0);
 -- Refresh Level 1 for March and April
 CALL refresh_continuous_aggregate('cagg_hier_monthly', '2025-03-01 00:00:00', '2025-05-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-03-01 00:00:00+00, 2025-05-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_hier_monthly
 WHERE bucket IN ('2025-03-01 00:00:00', '2025-04-01 00:00:00')
 ORDER BY bucket;
@@ -837,7 +804,6 @@ ORDER BY bucket;
 
 -- Refresh Level 2 with a wide window covering both Q1 and Q2
 CALL refresh_continuous_aggregate('cagg_hier_quarterly', '2025-01-01 00:00:00', '2025-07-01 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-01-01 00:00:00+00, 2025-07-01 00:00:00+00 ]
 SELECT bucket, cnt FROM cagg_hier_quarterly
 WHERE bucket IN ('2025-01-01 00:00:00', '2025-04-01 00:00:00')
 ORDER BY bucket;

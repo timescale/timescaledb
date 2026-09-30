@@ -68,7 +68,6 @@ WHERE hypertable_id = (
 -- (iv) The refresh falls back to the full invalidation log and produces the
 -- correct result for every bucket.
 CALL refresh_continuous_aggregate('cond_daily', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 SELECT sensor_id, bucket, avg
 FROM cond_daily
 ORDER BY sensor_id, bucket;
@@ -89,7 +88,6 @@ SELECT debug_waitpoint_release('tenant_tracker_area_oom');
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_a', 5);
 INSERT INTO conditions VALUES ('2025-05-03 00:00+00', 'sensor_b', 5);
 CALL refresh_continuous_aggregate('cond_daily', '2025-05-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Thu May 01 00:00:00 2025 UTC, infinity ]
 SELECT count(*) AS tracking_rows_after_release
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
 WHERE hypertable_id = (
@@ -101,7 +99,6 @@ WHERE hypertable_id = (
 
 -- refresh still works
 CALL refresh_continuous_aggregate('cond_daily', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 SELECT sensor_id, bucket, avg
 FROM cond_daily
 ORDER BY sensor_id, bucket;
@@ -174,7 +171,6 @@ WHERE hypertable_id = (
 
 -- refresh still works as we use invalidation logs
 CALL refresh_continuous_aggregate('metric_daily', '2020-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ]
 SELECT sensor_id, bucket, avg
 FROM metric_daily
 ORDER BY sensor_id, bucket;
@@ -186,7 +182,6 @@ ORDER BY sensor_id, bucket;
 INSERT INTO metrics VALUES ('2020-01-02 00:00+00', 'sensor_x', 40);
 INSERT INTO metrics VALUES ('2025-05-05 00:00+00', 'sensor_y', 50);
 CALL refresh_continuous_aggregate('metric_daily', '2025-02-01 10:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Feb 01 10:00:00 2025 UTC, infinity ]
 SELECT *
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
 WHERE hypertable_id = (
@@ -250,7 +245,6 @@ SELECT debug_waitpoint_release('tenant_tracker_seqnum_scan_oom');
 
 -- Refresh falls back to the full invalidation log and materializes correctly.
 CALL refresh_continuous_aggregate('gauge_daily', '2020-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ]
 SELECT sensor_id, bucket, avg FROM gauge_daily ORDER BY sensor_id, bucket;
  sensor_id |            bucket            | avg 
 -----------+------------------------------+-----

@@ -128,7 +128,6 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 
 -- refresh
 CALL refresh_continuous_aggregate('metrics_summary', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- result should not change after refresh for union view
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
          time_bucket          | avg 
@@ -253,7 +252,6 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
  Fri Dec 31 16:00:00 1999 PST | 0.5
 
 CALL refresh_continuous_aggregate('metrics_summary', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
 -- materialized only view should return data now too because refresh has happened
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
@@ -279,7 +277,6 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 
 -- and after refresh non union view should have new data too
 CALL refresh_continuous_aggregate('metrics_summary', NULL, '2000-01-30');
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Sat Jan 29 16:00:00 2000 PST ]
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
          time_bucket          | avg 
@@ -349,7 +346,6 @@ SELECT * FROM boundary_view ORDER BY time_bucket;
 -- Refresh up to 30 to leave some unmaterialized data at the head and
 -- thus have something to union.
 CALL refresh_continuous_aggregate('boundary_view', NULL, 30);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 30 ]
 -- watermark should be 30
 SELECT _timescaledb_functions.cagg_watermark(:boundary_view_id);
  cagg_watermark 
@@ -419,7 +415,6 @@ GROUP BY time_bucket(1, a)
 HAVING sum(c) > 50 WITH NO DATA;
 -- Do partial refresh to have something to union
 CALL refresh_continuous_aggregate('mat_m1', NULL, 11);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 11 ]
 --results from real time cont.agg and direct query should match
 SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
 FROM ht_intdata
@@ -458,7 +453,6 @@ SELECT * FROM mat_m1 ORDER BY 1;
  31 |      2 |   129 |       56 |   50
 
 CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ -2147483648, 2147483647 ]
 SELECT * FROM mat_m1 ORDER BY 1;
  a  | countb | sumbc | spreadcb | avgc 
 ----+--------+-------+----------+------
@@ -495,7 +489,6 @@ INSERT into ht_intdata values( 42 , 15 , 18);
 INSERT into ht_intdata values( 41 , 18 , 21);
 -- Do partial refresh so that we leave data to UNION
 CALL refresh_continuous_aggregate('mat_m1', NULL, 25);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 25 ]
 SELECT mat_hypertable_id AS mat_m1_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'mat_m1' \gset
@@ -706,17 +699,11 @@ INSERT INTO timestamp_table VALUES ('2020-01-01', 1), ('2020-01-02', 2), ('2020-
 INSERT INTO timestamptz_table VALUES ('2020-01-01', 1), ('2020-01-02', 2), ('2020-01-06', 6), ('2020-01-08', 8);
 -- Refresh to move the watermarks
 CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -32768, 32767 ]
 CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 11-24-4714 BC, infinity ]
 CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- Watermarks should reflect the new materializations
 SELECT user_view_name, _timescaledb_functions.cagg_watermark(mat_hypertable_id)
 FROM _timescaledb_catalog.continuous_agg
@@ -744,17 +731,11 @@ INSERT INTO date_table VALUES ('294247-01-01', 1);
 INSERT INTO timestamp_table VALUES ('294247-01-01 00:00:00-00', 1);
 INSERT INTO timestamptz_table VALUES ('294247-01-01 00:00:00-00', 1);
 CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -32768, 32767 ]
 CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 11-24-4714 BC, infinity ]
 CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- Watermarks after refresh hould be at the end of the valid range for
 -- the time type
 SELECT user_view_name, _timescaledb_functions.cagg_watermark(mat_hypertable_id)
@@ -950,14 +931,8 @@ ORDER BY 1,2;
  Wed Dec 30 16:00:00 294246 PST | 1.00000000000000000000
 
 CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -32768, 32767 ]
 CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 11-24-4714 BC, infinity ]
 CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]

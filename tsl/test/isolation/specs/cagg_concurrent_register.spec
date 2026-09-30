@@ -63,7 +63,6 @@ teardown {
 }
 
 session "S1"
-setup { SET client_min_messages TO warning; }
 step "s1_run_cagg1_refresh" {
    CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00+00', '2020-01-03 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
 }
@@ -75,7 +74,6 @@ step "s1_run_cagg2_nonoverlap_refresh" {
 }
 
 session "S2"
-setup { SET client_min_messages TO warning; }
 
 step "s2_run_cagg2_overlap_refresh" {
    CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
