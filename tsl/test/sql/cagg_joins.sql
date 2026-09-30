@@ -4,7 +4,7 @@
 
 \set VERBOSITY default
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TABLE conditions(
   day TIMESTAMPTZ NOT NULL,
@@ -593,7 +593,7 @@ ALTER USER MAPPING FOR :ROLE_DEFAULT_PERM_USER
 GRANT USAGE ON FOREIGN SERVER loopback TO :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE FOREIGN TABLE devices_fdw (
    device_id int not null,

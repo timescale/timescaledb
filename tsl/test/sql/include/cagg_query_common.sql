@@ -687,7 +687,7 @@ CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buck
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
-SET timezone TO 'PST8PDT';
+SET timezone TO 'America/Los_Angeles';
 
 -- Query the CAggs and check that all buckets are materialized
 SELECT * FROM cagg_4_hours;
@@ -733,7 +733,7 @@ CALL refresh_continuous_aggregate('cagg_4_hours', NULL, NULL, options => '{"buck
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 RESET client_min_messages;
-SET timezone TO 'PST8PDT';
+SET timezone TO 'America/Los_Angeles';
 
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours;
