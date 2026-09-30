@@ -13,6 +13,7 @@ set(TEST_FILES_SHARED
     lateral_subquery.sql
     osm_api.sql
     security_barrier.sql
+    space_constraint_cross_type.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
