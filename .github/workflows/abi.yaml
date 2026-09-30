@@ -19,6 +19,10 @@ name: ABI Test
     paths: .github/workflows/abi.yaml
   workflow_dispatch:
   workflow_call:
+    inputs:
+      timescaledb-ref:
+        required: true
+        type: string
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -33,6 +37,10 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -62,6 +70,10 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
 
     - name: Build extension with ${{ matrix.builder }}
       run: |
