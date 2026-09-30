@@ -845,7 +845,7 @@ select * from int_table where b is null or b is not null order by 1;
 select * from int_table where b is null and b is not null order by 1;
 
 -- check the compression algorithm for the compressed chunks
-set timescaledb.enable_columnarscan='off';
+set timescaledb.debug_enable_columnarscan='off';
 DO $$
 DECLARE
 	comp_regclass REGCLASS;
@@ -878,7 +878,7 @@ BEGIN
 END;
 $$;
 
-reset timescaledb.enable_columnarscan;
+reset timescaledb.debug_enable_columnarscan;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;
 
