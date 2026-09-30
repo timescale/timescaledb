@@ -35,9 +35,7 @@ def run_query(query):
 def get_referenced_issues(pr_number):
     """Get the numbers of issue fixed by the given pull request."""
 
-    ref_result = run_query(
-        string.Template(
-            """
+    ref_result = run_query(string.Template("""
         query {
             repository(owner: "timescale", name: "timescaledb") {
               pullRequest(number: $pr_number) {
@@ -51,9 +49,7 @@ def get_referenced_issues(pr_number):
               }
             }
           }
-          """
-        ).substitute({"pr_number": pr_number})
-    )
+          """).substitute({"pr_number": pr_number}))
 
     # The above returns {'data': {'repository': {'pullRequest': {'closingIssuesReferences': {'edges': [{'node': {'number': 4944}}]}}}}}
 
