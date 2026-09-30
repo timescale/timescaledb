@@ -197,17 +197,10 @@ get_compressed_data_header(Datum data)
 static void
 truncate_relation(Oid table_oid)
 {
-	List *fks = heap_truncate_find_FKs(list_make1_oid(table_oid));
 	/* Take an access exclusive lock now. Note that this may very well
 	 *  be a lock upgrade. */
 	Relation rel = table_open(table_oid, AccessExclusiveLock);
 	Oid toast_relid;
-
-	/* Chunks should never have fks into them, but double check */
-	if (fks != NIL)
-	{
-		elog(ERROR, "found a FK into a chunk while truncating");
-	}
 
 	CheckTableForSerializableConflictIn(rel);
 
