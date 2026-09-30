@@ -205,8 +205,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:104: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:105: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:106: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
@@ -288,8 +291,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:146: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:147: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:148: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
@@ -317,6 +323,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
 -- This full refresh will remove all the data from the 3TH level cagg
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:158: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature 
@@ -328,7 +335,9 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:163: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:164: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature 
@@ -367,7 +376,9 @@ psql:include/cagg_on_cagg_common.sql:182: ERROR:  relation "conditions_summary_3
 -- don't affect the down level CAGGs
 TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:188: NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ -2147483648, 2147483647 ]
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
 --------+-------------+-----------
@@ -590,8 +601,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:104: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:105: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:106: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
@@ -673,8 +687,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:146: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:147: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:148: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
@@ -702,6 +719,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
 -- This full refresh will remove all the data from the 3TH level cagg
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:158: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature 
@@ -713,7 +731,9 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:163: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:164: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature 
@@ -752,7 +772,9 @@ psql:include/cagg_on_cagg_common.sql:182: ERROR:  relation "conditions_summary_3
 -- don't affect the down level CAGGs
 TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:188: NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ -2147483648, 2147483647 ]
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
 --------+-------------+-----------
@@ -1302,8 +1324,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:104: NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:105: NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:106: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
           bucket          | temperature | device_id 
@@ -1385,8 +1410,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:146: NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:147: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:148: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
           bucket          | temperature | device_id 
@@ -1414,6 +1442,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
 -- This full refresh will remove all the data from the 3TH level cagg
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:158: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature 
@@ -1425,7 +1454,9 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:163: NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:164: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature 
@@ -1464,7 +1495,9 @@ psql:include/cagg_on_cagg_common.sql:182: ERROR:  relation "conditions_summary_3
 -- don't affect the down level CAGGs
 TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:188: NOTICE:  continuous aggregate refresh: processed 10 batch(es) of 10 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
           bucket          | temperature | device_id 
 --------------------------+-------------+-----------
@@ -1684,8 +1717,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:104: NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:105: NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:106: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
           bucket          | temperature | device_id 
@@ -1767,8 +1803,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:146: NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:147: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:148: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
           bucket          | temperature | device_id 
@@ -1796,6 +1835,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
 -- This full refresh will remove all the data from the 3TH level cagg
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:158: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature 
@@ -1807,7 +1847,9 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:163: NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:164: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature 
@@ -1846,7 +1888,9 @@ psql:include/cagg_on_cagg_common.sql:182: ERROR:  relation "conditions_summary_3
 -- don't affect the down level CAGGs
 TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:188: NOTICE:  continuous aggregate refresh: processed 10 batch(es) of 10 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
           bucket          | temperature | device_id 
 --------------------------+-------------+-----------
@@ -2496,8 +2540,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:104: NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:105: NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:106: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
             bucket            | temperature | device_id 
@@ -2579,8 +2626,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:146: NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:147: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:148: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
             bucket            | temperature | device_id 
@@ -2608,6 +2658,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
 -- This full refresh will remove all the data from the 3TH level cagg
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:158: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature 
@@ -2619,7 +2670,9 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:163: NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:164: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature 
@@ -2658,7 +2711,9 @@ psql:include/cagg_on_cagg_common.sql:182: ERROR:  relation "conditions_summary_3
 -- don't affect the down level CAGGs
 TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:188: NOTICE:  continuous aggregate refresh: processed 10 batch(es) of 10 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
             bucket            | temperature | device_id 
 ------------------------------+-------------+-----------
@@ -2877,8 +2932,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:104: NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:105: NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:106: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- Materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
             bucket            | temperature | device_id 
@@ -2960,8 +3018,11 @@ ALTER MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL SET (timescaledb.materialized_only=
 ALTER MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL SET (timescaledb.materialized_only=true);
 -- Refresh all data
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:146: NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:147: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:148: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- All changes are materialized
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
             bucket            | temperature | device_id 
@@ -2989,6 +3050,7 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
 -- This full refresh will remove all the data from the 3TH level cagg
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:158: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- Should return no rows
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature 
@@ -3000,7 +3062,9 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:163: NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:164: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- Now we have all the data
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature 
@@ -3039,7 +3103,9 @@ psql:include/cagg_on_cagg_common.sql:182: ERROR:  relation "conditions_summary_3
 -- don't affect the down level CAGGs
 TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:187: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_common.sql:188: NOTICE:  continuous aggregate refresh: processed 10 batch(es) of 10 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
             bucket            | temperature | device_id 
 ------------------------------+-------------+-----------
@@ -3918,7 +3984,9 @@ UNION ALL
   INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
   INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_validations.sql:58: NOTICE:  continuous aggregate refresh: processed 44 batch(es) of 44 in window [ -infinity, infinity ]
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_validations.sql:59: NOTICE:  continuous aggregate refresh: processed 6 batch(es) of 6 in window [ -infinity, infinity ]
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
@@ -4170,7 +4238,9 @@ UNION ALL
   INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
   INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_validations.sql:58: NOTICE:  continuous aggregate refresh: processed 44 batch(es) of 44 in window [ -infinity, infinity ]
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_validations.sql:59: NOTICE:  continuous aggregate refresh: processed 6 batch(es) of 6 in window [ -infinity, infinity ]
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
@@ -4423,7 +4493,9 @@ UNION ALL
   INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-15 01:00:00-00', 20, 4);
   INSERT INTO conditions ("time", temperature, device_id) VALUES ('2022-01-31 01:00:00-00', 30, 4);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_validations.sql:58: NOTICE:  continuous aggregate refresh: processed 44 batch(es) of 44 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
+psql:include/cagg_on_cagg_validations.sql:59: NOTICE:  continuous aggregate refresh: processed 6 batch(es) of 6 in window [ -infinity, infinity ]
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
   WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT

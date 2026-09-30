@@ -4,7 +4,10 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/heapam.h>
 #include <access/multixact.h>
+#include <access/rewriteheap.h>
+#include <access/tupconvert.h>
 #include <access/xact.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
@@ -34,6 +37,7 @@
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
+#include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "debug_point.h"
@@ -510,119 +514,6 @@ merge_chunks_multidim_allowed(void)
 			pg_strcasecmp("true", multidim_merge_enabled) == 0);
 }
 
-#if (PG_VERSION_NUM >= 170000 && PG_VERSION_NUM <= 170002)
-/*
- * Workaround for changed behavior in the relation rewrite code that appeared
- * in PostgreSQL 17.0, but was fixed in 17.3.
- *
- * Merge chunks uses the relation rewrite functionality from CLUSTER and
- * VACUUM FULL. This works for merge because, when writing into a non-empty
- * relation, new pages are appended while the existing pages remain the
- * same. In PG17.0, however, that changed so that existing pages in the
- * relation were zeroed out. The changed behavior was introduced as part of
- * this commit:
- *
- * https://github.com/postgres/postgres/commit/8af256524893987a3e534c6578dd60edfb782a77
- *
- * Fortunately, this was fixed in a follow up commit:
- *
- * https://github.com/postgres/postgres/commit/9695835538c2c8e9cd0048028b8c85e1bbf5c79c
- *
- * The fix is part of PG 17.3. However, this still leaves PG 17.0 - 17.2
- * with different behavior.
- *
- * To make the merge chunks code work for the "broken" versions we make PG
- * believe the first rewrite operation is the size of the fully merged
- * relation so that we reserve the full space needed and then "append"
- * backwards into the zeroed space (see illustration below). By doing this, we
- * ensure that no valid data is zeroed out. The downside of this approach is
- * that there will be a lot of unnecessary writing of zero pages. Below is an
- * example of what the rewrite would look like for merging three relations
- * with one page each. When writing the first relation, PG believes the merged
- * relation already contains two pages when starting the rewrite. These two
- * existing pages will be zeroed. When writing the next relation we tell PG
- * that there is only one existing page in the merged relation, and so forth.
- *
- *  _____________
- *  |_0_|_0_|_x_|
- *  _________
- *  |_0_|_x_|
- *  _____
- *  |_x_|
- *
- *  Result:
- *  _____________
- *  |_x_|_x_|_x_|
- *
- */
-static BlockNumber merge_rel_nblocks = 0;
-static BlockNumber *blockoff = NULL;
-static const TableAmRoutine *old_routine = NULL;
-static TableAmRoutine routine = {};
-
-/*
- * TAM relation size function to make PG believe that the merged relation
- * contains as specific amount of existing data.
- */
-static uint64
-pq17_workaround_merge_relation_size(Relation rel, ForkNumber forkNumber)
-{
-	uint64 nblocks = merge_rel_nblocks;
-
-	if (forkNumber == MAIN_FORKNUM)
-	{
-		return nblocks * BLCKSZ;
-	}
-
-	return old_routine->relation_size(rel, forkNumber);
-}
-
-static inline void
-pg17_workaround_init(Relation rel, RelationMergeInfo *relinfos, int nrelids)
-{
-	routine = *rel->rd_tableam;
-	routine.relation_size = pq17_workaround_merge_relation_size;
-	old_routine = rel->rd_tableam;
-	rel->rd_tableam = &routine;
-	blockoff = palloc(sizeof(BlockNumber) * nrelids);
-	uint64 totalblocks = 0;
-
-	for (int i = 0; i < nrelids; i++)
-	{
-		blockoff[i] = (BlockNumber) totalblocks;
-
-		if (relinfos[i].rel)
-		{
-			totalblocks += smgrnblocks(RelationGetSmgr(relinfos[i].rel), MAIN_FORKNUM);
-
-			/* Ensure the offsets don't overflow. For the merge itself, it is
-			 * assumed that the write will fail when writing too many blocks */
-			Ensure(totalblocks <= MaxBlockNumber, "max number of blocks exceeded for merge");
-		}
-	}
-}
-
-static inline void
-pg17_workaround_cleanup(Relation rel)
-{
-	pfree(blockoff);
-	rel->rd_tableam = old_routine;
-}
-
-static inline RelationMergeInfo *
-get_relmergeinfo(RelationMergeInfo *relinfos, int nrelids, int i)
-{
-	RelationMergeInfo *relinfo = &relinfos[nrelids - i - 1];
-	merge_rel_nblocks = blockoff[nrelids - i - 1];
-	return relinfo;
-}
-
-#else
-#define pg17_workaround_init(rel, relinfos, nrelids)
-#define pg17_workaround_cleanup(rel)
-#define get_relmergeinfo(relinfos, nrelids, i) &(relinfos)[i]
-#endif
-
 /* Update table stats */
 
 void
@@ -641,6 +532,101 @@ update_relstats(Relation catrel, Oid relid, BlockNumber num_pages, double ntuple
 	heap_freetuple(reltup);
 }
 
+/*
+ * Copy tuples between relations with different attribute layouts, e.g.,
+ * when one chunk was created before a column was dropped and the other
+ * after. Loop adapted from heapam_relation_copy_for_cluster().
+ */
+static void
+copy_table_data_with_map(Relation fromrel, Relation torel, TupleConversionMap *map,
+						 struct VacuumCutoffs *cutoffs, double *num_tuples, double *tups_vacuumed,
+						 double *tups_recently_dead)
+{
+	RewriteState rwstate = begin_heap_rewrite(fromrel,
+											  torel,
+											  cutoffs->OldestXmin,
+											  cutoffs->FreezeLimit,
+											  cutoffs->MultiXactCutoff);
+	TableScanDesc scan = table_beginscan_compat(fromrel, SnapshotAny, 0, NULL, 0);
+	TupleTableSlot *slot = table_slot_create(fromrel, NULL);
+	BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) slot;
+
+	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
+	{
+		HeapTuple tuple;
+		HeapTuple newtuple;
+		Buffer buf = hslot->buffer;
+		bool isdead = false;
+
+		CHECK_FOR_INTERRUPTS();
+
+		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
+
+		/* PG19+ only sets hint bits, which the rewrite needs, under exclusive lock */
+#if PG19_GE
+		LockBuffer(buf, BUFFER_LOCK_EXCLUSIVE);
+#else
+		LockBuffer(buf, BUFFER_LOCK_SHARE);
+#endif
+
+		switch (HeapTupleSatisfiesVacuum(tuple, cutoffs->OldestXmin, buf))
+		{
+			case HEAPTUPLE_DEAD:
+				isdead = true;
+				break;
+			case HEAPTUPLE_RECENTLY_DEAD:
+				*tups_recently_dead += 1;
+				break;
+			case HEAPTUPLE_LIVE:
+				break;
+			case HEAPTUPLE_INSERT_IN_PROGRESS:
+				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
+				{
+					elog(WARNING,
+						 "concurrent insert in progress within table \"%s\"",
+						 RelationGetRelationName(fromrel));
+				}
+				break;
+			case HEAPTUPLE_DELETE_IN_PROGRESS:
+				if (!TransactionIdIsCurrentTransactionId(
+						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
+				{
+					elog(WARNING,
+						 "concurrent delete in progress within table \"%s\"",
+						 RelationGetRelationName(fromrel));
+				}
+				*tups_recently_dead += 1;
+				break;
+			default:
+				elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
+				break;
+		}
+
+		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+
+		if (isdead)
+		{
+			*tups_vacuumed += 1;
+			/* The rewrite module still needs to see dead tuples */
+			if (rewrite_heap_dead_tuple(rwstate, tuple))
+			{
+				*tups_vacuumed += 1;
+				*tups_recently_dead -= 1;
+			}
+			continue;
+		}
+
+		*num_tuples += 1;
+		newtuple = execute_attr_map_tuple(tuple, map);
+		rewrite_heap_tuple(rwstate, tuple, newtuple);
+		heap_freetuple(newtuple);
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	table_endscan(scan);
+	end_heap_rewrite(rwstate);
+}
+
 static double
 copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 				struct VacuumCutoffs *merged_cutoffs)
@@ -648,20 +634,36 @@ copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 	double num_tuples = 0.0;
 	double tups_vacuumed = 0.0;
 	double tups_recently_dead = 0.0;
+	TupleConversionMap *map =
+		convert_tuples_by_name(RelationGetDescr(fromrel), RelationGetDescr(torel));
 
-	table_relation_copy_for_cluster(fromrel,
-									torel,
-									NULL,
-									false,
-									cutoffs->OldestXmin,
+	if (map != NULL)
+	{
+		copy_table_data_with_map(fromrel,
+								 torel,
+								 map,
+								 cutoffs,
+								 &num_tuples,
+								 &tups_vacuumed,
+								 &tups_recently_dead);
+		free_conversion_map(map);
+	}
+	else
+	{
+		table_relation_copy_for_cluster(fromrel,
+										torel,
+										NULL,
+										false,
+										cutoffs->OldestXmin,
 #if PG19_GE
-									NULL, /* snapshot (only used by REPACK CONCURRENTLY) */
+										NULL, /* snapshot (only used by REPACK CONCURRENTLY) */
 #endif
-									&cutoffs->FreezeLimit,
-									&cutoffs->MultiXactCutoff,
-									&num_tuples,
-									&tups_vacuumed,
-									&tups_recently_dead);
+										&cutoffs->FreezeLimit,
+										&cutoffs->MultiXactCutoff,
+										&num_tuples,
+										&tups_vacuumed,
+										&tups_recently_dead);
+	}
 
 	elog(LOG,
 		 "merged rows from \"%s\" into \"%s\": tuples %lf vacuumed %lf recently dead %lf",
@@ -736,12 +738,10 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex, LOCKMOD
 
 	*rellocks = append_rellock(*rellocks, new_rel, AccessExclusiveLock, merge_mcxt);
 
-	pg17_workaround_init(new_rel, relinfos, nrelids);
-
 	/* Step 3: write the data from all the rels into a new merged heap */
 	for (int i = 0; i < nrelids; i++)
 	{
-		RelationMergeInfo *relinfo = get_relmergeinfo(relinfos, nrelids, i);
+		RelationMergeInfo *relinfo = &relinfos[i];
 		struct VacuumCutoffs *cutoffs_i = &relinfo->cutoffs;
 		double num_tuples = 0.0;
 
@@ -803,12 +803,11 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex, LOCKMOD
 	}
 
 	stats->num_pages = RelationGetNumberOfBlocks(new_rel);
-	pg17_workaround_cleanup(new_rel);
 
 	/* Now close all relations */
 	for (int i = 0; i < nrelids; i++)
 	{
-		RelationMergeInfo *relinfo = get_relmergeinfo(relinfos, nrelids, i);
+		RelationMergeInfo *relinfo = &relinfos[i];
 
 		/*
 		 * Close the relations before the heap swap, but keep the locks until

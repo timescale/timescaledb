@@ -25,6 +25,7 @@ SELECT time_bucket(INTERVAL '1 hour', ts) AS bucket, avg(val) AS avg_val
 FROM metrics GROUP BY bucket
 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_validation', '2026-01-01', '2026-01-03');
+NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Thu Jan 01 00:00:00 2026 UTC, Sat Jan 03 00:00:00 2026 UTC ]
 \set ON_ERROR_STOP 0
 -- non-aggregate expression
 ALTER MATERIALIZED VIEW cagg_validation
@@ -104,6 +105,7 @@ FROM metrics GROUP BY bucket
 WITH NO DATA;
 -- materialize only the first 24h; the rest is served live from the source
 CALL refresh_continuous_aggregate('cagg_rt', '2026-01-01', '2026-01-02');
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Thu Jan 01 00:00:00 2026 UTC, Fri Jan 02 00:00:00 2026 UTC ]
 -- before ADD COLUMN there is no schema change recorded
 SELECT schema_change_timestamp IS NULL AS schema_change_unset
 FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='cagg_rt';
@@ -177,9 +179,11 @@ SELECT time_bucket(INTERVAL '1 hour', ts) AS bucket, avg(val) AS avg_val
 FROM groupby_col GROUP BY bucket, device_id
 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_groupby', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 ALTER MATERIALIZED VIEW cagg_groupby
     ADD COLUMN dev int GENERATED ALWAYS AS (device_id) STORED;
 CALL refresh_continuous_aggregate('cagg_groupby', NULL, NULL, force => true);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 SELECT bucket, dev, avg_val FROM cagg_groupby ORDER BY bucket, dev;
             bucket            | dev | avg_val 
 ------------------------------+-----+---------
@@ -220,6 +224,7 @@ WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_e2e',
                                   '2026-01-01 00:00:00+00'::timestamptz,
                                   '2026-01-03 00:00:00+00'::timestamptz);
+NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Thu Jan 01 00:00:00 2026 UTC, Sat Jan 03 00:00:00 2026 UTC ]
 -- multiple new columns
 ALTER MATERIALIZED VIEW cagg_e2e
     ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(metrics.temp)) STORED,
@@ -265,6 +270,7 @@ FROM generate_series(0, 23) i;
 CALL refresh_continuous_aggregate('cagg_e2e',
                                   '2026-01-04 00:00:00+00'::timestamptz,
                                   '2026-01-05 00:00:00+00'::timestamptz);
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sun Jan 04 00:00:00 2026 UTC, Mon Jan 05 00:00:00 2026 UTC ]
 -- new buckets populated on all new columns; old (pre-ALTER) still NULL
 SELECT
     sum(CASE WHEN bucket < '2026-01-03 00:00:00+00' AND min_temp IS NULL
@@ -282,6 +288,7 @@ CALL refresh_continuous_aggregate('cagg_e2e',
                                   '2026-01-01 00:00:00+00'::timestamptz,
                                   '2026-01-03 00:00:00+00'::timestamptz,
                                   force => true);
+NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Thu Jan 01 00:00:00 2026 UTC, Sat Jan 03 00:00:00 2026 UTC ]
 -- verify that new columns are now populated on the pre-ALTER range too
 SELECT count(*) AS rows_still_null FROM cagg_e2e
 WHERE bucket < '2026-01-03 00:00:00+00'
@@ -303,6 +310,7 @@ SELECT time_bucket(INTERVAL '1 hour', ts) AS bucket, avg(val) AS avg_val
 FROM metrics GROUP BY bucket
 WITH NO DATA;
 CALL refresh_continuous_aggregate('v_atomic', '2026-01-01', '2026-01-02');
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Thu Jan 01 00:00:00 2026 UTC, Fri Jan 02 00:00:00 2026 UTC ]
 \set ON_ERROR_STOP 0
 -- Bad expression: column doesn't exist on the source HT.
 ALTER MATERIALIZED VIEW v_atomic
@@ -343,6 +351,7 @@ FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='v_atomic';
 -- The CAgg must remain fully usable after the failed ALTER
 INSERT INTO metrics VALUES ('2026-01-02 12:00:00+00', 999, 9.99);
 CALL refresh_continuous_aggregate('v_atomic', '2026-01-02', '2026-01-03');
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Jan 02 00:00:00 2026 UTC, Sat Jan 03 00:00:00 2026 UTC ]
 SELECT count(*) > 0 AS refresh_after_failed_alter_works FROM v_atomic;
  refresh_after_failed_alter_works 
 ----------------------------------
@@ -364,6 +373,7 @@ WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_compressed',
                                   '2026-01-01 00:00:00+00'::timestamptz,
                                   '2026-01-04 00:00:00+00'::timestamptz);
+NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Thu Jan 01 00:00:00 2026 UTC, Sun Jan 04 00:00:00 2026 UTC ]
 ALTER MATERIALIZED VIEW cagg_compressed SET (timescaledb.compress = true);
 NOTICE:  defaulting compress_orderby to bucket
 SELECT count(*) AS chunks_compressed FROM (
@@ -414,6 +424,7 @@ CALL refresh_continuous_aggregate('cagg_compressed',
                                   '2026-01-02 00:00:00+00'::timestamptz,
                                   '2026-01-03 00:00:00+00'::timestamptz,
                                   force => true);
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Jan 02 00:00:00 2026 UTC, Sat Jan 03 00:00:00 2026 UTC ]
 SELECT count(*) FROM cagg_compressed
 WHERE bucket >= '2026-01-02 00:00:00+00' AND bucket < '2026-01-03 00:00:00+00'
 AND min_temp IS NOT NULL;
@@ -432,6 +443,7 @@ SELECT time_bucket(INTERVAL '1 hour', ts) AS bucket, avg(val) AS avg_val
 FROM metrics GROUP BY bucket
 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_meta', '2026-01-01', '2026-01-02');
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Thu Jan 01 00:00:00 2026 UTC, Fri Jan 02 00:00:00 2026 UTC ]
 GRANT SELECT ON cagg_meta TO :ROLE_DEFAULT_PERM_USER_2;
 COMMENT ON VIEW cagg_meta IS 'hourly average of val';
 ALTER MATERIALIZED VIEW cagg_meta OWNER TO :ROLE_DEFAULT_PERM_USER;
@@ -504,12 +516,14 @@ SELECT time_bucket(INTERVAL '1 hour', ts) AS bucket, avg(val) AS avg_val
 FROM hier_src GROUP BY bucket
 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_parent', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 6 batch(es) of 6 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CREATE MATERIALIZED VIEW cagg_child
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT time_bucket(INTERVAL '1 day', bucket) AS day_bucket, avg(avg_val) AS daily_avg
 FROM cagg_parent GROUP BY day_bucket
 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_child', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- ADD COLUMN to parent
 ALTER MATERIALIZED VIEW cagg_parent
     ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp)) STORED;
@@ -525,6 +539,7 @@ ALTER MATERIALIZED VIEW cagg_child
 ALTER MATERIALIZED VIEW cagg_child
     ADD COLUMN min_min_temp double precision GENERATED ALWAYS AS (min(min_temp)) STORED;
 CALL refresh_continuous_aggregate('cagg_child', NULL, NULL, force => true);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT day_bucket, daily_avg, min_avg, min_min_temp FROM cagg_child;
           day_bucket          | daily_avg | min_avg | min_min_temp 
 ------------------------------+-----------+---------+--------------
@@ -534,7 +549,9 @@ SELECT day_bucket, daily_avg, min_avg, min_min_temp FROM cagg_child;
 
 -- refresh both caggs to populate the new columns on all rows
 CALL refresh_continuous_aggregate('cagg_parent', NULL, NULL, force => true);
+NOTICE:  continuous aggregate refresh: processed 6 batch(es) of 6 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('cagg_child', NULL, NULL, force => true);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT day_bucket, daily_avg, min_avg, min_min_temp FROM cagg_child;
           day_bucket          | daily_avg | min_avg | min_min_temp 
 ------------------------------+-----------+---------+--------------

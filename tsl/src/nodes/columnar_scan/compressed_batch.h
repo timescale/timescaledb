@@ -50,6 +50,9 @@ typedef struct CompressedColumnValues
 	Datum *output_value;
 	bool *output_isnull;
 
+	/* Storage area for by-reference types. */
+	void *by_ref_storage;
+
 	/*
 	 * The flattened source buffers for getting the decompressed datum.
 	 * Depending on decompression type, they are as follows:

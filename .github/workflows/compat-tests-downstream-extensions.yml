@@ -1,0 +1,129 @@
+name: "Compatibility: OSM, Tiger Lake and Toolkit"
+on:
+  workflow_dispatch:
+    inputs:
+      tsdb-git-ref:
+        description: "git ref of timescale/timescaledb to build"
+        required: true
+        default: "main"
+        type: string
+  workflow_call:
+    inputs:
+      tsdb-git-ref:
+        description: "git ref of timescale/timescaledb to build"
+        required: true
+        type: string
+  # TODO: schedule disabled until tested successfully [pk]
+  #schedule:
+  #  - cron: "0 1 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # On nightly runs, take the git-ref of the current/latest release branch
+  # scheduled runs do not have a required input, and the git-ref's of
+  # timescaldb and OSM must be resolved
+  resolve_ref:
+    name: "Resolve git-ref's"
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    permissions:
+      contents: read
+    outputs:
+      tsdb-git-ref: ${{ steps.resolve_tsdb.outputs.tsdb-git-ref }}
+      osm-git-ref: ${{ steps.resolve_osm.outputs.osm-git-ref }}
+    steps:
+      - uses: runs-on/action@46910bf61b41721b0579f237e186afb35477007a # v2.3.0
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: "timescaledb"
+        id: resolve_tsdb
+        run: |
+          # push: temporary for testing from the feature branch, resolves like schedule
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "push" ]; then
+            REF=$(git ls-remote --heads origin | sed -n 's|.*refs/heads/||p' | grep -E '^[23]\.[0-9]{1,3}\.x$' | sort -V | tail -1)
+            if [ -z "$REF" ]; then
+              echo "No release branch matching ^[23].[0-9]{1,3}.x$ found" >&2
+              exit 1
+            fi
+          else
+            REF="${{ inputs.tsdb-git-ref }}"
+          fi
+          echo "Using tsdb-git-ref: $REF"
+          echo "tsdb-git-ref=$REF" >> "$GITHUB_OUTPUT"
+          {
+            echo ""
+            echo "| Trigger | tsdb-git-ref |"
+            echo "| --- | --- |"
+            echo "| ${{ github.event_name }} | \`$REF\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+        # The git-ref of OSM must be the latest tag
+        # TODO: if necessary in the future accept the OSM git-ref as input
+      - name: OSM
+        id: resolve_osm
+        env:
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          LATEST_TAG=$(gh api repos/timescale/timescaledb-osm/tags --paginate --jq '.[].name' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -rV | head -n1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No release tags found in timescale/timescaledb-osm" >&2
+            exit 1
+          fi
+          echo "Latest timescaledb-osm release tag: $LATEST_TAG"
+          echo "osm-git-ref=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+
+  # Tiger Lake (ext)
+  lake_regression:
+    name: "Tiger Lake: regression"
+    needs: resolve_ref
+    uses: timescale/timescaledb-lake/.github/workflows/regression_test.yml@main
+    with:
+      tsdb-git-ref: ${{ needs.resolve_ref.outputs.tsdb-git-ref }}
+    secrets: inherit
+
+  lake_regression_arm:
+    name: "Tiger Lake: regression (ARM)"
+    needs: resolve_ref
+    uses: timescale/timescaledb-lake/.github/workflows/regression_test_arm.yml@main
+    with:
+      tsdb-git-ref: ${{ needs.resolve_ref.outputs.tsdb-git-ref }}
+    secrets: inherit
+
+  lake_upgrade:
+    name: "Tiger Lake: upgrade"
+    needs: resolve_ref
+    uses: timescale/timescaledb-lake/.github/workflows/update.yml@main
+    with:
+      tsdb-git-ref: ${{ needs.resolve_ref.outputs.tsdb-git-ref }}
+    secrets: inherit
+
+  # OSM
+  osm_multi_version_update:
+    name: "OSM: multi version upgrade"
+    needs: resolve_ref
+    uses: timescale/timescaledb-osm/.github/workflows/multi-version-update.yml@main
+    with:
+      tsdb-git-ref: ${{ needs.resolve_ref.outputs.tsdb-git-ref }}
+      osm-git-ref: ${{ needs.resolve_ref.outputs.osm-git-ref }}
+    secrets: inherit
+
+  osm_update:
+    name: "OSM: update"
+    needs: resolve_ref
+    uses: timescale/timescaledb-osm/.github/workflows/update.yml@main
+    with:
+      tsdb-git-ref: ${{ needs.resolve_ref.outputs.tsdb-git-ref }}
+    secrets: inherit
+
+  osm_regress:
+    name: "OSM: regression"
+    needs: resolve_ref
+    uses: timescale/timescaledb-osm/.github/workflows/regress.yml@main
+    with:
+      tsdb-git-ref: ${{ needs.resolve_ref.outputs.tsdb-git-ref }}
+      osm-git-ref: ${{ needs.resolve_ref.outputs.osm-git-ref }}
+    secrets: inherit

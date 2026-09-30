@@ -216,6 +216,7 @@ step "WP_after_materialization_release"
 session "R1"
 setup
 {
+    SET client_min_messages TO warning;
     SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     INSERT INTO cancelpid VALUES (pg_backend_pid())
@@ -248,6 +249,7 @@ step "RI2_invalidation"
 session "R12"
 setup
 {
+    SET client_min_messages TO warning;
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
 }
@@ -257,6 +259,7 @@ step "R12_refresh"
 }
 
 session "R13"
+setup { SET client_min_messages TO warning; }
 step "R13_refresh1"
 {
     -- the window start 65 is far from the pending range start 30
@@ -293,6 +296,7 @@ step "R13_refresh5"
 session "R2"
 setup
 {
+    SET client_min_messages TO warning;
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
 }
@@ -317,6 +321,7 @@ step "R2_refresh_superset"
 session "R3"
 setup
 {
+    SET client_min_messages TO warning;
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
 }

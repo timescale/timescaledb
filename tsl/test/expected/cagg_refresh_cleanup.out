@@ -24,6 +24,7 @@ GROUP BY 1
 WITH NO DATA;
 -- Set the invalidation threshold via an initial refresh
 CALL refresh_continuous_aggregate('cond_daily', '2026-01-01', '2026-04-01');
+NOTICE:  continuous aggregate refresh: processed 9 batch(es) of 9 in window [ Thu Jan 01 16:00:00 2026 PST, Tue Mar 31 17:00:00 2026 PDT ]
 -- Add invalidations inside the threshold range so future refreshes have real work
 BEGIN; INSERT INTO conditions VALUES ('2026-01-10', 999), ('2026-01-20', 999), ('2026-01-30', 999); COMMIT;
 BEGIN; INSERT INTO conditions VALUES ('2026-02-10', 999), ('2026-02-20', 999); COMMIT;
@@ -58,6 +59,7 @@ SELECT debug_waitpoint_release('cagg_refresh_fail_in_txn1');
 -- Next refresh should succeed
 BEGIN; INSERT INTO conditions VALUES ('2026-01-10', 777), ('2026-01-20', 777); COMMIT;
 CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Fri Jan 09 16:00:00 2026 PST, Sat Feb 28 16:00:00 2026 PST ]
 -- No job should be left behind after the successful refresh
 SELECT count(*) AS jobs_after_next_refresh
 FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
@@ -172,6 +174,7 @@ FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 -- Refresh detects BackendPidGetProc(0) == NULL, removes the stale row, and succeeds
 BEGIN; INSERT INTO conditions VALUES ('2026-01-10', 444), ('2026-01-20', 444); COMMIT;
 CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+NOTICE:  continuous aggregate refresh: processed 6 batch(es) of 6 in window [ Fri Jan 09 16:00:00 2026 PST, Tue Mar 10 17:00:00 2026 PDT ]
 SELECT count(*) AS jobs_after_dead_pid_cleanup
 FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
  jobs_after_dead_pid_cleanup 

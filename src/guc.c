@@ -77,6 +77,7 @@ bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
+TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit = 30000;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
@@ -145,7 +146,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
-TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
+TSDLLEXPORT bool ts_guc_debug_enable_columnarscan = true;
 TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
 #if PG19_LT
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
@@ -569,6 +570,22 @@ _guc_init(void)
 							"single transaction. Setting this to 0 would make it unlimited.",
 							&ts_guc_direct_compress_copy_tuple_sort_limit,
 							100000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("move_to_columnstore_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once when moving a chunk "
+							"to the columnstore",
+							"This is mainly used to keep the memory footprint down when moving "
+							"large amounts of uncompressed data in a single transaction. "
+							"Setting this to 0 would make it unlimited.",
+							&ts_guc_move_to_columnstore_tuple_sort_limit,
+							30000,
 							0,
 							2147483647,
 							PGC_USERSET,
@@ -1383,12 +1400,10 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
-							 "Enable ColumnarScan for columnar storage",
-							 "Transparently decompress columnar data using ColumnarScan custom "
-							 "node. Disabling columnar scan will ignore data stored in columnar "
-							 "format in queries.",
-							 &ts_guc_enable_columnarscan,
+	DefineCustomBoolVariable(MAKE_EXTOPTION("debug_enable_columnarscan"),
+							 "this setting is used for debugging",
+							 "Do not use",
+							 &ts_guc_debug_enable_columnarscan,
 							 true,
 							 PGC_USERSET,
 							 0,

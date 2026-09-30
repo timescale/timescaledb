@@ -233,6 +233,7 @@ INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
 -- Only refresh up to bucket 15 initially. Matches the old refresh
 -- behavior that didn't materialize everything
 CALL refresh_continuous_aggregate('drop_chunks_view', 0, 15);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 15 ]
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
 -------
@@ -306,6 +307,7 @@ SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_table_u,
 INSERT INTO drop_chunks_table_u SELECT i, i FROM generate_series(0, 21) AS i;
 -- Refresh up to bucket 15 to match old materializer behavior
 CALL refresh_continuous_aggregate('drop_chunks_view', 0, 15);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 15 ]
 SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
  count 
 -------
@@ -441,6 +443,7 @@ SELECT
 FROM metrics
 GROUP BY 1 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:00:00 4714 UTC BC, infinity ]
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------
@@ -487,6 +490,7 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(20, 35) AS i;
 CALL refresh_continuous_aggregate('drop_chunks_view', 10, 40);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 10, 40 ]
 --this will be seen after the drop its within the invalidation window and will be dropped
 INSERT INTO drop_chunks_table VALUES (26, 100);
 --this will not be processed by the drop since chunk 30-39 is not dropped but will be seen after refresh
@@ -517,6 +521,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 
 --refresh to process the invalidations and then drop
 CALL refresh_continuous_aggregate('drop_chunks_view', NULL, (integer_now_test2()-9));
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 30 ]
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
                drop_chunks                
 ------------------------------------------
@@ -599,6 +604,7 @@ ORDER BY range_start_integer;
 --dropped data should stay the same as long as we only refresh
 --buckets that have non-dropped data.
 CALL refresh_continuous_aggregate('drop_chunks_view', 30, 40);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 30, 40 ]
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
  time_bucket | max 
 -------------+-----
@@ -628,6 +634,7 @@ INFO:  dropping chunk _timescaledb_internal._hyper_11_17_chunk
 -- hypertable
 INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
 CALL refresh_continuous_aggregate('drop_chunks_view', 45, 55);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 45, 55 ]
 SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
@@ -693,6 +700,7 @@ ORDER BY 1;
 -- Note that this behaviour of dropping the materialization table chunks and expecting a refresh
 -- that overlaps that time range to NOT update those chunks is undefined.
 CALL refresh_continuous_aggregate('drop_chunks_view', 0, 50);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 50 ]
 SELECT * FROM drop_chunks_view
 ORDER BY 1;
  time_bucket | max 
@@ -741,6 +749,7 @@ ORDER BY 1;
 INSERT INTO drop_chunks_table VALUES (:range_start_integer-1, 100);
 -- Now refresh and drop the two adjecent chunks
 CALL refresh_continuous_aggregate('drop_chunks_view', NULL, 30);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 30 ]
 SELECT drop_chunks('drop_chunks_table', older_than=>30);
                drop_chunks                
 ------------------------------------------
@@ -773,6 +782,7 @@ ORDER BY 1;
 
 -- Now refresh in the region of the first two dropped chunks
 CALL refresh_continuous_aggregate('drop_chunks_view', 0, :range_end_integer);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 20 ]
 -- Aggregate data in the refreshed range should no longer exist since
 -- the underlying data was dropped.
 SELECT * FROM drop_chunks_view
@@ -835,7 +845,9 @@ SELECT time_bucket('5', time), COUNT(data)
   FROM whatever GROUP BY 1 WITH NO DATA;
 INSERT INTO whatever SELECT i, i FROM generate_series(0, 29) AS i;
 CALL refresh_continuous_aggregate('whatever_view_1', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 CALL refresh_continuous_aggregate('whatever_view_2', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 SELECT user_view,
        mat_table,
        cagg_info.tablespace AS mat_tablespace,
@@ -1367,7 +1379,11 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = fa
 -- Refresh the continuous aggregate to check that it works after the
 -- rename.
 \set VERBOSITY verbose
+-- Verbose is only here to spell out a failure, so hide the statistics notice
+-- and the source location that comes with it
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+RESET client_min_messages;
 \set VERBOSITY terse
 -- Rename another column after the flip and verify toggling back and
 -- forth still works. This exercises the rename when the user view
@@ -1484,6 +1500,7 @@ NOTICE:  continuous aggregate "test_setting_cagg" is already up-to-date
 INSERT INTO test_setting
 SELECT generate_series( '2020-01-10 8:00'::timestamp, '2020-01-30 10:00+00'::timestamptz, '1 day'::interval), 10.0;
 CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
+NOTICE:  continuous aggregate refresh: processed 51 batch(es) of 51 in window [ Sun Nov 23 16:00:00 4714 UTC BC, Wed Jan 29 22:00:00 2020 UTC ]
 SELECT count(*) from test_setting_cagg ORDER BY 1;
  count 
 -------
@@ -1561,6 +1578,7 @@ CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timesca
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "test_setting_cagg"
 CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:00:00 4714 UTC BC, Sat May 30 02:00:00 2020 UTC ]
 SELECT count(*) from test_setting_cagg ORDER BY 1;
  count 
 -------
@@ -1807,6 +1825,7 @@ SELECT * FROM transactions_montly ORDER BY bucket;
 
 -- Refresh from beginning of the CAGG for 1 month
 CALL refresh_continuous_aggregate('transactions_montly', NULL, INTERVAL '1 month');
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ -infinity, Sat Aug 31 16:00:00 2019 UTC ]
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
@@ -1816,6 +1835,7 @@ SELECT * FROM transactions_montly ORDER BY bucket;
 TRUNCATE transactions_montly;
 -- Partial refresh the CAGG from beginning to an specific timestamp
 CALL refresh_continuous_aggregate('transactions_montly', NULL, '2018-11-01 11:50:00-08'::timestamptz);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, Thu Nov 01 11:50:00 2018 UTC ]
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
@@ -1823,6 +1843,7 @@ SELECT * FROM transactions_montly ORDER BY bucket;
 
 -- Full refresh the CAGG
 CALL refresh_continuous_aggregate('transactions_montly', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, infinity ]
 SELECT * FROM transactions_montly ORDER BY bucket;
             bucket            | sum | max | min 
 ------------------------------+-----+-----+-----
@@ -1845,6 +1866,7 @@ SELECT set_chunk_time_interval('cagg_set_chunk_time_interval', chunk_time_interv
  
 
 CALL refresh_continuous_aggregate('cagg_set_chunk_time_interval', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ -infinity, infinity ]
 SELECT _timescaledb_functions.to_interval(d.interval_length) = interval '1 month'
 FROM _timescaledb_catalog.dimension d
          RIGHT JOIN _timescaledb_catalog.continuous_agg ca ON ca.user_view_name = 'cagg_set_chunk_time_interval'
@@ -1953,6 +1975,7 @@ View definition:
    FROM _timescaledb_internal._materialized_hypertable_52;
 
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:00:00 4714 UTC BC, infinity ]
 SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
@@ -1983,6 +2006,7 @@ SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark
 
 -- Refresh the CAGG
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:00:00 4714 UTC BC, infinity ]
 -- Check the watermark after the refresh and before truncate the CAgg
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_before;
        watermak_before        

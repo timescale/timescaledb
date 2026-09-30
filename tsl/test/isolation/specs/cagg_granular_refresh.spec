@@ -94,7 +94,7 @@ step "s2_insert" { INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor
 
 # Refresh that flushes + flips, then parks (scenario 2).
 session "R"
-setup { SET timezone TO 'UTC'; SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00'; }
+setup { SET client_min_messages TO warning; SET timezone TO 'UTC'; SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00'; }
 step "r_refresh" { CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01'); }
 
 # Narrows the late-arrival window so it no longer covers the 2020 data.
@@ -114,7 +114,7 @@ step "a2_commit" { COMMIT; }
 
 # Verification: a final granular refresh must materialize every tenant correctly.
 session "V"
-setup { SET timezone TO 'UTC'; SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00'; }
+setup { SET client_min_messages TO warning; SET timezone TO 'UTC'; SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00'; }
 step "v_refresh" { CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01'); }
 step "v_check"
 {

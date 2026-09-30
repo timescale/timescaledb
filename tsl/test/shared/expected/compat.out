@@ -217,6 +217,7 @@ WITH DATA;
 NOTICE:  continuous aggregate "sensor_data_hourly" is already up-to-date
 INSERT INTO sensor_data values('1980-01-01 00:00:00-00', 1);
 CALL refresh_continuous_aggregate('sensor_data_hourly', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 13 batch(es) of 13 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- should not return rows because there's old invalid regions
 SELECT lowest_modified_value, greatest_modified_value
 FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log

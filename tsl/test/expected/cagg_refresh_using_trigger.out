@@ -65,7 +65,9 @@ SHOW timezone;
 -- in the bucket's time zone (which is UTC, since time_bucket doesn't
 -- support time zone arg)
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+psql:include/cagg_refresh_common.sql:40: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat May 02 17:00:00 2020 PDT, Sun May 03 17:00:00 2020 PDT ]
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 17:00 PDT', '2020-05-04 17:00 PDT');
+psql:include/cagg_refresh_common.sql:41: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun May 03 17:00:00 2020 PDT, Mon May 04 17:00:00 2020 PDT ]
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 -- These refreshes will fail since they don't align with the bucket's
@@ -96,6 +98,7 @@ HINT:  Align the refresh window with the bucket time zone or use at least two bu
 \set ON_ERROR_STOP 1
 -- Refresh the most recent few days:
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00');
+psql:include/cagg_refresh_common.sql:62: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat May 02 00:00:00 2020 PDT, Tue May 05 17:00:00 2020 PDT ]
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
              day              | device |     avg_temp     
@@ -115,6 +118,7 @@ ORDER BY day DESC, device;
 
 -- Refresh the rest
 CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
+psql:include/cagg_refresh_common.sql:68: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Thu Apr 30 00:00:00 2020 PDT, Mon May 04 00:00:00 2020 PDT ]
 -- Compare the aggregate to the equivalent query on the source table
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
@@ -177,6 +181,7 @@ psql:include/cagg_refresh_common.sql:81: NOTICE:  continuous aggregate "daily_te
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', NULL);
 psql:include/cagg_refresh_common.sql:84: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
 CALL refresh_continuous_aggregate('daily_temp', NULL, NULL);
+psql:include/cagg_refresh_common.sql:85: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- Unbounded window back in time
 CALL refresh_continuous_aggregate('daily_temp', NULL, '2020-05-01');
 psql:include/cagg_refresh_common.sql:88: NOTICE:  continuous aggregate "daily_temp" is already up-to-date
@@ -233,6 +238,7 @@ ORDER BY day DESC, device;
 
 -- Run it again with force=>true, the data should be rematerialized
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00', force=>true);
+psql:include/cagg_refresh_common.sql:130: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat May 02 00:00:00 2020 PDT, Tue May 05 17:00:00 2020 PDT ]
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
              day              | device |     avg_temp     
@@ -265,8 +271,10 @@ SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions_date
 GROUP BY 1,2 WITH NO DATA;
 CALL refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
+psql:include/cagg_refresh_common.sql:146: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 05-01-2020, 05-03-2020 ]
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('daily_temp_date', NULL, NULL);
+psql:include/cagg_refresh_common.sql:149: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 11-24-4714 BC, infinity ]
 -- Test smallint-based continuous aggregate
 CREATE TABLE conditions_smallint (time smallint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_smallint', 'time', chunk_time_interval => 20);
@@ -308,6 +316,7 @@ SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2 WITH NO DATA;
 CALL refresh_continuous_aggregate('cond_20_smallint', 0::smallint, 70::smallint);
+psql:include/cagg_refresh_common.sql:188: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 70 ]
 SELECT * FROM cond_20_smallint
 ORDER BY 1,2;
  bucket | device |     avg_temp     
@@ -327,6 +336,7 @@ ORDER BY 1,2;
 
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('cond_20_smallint', NULL, NULL);
+psql:include/cagg_refresh_common.sql:194: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -32768, 32767 ]
 -- Test int-based continuous aggregate
 CREATE TABLE conditions_int (time int NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_int', 'time', chunk_time_interval => 20);
@@ -356,6 +366,7 @@ SELECT time_bucket(INT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_int
 GROUP BY 1,2 WITH NO DATA;
 CALL refresh_continuous_aggregate('cond_20_int', 0, 65);
+psql:include/cagg_refresh_common.sql:221: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 65 ]
 SELECT * FROM cond_20_int
 ORDER BY 1,2;
  bucket | device |     avg_temp     
@@ -375,6 +386,7 @@ ORDER BY 1,2;
 
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('cond_20_int', NULL, NULL);
+psql:include/cagg_refresh_common.sql:227: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- Test bigint-based continuous aggregate
 CREATE TABLE conditions_bigint (time bigint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_bigint', 'time', chunk_time_interval => 20);
@@ -404,6 +416,7 @@ SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_bigint
 GROUP BY 1,2 WITH NO DATA;
 CALL refresh_continuous_aggregate('cond_20_bigint', 0, 75);
+psql:include/cagg_refresh_common.sql:254: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 75 ]
 SELECT * FROM cond_20_bigint
 ORDER BY 1,2;
  bucket | device |     avg_temp     
@@ -423,6 +436,7 @@ ORDER BY 1,2;
 
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('cond_20_bigint', NULL, NULL);
+psql:include/cagg_refresh_common.sql:260: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 -- Test that WITH NO DATA and WITH DATA works (we use whatever is the
 -- default for Postgres, so we do not need to have test for the
 -- default).
@@ -576,6 +590,7 @@ CREATE MATERIALIZED VIEW daily_temp_decompress_limit WITH (tsdb.continuous) AS S
 ALTER MATERIALIZED VIEW daily_temp_decompress_limit SET (tsdb.columnstore,tsdb.segmentby = 'device');
 psql:include/cagg_refresh_common.sql:413: NOTICE:  defaulting compress_orderby to day
 CALL refresh_continuous_aggregate('daily_temp_decompress_limit', NULL, NULL);
+psql:include/cagg_refresh_common.sql:414: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT compress_chunk(show_chunks('daily_temp_decompress_limit'));
               compress_chunk              
 ------------------------------------------
@@ -584,6 +599,7 @@ SELECT compress_chunk(show_chunks('daily_temp_decompress_limit'));
 INSERT INTO conditions_decompress_limit SELECT '2020-01-01','d' || i::text, 2.0 FROM generate_series(1,100) g(i);
 SET timescaledb.max_tuples_decompressed_per_dml_transaction TO 1;
 CALL refresh_continuous_aggregate('daily_temp_decompress_limit', NULL, NULL);
+psql:include/cagg_refresh_common.sql:418: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SHOW timescaledb.max_tuples_decompressed_per_dml_transaction;
  timescaledb.max_tuples_decompressed_per_dml_transaction 
 ---------------------------------------------------------
@@ -616,6 +632,7 @@ FROM conditions
 GROUP BY 1, 2
 WITH NO DATA;
 CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'::timestamptz, '2025-07-04 12:00:00+00'::timestamptz);
+psql:include/cagg_refresh_common.sql:451: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jul 04 10:00:00 2025 UTC, Fri Jul 04 12:00:00 2025 UTC ]
 -- It should return 2 buckets
 SELECT * FROM conditions_by_hour ORDER BY bucket;
             bucket            | device | max | min | count 
@@ -643,6 +660,7 @@ ORDER BY 1;
 -- to move the invalidation into the cagg invalidation log.
 INSERT INTO conditions VALUES ('2025-07-04 10:30:00+00', 1, 2);
 CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 01:00:00+00'::timestamptz, '2025-07-04 06:00:00+00'::timestamptz);
+psql:include/cagg_refresh_common.sql:470: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jul 04 01:00:00 2025 UTC, Fri Jul 04 06:00:00 2025 UTC ]
 -- Cagg invalidation log before the force refresh, should have an entry
 -- that contains the bucket from 10:00 to 10:59:59.99
 -- which is 3:00:00 - 3:59:59.99 PDT
@@ -669,6 +687,7 @@ INSERT INTO conditions VALUES ('2025-07-04 09:30:00+00', 1, 2), ('2025-07-04 10:
 INSERT INTO conditions VALUES ('2025-07-04 10:50:00+00', 1, 40), ('2025-07-04 11:20:00+00', 1, 50);
 INSERT INTO conditions VALUES ('2025-07-04 11:50:00+00', 1, 60), ('2025-07-04 12:20:00+00', 1, 70);
 CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'::timestamptz, '2025-07-04 12:00:00+00'::timestamptz, force=>true);
+psql:include/cagg_refresh_common.sql:491: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jul 04 10:00:00 2025 UTC, Fri Jul 04 12:00:00 2025 UTC ]
 -- It should return the same 2 buckets of previous query (with updated count for 10:00 and 11:00 buckets)
 SELECT * FROM conditions_by_hour ORDER BY bucket;
             bucket            | device | max | min | count 
@@ -698,6 +717,7 @@ ORDER BY 1;
 
 --run another refresh to verify that the 2 inval entries for [ 2025-07-04 12:00 , ..] are consumed
 CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 12:00:00+00'::timestamptz, '2025-07-04 14:00:00+00'::timestamptz);
+psql:include/cagg_refresh_common.sql:509: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jul 04 12:00:00 2025 UTC, Fri Jul 04 14:00:00 2025 UTC ]
 SELECT
   _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
   _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
@@ -715,6 +735,7 @@ ORDER BY 1;
 
 --run another refresh to verify that the 2 inval entries for [ ..., 2025-07-04 09:59.59 , ..] are consumed
 CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 06:00:00+00'::timestamptz, '2025-07-04 10:00:00+00'::timestamptz);
+psql:include/cagg_refresh_common.sql:520: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jul 04 06:00:00 2025 UTC, Fri Jul 04 10:00:00 2025 UTC ]
 SELECT
   _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
   _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
@@ -750,6 +771,7 @@ FROM conditions
 GROUP BY 1, 2
 WITH NO DATA;
 CALL refresh_continuous_aggregate('conditions_by_month', '2025-05-01 00:00:00+00'::timestamptz, '2025-07-01 12:00:00+00'::timestamptz);
+psql:include/cagg_refresh_common.sql:555: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Apr 30 17:00:00 2025 PDT, Tue Jul 01 05:00:00 2025 PDT ]
 -- It should return 2 buckets
 SELECT * FROM conditions_by_month ORDER BY bucket;
             bucket            | device | max | min | count 
@@ -758,6 +780,7 @@ SELECT * FROM conditions_by_month ORDER BY bucket;
  Sat May 31 17:00:00 2025 PDT |      1 |   1 |   1 |     2
 
 CALL refresh_continuous_aggregate('conditions_by_month', '2025-05-01 00:00:00+00'::timestamptz, '2025-07-01 12:00:00+00'::timestamptz, force=>true);
+psql:include/cagg_refresh_common.sql:559: NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Apr 30 17:00:00 2025 PDT, Tue Jul 01 05:00:00 2025 PDT ]
 -- It should return the same 2 buckets of previous query
 SELECT * FROM conditions_by_month ORDER BY bucket;
             bucket            | device | max | min | count 

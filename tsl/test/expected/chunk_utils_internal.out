@@ -672,6 +672,9 @@ SELECT * FROM hypertable_approximate_size('ht_try');
 -- Error for a hypertable that has no OSM chunk
 SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('test1.hyper1');
 ERROR:  no OSM chunk found for hypertable test1.hyper1
+-- Cannot add dimensions with tiering
+SELECT add_dimension('ht_try', 'acq_id', number_partitions => 2);
+ERROR:  multiple dimensions not supported for hypertables with data tiering enabled
 \set ON_ERROR_STOP 1
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;
@@ -723,12 +726,14 @@ SELECT * FROM ht_try_weekly;
 
 SET timescaledb.enable_tiered_reads=false;
 CALL refresh_continuous_aggregate('ht_try_weekly', '2019-12-29', '2020-01-10', force=>false);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Dec 29 00:00:00 2019 PST, Fri Jan 10 00:00:00 2020 PST ]
 SELECT * FROM ht_try_weekly;
  ts_bucket | avg 
 -----------+-----
 
 SET timescaledb.enable_tiered_reads=true;
 CALL refresh_continuous_aggregate('ht_try_weekly', '2019-12-29', '2020-01-10', force=>true);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Dec 29 00:00:00 2019 PST, Fri Jan 10 00:00:00 2020 PST ]
 SELECT * FROM ht_try_weekly;
           ts_bucket           |          avg          
 ------------------------------+-----------------------
@@ -774,6 +779,7 @@ NOTICE:  config: {
     "include_tiered_data": true
 }
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Sun Jul 10 17:00:00 2022 PDT ]
 SELECT * FROM ht_try_weekly ORDER BY 1;
           ts_bucket           |          avg          
 ------------------------------+-----------------------
@@ -791,6 +797,7 @@ NOTICE:  config: {
     "include_tiered_data": false
 }
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Sun Jul 10 17:00:00 2022 PDT ]
 SELECT * FROM ht_try_weekly ORDER BY 1;
           ts_bucket           |         avg          
 ------------------------------+----------------------
@@ -806,6 +813,7 @@ NOTICE:  config: {
     "mat_hypertable_id": 8
 }
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Sun Jul 10 17:00:00 2022 PDT ]
 SELECT * FROM ht_try_weekly ORDER BY 1;
           ts_bucket           |          avg          
 ------------------------------+-----------------------
