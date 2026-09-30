@@ -347,3 +347,25 @@ SELECT kind::text FROM enum_metrics WHERE kind::text = (ROW(1,2)::dca_row)::text
 -- NULL input
 SELECT kind::text FROM enum_metrics WHERE kind = CAST(NULL::text AS dca_enum) LIMIT 1;
 RESET timescaledb.debug_require_deferred_chunk_scan;
+
+-- float literals under a lossy extra_float_digits
+CREATE TABLE float_metrics (time timestamptz NOT NULL, val float8 NOT NULL)
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO float_metrics VALUES ('2020-01-01', 1.0), ('2020-01-02', 0.30000000000000004);
+SET extra_float_digits = 0;
+SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SELECT time FROM float_metrics WHERE val = '1.0000000000000002'::float8 ORDER BY time LIMIT 1;
+SELECT val FROM float_metrics WHERE val = 0.30000000000000004::float8 ORDER BY time LIMIT 1;
+RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET extra_float_digits;
+
+-- array literals with a NULL element under array_nulls = off
+CREATE TABLE array_metrics (time timestamptz NOT NULL, tags text[])
+  WITH (tsdb.hypertable, tsdb.partition_column = 'time');
+INSERT INTO array_metrics VALUES ('2020-01-01', ARRAY['hello', 'NULL']::text[]);
+SET array_nulls = off;
+SET timescaledb.debug_require_deferred_chunk_scan TO 'require';
+SELECT tags FROM array_metrics WHERE tags = ARRAY['hello', NULL]::text[] ORDER BY time LIMIT 1;
+SELECT tags FROM array_metrics WHERE tags = ARRAY['hello', 'NULL']::text[] ORDER BY time LIMIT 1;
+RESET timescaledb.debug_require_deferred_chunk_scan;
+RESET array_nulls;
