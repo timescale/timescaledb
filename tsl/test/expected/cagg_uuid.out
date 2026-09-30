@@ -83,9 +83,7 @@ INSERT INTO ts_events VALUES
        (uuid_timestamp('019552dd-7500-7000-8a80-103c4d6ee60e'), 3, 7.0);
 -- Refresh the caggs
 CALL refresh_continuous_aggregate('daily_uuid_events', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('daily_ts_events', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- The caggs should be updated in the same way
 SELECT * FROM daily_uuid_events ORDER BY day;
              day              | temp  
@@ -112,9 +110,7 @@ INSERT INTO ts_events VALUES
        (uuid_timestamp('0194256e-cd00-7000-a9a7-63f1416dab45'), 4, 8.0),
        (uuid_timestamp('019552fd-7500-7000-8a80-103c4d6ee60e'), 5, 9.0);
 CALL refresh_continuous_aggregate('daily_uuid_events', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('daily_ts_events', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM daily_uuid_events ORDER BY day;
              day              | temp  
 ------------------------------+-------
@@ -183,9 +179,7 @@ select count(*) from ts_events;
 
 CALL refresh_continuous_aggregate('daily_uuid_events', NULL, NULL);
 WARNING:  disabling direct compress because of too small batch size
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('daily_ts_events', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM daily_uuid_events ORDER BY day;
              day              |  temp  
 ------------------------------+--------
@@ -246,13 +240,9 @@ VALUES
 SELECT add_continuous_aggregate_policy('daily_uuid_events', start_offset => NULL, end_offset => NULL, schedule_interval => '1 minute') AS job_id \gset
 CALL run_job(:job_id);
 WARNING:  disabling direct compress because of too small batch size
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('weekly_uuid_events', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('daily_ts_events', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 CALL refresh_continuous_aggregate('weekly_ts_events', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM daily_uuid_events ORDER BY day;
              day              |  temp  
 ------------------------------+--------
@@ -472,7 +462,6 @@ SELECT * FROM daily_uuid_realtime ORDER BY day;
 
 -- Refresh and verify results are consistent
 CALL refresh_continuous_aggregate('daily_uuid_realtime', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM daily_uuid_realtime ORDER BY day;
              day              | total_temp 
 ------------------------------+------------

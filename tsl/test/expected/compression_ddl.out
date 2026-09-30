@@ -483,9 +483,7 @@ SELECT add_continuous_aggregate_policy('test1_cont_view', NULL, '1 hour'::interv
 ---------------------------------
                             1001
 
-SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('test1_cont_view', NULL, NULL);
-RESET client_min_messages;
 SELECT count(*) FROM test1_cont_view;
  count 
 -------
