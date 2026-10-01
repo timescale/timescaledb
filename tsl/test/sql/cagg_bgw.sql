@@ -27,6 +27,17 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 --test that this all works under the community license
 ALTER DATABASE :TEST_DBNAME SET timescaledb.license_key='Community';
 
+-- The parameter that controls the background worker log level differs by
+-- PostgreSQL version: timescaledb.bgw_log_level before PG19, and the native
+-- per-backend-type log_min_messages from PG19 on.
+SELECT CASE WHEN current_setting('server_version_num')::int >= 190000
+            THEN 'log_min_messages' ELSE 'timescaledb.bgw_log_level' END AS bgw_log_param,
+       CASE WHEN current_setting('server_version_num')::int >= 190000
+            THEN 'warning, bgworker:warning' ELSE 'warning' END AS bgw_log_value
+\gset
+ALTER SYSTEM SET :bgw_log_param TO :'bgw_log_value';
+SELECT pg_reload_conf();
+
 --create a function with no permissions to execute
 
 CREATE FUNCTION get_constant_no_perms() RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS
@@ -375,3 +386,8 @@ SELECT * from sorted_bgw_log;
 SELECT count(*) FROM _timescaledb_catalog.bgw_job
  WHERE proc_schema = '_timescaledb_functions'
    AND proc_name = 'policy_refresh_continuous_aggregate';
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+ALTER SYSTEM RESET :bgw_log_param;
+SELECT pg_reload_conf();

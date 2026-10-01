@@ -109,8 +109,8 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
     for test_pattern in ${SKIPS}; do
       for test_name in ${ALL_TESTS}; do
         if [[ $test_name == $test_pattern ]]; then
-          sed -e "s!^test:\s*${test_name}\s*\$!!" -i.backup ${TEMP_SCHEDULE}
-          sed -e "s!\b${test_name}\b!!" -i.backup ${TEMP_SCHEDULE}
+          sed -e "s!^test:[[:space:]]*${test_name}[[:space:]]*\$!!" -i.backup ${TEMP_SCHEDULE}
+          sed -E -e "s!(^|[^A-Za-z0-9_])${test_name}([^A-Za-z0-9_]|\$)!\1\2!g" -i.backup ${TEMP_SCHEDULE}
         fi
       done
     done

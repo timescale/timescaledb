@@ -44,6 +44,7 @@ INSERT INTO conditions
 -- insert so that refresh has something to do.  refresh will also flush shared mem emtries
 INSERT INTO conditions VALUES ( '2025-03-01 10:00+00', 'sensor_b', 20);
 CALL refresh_continuous_aggregate('cond_daily', '2025-03-01 00:00+00', NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Mar 01 00:00:00 2025 UTC, infinity ]
 -- Note that before the above refresh, invalidation threshold was set as min int64,
 -- So the inserts doesn't write invalidations. Therefore, although the invalid marker
 -- is written, it does not have an associated invalidation in the invalidation log.
@@ -59,6 +60,7 @@ WHERE hypertable_id = (
 
 --now refresh the actual range, should fallback to regular refresh
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ]
 -- Every distinct sensor is materialized; each bucket has a single row so its
 -- average equals the inserted value (the numeric suffix of the sensor name).
 SELECT count(*) AS materialized_sensors,
@@ -85,6 +87,7 @@ INSERT INTO conditions VALUES
 -- will force write out of invalid seqnum entry
 INSERT INTO conditions VALUES ( '2025-01-01 10:00+00', 'sensor_b', 20);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
 SELECT *
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
 WHERE hypertable_id = (
@@ -95,6 +98,7 @@ WHERE hypertable_id = (
 
 --refresh still works by using invalidation logs
 CALL refresh_continuous_aggregate('cond_daily', '2020-02-01 00:00+00', NULL);
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sat Feb 01 00:00:00 2020 UTC, infinity ]
 SELECT length(sensor_id) AS key_len, avg
 FROM cond_daily
 WHERE bucket = '2020-02-01 00:00+00'
@@ -117,6 +121,7 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::re
 
 -- Both groups materialize via the fall back.
 CALL refresh_continuous_aggregate('cond_daily', '2020-05-01 00:00+00', '2020-05-02 00:00+00');
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri May 01 00:00:00 2020 UTC, Sat May 02 00:00:00 2020 UTC ]
 SELECT sensor_id, avg
 FROM cond_daily
 WHERE bucket = '2020-05-01 00:00+00'
@@ -164,6 +169,7 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('conditions'::re
 
 -- Both groups materialize via the fall back.
 CALL refresh_continuous_aggregate('cond_daily', '2020-06-01 00:00+00', '2020-06-02 00:00+00');
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Jun 01 00:00:00 2020 UTC, Tue Jun 02 00:00:00 2020 UTC ]
 SELECT sensor_id, avg
 FROM cond_daily
 WHERE bucket = '2020-06-01 00:00+00'
@@ -195,6 +201,7 @@ INSERT INTO conditions_untracked VALUES
   ('2020-03-01 00:00+00', 'sensor_a', 3),
   ('2020-03-01 00:00+00', 'sensor_b', 5);
 CALL refresh_continuous_aggregate('cond_untracked_daily', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 SELECT sensor_id, avg
 FROM cond_untracked_daily
 WHERE bucket = '2020-03-01 00:00+00'
@@ -268,6 +275,7 @@ ALTER MATERIALIZED VIEW readings_daily SET (timescaledb.enable_granular_refresh 
 -- Refresh first so the invalidation threshold is above all three timestamps
 -- below and every insert actually lands in the invalidation log.
 CALL refresh_continuous_aggregate('readings_daily', NULL, '2026-01-01 00:00+00');
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu Jan 01 00:00:00 2026 UTC ]
 -- One transaction each: before the window, inside it, after it.
 INSERT INTO readings VALUES ('2020-06-01 00:00+00', 'before_window', 1);
 INSERT INTO readings VALUES ('2022-06-01 00:00+00', 'inside_window', 2);
@@ -293,6 +301,7 @@ ORDER BY greatest_modified_value;
 -- All three are materialized correctly: the inside-window one via the granular
 -- path, the other two via the full-log fall back.
 CALL refresh_continuous_aggregate('readings_daily', NULL, '2026-01-01 00:00+00');
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Sun Jun 09 00:00:00 2024 UTC ]
 SELECT sensor_id, avg
 FROM readings_daily
 ORDER BY sensor_id;
@@ -325,6 +334,7 @@ SELECT seq_num FROM
        4
 
 CALL refresh_continuous_aggregate('readings_daily', NULL, '2023-01-01 00:00+00');
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Sun Jan 01 00:00:00 2023 UTC ]
 -- No flush, so the seqnum did not advance.
 SELECT seq_num AS seqnum_unchanged
 FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass);
@@ -339,6 +349,7 @@ SELECT seq_num AS seq_before FROM
 ALTER MATERIALIZED VIEW readings_daily SET (timescaledb.enable_granular_refresh = true);
 INSERT INTO readings VALUES ('2022-08-01 00:00+00', 'after_reenable', 5);
 CALL refresh_continuous_aggregate('readings_daily', NULL, '2023-01-01 00:00+00');
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Sun Jan 01 00:00:00 2023 UTC ]
 SELECT seq_num > :seq_before AS seqnum_advanced
 FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass);
  seqnum_advanced 

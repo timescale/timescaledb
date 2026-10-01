@@ -872,15 +872,14 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		return NULL;
 	}
 
-	if (OidIsValid(var->varcollid) && !get_collation_isdeterministic(var->varcollid))
+	/*
+	 * The vector predicates compare bytes. That is only correct for a
+	 * deterministic collation, and the collation the operator runs with can
+	 * differ from the column's, for example with COLLATE in the query.
+	 */
+	Oid collation = opexpr ? opexpr->inputcollid : saop->inputcollid;
+	if (OidIsValid(collation) && !get_collation_isdeterministic(collation))
 	{
-		/*
-		 * Can't vectorize string equality with a nondeterministic collation.
-		 * Not sure if we have to check the collation of Const as well, but it
-		 * will be known only at planning time. Currently we don't check it at
-		 * all. Also this is untested because we don't have nondeterministic
-		 * collations in all test configurations.
-		 */
 		return NULL;
 	}
 

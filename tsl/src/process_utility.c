@@ -29,6 +29,7 @@
 #include "process_utility.h"
 #include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_tenant_tracking.h"
 #include "ts_catalog/hypertable_cagg_settings.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
@@ -416,6 +417,14 @@ tsl_process_granular_refresh_options(Hypertable *ht, WithClauseResult *with_clau
 	}
 	else
 	{
+		/*
+		 * Tracking rows can outlive the configuration that produced them:
+		 * disabling deletes the settings row without deleting them. When we
+		 * re-enable trackings on the hypertable, we need to clear any existing
+		 * trackings of that ht, because the trackings could have been produced
+		 * with a different tracking column.
+		 */
+		ts_cagg_tenant_tracking_delete_by_hypertable_id(ht->fd.id);
 		ts_hypertable_cagg_settings_insert(&settings);
 	}
 }

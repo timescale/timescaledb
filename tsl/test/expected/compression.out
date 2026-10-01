@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-SET timescaledb.enable_columnarscan to OFF;
+SET timescaledb.debug_enable_columnarscan to OFF;
 SET timezone TO 'America/Los_Angeles';
 \set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 \ir include/rand_generator.sql
@@ -52,10 +52,10 @@ SELECT count(*) from foo;
 
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 --test self-refencing updates
-SET timescaledb.enable_columnarscan to ON;
+SET timescaledb.debug_enable_columnarscan to ON;
 update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
-SET timescaledb.enable_columnarscan to OFF;
+SET timescaledb.debug_enable_columnarscan to OFF;
 SELECT id, schema_name, table_name, status & 4 = 4 as compressed FROM _timescaledb_catalog.hypertable ORDER BY id;
  id | schema_name | table_name | compressed 
 ----+-------------+------------+------------
@@ -489,7 +489,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
  t
 
 -- test plans get invalidated when chunks get compressed
-SET timescaledb.enable_columnarscan TO ON;
+SET timescaledb.debug_enable_columnarscan TO ON;
 CREATE TABLE plan_inval(time timestamptz, device_id int);
 SELECT create_hypertable('plan_inval','time');
     create_hypertable    
@@ -865,7 +865,9 @@ SELECT
   count(*) AS cnt
 FROM metrics
 GROUP BY 1 WITH NO DATA;
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
+RESET client_min_messages;
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 | cnt  
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------+------
@@ -1534,7 +1536,9 @@ CREATE MATERIALIZED VIEW tidrangescan_expr WITH (timescaledb.continuous)
    count(*) AS cnt
  FROM tidrangescan_test
  WHERE ctid < '(1,1)'::tid GROUP BY 1 WITH NO DATA;
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('tidrangescan_expr', NULL, NULL);
+RESET client_min_messages;
 SET timescaledb.enable_chunk_append to off;
 SET enable_indexscan to off;
 SELECT time, const, numeric,first, avg1, avg2 FROM tidrangescan_expr ORDER BY time LIMIT 5;

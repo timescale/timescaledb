@@ -988,7 +988,11 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = fa
 -- Refresh the continuous aggregate to check that it works after the
 -- rename.
 \set VERBOSITY verbose
+-- Verbose is only here to spell out a failure, so hide the statistics notice
+-- and the source location that comes with it
+SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+RESET client_min_messages;
 \set VERBOSITY terse
 
 -- Rename another column after the flip and verify toggling back and

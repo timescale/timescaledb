@@ -153,6 +153,7 @@ def macos_config(overrides):
         "pg_dump",
         "compression_bgw",
         "compressed_collation",
+        "compressed_collation_icu",
     }
     openssl_path = "/usr/local/opt/openssl@3"
     base_config = dict(
@@ -177,6 +178,11 @@ def macos_config(overrides):
             ),
         }
     )
+    if "ignored_tests" in overrides:
+        overrides = dict(overrides)
+        overrides["ignored_tests"] = overrides["ignored_tests"].union(
+            macos_ignored_tests
+        )
     base_config.update(overrides)
     return base_config
 

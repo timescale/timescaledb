@@ -97,6 +97,7 @@ AS :QUERY_AFTER WITH NO DATA;
 --materialize mat_before
 SET client_min_messages TO NOTICE;
 CALL refresh_continuous_aggregate('mat_before', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT count(*) FROM conditions_before;
  count 
 -------
@@ -160,6 +161,7 @@ ERROR:  cannot drop the partial/direct view because it is required by a continuo
 \set ON_ERROR_STOP 1
 --materialize mat_after
 CALL refresh_continuous_aggregate('mat_after', NULL, NULL);
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT count(*) FROM mat_after;
  count 
 -------

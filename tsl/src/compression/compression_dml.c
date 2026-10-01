@@ -95,9 +95,8 @@ static bool key_column_is_null(tuple_filtering_constraints *constraints, Relatio
 							   Oid ht_relid, TupleTableSlot *slot);
 static bool is_null_or_contains_nulls(Const *const_value);
 static bool direct_delete_prerequisites(ModifyHypertableState *ht_state);
-static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
-											CompressionSettings *settings, Relation chunk_rel,
-											Oid ht_relid, ScanKeyWithAttnos *mem_scankeys);
+static bool can_vectorize_scankeys(const ScanKeyWithAttnos *mem_scankeys,
+								   CompressionSettings *settings, Relation chunk_rel);
 static void update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
 static void init_upsert_bloom_state(ChunkInsertState *cis);
 static Bitmapset *get_arbiter_index_attnums(ChunkInsertState *cis);
@@ -227,6 +226,16 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 	 */
 	Assert(cdst->constraints != NULL);
 	conflict_attnums = bms_intersect(conflict_attnums, cdst->constraints->key_columns);
+
+	/* the bloom filter hashes bytes and cannot match a case or accent variant */
+	int attno = -1;
+	while ((attno = bms_next_member(conflict_attnums, attno)) > 0)
+	{
+		if (!collation_is_deterministic(cdst->constraints->key_collations[attno]))
+		{
+			conflict_attnums = bms_del_member(conflict_attnums, attno);
+		}
+	}
 	if (bms_is_empty(conflict_attnums))
 	{
 		return;
@@ -382,18 +391,15 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 											 &cdst->mem_scankeys.num_scankeys,
 											 &cdst->mem_scankeys.attnos);
 
-			cdst->constraints->vectorized_filtering =
-				can_vectorize_constraint_checks(constraints,
-												compression_settings,
-												cis->rel,
-												cis->hypertable_relid,
-												&cdst->mem_scankeys);
+			cdst->mem_scankeys.vectorized =
+				can_vectorize_scankeys(&cdst->mem_scankeys, compression_settings, cis->rel);
 
 			cdst->index_scankeys.scankeys =
 				build_index_scankeys_using_slot(cis->hypertable_relid,
 												in_rel,
 												cis->rel,
 												constraints->key_columns,
+												constraints->key_collations,
 												slot,
 												&index_rel,
 												&index_columns,
@@ -420,6 +426,7 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 														   cis->rel,
 														   compression_settings,
 														   key_columns,
+														   constraints->key_collations,
 														   &columns_with_null_check,
 														   slot,
 														   &cdst->heap_scankeys.num_scankeys,
@@ -958,6 +965,14 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	temp_cdst.heap_scankeys.num_scankeys = num_scankeys;
 	temp_cdst.mem_scankeys.scankeys = mem_scankeys;
 	temp_cdst.mem_scankeys.num_scankeys = num_mem_scankeys;
+	/*
+	 * like for INSERTs, evaluate bulk-decompressed key columns for in-memory
+	 * scan keys with vector predicates when every key and predicate
+	 * allows it.
+	 */
+	temp_cdst.mem_scankeys.vectorized =
+		ts_guc_enable_optimizations &&
+		can_vectorize_scankeys(&temp_cdst.mem_scankeys, settings, chunk_rel);
 	temp_cdst.constraints = NULL;
 	temp_cdst.columns_with_null_check = null_columns;
 	temp_cdst.bloom_filters = bloom_filters;
@@ -1124,7 +1139,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 	Bitmapset *null_columns = cdst->columns_with_null_check;
 
 	BatchMatcher *batch_matcher =
-		constraints && constraints->vectorized_filtering ? batch_matches_vectorized : batch_matches;
+		cdst->mem_scankeys.vectorized ? batch_matches_vectorized : batch_matches;
 	AttrNumber meta_count_attno = InvalidAttrNumber;
 
 	struct decompress_batches_stats stats = { 0 };
@@ -1943,6 +1958,7 @@ get_batch_keys_for_unique_constraints(Relation relation)
 	tuple_filtering_constraints *constraints = palloc0(sizeof(tuple_filtering_constraints));
 	constraints->on_conflict = ONCONFLICT_UPDATE;
 	constraints->nullsnotdistinct = false;
+	Bitmapset *mixed_collations = NULL;
 	ListCell *lc;
 
 	/* Fast path if definitely no indexes */
@@ -1958,6 +1974,9 @@ get_batch_keys_for_unique_constraints(Relation relation)
 	{
 		return constraints;
 	}
+
+	constraints->key_collations =
+		palloc0(sizeof(Oid) * (RelationGetNumberOfAttributes(relation) + 1));
 
 	foreach (lc, indexoidlist)
 	{
@@ -1991,6 +2010,31 @@ get_batch_keys_for_unique_constraints(Relation relation)
 
 			Assert(AttrNumberIsForUserDefinedAttr(attno));
 			idx_attrs = bms_add_member(idx_attrs, attno);
+
+			/*
+			 * Batches are matched with one collation per column, and it has
+			 * to find every row that any of the unique indexes considers
+			 * equal. A non-deterministic collation also matches everything a
+			 * deterministic one does, so it wins over a deterministic one.
+			 * Two different non-deterministic collations each match rows the
+			 * other does not, so such a column cannot filter batches and is
+			 * removed from the key columns below.
+			 */
+			Oid collation = indexDesc->rd_indcollation[i];
+			Oid key_collation = constraints->key_collations[attno];
+			if (!OidIsValid(key_collation))
+			{
+				/* first unique index with this column */
+				constraints->key_collations[attno] = collation;
+			}
+			else if (!collation_is_deterministic(collation))
+			{
+				if (key_collation != collation && !collation_is_deterministic(key_collation))
+				{
+					mixed_collations = bms_add_member(mixed_collations, attno);
+				}
+				constraints->key_collations[attno] = collation;
+			}
 		}
 		index_close(indexDesc, AccessShareLock);
 
@@ -2029,6 +2073,7 @@ get_batch_keys_for_unique_constraints(Relation relation)
 		}
 	}
 
+	constraints->key_columns = bms_del_members(constraints->key_columns, mixed_collations);
 	return constraints;
 }
 
@@ -2824,66 +2869,60 @@ direct_delete_prerequisites(ModifyHypertableState *ht_state)
 	return true;
 }
 
+/*
+ * decide once per statement whether the in-memory scan keys can be
+ * evaluated with vector predicates on the bulk-decompressed key columns
+ */
 static bool
-can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
-								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid,
-								ScanKeyWithAttnos *mem_scankeys)
+can_vectorize_scankeys(const ScanKeyWithAttnos *mem_scankeys, CompressionSettings *settings,
+					   Relation chunk_rel)
 {
-	AttrNumber chunk_attno = -1;
-	Oid typoid, collid;
-	int32 typmod;
-
 	if (mem_scankeys == NULL || mem_scankeys->num_scankeys == 0)
 	{
 		return false;
 	}
 
-	/* We can only vectorize if a vectorized check is available for all scankeys */
+	if (!ts_guc_enable_bulk_decompression)
+	{
+		return false;
+	}
+
 	for (int sk = 0; sk < mem_scankeys->num_scankeys; sk++)
 	{
 		/*
-		 * Here we cannot check for NULL flags even if that is
-		 * handled separately, because this code is called from
-		 * the `init_decompress_state_for_insert` which sets the
-		 * flag based on the first record to be inserted and the
-		 * value may change for the subsequent records.
-		 *
-		 * The `fn_oid` doesn't get updated so it is valid to check
-		 * it here.
+		 * Here we cannot check for NULL flags even if that is handled
+		 * separately, because for INSERT this is called from
+		 * init_decompress_state_for_insert(), which sets the flag based on
+		 * the first record to be inserted and the value may change for the
+		 * subsequent records. The fn_oid doesn't get updated so it is valid
+		 * to check it here.
 		 */
-		ScanKeyData *scankey = &mem_scankeys->scankeys[sk];
+		const ScanKeyData *scankey = &mem_scankeys->scankeys[sk];
 		if (get_vector_const_predicate(scankey->sk_func.fn_oid) == NULL)
 		{
 			return false;
 		}
-	}
 
-	while ((chunk_attno = bms_next_member(constraints->key_columns, chunk_attno)) > 0)
-	{
-		/*
-		 * slot has the physical layout of the hypertable, so we need to
-		 * get the attribute number of the hypertable for the column.
-		 */
-		char *attname = get_attname(chunk_rel->rd_id, chunk_attno, false);
+		/* vector predicates compare bytes */
+		if (!collation_is_deterministic(scankey->sk_collation))
+		{
+			return false;
+		}
 
-		/* Ignore segmentby columns, they aren't compressed */
+		/* sk_attno is the attribute number in the uncompressed chunk */
+		char *attname = get_attname(chunk_rel->rd_id, scankey->sk_attno, false);
+
+		/* Segmentby columns are stored uncompressed and never need decompression. */
 		if (ts_array_is_member(settings->fd.segmentby, attname))
 		{
 			continue;
 		}
 
-		get_atttypetypmodcoll(chunk_rel->rd_id, chunk_attno, &typoid, &typmod, &collid);
+		Oid typoid = get_atttype(chunk_rel->rd_id, scankey->sk_attno);
 
 		/* No bulk decompression function, no vectorized filtering */
 		if (tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) ==
 			NULL)
-		{
-			return false;
-		}
-
-		/* For text types, check for non-deterministic collation which
-		 * prevents vectorized filtering */
-		if (typoid == TEXTOID && OidIsValid(collid) && !get_collation_isdeterministic(collid))
 		{
 			return false;
 		}

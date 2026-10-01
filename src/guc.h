@@ -46,6 +46,7 @@ extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
 extern int ts_guc_direct_compress_copy_tuple_sort_limit;
+extern TSDLLEXPORT int ts_guc_move_to_columnstore_tuple_sort_limit;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert;
 extern bool ts_guc_enable_direct_compress_insert_sort_batches;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted;
@@ -118,7 +119,7 @@ extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
 extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
-extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
+extern TSDLLEXPORT bool ts_guc_debug_enable_columnarscan;
 extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
 #if PG19_LT
 extern TSDLLEXPORT int ts_guc_bgw_log_level;

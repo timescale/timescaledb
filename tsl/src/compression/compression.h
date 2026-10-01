@@ -408,6 +408,7 @@ extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorith
 															 Oid type);
 
 typedef struct Chunk Chunk;
+extern bool move_to_columnstore_impl(Chunk *chunk);
 typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot);
 extern void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot);

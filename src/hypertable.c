@@ -673,11 +673,28 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	 */
 	ts_chunk_column_stats_delete_by_hypertable_id(hypertable_id);
 
-	/* Also remove the granular refresh settings and tracking rows, if any. The
-	 * FK cascades do not apply here since catalog tuples are deleted directly
-	 * via the heap. */
+	/* Also remove the granular refresh settings and tracking rows, if any */
 	ts_hypertable_cagg_settings_delete(hypertable_id);
 	ts_cagg_tenant_tracking_delete_by_hypertable_id(hypertable_id);
+
+	/*
+	 * Release the hypertable's tenant tracker.
+	 * Queued for commit rather than freed here as shared mem free cannot be
+	 * rolled back if the DROP TABLE gets rolled back. We have an AccessExcl
+	 * lock, so there are no writers to shared mem and we can safely drop it
+	 */
+	Name schema_name = DatumGetName(slot_getattr(ti->slot, Anum_hypertable_schema_name, &isnull));
+	Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_hypertable_table_name, &isnull));
+
+	/*
+	 * The main table's relid is supplied by the caller, since it may already
+	 * be gone from pg_class by this point (a plain DROP TABLE removes the
+	 * relation before our sql_drop event trigger fires). It is only used to
+	 * identify which cached tracker entry to invalidate.
+	 */
+	Oid main_table_relid = *(Oid *) data;
+
+	ts_cm_functions->tenant_tracker_remove_at_commit(hypertable_id, main_table_relid);
 
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
@@ -686,10 +703,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	/* Invoke the OSM callback if set */
 	if (osm_htdrop_hook)
 	{
-		Name schema_name =
-			DatumGetName(slot_getattr(ti->slot, Anum_hypertable_schema_name, &isnull));
-		Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_hypertable_table_name, &isnull));
-
 		osm_htdrop_hook(NameStr(*schema_name), NameStr(*table_name));
 	}
 
@@ -701,7 +714,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 }
 
 int
-ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
+ts_hypertable_delete_by_name(const char *schema_name, const char *table_name, Oid relid)
 {
 	ScanKeyData scankey[2];
 
@@ -720,7 +733,7 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 										  2,
 										  HYPERTABLE_NAME_INDEX,
 										  hypertable_tuple_delete,
-										  NULL,
+										  &relid,
 										  0,
 										  RowExclusiveLock,
 										  CurrentMemoryContext,
@@ -728,7 +741,7 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 }
 
 int
-ts_hypertable_delete_by_id(int32 hypertable_id)
+ts_hypertable_delete_by_id(int32 hypertable_id, Oid relid)
 {
 	ScanKeyData scankey[1];
 
@@ -742,7 +755,7 @@ ts_hypertable_delete_by_id(int32 hypertable_id)
 										  1,
 										  HYPERTABLE_ID_INDEX,
 										  hypertable_tuple_delete,
-										  NULL,
+										  &relid,
 										  1,
 										  RowExclusiveLock,
 										  CurrentMemoryContext,
@@ -768,7 +781,8 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 
 	/* Clean up catalog */
 	ts_hypertable_delete_by_name(NameStr(hypertable->fd.schema_name),
-								 NameStr(hypertable->fd.table_name));
+								 NameStr(hypertable->fd.table_name),
+								 hypertable->main_table_relid);
 }
 
 static ScanTupleResult

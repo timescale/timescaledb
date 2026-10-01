@@ -65,5 +65,4 @@ extern Chunk **ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hr
 extern Chunk **ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri,
 															  Hypertable *ht, bool include_osm,
 															  Chunk **chunks, bool reverse,
-															  List **nested_oids,
 															  unsigned int *num_chunks);

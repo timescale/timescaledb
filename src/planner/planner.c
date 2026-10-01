@@ -1021,27 +1021,48 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
-	if (path->param_info != NULL && ordered)
+	if (!ts_guc_enable_chunk_append)
+	{
+		return false;
+	}
+
+	if ((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
+		bms_num_members(root->all_baserels) > 1)
 	{
 		/*
-		 * Ordered ChunkAppend might create MergeAppend path for individual
-		 * chunks when we have space partitioning or partial chunks. MergeAppend
-		 * paths cannot be parameterized. Refuse to use parameterized ordered
-		 * ChunkAppend altogether, because the more precise conditions are
-		 * difficult to check.
+		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved.
 		 */
 		return false;
 	}
 
-	if (
-		/*
-		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
-		 */
-		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
-		 bms_num_members(root->all_baserels) > 1) ||
-		!ts_guc_enable_chunk_append)
+	if (path->param_info != NULL)
 	{
-		return false;
+		if (ordered)
+		{
+			/*
+			 * Ordered ChunkAppend might create MergeAppend path for individual
+			 * chunks when we have space partitioning or partial chunks. MergeAppend
+			 * paths cannot be parameterized. Refuse to use parameterized ordered
+			 * ChunkAppend altogether, because the more precise conditions are
+			 * difficult to check.
+			 */
+			return false;
+		}
+
+		if (path->param_info->ppi_clauses != NIL)
+		{
+			/*
+			 * If we have any clauses with join parameters, we can apply runtime
+			 * chunk exclusion.
+			 */
+			return true;
+		}
+
+		/*
+		 * The path can be parameterized but not have any parameterized clauses,
+		 * effectively if it's a cross join written as LATERAL. Check the other
+		 * conditions for chunk append in this case.
+		 */
 	}
 
 	switch (nodeTag(path))
@@ -1408,7 +1429,6 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 		TimescaleDBPrivate *private = ts_get_private_reloptinfo(rel);
 		bool ordered = private->appends_ordered;
 		int order_attno = private->order_attno;
-		List *nested_oids = private->nested_oids;
 		ListCell *lc;
 
 		Assert(ht != NULL);
@@ -1423,13 +1443,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				case T_MergeAppendPath:
 					if (should_chunk_append(ht, root, rel, *pathptr, ordered, order_attno))
 					{
-						*pathptr = ts_chunk_append_path_create(root,
-															   rel,
-															   ht,
-															   *pathptr,
-															   false,
-															   ordered,
-															   nested_oids);
+						*pathptr =
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, false, ordered);
 					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
 					{
@@ -1452,7 +1467,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 					if (should_chunk_append(ht, root, rel, *pathptr, false, 0))
 					{
 						*pathptr =
-							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false);
 					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
 					{
@@ -1770,7 +1785,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * in cases when these functions don't run, we have to do it here.
 			 */
 			const bool use_columnar_scan =
-				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
+				ts_guc_debug_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
 			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);

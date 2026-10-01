@@ -193,14 +193,29 @@ ts_hypertable_cagg_settings_update(const FormData_hypertable_cagg_settings *form
 TSDLLEXPORT void
 ts_hypertable_cagg_settings_delete(int32 hypertable_id)
 {
+	/* Lock the row before deleting it . Protects against concurrent
+	 * updates to the row
+	 */
+	static const ScanTupLock tuplock = {
+		.lockmode = LockTupleExclusive,
+		.waitpolicy = LockWaitBlock,
+		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+	};
 	ScanIterator iterator =
 		ts_scan_iterator_create(HYPERTABLE_CAGG_SETTINGS, RowExclusiveLock, CurrentMemoryContext);
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	iterator.ctx.tuplock = &tuplock;
 
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		/* already gone: another transaction deleted it */
+		if (ti->lockresult == TM_Deleted)
+		{
+			continue;
+		}
 
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}

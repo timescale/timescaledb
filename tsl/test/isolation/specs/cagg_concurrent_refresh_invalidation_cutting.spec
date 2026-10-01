@@ -120,6 +120,7 @@ step "wp_release"
 session "R1"
 setup
 {
+    SET client_min_messages TO warning;
     SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
 }
@@ -132,6 +133,7 @@ step "r1_refresh"
 session "R2"
 setup
 {
+    SET client_min_messages TO warning;
     SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
 }

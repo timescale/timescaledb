@@ -682,3 +682,40 @@ DROP TABLE tbl;
 DROP TABLE fk_tbl;
 
 DROP TABLESPACE IF EXISTS tablespace1;
+
+-- TRUNCATE CASCADE on a referenced hypertable keeps the foreign key
+CREATE TABLE trunc_fk_parent(time timestamptz NOT NULL, id int, UNIQUE(time, id)) WITH (tsdb.hypertable);
+CREATE TABLE trunc_fk_child(parent_time timestamptz, parent_id int, FOREIGN KEY(parent_time, parent_id) REFERENCES trunc_fk_parent(time, id));
+INSERT INTO trunc_fk_parent VALUES ('2025-01-01', 1), ('2025-01-02', 2);
+INSERT INTO trunc_fk_child VALUES ('2025-01-01', 1);
+TRUNCATE trunc_fk_parent CASCADE;
+SELECT count(*) FROM show_chunks('trunc_fk_parent');
+SELECT conname FROM pg_constraint WHERE conrelid = 'trunc_fk_child'::regclass AND contype = 'f' ORDER BY 1;
+\set ON_ERROR_STOP 0
+INSERT INTO trunc_fk_child VALUES ('2025-04-01', 10);
+\set ON_ERROR_STOP 1
+INSERT INTO trunc_fk_parent VALUES ('2025-04-01', 10);
+INSERT INTO trunc_fk_child VALUES ('2025-04-01', 10);
+SELECT count(*) FROM show_chunks('trunc_fk_parent');
+TRUNCATE trunc_fk_parent CASCADE;
+SELECT count(*) FROM show_chunks('trunc_fk_parent');
+SELECT count(*) FROM trunc_fk_child;
+
+-- TRUNCATE on a single referenced chunk
+INSERT INTO trunc_fk_parent VALUES ('2025-01-01', 1), ('2025-04-01', 10);
+INSERT INTO trunc_fk_child VALUES ('2025-01-01', 1), ('2025-04-01', 10);
+SELECT show_chunks('trunc_fk_parent') AS "TRUNC_CHUNK" ORDER BY 1 LIMIT 1 \gset
+\set ON_ERROR_STOP 0
+TRUNCATE :TRUNC_CHUNK;
+\set ON_ERROR_STOP 1
+TRUNCATE :TRUNC_CHUNK CASCADE;
+SELECT count(*) FROM show_chunks('trunc_fk_parent');
+SELECT count(*) FROM trunc_fk_parent;
+SELECT count(*) FROM trunc_fk_child;
+SELECT conname FROM pg_constraint WHERE conrelid = 'trunc_fk_child'::regclass AND contype = 'f' ORDER BY 1;
+\set ON_ERROR_STOP 0
+INSERT INTO trunc_fk_child VALUES ('2025-01-01', 1);
+\set ON_ERROR_STOP 1
+INSERT INTO trunc_fk_child VALUES ('2025-04-01', 10);
+DROP TABLE trunc_fk_child;
+DROP TABLE trunc_fk_parent;

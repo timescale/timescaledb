@@ -1367,6 +1367,8 @@ process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	/* Drop FKs referencing the chunk so CASCADE does not drop the hypertable FK */
+	ts_chunk_drop_referencing_fk_by_relid(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
@@ -1579,7 +1581,8 @@ process_truncate(ProcessUtilityArgs *args)
 								char *schema_name =
 									get_namespace_name(get_rel_namespace(compressed_relid));
 								char *table_name = get_rel_name(compressed_relid);
-								rv = makeRangeVar(schema_name, table_name, -1);
+								relations =
+									lappend(relations, makeRangeVar(schema_name, table_name, -1));
 								MemoryContextSwitchTo(oldctx);
 								list_changed = true;
 							}
@@ -1707,20 +1710,6 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		if (chunk)
 		{
 			Hypertable *ht;
-
-			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
-			 *  it would be blocked if there are dependent objects */
-			if (stmt->behavior == DROP_CASCADE && ts_chunk_is_compressed(chunk))
-			{
-				Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
-				/* The chunk may have been delete by a CASCADE */
-				if (OidIsValid(compressed_relid))
-				{
-					LockRelationOid(compressed_relid, AccessExclusiveLock);
-					ts_chunk_drop_by_relid(compressed_relid, stmt->behavior, DEBUG1);
-				}
-			}
-
 			ht = ts_hypertable_cache_get_entry(hcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
 
 			Assert(ht != NULL);
@@ -6478,13 +6467,13 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 }
 
 static void
-process_drop_table(EventTriggerDropObject *obj)
+process_drop_table(EventTriggerDropObject *obj, DropBehavior behavior)
 {
 	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
-	ts_chunk_delete_by_relid(table->relid, DROP_RESTRICT);
-	ts_hypertable_delete_by_name(table->schema, table->name);
+	ts_chunk_delete_by_relid(table->relid, behavior);
+	ts_hypertable_delete_by_name(table->schema, table->name, table->relid);
 	/*
 	 * Normally, dependent catalogs (like compression settings) are cleaned up
 	 * when deleting the hypertable or chunk. However, in some cases, e.g.,
@@ -6557,7 +6546,7 @@ process_drop_view(EventTriggerDropView *dropped_view)
 }
 
 static void
-process_ddl_sql_drop(EventTriggerDropObject *obj)
+process_ddl_sql_drop(EventTriggerDropObject *obj, DropBehavior behavior)
 {
 	switch (obj->type)
 	{
@@ -6565,7 +6554,7 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			process_drop_table_constraint(obj);
 			break;
 		case EVENT_TRIGGER_DROP_TABLE:
-			process_drop_table(obj);
+			process_drop_table(obj, behavior);
 			break;
 		case EVENT_TRIGGER_DROP_SCHEMA:
 			process_sql_drop_schema(obj);
@@ -6671,15 +6660,36 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 	EventTriggerUndoInhibitCommandCollection();
 }
 
+/* Get the drop behavior of the statement that caused the drop. */
+static DropBehavior
+event_trigger_drop_behavior(Node *parsetree)
+{
+	if (parsetree != NULL)
+	{
+		switch (nodeTag(parsetree))
+		{
+			case T_DropStmt:
+				return castNode(DropStmt, parsetree)->behavior;
+			case T_DropOwnedStmt:
+				return castNode(DropOwnedStmt, parsetree)->behavior;
+			default:
+				break;
+		}
+	}
+
+	return DROP_RESTRICT;
+}
+
 static void
 process_ddl_event_sql_drop(EventTriggerData *trigdata)
 {
 	ListCell *lc;
 	List *dropped_objects = ts_event_trigger_dropped_objects();
+	DropBehavior behavior = event_trigger_drop_behavior(trigdata->parsetree);
 
 	foreach (lc, dropped_objects)
 	{
-		process_ddl_sql_drop(lfirst(lc));
+		process_ddl_sql_drop(lfirst(lc), behavior);
 	}
 }
 

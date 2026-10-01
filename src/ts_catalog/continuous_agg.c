@@ -1056,7 +1056,7 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	if (OidIsValid(mat_hypertable.objectId))
 	{
 		ts_compression_settings_delete(mat_hypertable.objectId);
-		ts_hypertable_delete_by_id(cadata->mat_hypertable_id);
+		ts_hypertable_delete_by_id(cadata->mat_hypertable_id, mat_hypertable.objectId);
 		performDeletion(&mat_hypertable, DROP_CASCADE, 0);
 	}
 
