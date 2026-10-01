@@ -58,6 +58,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_merge_race.spec
     compression_recompress.spec
     recompress_concurrent_dml.spec
+    recompress_in_memory_concurrent_read.spec
     decompression_chunk_and_parallel_query_wo_idx.spec
     merge_chunks_concurrent.spec
     move_to_columnstore_concurrent.spec
