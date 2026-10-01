@@ -1,0 +1,1 @@
+Fixes: #10709 Dictionary compression replaces values that are equal but not identical, e.g. interval '1 mon' with '30 days'

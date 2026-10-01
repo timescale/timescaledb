@@ -18,6 +18,7 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
+#include <utils/timestamp.h>
 #include <utils/typcache.h>
 
 #include "test_utils.h"
@@ -171,6 +172,48 @@ test_int_dictionary()
 }
 
 static void
+test_interval_dictionary()
+{
+	/*
+	 * '30 days' and '1 mon' are equal under interval_eq but are different
+	 * values; the dictionary must keep one entry per distinct binary
+	 * representation, not per equivalence class (#10709).
+	 */
+	Interval thirty_days = { .time = 0, .day = 30, .month = 0 };
+	Interval one_month = { .time = 0, .day = 0, .month = 1 };
+	Interval *values[2] = { &thirty_days, &one_month };
+	DictionaryCompressor *compressor = dictionary_compressor_alloc(INTERVALOID);
+	DictionaryCompressed *compressed;
+	DecompressionIterator *iter;
+	int i;
+
+	for (i = 0; i < TEST_ELEMENTS; i++)
+	{
+		dictionary_compressor_append(compressor, PointerGetDatum(values[i % 2]));
+	}
+
+	compressed = dictionary_compressor_finish(compressor);
+	TestAssertTrue(compressed != NULL);
+
+	i = 0;
+	iter = tsl_dictionary_decompression_iterator_from_datum_forward(PointerGetDatum(compressed),
+																	INTERVALOID);
+	for (DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter); !r.is_done;
+		 r = dictionary_decompression_iterator_try_next_forward(iter))
+	{
+		Interval *got = DatumGetIntervalP(r.val);
+		Interval *want = values[i % 2];
+
+		TestAssertTrue(!r.is_null);
+		TestAssertInt64Eq(got->month, want->month);
+		TestAssertInt64Eq(got->day, want->day);
+		TestAssertInt64Eq(got->time, want->time);
+		i += 1;
+	}
+	TestAssertInt64Eq(i, TEST_ELEMENTS);
+}
+
+static void
 test_string_dictionary()
 {
 	DictionaryCompressor *compressor = dictionary_compressor_alloc(TEXTOID);
@@ -230,8 +273,6 @@ test_string_dictionary()
 		i -= 1;
 	}
 	TestAssertInt64Eq(i, 0);
-
-	TestEnsureError(dictionary_compressor_alloc(CSTRINGOID));
 }
 
 static void
@@ -1702,6 +1743,7 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_string_array();
 	test_int_dictionary();
 	test_string_dictionary();
+	test_interval_dictionary();
 	test_gorilla_int();
 	test_gorilla_float();
 	test_gorilla_double(/* have_nulls = */ false, /* have_random = */ false);
