@@ -911,7 +911,7 @@ UPDATE compress_dml SET value = 1111 WHERE time IS NULL;
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.compress_dml (actual rows=0.00 loops=1)
          ->  Result (actual rows=0.00 loops=1)
-               Output: '1111'::double precision, ctid
+               Output: '1111'::double precision, NULL::oid, NULL::tid
                One-Time Filter: false
 
 ROLLBACK;
