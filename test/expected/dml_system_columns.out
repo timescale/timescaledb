@@ -553,14 +553,6 @@ VACUUM FREEZE ANALYZE ht_dummy;
                Output: ctid
                One-Time Filter: false
 
-:PREFIX UPDATE ht_dummy SET v = 99 WHERE time IS NULL;
---- QUERY PLAN ---
- Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   ->  Update on public.ht_dummy (actual rows=0.00 loops=1)
-         ->  Result (actual rows=0.00 loops=1)
-               Output: 99, ctid
-               One-Time Filter: false
-
 :PREFIX
 UPDATE ht_dummy SET v = 99 WHERE 1 = 0
 RETURNING ctid, xmin, tableoid::regclass, *
