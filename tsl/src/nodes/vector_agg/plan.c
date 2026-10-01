@@ -52,7 +52,6 @@ static Plan *
 vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 					   List *resolved_postgres_quals, VectorAggGroupingType grouping_type)
 {
-	/* LOOK HERE */
 	CustomScan *vector_agg = (CustomScan *) makeNode(CustomScan);
 	vector_agg->custom_plans = list_make1(childplan);
 	vector_agg->methods = &scan_methods;
