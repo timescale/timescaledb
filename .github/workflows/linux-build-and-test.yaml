@@ -30,7 +30,7 @@ jobs:
       with:
         repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
         ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
-        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
     - name: Build matrix
       id: set-matrix
@@ -56,7 +56,7 @@ jobs:
         with:
           repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
           ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         if: github.event_name != 'workflow_call'
         id: filter
@@ -136,7 +136,7 @@ jobs:
       with:
         repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
         ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
-        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
