@@ -38,3 +38,39 @@ SELECT conrelid::regclass,conname,confrelid::regclass FROM pg_constraint WHERE c
  _timescaledb_internal._hyper_1_2_chunk | keys    | keys
  ht_with_fk                             | keys    | keys
 
+-- compress hypertable referenced by a foreign key
+CREATE TABLE ht_referenced(time timestamptz NOT NULL, id int, UNIQUE(time, id));
+SELECT create_hypertable('ht_referenced', 'time');
+     create_hypertable      
+----------------------------
+ (2,public,ht_referenced,t)
+
+CREATE TABLE ht_referencing(time timestamptz, id int, FOREIGN KEY(time, id) REFERENCES ht_referenced(time, id));
+INSERT INTO ht_referenced VALUES ('2025-01-01', 1), ('2025-04-01', 2);
+INSERT INTO ht_referencing VALUES ('2025-01-01', 1);
+ALTER TABLE ht_referenced SET (timescaledb.compress, timescaledb.compress_segmentby = 'id');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht_referenced') ch;
+ count 
+-------
+     2
+
+SELECT * FROM ht_referenced ORDER BY time;
+             time             | id 
+------------------------------+----
+ Wed Jan 01 00:00:00 2025 PST |  1
+ Tue Apr 01 00:00:00 2025 PDT |  2
+
+-- foreign key is still enforced after compression
+INSERT INTO ht_referencing VALUES ('2025-04-01', 2);
+\set ON_ERROR_STOP 0
+INSERT INTO ht_referencing VALUES ('2025-04-01', 3);
+ERROR:  insert or update on table "ht_referencing" violates foreign key constraint "ht_referencing_time_id_fkey"
+DELETE FROM ht_referenced WHERE id = 1;
+ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "ht_referencing_time_id_fkey1" on table "ht_referencing"
+\set ON_ERROR_STOP 1
+SELECT * FROM ht_referencing ORDER BY time;
+             time             | id 
+------------------------------+----
+ Wed Jan 01 00:00:00 2025 PST |  1
+ Tue Apr 01 00:00:00 2025 PDT |  2
+
