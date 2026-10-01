@@ -1061,7 +1061,6 @@ ts_constify_restrictinfo_params(PlannerInfo *root, EState *state, List *restrict
 static Node *
 constify_param_mutator(Node *node, void *context)
 {
-	/* LOOK HERE */
 	if (node == NULL)
 	{
 		return NULL;
