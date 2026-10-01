@@ -36,6 +36,8 @@
 static Expr *
 transform_timestamp_cast(FuncExpr *func)
 {
+
+	/* LOOK HERE */
 	/*
 	 * transform cast from timestamptz to timestamp
 	 *
