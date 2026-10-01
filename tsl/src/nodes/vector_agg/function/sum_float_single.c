@@ -25,7 +25,6 @@ static pg_attribute_always_inline void
 FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const uint64 *filter,
 						   MemoryContext agg_extra_mctx)
 {
-	/* LOOK HERE */
 	/*
 	 * Vector registers can be up to 512 bits wide.
 	 */
