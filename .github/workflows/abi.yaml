@@ -20,6 +20,8 @@ name: ABI Test
   workflow_dispatch:
   workflow_call:
     inputs:
+      # Ref in timescale/timescaledb to test when called by release sanity,
+      # usually the release branch (e.g. 2.30.x).
       timescaledb-ref:
         required: true
         type: string

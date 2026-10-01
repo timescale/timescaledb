@@ -11,6 +11,8 @@ on:
       version:
         required: true
         type: string
+      # Ref in timescale/timescaledb to tag and release, usually the release
+      # branch (e.g. 2.30.x), not an already-created release tag.
       timescaledb-ref:
         description: "TimescaleDB branch/ref to tag."
         required: true

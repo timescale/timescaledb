@@ -11,6 +11,8 @@ on:
       version:
         required: true
         type: string
+      # Ref in timescale/timescaledb to validate, usually the release branch
+      # (e.g. 2.30.x), not the release tag created later.
       timescaledb-ref:
         description: "TimescaleDB branch/ref to validate."
         required: true
