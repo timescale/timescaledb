@@ -2770,8 +2770,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				continue;
 			}
 
-
-	/* LOOK HERE */
 			/* direct compress */
 			if (operation == CMD_INSERT && ht_state->columnstore_insert)
 			{
