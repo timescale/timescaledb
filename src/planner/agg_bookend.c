@@ -667,6 +667,8 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	parse->hasDistinctOn = false;
 	parse->hasAggs = false;
 
+	/* LOOK HERE */
+
 	/*
 	 * Build "sort IS NOT NULL" expression. Note that target can still be NULL.
 	 * We don't need it if the order is NULLS LAST.
