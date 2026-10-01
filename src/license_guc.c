@@ -12,6 +12,7 @@
 #include <utils/guc.h>
 
 #include "cross_module_fn.h"
+#include "debug_point.h"
 #include "export.h"
 #include "extension_constants.h"
 #include "license_guc.h"
@@ -98,7 +99,14 @@ ts_license_enable_module_loading(void)
 		return;
 	}
 
+	/*
+	 * load_enabled survives a statement abort, so a cancel after it is set
+	 * but before the submodule is initialized would leave this backend on the
+	 * Apache stubs for good.
+	 */
+	HOLD_INTERRUPTS();
 	load_enabled = true;
+	DEBUG_WAITPOINT("license_enable_module_loading");
 
 	/* re-set the license to actually load the submodule if needed */
 	result = set_config_option(MAKE_EXTOPTION("license"),
@@ -109,6 +117,7 @@ ts_license_enable_module_loading(void)
 							   true,
 							   0,
 							   false);
+	RESUME_INTERRUPTS();
 
 	if (result <= 0)
 	{
