@@ -1,0 +1,1 @@
+Implements: #10773 Flush granular refresh tenant tracking only when the refresh window overlaps the late arrival window

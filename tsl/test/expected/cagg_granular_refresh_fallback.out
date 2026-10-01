@@ -331,7 +331,7 @@ SELECT seq_num FROM
   _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass) ;
  seq_num 
 ---------
-       4
+       2
 
 CALL refresh_continuous_aggregate('readings_daily', NULL, '2023-01-01 00:00+00');
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Sun Jan 01 00:00:00 2023 UTC ]
@@ -340,7 +340,7 @@ SELECT seq_num AS seqnum_unchanged
 FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass);
  seqnum_unchanged 
 ------------------
-                4
+                2
 
 SELECT seq_num AS seq_before FROM
   _timescaledb_functions.hypertable_get_tenant_tracking_info('readings'::regclass)

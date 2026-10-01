@@ -1048,13 +1048,27 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
  * heap_multi_insert for very large snapshots.
  */
 static void
-flush_tenant_tracking(const ContinuousAgg *cagg)
+flush_tenant_tracking(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window)
 {
 	/* Tenants are tracked by the raw (user) hypertable that received the DML. */
 	TenantTracking *tracking = ts_tenant_tracker_lookup(cagg->data.raw_hypertable_id);
+	TenantTrackerInfo info;
 	int64 late_window_start, late_window_end;
 
 	if (tracking == NULL)
+	{
+		return;
+	}
+
+	/*
+	 * Flush only if refresh window overlaps late arrival window. Protects
+	 * against cases where we have multiple refresh policies and an aggressive
+	 * refresh on new data constantly flushes tenant tracking information for
+	 * late arriving data.
+	 */
+	ts_tenant_tracker_get_info(tracking, &info);
+	if (refresh_window->start >= info.late_threshold_end ||
+		refresh_window->end <= info.late_threshold_start)
 	{
 		return;
 	}
@@ -1117,7 +1131,7 @@ process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
 	 */
 	if (cagg->data.granular_refresh_enabled)
 	{
-		flush_tenant_tracking(cagg);
+		flush_tenant_tracking(cagg, refresh_window);
 	}
 
 	invalidation_process_cagg_log(cagg, refresh_window);

@@ -397,8 +397,13 @@ CREATE MATERIALIZED VIEW metrics_daily
   GROUP BY bucket, tenant
   WITH NO DATA;
 
+-- current late arrival window is [ 2025-01-07 12:00 , 2025-01-10 11:00]
 -- Moving now() half an hour puts W at 2025-01-07 12:30, inside the 12:00 bucket.
 SET timescaledb.current_timestamp_mock = '2025-01-10 12:30:00+00';
+-- the late arrival window is moved only when the refresh overlaps with the late
+-- arrival window. So write into the current late arrival window so that new now()
+-- is used.
+INSERT INTO metrics VALUES ('2025-01-09 00:00:00+00', 'dummy-shift', 0);
 --refresh to move invalidation threshold forward
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-30 12:00:00+00');
 --print the bucket that contain now()
@@ -929,11 +934,11 @@ ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh 
 -- Inside the window, so tracked under the sensor_id column.
 INSERT INTO relabel VALUES ('2025-01-07 20:00:00+00', 'sensor_x', 'east', 1),
                            ('2025-01-08 12:00:00+00', 'sensor_a', 'east', 1);
--- After the window end, so untracked. It gives the refresh below work to do.
-INSERT INTO relabel VALUES ('2025-01-10 11:30:00+00', 'sensor_b', 'west', 2);
+-- In the window's last bucket, apart from the writes above. It gives the
+-- refresh below work to do.
+INSERT INTO relabel VALUES ('2025-01-10 10:30:00+00', 'senx', 'west', 2);
 
--- The Jan 8 write is inside the window, so its invalidation carries a seqnum;
--- the Jan 10 one is outside and carries none.
+-- All writes are inside the window, so their invalidations carry a seqnum.
 SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
        _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
        seqnum
@@ -943,9 +948,9 @@ WHERE hypertable_id = (
     WHERE user_view_name = 'relabel_hourly')
 ORDER BY lowest_modified_value;
 
--- Refresh a window that covers the untracked write but not the
--- tracked one, so the flush persists the tracking row but not consumes its invalidation.
-CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
+-- Refresh a window that overlaps the late window but not the Jan 7/8 writes,
+-- so the flush persists their tracking rows without consuming their invalidations.
+CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 10:00:00+00', '2025-01-10 11:00:00+00');
 
 -- The tenant ids here are sensor_id values.
 SELECT tenant_id, seqnum
@@ -983,8 +988,8 @@ WHERE hypertable_id = (
   AND tenant_id IS NOT NULL
 ORDER BY seqnum, tenant_id;
 
--- Enabling again, on a different column. The tracking rows from the previous
--- configuration should now be all removed
+-- TEST Enabling again, on a different column. The tracking rows from the previous
+-- configuration should now be all removed. But the invalidation logs are untouched.
 ALTER TABLE relabel SET (
     timescaledb.cagg_enable_granular_refresh = true,
     timescaledb.cagg_granular_refresh_column = 'region',
@@ -999,10 +1004,10 @@ WHERE hypertable_id = (
   AND tenant_id IS NOT NULL
 ORDER BY seqnum, tenant_id;
 
--- The invalidation is untouched: enabling clears tracking rows, not the log.
--- Its seqnum now resolves to no tenants at all, which is what makes the refresh
--- below re-materialize the whole range
-
+-- The invalidation is untouched.
+-- Its seqnum does not find any tenants (as tracking entries were cleared).
+-- This makes the refresh below re-materialize the whole range (which is the correct
+-- behavior).
 SELECT CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
             THEN '-infinity'::timestamptz
             ELSE _timescaledb_functions.to_timestamp(lowest_modified_value) END AS lowest,
@@ -1016,6 +1021,7 @@ WHERE materialization_id = (
     WHERE user_view_name = 'relabel_hourly')
 ORDER BY lowest_modified_value, seqnum;
 
+-- TEST re-enable granular , refresh works correctly.
 ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh = true);
 
 -- Consumes the Jan 8 invalidation but not the Jan 7 one, so seqnum 1 is still
@@ -1027,16 +1033,17 @@ SELECT bucket, sensor_id, region, avg
 FROM relabel_hourly
 ORDER BY bucket, sensor_id;
 
--- Writes under the new configuration: the first is inside the window, the
--- second outside it and there to give the refresh work.
+-- Writes under the new configuration, both inside the late window.
+-- The second is there to give the refresh work.
 -- The write should create a new tracker for the hypertable, with a seqnum above
 -- those in the invalidation logs of that hypertable (2 in this case)
+-- NOTE: refresh overlaps late window [ 2025-01-07 12:00 , 2025-01-10 11:00)
 INSERT INTO relabel VALUES ('2025-01-08 18:00:00+00', 'sensor_e', 'north', 3);
-INSERT INTO relabel VALUES ('2025-01-10 11:45:00+00', 'sensor_d', 'south', 4);
-CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
+INSERT INTO relabel VALUES ('2025-01-10 10:45:00+00', 'sensor_d', 'south', 4);
+CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 10:00:00+00', '2025-01-10 11:00:00+00');
 
--- The tenant ids are region values now. The seqnum is one above the highest
--- the logs still hold, so it cannot collide with the invalidation's seqnums
+-- TEST seqnum for tracker entry is one above the highest the logs still hold,
+-- This ensures that it cannot collide with the invalidation's seqnums
 -- left from the previous configuration.
 SELECT tenant_id, seqnum
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
@@ -1046,7 +1053,7 @@ WHERE hypertable_id = (
   AND tenant_id IS NOT NULL
 ORDER BY seqnum, tenant_id;
 
--- The same re-enabling test, this time leave a tracked write unflushed
+-- TEST The same re-enabling test, this time leave a tracked write unflushed
 -- and invalidation still in the hypertable invalidation log. After
 -- re-enabling the new tracker should be seed with a seqnum that is above
 -- the existing highest seqnum.
@@ -1072,8 +1079,8 @@ ALTER TABLE relabel SET (
 ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh = true);
 
 INSERT INTO relabel VALUES ('2025-01-08 21:00:00+00', 'sensor_g', 'east', 6);
-INSERT INTO relabel VALUES ('2025-01-10 11:50:00+00', 'sensor_h', 'south', 7);
-CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
+INSERT INTO relabel VALUES ('2025-01-10 10:50:00+00', 'sensor_h', 'south', 7);
+CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 10:00:00+00', '2025-01-10 11:00:00+00');
 
 -- Check the new trackings. The seqnum of the hypertable invalidation log counts too:
 -- the new seqnum should be above that too.
