@@ -264,43 +264,18 @@ SET enable_seqscan = 1;
          ->  Seq Scan on _hyper_4_4_chunk_compressed
                Filter: (s1 = s3)
 
--- Test that UNION ALL works
-SELECT s1 FROM test2 UNION ALL SELECT s1 FROM test2 ORDER BY s1;
- s1 
-----
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  1
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
-  2
+-- We should utilize compressed sort order for UNION ALL legs
+SET enable_seqscan = 0;
+:PREFIX SELECT s1 FROM test2 UNION ALL SELECT s1 FROM test2 ORDER BY s1;
+--- QUERY PLAN ---
+ Merge Append
+   Sort Key: _hyper_4_4_chunk.s1
+   ->  Custom Scan (ColumnarScan) on _hyper_4_4_chunk
+         ->  Index Scan using _hyper_4_4_chunk_compressed_s1_s2_s3__ts_meta_v2_first_o1___idx on _hyper_4_4_chunk_compressed
+   ->  Custom Scan (ColumnarScan) on _hyper_4_4_chunk _hyper_4_4_chunk_1
+         ->  Index Scan using _hyper_4_4_chunk_compressed_s1_s2_s3__ts_meta_v2_first_o1___idx on _hyper_4_4_chunk_compressed _hyper_4_4_chunk_compressed_1
 
+SET enable_seqscan = 1;
 DROP table test2 cascade;
 -- Cross-type equivalency for Batch sorted merge scenario flagged by LLM:
 -- cannot use non-vars as sort keys for batch sorted merge as the heap is not set up for it

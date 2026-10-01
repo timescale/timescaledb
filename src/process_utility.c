@@ -1367,6 +1367,8 @@ process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	/* Drop FKs referencing the chunk so CASCADE does not drop the hypertable FK */
+	ts_chunk_drop_referencing_fk_by_relid(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
