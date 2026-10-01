@@ -336,6 +336,10 @@ jobs:
 
         printf '\\restrict %s\n' "${RANDOM}" > restricted-repro.sql
         cat ~/llm-fuzzer-repro.sql >> restricted-repro.sql
+        sed -E -i \
+            -e '/^[[:space:]]*(set|reset)[[:space:]].*parallel/Id' \
+            -e '/^[[:space:]]*reset[[:space:]]+all[[:space:]]*;/Id' \
+            restricted-repro.sql
 
         PSQLRC=oracle-psqlrc
         export PSQLRC
