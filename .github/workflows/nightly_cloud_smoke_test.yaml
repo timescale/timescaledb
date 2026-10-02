@@ -66,7 +66,7 @@ jobs:
 
   test-version:
     needs: [generate-matrix, get-next-version]
-    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     strategy:
       # run sequentially
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}

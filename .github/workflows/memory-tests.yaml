@@ -11,7 +11,7 @@ name: Memory tests
 jobs:
   memory_leak:
     name: Memory leak on insert PG${{ matrix.pg }}
-    runs-on: runs-on/fleet=linux-8cpu-x64/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     strategy:
       matrix:
         pg: [16, 17, 18]
@@ -85,4 +85,3 @@ jobs:
       if: always()
       run: |
         sudo journalctl -u postgresql@${{ matrix.pg }}-main.service
-
