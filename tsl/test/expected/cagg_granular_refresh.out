@@ -71,7 +71,7 @@ CREATE MATERIALIZED VIEW cond_daily
   WITH NO DATA;
 ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
 CALL refresh_continuous_aggregate('cond_daily', NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 0 row(s), deleted 0 row(s)
 -- sensor_a gets two days, sensor_b a single day. Explicit +00 offsets keep the
 -- stored internal time values timezone-independent.
 INSERT INTO conditions VALUES
@@ -92,7 +92,7 @@ SELECT * FROM hyper_invlog_view;
         1 | Thu Jan 02 00:00:00 2020 UTC | Thu Jan 02 00:00:00 2020 UTC |      1
 
 CALL refresh_continuous_aggregate('cond_daily', NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 3 row(s), deleted 0 row(s), fully granular
 -- The granular refresh materialized each tracked tenant's buckets.
 SELECT sensor_id, bucket, avg
 FROM cond_daily
@@ -152,7 +152,7 @@ INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_d', 3);
 -- Later, when all trackings of seqnum 1 are consumed, all of them will
 -- be reclaimed in a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 SELECT * FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
     SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
@@ -169,7 +169,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 -- Insert some dummy rows before the refresh so the new seqnum show up in the tracking table
 INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_a', 1);
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Thu Jan 02 00:00:00 2020 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Thu Jan 02 00:00:00 2020 UTC, infinity ], materialized 3 row(s), deleted 0 row(s), no granular refresh
 --should still see all the trackings of seqnum 1 and 2
 SELECT * FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -185,7 +185,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 
 --the following refresh will cleanup all seqnum 1 tracking rows
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00','2020-01-03 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 03 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 03 00:00:00 2020 UTC ], materialized 0 row(s), deleted 0 row(s)
 --all trackings of seqnum 1 should be cleaned up, only seqnum 2 and 3 remain
 SELECT * FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -254,9 +254,9 @@ INSERT INTO readings VALUES
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_a', 10);
 INSERT INTO readings VALUES ('2025-01-01 00:00+00', 'sensor_a', 10);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 CALL refresh_continuous_aggregate('read_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 SELECT * FROM continuous_aggs_tenant_tracking_view
 ORDER BY hypertable_id, tenant_id, seqnum;
  hypertable_id | tenant_id |        min_timestamp         |        max_timestamp         | seqnum 
@@ -299,13 +299,13 @@ ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = tr
 -- Move the invalidation threshold past the 2020 rows below, so that inserting
 -- them is late-arriving and logs invalidations.
 CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, Fri Jan 01 00:00:00 2021 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, Fri Jan 01 00:00:00 2021 UTC ], materialized 0 row(s), deleted 0 row(s)
 -- sensor_a/sensor_c: old (2020) rows that will be updated/deleted below.
 INSERT INTO conditions VALUES
   ('2020-01-01 00:00+00', 'sensor_a', 1),
   ('2020-01-01 00:00+00', 'sensor_c', 3);
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ], materialized 2 row(s), deleted 0 row(s), fully granular
 -- Should see trackings for sensor_a, sensor_c because
 -- the above refresh consumed the invalidations but didn't clean up
 -- the trackings (left for garbage collection in the following refresh)
@@ -326,7 +326,7 @@ UPDATE conditions SET sensor_id = 'sensor_b' WHERE sensor_id = 'sensor_a';
 -- Note that this refresh doesn't clean up tracking with seqnum 1 because of the
 -- cleanup headroom, so we still see them here
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ], materialized 1 row(s), deleted 1 row(s), fully granular
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
@@ -343,7 +343,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 -- TEST DELETE sensor_c's row: must track sensor_c (the deleted row's tenant).
 DELETE FROM conditions WHERE sensor_id = 'sensor_c';
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ], materialized 0 row(s), deleted 1 row(s), fully granular
 --(the above refresh garbage-collected trackings of seqnum 1, so we don't see them)
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -383,19 +383,19 @@ CREATE MATERIALIZED VIEW cond_daily
 --insert some data and do a prime refresh to clear off [-inf, +inf] invalidations
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', NULL, '2026-01-07 00:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Wed Jan 07 00:00:00 2026 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Wed Jan 07 00:00:00 2026 UTC ], materialized 1 row(s), deleted 0 row(s)
 ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
 -- fresh row to force the refresh to drain the tracker
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 1 row(s), fully granular
 -- UPDATE the tenant row
 INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_a', 3);
 UPDATE conditions SET value = 99 WHERE sensor_id = 'sensor_a' and time = '2020-01-01 00:00+00';
 INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), fully granular
 -- Expect exactly one row for sensor_a .
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -423,7 +423,7 @@ ORDER BY 1, 2;
 
 --Refresh Jan1 2020 bucket, that would clear one invalidation for sensor_a but leave the other.
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-02 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 02 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 02 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE materialization_id = (
   SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
@@ -455,7 +455,8 @@ CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-
 LOG:  statement: CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', '2020-01-30 00:00+00');
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_12"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_12"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 30 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 30 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 30 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 DROP MATERIALIZED VIEW cond_daily;
@@ -485,7 +486,7 @@ ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = tr
 INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- baseline: min = max = 2020-01-01 for sensor_a
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -504,7 +505,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 UPDATE conditions SET time = '2020-01-01 10:00+00' WHERE sensor_id = 'sensor_a';
 INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Expect a new row for sensor_a
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -547,7 +548,7 @@ ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = tr
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'sensor_a', 1);
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- baseline: sensor_a at 2020-01-03
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -566,7 +567,7 @@ UPDATE conditions SET sensor_id = 'sensor_b', time = '2020-01-03 00:01+00'
   WHERE sensor_id = 'sensor_a';
 INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Expect sensor_a and sensor_b entry (Sensor_b due to update with new seqnum)
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -620,7 +621,7 @@ COMMIT;
 -- refresh drains the tracker; its entries remain in the catalog until garbage collected
 -- by a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- baseline: sensor_a through sensor_e, all tracked from the bulk INSERT.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -645,7 +646,7 @@ UPDATE conditions SET sensor_id = 'sensor_x'
 DELETE FROM conditions WHERE sensor_id IN ('sensor_d', 'sensor_e');
 INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Expect sensor_a, sensor_b, sensor_c (old tenants from the bulk UPDATE),
 -- sensor_x (new tenant, one entry folding all three rows), sensor_d and
 -- sensor_e (from the bulk DELETE).
@@ -701,7 +702,7 @@ INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1)
   ON CONFLICT (time, sensor_id) DO UPDATE SET value = excluded.value;
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- baseline: sensor_a tracked once, from the no-conflict INSERT.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -720,7 +721,7 @@ INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 99)
   ON CONFLICT (time, sensor_id) DO UPDATE SET value = excluded.value;
 INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Expect a new row for sensor_a (next seqnum) from the ON CONFLICT DO UPDATE.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -765,7 +766,7 @@ ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = tr
 INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_b', 2);
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- baseline: sensor_b tracked from the prior INSERT.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -787,7 +788,7 @@ DELETE FROM conditions WHERE sensor_id = 'sensor_b';
 COMMIT;
 INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Expect exactly one new entry for sensor_a (INSERT + UPDATE dedup to a
 -- single tracked row) and one new entry for sensor_b (from the DELETE),
 -- both sharing the same seqnum since they drained from the same transaction.
@@ -827,7 +828,7 @@ UPDATE conditions SET value = 99 WHERE time = '2020-01-01 00:00+00';
 DELETE FROM conditions WHERE time = '2020-01-01 00:00+00';
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s)
 -- Expect no tracking rows at all for this hypertable.
 SELECT count(*) AS tracking_rows
 FROM continuous_aggs_tenant_tracking_view
@@ -868,7 +869,7 @@ COPY conditions FROM STDIN WITH (DELIMITER ',');
 COPY conditions FROM STDIN WITH (DELIMITER ',');
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Expect all 4 tenants tracked from the single COPY batch.
 -- sensor_c and sensor_d have wider min-max
 SELECT *
@@ -917,7 +918,7 @@ ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = tr
 -- sensor_c: materialized up front
 INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_c', 3);
 CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, Fri Jan 01 00:00:00 2021 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, Fri Jan 01 00:00:00 2021 UTC ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- sensor_a: late data, tracked; deliberately left un-consumed (the refresh
 -- below only covers 2025+, which doesn't overlap 2020, so the tracking row
 -- persists).
@@ -931,7 +932,7 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::r
        2 |                 1 |        2 |      0
 
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Baseline: sensor_c's bucket is materialized; sensor_a has a stale tracking
 -- row (never materialized, since no refresh has covered its window yet).
 SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
@@ -971,7 +972,7 @@ SELECT * FROM hyper_invlog_view;
        27 | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 01 00:00:00 2020 UTC |      3
 
 CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, infinity ], materialized 0 row(s), deleted 2 row(s), no granular refresh
 -- Full refresh clears every stale bucket, so cond_daily is empty again.
 SELECT sensor_id, bucket, avg FROM cond_daily ORDER BY sensor_id, bucket;
  sensor_id | bucket | avg 
@@ -1019,7 +1020,7 @@ ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = tr
 INSERT INTO conditions VALUES ('2020-01-01 01:00+00', 'sensor_a', 1);
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- baseline: sensor_a tracked normally.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -1037,7 +1038,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 INSERT INTO conditions VALUES ('2020-01-01 01:00+00', 'sensor_b', 1);
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 1 row(s), fully granular
 -- has only sensor_z
 SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
             bucket            | sensor_id | avg 
@@ -1060,14 +1061,14 @@ INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
 --status should be 1 now. i.e shared mem contents is invalid
 -- insert happens after mem is invalidated. So should not record new entry
 -- so nentries should stay at 1.
-SELECT seq_num, active_generation, nentries, status
+SELECT seq_num, active_generation, nentries, status, num_invalids
 FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::regclass);
- seq_num | active_generation | nentries | status 
----------+-------------------+----------+--------
-       3 |                 0 |        1 |      1
+ seq_num | active_generation | nentries | status | num_invalids 
+---------+-------------------+----------+--------+--------------
+       3 |                 0 |        1 |      1 |            1
 
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 2 row(s), deleted 0 row(s), no granular refresh
 -- has only sensor_z+sensor_x.
 -- sensor_a+ sensor_b are in 2020. we should see tracking entries
 SELECT * FROM cond_daily ORDER BY sensor_id, bucket;
@@ -1092,7 +1093,7 @@ ORDER BY hypertable_id, tenant_id, seqnum;
 
 --refresh from 2020 so that we can see sensor_a . falls back to full refresh
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Wed Jan 01 00:00:00 2020 UTC, infinity ], materialized 5 row(s), deleted 3 row(s), partly granular
 -- tracking rows remain until garbage collected by a later refresh.
 SELECT *
 FROM continuous_aggs_tenant_tracking_view
@@ -1143,7 +1144,7 @@ ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = tr
 -- the generation INVALID.
 INSERT INTO conditions VALUES ('2025-01-01 00:00+00', 'sensor_a', 1);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', '2025-02-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, Sat Feb 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, Sat Feb 01 00:00:00 2025 UTC ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Two VALID inserts (sensor_b) at widely separated times land in the SAME
 -- generation, so both invalidation-log entries are tagged with that
 -- generation's seqnum ...
@@ -1172,7 +1173,7 @@ FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::r
 -- for the dead seqnum) recomputes the 01-05 bucket; the 01-20 entry is left in
 -- the cagg log for a later refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2024-01-01 00:00+00', '2024-01-10 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Jan 01 00:00:00 2024 UTC, Wed Jan 10 00:00:00 2024 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Jan 01 00:00:00 2024 UTC, Wed Jan 10 00:00:00 2024 UTC ], materialized 2 row(s), deleted 1 row(s), no granular refresh
 --The dead generation's tracking row is still present until garbage collected
 --by a later refresh.
 SELECT count(*) AS tracking_rows
@@ -1199,7 +1200,7 @@ INSERT INTO conditions VALUES ('2024-01-20 01:00+00', 'sensor_b', 20);
 -- back to a full refresh. Refresh 2024-01-01 range again.
 -- This will write out tracker and inv entries for us to inspect.
 CALL refresh_continuous_aggregate('cond_daily', '2024-01-01 00:00+00', '2024-01-10 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Jan 01 00:00:00 2024 UTC, Wed Jan 10 00:00:00 2024 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Jan 01 00:00:00 2024 UTC, Wed Jan 10 00:00:00 2024 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM continuous_aggs_tenant_tracking_view
 WHERE hypertable_id = (
     SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
@@ -1236,7 +1237,7 @@ ORDER BY 1, 2, seqnum;
 
 -- verify that update for sensor_b picked up all ranges with and without valid seqnum
 CALL refresh_continuous_aggregate('cond_daily', '2024-01-10 00:00+00', '2024-01-30 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Wed Jan 10 00:00:00 2024 UTC, Tue Jan 30 00:00:00 2024 UTC ]
+NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Wed Jan 10 00:00:00 2024 UTC, Tue Jan 30 00:00:00 2024 UTC ], materialized 3 row(s), deleted 2 row(s), partly granular
 -- 01-20 bucket is correct; the whole range has been materialized across the two refreshes.
 SELECT bucket, sensor_id, cnt FROM cond_daily
 WHERE bucket < '2025-01-01 00:00+00'
@@ -1311,11 +1312,11 @@ INSERT INTO metrics VALUES
   ('2020-03-01 00:00+00', 'A', 1), ('2020-03-01 00:00+00', 'B', 1), ('2020-03-01 00:00+00', 'C', 1),
   ('2020-03-02 00:00+00', 'A', 1), ('2020-03-02 00:00+00', 'B', 1), ('2020-03-02 00:00+00', 'C', 1);
 CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 6 row(s), deleted 0 row(s), no granular refresh
 CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 6 row(s), deleted 0 row(s)
 CALL refresh_continuous_aggregate('m_ng2',  NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 6 row(s), deleted 0 row(s)
 -- Clean start: the hypertable invalidation log is empty. The materialization
 -- log still shows two +/-infinity "outside the refreshed window" residual
 -- entries per cagg (NULL seqnum)
@@ -1377,11 +1378,11 @@ SELECT * FROM continuous_aggs_tenant_tracking_view;
 
 -- Reset to a clean slate (drain every cagg's mat log and the tracker).
 CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 1 row(s), deleted 1 row(s), fully granular
 CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 3 row(s), deleted 3 row(s)
 CALL refresh_continuous_aggregate('m_ng2',  NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 3 row(s), deleted 3 row(s)
 SELECT * FROM mat_invlog_view;
   cagg  |            start             |    end    | seqnum 
 --------+------------------------------+-----------+--------
@@ -1428,11 +1429,11 @@ SELECT * FROM mat_invlog_view;
 -- ----------------------------------------------------------------------------
 -- Reset to a clean slate again.
 CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 1 row(s), deleted 0 row(s)
 CALL refresh_continuous_aggregate('m_ng2',  NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 1 row(s), deleted 0 row(s)
 SELECT * FROM mat_invlog_view;
   cagg  |            start             |    end    | seqnum 
 --------+------------------------------+-----------+--------
@@ -1485,12 +1486,14 @@ LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materi
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Aug 01 00:00:00 2020 UTC, Mon Aug 03 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Aug 01 00:00:00 2020 UTC, Mon Aug 03 00:00:00 2020 UTC ], materialized 2 row(s), deleted 0 row(s), fully granular
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Aug 01 00:00:00 2020 UTC, Mon Aug 03 00:00:00 2020 UTC ], materialized 2 row(s), deleted 0 row(s), fully granular
 CALL refresh_continuous_aggregate('m_ng1',  '2020-08-01 00:00+00', '2020-08-03 00:00+00');
 LOG:  statement: CALL refresh_continuous_aggregate('m_ng1',  '2020-08-01 00:00+00', '2020-08-03 00:00+00');
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
 LOG:  inserted 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Aug 01 00:00:00 2020 UTC, Mon Aug 03 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Aug 01 00:00:00 2020 UTC, Mon Aug 03 00:00:00 2020 UTC ], materialized 2 row(s), deleted 0 row(s)
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Aug 01 00:00:00 2020 UTC, Mon Aug 03 00:00:00 2020 UTC ], materialized 2 row(s), deleted 0 row(s)
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Reset before the next case
@@ -1499,7 +1502,7 @@ NOTICE:  continuous aggregate "m_gran" is already up-to-date
 CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
 NOTICE:  continuous aggregate "m_ng1" is already up-to-date
 CALL refresh_continuous_aggregate('m_ng2',  NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 2 row(s), deleted 0 row(s)
 -- ----------------------------------------------------------------------------
 -- (d) Refresh scope: for the same invalidated range, the non-granular cagg
 --     re-materializes every tenant, while the granular cagg re-materializes only
@@ -1511,9 +1514,9 @@ INSERT INTO metrics VALUES
   ('2020-12-02 00:00+00', 'A', 1), ('2020-12-02 00:00+00', 'B', 1), ('2020-12-02 00:00+00', 'C', 1),
   ('2020-12-03 00:00+00', 'A', 1), ('2020-12-03 00:00+00', 'B', 1), ('2020-12-03 00:00+00', 'C', 1);
 CALL refresh_continuous_aggregate('m_gran', NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 9 row(s), deleted 0 row(s), fully granular
 CALL refresh_continuous_aggregate('m_ng1',  NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ], materialized 9 row(s), deleted 0 row(s)
 -- Late change touching ONLY tenant A, in one already-materialized bucket.
 INSERT INTO metrics VALUES ('2020-12-02 06:00+00', 'A', 9);
 SET client_min_messages TO LOG;
@@ -1522,13 +1525,15 @@ CALL refresh_continuous_aggregate('m_gran', '2020-12-01 00:00+00', '2020-12-04 0
 LOG:  statement: CALL refresh_continuous_aggregate('m_gran', '2020-12-01 00:00+00', '2020-12-04 00:00+00');
 LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Dec 01 00:00:00 2020 UTC, Fri Dec 04 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Dec 01 00:00:00 2020 UTC, Fri Dec 04 00:00:00 2020 UTC ], materialized 1 row(s), deleted 1 row(s), fully granular
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Dec 01 00:00:00 2020 UTC, Fri Dec 04 00:00:00 2020 UTC ], materialized 1 row(s), deleted 1 row(s), fully granular
 -- Non-granular: the invalidated bucket is rewritten for every tenant (3 delete+insert).
 CALL refresh_continuous_aggregate('m_ng1', '2020-12-01 00:00+00', '2020-12-04 00:00+00');
 LOG:  statement: CALL refresh_continuous_aggregate('m_ng1', '2020-12-01 00:00+00', '2020-12-04 00:00+00');
 LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
 LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Dec 01 00:00:00 2020 UTC, Fri Dec 04 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Dec 01 00:00:00 2020 UTC, Fri Dec 04 00:00:00 2020 UTC ], materialized 3 row(s), deleted 3 row(s)
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Dec 01 00:00:00 2020 UTC, Fri Dec 04 00:00:00 2020 UTC ], materialized 3 row(s), deleted 3 row(s)
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Both caggs end up with identical, correct contents for the 2020-12 region.
@@ -1613,7 +1618,7 @@ SELECT hashtext('t1') = hashtext('t1uLGQQa') AS hash_collides,
 -- inserts below actually log invalidations.
 INSERT INTO collide VALUES ('2024-06-01 00:00+00', 'seed', 1);
 CALL refresh_continuous_aggregate('coll_daily', NULL, '2024-07-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Mon Jul 01 00:00:00 2024 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Mon Jul 01 00:00:00 2024 UTC ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- verify tenant tracking works correctly even if there is hash collision
 -- Separate transactions so the SHORT key is drained into the tracker generation
 -- first; the fast-path probe for the long key then walks over the stored short
@@ -1625,7 +1630,7 @@ BEGIN;
 INSERT INTO collide VALUES ('2020-03-01 06:00+00', 't1uLGQQa', 2);
 COMMIT;
 CALL refresh_continuous_aggregate('coll_daily', '2020-03-01 00:00+00', '2020-03-02 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Mar 01 00:00:00 2020 UTC, Mon Mar 02 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Mar 01 00:00:00 2020 UTC, Mon Mar 02 00:00:00 2020 UTC ], materialized 2 row(s), deleted 0 row(s), fully granular
 -- Both tenants are tracked separately, so both are materialized.
 SELECT bucket, tenant, cnt FROM coll_daily
 WHERE bucket = '2020-03-01 00:00+00'

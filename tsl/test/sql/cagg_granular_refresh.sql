@@ -865,7 +865,7 @@ INSERT INTO conditions VALUES ('2025-01-02 00:00+00', 'sensor_z', 0);
 --status should be 1 now. i.e shared mem contents is invalid
 -- insert happens after mem is invalidated. So should not record new entry
 -- so nentries should stay at 1.
-SELECT seq_num, active_generation, nentries, status
+SELECT seq_num, active_generation, nentries, status, num_invalids
 FROM _timescaledb_functions.hypertable_get_tenant_tracking_info( 'conditions'::regclass);
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
 -- has only sensor_z+sensor_x.
