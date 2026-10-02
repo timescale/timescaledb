@@ -24,7 +24,10 @@
 # and so on. A stable divergence is still not a bug if the query allows
 # multiple correct outputs.
 #
-# Must not depend on floating point precision or numeric stability.
+# Must not depend on floating point precision or numeric stability. It is always
+# possible to engineer a case where these issues accumulate to give an
+# arbitrarily large divirgence in the query results, but the underlying behavior
+# is still not admissible to this oracle.
 #
 # Must be independent from arbitrary environmental influence like the OID values
 # or chunk identifiers.
