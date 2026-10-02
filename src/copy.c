@@ -393,6 +393,35 @@ TSCopyMultiInsertInfoIsFull(TSCopyMultiInsertInfo *miinfo)
 	return false;
 }
 
+static inline void
+copy_invalidate_cagg(TSCopyMultiInsertInfo *miinfo, Relation rel, TupleTableSlot *slot)
+{
+	if (miinfo->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
+	{
+		bool should_free;
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+		ts_cm_functions->continuous_agg_dml_invalidate(miinfo->ht->fd.id, rel, tuple, NULL, false);
+		if (should_free)
+		{
+			heap_freetuple(tuple);
+		}
+	}
+}
+
+#ifdef TS_DEBUG
+/* Exercise tuple ownership with slot types not produced by heap COPY. */
+void
+ts_copy_invalidate_cagg_test(Hypertable *ht, Relation rel, TupleTableSlot *slot)
+{
+	TSCopyMultiInsertInfo miinfo = {
+		.ht = ht,
+		.has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(ht->fd.id),
+	};
+
+	copy_invalidate_cagg(&miinfo, rel, slot);
+}
+#endif
+
 /*
  * Write the tuples stored in 'buffer' out to the table.
  */
@@ -507,20 +536,7 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 								 NULL /* transition capture */);
 		}
 
-		if (miinfo->has_continuous_aggregate && !ts_guc_skip_cagg_invalidation)
-		{
-			bool should_free;
-			HeapTuple tuple = ExecFetchSlotHeapTuple(slots[i], false, &should_free);
-			ts_cm_functions->continuous_agg_dml_invalidate(miinfo->ht->fd.id,
-														   resultRelInfo->ri_RelationDesc,
-														   tuple,
-														   NULL,
-														   false);
-			if (should_free)
-			{
-				heap_freetuple(tuple);
-			}
-		}
+		copy_invalidate_cagg(miinfo, resultRelInfo->ri_RelationDesc, slots[i]);
 
 		ExecClearTuple(slots[i]);
 	}
@@ -1289,6 +1305,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 										 recheckIndexes,
 										 ccstate->cstate->transition_capture);
 				}
+				copy_invalidate_cagg(&multiInsertInfo, resultRelInfo->ri_RelationDesc, myslot);
 			}
 			else if (buffer->method == TS_CIM_COMPRESSION)
 			{

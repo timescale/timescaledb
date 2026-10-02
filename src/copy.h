@@ -35,3 +35,7 @@ typedef struct CopyChunkState
 extern void timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed,
 							   Hypertable *ht);
 extern void timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode);
+
+#ifdef TS_DEBUG
+extern void ts_copy_invalidate_cagg_test(Hypertable *ht, Relation rel, TupleTableSlot *slot);
+#endif
