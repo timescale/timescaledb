@@ -1846,6 +1846,10 @@ resolve_columns_to_attnos(List *column_names, Oid relid)
 /*
  * Resolve the column names in the parsed settings to attribute numbers for the given relation
  * and return a list of bitmapsets corresponding to each object in the parsed settings.
+ *
+ * Objects without columns, such as the {"source": "config"} object stored for an empty
+ * sparse index setting, resolve to an empty (NULL) bitmapset so that the result stays
+ * aligned with the objects in the parsed settings.
  */
 TsBmsList
 ts_resolve_columns_to_attnos_from_parsed_settings(SparseIndexSettings *settings, Oid relid)
@@ -1857,7 +1861,8 @@ ts_resolve_columns_to_attnos_from_parsed_settings(SparseIndexSettings *settings,
 	foreach_ptr(SparseIndexSettingsObject, obj, settings->objects)
 	{
 		List *column_names = ts_get_column_names_from_parsed_object(obj);
-		Bitmapset *attnos = resolve_columns_to_attnos(column_names, relid);
+		Bitmapset *attnos =
+			column_names != NIL ? resolve_columns_to_attnos(column_names, relid) : NULL;
 		result = lappend(result, attnos);
 	}
 
