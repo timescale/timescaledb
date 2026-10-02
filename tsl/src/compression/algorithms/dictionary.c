@@ -187,8 +187,11 @@ DictionaryCompressor *
 dictionary_compressor_alloc(Oid type)
 {
 	DictionaryCompressor *compressor = palloc(sizeof(*compressor));
-	TypeCacheEntry *tentry =
-		lookup_type_cache(type, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
+	/*
+	 * Only typlen/typbyval/typalign are needed: dictionary entries are keyed on
+	 * the datum image, not on the type's hash and equality operators.
+	 */
+	TypeCacheEntry *tentry = lookup_type_cache(type, 0);
 
 	compressor->next_index = 0;
 	compressor->dict_val_size = 0;
