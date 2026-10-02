@@ -359,7 +359,7 @@ ALTER MATERIALIZED VIEW readings_by_location SET (timescaledb.enable_granular_re
 DROP MATERIALIZED VIEW readings_by_location;
 DROP TABLE readings;
 
--- Error: only one cagg per hypertable can enable granular refresh
+-- More than one cagg on a hypertable can enable granular refresh
 CREATE TABLE devices (time timestamptz NOT NULL, device_id integer, value float8);
 SELECT create_hypertable('devices', 'time', chunk_time_interval => '1 day'::interval);
 ALTER TABLE devices SET (
@@ -384,16 +384,12 @@ GROUP BY bucket, device_id
 WITH NO DATA;
 
 ALTER MATERIALIZED VIEW devices_hourly SET (timescaledb.enable_granular_refresh = true);
-
-\set ON_ERROR_STOP 0
 ALTER MATERIALIZED VIEW devices_daily SET (timescaledb.enable_granular_refresh = true);
-\set ON_ERROR_STOP 1
 :GRE 'devices_hourly';
 :GRE 'devices_daily';
 
--- Dropping the first one frees the hypertable, so the second can enable it.
+-- Dropping one leaves the other enabled.
 DROP MATERIALIZED VIEW devices_hourly;
-ALTER MATERIALIZED VIEW devices_daily SET (timescaledb.enable_granular_refresh = true);
 :GRE 'devices_daily';
 
 DROP MATERIALIZED VIEW devices_daily;
