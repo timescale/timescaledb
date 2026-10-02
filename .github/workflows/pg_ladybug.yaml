@@ -7,7 +7,7 @@ name: pg_ladybug
       - ?.*.x
 jobs:
   pg_ladybug:
-    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     env:
       CC: clang-19
       CXX: clang++-19
@@ -66,4 +66,3 @@ jobs:
     - name: Build timescaledb
       run: |
         make -C build -j $(getconf _NPROCESSORS_ONLN)
-

@@ -39,7 +39,7 @@ jobs:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
     name: pg_upgrade test from PG${{ matrix.pg_version_old }} to PG${{ matrix.pg_version_new }}
-    runs-on: runs-on/fleet=linux-8cpu-x64/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     strategy:
       matrix:
         include:

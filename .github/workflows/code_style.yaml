@@ -262,7 +262,7 @@ jobs:
 
   misc_checks:
     name: Check license, update scripts, git hooks, missing gitignore entries and unnecessary template tests
-    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     strategy:
       fail-fast: false
     steps:
@@ -298,4 +298,3 @@ jobs:
     - name: Check for orphaned output test files
       if: always()
       run: ./scripts/check_orphaned_test_output_files.sh
-
