@@ -42,12 +42,14 @@ $ctl->query_safe(
 	"SELECT debug_waitpoint_enable('license_enable_module_loading');");
 
 # Nothing has run in this session yet, so the upsert is what loads the
-# extension and stops at the wait point.
-my $victim = $node->background_psql(
-	'postgres',
-	on_error_stop => 0,
-	connstr       => $node->connstr('postgres')
-	  . ' application_name=license_load_cancel');
+# extension and stops at the wait point. application_name has to be set
+# before that statement. background_psql accepts connstr only since
+# PostgreSQL 18, so set PGAPPNAME, which libpq applies on every version.
+my $victim;
+{
+	local $ENV{PGAPPNAME} = 'license_load_cancel';
+	$victim = $node->background_psql('postgres', on_error_stop => 0);
+}
 $victim->query_until('', "$upsert\n");
 
 my $waiting_query = q{
