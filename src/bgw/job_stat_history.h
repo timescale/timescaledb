@@ -20,3 +20,6 @@ typedef enum BgwJobStatHistoryUpdateType
 
 extern void ts_bgw_job_stat_history_update(BgwJobStatHistoryUpdateType update_type, BgwJob *job,
 										   JobResult result, Jsonb *edata);
+extern void ts_bgw_job_execution_begin(void);
+extern TSDLLEXPORT void ts_bgw_job_execution_set_info(const Jsonb *info);
+extern void ts_bgw_job_execution_end(void);
