@@ -60,7 +60,7 @@ jobs:
   regress:
     if: needs.check_paths.outputs.run_ci == 'true'
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
-    runs-on: runs-on/fleet=linux-8cpu-x64/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     needs: [config, check_paths]
     container:
       image: i386/debian:bookworm-slim@sha256:4d0f3abf8160f14d07208ff72dc4c46882bc5f0a259a8bb8652702c0ee2cc67a

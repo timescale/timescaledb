@@ -32,7 +32,7 @@ jobs:
 
   abi_snapshot_test:
     name: ABI Snapshot Test PG${{ matrix.pg }}
-    runs-on: runs-on/fleet=linux-8cpu-x64/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
     needs: config
 
     env:

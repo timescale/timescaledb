@@ -24,10 +24,12 @@ jobs:
 
   perl_checks:
     name: Check Perl code in tree
-    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     steps:
       - name: Install prerequisites
-        run: sudo apt install perltidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y perltidy
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check trailing whitespace
@@ -98,7 +100,7 @@ jobs:
 
   cc_checks:
     name: Check code formatting
-    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     strategy:
       fail-fast: false
     env:
@@ -154,7 +156,7 @@ jobs:
 
   clang_tidy:
     name: clang-tidy
-    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     env:
       LLVM_VER: 17
     steps:

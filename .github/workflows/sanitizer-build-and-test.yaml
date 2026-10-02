@@ -76,8 +76,8 @@ jobs:
       fail-fast: false
       matrix:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
-        os: ["runs-on/fleet=linux-16cpu-x64/env=ue1"]
-        os_name: ["linux-16cpu-x64"]
+        os: ["runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1"]
+        os_name: ["linux-8cpu-x64-ubuntu24"]
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     steps:
     - name: Replace unreliable Azure APT mirror

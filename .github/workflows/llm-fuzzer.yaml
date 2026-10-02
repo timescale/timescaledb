@@ -74,7 +74,7 @@ jobs:
   fuzzer:
     if: needs.config.outputs.have_key == 'true' && needs.config.outputs.should_run == 'true'
     name: ${{ matrix.display_name }}
-    runs-on: runs-on/fleet=linux-16cpu/env=ue1
+    runs-on: runs-on/fleet=linux-8cpu-ubuntu24/env=ue1
     needs: config
     permissions:
       contents: read
