@@ -11,9 +11,15 @@ on:
       version:
         required: true
         type: string
+      # Ref in timescale/timescaledb to validate, usually the release branch
+      # (e.g. 2.30.x), not the release tag created later.
+      timescaledb-ref:
+        description: "TimescaleDB branch/ref to validate."
+        required: true
+        type: string
 
 jobs:
-  # Tests that the release has a releaseable state.
+  # Tests that the release has a releasable state.
   release_sanity:
     name: Validate release conditions
     runs-on: runs-on/fleet=linux-2cpu/env=ue1
@@ -21,7 +27,12 @@ jobs:
       contents: read
       issues: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: timescale/timescaledb
+          ref: ${{ inputs.timescaledb-ref }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
       # The release branch must have the exact version the release manager
       # specified.
@@ -78,12 +89,12 @@ jobs:
       # no open issues or PRs at release time.
       - name: Release milestone is empty
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           milestone_title="v${{ inputs.version }}"
 
           milestone_number="$(
-            gh api "repos/${GITHUB_REPOSITORY}/milestones?state=all&per_page=100" \
+            gh api "repos/timescale/timescaledb/milestones?state=all&per_page=100" \
               --paginate \
               --jq ".[] | select(.title == \"$milestone_title\") | .number" \
               | head -n 1
@@ -95,7 +106,7 @@ jobs:
           fi
 
           open_items="$(
-            gh api "repos/${GITHUB_REPOSITORY}/milestones/${milestone_number}" \
+            gh api "repos/timescale/timescaledb/milestones/${milestone_number}" \
               --jq '.open_issues'
           )"
 
@@ -104,7 +115,7 @@ jobs:
 
           if [ "$open_items" -ne 0 ]; then
             echo "::error::Release milestone '$milestone_title' still has open items"
-            gh api "repos/${GITHUB_REPOSITORY}/issues?milestone=${milestone_number}&state=open&per_page=100" \
+            gh api "repos/timescale/timescaledb/issues?milestone=${milestone_number}&state=open&per_page=100" \
               --paginate \
               --jq '.[] | "- #\(.number) \(.title) (\(.html_url))"'
             exit 1
@@ -113,32 +124,50 @@ jobs:
   regression:
     name: Regression
     needs: release_sanity
-    uses: ./.github/workflows/linux-build-and-test.yaml
+    uses: timescale/timescaledb/.github/workflows/linux-build-and-test.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
 
   regression_linux_i386:
     name: Regression Linux i386
     needs: release_sanity
-    uses: ./.github/workflows/linux-32bit-build-and-test.yaml
+    uses: timescale/timescaledb/.github/workflows/linux-32bit-build-and-test.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
 
   regression_windows:
     name: Regression Windows
     needs: release_sanity
-    uses: ./.github/workflows/windows-build-and-test.yaml
+    uses: timescale/timescaledb/.github/workflows/windows-build-and-test.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
 
   update_and_downgrade:
     name: Update and Downgrade
     needs: release_sanity
-    uses: ./.github/workflows/update-test.yaml
+    uses: timescale/timescaledb/.github/workflows/update-test.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
 
   pg_upgrade:
     name: pg_upgrade test
     needs: release_sanity
-    uses: ./.github/workflows/pg_upgrade-test.yaml
+    uses: timescale/timescaledb/.github/workflows/pg_upgrade-test.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
 
   abi:
     name: ABI Test
     needs: release_sanity
-    uses: ./.github/workflows/abi.yaml
+    uses: timescale/timescaledb/.github/workflows/abi.yaml@main
+    with:
+      timescaledb-ref: ${{ inputs.timescaledb-ref }}
+    secrets: inherit
 
 # TODO: uncomment when workflow is tested successfully (pk)
 #  compat:
@@ -162,9 +191,9 @@ jobs:
       - name: Get latest timescaledb tag
         id: get_tag
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          LATEST_TAG="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
+          LATEST_TAG="$(gh api "repos/timescale/timescaledb/releases/latest" --jq '.tag_name')"
 
           if [ -z "$LATEST_TAG" ]; then
             echo "::error::Could not determine the latest release tag"

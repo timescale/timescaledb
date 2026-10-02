@@ -7,6 +7,12 @@ name: pg_upgrade test
       - prerelease_test
   pull_request:
   workflow_call:
+    inputs:
+      # Ref in timescale/timescaledb to test when called by release sanity,
+      # usually the release branch (e.g. 2.30.x).
+      timescaledb-ref:
+        required: true
+        type: string
 
 jobs:
   check_paths:
@@ -19,6 +25,10 @@ jobs:
          }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+          ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         if: github.event_name != 'workflow_call'
         id: filter
@@ -83,6 +93,10 @@ jobs:
 
       - name: Checkout TimescaleDB
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+          ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
       - name: Build and install TimescaleDB on PostgreSQL ${{ matrix.pg_version_old}}
         env:
