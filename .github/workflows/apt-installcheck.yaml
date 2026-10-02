@@ -15,7 +15,7 @@ name: "Packaging tests: Installcheck for APT"
   workflow_dispatch:
 jobs:
   apt_tests:
-    name: APT ${{ matrix.runner }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    name: APT ${{ matrix.arch }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
     container:
       image: ${{ matrix.image }}
       env:
@@ -24,8 +24,8 @@ jobs:
       fail-fast: false
       matrix:
         runner:
-          - ubuntu-latest
-          - timescaledb-runner-arm64
+          - runs-on/fleet=linux-8cpu-x64/env=ue1
+          - runs-on/fleet=linux-8cpu/env=ue1
         image:
           - ubuntu:22.04
         pg:
@@ -33,9 +33,9 @@ jobs:
         license:
           - "TSL"
         include:
-          - runner: ubuntu-latest
+          - runner: runs-on/fleet=linux-8cpu-x64/env=ue1
             arch: AMD64
-          - runner: timescaledb-runner-arm64
+          - runner: runs-on/fleet=linux-8cpu/env=ue1
             arch: ARM
           - image: ubuntu:22.04
             image_friendly: Ubuntu 22.04
@@ -147,10 +147,9 @@ jobs:
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: Installcheck logs ${{ matrix.runner }} ${{ matrix.image_friendly }} PG ${{ matrix.pg }}
+        name: Installcheck logs ${{ matrix.arch }} ${{ matrix.image_friendly }} PG ${{ matrix.pg }}
         path: |
             postmaster.*
             initdb.log
             regression.log
             installcheck.log
-

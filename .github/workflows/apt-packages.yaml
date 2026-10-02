@@ -33,9 +33,9 @@ jobs:
           - license: Apache
             pkg_suffix: "-oss"
           - arch: "x86"
-            runner: "ubuntu-latest"
+            runner: "runs-on/fleet=linux-8cpu-x64/env=ue1"
           - arch: "ARM"
-            runner: "cloud-image-runner-ubuntu-24-arm64"
+            runner: "runs-on/fleet=linux-8cpu-ubuntu24/env=ue1"
 
     steps:
     - name: Replace unreliable Azure APT mirror

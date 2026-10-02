@@ -16,7 +16,7 @@ on:
 jobs:
   label-release:
     name: Label Released PRs
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     env:
       GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
