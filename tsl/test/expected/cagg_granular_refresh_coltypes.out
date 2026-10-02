@@ -1,6 +1,8 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- Report refresh statistics throughout.
+SET timescaledb.cagg_refresh_stats_level TO summary;
 -- Granular refresh across tenant column TYPES.
 --
 -- Exercises the tenant-key encode/decode that granular refresh relies on for the
@@ -138,6 +140,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('s_daily', NULL, '2025-05-01 
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Modify only tenant 1 -> only tenant 1 is dirty in the new generation.
@@ -150,6 +153,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('s_daily', NULL, '2025-05-01 
 LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SET client_min_messages TO LOG;
@@ -159,6 +163,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('s_daily', '2020-01-01 00:00+
 LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
 LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 02 00:00:00 2020 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 02 00:00:00 2020 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT sensor_id, avg
@@ -211,6 +216,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('su_daily', NULL, '2025-05-01
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
 LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Modify only tenant ...0001 -> only it is dirty in the new generation.
@@ -223,6 +229,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('su_daily', NULL, '2025-05-01
 LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SET client_min_messages TO LOG;
@@ -232,6 +239,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('su_daily', '2020-01-01 00:00
 LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
 LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 02 00:00:00 2020 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Thu Jan 02 00:00:00 2020 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT sensor_id, avg
@@ -291,6 +299,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('gm_daily', NULL, '2025-05-01
 LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_6"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_6"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 24/11/4714 00:00:00 UTC BC, 01/05/2025 00:00:00 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 24/11/4714 00:00:00 UTC BC, 01/05/2025 00:00:00 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- (note that we still keep the DMY datestyle for the select query result below)
@@ -344,6 +353,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('dm_daily', NULL, '2025-05-01
 LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_8"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_8"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT sensor_id, avg FROM dm_daily ORDER BY sensor_id;
@@ -408,6 +418,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('bp_daily', NULL, '2025-05-01
 LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_10"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_10"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- 'aaa' averages (10+50)/2 = 30; the untouched tenants keep 20 and 30.
@@ -459,6 +470,7 @@ LOG:  statement: CALL refresh_continuous_aggregate('vc_daily', NULL, '2025-05-01
 LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_12"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_12"
 NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
+LOG:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu May 01 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT sensor_id, octet_length(sensor_id) AS stored_bytes, avg
@@ -472,3 +484,4 @@ ORDER BY sensor_id;
 DROP MATERIALIZED VIEW vc_daily;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_12_chunk
 DROP TABLE vc;
+RESET timescaledb.cagg_refresh_stats_level;
