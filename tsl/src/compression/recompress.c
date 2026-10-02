@@ -1856,10 +1856,13 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 											   index_rel,
 											   false);
 
-	/* Free the deterministic compressed chunk name before creating the new one. */
-	rename_compressed_chunk_for_replacement(compressed_relid);
+	/*
+	 * Build the new compressed relation under a temporary name. Renaming the
+	 * old one out of the way here would take AccessExclusiveLock on it and
+	 * block reads of the chunk for the whole recompression.
+	 */
 	Oid new_compressed_relid =
-		create_compress_chunk(uncompressed_chunk, InvalidOid, false, new_settings);
+		create_replacement_compress_chunk(uncompressed_chunk, compressed_relid, new_settings);
 	Relation new_compressed_chunk_rel = table_open(new_compressed_relid, lockmode);
 
 	perform_recompression(recompress_ctx,
@@ -1875,9 +1878,11 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	table_close(compressed_chunk_rel, NoLock);
 	table_close(new_compressed_chunk_rel, NoLock);
 
+	DEBUG_WAITPOINT("recompress_in_memory_before_swap");
+
 	LockRelationOid(uncompressed_chunk->fd.relid, AccessExclusiveLock);
 	LockRelationOid(compressed_relid, AccessExclusiveLock);
-	ts_chunk_drop_by_relid(compressed_relid, DROP_RESTRICT, -1);
+	replace_compressed_chunk(uncompressed_chunk, compressed_relid, new_compressed_relid);
 	if (ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_UNORDERED))
 	{
 		ereport(DEBUG1,

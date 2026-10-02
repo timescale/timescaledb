@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/genam.h>
 #include <access/heapam.h>
 #include <access/reloptions.h>
 #include <access/tupdesc.h>
@@ -921,9 +922,9 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
  * If table_id is InvalidOid, create a new table.
  *
  */
-Oid
-create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_default,
-					  CompressionSettings *settings)
+static Oid
+create_compress_chunk_named(Chunk *src_chunk, Oid table_id, bool skip_segmentby_default,
+							CompressionSettings *settings, const char *relname)
 {
 	Oid tablespace_oid;
 	bool settings_provided = (settings != NULL);
@@ -973,7 +974,8 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 	if (!OidIsValid(table_id))
 	{
 		List *column_defs = build_columndefs(settings, src_chunk->fd.relid);
-		table_id = compression_table_create(src_chunk, column_defs, tablespace_oid, settings);
+		table_id =
+			compression_table_create(src_chunk, column_defs, tablespace_oid, settings, relname);
 	}
 	else
 	{
@@ -1037,6 +1039,93 @@ create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_defaul
 	ts_chunk_set_compressed(src_chunk);
 
 	return table_id;
+}
+
+Oid
+create_compress_chunk(Chunk *src_chunk, Oid table_id, bool skip_segmentby_default,
+					  CompressionSettings *settings)
+{
+	return create_compress_chunk_named(src_chunk, table_id, skip_segmentby_default, settings, NULL);
+}
+
+/*
+ * Create the compressed relation that will replace an existing one.
+ *
+ * The new relation is created under a temporary name, so the existing
+ * compressed relation keeps its name and stays readable while the new one is
+ * populated. Call replace_compressed_chunk() once the new relation is complete.
+ */
+Oid
+create_replacement_compress_chunk(Chunk *src_chunk, Oid old_compressed_relid,
+								  CompressionSettings *settings)
+{
+	char tmp_name[NAMEDATALEN];
+	int ret = snprintf(tmp_name, NAMEDATALEN, "compress_new_%u", old_compressed_relid);
+	if (ret < 0 || ret >= NAMEDATALEN)
+	{
+		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("chunk name too long")));
+	}
+
+	return create_compress_chunk_named(src_chunk, InvalidOid, false, settings, tmp_name);
+}
+
+/*
+ * Drop the old compressed relation and give its name to the replacement
+ * created by create_replacement_compress_chunk().
+ *
+ * The caller must hold AccessExclusiveLock on the old compressed relation.
+ */
+void
+replace_compressed_chunk(Chunk *src_chunk, Oid old_compressed_relid, Oid new_compressed_relid)
+{
+	Assert(CheckRelationOidLockedByMe(old_compressed_relid, AccessExclusiveLock, false));
+
+	ts_chunk_drop_by_relid(old_compressed_relid, DROP_RESTRICT, -1);
+	/* Make the freed name visible to the subsequent rename. */
+	CommandCounterIncrement();
+
+	NameData relname = build_compressed_relation_name(src_chunk);
+	RenameRelationInternal(new_compressed_relid, NameStr(relname), true, false);
+	CommandCounterIncrement();
+
+	/*
+	 * The indexes were named after the temporary relation name. Rename them
+	 * the way DefineIndex() names an index created on the final relation.
+	 */
+	Relation rel = table_open(new_compressed_relid, NoLock);
+	List *index_oids = RelationGetIndexList(rel);
+	Oid namespace_oid = RelationGetNamespace(rel);
+	table_close(rel, NoLock);
+
+	ListCell *lc;
+	foreach (lc, index_oids)
+	{
+		Oid index_oid = lfirst_oid(lc);
+		Relation index_rel = index_open(index_oid, AccessExclusiveLock);
+		TupleDesc index_desc = RelationGetDescr(index_rel);
+		char addition[NAMEDATALEN * 2];
+		int addition_len = 0;
+
+		addition[0] = '\0';
+		for (int i = 0; i < index_desc->natts && addition_len < NAMEDATALEN; i++)
+		{
+			if (addition_len > 0)
+			{
+				addition[addition_len++] = '_';
+			}
+			strlcpy(addition + addition_len,
+					NameStr(TupleDescAttr(index_desc, i)->attname),
+					NAMEDATALEN);
+			addition_len += strlen(addition + addition_len);
+		}
+		index_close(index_rel, NoLock);
+
+		char *index_name =
+			ChooseRelationName(NameStr(relname), addition, "idx", namespace_oid, true);
+		RenameRelationInternal(index_oid, index_name, true, true);
+		CommandCounterIncrement();
+	}
+	list_free(index_oids);
 }
 
 /* Add  the hypertable time column to the end of the orderby list if
