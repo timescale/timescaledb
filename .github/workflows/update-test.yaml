@@ -17,7 +17,7 @@ name: Update and Downgrade
 
 jobs:
   check_paths:
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     outputs:
       run_ci: >-
         ${{ github.event_name == 'push'
@@ -40,7 +40,7 @@ jobs:
     needs: check_paths
     if: needs.check_paths.outputs.run_ci == 'true'
     name: Update test PG${{ matrix.pg }} ${{ matrix.mode }}
-    runs-on: 'ubuntu-latest'
+    runs-on: runs-on/fleet=linux-8cpu-x64/env=ue1
     strategy:
       matrix:
         pg: [16, 17, 18]
@@ -158,7 +158,7 @@ jobs:
     name: Update and Downgrade summary
     needs: [check_paths, update_test]
     if: always()
-    runs-on: timescaledb-runner-arm64
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - run: |
           # If the detector failed, or the matrix failed, exit with error

@@ -90,9 +90,11 @@ def build_debug_config(overrides):
             "coverage": False,
             "cxx": "g++",
             "extra_packages": "clang llvm llvm-dev",
+            "faketime": True,
             "ignored_tests": default_ignored_tests,
             "name": "Debug",
-            "os": "ubuntu-22.04",
+            "os": "runs-on/fleet=linux-8cpu-x64/env=ue1",
+            "os_name": "linux-8cpu-x64",
             "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config",
             "pg_extensions": "postgres_fdw test_decoding",
             "installcheck": True,
@@ -163,8 +165,10 @@ def macos_config(overrides):
             "coverage": False,
             "cxx": "clang++",
             "extra_packages": "",
+            "faketime": False,
             "ignored_tests": default_ignored_tests.union(macos_ignored_tests),
             "os": "macos-15-intel",
+            "os_name": "macos-15-intel",
             "pg_extra_args": (
                 " --enable-debug"
                 f" --with-libraries={openssl_path}/lib"
@@ -207,16 +211,16 @@ m["include"].append(
     )
 )
 
-# Also test on ARM. The custom arm64 runner is only available in the
+# Also test on ARM. The arm64 fleet is only available in the
 # timescale/timescaledb repository.
-# See the available runners here:
-# https://github.com/timescale/timescaledb/actions/runners
 if os.environ.get("GITHUB_REPOSITORY") == "timescale/timescaledb":
     m["include"].append(
         build_debug_config(
             {
                 "pg": PG18_LATEST,
-                "os": "timescaledb-runner-arm64",
+                "os": "runs-on/fleet=linux-8cpu/env=ue1",
+                "os_name": "linux-8cpu",
+                "faketime": False,
                 # We need to enable ARM crypto extensions to build the vectorized grouping
                 # code. The actual architecture for our ARM CI runner is reported as:
                 # -imultiarch aarch64-linux-gnu - -mlittle-endian -mabi=lp64 -march=armv8.2-a+crypto+fp16+rcpc+dotprod

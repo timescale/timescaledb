@@ -7,7 +7,7 @@ name: pg_ladybug
       - ?.*.x
 jobs:
   pg_ladybug:
-    runs-on: ubuntu-latest
+    runs-on: runs-on/fleet=linux-2cpu-x64/env=ue1
     env:
       CC: clang-19
       CXX: clang++-19
