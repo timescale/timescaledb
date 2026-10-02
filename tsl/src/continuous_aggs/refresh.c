@@ -17,10 +17,12 @@
 #include <utils/date.h>
 #include <utils/fmgrprotos.h>
 #include <utils/guc.h>
+#include <utils/json.h>
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
 
+#include "bgw/job_stat_history.h"
 #include "bgw_policy/policies_v2.h"
 #include "debug_point.h"
 #include "dimension.h"
@@ -765,11 +767,84 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 
 /*
- * Report what a refresh did.
+ * Add one refresh range boundary to the information object.
+ *
+ * The boundary is reported in the time type of the refreshed hypertable, so
+ * integer based ranges show up as JSON numbers. The timestamp types are
+ * rendered as ISO-8601 strings, the same representation `to_jsonb` produces,
+ * so that the value does not depend on the DateStyle of the background worker
+ * that happened to run the refresh.
  */
 static void
-cagg_refresh_stats_report(const CaggRefreshStats *stats)
+cagg_refresh_stats_add_boundary(JsonbInState *parse_state, const char *key, Oid range_type,
+								int64 boundary)
 {
+	JsonbValue value = { 0 };
+	Datum datum = ts_internal_to_time_value(boundary, range_type);
+
+	switch (range_type)
+	{
+		case DATEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+		{
+			char *str = JsonEncodeDateTime(NULL, datum, range_type, NULL);
+
+			value.type = jbvString;
+			value.val.string.val = str;
+			value.val.string.len = strlen(str);
+			break;
+		}
+
+		default:
+			ts_jsonb_set_value_by_type(&value, range_type, datum);
+			break;
+	}
+
+	ts_jsonb_add_value(parse_state, key, &value);
+}
+
+/*
+ * Record what a refresh did in the execution history of the job that ran it.
+ */
+static void
+cagg_refresh_stats_report_json(const CaggRefreshStats *stats)
+{
+	JsonbInState parse_state = { 0 };
+	pushJsonbValueCompat(&parse_state, WJB_BEGIN_OBJECT, NULL);
+
+	ts_jsonb_add_int32(&parse_state, "total_batches", stats->total_batches);
+	ts_jsonb_add_int32(&parse_state, "batches_processed", stats->batches_processed);
+
+	cagg_refresh_stats_add_boundary(&parse_state,
+									"range_start",
+									stats->range_type,
+									stats->range_start);
+	cagg_refresh_stats_add_boundary(&parse_state, "range_end", stats->range_type, stats->range_end);
+
+	ts_jsonb_add_int64(&parse_state,
+					   "rows_materialized",
+					   (int64) stats->mat_stats.rows_materialized);
+	ts_jsonb_add_int64(&parse_state, "rows_deleted", (int64) stats->mat_stats.rows_deleted);
+
+	pushJsonbValueCompat(&parse_state, WJB_END_OBJECT, NULL);
+
+	ts_bgw_job_execution_set_info(JsonbValueToJsonb(parse_state.result));
+}
+
+/*
+ * Report what a refresh did. A refresh run by a job also records it in the
+ * execution history of that job.
+ */
+static void
+cagg_refresh_stats_report(int32 job_id, const CaggRefreshStats *stats)
+{
+	/* Only jobs have an execution history, manual refreshes don't have a job id */
+	if (job_id > 0)
+	{
+		cagg_refresh_stats_report_json(stats);
+	}
+
 	if (ts_guc_cagg_refresh_stats_level == CAGG_REFRESH_STATS_OFF)
 	{
 		return;
@@ -937,7 +1012,7 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 		stats.range_start = processed_range_start;
 		stats.range_end = processed_range_end;
 
-		cagg_refresh_stats_report(&stats);
+		cagg_refresh_stats_report(context->options.job_id, &stats);
 	}
 }
 
