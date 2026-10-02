@@ -176,9 +176,38 @@ FROM _timescaledb_internal.bgw_job_stat_history
 WHERE job_id = :job_id_3
 ORDER BY id;
 
+-- A continuous aggregate refresh policy records what it refreshed in the
+-- info field of its execution history entry. Integer time and a fixed
+-- integer_now keep the refreshed window deterministic.
+CREATE TABLE metrics(time int NOT NULL, value int);
+SELECT table_name FROM create_hypertable('metrics', 'time', chunk_time_interval => 50);
+CREATE FUNCTION metrics_now() RETURNS int LANGUAGE SQL IMMUTABLE AS 'SELECT 100';
+SELECT set_integer_now_func('metrics', 'metrics_now');
+INSERT INTO metrics SELECT t, t FROM generate_series(0, 99) t;
+
+CREATE MATERIALIZED VIEW metrics_10
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(10, time) AS bucket, sum(value)
+FROM metrics
+GROUP BY 1
+WITH NO DATA;
+
+-- Window [0, 100] has 10 buckets, refreshed in 5 batches of 2 buckets
+SELECT add_continuous_aggregate_policy('metrics_10', start_offset => 100, end_offset => 0,
+  schedule_interval => interval '1 hour', initial_start => now(),
+  buckets_per_batch => 2) AS job_id_4 \gset
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run(:job_id_4, 1);
+
+SELECT job_id, succeeded, jsonb_pretty(data->'info') AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_4
+ORDER BY id;
+
 SELECT delete_job(:job_id_1);
 SELECT delete_job(:job_id_2);
 SELECT delete_job(:job_id_3);
+SELECT remove_continuous_aggregate_policy('metrics_10');
 
 ALTER SYSTEM RESET timescaledb.enable_job_execution_logging;
 SELECT pg_reload_conf();
