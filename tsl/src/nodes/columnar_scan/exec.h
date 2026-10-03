@@ -32,6 +32,10 @@ typedef struct ColumnarScanState
 	CustomExecMethods exec_methods;
 
 	List *sortinfo;
+	List *metadata_qual_attnos;
+
+	/* Reads the compressed batches in place of the index scan, if set. */
+	struct BatchSeekState *batch_seek;
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
@@ -52,3 +56,5 @@ typedef struct ColumnarScanState
 } ColumnarScanState;
 
 extern Node *columnar_scan_state_create(CustomScan *cscan);
+extern TupleTableSlot *columnar_scan_next_compressed(ColumnarScanState *chunk_state);
+extern void columnar_scan_constify_vectorized_quals(DecompressContext *dcontext);

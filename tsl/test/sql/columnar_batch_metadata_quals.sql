@@ -1,0 +1,110 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Vectorized filters answered from the batch metadata when a batch has a single
+-- value of the column, and columns read only by vectorized filters that are not
+-- decompressed. Results must match an uncompressed table.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET max_parallel_workers_per_gather = 0;
+
+-- Sensors with more than 1000 rows have batches with a single sensor, the
+-- others share batches with their neighbours.
+CREATE TABLE ref (sensor_id int NOT NULL, time timestamptz NOT NULL, val int NOT NULL,
+    grp int NOT NULL, nsensor int, tag text NOT NULL);
+INSERT INTO ref
+SELECT s, '2026-01-01'::timestamptz + n * interval '10 seconds', (s * 7 + n) % 10,
+    s / 10, nullif(s, s / 5 * 5), 'tag' || (s % 3)
+FROM generate_series(1, 60) s, generate_series(1, (s * 337) % 2500 + 1) n;
+
+CREATE FUNCTION make_table(name text, orderby text, sparse text) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+    EXECUTE format('CREATE TABLE %I (LIKE ref)', name);
+    PERFORM create_hypertable(name::regclass, 'time', chunk_time_interval => interval '1 day');
+    EXECUTE format('ALTER TABLE %I SET (timescaledb.compress, timescaledb.compress_segmentby = '''',
+        timescaledb.compress_orderby = %L %s)', name, orderby,
+        CASE WHEN sparse IS NULL THEN '' ELSE format(', timescaledb.sparse_index = %L', sparse) END);
+    EXECUTE format('INSERT INTO %I SELECT * FROM ref', name);
+    PERFORM compress_chunk(c) FROM show_chunks(name::regclass) c;
+    EXECUTE format('ANALYZE %I', name);
+END
+$$;
+
+-- Leading orderby column with first and last values.
+SELECT make_table('ob', 'sensor_id, time', NULL);
+-- Second orderby column. Its first and last values are not its bounds within
+-- the batch.
+SELECT make_table('ob2', 'sensor_id, val', NULL);
+-- Min and max on a column outside of orderby.
+SELECT make_table('mm', 'sensor_id, time', 'minmax(grp)');
+-- Nullable leading orderby column. NULL rows are not in min and max.
+SELECT make_table('nl', 'nsensor, time', NULL);
+
+SELECT show_chunks('ob') || '_compressed' AS ob_cc \gset
+SELECT count(*) FILTER (WHERE _ts_meta_v2_first_sensor_id = _ts_meta_v2_last_sensor_id) single,
+    count(*) FILTER (WHERE _ts_meta_v2_first_sensor_id <> _ts_meta_v2_last_sensor_id) mixed
+FROM :ob_cc;
+
+-- Differences between the compressed table and the reference for a filter.
+CREATE FUNCTION mismatches(tbl regclass, cond text) RETURNS text
+LANGUAGE plpgsql AS $$
+DECLARE
+    a text;
+    b text;
+BEGIN
+    EXECUTE format('SELECT count(*) || '' '' || coalesce(sum(val), 0) || '' ''
+        || coalesce(sum(sensor_id), 0) || '' '' || coalesce(sum(hashtext(time::text)), 0) FROM %s WHERE %s',
+        tbl, cond) INTO a;
+    EXECUTE format('SELECT count(*) || '' '' || coalesce(sum(val), 0) || '' ''
+        || coalesce(sum(sensor_id), 0) || '' '' || coalesce(sum(hashtext(time::text)), 0) FROM ref WHERE %s',
+        cond) INTO b;
+    RETURN CASE WHEN a = b THEN 'ok' ELSE a || ' <> ' || b END;
+END
+$$;
+
+-- Only the sum of val is needed from the scan, sensor_id is read only by the
+-- vectorized filter.
+EXPLAIN (costs off) SELECT sum(val) FROM ob WHERE sensor_id = 30;
+
+CREATE TABLE conds (tbl regclass, cond text);
+INSERT INTO conds VALUES
+    ('ob', 'sensor_id = 30'), ('ob', 'sensor_id = 31'), ('ob', 'sensor_id = 1'),
+    ('ob', 'sensor_id <> 30'), ('ob', 'sensor_id < 30'), ('ob', 'sensor_id >= 30'),
+    ('ob', 'sensor_id = 30::bigint'), ('ob', 'sensor_id = 30 AND val = 3'),
+    ('ob', 'sensor_id = 30 OR sensor_id = 50'), ('ob', 'sensor_id IN (30, 50)'),
+    ('ob', 'sensor_id = 30 AND tag = ''tag0'''), ('ob', 'sensor_id = 30 AND tag = ''tag1'''),
+    ('ob', 'sensor_id = 1000'),
+    ('ob2', 'val = 5'), ('ob2', 'val <> 5'), ('ob2', 'sensor_id = 30 AND val = 5'),
+    ('mm', 'grp = 3'), ('mm', 'grp <> 3'), ('mm', 'grp = 3 AND sensor_id = 30'),
+    ('nl', 'nsensor = 31'), ('nl', 'nsensor = 59'), ('nl', 'nsensor <> 31'), ('nl', 'nsensor > 30');
+
+SELECT tbl, cond, mismatches(tbl, cond) FROM conds ORDER BY tbl::text, cond;
+
+-- The filtered column is needed for output.
+SELECT sensor_id, count(*) FROM ob WHERE sensor_id = 30 GROUP BY sensor_id;
+SELECT sensor_id, count(*) FROM ob WHERE sensor_id IN (30, 31) GROUP BY sensor_id ORDER BY 1;
+SELECT count(*), sum(hashtext(o::text)) FROM ob o WHERE sensor_id = 30;
+SELECT count(*), sum(hashtext(o::text)) FROM ref o WHERE sensor_id = 30;
+SELECT count(*), sum(sensor_id) FROM ob WHERE sensor_id = 30 AND sensor_id::text LIKE '3%';
+SELECT max(time), min(time) FROM ob WHERE sensor_id = 30;
+SELECT max(time), min(time) FROM ref WHERE sensor_id = 30;
+SELECT * FROM ob WHERE sensor_id = 30 ORDER BY time DESC LIMIT 2;
+SELECT * FROM ref WHERE sensor_id = 30 ORDER BY time DESC LIMIT 2;
+
+-- Join parameters.
+SELECT count(*) FILTER (WHERE (h.c, h.s) IS DISTINCT FROM (r.c, r.s))
+FROM generate_series(1, 61) x,
+LATERAL (SELECT count(*) c, sum(val) s FROM ob WHERE sensor_id = x) h,
+LATERAL (SELECT count(*) c, sum(val) s FROM ref WHERE sensor_id = x) r;
+
+SELECT count(*) FILTER (WHERE (h.c, h.s) IS DISTINCT FROM (r.c, r.s))
+FROM generate_series(1, 61) x,
+LATERAL (SELECT count(*) c, sum(val) s FROM nl WHERE nsensor = x) h,
+LATERAL (SELECT count(*) c, sum(val) s FROM ref WHERE nsensor = x) r;
+
+-- Same results without the optimization.
+SET timescaledb.enable_columnar_batch_metadata_quals = off;
+SELECT tbl, cond, mismatches(tbl, cond) FROM conds WHERE mismatches(tbl, cond) <> 'ok';
+RESET timescaledb.enable_columnar_batch_metadata_quals;

@@ -1384,8 +1384,7 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		 */
 		reset_expr_cache(vector_agg_state->expr_cache);
 
-		TupleTableSlot *compressed_slot =
-			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
+		TupleTableSlot *compressed_slot = columnar_scan_next_compressed(decompress_state);
 
 		if (TupIsNull(compressed_slot))
 		{

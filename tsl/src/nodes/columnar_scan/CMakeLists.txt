@@ -3,6 +3,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/batch_array.c
     ${CMAKE_CURRENT_SOURCE_DIR}/batch_queue_heap.c
     ${CMAKE_CURRENT_SOURCE_DIR}/batch_queue_fifo.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/batch_seek.c
     ${CMAKE_CURRENT_SOURCE_DIR}/compressed_batch.c
     ${CMAKE_CURRENT_SOURCE_DIR}/columnar_scan.c
     ${CMAKE_CURRENT_SOURCE_DIR}/detoaster.c
