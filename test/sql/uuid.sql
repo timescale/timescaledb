@@ -173,6 +173,16 @@ SELECT time_bucket('1 day', id, 'Europe/Stockholm'::text, '2000-01-01 00:00'::ti
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 GROUP BY id ORDER BY id DESC;
 
+-- UUID timezone overload must forward a non-NULL offset.
+WITH x AS (
+    SELECT '01942117-de80-7000-8121-f12b2b69dd96'::uuid AS id
+)
+SELECT time_bucket('1 hour', id, 'UTC'::text, NULL::timestamptz, '30 minutes'::interval) =
+       time_bucket('1 hour', uuid_timestamp(id), 'UTC'::text, NULL::timestamptz, '30 minutes'::interval)
+       AS uuid_timezone_offset_matches_timestamp
+FROM x \gset
+\echo :uuid_timezone_offset_matches_timestamp
+
 -- Test UUID time_bucket in WHERE clause. Note that there is currently no chunk
 -- exclusion when using time_bucket() in the WHERE clause qual. This requires
 -- special handling of the time_bucket() transform optimizatios for different
