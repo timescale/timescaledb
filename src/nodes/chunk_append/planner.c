@@ -47,6 +47,33 @@ _chunk_append_init(void)
 	TryRegisterCustomScanMethods(&chunk_append_plan_methods);
 }
 
+/*
+ * Adjust the exclusion clauses to the chunk scanned by this plan. Returns NIL
+ * when the plan does not scan a chunk.
+ */
+static List *
+make_chunk_clauses(PlannerInfo *root, List *exclusion_clauses, Scan *scan)
+{
+	List *chunk_clauses = NIL;
+	ListCell *lc;
+
+	if (scan == NULL || scan->scanrelid == 0)
+	{
+		return NIL;
+	}
+
+	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scan->scanrelid, false);
+
+	foreach (lc, exclusion_clauses)
+	{
+		Node *clause = (Node *) ts_transform_cross_datatype_comparison(lfirst(lc));
+		clause = adjust_appendrel_attrs(root, clause, 1, &appinfo);
+		chunk_clauses = lappend(chunk_clauses, clause);
+	}
+
+	return chunk_clauses;
+}
+
 Plan *
 ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
 							List *clauses, List *custom_plans)
@@ -247,29 +274,25 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			}
 		}
 
+		/* keep the clauses for every chunk of a child */
 		foreach (lc_child, cscan->custom_plans)
 		{
-			Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_child));
+			List *member_clauses = NIL;
+			List *member_rt_indexes = NIL;
+			ListCell *lc_member;
 
-			if (scan == NULL || scan->scanrelid == 0)
+			foreach (lc_member, ts_chunk_append_get_members(lfirst(lc_child)))
 			{
-				chunk_ri_clauses = lappend(chunk_ri_clauses, NIL);
-				chunk_rt_indexes = lappend_oid(chunk_rt_indexes, 0);
-			}
-			else
-			{
-				List *chunk_clauses = NIL;
-				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scan->scanrelid, false);
+				Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_member));
 
-				foreach (lc, exclusion_clauses)
-				{
-					Node *clause = (Node *) ts_transform_cross_datatype_comparison(lfirst(lc));
-					clause = adjust_appendrel_attrs(root, clause, 1, &appinfo);
-					chunk_clauses = lappend(chunk_clauses, clause);
-				}
-				chunk_ri_clauses = lappend(chunk_ri_clauses, chunk_clauses);
-				chunk_rt_indexes = lappend_oid(chunk_rt_indexes, scan->scanrelid);
+				member_clauses =
+					lappend(member_clauses, make_chunk_clauses(root, exclusion_clauses, scan));
+				member_rt_indexes =
+					lappend_oid(member_rt_indexes, scan != NULL ? scan->scanrelid : 0);
 			}
+
+			chunk_ri_clauses = lappend(chunk_ri_clauses, member_clauses);
+			chunk_rt_indexes = lappend(chunk_rt_indexes, member_rt_indexes);
 		}
 
 		Assert(list_length(cscan->custom_plans) == list_length(chunk_ri_clauses));
@@ -304,6 +327,22 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	cscan->custom_private = custom_private;
 
 	return &cscan->scan.plan;
+}
+
+/*
+ * Get the plans of the chunks of a child. A MergeAppend combines the chunks of
+ * a time slice of a space partitioned hypertable, any other child is a single
+ * chunk.
+ */
+List *
+ts_chunk_append_get_members(Plan *plan)
+{
+	if (IsA(plan, MergeAppend))
+	{
+		return castNode(MergeAppend, plan)->mergeplans;
+	}
+
+	return list_make1(plan);
 }
 
 Scan *
