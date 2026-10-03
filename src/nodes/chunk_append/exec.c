@@ -21,6 +21,8 @@
 #include <rewrite/rewriteManip.h>
 #include <storage/lwlock.h>
 #include <utils/builtins.h>
+#include <utils/datum.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/ruleutils.h>
 #include <utils/typcache.h>
@@ -74,6 +76,7 @@ typedef struct ChunkAppendState
 	PlanState **subplan_states;
 
 	MemoryContext exclusion_ctx;
+	MemoryContext hash_value_ctx;
 
 	int num_subplans;
 	int first_partial_plan;
@@ -99,6 +102,10 @@ typedef struct ChunkAppendState
 	List *initial_ri_clauses;
 	/* List of restrictinfo clauses on the parent hypertable */
 	List *initial_parent_clauses;
+	/* hashes of values in the clauses, computed once for all chunks */
+	List *hash_values;
+	List *hash_value_states;
+	List *hash_value_consts;
 
 	/* list of subplans after startup exclusion */
 	List *filtered_subplans;
@@ -196,6 +203,7 @@ ts_chunk_append_state_create(CustomScan *cscan)
 		(List *) copyObject(list_nth(cscan->custom_private, CAP_ChunkRIClauses));
 	state->sort_options = list_nth(cscan->custom_private, CAP_SortOptions);
 	state->initial_parent_clauses = list_nth(cscan->custom_private, CAP_ParentClauses);
+	state->hash_values = list_nth(cscan->custom_private, CAP_HashValues);
 
 	state->startup_exclusion = list_nth_int(settings, CAS_StartupExclusion);
 	state->runtime_exclusion_parent = list_nth_int(settings, CAS_RuntimeExclusionParent);
@@ -213,6 +221,9 @@ ts_chunk_append_state_create(CustomScan *cscan)
 	state->exclusion_ctx = AllocSetContextCreate(CurrentMemoryContext,
 												 "ChunkApppend exclusion",
 												 ALLOCSET_DEFAULT_SIZES);
+	state->hash_value_ctx = AllocSetContextCreate(CurrentMemoryContext,
+												  "ChunkApppend hash values",
+												  ALLOCSET_SMALL_SIZES);
 
 	return (Node *) state;
 }
@@ -231,6 +242,111 @@ make_restrictinfos(List *clauses)
 	}
 
 	return restrictinfos;
+}
+
+/*
+ * Replace the hash of a value in a clause by its result computed for all
+ * chunks.
+ */
+static List *
+replace_hash_values(List *hash_values, List *hash_value_consts, List *clauses)
+{
+	List *result = NIL;
+	ListCell *lc;
+
+	if (hash_value_consts == NIL)
+	{
+		return clauses;
+	}
+
+	foreach (lc, clauses)
+	{
+		Expr *clause = lfirst(lc);
+
+		if (IsA(clause, OpExpr) && list_length(castNode(OpExpr, clause)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, clause);
+			ListCell *lc_value, *lc_const;
+
+			forboth (lc_value, hash_values, lc_const, hash_value_consts)
+			{
+				if (lfirst(lc_const) != NULL && equal(lsecond(op->args), lfirst(lc_value)))
+				{
+					OpExpr *new_op = makeNode(OpExpr);
+
+					memcpy(new_op, op, sizeof(OpExpr));
+					new_op->args = list_make2(linitial(op->args), lfirst(lc_const));
+					clause = (Expr *) new_op;
+					break;
+				}
+			}
+		}
+
+		result = lappend(result, clause);
+	}
+
+	return result;
+}
+
+static bool
+contain_exec_params_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, Param) && castNode(Param, node)->paramkind == PARAM_EXEC)
+	{
+		return true;
+	}
+
+	return expression_tree_walker(node, contain_exec_params_walker, context);
+}
+
+/*
+ * Compute the hashes of the values. Values using parameters set while executing
+ * are skipped, leaving NULL in the result, unless with_exec_params is set.
+ */
+static List *
+compute_hash_values(ChunkAppendState *state, bool with_exec_params)
+{
+	ExprContext *econtext = state->csstate.ss.ps.ps_ExprContext;
+	List *hash_value_consts = NIL;
+	ListCell *lc_value, *lc_state;
+
+	forboth (lc_value, state->hash_values, lc_state, state->hash_value_states)
+	{
+		Expr *value = lfirst(lc_value);
+		Const *result = NULL;
+
+		if (with_exec_params || !contain_exec_params_walker((Node *) value, NULL))
+		{
+			Oid type = exprType((Node *) value);
+			int16 typlen;
+			bool typbyval;
+			bool isnull;
+			Datum datum = ExecEvalExprSwitchContext(lfirst(lc_state), econtext, &isnull);
+
+			get_typlenbyval(type, &typlen, &typbyval);
+			result = makeConst(type,
+							   exprTypmod((Node *) value),
+							   exprCollation((Node *) value),
+							   typlen,
+							   isnull ? (Datum) 0 : datumCopy(datum, typbyval, typlen),
+							   isnull,
+							   typbyval);
+		}
+
+		hash_value_consts = lappend(hash_value_consts, result);
+	}
+
+	if (hash_value_consts != NIL)
+	{
+		ResetExprContext(econtext);
+	}
+
+	return hash_value_consts;
 }
 
 /*
@@ -278,6 +394,9 @@ do_startup_exclusion(ChunkAppendState *state)
 	/* Reset included subplans */
 	state->subplans_after_startup = NULL;
 
+	/* the hashes of the values are computed once for all chunks */
+	List *hash_value_consts = compute_hash_values(state, false);
+
 	/*
 	 * clauses and constraints should always have the same length as initial_subplans
 	 */
@@ -309,7 +428,9 @@ do_startup_exclusion(ChunkAppendState *state)
 
 			if (!startup_exclude_chunk(&root,
 									   lfirst(lc_member_constraints),
-									   member_clauses,
+									   replace_hash_values(state->hash_values,
+														   hash_value_consts,
+														   member_clauses),
 									   &const_clauses))
 			{
 				valid_members = bms_add_member(valid_members, member);
@@ -389,6 +510,10 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	ExecAssignScanProjectionInfoWithVarno(&node->ss, INDEX_VAR);
 
 	initialize_constraints(state, list_nth(cscan->custom_private, CAP_RTIndexes));
+
+	List *hash_values = copyObject(state->hash_values);
+	fix_opfuncids((Node *) hash_values);
+	state->hash_value_states = ExecInitExprList(hash_values, &node->ss.ps);
 
 	/*
 	 * In parallel mode, the leader performs startup exclusion and ships the
@@ -509,7 +634,12 @@ can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints
 	bool can_exclude;
 	MemoryContext old = MemoryContextSwitchTo(state->exclusion_ctx);
 	List *restrictinfos =
-		ts_constify_restrictinfo_params(root, ps->state, make_restrictinfos(clauses));
+		ts_constify_restrictinfo_params(root,
+										ps->state,
+										make_restrictinfos(
+											replace_hash_values(state->hash_values,
+																state->hash_value_consts,
+																clauses)));
 
 	can_exclude = can_exclude_chunk(constraints, restrictinfos);
 
@@ -579,6 +709,7 @@ do_runtime_exclusion(ChunkAppendState *state)
 	}
 
 	state->runtime_number_loops++;
+	state->hash_value_consts = NIL;
 
 	if (state->runtime_exclusion_parent)
 	{
@@ -606,6 +737,11 @@ do_runtime_exclusion(ChunkAppendState *state)
 		}
 		return;
 	}
+
+	MemoryContextReset(state->hash_value_ctx);
+	MemoryContext old = MemoryContextSwitchTo(state->hash_value_ctx);
+	state->hash_value_consts = compute_hash_values(state, true);
+	MemoryContextSwitchTo(old);
 
 	Assert(state->num_subplans == list_length(state->filtered_ri_clauses));
 

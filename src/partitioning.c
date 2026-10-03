@@ -317,45 +317,11 @@ ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, b
 static Oid
 resolve_function_argtype(FunctionCallInfo fcinfo)
 {
-	FuncExpr *fe;
-	Node *node;
-	Oid argtype;
+	Oid argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 
-	/* Get the function expression from the call info */
-	fe = (FuncExpr *) fcinfo->flinfo->fn_expr;
-
-	if (NULL == fe || !IsA(fe, FuncExpr))
+	if (!OidIsValid(argtype))
 	{
-		elog(ERROR, "no function expression set when invoking partitioning function");
-	}
-
-	if (list_length(fe->args) != 1)
-	{
-		elog(ERROR, "unexpected number of arguments in function expression");
-	}
-
-	node = linitial(fe->args);
-
-	switch (nodeTag(node))
-	{
-		case T_Var:
-			argtype = castNode(Var, node)->vartype;
-			break;
-		case T_Const:
-			argtype = castNode(Const, node)->consttype;
-			break;
-		case T_CoerceViaIO:
-			argtype = castNode(CoerceViaIO, node)->resulttype;
-			break;
-		case T_FuncExpr:
-			/* Argument is function, so our input is its result type */
-			argtype = castNode(FuncExpr, node)->funcresulttype;
-			break;
-		case T_Param:
-			argtype = castNode(Param, node)->paramtype;
-			break;
-		default:
-			elog(ERROR, "unsupported expression argument node type: %s", ts_get_node_name(node));
+		elog(ERROR, "could not resolve the argument type of the partitioning function");
 	}
 
 	return argtype;
