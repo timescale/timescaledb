@@ -361,8 +361,8 @@ typedef DimensionValues *(*get_dimension_values)(Const *c, bool use_or);
  */
 static bool
 hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root, Var *v,
-								  Expr *expr, Oid op_oid, get_dimension_values func_get_dim_values,
-								  bool use_or)
+								  Expr *expr, Oid op_oid, Oid inputcollid,
+								  get_dimension_values func_get_dim_values, bool use_or)
 {
 	DimensionRestrictInfo *dri;
 	Const *c;
@@ -388,6 +388,16 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	}
 
 	c = (Const *) expr;
+
+	/*
+	 * Rows are hashed with the collation of the column. Under another,
+	 * nondeterministic collation values with different hashes can be equal.
+	 */
+	if (IS_CLOSED_DIMENSION(dri->dimension) && OidIsValid(inputcollid) &&
+		inputcollid != v->varcollid && !get_collation_isdeterministic(inputcollid))
+	{
+		return false;
+	}
 
 	/* quick check for a NULL constant */
 	if (c->constisnull)
@@ -503,7 +513,7 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	{
 		proven_true_by_hri = dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
 																strategy,
-																c->constcollid,
+																v->varcollid,
 																dimvalues);
 	}
 	else
@@ -523,7 +533,7 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 				/* Apply partitioning function first, then convert result to int64 */
 				Oid restype;
 				value = ts_dimension_transform_value(dri->dimension,
-													 c->constcollid,
+													 v->varcollid,
 													 value,
 													 valuetype,
 													 &restype);
@@ -621,6 +631,7 @@ ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo 
 
 	get_dimension_values value_func;
 	bool use_or;
+	Oid inputcollid;
 
 	switch (nodeTag(e))
 	{
@@ -628,12 +639,14 @@ ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo 
 		{
 			value_func = dimension_values_create_from_single_element;
 			use_or = false;
+			inputcollid = castNode(OpExpr, e)->inputcollid;
 			break;
 		}
 		case T_ScalarArrayOpExpr:
 		{
 			value_func = dimension_values_create_from_array;
 			use_or = castNode(ScalarArrayOpExpr, e)->useOr;
+			inputcollid = castNode(ScalarArrayOpExpr, e)->inputcollid;
 			break;
 		}
 		default:
@@ -641,7 +654,14 @@ ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo 
 			return false;
 	}
 
-	return hypertable_restrict_info_add_expr(hri, root, var, arg_value, opno, value_func, use_or);
+	return hypertable_restrict_info_add_expr(hri,
+											 root,
+											 var,
+											 arg_value,
+											 opno,
+											 inputcollid,
+											 value_func,
+											 use_or);
 }
 
 void

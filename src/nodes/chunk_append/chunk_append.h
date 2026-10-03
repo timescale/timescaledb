@@ -33,6 +33,7 @@ typedef enum
 	CAP_RTIndexes = 2,
 	CAP_SortOptions = 3,
 	CAP_ParentClauses = 4,
+	CAP_HashValues = 5,
 	CAP_Count
 } ChunkAppendPrivateIndex;
 
@@ -55,6 +56,9 @@ extern Plan *ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, Cus
 										 List *tlist, List *clauses, List *custom_plans);
 extern Node *ts_chunk_append_state_create(CustomScan *cscan);
 
+extern bool ts_chunk_append_clauses_allow_exclusion(PlannerInfo *root, List *clauses, Index relid,
+													const Hypertable *ht);
+
 extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 											  int *order_attno, bool *reverse);
 
@@ -62,6 +66,7 @@ extern TSDLLEXPORT bool ts_is_chunk_append_path(Path *path);
 extern TSDLLEXPORT bool ts_is_chunk_append_plan(Plan *plan);
 
 extern Scan *ts_chunk_append_get_scan_plan(Plan *plan);
+extern List *ts_chunk_append_get_members(Plan *plan);
 
 void _chunk_append_init(void);
 
