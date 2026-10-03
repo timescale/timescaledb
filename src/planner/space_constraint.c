@@ -120,12 +120,7 @@ space_partitioning_column(PlannerInfo *root, List *rtable, Index relid, Oid opno
 		return NULL;
 	}
 
-	/*
-	 * Rows are hashed with the collation of the column. Under another,
-	 * nondeterministic collation values with different hashes can be equal.
-	 */
-	if (OidIsValid(inputcollid) && inputcollid != candidate->varcollid &&
-		!get_collation_isdeterministic(inputcollid))
+	if (!ts_partitioning_collation_matches(inputcollid, candidate->varcollid))
 	{
 		return NULL;
 	}
