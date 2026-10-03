@@ -62,7 +62,7 @@ build_nested_oids(PlannerInfo *root, List *children)
 		const Chunk *chunk = ts_planner_chunk_fetch(root, child->parent);
 
 		/*
-		 * The children should be only plain chunks since we're creating a
+		 * The children should be only hypertable chunks since we're creating a
 		 * ChunkAppend, but don't segfault.
 		 */
 		Ensure(chunk != NULL,
