@@ -39,6 +39,7 @@ typedef struct PartitioningInfo
 {
 	NameData column;
 	AttrNumber column_attnum;
+	Oid column_collation;
 	DimensionType dimtype;
 	PartitioningFunc partfunc;
 } PartitioningInfo;
@@ -52,6 +53,7 @@ extern PartitioningInfo *ts_partitioning_info_create(const char *schema, const c
 													 Oid relid);
 extern TSDLLEXPORT Datum ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation,
 													Datum value);
+extern bool ts_partitioning_collation_matches(Oid inputcollid, Oid column_collation);
 
 /* NOTE: assume the tuple belongs to the root table, use ts_partitioning_func_apply for chunk tuples
  */

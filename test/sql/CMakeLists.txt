@@ -31,6 +31,7 @@ set(TEST_FILES
     extension_scripts.sql
     generated_as_identity.sql
     hash.sql
+    hash_collation_icu.sql
     histogram.sql
     index.sql
     information_views.sql
