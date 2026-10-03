@@ -111,15 +111,15 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 }
 
 /*
- * returns now() - window as partitioning type datum
+ * Returns a boundary as a partitioning type or interval datum.
  */
 static Datum
 get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_getter)(const Jsonb *),
-					Interval *(*interval_getter)(const Jsonb *) )
+					Interval *(*interval_getter)(const Jsonb *), bool use_creation_time)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 
-	if (IS_INTEGER_TYPE(partitioning_type))
+	if (IS_INTEGER_TYPE(partitioning_type) && !use_creation_time)
 	{
 		Oid now_func = ts_get_integer_now_func(dim, false);
 
@@ -130,29 +130,23 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 			res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
 			return Int64GetDatum(res);
 		}
-		else
-		{
-			/*
-			 * Otherwise, the interval value can be returned without subtracting it
-			 * from now().
-			 */
-			Interval *lag = interval_getter(config);
-			return IntervalPGetDatum(lag);
-		}
 	}
-	else
+
+	Interval *lag = interval_getter(config);
+	if (IS_INTEGER_TYPE(partitioning_type))
 	{
-		Interval *lag = interval_getter(config);
-		/*
-		 * For UUID (v7) partitioned hypertables, drop_chunks expects TIMESTAMPTZ
-		 * input, so we compute the boundary as TIMESTAMPTZ instead of UUID.
-		 */
-		if (IS_UUID_TYPE(partitioning_type))
-		{
-			partitioning_type = TIMESTAMPTZOID;
-		}
-		return ts_subtract_interval_from_now(lag, partitioning_type);
+		return IntervalPGetDatum(lag);
 	}
+
+	/*
+	 * For UUID (v7) partitioned hypertables, drop_chunks expects TIMESTAMPTZ
+	 * input, so we compute the boundary as TIMESTAMPTZ instead of UUID.
+	 */
+	if (IS_UUID_TYPE(partitioning_type))
+	{
+		partitioning_type = TIMESTAMPTZOID;
+	}
+	return ts_subtract_interval_from_now(lag, partitioning_type);
 }
 
 static List *
@@ -175,7 +169,8 @@ get_chunk_to_recompress(const Dimension *dim, const Jsonb *config)
 	Datum boundary = get_window_boundary(dim,
 										 config,
 										 policy_recompression_get_recompress_after_int,
-										 policy_recompression_get_recompress_after_interval);
+										 policy_recompression_get_recompress_after_interval,
+										 false);
 
 	return ts_dimension_slice_get_chunkids_to_compress(dim->fd.id,
 													   InvalidStrategy, /*start_strategy*/
@@ -371,8 +366,16 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 		}
 	}
 
-	boundary =
-		get_window_boundary(open_dim, config, policy_retention_get_drop_after_int, interval_getter);
+	boundary = get_window_boundary(open_dim,
+								   config,
+								   policy_retention_get_drop_after_int,
+								   interval_getter,
+								   use_creation_time);
+
+	if (use_creation_time && IS_INTEGER_TYPE(boundary_type))
+	{
+		boundary_type = INTERVALOID;
+	}
 
 	/* We need to do a reverse lookup here since the given hypertable might be
 	   a materialized hypertable, and thus need to call drop_chunks on the
