@@ -26,6 +26,8 @@ typedef enum
 	DCP_IsSegmentbyColumn = 2,
 	DCP_BulkDecompressionColumn = 3,
 	DCP_SortInfo = 4,
+	DCP_MetadataQuals = 5,
+	DCP_BatchSeek = 6,
 	DCP_Count
 } ColumnarScanPrivateIndex;
 

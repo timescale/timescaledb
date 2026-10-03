@@ -22,6 +22,9 @@ set(TEST_FILES
     cagg_union_view.sql
     cagg_utils.sql
     chunk_publication_compression.sql
+    columnar_batch_metadata_quals.sql
+    columnar_batch_seek.sql
+    columnar_join_pushdown.sql
     columnstore_aliases.sql
     compact_chunk.sql
     compaction_policy.sql
@@ -95,6 +98,7 @@ set(TEST_FILES
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql
+    vector_qual_param_exec.sql
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES

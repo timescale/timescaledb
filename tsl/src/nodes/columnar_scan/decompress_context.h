@@ -9,6 +9,7 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <executor/tuptable.h>
+#include <fmgr.h>
 #include <nodes/execnodes.h>
 #include <nodes/pg_list.h>
 
@@ -53,6 +54,22 @@ typedef struct CompressionColumnDescription
 	bool bulk_decompression_supported;
 } CompressionColumnDescription;
 
+/*
+ * A vectorized qual "column op constant" on a column with min and max values
+ * in the batch metadata. When they are equal, every row has that value, so the
+ * qual can be evaluated once for the whole batch.
+ */
+typedef struct BatchMetadataQual
+{
+	/* Attnos in the compressed scan tuple, invalid if this qual can't use metadata. */
+	AttrNumber min_attno;
+	AttrNumber max_attno;
+	int16 typlen;
+	bool typbyval;
+	FmgrInfo opfn;
+	Oid inputcollid;
+} BatchMetadataQual;
+
 typedef struct DecompressContext
 {
 	/*
@@ -73,6 +90,39 @@ typedef struct DecompressContext
 	int num_data_columns;
 
 	List *vectorized_quals_constified;
+
+	/*
+	 * When the vectorized quals reference join or initplan parameters, the
+	 * constified version is rebuilt from the original one after these
+	 * parameters change, before the next batch is filtered.
+	 */
+	List *vectorized_quals_original;
+	Bitmapset *vectorized_quals_params;
+	bool vectorized_quals_stale;
+	MemoryContext vectorized_quals_context;
+
+	/*
+	 * When every parameter is a direct operand of a vectorized qual, the
+	 * constified quals are built once with a Const in place of each parameter,
+	 * and only the values of these Consts change afterwards.
+	 */
+	List *vectorized_quals_template;
+	List *vectorized_quals_param_consts;
+	List *vectorized_quals_param_ids;
+	MemoryContext vectorized_quals_values_context;
+
+	/*
+	 * Parallel to vectorized_quals_original, NULL when no qual can use the
+	 * batch metadata.
+	 */
+	BatchMetadataQual *metadata_quals;
+
+	/*
+	 * Per data column, true if only the vectorized quals read it. Such columns
+	 * don't have to be decompressed for output. NULL when there are none.
+	 */
+	bool *qual_only_columns;
+
 	bool reverse;
 	bool batch_sorted_merge; /* Batch sorted merge optimization enabled. */
 	bool enable_bulk_decompression;

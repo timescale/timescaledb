@@ -8,6 +8,7 @@
 #include "ts_stats/ts_stats_defs.h"
 #include <access/sysattr.h>
 #include <executor/executor.h>
+#include <executor/nodeSubplan.h>
 #include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
@@ -17,6 +18,7 @@
 #include <rewrite/rewriteManip.h>
 #include <tcop/tcopprot.h>
 #include <utils/datum.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/typcache.h>
 
@@ -28,6 +30,7 @@
 #include "nodes/columnar_scan/batch_array.h"
 #include "nodes/columnar_scan/batch_queue_fifo.h"
 #include "nodes/columnar_scan/batch_queue_heap.h"
+#include "nodes/columnar_scan/batch_seek.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/compressed_batch.h"
 #include "nodes/columnar_scan/exec.h"
@@ -77,6 +80,7 @@ columnar_scan_state_create(CustomScan *cscan)
 	chunk_state->bulk_decompression_column =
 		list_nth(cscan->custom_private, DCP_BulkDecompressionColumn);
 	chunk_state->sortinfo = list_nth(cscan->custom_private, DCP_SortInfo);
+	chunk_state->metadata_qual_attnos = list_nth(cscan->custom_private, DCP_MetadataQuals);
 
 	chunk_state->custom_scan_tlist = cscan->custom_scan_tlist;
 
@@ -93,7 +97,7 @@ columnar_scan_state_create(CustomScan *cscan)
 	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
-	Assert(list_length(cscan->custom_exprs) == 1);
+	Assert(list_length(cscan->custom_exprs) == 2);
 	chunk_state->vectorized_quals_original = linitial(cscan->custom_exprs);
 	Assert(list_length(chunk_state->decompression_map) ==
 		   list_length(chunk_state->is_segmentby_column));
@@ -187,6 +191,407 @@ columnar_scan_exec_heap(CustomScanState *node)
 	return columnar_scan_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
 
+static bool
+is_exec_param(Node *node)
+{
+	return node != NULL && IsA(node, Param) && castNode(Param, node)->paramkind == PARAM_EXEC;
+}
+
+/*
+ * The current value of a join or initplan parameter. An initplan that has not
+ * run yet runs now.
+ */
+static ParamExecData *
+exec_param_value(ExprContext *econtext, int paramid)
+{
+	ParamExecData *prm = &econtext->ecxt_param_exec_vals[paramid];
+	if (prm->execPlan != NULL)
+	{
+		ExecSetParamPlan(prm->execPlan, econtext);
+		Assert(prm->execPlan == NULL);
+	}
+	return prm;
+}
+
+static Const *
+make_param_const(Param *param, Datum value, bool isnull)
+{
+	int16 typlen;
+	bool typbyval;
+	get_typlenbyval(param->paramtype, &typlen, &typbyval);
+	return makeConst(param->paramtype,
+					 param->paramtypmod,
+					 param->paramcollid,
+					 typlen,
+					 isnull ? (Datum) 0 : datumCopy(value, typbyval, typlen),
+					 isnull,
+					 typbyval);
+}
+
+/* Fold stable functions and external parameters, like the planner does. */
+static Node *
+estimate_value(DecompressContext *dcontext, Node *node)
+{
+	PlannerGlobal glob = {
+		.boundParams = dcontext->ps->state->es_param_list_info,
+	};
+	PlannerInfo root = {
+		.glob = &glob,
+	};
+	return estimate_expression_value(&root, node);
+}
+
+static bool
+collect_exec_params(Node *node, Bitmapset **params)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (is_exec_param(node))
+	{
+		*params = bms_add_member(*params, castNode(Param, node)->paramid);
+		return false;
+	}
+
+	return expression_tree_walker(node, collect_exec_params, params);
+}
+
+/*
+ * Replace join and initplan parameters with their current values.
+ */
+static Node *
+exec_params_to_consts(Node *node, ExprContext *econtext)
+{
+	if (node == NULL)
+	{
+		return NULL;
+	}
+
+	if (is_exec_param(node))
+	{
+		Param *param = castNode(Param, node);
+		ParamExecData *prm = exec_param_value(econtext, param->paramid);
+		return (Node *) make_param_const(param, prm->value, prm->isnull);
+	}
+
+	return expression_tree_mutator(node, exec_params_to_consts, econtext);
+}
+
+/*
+ * Whether a join or initplan parameter is used other than in "column op
+ * parameter". Such a parameter needs constant folding once its value is known,
+ * so the quals can't be reused with only new parameter values.
+ */
+static bool
+has_folded_params(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (is_exec_param(node))
+	{
+		return true;
+	}
+
+	List *args = IsA(node, OpExpr)			  ? castNode(OpExpr, node)->args :
+				 IsA(node, ScalarArrayOpExpr) ? castNode(ScalarArrayOpExpr, node)->args :
+												NIL;
+	if (list_length(args) == 2 && IsA(ts_strip_relabel_types(linitial(args)), Var) &&
+		is_exec_param(lsecond(args)))
+	{
+		return false;
+	}
+
+	return expression_tree_walker(node, has_folded_params, context);
+}
+
+typedef struct ParamConstsContext
+{
+	List *consts;
+	List *param_ids;
+} ParamConstsContext;
+
+/* Replace each parameter with a Const whose value is set before each use. */
+static Node *
+params_to_placeholders(Node *node, ParamConstsContext *ctx)
+{
+	if (node == NULL)
+	{
+		return NULL;
+	}
+
+	if (is_exec_param(node))
+	{
+		Param *param = castNode(Param, node);
+		Const *c = make_param_const(param, (Datum) 0, true);
+		ctx->consts = lappend(ctx->consts, c);
+		ctx->param_ids = lappend_int(ctx->param_ids, param->paramid);
+		return (Node *) c;
+	}
+
+	return expression_tree_mutator(node, params_to_placeholders, ctx);
+}
+
+static void
+setup_vectorized_quals_template(DecompressContext *dcontext)
+{
+	List *folded = NIL;
+	ListCell *lc;
+	foreach (lc, dcontext->vectorized_quals_original)
+	{
+		Node *qual = estimate_value(dcontext, lfirst(lc));
+		if (has_folded_params(qual, NULL))
+		{
+			return;
+		}
+		folded = lappend(folded, qual);
+	}
+
+	ParamConstsContext ctx = { 0 };
+	dcontext->vectorized_quals_template = (List *) params_to_placeholders((Node *) folded, &ctx);
+	dcontext->vectorized_quals_param_consts = ctx.consts;
+	dcontext->vectorized_quals_param_ids = ctx.param_ids;
+	dcontext->vectorized_quals_values_context =
+		AllocSetContextCreate(CurrentMemoryContext,
+							  "vectorized qual parameter values",
+							  ALLOCSET_SMALL_SIZES);
+}
+
+/*
+ * Put the current parameter values into the template. Returns false for a
+ * NULL value, because then the qual has to be folded to a constant.
+ */
+static bool
+update_vectorized_quals_template(DecompressContext *dcontext)
+{
+	ExprContext *econtext = dcontext->ps->ps_ExprContext;
+	MemoryContextReset(dcontext->vectorized_quals_values_context);
+	MemoryContext old = MemoryContextSwitchTo(dcontext->vectorized_quals_values_context);
+
+	bool ok = true;
+	ListCell *lc_const, *lc_id;
+	forboth (lc_const,
+			 dcontext->vectorized_quals_param_consts,
+			 lc_id,
+			 dcontext->vectorized_quals_param_ids)
+	{
+		Const *c = lfirst(lc_const);
+		ParamExecData *prm = exec_param_value(econtext, lfirst_int(lc_id));
+		if (prm->isnull)
+		{
+			ok = false;
+			break;
+		}
+
+		c->constvalue = datumCopy(prm->value, c->constbyval, c->constlen);
+		c->constisnull = false;
+	}
+
+	MemoryContextSwitchTo(old);
+	return ok;
+}
+
+void
+columnar_scan_constify_vectorized_quals(DecompressContext *dcontext)
+{
+	if (dcontext->vectorized_quals_template != NULL && update_vectorized_quals_template(dcontext))
+	{
+		dcontext->vectorized_quals_constified = dcontext->vectorized_quals_template;
+		dcontext->vectorized_quals_stale = false;
+		return;
+	}
+
+	MemoryContext old = CurrentMemoryContext;
+	if (dcontext->vectorized_quals_context != NULL)
+	{
+		MemoryContextReset(dcontext->vectorized_quals_context);
+		MemoryContextSwitchTo(dcontext->vectorized_quals_context);
+	}
+
+	List *constified = NIL;
+	ListCell *lc;
+	foreach (lc, dcontext->vectorized_quals_original)
+	{
+		Node *qual = lfirst(lc);
+		if (dcontext->vectorized_quals_params != NULL)
+		{
+			qual = exec_params_to_consts(qual, dcontext->ps->ps_ExprContext);
+		}
+		constified = lappend(constified, estimate_value(dcontext, qual));
+	}
+
+	MemoryContextSwitchTo(old);
+	dcontext->vectorized_quals_constified = constified;
+	dcontext->vectorized_quals_stale = false;
+}
+
+static bool
+collect_var_attnos(Node *node, Bitmapset **attnos)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, Var))
+	{
+		Var *var = castNode(Var, node);
+		if (var->varlevelsup == 0)
+		{
+			*attnos = bms_add_member(*attnos, var->varattno - FirstLowInvalidHeapAttributeNumber);
+		}
+		return false;
+	}
+
+	return expression_tree_walker(node, collect_var_attnos, attnos);
+}
+
+static int
+find_data_column(DecompressContext *dcontext, AttrNumber custom_scan_attno)
+{
+	for (int i = 0; i < dcontext->num_data_columns; i++)
+	{
+		if (dcontext->compressed_chunk_columns[i].custom_scan_attno == custom_scan_attno)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+/*
+ * Find the position of a compressed chunk column in the compressed scan tuple.
+ */
+static AttrNumber
+find_compressed_scan_attno(Plan *compressed_scan, AttrNumber compressed_chunk_attno)
+{
+	if (compressed_chunk_attno == InvalidAttrNumber)
+	{
+		return InvalidAttrNumber;
+	}
+
+	ListCell *lc;
+	foreach (lc, compressed_scan->targetlist)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+		if (IsA(tle->expr, Var) && castNode(Var, tle->expr)->varattno == compressed_chunk_attno)
+		{
+			return tle->resno;
+		}
+	}
+	return InvalidAttrNumber;
+}
+
+/*
+ * Find the vectorized quals of the form "column op something" where the batch
+ * metadata has the min and max values of the column, and the columns that only
+ * the vectorized quals read.
+ */
+static void
+setup_batch_metadata_quals(ColumnarScanState *chunk_state, Plan *compressed_scan)
+{
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+	Plan *plan = chunk_state->csstate.ss.ps.plan;
+
+	if (!ts_guc_enable_columnar_batch_metadata_quals || dcontext->batch_sorted_merge ||
+		dcontext->vectorized_quals_original == NIL)
+	{
+		return;
+	}
+
+	/* Columns that are needed for output or for the remaining quals. */
+	Bitmapset *needed = NULL;
+	collect_var_attnos((Node *) plan->targetlist, &needed);
+	collect_var_attnos((Node *) plan->qual, &needed);
+	if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, needed))
+	{
+		return;
+	}
+
+	bool *qual_only = palloc0(sizeof(bool) * dcontext->num_data_columns);
+	bool any_qual_only = false;
+	Bitmapset *qual_attnos = NULL;
+	collect_var_attnos((Node *) dcontext->vectorized_quals_original, &qual_attnos);
+	int k = -1;
+	while ((k = bms_next_member(qual_attnos, k)) >= 0)
+	{
+		if (bms_is_member(k, needed))
+		{
+			continue;
+		}
+		int i = find_data_column(dcontext, k + FirstLowInvalidHeapAttributeNumber);
+		if (i >= 0 && dcontext->compressed_chunk_columns[i].type == COMPRESSED_COLUMN)
+		{
+			qual_only[i] = true;
+			any_qual_only = true;
+		}
+	}
+	dcontext->qual_only_columns = any_qual_only ? qual_only : NULL;
+
+	/* The metadata columns for each qual were found at planning time. */
+	List *attnos = chunk_state->metadata_qual_attnos;
+	if (attnos == NIL)
+	{
+		return;
+	}
+
+	int nquals = list_length(dcontext->vectorized_quals_original);
+	Assert(list_length(attnos) == 2 * nquals);
+	BatchMetadataQual *mquals = palloc0(sizeof(BatchMetadataQual) * nquals);
+	bool any_metadata = false;
+	ListCell *lc;
+	foreach (lc, dcontext->vectorized_quals_original)
+	{
+		Node *qual = lfirst(lc);
+		if (!IsA(qual, OpExpr) || list_length(castNode(OpExpr, qual)->args) != 2)
+		{
+			continue;
+		}
+
+		OpExpr *opexpr = castNode(OpExpr, qual);
+		Node *arg = ts_strip_relabel_types(linitial(opexpr->args));
+		if (!IsA(arg, Var))
+		{
+			continue;
+		}
+
+		int i = find_data_column(dcontext, castNode(Var, arg)->varattno);
+		if (i < 0 || dcontext->compressed_chunk_columns[i].type != COMPRESSED_COLUMN)
+		{
+			continue;
+		}
+		CompressionColumnDescription *column = &dcontext->compressed_chunk_columns[i];
+
+		AttrNumber min_attno = list_nth_int(attnos, 2 * foreach_current_index(lc));
+		AttrNumber max_attno = list_nth_int(attnos, 2 * foreach_current_index(lc) + 1);
+		if (min_attno == InvalidAttrNumber)
+		{
+			continue;
+		}
+
+		min_attno = find_compressed_scan_attno(compressed_scan, min_attno);
+		max_attno = find_compressed_scan_attno(compressed_scan, max_attno);
+		if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+		{
+			continue;
+		}
+
+		BatchMetadataQual *mq = &mquals[foreach_current_index(lc)];
+		mq->min_attno = min_attno;
+		mq->max_attno = max_attno;
+		mq->typlen = column->value_bytes;
+		mq->typbyval = column->by_value;
+		mq->inputcollid = opexpr->inputcollid;
+		fmgr_info(get_opcode(opexpr->opno), &mq->opfn);
+		any_metadata = true;
+	}
+	dcontext->metadata_quals = any_metadata ? mquals : NULL;
+}
+
 /*
  * Complete initialization of the supplied CustomScanState.
  *
@@ -243,7 +648,22 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	/*
 	 * Init the underlying compressed scan.
 	 */
-	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
+	List *batch_seek_private = list_nth(cscan->custom_private, DCP_BatchSeek);
+	if (batch_seek_private != NIL)
+	{
+		/* The index scan below is set up only when the seek needs it. */
+		chunk_state->batch_seek = batch_seek_begin(node,
+												   batch_seek_private,
+												   linitial(lsecond(cscan->custom_exprs)),
+												   compressed_scan,
+												   chunk_state->chunk_relid,
+												   estate,
+												   eflags);
+	}
+	else
+	{
+		node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
+	}
 
 	/*
 	 * Count the actual data columns we have to decompress, skipping the
@@ -418,23 +838,41 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 				 errmsg("debug: batch sorted merge is used when it is forbidden")));
 	}
 
-	/* Constify stable expressions in vectorized predicates. */
-	PlannerGlobal glob = {
-		.boundParams = node->ss.ps.state->es_param_list_info,
-	};
-	PlannerInfo root = {
-		.glob = &glob,
-	};
-	ListCell *lc;
-	foreach (lc, chunk_state->vectorized_quals_original)
+	/*
+	 * Constify stable expressions in vectorized predicates. With join or
+	 * initplan parameters, this has to wait until their values are known, so
+	 * it happens before the first batch and again after they change.
+	 */
+	dcontext->vectorized_quals_original = chunk_state->vectorized_quals_original;
+	collect_exec_params((Node *) dcontext->vectorized_quals_original,
+						&dcontext->vectorized_quals_params);
+	if (dcontext->vectorized_quals_params != NULL)
 	{
-		Node *constified = estimate_expression_value(&root, (Node *) lfirst(lc));
-
-		dcontext->vectorized_quals_constified =
-			lappend(dcontext->vectorized_quals_constified, constified);
+		dcontext->vectorized_quals_context =
+			AllocSetContextCreate(CurrentMemoryContext,
+								  "vectorized quals with parameters",
+								  ALLOCSET_SMALL_SIZES);
+		dcontext->vectorized_quals_stale = true;
+		setup_vectorized_quals_template(dcontext);
+	}
+	else
+	{
+		columnar_scan_constify_vectorized_quals(dcontext);
 	}
 
+	setup_batch_metadata_quals(chunk_state, compressed_scan);
+
 	detoaster_init(&dcontext->detoaster, CurrentMemoryContext);
+}
+
+TupleTableSlot *
+columnar_scan_next_compressed(ColumnarScanState *chunk_state)
+{
+	if (chunk_state->batch_seek != NULL)
+	{
+		return batch_seek_next(chunk_state->batch_seek);
+	}
+	return ExecProcNode(linitial(chunk_state->csstate.custom_ps));
 }
 
 /*
@@ -455,7 +893,7 @@ columnar_scan_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunction
 
 	while (!chunk_state->done_fetching_batches && bqfuncs->needs_next_batch(bq))
 	{
-		TupleTableSlot *subslot = ExecProcNode(linitial(chunk_state->csstate.custom_ps));
+		TupleTableSlot *subslot = columnar_scan_next_compressed(chunk_state);
 		if (TupIsNull(subslot))
 		{
 			/* Won't have more compressed tuples. */
@@ -499,6 +937,18 @@ columnar_scan_rescan(CustomScanState *node)
 
 	bq->funcs->reset(bq);
 
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+	if (bms_overlap(node->ss.ps.chgParam, dcontext->vectorized_quals_params))
+	{
+		dcontext->vectorized_quals_stale = true;
+	}
+
+	if (chunk_state->batch_seek != NULL)
+	{
+		batch_seek_rescan(chunk_state->batch_seek, node->ss.ps.chgParam);
+		return;
+	}
+
 	if (node->ss.ps.chgParam != NULL)
 	{
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
@@ -516,7 +966,14 @@ columnar_scan_end(CustomScanState *node)
 	DecompressContext *dcontext = &chunk_state->decompress_context;
 
 	bq->funcs->free(bq);
-	ExecEndNode(linitial(node->custom_ps));
+	if (chunk_state->batch_seek != NULL)
+	{
+		batch_seek_end(chunk_state->batch_seek);
+	}
+	else
+	{
+		ExecEndNode(linitial(node->custom_ps));
+	}
 
 	detoaster_close(&chunk_state->decompress_context.detoaster);
 
@@ -547,6 +1004,11 @@ columnar_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 					  &node->ss.ps,
 					  ancestors,
 					  es);
+
+	if (chunk_state->batch_seek != NULL)
+	{
+		batch_seek_explain(chunk_state->batch_seek, ancestors, es);
+	}
 
 	if (!node->ss.ps.plan->qual && chunk_state->vectorized_quals_original)
 	{

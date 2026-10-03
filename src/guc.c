@@ -100,6 +100,10 @@ bool ts_guc_enable_hypertable_expansion_for_dml = true;
 TSDLLEXPORT bool ts_guc_enable_deferred_chunk_append = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
+TSDLLEXPORT bool ts_guc_enable_columnar_batch_seek = true;
+TSDLLEXPORT bool ts_guc_enable_columnar_batch_metadata_quals = true;
+TSDLLEXPORT bool ts_guc_enable_columnar_vectorized_exec_params = true;
+TSDLLEXPORT bool ts_guc_enable_columnar_join_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
@@ -862,6 +866,56 @@ _guc_init(void)
 							 "Enable pushing down the filters into the compressed scan part of the "
 							 "columnar scan",
 							 &ts_guc_enable_columnar_scan_filter_pushdown,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnar_batch_seek"),
+							 "Enable batch seek on the leading orderby column",
+							 "Find the batches for equality, range and = ANY conditions on the "
+							 "leading orderby column with one index lookup per value, when the "
+							 "chunk has no segmentby and its batches are sorted",
+							 &ts_guc_enable_columnar_batch_seek,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnar_join_pushdown"),
+							 "Push down join conditions on orderby columns",
+							 "Use the batch metadata of orderby columns for join conditions, so "
+							 "that the compressed chunk can be scanned once per outer row",
+							 &ts_guc_enable_columnar_join_pushdown,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnar_vectorized_exec_params"),
+							 "Vectorize filters with join and initplan parameters",
+							 "Use vectorized filters for conditions that compare a column with a "
+							 "join or initplan parameter",
+							 &ts_guc_enable_columnar_vectorized_exec_params,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnar_batch_metadata_quals"),
+							 "Use batch metadata to evaluate vectorized filters",
+							 "Evaluate a vectorized filter once per batch when the batch metadata "
+							 "shows that the column has one value, and skip decompressing the "
+							 "columns that are only used by vectorized filters",
+							 &ts_guc_enable_columnar_batch_metadata_quals,
 							 true,
 							 PGC_USERSET,
 							 0,

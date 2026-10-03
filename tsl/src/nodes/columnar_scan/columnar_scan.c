@@ -17,6 +17,7 @@
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
+#include <optimizer/restrictinfo.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <storage/lockdefs.h>
@@ -33,9 +34,11 @@
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
+#include "guc.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
+#include "nodes/columnar_scan/batch_seek.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/qual_pushdown.h"
@@ -771,6 +774,7 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 {
 	AppendRelInfo *appinfo;
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
+	info->batch_seek_range = palloc0(sizeof(BatchSeekRange));
 
 	info->compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
@@ -958,18 +962,20 @@ cost_columnar_scan(const CompressionInfo *compression_info, ColumnarScanPath *co
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
 	/*
+	 * Estimate the resulting number of rows based on the batch size statistics.
+	 * With batch seek, this can be less than one batch.
+	 */
+	path->rows = compressed_path->rows * compression_info->compressed_batch_size;
+
+	/*
 	 * 3) in case of bulk decompression, cost of fully decompressing the first
 	 * batch.
 	 */
 	if (columnar_scan->enable_bulk_decompression)
 	{
-		path->startup_cost += compression_info->compressed_batch_size * cpu_tuple_cost;
+		path->startup_cost +=
+			Min(compression_info->compressed_batch_size, path->rows) * cpu_tuple_cost;
 	}
-
-	/*
-	 * Estimate the resulting number of rows based on the batch size statistics.
-	 */
-	path->rows = compressed_path->rows * compression_info->compressed_batch_size;
 
 	/*
 	 * Bulk decompression is about 10x more efficient than row-by-row
@@ -1427,7 +1433,8 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 															  compression_info->settings,
 															  chunk_rel,
 															  compressed_rel,
-															  add_uncompressed_part);
+															  add_uncompressed_part,
+															  ts_chunk_is_unordered(chunk));
 	}
 	/*
 	 * Estimate the size of the compressed chunk table.
@@ -1564,6 +1571,16 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	}
 
 	/*
+	 * A parallel index scan can't use batch seek, but it was costed as one,
+	 * because the index cost estimate can't tell the parallel paths apart.
+	 */
+	if (compressed_path->parallel_aware &&
+		batch_seek_path_costed(root, compression_info, compressed_path))
+	{
+		return NIL;
+	}
+
+	/*
 	 * Filter out all paths that try to JOIN the compressed chunk on the
 	 * hypertable or the uncompressed chunk
 	 * Ideally, we wouldn't create these paths in the first place.
@@ -1599,6 +1616,19 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	List *decompressed_paths = list_make1(chunk_path_no_sort);
 
 	/*
+	 * With batch seek, the compressed scan costs much less than the plain
+	 * index scan. The paths that put a Sort above the index scan can't use it.
+	 */
+	Path seek_path;
+	Path *compressed_path_cost = compressed_path;
+	if (batch_seek_cost_path(root, compression_info, compressed_path, &seek_path))
+	{
+		((ColumnarScanPath *) chunk_path_no_sort)->batch_seek = true;
+		cost_columnar_scan(compression_info, (ColumnarScanPath *) chunk_path_no_sort, &seek_path);
+		compressed_path_cost = &seek_path;
+	}
+
+	/*
 	 * Create a path for the batch sorted merge optimization. This optimization
 	 * performs a sorted merge of the involved batches by using a binary heap
 	 * and preserving the compression order. This optimization is only
@@ -1627,7 +1657,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		/* Setup batch sorted merge per-column comparison */
 		path_copy->required_pathkey_ems = sort_info->required_pathkey_ems;
 
-		cost_batch_sorted_merge(root, compression_info, sort_info, path_copy, compressed_path);
+		cost_batch_sorted_merge(root, compression_info, sort_info, path_copy, compressed_path_cost);
 
 		if (ts_guc_debug_require_batch_sorted_merge == DRO_Force)
 		{
@@ -1672,7 +1702,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 
 			columnar_scan_with_compressed_sort = path;
-			compressed_path_for_cost = linitial(path->custom_path.custom_paths);
+			compressed_path_for_cost = compressed_path_cost;
 		}
 		else
 		{
@@ -1687,6 +1717,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			path_copy->needs_orderby_metadata = sort_info->needs_orderby_metadata;
 			path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 			path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+			path_copy->batch_seek = false;
 
 			/*
 			 * Add costing for a sort. The standard Postgres pattern is to add the cost during
@@ -2270,6 +2301,161 @@ has_compressed_vars(RestrictInfo *ri, CompressionInfo *info)
 	return expression_tree_walker((Node *) ri->clause, has_compressed_vars_walker, info);
 }
 
+/*
+ * Add the batch metadata version of a join clause on an orderby column, for
+ * example "lower <= other.x AND upper >= other.x" for "col = other.x". With
+ * these the compressed chunk index can be scanned once per outer row, and the
+ * original clause is still checked on the decompressed rows.
+ *
+ * Skipped when the chunk is on the nullable side of an outer join, where a
+ * filter on the compressed scan could remove rows that the join keeps.
+ */
+static void
+add_orderby_join_clauses(PlannerInfo *root, CompressionInfo *info, Expr *clause,
+						 Index security_level, Relids required_relids, Relids incompatible_relids,
+						 List **joininfo)
+{
+	if (!ts_guc_enable_columnar_batch_seek || !ts_guc_enable_columnar_join_pushdown ||
+		!bms_is_empty(info->chunk_rel->nulling_relids))
+	{
+		return;
+	}
+
+	List *pushed_down =
+		columnar_scan_join_clause_pushdown(root,
+										   info->settings,
+										   info->chunk_rel,
+										   info->compressed_rel,
+										   ts_flags_are_set_32(info->chunk_status,
+															   CHUNK_STATUS_COMPRESSED_UNORDERED),
+										   clause);
+	ListCell *lc;
+	foreach (lc, pushed_down)
+	{
+		*joininfo = lappend(*joininfo,
+							make_restrictinfo(root,
+											  lfirst(lc),
+											  /* is_pushed_down = */ true,
+											  /* has_clone = */ false,
+											  /* is_clone = */ false,
+											  /* pseudoconstant = */ false,
+											  security_level,
+											  required_relids,
+											  incompatible_relids,
+											  /* outer_relids = */ NULL));
+	}
+}
+
+/*
+ * Join clauses that are equalities between the leading orderby column and
+ * other relations are in equivalence classes, not in joininfo. Build
+ * "col = other.x" for each such member and add its batch metadata version.
+ */
+static void
+compressed_rel_add_ec_join_clauses(PlannerInfo *root, CompressionInfo *info, List **joininfo)
+{
+	CompressionSettings *settings = info->settings;
+	if (settings == NULL || ts_array_length(settings->fd.orderby) < 1)
+	{
+		return;
+	}
+
+	const char *colname = ts_array_get_element_text(settings->fd.orderby, 1);
+	Index parent_relid = info->single_chunk ? info->chunk_rel->relid : info->ht_rel->relid;
+	Oid parent_reloid = planner_rt_fetch(parent_relid, root)->relid;
+	AttrNumber parent_attno = get_attnum(parent_reloid, colname);
+	AttrNumber chunk_attno = get_attnum(info->chunk_rte->relid, colname);
+	if (parent_attno == InvalidAttrNumber || chunk_attno == InvalidAttrNumber)
+	{
+		return;
+	}
+
+	Relids self = bms_union(info->chunk_rel->relids, info->parent_relids);
+	self = bms_add_member(self, parent_relid);
+
+	ListCell *lc;
+	foreach (lc, root->eq_classes)
+	{
+		EquivalenceClass *ec = lfirst(lc);
+		if (ec->ec_has_const || ec->ec_has_volatile || ec->ec_broken ||
+			!bms_is_member(parent_relid, ec->ec_relids))
+		{
+			continue;
+		}
+
+		/* The member for our column. */
+		Var *parent_var = NULL;
+		ListCell *lm;
+		foreach (lm, ec->ec_members)
+		{
+			EquivalenceMember *em = lfirst(lm);
+			Node *expr = ts_strip_relabel_types((Node *) em->em_expr);
+			if (IsA(expr, Var) && (Index) castNode(Var, expr)->varno == parent_relid &&
+				castNode(Var, expr)->varattno == parent_attno &&
+				castNode(Var, expr)->varlevelsup == 0)
+			{
+				parent_var = castNode(Var, expr);
+				break;
+			}
+		}
+		if (parent_var == NULL)
+		{
+			continue;
+		}
+
+		foreach (lm, ec->ec_members)
+		{
+			EquivalenceMember *em = lfirst(lm);
+			if (em->em_is_const || em->em_is_child || bms_is_empty(em->em_relids) ||
+				bms_overlap(em->em_relids, self))
+			{
+				continue;
+			}
+
+			Oid opno = InvalidOid;
+			ListCell *lo;
+			foreach (lo, ec->ec_opfamilies)
+			{
+				opno = get_opfamily_member(lfirst_oid(lo),
+										   parent_var->vartype,
+										   exprType((Node *) em->em_expr),
+										   BTEqualStrategyNumber);
+				if (OidIsValid(opno))
+				{
+					break;
+				}
+			}
+			if (!OidIsValid(opno))
+			{
+				continue;
+			}
+
+			Var *chunk_var = makeVar(info->chunk_rel->relid,
+									 chunk_attno,
+									 parent_var->vartype,
+									 parent_var->vartypmod,
+									 parent_var->varcollid,
+									 0);
+			Expr *clause = make_opclause(opno,
+										 BOOLOID,
+										 false,
+										 (Expr *) chunk_var,
+										 (Expr *) copyObject(em->em_expr),
+										 InvalidOid,
+										 ec->ec_collation);
+			set_opfuncid(castNode(OpExpr, clause));
+
+			add_orderby_join_clauses(root,
+									 info,
+									 clause,
+									 ec->ec_min_security,
+									 bms_union(info->compressed_rel->relids, em->em_relids),
+									 /* incompatible_relids = */ NULL,
+									 joininfo);
+		}
+	}
+}
+
 /* translate chunk_rel->joininfo for compressed_rel
  * this is necessary for create_index_path which gets join clauses from
  * rel->joininfo and sets up parameterized paths (in rel->ppilist).
@@ -2279,7 +2465,7 @@ has_compressed_vars(RestrictInfo *ri, CompressionInfo *info)
  * the index plan is executed (github issue 1558)
  */
 static void
-compressed_rel_setup_joininfo(RelOptInfo *compressed_rel, CompressionInfo *info)
+compressed_rel_setup_joininfo(PlannerInfo *root, RelOptInfo *compressed_rel, CompressionInfo *info)
 {
 	RelOptInfo *chunk_rel = info->chunk_rel;
 	ListCell *lc;
@@ -2295,13 +2481,29 @@ compressed_rel_setup_joininfo(RelOptInfo *compressed_rel, CompressionInfo *info)
 		{
 			/*
 			 * We can't check clauses that refer to compressed columns during
-			 * the compressed scan.
+			 * the compressed scan, but we can check their batch metadata
+			 * version. Not on the outer side of an outer join, where the
+			 * chunk keeps its rows without a match. On the inner side, as in
+			 * a semi or anti join, a row that fails the clause can't match,
+			 * so the batch metadata version filters the scan like a pushed
+			 * down clause.
 			 */
+			if (!bms_is_member(info->chunk_rel->relid, ri->outer_relids))
+			{
+				add_orderby_join_clauses(root,
+										 info,
+										 ri->clause,
+										 ri->security_level,
+										 adjusted->required_relids,
+										 adjusted->incompatible_relids,
+										 &compress_joininfo);
+			}
 			continue;
 		}
 
 		compress_joininfo = lappend(compress_joininfo, adjusted);
 	}
+	compressed_rel_add_ec_join_clauses(root, info, &compress_joininfo);
 	compressed_rel->joininfo = compress_joininfo;
 }
 
@@ -2605,7 +2807,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	compressed_rel_setup_reltarget(compressed_rel, info, needs_orderby_metadata);
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
-	compressed_rel_setup_joininfo(compressed_rel, info);
+	compressed_rel_setup_joininfo(root, compressed_rel, info);
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	compressed_rel->consider_startup = chunk_rel->consider_startup;
@@ -2817,7 +3019,9 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 		}
 
 		check_index_predicates(root, compressed_rel);
+		batch_seek_index_costing_begin(compression_info);
 		create_index_paths(root, compressed_rel);
+		batch_seek_index_costing_end(compression_info);
 		root->query_pathkeys = orig_query_pathkeys;
 		root->sort_pathkeys = orig_sort_pathkeys;
 		root->window_pathkeys = orig_window_pathkeys;
@@ -2827,7 +3031,9 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	else
 	{
 		check_index_predicates(root, compressed_rel);
+		batch_seek_index_costing_begin(compression_info);
 		create_index_paths(root, compressed_rel);
+		batch_seek_index_costing_end(compression_info);
 	}
 }
 

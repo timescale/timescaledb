@@ -13,6 +13,7 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "batch_seek.h"
 #include "columnar_scan.h"
 #include "compression/batch_metadata_builder.h"
 #include "compression/create.h"
@@ -32,6 +33,13 @@ typedef struct QualPushdownContext
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
 	CompressionSettings *settings;
+	bool chunk_unordered;
+
+	/*
+	 * Join clauses can reference other relations. Their Vars are kept as they
+	 * are, and become parameters of the compressed scan.
+	 */
+	bool allow_outer_vars;
 
 	/*
 	 * This is actually the result, not the static input context like above, but
@@ -84,7 +92,8 @@ static List *deconstruct_array_const(Const *array_const);
 
 bool
 columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
-							  RelOptInfo *chunk_rel, RelOptInfo *compressed_rel, bool chunk_partial)
+							  RelOptInfo *chunk_rel, RelOptInfo *compressed_rel, bool chunk_partial,
+							  bool chunk_unordered)
 {
 	ListCell *lc;
 	List *decompress_clauses = NIL;
@@ -96,6 +105,7 @@ columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
 		.chunk_rte = planner_rt_fetch(chunk_rel->relid, root),
 		.compressed_rte = planner_rt_fetch(compressed_rel->relid, root),
 		.settings = settings,
+		.chunk_unordered = chunk_unordered,
 	};
 
 	/*
@@ -163,6 +173,51 @@ columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
 	}
 	chunk_rel->baserestrictinfo = decompress_clauses;
 	return all_pushed_down;
+}
+
+/*
+ * Push down a join clause on an orderby column to the batch metadata, keeping
+ * the references to the other relations. For example "col = other.x" becomes
+ * "lower <= other.x AND upper >= other.x", which can be an index condition of
+ * a parameterized compressed scan. Returns the list of pushed down clauses, or
+ * NIL if the clause can't use the batch metadata.
+ */
+List *
+columnar_scan_join_clause_pushdown(PlannerInfo *root, CompressionSettings *settings,
+								   RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
+								   bool chunk_unordered, Expr *clause)
+{
+	if (settings == NULL)
+	{
+		return NIL;
+	}
+
+	QualPushdownContext context = {
+		.root = root,
+		.chunk_rel = chunk_rel,
+		.compressed_rel = compressed_rel,
+		.chunk_rte = planner_rt_fetch(chunk_rel->relid, root),
+		.compressed_rte = planner_rt_fetch(compressed_rel->relid, root),
+		.settings = settings,
+		.chunk_unordered = chunk_unordered,
+		.allow_outer_vars = true,
+		.can_pushdown = true,
+		.needs_recheck = false,
+	};
+
+	Node *pushed_down = qual_pushdown_mutator((Node *) clause, &context);
+
+	/*
+	 * Clauses that are exact on the compressed scan only reference segmentby
+	 * columns, and those reach the compressed scan as join clauses already.
+	 */
+	if (!context.can_pushdown || !context.needs_recheck)
+	{
+		return NIL;
+	}
+
+	pushed_down = eval_const_expressions(root, pushed_down);
+	return make_ands_implicit((Expr *) pushed_down);
 }
 
 static OpExpr *
@@ -262,6 +317,101 @@ expr_fetch_orderby_range_metadata(QualPushdownContext *context, Expr *expr, Attr
 													var->varattno,
 													context->compressed_rte->relid,
 													"max");
+}
+
+/*
+ * Whether "col = value" on this Var can use batch seek, see batch_seek.c.
+ */
+static bool
+batch_seek_applicable(QualPushdownContext *context, Var *var, Expr *value)
+{
+	return ts_guc_enable_columnar_batch_seek && !context->chunk_unordered &&
+		   !contain_volatile_functions((Node *) value) &&
+		   batch_seek_column_supported(context->settings, context->chunk_rte->relid, var->varattno);
+}
+
+/*
+ * For "col = ANY(array)" on the leading orderby column, where the array is only
+ * known at run time, push down "lower <= ANY(array) AND upper >= ANY(array)".
+ * Btree uses these as a range over the batch starts, and batch seek looks up
+ * each value of the array. A constant array gets one range per value instead,
+ * which is selective without batch seek too.
+ */
+static Expr *
+pushdown_saop_batch_seek(QualPushdownContext *context, ScalarArrayOpExpr *saop)
+{
+	if (!saop->useOr || list_length(saop->args) != 2)
+	{
+		context->can_pushdown = false;
+		return (Expr *) saop;
+	}
+
+	Node *left = ts_strip_relabel_types(linitial(saop->args));
+	Expr *array = lsecond(saop->args);
+	if (!IsA(left, Var) || (Index) castNode(Var, left)->varno != context->chunk_rel->relid ||
+		get_element_type(exprType((Node *) array)) != castNode(Var, left)->vartype ||
+		castNode(Var, left)->varcollid != saop->inputcollid)
+	{
+		context->can_pushdown = false;
+		return (Expr *) saop;
+	}
+	Var *var = castNode(Var, left);
+
+	TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
+	if (get_op_opfamily_strategy(saop->opno, tce->btree_opf) != BTEqualStrategyNumber)
+	{
+		context->can_pushdown = false;
+		return (Expr *) saop;
+	}
+
+	QualPushdownContext tmp_context = copy_context(context);
+	Expr *pushed_down_array = (Expr *) qual_pushdown_mutator((Node *) array, &tmp_context);
+	if (!tmp_context.can_pushdown || tmp_context.needs_recheck || IsA(pushed_down_array, Const) ||
+		IsA(pushed_down_array, ArrayExpr) ||
+		!batch_seek_applicable(context, var, pushed_down_array))
+	{
+		context->can_pushdown = false;
+		return (Expr *) saop;
+	}
+
+	AttrNumber lower_attno;
+	AttrNumber upper_attno;
+	expr_fetch_orderby_range_metadata(context, (Expr *) var, &lower_attno, &upper_attno);
+	Oid opno_le =
+		get_opfamily_member(tce->btree_opf, var->vartype, var->vartype, BTLessEqualStrategyNumber);
+	Oid opno_ge = get_opfamily_member(tce->btree_opf,
+									  var->vartype,
+									  var->vartype,
+									  BTGreaterEqualStrategyNumber);
+	if (lower_attno == InvalidAttrNumber || upper_attno == InvalidAttrNumber ||
+		!OidIsValid(opno_le) || !OidIsValid(opno_ge))
+	{
+		context->can_pushdown = false;
+		return (Expr *) saop;
+	}
+
+	List *clauses = NIL;
+	AttrNumber attnos[2] = { lower_attno, upper_attno };
+	Oid opnos[2] = { opno_le, opno_ge };
+	for (int i = 0; i < 2; i++)
+	{
+		ScalarArrayOpExpr *bound = makeNode(ScalarArrayOpExpr);
+		bound->opno = opnos[i];
+		bound->opfuncid = get_opcode(opnos[i]);
+		bound->useOr = true;
+		bound->inputcollid = saop->inputcollid;
+		bound->args = list_make2(makeVar(context->compressed_rel->relid,
+										 attnos[i],
+										 var->vartype,
+										 var->vartypmod,
+										 var->varcollid,
+										 0),
+								 copyObject(pushed_down_array));
+		clauses = lappend(clauses, bound);
+	}
+
+	context->needs_recheck = true;
+	return make_andclause(clauses);
 }
 
 static void *
@@ -1563,6 +1713,11 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 		case T_Var:
 		{
 			Var *var = castNode(Var, orig_node);
+			if (context->allow_outer_vars &&
+				(var->varlevelsup > 0 || (Index) var->varno != context->chunk_rel->relid))
+			{
+				return orig_node;
+			}
 			Assert((Index) var->varno == context->chunk_rel->relid);
 
 			if (var->varattno <= 0)
@@ -1633,7 +1788,7 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			/*
 			 * Try bloom1 sparse index.
 			 */
-			if (ts_guc_enable_sparse_index_bloom)
+			if (ts_guc_enable_sparse_index_bloom && !context->allow_outer_vars)
 			{
 				tmp_context = copy_context(context);
 				pushed_down = pushdown_op_to_segment_meta_bloom1(&tmp_context, opexpr);
@@ -1679,6 +1834,17 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			}
 
 			ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, orig_node);
+
+			/*
+			 * On an ordered chunk, look up each value with batch seek.
+			 */
+			tmp_context = copy_context(context);
+			pushed_down = pushdown_saop_batch_seek(&tmp_context, saop);
+			if (tmp_context.can_pushdown)
+			{
+				context->needs_recheck |= tmp_context.needs_recheck;
+				return pushed_down;
+			}
 
 			/*
 			 * Try to transform x = any(array[]) into

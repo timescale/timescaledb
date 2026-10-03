@@ -1,0 +1,112 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Join conditions on the leading orderby column use the batch metadata, so a
+-- nested loop can look up the compressed chunk once per outer row. Results
+-- must match an uncompressed table for every join type.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET max_parallel_workers_per_gather = 0;
+
+-- Sensor ids 1..200 skipping multiples of 5, over two chunks.
+CREATE TABLE ref (sensor_id int NOT NULL, time timestamptz NOT NULL, val int);
+INSERT INTO ref
+SELECT s, '2026-01-01'::timestamptz + n * interval '1 minute', s * 7 + n
+FROM generate_series(1, 200) s, generate_series(1, (s * 37) % 2500 + 1) n
+WHERE s % 5 <> 0;
+
+CREATE TABLE ob (LIKE ref);
+SELECT FROM create_hypertable('ob', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE ob SET (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'sensor_id, time');
+INSERT INTO ob SELECT * FROM ref;
+SELECT count(compress_chunk(c)) FROM show_chunks('ob') c;
+VACUUM ANALYZE ob;
+
+-- Outer side of the joins, with ids outside the range and a NULL.
+CREATE TABLE k (id int, id8 bigint);
+INSERT INTO k SELECT i, i FROM generate_series(-2, 205, 3) i;
+INSERT INTO k VALUES (NULL, NULL);
+ANALYZE k;
+
+-- The same query on the compressed table and on the reference table, as
+-- text of the sorted result rows.
+CREATE FUNCTION same_result(q text) RETURNS bool LANGUAGE plpgsql AS $$
+DECLARE
+    a text;
+    b text;
+BEGIN
+    EXECUTE format('SELECT string_agg(r::text, '','' ORDER BY r::text) FROM (%s) r', replace(q, '{tbl}', 'ob')) INTO a;
+    EXECUTE format('SELECT string_agg(r::text, '','' ORDER BY r::text) FROM (%s) r', replace(q, '{tbl}', 'ref')) INTO b;
+    RETURN a IS NOT DISTINCT FROM b;
+END
+$$;
+
+CREATE FUNCTION plan_has_seek(q text) RETURNS bool LANGUAGE plpgsql AS $$
+DECLARE
+    l text;
+BEGIN
+    FOR l IN EXECUTE 'EXPLAIN (costs off) ' || replace(q, '{tbl}', 'ob') LOOP
+        IF l LIKE '%Batch Seek%' THEN
+            RETURN true;
+        END IF;
+    END LOOP;
+    RETURN false;
+END
+$$;
+
+CREATE TABLE queries (name text, q text);
+INSERT INTO queries VALUES
+    ('inner', 'SELECT k.id, count(*), sum(t.val) FROM k JOIN {tbl} t ON t.sensor_id = k.id GROUP BY k.id'),
+    ('inner cross-type', 'SELECT k.id8, count(*), sum(t.val) FROM k JOIN {tbl} t ON t.sensor_id = k.id8 GROUP BY k.id8'),
+    ('semi', 'SELECT k.id FROM k WHERE EXISTS (SELECT FROM {tbl} t WHERE t.sensor_id = k.id AND t.val % 3 = 0)'),
+    ('in', 'SELECT k.id FROM k WHERE k.id IN (SELECT sensor_id FROM {tbl} WHERE val > 1000)'),
+    ('anti', 'SELECT k.id FROM k WHERE NOT EXISTS (SELECT FROM {tbl} t WHERE t.sensor_id = k.id AND t.val % 3 = 0)'),
+    ('anti all', 'SELECT k.id FROM k WHERE NOT EXISTS (SELECT FROM {tbl} t WHERE t.sensor_id = k.id)'),
+    ('left, hypertable inner', 'SELECT k.id, count(t.sensor_id), sum(t.val) FROM k LEFT JOIN {tbl} t ON t.sensor_id = k.id GROUP BY k.id'),
+    ('left, hypertable outer', 'SELECT t.sensor_id, count(*), count(k.id) FROM {tbl} t LEFT JOIN k ON k.id = t.sensor_id AND k.id % 2 = 0 GROUP BY t.sensor_id'),
+    ('range join', 'SELECT k.id, count(*) FROM k JOIN {tbl} t ON t.sensor_id > k.id AND t.sensor_id < k.id + 4 GROUP BY k.id'),
+    ('lateral', 'SELECT k.id, l.c FROM k, LATERAL (SELECT count(*) c, max(val) FROM {tbl} t WHERE t.sensor_id = k.id) l');
+
+-- Nested loops only, so that the compressed chunk is looked up per outer row.
+SET enable_hashjoin = off;
+SET enable_mergejoin = off;
+SET enable_material = off;
+SET enable_seqscan = off;
+SET enable_bitmapscan = off;
+
+EXPLAIN (costs off)
+SELECT k.id FROM k WHERE NOT EXISTS (SELECT FROM ob t WHERE t.sensor_id = k.id AND t.val % 3 = 0);
+
+SELECT name, plan_has_seek(q) AS seek, same_result(q) FROM queries ORDER BY name;
+
+RESET enable_hashjoin;
+RESET enable_mergejoin;
+RESET enable_material;
+RESET enable_seqscan;
+RESET enable_bitmapscan;
+
+-- The planner's own choice.
+SELECT name, same_result(q) FROM queries ORDER BY name;
+
+-- Unordered chunk: overlapping batches from direct compress.
+SET timescaledb.enable_direct_compress_insert = on;
+INSERT INTO ob SELECT s, '2026-01-01 12:00'::timestamptz + n * interval '1 second', n
+FROM generate_series(1, 200) s, generate_series(1, 3) n WHERE s % 5 <> 0;
+INSERT INTO ref SELECT s, '2026-01-01 12:00'::timestamptz + n * interval '1 second', n
+FROM generate_series(1, 200) s, generate_series(1, 3) n WHERE s % 5 <> 0;
+RESET timescaledb.enable_direct_compress_insert;
+SELECT _timescaledb_functions.chunk_status_text(c) FROM show_chunks('ob') c ORDER BY 1;
+
+SET enable_hashjoin = off;
+SET enable_mergejoin = off;
+SET enable_material = off;
+SET enable_seqscan = off;
+SET enable_bitmapscan = off;
+SELECT name, same_result(q) FROM queries ORDER BY name;
+RESET enable_hashjoin;
+RESET enable_mergejoin;
+RESET enable_material;
+RESET enable_seqscan;
+RESET enable_bitmapscan;

@@ -49,6 +49,9 @@ typedef struct CompressionInfo
 	double compressed_batch_size;
 
 	int32 chunk_status;
+
+	/* Range of the leading orderby column in the chunk, for batch seek costing. */
+	struct BatchSeekRange *batch_seek_range;
 } CompressionInfo;
 
 typedef struct ColumnarScanPath
@@ -73,6 +76,9 @@ typedef struct ColumnarScanPath
 
 	/* pathkey equivalence class members matching compressed sort order on the chunk */
 	List *required_pathkey_ems;
+
+	/* Read the batches with batch seek, and cost the compressed scan as a seek. */
+	bool batch_seek;
 
 } ColumnarScanPath;
 

@@ -10,6 +10,7 @@
 #include <nodes/bitmapset.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
+#include <utils/datum.h>
 #include <utils/timestamp.h>
 #include <utils/uuid.h>
 
@@ -18,6 +19,7 @@
 #include "debug_assert.h"
 #include "guc.h"
 #include "nodes/columnar_scan/compressed_batch.h"
+#include "nodes/columnar_scan/exec.h"
 #include "nodes/columnar_scan/vector_dict.h"
 #include "nodes/columnar_scan/vector_predicates.h"
 #include "nodes/columnar_scan/vector_quals.h"
@@ -915,6 +917,64 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 }
 
 /*
+ * Evaluate the vectorized quals that the batch metadata can answer for all
+ * rows at once, and return the rest. Sets *rejects_batch when one of them
+ * fails for all rows.
+ */
+static List *
+apply_batch_metadata_quals(DecompressContext *dcontext, TupleTableSlot *compressed_slot,
+						   bool *rejects_batch)
+{
+	List *quals = dcontext->vectorized_quals_constified;
+	List *remaining = NIL;
+	bool changed = false;
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		Node *qual = lfirst(lc);
+		BatchMetadataQual *mq = &dcontext->metadata_quals[foreach_current_index(lc)];
+		bool decided = false;
+		bool passes = false;
+		if (mq->min_attno != InvalidAttrNumber && IsA(qual, OpExpr) &&
+			IsA(lsecond(castNode(OpExpr, qual)->args), Const))
+		{
+			Const *value = lsecond_node(Const, castNode(OpExpr, qual)->args);
+			bool min_isnull, max_isnull;
+			Datum min = slot_getattr(compressed_slot, mq->min_attno, &min_isnull);
+			Datum max = slot_getattr(compressed_slot, mq->max_attno, &max_isnull);
+			decided = !value->constisnull && !min_isnull && !max_isnull &&
+					  datumIsEqual(min, max, mq->typbyval, mq->typlen);
+			passes =
+				decided &&
+				DatumGetBool(FunctionCall2Coll(&mq->opfn, mq->inputcollid, min, value->constvalue));
+		}
+
+		if (!decided)
+		{
+			if (changed)
+			{
+				remaining = lappend(remaining, qual);
+			}
+			continue;
+		}
+
+		if (!passes)
+		{
+			*rejects_batch = true;
+			return NIL;
+		}
+
+		if (!changed)
+		{
+			remaining = list_copy_head(quals, foreach_current_index(lc));
+			changed = true;
+		}
+	}
+
+	return changed ? remaining : quals;
+}
+
+/*
  * Initialize the batch decompression state with the new compressed  tuple.
  */
 void
@@ -1042,9 +1102,24 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	dcontext->tuples_decompressed += batch_state->total_batch_rows;
 	ts_stats_compression_acc_batch(&dcontext->observ_acc, batch_state->total_batch_rows);
 
+	if (unlikely(dcontext->vectorized_quals_stale))
+	{
+		columnar_scan_constify_vectorized_quals(dcontext);
+	}
+
+	List *vectorized_quals = dcontext->vectorized_quals_constified;
+	bool metadata_rejects_batch = false;
+	if (dcontext->metadata_quals != NULL)
+	{
+		MemoryContext old = MemoryContextSwitchTo(batch_state->per_batch_context);
+		vectorized_quals =
+			apply_batch_metadata_quals(dcontext, compressed_slot, &metadata_rejects_batch);
+		MemoryContextSwitchTo(old);
+	}
+
 	CompressedBatchVectorQualState cbvqstate = {
 		.vqstate = {
-			.vectorized_quals_constified = dcontext->vectorized_quals_constified,
+			.vectorized_quals_constified = vectorized_quals,
 			.num_results = batch_state->total_batch_rows,
 			.per_vector_mcxt = batch_state->per_batch_context,
 			.slot = compressed_slot,
@@ -1055,8 +1130,19 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	};
 	VectorQualState *vqstate = &cbvqstate.vqstate;
 
-	BatchQualSummary vector_qual_summary =
-		vqstate->vectorized_quals_constified != NIL ? vector_qual_compute(vqstate) : AllRowsPass;
+	BatchQualSummary vector_qual_summary;
+	if (metadata_rejects_batch)
+	{
+		vector_qual_summary = NoRowsPass;
+	}
+	else if (vectorized_quals != NIL)
+	{
+		vector_qual_summary = vector_qual_compute(vqstate);
+	}
+	else
+	{
+		vector_qual_summary = AllRowsPass;
+	}
 
 	batch_state->vector_qual_result = vqstate->vector_qual_result;
 
@@ -1089,6 +1175,12 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 			if (column_values->decompression_type == DT_Invalid)
 			{
+				if (dcontext->qual_only_columns != NULL && dcontext->qual_only_columns[i])
+				{
+					/* Nothing reads this column after the vectorized quals. */
+					decompress_scalar_column(column_values, (Datum) 0, true);
+					continue;
+				}
 				decompress_column(dcontext, batch_state, compressed_slot, i);
 				Assert(column_values->decompression_type != DT_Invalid);
 			}

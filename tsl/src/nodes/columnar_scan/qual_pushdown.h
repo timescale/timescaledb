@@ -14,4 +14,13 @@
  */
 bool columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
 								   RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
-								   bool chunk_partial);
+								   bool chunk_partial, bool chunk_unordered);
+
+/*
+ * Push down a join clause on an orderby column to the batch metadata, keeping
+ * the references to other relations. Returns the pushed down clauses, which
+ * always need a recheck, or NIL.
+ */
+List *columnar_scan_join_clause_pushdown(PlannerInfo *root, CompressionSettings *settings,
+										 RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
+										 bool chunk_unordered, Expr *clause);

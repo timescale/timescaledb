@@ -31,6 +31,7 @@
 #include "import/list.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/transform.h"
+#include "nodes/columnar_scan/batch_seek.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/exec.h"
 #include "nodes/columnar_scan/planner.h"
@@ -38,6 +39,7 @@
 #include "nodes/vector_agg/exec.h"
 #include "planner/planner.h"
 #include "ts_catalog/array_utils.h"
+#include "utils.h"
 #include "vector_predicates.h"
 
 static CustomScanMethods columnar_scan_plan_methods = {
@@ -601,25 +603,35 @@ is_not_runtime_constant_walker(Node *node, void *context)
 	switch (nodeTag(node))
 	{
 		case T_Var:
+		{
+			/*
+			 * A Var of another relation in a scan qual comes from a join
+			 * clause of a parameterized scan, and becomes a join parameter in
+			 * the plan, so it is constant between rescans like PARAM_EXEC.
+			 */
+			Index rti = *(const Index *) context;
+			Var *var = castNode(Var, node);
+			return var->varlevelsup != 0 || (Index) var->varno == rti ||
+				   !ts_guc_enable_columnar_vectorized_exec_params;
+		}
 		case T_PlaceHolderVar:
 			/*
-			 * We might want to support these nodes to have vectorizable join
-			 * clauses (T_Var) or join clauses referencing a variable that is
-			 * above outer join (T_PlaceHolderVar). We don't support them at the
-			 * moment.
+			 * We might want to support join clauses referencing a variable
+			 * that is above outer join. We don't support them at the moment.
 			 */
 			return true;
 		case T_Param:
 			/*
-			 * We support external query parameters (e.g. from parameterized
-			 * prepared statements), because they are constant for the duration
-			 * of the query.
+			 * External query parameters (e.g. from parameterized prepared
+			 * statements) are constant for the duration of the query.
 			 *
-			 * Join and initplan parameters are passed as PARAM_EXEC and require
-			 * support in the Rescan functions of the custom scan node. We don't
-			 * support them at the moment.
+			 * Join and initplan parameters (PARAM_EXEC) are constant between
+			 * rescans. The executor substitutes their current value again
+			 * when they change.
 			 */
-			return castNode(Param, node)->paramkind != PARAM_EXTERN;
+			return castNode(Param, node)->paramkind != PARAM_EXTERN &&
+				   (castNode(Param, node)->paramkind != PARAM_EXEC ||
+					!ts_guc_enable_columnar_vectorized_exec_params);
 		default:
 			if (check_functions_in_node(node,
 										contains_volatile_functions_checker,
@@ -627,9 +639,7 @@ is_not_runtime_constant_walker(Node *node, void *context)
 			{
 				return true;
 			}
-			return expression_tree_walker(node,
-										  is_not_runtime_constant_walker,
-										  /* context = */ NULL);
+			return expression_tree_walker(node, is_not_runtime_constant_walker, context);
 	}
 }
 
@@ -646,9 +656,9 @@ is_not_runtime_constant_walker(Node *node, void *context)
  * Similar checks are performed for sparse index pushdown.
  */
 static bool
-is_not_runtime_constant(Node *node)
+is_not_runtime_constant(Node *node, Index rti)
 {
-	bool result = is_not_runtime_constant_walker(node, /* context = */ NULL);
+	bool result = is_not_runtime_constant_walker(node, &rti);
 	return result;
 }
 
@@ -787,10 +797,10 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		return NULL;
 	}
 
-	if (opexpr && IsA(arg2, Var))
+	if (opexpr && IsA(arg2, Var) && (Index) castNode(Var, arg2)->varno == vqinfo->rti)
 	{
 		/*
-		 * Try to commute the operator if we have Var on the right.
+		 * Try to commute the operator if we have our Var on the right.
 		 */
 		opno = get_commutator(opno);
 		if (!OidIsValid(opno))
@@ -861,7 +871,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	 * be evaluated to a constant at run time (e.g. contains stable functions).
 	 */
 	Assert(arg2);
-	if (is_not_runtime_constant(arg2))
+	if (is_not_runtime_constant(arg2, vqinfo->rti))
 	{
 		return NULL;
 	}
@@ -972,6 +982,131 @@ find_vectorized_quals(DecompressionMapContext *context, ColumnarScanPath *path, 
 	}
 
 	pfree(vqi.vector_attrs);
+}
+
+/*
+ * For each vectorized qual "column op value" on a NOT NULL compressed column,
+ * the compressed chunk attnos of the batch min and max of that column, or 0
+ * when there are none. Two entries per qual, in the order of the quals. The
+ * executor uses them to answer the qual once for a batch where min = max.
+ */
+static List *
+make_metadata_qual_attnos(const ColumnarScanPath *path, List *vectorized_quals)
+{
+	const CompressionInfo *info = path->info;
+	CompressionSettings *settings = info->settings;
+	Oid chunk_relid = info->chunk_rte->relid;
+	Oid compressed_relid = info->compressed_rte->relid;
+	List *result = NIL;
+	bool any = false;
+
+	if (!ts_guc_enable_columnar_batch_metadata_quals || path->batch_sorted_merge ||
+		settings == NULL)
+	{
+		return NIL;
+	}
+
+	ListCell *lc;
+	foreach (lc, vectorized_quals)
+	{
+		AttrNumber min_attno = InvalidAttrNumber;
+		AttrNumber max_attno = InvalidAttrNumber;
+		Node *qual = lfirst(lc);
+		Var *var = NULL;
+		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		{
+			Node *arg = ts_strip_relabel_types(linitial(castNode(OpExpr, qual)->args));
+			if (IsA(arg, Var) && (Index) castNode(Var, arg)->varno == info->chunk_rel->relid &&
+				castNode(Var, arg)->varattno > 0)
+			{
+				var = castNode(Var, arg);
+			}
+		}
+
+		/* Min and max ignore NULLs, so they say nothing about the rows that are NULL. */
+		if (var != NULL && ts_get_attnotnull(chunk_relid, var->varattno))
+		{
+			char *attname = get_attname(chunk_relid, var->varattno, false);
+			if (!ts_array_is_member(settings->fd.segmentby, attname))
+			{
+				min_attno = compressed_column_metadata_attno(settings,
+															 chunk_relid,
+															 var->varattno,
+															 compressed_relid,
+															 "min");
+				max_attno = compressed_column_metadata_attno(settings,
+															 chunk_relid,
+															 var->varattno,
+															 compressed_relid,
+															 "max");
+
+				/*
+				 * The first and last values are the bounds of the batch only
+				 * for the leading orderby column.
+				 */
+				if ((min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber) &&
+					ts_array_position(settings->fd.orderby, attname) == 1)
+				{
+					min_attno = compressed_column_metadata_attno(settings,
+																 chunk_relid,
+																 var->varattno,
+																 compressed_relid,
+																 "first");
+					max_attno = compressed_column_metadata_attno(settings,
+																 chunk_relid,
+																 var->varattno,
+																 compressed_relid,
+																 "last");
+				}
+
+				if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+				{
+					min_attno = max_attno = InvalidAttrNumber;
+				}
+			}
+		}
+
+		any |= min_attno != InvalidAttrNumber;
+		result = lappend_int(result, min_attno);
+		result = lappend_int(result, max_attno);
+	}
+
+	return any ? result : NIL;
+}
+
+/*
+ * Move the vectorized quals on the leading orderby column, which batch seek
+ * looks up, to the front. The vectorized quals are checked in order, and stop
+ * when no rows of the batch are left.
+ */
+static List *
+seek_column_quals_first(const ColumnarScanPath *path, List *quals)
+{
+	const CompressionInfo *info = path->info;
+	AttrNumber attno = get_attnum(info->chunk_rte->relid,
+								  ts_array_get_element_text(info->settings->fd.orderby, 1));
+	List *first = NIL;
+	List *rest = NIL;
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		Node *qual = lfirst(lc);
+		List *args = IsA(qual, OpExpr)			  ? castNode(OpExpr, qual)->args :
+					 IsA(qual, ScalarArrayOpExpr) ? castNode(ScalarArrayOpExpr, qual)->args :
+													NIL;
+		Node *arg = args != NIL ? ts_strip_relabel_types(linitial(args)) : NULL;
+		if (arg != NULL && IsA(arg, Var) &&
+			(Index) castNode(Var, arg)->varno == info->chunk_rel->relid &&
+			castNode(Var, arg)->varattno == attno)
+		{
+			first = lappend(first, qual);
+		}
+		else
+		{
+			rest = lappend(rest, qual);
+		}
+	}
+	return list_concat(first, rest);
 }
 
 /*
@@ -1235,13 +1370,27 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	/*
 	 * Add a sort if the compressed scan is not ordered appropriately.
 	 */
-	decompress_plan->custom_plans =
-		list_make1(ts_add_sort_if_needed(root,
-										 (Plan *) compressed_scan,
-										 compressed_path,
-										 dcpath->required_compressed_pathkeys,
-										 /* reqColIdx = */ NULL,
-										 /* limit_tuples = */ -1.0));
+	Plan *compressed_child = ts_add_sort_if_needed(root,
+												   (Plan *) compressed_scan,
+												   compressed_path,
+												   dcpath->required_compressed_pathkeys,
+												   /* reqColIdx = */ NULL,
+												   /* limit_tuples = */ -1.0);
+	decompress_plan->custom_plans = list_make1(compressed_child);
+
+	/*
+	 * The path was costed for batch seek. It reads the batches in place of the
+	 * index scan, so it can't be used when they have to be sorted.
+	 */
+	List *batch_seek = NIL;
+	Expr *batch_seek_expr = NULL;
+	if (dcpath->batch_seek && compressed_child == (Plan *) compressed_scan)
+	{
+		batch_seek = batch_seek_plan_create(dcpath,
+											compressed_path,
+											(Plan *) compressed_scan,
+											&batch_seek_expr);
+	}
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
@@ -1260,6 +1409,16 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 							  &nonvectorized_quals);
 
 		decompress_plan->scan.plan.qual = nonvectorized_quals;
+	}
+
+	/*
+	 * With batch seek, most batches that don't contain the value are removed
+	 * by the condition on the seek column alone. Check it first, so that the
+	 * other filter columns of these batches are not decompressed.
+	 */
+	if (batch_seek != NIL)
+	{
+		vectorized_quals = seek_column_quals_first(dcpath, vectorized_quals);
 	}
 
 #ifdef TS_DEBUG
@@ -1301,7 +1460,8 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	 * them and perform the varno adjustments on them when flattening the
 	 * subqueries.
 	 */
-	decompress_plan->custom_exprs = list_make1(vectorized_quals);
+	decompress_plan->custom_exprs =
+		list_make2(vectorized_quals, batch_seek_expr ? list_make1(batch_seek_expr) : NIL);
 
 	decompress_plan->custom_private = ts_new_list(T_List, DCP_Count);
 	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_Settings)) = settings;
@@ -1312,6 +1472,9 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_BulkDecompressionColumn)) =
 		context.bulk_decompression_column;
 	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_SortInfo)) = sort_options;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_MetadataQuals)) =
+		make_metadata_qual_attnos(dcpath, vectorized_quals);
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_BatchSeek)) = batch_seek;
 
 	/*
 	 * We might be using a custom scan tuple if it allows us to avoid the
