@@ -10,6 +10,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/appendinfo.h>
+#include <optimizer/clauses.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
@@ -82,6 +83,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	List *parent_clauses = NIL;
 	List *chunk_ri_clauses = NIL;
 	List *chunk_rt_indexes = NIL;
+	List *hash_values = NIL;
 	List *sort_options = NIL;
 	List *custom_private = NIL;
 	uint32 limit = 0;
@@ -270,7 +272,16 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 			if (hash_clause != NULL)
 			{
+				Node *value_hash = lsecond(castNode(OpExpr, hash_clause)->args);
+
 				exclusion_clauses = lappend(exclusion_clauses, hash_clause);
+
+				/* the hash of the value is computed once for all chunks */
+				if (!IsA(value_hash, Const) && !contain_volatile_functions(value_hash) &&
+					!contain_subplans(value_hash))
+				{
+					hash_values = list_append_unique(hash_values, value_hash);
+				}
 			}
 		}
 
@@ -323,6 +334,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	custom_private = lappend(custom_private, chunk_rt_indexes);
 	custom_private = lappend(custom_private, sort_options);
 	custom_private = lappend(custom_private, parent_clauses);
+	custom_private = lappend(custom_private, hash_values);
 
 	cscan->custom_private = custom_private;
 

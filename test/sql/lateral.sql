@@ -376,6 +376,38 @@ EXECUTE metric_device(2);
 DEALLOCATE metric_device;
 RESET plan_cache_mode;
 
+-- the hash of the outer value is computed once per loop and not for every chunk
+CREATE FUNCTION notice_part(v int) RETURNS int LANGUAGE plpgsql IMMUTABLE AS
+$$ BEGIN RAISE NOTICE 'notice_part(%)', v; RETURN v * 500000000; END $$;
+CREATE TABLE metric_notice(time int NOT NULL, device_id int NOT NULL);
+SELECT create_hypertable('metric_notice', by_range('time', 10));
+SELECT add_dimension('metric_notice', by_hash('device_id', 4, partition_func => 'notice_part'));
+CREATE INDEX ON metric_notice(device_id, time);
+SET client_min_messages TO warning;
+INSERT INTO metric_notice SELECT t, d FROM generate_series(0, 39) t, generate_series(1, 4) d;
+ANALYZE metric_notice;
+RESET client_min_messages;
+
+SELECT (SELECT count(*) FROM metric_notice m WHERE m.device_id = v.device_id)
+FROM (VALUES (1), (2)) v(device_id);
+
+SET client_min_messages TO warning;
+SELECT exclusion_info($$
+  SELECT (SELECT count(*) FROM metric_notice m WHERE m.device_id = v.device_id)
+  FROM (VALUES (1), (2)) v(device_id)
+$$);
+RESET client_min_messages;
+
+-- startup exclusion also computes the hash once for all chunks
+SET plan_cache_mode TO force_generic_plan;
+PREPARE metric_notice_device(int) AS SELECT count(*) FROM metric_notice WHERE device_id = $1;
+EXECUTE metric_notice_device(1);
+DEALLOCATE metric_notice_device;
+RESET plan_cache_mode;
+
+DROP TABLE metric_notice;
+DROP FUNCTION notice_part;
+
 RESET enable_hashjoin;
 RESET enable_mergejoin;
 RESET enable_material;
@@ -392,3 +424,11 @@ DROP TABLE metric_part;
 DROP FUNCTION text_part;
 DROP TABLE metric_open_part;
 DROP FUNCTION int_part;
+
+-- EXPLAIN (GENERIC_PLAN) with a parameter on a hash partitioned column
+CREATE TABLE metric_generic(time int NOT NULL, device_id int NOT NULL);
+SELECT create_hypertable('metric_generic', by_range('time', 10));
+SELECT add_dimension('metric_generic', by_hash('device_id', 2));
+INSERT INTO metric_generic SELECT t, d FROM generate_series(0, 19) t, generate_series(1, 2) d;
+EXPLAIN (GENERIC_PLAN, COSTS OFF) SELECT * FROM metric_generic WHERE device_id = $1;
+DROP TABLE metric_generic;

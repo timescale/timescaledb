@@ -33,6 +33,7 @@ typedef enum
 	CAP_RTIndexes = 2,
 	CAP_SortOptions = 3,
 	CAP_ParentClauses = 4,
+	CAP_HashValues = 5,
 	CAP_Count
 } ChunkAppendPrivateIndex;
 
