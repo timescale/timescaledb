@@ -627,6 +627,63 @@ $$);
 --------------------
          ->  Append
 
+-- chunk exclusion below the MergeAppend of an ordered append on a hash
+-- partitioned hypertable
+SELECT exclusion_info($$
+  SELECT x.* FROM (VALUES (1::bigint), (2)) v(device_id),
+  LATERAL (SELECT time FROM metric m WHERE m.device_id = v.device_id ORDER BY time DESC LIMIT 1) x
+$$);
+                  exclusion_info                   
+---------------------------------------------------
+         ->  Custom Scan (ChunkAppend) on metric m
+               Chunks excluded during runtime: 12
+               ->  Merge Append
+               ->  Merge Append (never executed)
+               ->  Merge Append (never executed)
+               ->  Merge Append (never executed)
+
+SELECT x.* FROM (VALUES (1::bigint), (2), (3)) v(device_id),
+LATERAL (SELECT device_id, time FROM metric m WHERE m.device_id = v.device_id ORDER BY time DESC LIMIT 1) x;
+ device_id |             time             
+-----------+------------------------------
+         1 | Mon Mar 31 19:00:00 2025 PDT
+         2 | Mon Mar 31 19:00:00 2025 PDT
+         3 | Mon Mar 31 19:00:00 2025 PDT
+
+SELECT x.* FROM (VALUES (1::bigint), (2), (3)) v(device_id),
+LATERAL (SELECT device_id, time FROM metric m WHERE m.device_id = v.device_id ORDER BY time LIMIT 1) x;
+ device_id |             time             
+-----------+------------------------------
+         1 | Wed Jan 01 00:00:00 2025 PST
+         2 | Wed Jan 01 00:00:00 2025 PST
+         3 | Wed Jan 01 00:00:00 2025 PST
+
+-- startup exclusion below the MergeAppend of an ordered append
+SET plan_cache_mode TO force_generic_plan;
+PREPARE metric_device(bigint) AS
+SELECT device_id, time FROM metric WHERE device_id = $1 ORDER BY time DESC LIMIT 1;
+SELECT exclusion_info('EXECUTE metric_device(1)');
+               exclusion_info               
+--------------------------------------------
+   ->  Custom Scan (ChunkAppend) on metric
+         Chunks excluded during startup: 12
+         ->  Merge Append
+         ->  Merge Append (never executed)
+         ->  Merge Append (never executed)
+         ->  Merge Append (never executed)
+
+EXECUTE metric_device(1);
+ device_id |             time             
+-----------+------------------------------
+         1 | Mon Mar 31 19:00:00 2025 PDT
+
+EXECUTE metric_device(2);
+ device_id |             time             
+-----------+------------------------------
+         2 | Mon Mar 31 19:00:00 2025 PDT
+
+DEALLOCATE metric_device;
+RESET plan_cache_mode;
 RESET enable_hashjoin;
 RESET enable_mergejoin;
 RESET enable_material;

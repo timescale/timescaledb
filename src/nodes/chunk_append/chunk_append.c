@@ -589,7 +589,6 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		List *nested_oids = build_nested_oids(root, children);
 		ListCell *flat = list_head(children);
 		List *nested_children = NIL;
-		bool has_scan_childs = false;
 
 		foreach (lc, nested_oids)
 		{
@@ -656,24 +655,11 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			}
 			else if (list_length(merge_childs) == 1)
 			{
-				has_scan_childs = true;
 				nested_children = lappend(nested_children, linitial(merge_childs));
 			}
 		}
 
 		Assert(flat == NULL);
-
-		/*
-		 * if we do not have scans as direct children of this
-		 * node we disable startup and runtime exclusion
-		 * in this node
-		 */
-		if (!has_scan_childs)
-		{
-			path->startup_exclusion = false;
-			path->runtime_exclusion_parent = false;
-			path->runtime_exclusion_children = false;
-		}
 
 		path->cpath.custom_paths = nested_children;
 	}

@@ -65,6 +65,7 @@ extern TSDLLEXPORT bool ts_is_chunk_append_path(Path *path);
 extern TSDLLEXPORT bool ts_is_chunk_append_plan(Plan *plan);
 
 extern Scan *ts_chunk_append_get_scan_plan(Plan *plan);
+extern List *ts_chunk_append_get_members(Plan *plan);
 
 void _chunk_append_init(void);
 
