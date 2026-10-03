@@ -353,6 +353,29 @@ SELECT exclusion_info($$
   LATERAL (SELECT 1 FROM metric_open_part m WHERE m.time >= v.time) x
 $$);
 
+-- chunk exclusion below the MergeAppend of an ordered append on a hash
+-- partitioned hypertable
+SELECT exclusion_info($$
+  SELECT x.* FROM (VALUES (1::bigint), (2)) v(device_id),
+  LATERAL (SELECT time FROM metric m WHERE m.device_id = v.device_id ORDER BY time DESC LIMIT 1) x
+$$);
+
+SELECT x.* FROM (VALUES (1::bigint), (2), (3)) v(device_id),
+LATERAL (SELECT device_id, time FROM metric m WHERE m.device_id = v.device_id ORDER BY time DESC LIMIT 1) x;
+
+SELECT x.* FROM (VALUES (1::bigint), (2), (3)) v(device_id),
+LATERAL (SELECT device_id, time FROM metric m WHERE m.device_id = v.device_id ORDER BY time LIMIT 1) x;
+
+-- startup exclusion below the MergeAppend of an ordered append
+SET plan_cache_mode TO force_generic_plan;
+PREPARE metric_device(bigint) AS
+SELECT device_id, time FROM metric WHERE device_id = $1 ORDER BY time DESC LIMIT 1;
+SELECT exclusion_info('EXECUTE metric_device(1)');
+EXECUTE metric_device(1);
+EXECUTE metric_device(2);
+DEALLOCATE metric_device;
+RESET plan_cache_mode;
+
 RESET enable_hashjoin;
 RESET enable_mergejoin;
 RESET enable_material;
