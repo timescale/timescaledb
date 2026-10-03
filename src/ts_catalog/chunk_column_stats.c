@@ -749,6 +749,43 @@ ts_chunk_column_stats_range_space_scan(int32 hypertable_id, Oid ht_reloid, Memor
 	return range_space;
 }
 
+/*
+ * Check if chunk skipping is enabled on any column of a hypertable
+ *
+ * Unlike range_space, this does not depend on the enable_chunk_skipping setting.
+ */
+bool
+ts_chunk_column_stats_enabled_for_hypertable(int32 hypertable_id)
+{
+	ScanKeyData scankey[2];
+
+	ScanKeyInit(
+		&scankey[0],
+		Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_hypertable_id,
+		BTEqualStrategyNumber,
+		F_INT4EQ,
+		Int32GetDatum(hypertable_id));
+
+	ScanKeyEntryInitialize(
+		&scankey[1],
+		SK_ISNULL | SK_SEARCHNULL,
+		Anum_chunk_column_stats_ht_id_chunk_id_column_name_range_start_range_end_idx_chunk_id,
+		BTEqualStrategyNumber,
+		InvalidOid,
+		InvalidOid,
+		InvalidOid,
+		Int32GetDatum(INVALID_CHUNK_ID));
+
+	return chunk_column_stats_scan_internal(scankey,
+											2,
+											NULL,
+											NULL,
+											1,
+											CHUNK_COLUMN_STATS_HT_ID_CHUNK_ID_COLUMN_NAME_IDX,
+											AccessShareLock,
+											CurrentMemoryContext) > 0;
+}
+
 static ScanTupleResult
 form_range_tuple_found(TupleInfo *ti, void *data)
 {

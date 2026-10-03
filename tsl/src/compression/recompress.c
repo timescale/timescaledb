@@ -530,12 +530,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 		}
 	}
 
-	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	if (ht->range_space)
-	{
-		ts_chunk_column_stats_calculate(ht, uncompressed_chunk);
-	}
-
 	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
 	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
 	/******************** row decompressor **************/
@@ -2255,6 +2249,16 @@ try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk
 
 	if (!has_tuples)
 	{
+		/* Recalculate column ranges while concurrent inserts are blocked */
+		Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
+		if (ht->range_space)
+		{
+			CommandCounterIncrement();
+			PushActiveSnapshot(GetLatestSnapshot());
+			ts_chunk_column_stats_calculate(ht, uncompressed_chunk);
+			PopActiveSnapshot();
+		}
+
 		/*
 		 * Only clear PARTIAL. Segmentwise recompression only processes
 		 * segments that have new uncompressed data, so segments without new

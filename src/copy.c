@@ -59,6 +59,7 @@
 #include "hypertable.h"
 #include "indexing.h"
 #include "subspace_store.h"
+#include "ts_catalog/chunk_column_stats.h"
 
 /*
  * Represents the insert method to be used during COPY FROM.
@@ -857,6 +858,13 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 			ereport(WARNING,
 					(errmsg(
 						"disabling direct compress because the destination table has triggers")));
+		}
+		/* Direct compress does not maintain chunk skipping ranges */
+		else if (ts_chunk_column_stats_enabled_for_hypertable(ht->fd.id))
+		{
+			ereport(WARNING,
+					(errmsg("disabling direct compress because the destination table has chunk "
+							"skipping enabled")));
 		}
 		else
 		{
