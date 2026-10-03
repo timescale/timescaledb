@@ -60,6 +60,15 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
 
 RESET enable_hashagg;
 
+
+-- GROUP BY with column equated to constant has different semantics than no
+-- GROUP BY clause at all.
+SELECT device_id, count(*), sum(v0) FROM testtable WHERE device_id = -1 GROUP BY device_id;
+
+:PREFIX
+SELECT device_id, count(*), sum(v0) FROM testtable WHERE device_id = -1 GROUP BY device_id;
+
+
 -- Check chunk exclusion for index scans
 SET enable_seqscan = OFF;
 
