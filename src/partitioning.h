@@ -39,6 +39,7 @@ typedef struct PartitioningInfo
 {
 	NameData column;
 	AttrNumber column_attnum;
+	Oid column_collation;
 	DimensionType dimtype;
 	PartitioningFunc partfunc;
 } PartitioningInfo;

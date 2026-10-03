@@ -185,6 +185,7 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 {
 	PartitioningInfo *pinfo;
 	Oid columntype, varcollid, funccollid = InvalidOid;
+	int32 columntypmod;
 	Var *var;
 	FuncExpr *expr;
 
@@ -210,7 +211,11 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 	namestrcpy(&pinfo->partfunc.schema, schema);
 
 	/* Lookup the type cache entry to access the hash function for the type */
-	columntype = get_atttype(relid, pinfo->column_attnum);
+	get_atttypetypmodcoll(relid,
+						  pinfo->column_attnum,
+						  &columntype,
+						  &columntypmod,
+						  &pinfo->column_collation);
 
 	if (dimtype == DIMENSION_TYPE_CLOSED)
 	{
@@ -287,7 +292,6 @@ ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, b
 {
 	Datum value;
 	bool null;
-	Oid collation;
 
 	value = slot_getattr(slot, pinfo->column_attnum, &null);
 
@@ -301,11 +305,8 @@ ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, b
 		return 0;
 	}
 
-	collation =
-		TupleDescAttr(slot->tts_tupleDescriptor, AttrNumberGetAttrOffset(pinfo->column_attnum))
-			->attcollation;
-
-	return ts_partitioning_func_apply(pinfo, collation, value);
+	/* Hash with the column collation, the slot can carry the one of the inserted value */
+	return ts_partitioning_func_apply(pinfo, pinfo->column_collation, value);
 }
 
 /*
