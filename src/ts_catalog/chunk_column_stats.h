@@ -47,6 +47,7 @@ extern Dimension *ts_chunk_column_stats_fill_dummy_dimension(FormData_chunk_colu
 															 Oid main_table_relid);
 extern List *ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri);
 extern void ts_chunk_column_stats_set_invalid(int32 hypertable_id, int32 chunk_id);
+extern bool ts_chunk_column_stats_enabled_for_hypertable(int32 hypertable_id);
 extern int ts_chunk_column_stats_set_name(FormData_chunk_column_stats *in_fd, char *new_colname);
 extern List *ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid,
 															   Index varno);

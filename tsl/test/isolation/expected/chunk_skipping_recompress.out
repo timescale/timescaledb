@@ -1,0 +1,81 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_lock s1_recompress s3_commit s1_show_ranges s2_insert s1_show_ranges s2_query
+step s3_lock: 
+   BEGIN;
+   LOCK TABLE skip_data IN ROW EXCLUSIVE MODE;
+   INSERT INTO skip_data VALUES ('2025-01-01 04:00', 3, 15);
+
+step s1_recompress: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(c)) FROM show_chunks('skip_data') c;
+
+count
+-----
+    1
+
+step s3_commit: 
+   COMMIT;
+
+step s1_show_ranges: 
+   SELECT c.status, s.valid, s.range_start, s.range_end
+   FROM _timescaledb_catalog.chunk_column_stats s
+   JOIN _timescaledb_catalog.chunk c ON c.id = s.chunk_id;
+
+status|valid|range_start|range_end
+------+-----+-----------+---------
+     9|f    |         10|       21
+
+step s2_insert: 
+   INSERT INTO skip_data VALUES ('2025-01-01 03:00', 2, 1000);
+
+step s1_show_ranges: 
+   SELECT c.status, s.valid, s.range_start, s.range_end
+   FROM _timescaledb_catalog.chunk_column_stats s
+   JOIN _timescaledb_catalog.chunk c ON c.id = s.chunk_id;
+
+status|valid|range_start|range_end
+------+-----+-----------+---------
+     9|f    |         10|       21
+
+step s2_query: 
+   SELECT count(*) FROM skip_data WHERE value = 1000;
+   SELECT count(*) FROM skip_data WHERE time > now() - interval '100 years' AND value = 1000;
+
+count
+-----
+    1
+
+count
+-----
+    1
+
+
+starting permutation: s1_recompress s1_show_ranges s2_query
+step s1_recompress: 
+   SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(c)) FROM show_chunks('skip_data') c;
+
+count
+-----
+    1
+
+step s1_show_ranges: 
+   SELECT c.status, s.valid, s.range_start, s.range_end
+   FROM _timescaledb_catalog.chunk_column_stats s
+   JOIN _timescaledb_catalog.chunk c ON c.id = s.chunk_id;
+
+status|valid|range_start|range_end
+------+-----+-----------+---------
+     1|t    |         10|       31
+
+step s2_query: 
+   SELECT count(*) FROM skip_data WHERE value = 1000;
+   SELECT count(*) FROM skip_data WHERE time > now() - interval '100 years' AND value = 1000;
+
+count
+-----
+    0
+
+count
+-----
+    0
+
