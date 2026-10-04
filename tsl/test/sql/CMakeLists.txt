@@ -74,6 +74,7 @@ set(TEST_FILES
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
     direct_compress_policy.sql
+    memoize.sql
     move.sql
     move_to_columnstore.sql
     plan_skip_scan_pg_partition.sql
@@ -110,7 +111,6 @@ set(TEST_TEMPLATES
     compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
-    memoize.sql.in
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
