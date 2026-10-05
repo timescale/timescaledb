@@ -78,12 +78,22 @@ make_chunk_clauses(PlannerInfo *root, List *exclusion_clauses, Scan *scan)
 static bool
 collect_params_walker(Node *node, void *context)
 {
+	if (node == NULL)
+	{
+		/* Continue walking the rest of the tree. */
+		return false;
+	}
+
 	if (IsA(node, Param))
 	{
 		List **collected_params = (List **) context;
 		*collected_params = lappend(*collected_params, node);
+
+		/* Continue walking the rest of the tree. */
+		return false;
 	}
-	else if (IsA(node, RestrictInfo))
+
+	if (IsA(node, RestrictInfo))
 	{
 		return expression_tree_walker((Node *) castNode(RestrictInfo, node)->clause,
 									  collect_params_walker,
