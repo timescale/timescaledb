@@ -176,7 +176,6 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	 */
 	List *custom_exprs = NIL;
 	collect_params_walker((Node *) clauses, (void *) &custom_exprs);
-	my_print(custom_exprs);
 
 	ListCell *lc_plan, *lc_path;
 	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
