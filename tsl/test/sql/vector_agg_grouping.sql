@@ -236,3 +236,28 @@ select count(*) from (select b, count(*) from groupnotinto group by a, b) g;
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 
+
+-- Grouping by a computed expression on a single chunk.
+create table onechunkbucket(ts timestamptz not null, host text, v float8)
+    with (tsdb.hypertable, tsdb.segmentby = 'host', tsdb.orderby = 'ts desc',
+        tsdb.chunk_interval = '1 day');
+insert into onechunkbucket
+select '2026-01-01 00:00:00+00'::timestamptz + g * interval '1 min', 'h' || (g % 4), g
+from generate_series(0, 1439) g;
+select count(compress_chunk(x)) from show_chunks('onechunkbucket') x;
+vacuum analyze onechunkbucket;
+
+set timescaledb.debug_require_vector_agg = 'require';
+-- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+
+explain (costs off)
+select time_bucket('1 hour', ts) b, sum(v) from onechunkbucket group by b;
+select time_bucket('4 hours', ts) b, sum(v) from onechunkbucket group by b order by b;
+select time_bucket('1 hour', ts) b, host, max(v) from onechunkbucket
+group by b, host order by b, host limit 3;
+select date_bin('6 hours', ts, '2000-01-01 00:00:00+00') b, count(*), min(v)
+from onechunkbucket group by b order by b;
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;

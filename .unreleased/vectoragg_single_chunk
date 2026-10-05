@@ -1,0 +1,1 @@
+Implements: Use vectorized aggregation when grouping by an expression on a single chunk
