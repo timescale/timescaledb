@@ -11,7 +11,6 @@
 /deferredchunkappend-*.sql
 /explain_wal-*.sql
 /foreign_keys_test-*.sql
-/memoize-*.sql
 /merge_append_partially_compressed-*.sql
 /modify_exclusion-*.sql
 /ordered_append-*.sql

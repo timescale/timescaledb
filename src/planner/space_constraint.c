@@ -8,16 +8,22 @@
 #include <access/xact.h>
 #include <datatype/timestamp.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/pg_list.h>
 #include <optimizer/optimizer.h>
+#include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
+#include <parser/parsetree.h>
 #include <utils/fmgroids.h>
+#include <utils/lsyscache.h>
 #include <utils/typcache.h>
 
 #include "cache.h"
 #include "dimension.h"
+#include "expression_utils.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "import/optimizer/clauses.h"
 #include "partitioning.h"
 #include "planner.h"
 
@@ -25,7 +31,7 @@
  * Returns space dimension for a specific column. Returns NULL
  * if the column is not a space dimension.
  */
-static Dimension *
+static const Dimension *
 get_space_dimension(Oid relid, AttrNumber varattno)
 {
 	Hypertable *ht = ts_planner_get_hypertable(relid, CACHE_FLAG_CHECK);
@@ -34,212 +40,283 @@ get_space_dimension(Oid relid, AttrNumber varattno)
 		return NULL;
 	}
 
-	for (uint16 i = 0; i < ht->space->num_dimensions; i++)
-	{
-		Dimension *dim = &ht->space->dimensions[i];
-		if (dim->type == DIMENSION_TYPE_CLOSED && dim->column_attno == varattno)
-		{
-			return dim;
-		}
-	}
-	return NULL;
+	return ts_hyperspace_get_dimension_by_attno(ht->space, DIMENSION_TYPE_CLOSED, varattno);
 }
 
 /*
- * Check if this operator is compatible with the constraints on
- * the space dimension. This is the equality operator between
- * left and right in the btree operator family.
+ * Check if this operator is compatible with the constraints on the space
+ * dimension. This is the equality of the btree operator family of the type.
+ *
+ * The type of the other operand does not matter, the family also covers
+ * comparisons between different types, e.g. an int2 column against an integer
+ * literal which defaults to int4.
  */
 bool
-ts_is_equality_operator(Oid opno, Oid left, Oid right)
+ts_is_equality_operator(Oid opno, Oid type)
 {
-	TypeCacheEntry *tce;
+	TypeCacheEntry *tce = lookup_type_cache(type, TYPECACHE_BTREE_OPFAMILY);
 
-	if (left == right)
-	{
-		/*
-		 * When left and right match lookup_type_cache can
-		 * directly return the equality operator saving us
-		 * one roundtrip.
-		 */
-		tce = lookup_type_cache(left, TYPECACHE_EQ_OPR);
-
-		return tce && opno == tce->eq_opr;
-	}
-	else
-	{
-		/*
-		 * The left and right type might not match when comparing
-		 * different integer types eg comparing int2 or int8
-		 * columns with integer literals which default to int4.
-		 */
-		tce = lookup_type_cache(left, TYPECACHE_BTREE_OPFAMILY);
-		if (!tce)
-		{
-			return false;
-		}
-
-		Oid eqop = get_opfamily_member(tce->btree_opf, left, right, BTEqualStrategyNumber);
-		return opno == eqop;
-	}
+	return get_op_opfamily_strategy(opno, tce->btree_opf) == BTEqualStrategyNumber;
 }
 
 /*
- * Valid constraints are: Var = Const
- * Var has to refer to a space partitioning column
+ * Check whether one side of an equality is a space partitioning column that can
+ * be compared against the other side.
+ *
+ * relid restricts the check to the columns of that relation, 0 accepts any
+ * relation of the range table. Returns the dimension of the column and sets var
+ * to the column itself.
  */
-static bool
-is_valid_space_constraint(OpExpr *op, List *rtable)
+static const Dimension *
+space_partitioning_column(PlannerInfo *root, List *rtable, Index relid, Oid opno, Oid inputcollid,
+						  Node *column, Node *other, Var **var)
 {
-	Assert(IsA(op, OpExpr));
-	if (!IsA(linitial(op->args), Var) || !IsA(lsecond(op->args), Const))
+	/*
+	 * A comparison between binary coercible types puts a relabel around the
+	 * column, for example when a varchar column is compared against text.
+	 */
+	column = ts_strip_relabel_types(column);
+
+	if (!IsA(column, Var))
 	{
-		return false;
+		return NULL;
 	}
 
-	Var *var = linitial_node(Var, op->args);
-	if (var->varlevelsup != 0)
-	{
-		return false;
-	}
+	Var *candidate = castNode(Var, column);
 
-	Const *value = lsecond_node(Const, op->args);
-	if (!ts_is_equality_operator(op->opno, var->vartype, value->consttype))
+	if (candidate->varlevelsup != 0 || (relid != 0 && (Index) candidate->varno != relid))
 	{
-		return false;
+		return NULL;
 	}
 
 	/*
-	 * Check that the constraint is actually on a partitioning column.
+	 * The value has to come from outside the hypertable, e.g. a constant, a
+	 * parameter of a prepared statement or a column of an outer relation of a
+	 * join. When this runs before the outer references have been turned into
+	 * parameters they are still plain Vars, so we only reject the columns of
+	 * the hypertable itself.
 	 */
-	Assert((int) var->varno <= list_length(rtable));
-	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
-
-	if (!dim)
+	if (bms_is_member(candidate->varno, pull_varnos(root, other)))
 	{
-		return false;
+		return NULL;
 	}
 
-	return true;
-}
+	Assert((int) candidate->varno <= list_length(rtable));
+	RangeTblEntry *rte = rt_fetch(candidate->varno, rtable);
+	const Dimension *dim = get_space_dimension(rte->relid, candidate->varattno);
 
-/*
- * Valid constraints are:
- *   Var = ANY(ARRAY[Const,Const])
- *   Var IN (Const,Const)
- * Var has to refer to a space partitioning column
- */
-static bool
-is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
-{
-	Assert(IsA(op, ScalarArrayOpExpr));
-	if (!IsA(linitial(op->args), Var) || !IsA(lsecond(op->args), ArrayExpr))
+	if (dim == NULL)
 	{
-		return false;
-	}
-
-	Var *var = linitial_node(Var, op->args);
-	ArrayExpr *arr = castNode(ArrayExpr, lsecond(op->args));
-	if (arr->multidims || !op->useOr || var->varlevelsup != 0)
-	{
-		return false;
-	}
-
-	if (!ts_is_equality_operator(op->opno, var->vartype, arr->element_typeid))
-	{
-		return false;
+		return NULL;
 	}
 
 	/*
-	 * Check that the constraint is actually on a partitioning column.
+	 * The operator has to be an equality of the column type. Through a relabel
+	 * the column can be compared with a looser equality, e.g. bpchar ignores
+	 * trailing spaces.
 	 */
-	Assert((int) var->varno <= list_length(rtable));
-	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
-
-	if (!dim)
+	if (!ts_is_equality_operator(opno, candidate->vartype) || !op_strict(opno))
 	{
-		return false;
+		return NULL;
 	}
 
-	ListCell *lc;
-	foreach (lc, arr->elements)
+	if (!ts_partitioning_collation_matches(inputcollid, candidate->varcollid))
 	{
-		switch (nodeTag(lfirst(lc)))
-		{
-			case T_Const:
-				break;
-			case T_FuncExpr:
-			{
-				FuncExpr *element = lfirst_node(FuncExpr, lc);
-				if (element->funcformat != COERCE_IMPLICIT_CAST ||
-					!IsA(linitial(element->args), Const))
-				{
-					return false;
-				}
-
-				break;
-			}
-			default:
-				return false;
-				break;
-		}
+		return NULL;
 	}
-	return true;
+
+	*var = candidate;
+
+	return dim;
 }
 
 static FuncExpr *
-make_partfunc_call(Oid funcid, Oid rettype, List *args, Oid inputcollid)
+make_partfunc_call(const Dimension *dim, Node *arg, Oid inputcollid)
 {
 	/* build FuncExpr to use in eval_const_expressions */
-	return makeFuncExpr(funcid /* funcid */,
-						rettype /* rettype */,
-						args /* args */,
+	return makeFuncExpr(dim->partitioning->partfunc.func_fmgr.fn_oid /* funcid */,
+						dim->partitioning->partfunc.rettype /* rettype */,
+						list_make1(arg) /* args */,
 						InvalidOid /* funccollid */,
 						inputcollid /* inputcollid */,
 						COERCE_EXPLICIT_CALL /* fformat */);
 }
 
 /*
+ * Check whether values of the two types are hashed the same way. All types of a
+ * hash operator family hash equal values to the same value, which is what makes
+ * them usable for hash joins between those types. A nondeterministic collation
+ * is ignored when hashing name but not text, so it needs the value coerced.
+ */
+static bool
+hashes_match(Oid type1, Oid type2, Oid collid)
+{
+	if (OidIsValid(collid) && !get_collation_isdeterministic(collid))
+	{
+		return false;
+	}
+
+	TypeCacheEntry *tce1 = lookup_type_cache(type1, TYPECACHE_HASH_OPFAMILY);
+	TypeCacheEntry *tce2 = lookup_type_cache(type2, TYPECACHE_HASH_OPFAMILY);
+
+	return OidIsValid(tce1->hash_opf) && tce1->hash_opf == tce2->hash_opf;
+}
+
+/*
+ * Apply the partitioning function to a value of the equality. The result is
+ * folded when the value is already known, so it is not computed again for every
+ * chunk whenever the plan runs.
+ *
+ * Returns NULL when the value cannot be coerced to the column type.
+ */
+static Node *
+make_value_hash(PlannerInfo *root, const Dimension *dim, Var *var, Node *value)
+{
+	value = copyObject(value);
+
+	/*
+	 * get_partition_hash hashes the value as the type it has, so a value of
+	 * another type is only usable when both types are hashed the same way. Any
+	 * other partitioning function needs the value coerced to the column type.
+	 * We only use implicit coercions because narrowing casts can fail at
+	 * runtime.
+	 */
+	if (exprType(value) != var->vartype &&
+		!(ts_partitioning_func_is_partition_hash(&dim->partitioning->partfunc) &&
+		  hashes_match(exprType(value), var->vartype, var->varcollid)))
+	{
+		value = coerce_to_target_type(NULL,
+									  value,
+									  exprType(value),
+									  var->vartype,
+									  -1,
+									  COERCION_IMPLICIT,
+									  COERCE_IMPLICIT_CAST,
+									  -1);
+
+		if (value == NULL)
+		{
+			return NULL;
+		}
+	}
+
+	return eval_const_expressions(root, (Node *) make_partfunc_call(dim, value, var->varcollid));
+}
+
+/*
+ * Find the space partitioning column of an equality clause.
+ *
+ * The column can be on either side of the equality. On success the dimension of
+ * the column is returned and var and value are set to the two sides.
+ */
+static const Dimension *
+space_equality_operands(PlannerInfo *root, List *rtable, Index relid, Expr *clause, Var **var,
+						Node **value)
+{
+	if (!IsA(clause, OpExpr) || list_length(castNode(OpExpr, clause)->args) != 2)
+	{
+		return NULL;
+	}
+
+	OpExpr *op = castNode(OpExpr, clause);
+	Node *left = linitial(op->args);
+	Node *right = lsecond(op->args);
+
+	const Dimension *dim =
+		space_partitioning_column(root, rtable, relid, op->opno, op->inputcollid, left, right, var);
+
+	if (dim != NULL)
+	{
+		*value = right;
+		return dim;
+	}
+
+	dim =
+		space_partitioning_column(root, rtable, relid, op->opno, op->inputcollid, right, left, var);
+
+	if (dim != NULL)
+	{
+		*value = left;
+		return dim;
+	}
+
+	return NULL;
+}
+
+/*
+ * Build a clause on the partition hash for an equality between a space
+ * partitioning column and a value from outside the hypertable:
+ *
+ * device_id = $1 => get_partition_hash(device_id) = get_partition_hash($1)
+ *
+ * The left side matches the constraints on the chunks, so chunk exclusion can
+ * use the clause as soon as the value is known.
+ *
+ * relid restricts the clause to the columns of that relation, 0 accepts any
+ * relation of the range table.
+ *
+ * Returns NULL when no such clause can be built.
+ */
+Expr *
+ts_make_partition_hash_clause(PlannerInfo *root, List *rtable, Index relid, Expr *clause)
+{
+	Var *var;
+	Node *value;
+	const Dimension *dim = space_equality_operands(root, rtable, relid, clause, &var, &value);
+
+	if (dim == NULL)
+	{
+		return NULL;
+	}
+
+	Node *value_hash = make_value_hash(root, dim, var, value);
+
+	if (value_hash == NULL)
+	{
+		return NULL;
+	}
+
+	TypeCacheEntry *tce = lookup_type_cache(dim->partitioning->partfunc.rettype, TYPECACHE_EQ_OPR);
+
+	/*
+	 * The call on the column has to match the chunk constraint, which applies
+	 * the partitioning function to the bare column.
+	 */
+	FuncExpr *column_hash = make_partfunc_call(dim, (Node *) copyObject(var), var->varcollid);
+
+	return make_opclause(tce->eq_opr,
+						 BOOLOID,
+						 false,
+						 (Expr *) column_hash,
+						 (Expr *) value_hash,
+						 InvalidOid,
+						 InvalidOid);
+}
+
+/*
  * Transform a constraint like: device_id = 1
  * into
  * ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
+ *
+ * The hash of the value has to be known here because this clause is matched
+ * against the constraints of the chunks while planning. The clause is tagged so
+ * it can be removed from the finished plan again.
+ *
+ * Returns NULL when the constraint cannot be transformed.
  */
 static OpExpr *
 transform_space_constraint(PlannerInfo *root, List *rtable, OpExpr *op)
 {
-	Var *var = linitial_node(Var, op->args);
-	Const *value = lsecond_node(Const, op->args);
-	Const *part_value;
-	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
-	Oid rettype = dim->partitioning->partfunc.rettype;
-	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
+	Expr *clause = ts_make_partition_hash_clause(root, rtable, 0, (Expr *) op);
 
-	/* build FuncExpr to use in eval_const_expressions */
-	FuncExpr *partcall = make_partfunc_call(dim->partitioning->partfunc.func_fmgr.fn_oid,
-											rettype,
-											list_make1(value),
-											var->varcollid);
+	if (clause == NULL || !IsA(lsecond(castNode(OpExpr, clause)->args), Const))
+	{
+		return NULL;
+	}
 
-	/*
-	 * We should always be able to constify here
-	 */
-	part_value = castNode(Const, eval_const_expressions(root, (Node *) partcall));
+	castNode(OpExpr, clause)->location = PLANNER_LOCATION_MAGIC;
 
-	/* build FuncExpr with column reference to use in constraint */
-	partcall->args = list_make1(copyObject(var));
-
-	OpExpr *ret = (OpExpr *) make_opclause(tce->eq_opr /* opno */,
-										   BOOLOID /*opresulttype */,
-										   false /* opretset */,
-										   (Expr *) partcall /* left */,
-										   (Expr *) part_value /* right */,
-										   InvalidOid /* opcollid */,
-										   InvalidOid /* inputcollid */);
-	ret->location = PLANNER_LOCATION_MAGIC;
-	return ret;
+	return castNode(OpExpr, clause);
 }
 
 /*
@@ -247,30 +324,45 @@ transform_space_constraint(PlannerInfo *root, List *rtable, OpExpr *op)
  * into
  * ((s1 = ANY ('{s1_2,s1_2}'::text[])) AND (_timescaledb_functions.get_partition_hash(s1) = ANY
  * ('{1583420735,1583420735}'::integer[])))
+ *
+ * Returns NULL when the constraint cannot be transformed.
  */
 static ScalarArrayOpExpr *
 transform_scalar_space_constraint(PlannerInfo *root, List *rtable, ScalarArrayOpExpr *op)
 {
-	Var *var = linitial_node(Var, op->args);
-	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
-	Oid rettype = dim->partitioning->partfunc.rettype;
-	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
+	if (list_length(op->args) != 2 || !IsA(lsecond(op->args), ArrayExpr))
+	{
+		return NULL;
+	}
+
+	Node *column = linitial(op->args);
+	ArrayExpr *arr = castNode(ArrayExpr, lsecond(op->args));
+
+	if (arr->multidims || !op->useOr)
+	{
+		return NULL;
+	}
+
+	Var *var;
+	const Dimension *dim = space_partitioning_column(root,
+													 rtable,
+													 0,
+													 op->opno,
+													 op->inputcollid,
+													 column,
+													 (Node *) arr,
+													 &var);
+
+	if (dim == NULL)
+	{
+		return NULL;
+	}
+
 	List *part_values = NIL;
 	ListCell *lc;
 
-	/* build FuncExpr to use in eval_const_expressions */
-	FuncExpr *partcall = make_partfunc_call(dim->partitioning->partfunc.func_fmgr.fn_oid,
-											rettype,
-											NIL,
-											var->varcollid);
-
-	foreach (lc, lsecond_node(ArrayExpr, op->args)->elements)
+	foreach (lc, arr->elements)
 	{
-		Assert(IsA(lfirst(lc), Const) ||
-			   (IsA(lfirst(lc), FuncExpr) &&
-				lfirst_node(FuncExpr, lc)->funcformat == COERCE_IMPLICIT_CAST));
-
 		/*
 		 * We can skip NULL here as elements are ORed and partitioning dimensions
 		 * have NOT NULL constraint.
@@ -280,30 +372,53 @@ transform_scalar_space_constraint(PlannerInfo *root, List *rtable, ScalarArrayOp
 			continue;
 		}
 
-		List *args = list_make1(lfirst(lc));
-		partcall->args = args;
-		part_values =
-			lappend(part_values, castNode(Const, eval_const_expressions(root, (Node *) partcall)));
+		Node *value_hash = make_value_hash(root, dim, var, lfirst(lc));
+
+		/*
+		 * Every element has to be known here, an unknown one would exclude
+		 * chunks that can have matching rows.
+		 */
+		if (value_hash == NULL || !IsA(value_hash, Const))
+		{
+			return NULL;
+		}
+
+		part_values = lappend(part_values, value_hash);
 	}
-	/* build FuncExpr with column reference to use in constraint */
-	partcall->args = list_make1(copyObject(var));
 
-	ArrayExpr *arr2 = makeNode(ArrayExpr);
-	arr2->array_collid = InvalidOid;
-	arr2->array_typeid = get_array_type(rettype);
-	arr2->element_typeid = rettype;
-	arr2->multidims = false;
-	arr2->location = -1;
-	arr2->elements = part_values;
+	Oid rettype = dim->partitioning->partfunc.rettype;
+	TypeCacheEntry *tce = lookup_type_cache(rettype, TYPECACHE_EQ_OPR);
 
-	ScalarArrayOpExpr *op2 = makeNode(ScalarArrayOpExpr);
-	op2->opno = tce->eq_opr;
-	op2->args = list_make2(partcall, arr2);
-	op2->inputcollid = InvalidOid;
-	op2->useOr = true;
-	op2->location = PLANNER_LOCATION_MAGIC;
+	ScalarArrayOpExpr *ret =
+		make_SAOP_expr(tce->eq_opr,
+					   (Node *) make_partfunc_call(dim, (Node *) copyObject(var), var->varcollid),
+					   rettype,
+					   InvalidOid,
+					   InvalidOid,
+					   part_values,
+					   false);
+	ret->location = PLANNER_LOCATION_MAGIC;
 
-	return op2;
+	return ret;
+}
+
+/*
+ * Build the clause on the partition hash for an equality or IN clause.
+ */
+static Expr *
+transform_hash_constraint(PlannerInfo *root, List *rtable, Node *node)
+{
+	switch (nodeTag(node))
+	{
+		case T_OpExpr:
+			return (Expr *) transform_space_constraint(root, rtable, castNode(OpExpr, node));
+		case T_ScalarArrayOpExpr:
+			return (Expr *) transform_scalar_space_constraint(root,
+															  rtable,
+															  castNode(ScalarArrayOpExpr, node));
+		default:
+			return NULL;
+	}
 }
 
 /*
@@ -321,83 +436,35 @@ ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node)
 {
 	Assert(node);
 
-	switch (nodeTag(node))
+	if (is_andclause(node))
 	{
-		case T_ScalarArrayOpExpr:
+		BoolExpr *be = castNode(BoolExpr, node);
+		List *additions = NIL;
+		ListCell *lc;
+
+		/*
+		 * If this is a top-level AND we can just append our transformed constraints
+		 * to the list of ANDed expressions.
+		 */
+		foreach (lc, be->args)
 		{
-			if (is_valid_scalar_space_constraint(castNode(ScalarArrayOpExpr, node), rtable))
-			{
-				List *args =
-					list_make2(node,
-							   transform_scalar_space_constraint(root,
-																 rtable,
-																 castNode(ScalarArrayOpExpr,
-																		  node)));
-				return (Node *) makeBoolExpr(AND_EXPR, args, -1);
-			}
+			Expr *hash_clause = transform_hash_constraint(root, rtable, lfirst(lc));
 
-			break;
+			if (hash_clause)
+			{
+				additions = lappend(additions, hash_clause);
+			}
 		}
-		case T_OpExpr:
-			if (is_valid_space_constraint(castNode(OpExpr, node), rtable))
-			{
-				List *args =
-					list_make2(node,
-							   transform_space_constraint(root, rtable, castNode(OpExpr, node)));
-				return (Node *) makeBoolExpr(AND_EXPR, args, -1);
-			}
-			break;
-		case T_BoolExpr:
-		{
-			ListCell *lc;
-			BoolExpr *be = castNode(BoolExpr, node);
 
-			if (be->boolop == AND_EXPR)
-			{
-				List *additions = NIL;
-				/*
-				 * If this is a top-level AND we can just append our transformed constraints
-				 * to the list of ANDed expressions.
-				 */
-				foreach (lc, be->args)
-				{
-					switch (nodeTag(lfirst(lc)))
-					{
-						case T_OpExpr:
-						{
-							OpExpr *op = lfirst_node(OpExpr, lc);
-							if (is_valid_space_constraint(op, rtable))
-							{
-								additions = lappend(additions,
-													transform_space_constraint(root, rtable, op));
-							}
-							break;
-						}
-						case T_ScalarArrayOpExpr:
-						{
-							ScalarArrayOpExpr *op = lfirst_node(ScalarArrayOpExpr, lc);
-							if (is_valid_scalar_space_constraint(op, rtable))
-							{
-								additions =
-									lappend(additions,
-											transform_scalar_space_constraint(root, rtable, op));
-							}
-							break;
-						}
-						default:
-							break;
-					}
-				}
+		be->args = list_concat(be->args, additions);
+		return node;
+	}
 
-				if (additions)
-				{
-					be->args = list_concat(be->args, additions);
-				}
-			}
-			break;
-		}
-		default:
-			break;
+	Expr *hash_clause = transform_hash_constraint(root, rtable, node);
+
+	if (hash_clause)
+	{
+		return (Node *) makeBoolExpr(AND_EXPR, list_make2(node, hash_clause), -1);
 	}
 
 	return node;

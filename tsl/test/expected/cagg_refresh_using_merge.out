@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Enable MERGE statements for continuous aggregate refresh
 SET timescaledb.enable_merge_on_cagg_refresh TO ON;
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 \ir include/cagg_refresh_common.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -59,9 +59,9 @@ ORDER BY day DESC, device;
 
 -- Refresh one bucket (1 day):
 SHOW timezone;
- TimeZone 
-----------
- PST8PDT
+      TimeZone       
+---------------------
+ America/Los_Angeles
 
 -- The refresh of a single bucket must align with the start of the day
 -- in the bucket's time zone (which is UTC, since time_bucket doesn't

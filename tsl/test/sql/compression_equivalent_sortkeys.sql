@@ -123,8 +123,10 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test2') AS ch;
 SET enable_seqscan = 1;
 :PREFIX SELECT FROM test2 WHERE s1 = s3 ORDER BY s3, o1;
 
--- Test that UNION ALL works
-SELECT s1 FROM test2 UNION ALL SELECT s1 FROM test2 ORDER BY s1;
+-- We should utilize compressed sort order for UNION ALL legs
+SET enable_seqscan = 0;
+:PREFIX SELECT s1 FROM test2 UNION ALL SELECT s1 FROM test2 ORDER BY s1;
+SET enable_seqscan = 1;
 
 DROP table test2 cascade;
 

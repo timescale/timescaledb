@@ -185,6 +185,7 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 {
 	PartitioningInfo *pinfo;
 	Oid columntype, varcollid, funccollid = InvalidOid;
+	int32 columntypmod;
 	Var *var;
 	FuncExpr *expr;
 
@@ -210,7 +211,11 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 	namestrcpy(&pinfo->partfunc.schema, schema);
 
 	/* Lookup the type cache entry to access the hash function for the type */
-	columntype = get_atttype(relid, pinfo->column_attnum);
+	get_atttypetypmodcoll(relid,
+						  pinfo->column_attnum,
+						  &columntype,
+						  &columntypmod,
+						  &pinfo->column_collation);
 
 	if (dimtype == DIMENSION_TYPE_CLOSED)
 	{
@@ -243,6 +248,17 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 	fmgr_info_set_expr((Node *) expr, &pinfo->partfunc.func_fmgr);
 
 	return pinfo;
+}
+
+/*
+ * Rows are hashed with the collation of the column. Under another,
+ * nondeterministic collation values with different hashes can be equal.
+ */
+bool
+ts_partitioning_collation_matches(Oid inputcollid, Oid column_collation)
+{
+	return !OidIsValid(inputcollid) || inputcollid == column_collation ||
+		   get_collation_isdeterministic(inputcollid);
 }
 
 /*
@@ -287,7 +303,6 @@ ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, b
 {
 	Datum value;
 	bool null;
-	Oid collation;
 
 	value = slot_getattr(slot, pinfo->column_attnum, &null);
 
@@ -301,11 +316,8 @@ ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, b
 		return 0;
 	}
 
-	collation =
-		TupleDescAttr(slot->tts_tupleDescriptor, AttrNumberGetAttrOffset(pinfo->column_attnum))
-			->attcollation;
-
-	return ts_partitioning_func_apply(pinfo, collation, value);
+	/* Hash with the column collation, the slot can carry the one of the inserted value */
+	return ts_partitioning_func_apply(pinfo, pinfo->column_collation, value);
 }
 
 /*
@@ -316,45 +328,11 @@ ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, b
 static Oid
 resolve_function_argtype(FunctionCallInfo fcinfo)
 {
-	FuncExpr *fe;
-	Node *node;
-	Oid argtype;
+	Oid argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 
-	/* Get the function expression from the call info */
-	fe = (FuncExpr *) fcinfo->flinfo->fn_expr;
-
-	if (NULL == fe || !IsA(fe, FuncExpr))
+	if (!OidIsValid(argtype))
 	{
-		elog(ERROR, "no function expression set when invoking partitioning function");
-	}
-
-	if (list_length(fe->args) != 1)
-	{
-		elog(ERROR, "unexpected number of arguments in function expression");
-	}
-
-	node = linitial(fe->args);
-
-	switch (nodeTag(node))
-	{
-		case T_Var:
-			argtype = castNode(Var, node)->vartype;
-			break;
-		case T_Const:
-			argtype = castNode(Const, node)->consttype;
-			break;
-		case T_CoerceViaIO:
-			argtype = castNode(CoerceViaIO, node)->resulttype;
-			break;
-		case T_FuncExpr:
-			/* Argument is function, so our input is its result type */
-			argtype = castNode(FuncExpr, node)->funcresulttype;
-			break;
-		case T_Param:
-			argtype = castNode(Param, node)->paramtype;
-			break;
-		default:
-			elog(ERROR, "unsupported expression argument node type: %s", ts_get_node_name(node));
+		elog(ERROR, "could not resolve the argument type of the partitioning function");
 	}
 
 	return argtype;
@@ -507,4 +485,13 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 	res = (int32) (DatumGetUInt32(hash) & 0x7fffffff);
 
 	PG_RETURN_INT32(res);
+}
+
+/*
+ * Check whether the partitioning function is get_partition_hash.
+ */
+bool
+ts_partitioning_func_is_partition_hash(const PartitioningFunc *pf)
+{
+	return pf->func_fmgr.fn_addr == ts_get_partition_hash;
 }

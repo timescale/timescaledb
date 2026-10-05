@@ -33,6 +33,7 @@
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
+#include "expression_utils.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
@@ -192,24 +193,6 @@ append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr 
 		bms_add_member(info->compressed_rel->eclass_indexes, root->eq_classes->length - 1);
 
 	return ec;
-}
-
-/*
- * Remove any RelabelType from the expression to get at the underlying
- * expression. Unlike strip_implicit_coercions we also strip explicit casts
- * since a RelabelType never changes the value. Note that it does not have to
- * keep the sort order, so callers that rely on an order have to check the
- * operator family separately.
- */
-Node *
-ts_strip_relabel_types(Node *node)
-{
-	while (node != NULL && IsA(node, RelabelType))
-	{
-		node = (Node *) castNode(RelabelType, node)->arg;
-	}
-
-	return node;
 }
 
 static List *
@@ -2355,8 +2338,13 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 	 * https://github.com/postgres/postgres/commit/d69d45a5
 	 */
 	EquivalenceMemberIterator it;
-
-	setup_eclass_member_iterator(&it, cur_ec, bms_make_singleton(info->chunk_rel->relid));
+	Bitmapset *relids = bms_make_singleton(info->chunk_rel->relid);
+	/* If hypertable is itself a child, we need to look for it in child members iterator */
+	if (info->ht_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+	{
+		relids = bms_add_member(relids, info->ht_rel->relid);
+	}
+	setup_eclass_member_iterator(&it, cur_ec, relids);
 	while ((cur_em = eclass_member_iterator_next(&it)) != NULL)
 	{
 #else

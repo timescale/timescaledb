@@ -19,6 +19,12 @@ name: ABI Test
     paths: .github/workflows/abi.yaml
   workflow_dispatch:
   workflow_call:
+    inputs:
+      # Ref in timescale/timescaledb to test when called by release sanity,
+      # usually the release branch (e.g. 2.30.x).
+      timescaledb-ref:
+        required: true
+        type: string
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -33,6 +39,10 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -62,6 +72,10 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
     - name: Build extension with ${{ matrix.builder }}
       run: |

@@ -118,6 +118,24 @@ ts_hyperspace_get_dimension_by_name(const Hyperspace *hs, DimensionType type, co
 	return ts_hyperspace_get_mutable_dimension_by_name((Hyperspace *) hs, type, name);
 }
 
+const Dimension *
+ts_hyperspace_get_dimension_by_attno(const Hyperspace *hs, DimensionType type, AttrNumber attno)
+{
+	int i;
+
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		const Dimension *dim = &hs->dimensions[i];
+
+		if ((type == DIMENSION_TYPE_ANY || dim->type == type) && dim->column_attno == attno)
+		{
+			return dim;
+		}
+	}
+
+	return NULL;
+}
+
 Dimension *
 ts_hyperspace_get_mutable_dimension(Hyperspace *hs, DimensionType type, Index n)
 {

@@ -92,3 +92,343 @@ ORDER BY 1, 2, 3, 4;
 SELECT * FROM t1_timescale
 RIGHT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20
 ORDER BY 1, 2, 3, 4;
+
+-- chunk exclusion on a hash partitioned column when the hypertable is on the
+-- parameterized side of a nested loop
+CREATE TABLE metric(time timestamptz NOT NULL, device_id bigint NOT NULL, value float);
+SELECT create_hypertable('metric', by_range('time', INTERVAL '30 days'));
+SELECT add_dimension('metric', by_hash('device_id', 4));
+CREATE INDEX ON metric(device_id, time);
+INSERT INTO metric
+SELECT '2025-01-01'::timestamptz + i * INTERVAL '6 hours', d, d
+FROM generate_series(0, 359) i, generate_series(1, 8) d;
+CREATE INDEX ON metric(value, time);
+ANALYZE metric;
+
+-- only show the exclusion counts as the rest of the plan varies between versions
+CREATE FUNCTION exclusion_info(query text) RETURNS SETOF text LANGUAGE plpgsql AS
+$$
+DECLARE
+  ln text;
+BEGIN
+  FOR ln IN EXECUTE 'EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) ' || query
+  LOOP
+    IF ln ~ 'ChunkAppend|Append|excluded' THEN
+      RETURN NEXT regexp_replace(ln, ' \(actual.*', '');
+    END IF;
+  END LOOP;
+END;
+$$;
+
+SET enable_hashjoin TO off;
+SET enable_mergejoin TO off;
+SET enable_material TO off;
+SET enable_memoize TO off;
+SET max_parallel_workers_per_gather TO 0;
+
+-- the join parameter on the hash partitioned column is the only qual
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (1::bigint), (2)) v(device_id),
+  LATERAL (SELECT 1 FROM metric m WHERE m.device_id = v.device_id) x
+$$);
+
+SELECT count(*) FROM (VALUES (1::bigint), (2)) v(device_id),
+LATERAL (SELECT 1 FROM metric m WHERE m.device_id = v.device_id) x;
+
+SELECT count(*) FROM metric WHERE device_id IN (1, 2);
+
+-- join parameters on the hash and on the range dimension
+SELECT exclusion_info($$
+  SELECT count(*) FROM
+    (VALUES (1::bigint, '2025-03-01'::timestamptz), (2, '2025-02-01'::timestamptz)) v(device_id, time),
+  LATERAL (SELECT 1 FROM metric m WHERE m.device_id = v.device_id AND m.time >= v.time) x
+$$);
+
+SELECT count(*) FROM
+  (VALUES (1::bigint, '2025-03-01'::timestamptz), (2, '2025-02-01'::timestamptz)) v(device_id, time),
+LATERAL (SELECT 1 FROM metric m WHERE m.device_id = v.device_id AND m.time >= v.time) x;
+
+SELECT count(*) FROM metric WHERE device_id = 1 AND time >= '2025-03-01';
+
+SELECT count(*) FROM metric WHERE device_id = 2 AND time >= '2025-02-01';
+
+-- the outer value has a different type than the partitioning column
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (1), (2)) v(device_id),
+  LATERAL (SELECT 1 FROM metric m WHERE m.device_id = v.device_id) x
+$$);
+
+SELECT count(*) FROM (VALUES (1), (2)) v(device_id),
+LATERAL (SELECT 1 FROM metric m WHERE m.device_id = v.device_id) x;
+
+-- the partitioning column on the other side of the comparison
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (1), (2)) v(device_id),
+  LATERAL (SELECT 1 FROM metric m WHERE v.device_id = m.device_id) x
+$$);
+
+SELECT count(*) FROM (VALUES (1), (2)) v(device_id),
+LATERAL (SELECT 1 FROM metric m WHERE v.device_id = m.device_id) x;
+
+-- a NULL parameter must not exclude rows for the other values
+SELECT count(*) FROM (VALUES (1::bigint), (NULL)) v(device_id),
+LATERAL (SELECT 1 FROM metric m WHERE m.device_id = v.device_id) x;
+
+-- no chunk exclusion when the join parameter is not on a partitioning column
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (1.0::float), (2.0)) v(value),
+  LATERAL (SELECT 1 FROM metric m WHERE m.value = v.value) x
+$$);
+
+-- no chunk exclusion for a comparison on the partitioning column that can
+-- never contradict the constraints of a chunk
+SELECT exclusion_info($$
+  SELECT count(*) FROM
+    (VALUES (1.0::float, '2025-02-01'::timestamptz), (2.0, '2025-03-01'::timestamptz)) v(value, time),
+  LATERAL (SELECT 1 FROM metric m WHERE m.value = v.value AND m.time <> v.time) x
+$$);
+
+-- text partitioning column
+CREATE TABLE metric_text(time timestamptz NOT NULL, device text NOT NULL);
+SELECT create_hypertable('metric_text', by_range('time', INTERVAL '30 days'));
+SELECT add_dimension('metric_text', by_hash('device', 4));
+CREATE INDEX ON metric_text(device, time);
+INSERT INTO metric_text
+SELECT '2025-01-01'::timestamptz + i * INTERVAL '6 hours', 'device-' || d
+FROM generate_series(0, 359) i, generate_series(1, 8) d;
+ANALYZE metric_text;
+
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES ('device-1'), ('device-2')) v(device),
+  LATERAL (SELECT 1 FROM metric_text m WHERE m.device = v.device) x
+$$);
+
+SELECT count(*) FROM (VALUES ('device-1'), ('device-2')) v(device),
+LATERAL (SELECT 1 FROM metric_text m WHERE m.device = v.device) x;
+
+SELECT count(*) FROM metric_text WHERE device IN ('device-1', 'device-2');
+
+-- a comparison as bpchar ignores the trailing spaces of the column
+INSERT INTO metric_text SELECT '2025-01-01', 'device-' || d || '  ' FROM generate_series(1, 8) d;
+
+SELECT v.device, (SELECT count(*) FROM metric_text m WHERE m.device::bpchar = v.device AND m.time = '2025-01-01')
+FROM (VALUES ('device-1'::bpchar), ('device-2'), ('device-3'), ('device-4')) v(device);
+
+SET plan_cache_mode TO force_generic_plan;
+PREPARE metric_text_bpchar(bpchar) AS
+SELECT count(*) FROM metric_text WHERE device::bpchar = $1 AND time = '2025-01-01';
+EXECUTE metric_text_bpchar('device-1');
+EXECUTE metric_text_bpchar('device-2');
+EXECUTE metric_text_bpchar('device-3');
+EXECUTE metric_text_bpchar('device-4');
+DEALLOCATE metric_text_bpchar;
+RESET plan_cache_mode;
+
+-- no ChunkAppend for an ANY comparison on the hash partitioned column, the
+-- clause on the partition hash is only built for a plain equality
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (ARRAY[1::bigint, 2])) v(device_ids),
+  LATERAL (SELECT 1 FROM metric m WHERE m.device_id = ANY (v.device_ids)) x
+$$);
+
+SELECT count(*) FROM (VALUES (ARRAY[1::bigint, 2])) v(device_ids),
+LATERAL (SELECT 1 FROM metric m WHERE m.device_id = ANY (v.device_ids)) x;
+
+-- no chunk exclusion for an inequality on the hash partitioned column
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (1::bigint), (2)) v(device_id),
+  LATERAL (SELECT 1 FROM metric m WHERE m.device_id > v.device_id) x
+$$);
+
+SELECT count(*) FROM (VALUES (1::bigint), (2)) v(device_id),
+LATERAL (SELECT 1 FROM metric m WHERE m.device_id > v.device_id) x;
+
+-- varchar partitioning column, the comparison carries a relabel to text
+CREATE TABLE metric_varchar(time timestamptz NOT NULL, device varchar(32) NOT NULL);
+SELECT create_hypertable('metric_varchar', by_range('time', INTERVAL '30 days'));
+SELECT add_dimension('metric_varchar', by_hash('device', 4));
+CREATE INDEX ON metric_varchar(device, time);
+INSERT INTO metric_varchar
+SELECT '2025-01-01'::timestamptz + i * INTERVAL '6 hours', 'device-' || d
+FROM generate_series(0, 359) i, generate_series(1, 8) d;
+ANALYZE metric_varchar;
+
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES ('device-1'::varchar), ('device-2')) v(device),
+  LATERAL (SELECT 1 FROM metric_varchar m WHERE m.device = v.device) x
+$$);
+
+SELECT count(*) FROM (VALUES ('device-1'::varchar), ('device-2')) v(device),
+LATERAL (SELECT 1 FROM metric_varchar m WHERE m.device = v.device) x;
+
+SELECT count(*) FROM metric_varchar WHERE device IN ('device-1', 'device-2');
+
+-- bpchar partitioning column
+CREATE TABLE metric_bpchar(time timestamptz NOT NULL, device char(16) NOT NULL);
+SELECT create_hypertable('metric_bpchar', by_range('time', INTERVAL '30 days'));
+SELECT add_dimension('metric_bpchar', by_hash('device', 4));
+CREATE INDEX ON metric_bpchar(device, time);
+INSERT INTO metric_bpchar
+SELECT '2025-01-01'::timestamptz + i * INTERVAL '6 hours', 'device-' || d
+FROM generate_series(0, 359) i, generate_series(1, 8) d;
+ANALYZE metric_bpchar;
+
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES ('device-1'::char(16)), ('device-2')) v(device),
+  LATERAL (SELECT 1 FROM metric_bpchar m WHERE m.device = v.device) x
+$$);
+
+SELECT count(*) FROM (VALUES ('device-1'::char(16)), ('device-2')) v(device),
+LATERAL (SELECT 1 FROM metric_bpchar m WHERE m.device = v.device) x;
+
+SELECT count(*) FROM metric_bpchar WHERE device IN ('device-1', 'device-2');
+
+-- the outer value is wider than the partitioning column
+CREATE TABLE metric_int(time timestamptz NOT NULL, device_id int NOT NULL);
+SELECT create_hypertable('metric_int', by_range('time', INTERVAL '30 days'));
+SELECT add_dimension('metric_int', by_hash('device_id', 4));
+CREATE INDEX ON metric_int(device_id, time);
+INSERT INTO metric_int
+SELECT '2025-01-01'::timestamptz + i * INTERVAL '6 hours', d
+FROM generate_series(0, 359) i, generate_series(1, 8) d;
+ANALYZE metric_int;
+
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (1::bigint), (2)) v(device_id),
+  LATERAL (SELECT 1 FROM metric_int m WHERE m.device_id = v.device_id) x
+$$);
+
+SELECT count(*) FROM (VALUES (1::bigint), (2)) v(device_id),
+LATERAL (SELECT 1 FROM metric_int m WHERE m.device_id = v.device_id) x;
+
+SELECT count(*) FROM metric_int WHERE device_id IN (1, 2);
+
+-- custom partitioning function with an outer value of another type
+CREATE FUNCTION text_part(v text) RETURNS int LANGUAGE plpgsql IMMUTABLE AS
+$$ BEGIN RETURN hashtext(v) & 2147483647; END $$;
+CREATE TABLE metric_part(time timestamptz NOT NULL, device text NOT NULL);
+SELECT create_hypertable('metric_part', by_range('time', INTERVAL '30 days'));
+SELECT add_dimension('metric_part', by_hash('device', 4, partition_func => 'text_part'));
+CREATE INDEX ON metric_part(device, time);
+INSERT INTO metric_part
+SELECT '2025-01-01'::timestamptz + i * INTERVAL '6 hours', 'device-' || d
+FROM generate_series(0, 359) i, generate_series(1, 8) d;
+ANALYZE metric_part;
+
+SELECT exclusion_info($$
+  SELECT (SELECT count(*) FROM metric_part m WHERE m.device = v.device)
+  FROM (VALUES ('device-1'::name), ('device-2')) v(device)
+$$);
+
+SELECT (SELECT count(*) FROM metric_part m WHERE m.device = v.device)
+FROM (VALUES ('device-1'::name), ('device-2')) v(device);
+
+SET plan_cache_mode TO force_generic_plan;
+PREPARE metric_part_device(name) AS SELECT count(*) FROM metric_part WHERE device = $1;
+SELECT exclusion_info('EXECUTE metric_part_device(''device-1'')');
+EXECUTE metric_part_device('device-1');
+EXECUTE metric_part_device('device-2');
+DEALLOCATE metric_part_device;
+RESET plan_cache_mode;
+
+-- open dimension with a partitioning function
+CREATE FUNCTION int_part(v int) RETURNS int LANGUAGE plpgsql IMMUTABLE AS
+$$ BEGIN RETURN v; END $$;
+CREATE TABLE metric_open_part(time int NOT NULL, value int);
+SELECT create_hypertable('metric_open_part', by_range('time', 10, partition_func => 'int_part'));
+INSERT INTO metric_open_part SELECT i, i FROM generate_series(0, 99) i;
+ANALYZE metric_open_part;
+
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (75), (85)) v(time),
+  LATERAL (SELECT 1 FROM metric_open_part m WHERE int_part(m.time) >= v.time) x
+$$);
+
+SELECT count(*) FROM (VALUES (75), (85)) v(time),
+LATERAL (SELECT 1 FROM metric_open_part m WHERE int_part(m.time) >= v.time) x;
+
+-- no chunk exclusion for a comparison on the column itself
+SELECT exclusion_info($$
+  SELECT count(*) FROM (VALUES (75), (85)) v(time),
+  LATERAL (SELECT 1 FROM metric_open_part m WHERE m.time >= v.time) x
+$$);
+
+-- chunk exclusion below the MergeAppend of an ordered append on a hash
+-- partitioned hypertable
+SELECT exclusion_info($$
+  SELECT x.* FROM (VALUES (1::bigint), (2)) v(device_id),
+  LATERAL (SELECT time FROM metric m WHERE m.device_id = v.device_id ORDER BY time DESC LIMIT 1) x
+$$);
+
+SELECT x.* FROM (VALUES (1::bigint), (2), (3)) v(device_id),
+LATERAL (SELECT device_id, time FROM metric m WHERE m.device_id = v.device_id ORDER BY time DESC LIMIT 1) x;
+
+SELECT x.* FROM (VALUES (1::bigint), (2), (3)) v(device_id),
+LATERAL (SELECT device_id, time FROM metric m WHERE m.device_id = v.device_id ORDER BY time LIMIT 1) x;
+
+-- startup exclusion below the MergeAppend of an ordered append
+SET plan_cache_mode TO force_generic_plan;
+PREPARE metric_device(bigint) AS
+SELECT device_id, time FROM metric WHERE device_id = $1 ORDER BY time DESC LIMIT 1;
+SELECT exclusion_info('EXECUTE metric_device(1)');
+EXECUTE metric_device(1);
+EXECUTE metric_device(2);
+DEALLOCATE metric_device;
+RESET plan_cache_mode;
+
+-- the hash of the outer value is computed once per loop and not for every chunk
+CREATE FUNCTION notice_part(v int) RETURNS int LANGUAGE plpgsql IMMUTABLE AS
+$$ BEGIN RAISE NOTICE 'notice_part(%)', v; RETURN v * 500000000; END $$;
+CREATE TABLE metric_notice(time int NOT NULL, device_id int NOT NULL);
+SELECT create_hypertable('metric_notice', by_range('time', 10));
+SELECT add_dimension('metric_notice', by_hash('device_id', 4, partition_func => 'notice_part'));
+CREATE INDEX ON metric_notice(device_id, time);
+SET client_min_messages TO warning;
+INSERT INTO metric_notice SELECT t, d FROM generate_series(0, 39) t, generate_series(1, 4) d;
+ANALYZE metric_notice;
+RESET client_min_messages;
+
+SELECT (SELECT count(*) FROM metric_notice m WHERE m.device_id = v.device_id)
+FROM (VALUES (1), (2)) v(device_id);
+
+SET client_min_messages TO warning;
+SELECT exclusion_info($$
+  SELECT (SELECT count(*) FROM metric_notice m WHERE m.device_id = v.device_id)
+  FROM (VALUES (1), (2)) v(device_id)
+$$);
+RESET client_min_messages;
+
+-- startup exclusion also computes the hash once for all chunks
+SET plan_cache_mode TO force_generic_plan;
+PREPARE metric_notice_device(int) AS SELECT count(*) FROM metric_notice WHERE device_id = $1;
+EXECUTE metric_notice_device(1);
+DEALLOCATE metric_notice_device;
+RESET plan_cache_mode;
+
+DROP TABLE metric_notice;
+DROP FUNCTION notice_part;
+
+RESET enable_hashjoin;
+RESET enable_mergejoin;
+RESET enable_material;
+RESET enable_memoize;
+RESET max_parallel_workers_per_gather;
+
+DROP FUNCTION exclusion_info;
+DROP TABLE metric;
+DROP TABLE metric_text;
+DROP TABLE metric_varchar;
+DROP TABLE metric_bpchar;
+DROP TABLE metric_int;
+DROP TABLE metric_part;
+DROP FUNCTION text_part;
+DROP TABLE metric_open_part;
+DROP FUNCTION int_part;
+
+-- EXPLAIN (GENERIC_PLAN) with a parameter on a hash partitioned column
+CREATE TABLE metric_generic(time int NOT NULL, device_id int NOT NULL);
+SELECT create_hypertable('metric_generic', by_range('time', 10));
+SELECT add_dimension('metric_generic', by_hash('device_id', 2));
+INSERT INTO metric_generic SELECT t, d FROM generate_series(0, 19) t, generate_series(1, 2) d;
+EXPLAIN (GENERIC_PLAN, COSTS OFF) SELECT * FROM metric_generic WHERE device_id = $1;
+DROP TABLE metric_generic;
