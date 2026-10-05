@@ -75,6 +75,24 @@ make_chunk_clauses(PlannerInfo *root, List *exclusion_clauses, Scan *scan)
 	return chunk_clauses;
 }
 
+static bool
+collect_params_walker(Node *node, void *context)
+{
+	if (IsA(node, Param))
+	{
+		List **collected_params = (List **) context;
+		*collected_params = lappend(*collected_params, node);
+	}
+	else if (IsA(node, RestrictInfo))
+	{
+		return expression_tree_walker((Node *) castNode(RestrictInfo, node)->clause,
+									  collect_params_walker,
+									  context);
+	}
+
+	return expression_tree_walker(node, collect_params_walker, context);
+}
+
 Plan *
 ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
 							List *clauses, List *custom_plans)
@@ -140,6 +158,25 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		}
 		clauses = transformed_clauses;
 	}
+
+	/*
+	 * We need to put all Params used by clauses to custom_exprs, so that
+	 * SS_finalize() builds a correct set of Params required by this node.
+	 * Otherwise the Params won't be initialized before this node runs. We can't
+	 * put the chunk exclusion clauses themselves into custom_exprs, because
+	 * they are evaluated against a virtual tuple describing the given chunk's
+	 * constraints, and cannot be evaluated against this node's targetlist.
+	 *
+	 * In most cases, this node just inherits the list of parameters from its
+	 * children (per-chunk scans), but there are some corner cases where the
+	 * parameterized clauses are removed from children but not from parent.
+	 *
+	 * We can't directly fill the Plan.extParam/allParam bitmaps now, because
+	 * they are built later in the planning and will be overwritten.
+	 */
+	List *custom_exprs = NIL;
+	collect_params_walker((Node *) clauses, (void *) &custom_exprs);
+	my_print(custom_exprs);
 
 	ListCell *lc_plan, *lc_path;
 	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
@@ -337,6 +374,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	custom_private = lappend(custom_private, hash_values);
 
 	cscan->custom_private = custom_private;
+
+	cscan->custom_exprs = custom_exprs;
 
 	return &cscan->scan.plan;
 }
