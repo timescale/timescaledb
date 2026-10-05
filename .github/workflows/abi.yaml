@@ -40,8 +40,8 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
-        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
+        repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
         token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
     - name: Read configuration
       id: config
@@ -73,8 +73,8 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
-        ref: ${{ inputs['timescaledb-ref'] || github.ref }}
+        repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
         token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
     - name: Build extension with ${{ matrix.builder }}
