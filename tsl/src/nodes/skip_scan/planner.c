@@ -85,11 +85,12 @@ typedef struct SkipScanPath
 
 typedef struct DistinctPathInfo
 {
-	UpperRelationKind stage; /* What kind of Upper distinct path we are dealing with */
-	RelOptInfo *input_rel;	 /* Input into distinct */
-	Path *unique_path;		 /* If not NULL, valid Upper distinct path */
-	List *distinct_pathkeys; /* If not NULL, list of valid distinct pathkeys for Upper distinct path
-							  */
+	UpperRelationKind stage;   /* What kind of Upper distinct path we are dealing with */
+	Path *unique_path;		   /* If not NULL, valid Upper distinct path */
+	RelOptInfo *toprel;		   /* Input into distinct */
+	List *toprel_distinct_ems; /* If not NULL, list of valid distinct pathkey equivalence class
+								* members for Upper distinct path
+								*/
 } DistinctPathInfo;
 
 static int get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno);
@@ -99,7 +100,7 @@ static bool build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *i
 							bool build_eqop);
 static List *build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo,
 						   List *top_pathkeys);
-static Var *get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, PathKey *pk,
+static Var *get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, List *distinct_key_ems,
 							 IndexPath *index_path, Path *child_path, SkipKeyInfo *skinfo);
 static TargetEntry *tlist_member_match_var(Var *var, List *targetlist);
 
@@ -302,8 +303,7 @@ static CustomPathMethods skip_scan_path_methods = {
  * rather than repeat this check for each child path of an upper path input
  */
 static bool
-check_and_add_distinct_pathkeys(PlannerInfo *root, List *pathkeys, int numkeys,
-								DistinctPathInfo *dpinfo)
+check_and_add_distinct_ems(PlannerInfo *root, List *pathkeys, int numkeys, DistinctPathInfo *dpinfo)
 {
 	if (!pathkeys)
 	{
@@ -349,18 +349,18 @@ check_and_add_distinct_pathkeys(PlannerInfo *root, List *pathkeys, int numkeys,
 		{
 			return false;
 		}
-		List *chunk_emembers = ts_find_ems_for_rel(pk->pk_eclass, dpinfo->input_rel);
-		for (int i = 0; i < list_length(chunk_emembers); i++)
+		List *toprel_ems = ts_find_ems_for_rel(pk->pk_eclass, dpinfo->toprel);
+		for (int i = 0; i < list_length(toprel_ems); i++)
 		{
-			EquivalenceMember *chunk_em = list_nth(chunk_emembers, i);
+			EquivalenceMember *toprel_em = list_nth(toprel_ems, i);
 
-			Node *node = strip_implicit_coercions((Node *) chunk_em->em_expr);
+			Node *node = strip_implicit_coercions((Node *) toprel_em->em_expr);
 			if (node == NULL || !IsA(node, Var))
 			{
 				return false;
 			}
 		}
-		dpinfo->distinct_pathkeys = lappend(dpinfo->distinct_pathkeys, pk);
+		dpinfo->toprel_distinct_ems = lappend(dpinfo->toprel_distinct_ems, toprel_ems);
 	}
 	return true;
 }
@@ -401,10 +401,10 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 					return;
 				}
 
-				if (!check_and_add_distinct_pathkeys(root,
-													 unique->path.pathkeys,
-													 unique->numkeys,
-													 dpinfo))
+				if (!check_and_add_distinct_ems(root,
+												unique->path.pathkeys,
+												unique->numkeys,
+												dpinfo))
 				{
 					return;
 				}
@@ -444,10 +444,10 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 					return;
 				}
 
-				if (!check_and_add_distinct_pathkeys(root,
-													 unique->subpath->pathkeys,
-													 list_length(unique->subpath->pathkeys),
-													 dpinfo))
+				if (!check_and_add_distinct_ems(root,
+												unique->subpath->pathkeys,
+												list_length(unique->subpath->pathkeys),
+												dpinfo))
 				{
 					return;
 				}
@@ -533,9 +533,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 	DistinctPathInfo dpinfo = {
 		.stage = stage,
-		.input_rel = input_rel,
 		.unique_path = NULL,
-		.distinct_pathkeys = NULL,
+		.toprel = input_rel,
+		.toprel_distinct_ems = NULL,
 	};
 
 	obtain_upper_distinct_path(root, output_rel, &dpinfo);
@@ -546,7 +546,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 	Assert(IsA(dpinfo.unique_path, UniquePathCompat) || IsA(dpinfo.unique_path, AggPath));
 	ListCell *lc;
-	foreach (lc, input_rel->pathlist)
+	foreach (lc, dpinfo.toprel->pathlist)
 	{
 		bool has_caa = false;
 
@@ -904,13 +904,14 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 
 	ListCell *lc;
 	int sk_no = 0;
-	int num_skipkeys = list_length(dpinfo->distinct_pathkeys);
-	foreach (lc, dpinfo->distinct_pathkeys)
+	int num_skipkeys = list_length(dpinfo->toprel_distinct_ems);
+	foreach (lc, dpinfo->toprel_distinct_ems)
 	{
-		PathKey *pk = lfirst(lc);
+		List *distinct_key_ems = lfirst(lc);
 		/* Placeholder for skip key attributes */
 		SkipKeyInfo *skinfo = palloc(sizeof(SkipKeyInfo));
-		Var *dvar = get_distinct_var(root, dpinfo, pk, index_path, child_path, skinfo);
+		Var *dvar =
+			get_distinct_var(root, dpinfo, distinct_key_ems, index_path, child_path, skinfo);
 		if (!dvar)
 		{
 			pfree(skinfo);
@@ -1089,10 +1090,10 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 
 /* Extract the Var to use for the SkipScan and do attno mapping if required. */
 static Var *
-get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, PathKey *pk, IndexPath *index_path,
-				 Path *child_path, SkipKeyInfo *skinfo)
+get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, List *distinct_key_ems,
+				 IndexPath *index_path, Path *child_path, SkipKeyInfo *skinfo)
 {
-	RelOptInfo *ht_rel = dpinfo->input_rel;
+	RelOptInfo *ht_rel = dpinfo->toprel;
 	RelOptInfo *chunk_rel = child_path->parent;
 	RelOptInfo *indexed_rel = index_path->path.parent;
 
@@ -1111,16 +1112,28 @@ get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, PathKey *pk, Index
 
 	/* Loop through equivalent vars for this path key
 	 * to settle on the var which will be earliest in the index i.e. of highest index order */
-	List *chunk_emembers = ts_find_ems_for_rel(pk->pk_eclass, chunk_rel);
 	SkipKeyInfo result_skinfo = { 0 };
 	Var *result_var = NULL;
-	for (int i = 0; i < list_length(chunk_emembers); i++)
+	for (int i = 0; i < list_length(distinct_key_ems); i++)
 	{
-		EquivalenceMember *chunk_em = list_nth(chunk_emembers, i);
+		EquivalenceMember *distinct_em = list_nth(distinct_key_ems, i);
 
-		Node *node = strip_implicit_coercions((Node *) chunk_em->em_expr);
+		Node *node = strip_implicit_coercions((Node *) distinct_em->em_expr);
 		Assert(node && IsA(node, Var));
 		Var *var = castNode(Var, node);
+
+		/* If we are dealing with a hypertable, Var extracted from distinctClause will point to
+		 * the parent hypertable while the IndexPath will be on a Chunk.
+		 * For a normal PG table they point to the same relation and we do not need to adjust top
+		 * distinct var. */
+		if (ht_rel->relid != chunk_rel->relid)
+		{
+			/* derive chunk distinct Var from the top relation distinct Var */
+			char *attname = get_attname(ht_rte->relid, var->varattno, false);
+			var = copyObject(var);
+			var->varattno = get_attnum(chunk_rte->relid, attname);
+			var->varno = chunk_rel->relid;
+		}
 		AttrNumber indexed_column_attno = var->varattno;
 
 		/* Get attribute number for distinct column on a compressed chunk */
@@ -1189,16 +1202,25 @@ get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, PathKey *pk, Index
 	skinfo->scankey_attno = result_skinfo.scankey_attno;
 
 	/*
-	 * Check whether a distinct var is declared NOT NULL.
+	 * Check whether a distinct var is declared NOT NULL
 	 */
+#if PG17_LT
 	skinfo->notnull = ts_get_attnotnull(chunk_rte->relid, result_var->varattno);
+#else
+	/* Since PG18 "notnullattnums" contain only NOT NULL columns with validated NOT NULL
+	 * constraints. In PG17 "notnullattnums" are available but the notion of validated constraints
+	 * is not there yet, i.e. "notnullattnums" meaning is consistent with PG version in which it is
+	 * available.
+	 */
+	skinfo->notnull = bms_is_member(result_var->varattno, chunk_rel->notnullattnums);
+#endif
 
 	return result_var;
 }
 
 /*
  * Creates SkipScanPath for each path of subpaths that is an IndexPath
- * If no subpath can be changed to SkipScanPath returns NULL
+ * If no subpath can be changed to SkipScanPath, returns NULL
  * otherwise returns list of new paths
  */
 static List *
