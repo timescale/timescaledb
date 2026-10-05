@@ -32,7 +32,6 @@ jobs:
         with:
           repository: timescale/timescaledb
           ref: ${{ inputs.timescaledb-ref }}
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
       # The release branch must have the exact version the release manager
       # specified.
@@ -88,8 +87,6 @@ jobs:
       # The release milestone is named v{version}, e.g. v2.31.0, and must have
       # no open issues or PRs at release time.
       - name: Release milestone is empty
-        env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           milestone_title="v${{ inputs.version }}"
 
@@ -190,8 +187,6 @@ jobs:
     steps:
       - name: Get latest timescaledb tag
         id: get_tag
-        env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           LATEST_TAG="$(gh api "repos/timescale/timescaledb/releases/latest" --jq '.tag_name')"
 

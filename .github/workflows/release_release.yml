@@ -32,7 +32,6 @@ jobs:
         with:
           repository: timescale/timescaledb
           ref: ${{ inputs.timescaledb-ref }}
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
       - name: Show checked out revision
         run: git rev-parse HEAD
@@ -62,8 +61,6 @@ jobs:
           git push origin "${{ inputs.version }}"
 
       - name: Create draft release
-        env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           set -euo pipefail
           release_date="$(date +%F)"
@@ -90,8 +87,6 @@ jobs:
     runs-on: runs-on/fleet=linux-2cpu/env=ue1
     steps:
       - name: Check Windows binaries are uploaded
-        env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           set -euo pipefail
           assets="$(gh release view "${{ inputs.version }}" --repo timescale/timescaledb --json assets --jq '.assets[].name')"
@@ -108,8 +103,6 @@ jobs:
           echo "Found Windows assets: ${windows_assets}"
 
       - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           set -euo pipefail
           gh release edit "${{ inputs.version }}" \
