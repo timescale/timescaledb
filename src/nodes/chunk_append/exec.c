@@ -21,6 +21,7 @@
 #include <rewrite/rewriteManip.h>
 #include <storage/lwlock.h>
 #include <utils/builtins.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/ruleutils.h>
 #include <utils/typcache.h>
@@ -74,6 +75,7 @@ typedef struct ChunkAppendState
 	PlanState **subplan_states;
 
 	MemoryContext exclusion_ctx;
+	MemoryContext hash_value_ctx;
 
 	int num_subplans;
 	int first_partial_plan;
@@ -99,6 +101,9 @@ typedef struct ChunkAppendState
 	List *initial_ri_clauses;
 	/* List of restrictinfo clauses on the parent hypertable */
 	List *initial_parent_clauses;
+	/* hashes of values in the clauses, computed once for all chunks */
+	List *hash_values;
+	List *hash_value_consts;
 
 	/* list of subplans after startup exclusion */
 	List *filtered_subplans;
@@ -108,6 +113,8 @@ typedef struct ChunkAppendState
 	List *filtered_ri_clauses;
 	/* subplans remaining after startup exclusion (indexes into initial_subplans) */
 	Bitmapset *subplans_after_startup;
+	/* chunks of each child remaining after startup exclusion, indexed like filtered_subplans */
+	List *filtered_valid_members;
 
 	/* subplans remaining after runtime exclusion */
 	Bitmapset *subplans_after_runtime;
@@ -117,6 +124,7 @@ typedef struct ChunkAppendState
 	List *sort_options;
 
 	/* number of loops and exclusions for EXPLAIN */
+	int startup_number_exclusions;
 	int runtime_number_loops;
 	int runtime_number_exclusions_parent;
 	int runtime_number_exclusions_children;
@@ -193,6 +201,7 @@ ts_chunk_append_state_create(CustomScan *cscan)
 		(List *) copyObject(list_nth(cscan->custom_private, CAP_ChunkRIClauses));
 	state->sort_options = list_nth(cscan->custom_private, CAP_SortOptions);
 	state->initial_parent_clauses = list_nth(cscan->custom_private, CAP_ParentClauses);
+	state->hash_values = list_nth(cscan->custom_private, CAP_HashValues);
 
 	state->startup_exclusion = list_nth_int(settings, CAS_StartupExclusion);
 	state->runtime_exclusion_parent = list_nth_int(settings, CAS_RuntimeExclusionParent);
@@ -210,8 +219,122 @@ ts_chunk_append_state_create(CustomScan *cscan)
 	state->exclusion_ctx = AllocSetContextCreate(CurrentMemoryContext,
 												 "ChunkApppend exclusion",
 												 ALLOCSET_DEFAULT_SIZES);
+	state->hash_value_ctx = AllocSetContextCreate(CurrentMemoryContext,
+												  "ChunkApppend hash values",
+												  ALLOCSET_SMALL_SIZES);
 
 	return (Node *) state;
+}
+
+static List *
+make_restrictinfos(List *clauses)
+{
+	List *restrictinfos = NIL;
+	ListCell *lc;
+
+	foreach (lc, clauses)
+	{
+		RestrictInfo *ri = makeNode(RestrictInfo);
+		ri->clause = lfirst(lc);
+		restrictinfos = lappend(restrictinfos, ri);
+	}
+
+	return restrictinfos;
+}
+
+/*
+ * Replace the hash of a value in a clause by its result computed for all
+ * chunks.
+ */
+static List *
+replace_hash_values(List *hash_values, List *hash_value_consts, List *clauses)
+{
+	List *result = NIL;
+	ListCell *lc;
+
+	if (hash_value_consts == NIL)
+	{
+		return clauses;
+	}
+
+	foreach (lc, clauses)
+	{
+		Expr *clause = lfirst(lc);
+
+		if (IsA(clause, OpExpr) && list_length(castNode(OpExpr, clause)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, clause);
+			ListCell *lc_value, *lc_const;
+
+			forboth (lc_value, hash_values, lc_const, hash_value_consts)
+			{
+				if (lfirst(lc_const) != NULL && equal(lsecond(op->args), lfirst(lc_value)))
+				{
+					OpExpr *new_op = makeNode(OpExpr);
+
+					memcpy(new_op, op, sizeof(OpExpr));
+					new_op->args = list_make2(linitial(op->args), lfirst(lc_const));
+					clause = (Expr *) new_op;
+					break;
+				}
+			}
+		}
+
+		result = lappend(result, clause);
+	}
+
+	return result;
+}
+
+/*
+ * Constify the hashes of the values. With estate only the values using
+ * parameters set while executing are constified, with their current values.
+ * Values that are not constant are NULL.
+ */
+static List *
+constify_hash_values(PlannerInfo *root, EState *estate, List *hash_values)
+{
+	List *hash_value_consts = NIL;
+	ListCell *lc;
+
+	foreach (lc, hash_values)
+	{
+		Node *value = lfirst(lc);
+
+		if (estate != NULL)
+		{
+			value = ts_contains_join_param(value) ? constify_param_mutator(value, estate) : NULL;
+		}
+
+		if (value != NULL)
+		{
+			value = estimate_expression_value(root, value);
+		}
+
+		hash_value_consts =
+			lappend(hash_value_consts, value != NULL && IsA(value, Const) ? value : NULL);
+	}
+
+	return hash_value_consts;
+}
+
+/*
+ * Check whether startup exclusion removes the chunk. Otherwise the constified
+ * clauses are returned in const_clauses.
+ */
+static bool
+startup_exclude_chunk(PlannerInfo *root, List *constraints, List *clauses, List **const_clauses)
+{
+	List *restrictinfos = ts_constify_restrictinfos(root, make_restrictinfos(clauses));
+
+	if (can_exclude_chunk(constraints, restrictinfos))
+	{
+		return true;
+	}
+
+	*const_clauses = extract_actual_clauses(restrictinfos, false);
+
+	return false;
 }
 
 static void
@@ -220,6 +343,7 @@ do_startup_exclusion(ChunkAppendState *state)
 	List *filtered_children = NIL;
 	List *filtered_ri_clauses = NIL;
 	List *filtered_constraints = NIL;
+	List *filtered_valid_members = NIL;
 	ListCell *lc_plan;
 	ListCell *lc_clauses;
 	ListCell *lc_constraints;
@@ -239,6 +363,9 @@ do_startup_exclusion(ChunkAppendState *state)
 	/* Reset included subplans */
 	state->subplans_after_startup = NULL;
 
+	/* the hashes of the values are computed once for all chunks */
+	List *hash_value_consts = constify_hash_values(&root, NULL, state->hash_values);
+
 	/*
 	 * clauses and constraints should always have the same length as initial_subplans
 	 */
@@ -252,62 +379,68 @@ do_startup_exclusion(ChunkAppendState *state)
 			  lc_clauses,
 			  state->initial_ri_clauses)
 	{
-		List *restrictinfos = NIL;
-		List *ri_clauses = lfirst(lc_clauses);
-		ListCell *lc;
-		Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_plan));
+		List *ri_clauses = NIL;
+		Bitmapset *valid_members = NULL;
+		ListCell *lc_member_constraints, *lc_member_clauses;
+		int member = 0;
 
 		i++;
 
-		/*
-		 * If this is a base rel (chunk), check if it can be
-		 * excluded from the scan. Otherwise, fall through.
-		 */
-		if (scan != NULL && scan->scanrelid)
+		/* check every chunk of the child */
+		forboth (lc_member_constraints,
+				 lfirst(lc_constraints),
+				 lc_member_clauses,
+				 lfirst(lc_clauses))
 		{
-			foreach (lc, ri_clauses)
-			{
-				RestrictInfo *ri = makeNode(RestrictInfo);
-				ri->clause = lfirst(lc);
-				restrictinfos = lappend(restrictinfos, ri);
-			}
-			restrictinfos = ts_constify_restrictinfos(&root, restrictinfos);
+			List *member_clauses = lfirst(lc_member_clauses);
+			List *const_clauses = NIL;
 
-			if (can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
+			if (!startup_exclude_chunk(&root,
+									   lfirst(lc_member_constraints),
+									   replace_hash_values(state->hash_values,
+														   hash_value_consts,
+														   member_clauses),
+									   &const_clauses))
 			{
-				if (i < state->first_partial_plan)
+				valid_members = bms_add_member(valid_members, member);
+
+				/*
+				 * if this node does runtime exclusion on the children we keep the constified
+				 * expressions to save us some work during runtime exclusion
+				 */
+				if (state->runtime_exclusion_children)
 				{
-					filtered_first_partial_plan--;
+					member_clauses = const_clauses;
 				}
-
-				continue;
 			}
 
-			/*
-			 * if this node does runtime exclusion on the children we keep the constified
-			 * expressions to save us some work during runtime exclusion
-			 */
-			if (state->runtime_exclusion_children)
+			ri_clauses = lappend(ri_clauses, member_clauses);
+			member++;
+		}
+
+		state->startup_number_exclusions += member - bms_num_members(valid_members);
+
+		if (valid_members == NULL)
+		{
+			if (i < state->first_partial_plan)
 			{
-				List *const_ri_clauses = NIL;
-				foreach (lc, restrictinfos)
-				{
-					RestrictInfo *ri = lfirst(lc);
-					const_ri_clauses = lappend(const_ri_clauses, ri->clause);
-				}
-				ri_clauses = const_ri_clauses;
+				filtered_first_partial_plan--;
 			}
+
+			continue;
 		}
 
 		state->subplans_after_startup = bms_add_member(state->subplans_after_startup, i);
 		filtered_children = lappend(filtered_children, lfirst(lc_plan));
 		filtered_ri_clauses = lappend(filtered_ri_clauses, ri_clauses);
 		filtered_constraints = lappend(filtered_constraints, lfirst(lc_constraints));
+		filtered_valid_members = lappend(filtered_valid_members, valid_members);
 	}
 
 	state->filtered_subplans = filtered_children;
 	state->filtered_ri_clauses = filtered_ri_clauses;
 	state->filtered_constraints = filtered_constraints;
+	state->filtered_valid_members = filtered_valid_members;
 	state->filtered_first_partial_plan = filtered_first_partial_plan;
 
 	Assert(list_length(state->filtered_subplans) == bms_num_members(state->subplans_after_startup));
@@ -385,6 +518,28 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 /*
+ * Restrict a MergeAppend to the given children. Without run-time partition
+ * pruning the MergeAppend keeps this set across rescans.
+ */
+static void
+set_merge_append_members(PlanState *ps, Bitmapset *valid_members)
+{
+	MergeAppendState *ms = castNode(MergeAppendState, ps);
+
+	Assert(valid_members != NULL);
+
+	/* partition pruning numbers the children differently and resets them on rescan */
+	if (ms->ms_prune_state != NULL)
+	{
+		bms_free(valid_members);
+		return;
+	}
+
+	bms_free(ms->ms_valid_subplans);
+	ms->ms_valid_subplans = valid_members;
+}
+
+/*
  * Initialize the child plans that were not filtered out by startup exclusion.
  */
 static void
@@ -418,6 +573,13 @@ init_subplans(ChunkAppendState *state, EState *estate, int eflags)
 		state->subplan_states[i] = ExecInitNode(lfirst(lc), estate, eflags);
 		state->csstate.custom_ps = lappend(state->csstate.custom_ps, state->subplan_states[i]);
 
+		/* skip the chunks of a MergeAppend removed by startup exclusion */
+		if (IsA(state->subplan_states[i], MergeAppendState) && state->filtered_valid_members != NIL)
+		{
+			set_merge_append_members(state->subplan_states[i],
+									 bms_copy(list_nth(state->filtered_valid_members, i)));
+		}
+
 		if (state->limit)
 		{
 			ExecSetTupleBound(state->limit, state->subplan_states[i]);
@@ -441,23 +603,56 @@ can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints
 									  PlannerInfo *root, PlanState *ps)
 {
 	bool can_exclude;
-	ListCell *lc;
 	MemoryContext old = MemoryContextSwitchTo(state->exclusion_ctx);
-	List *restrictinfos = NIL;
-
-	foreach (lc, clauses)
-	{
-		RestrictInfo *ri = makeNode(RestrictInfo);
-		ri->clause = lfirst(lc);
-		restrictinfos = lappend(restrictinfos, ri);
-	}
-	restrictinfos = ts_constify_restrictinfo_params(root, ps->state, restrictinfos);
+	List *restrictinfos =
+		ts_constify_restrictinfo_params(root,
+										ps->state,
+										make_restrictinfos(
+											replace_hash_values(state->hash_values,
+																state->hash_value_consts,
+																clauses)));
 
 	can_exclude = can_exclude_chunk(constraints, restrictinfos);
 
 	MemoryContextReset(state->exclusion_ctx);
 	MemoryContextSwitchTo(old);
 	return can_exclude;
+}
+
+/*
+ * Run runtime exclusion on the chunks of a child. Only the chunks in candidates
+ * are checked, NULL checks all of them. Returns the chunks that cannot be
+ * excluded.
+ */
+static Bitmapset *
+runtime_exclude_members(ChunkAppendState *state, List *constraints, List *clauses,
+						Bitmapset *candidates, PlannerInfo *root, PlanState *ps)
+{
+	Bitmapset *valid_members = NULL;
+	ListCell *lc_constraints, *lc_clauses;
+	int member = 0;
+
+	forboth (lc_constraints, constraints, lc_clauses, clauses)
+	{
+		if (candidates == NULL || bms_is_member(member, candidates))
+		{
+			if (can_exclude_constraints_using_clauses(state,
+													  lfirst(lc_constraints),
+													  lfirst(lc_clauses),
+													  root,
+													  ps))
+			{
+				state->runtime_number_exclusions_children++;
+			}
+			else
+			{
+				valid_members = bms_add_member(valid_members, member);
+			}
+		}
+		member++;
+	}
+
+	return valid_members;
 }
 
 /*
@@ -485,6 +680,7 @@ do_runtime_exclusion(ChunkAppendState *state)
 	}
 
 	state->runtime_number_loops++;
+	state->hash_value_consts = NIL;
 
 	if (state->runtime_exclusion_parent)
 	{
@@ -513,6 +709,12 @@ do_runtime_exclusion(ChunkAppendState *state)
 		return;
 	}
 
+	MemoryContextReset(state->hash_value_ctx);
+	MemoryContext old = MemoryContextSwitchTo(state->hash_value_ctx);
+	state->hash_value_consts =
+		constify_hash_values(&root, state->csstate.ss.ps.state, state->hash_values);
+	MemoryContextSwitchTo(old);
+
 	Assert(state->num_subplans == list_length(state->filtered_ri_clauses));
 
 	lc_clauses = list_head(state->filtered_ri_clauses);
@@ -524,28 +726,28 @@ do_runtime_exclusion(ChunkAppendState *state)
 	for (i = 0; i < state->num_subplans; i++)
 	{
 		PlanState *ps = state->subplan_states[i];
-		Scan *scan = ts_chunk_append_get_scan_plan(ps->plan);
+		Bitmapset *valid_members =
+			runtime_exclude_members(state,
+									lfirst(lc_constraints),
+									lfirst(lc_clauses),
+									state->filtered_valid_members != NIL ?
+										list_nth(state->filtered_valid_members, i) :
+										NULL,
+									&root,
+									ps);
 
-		if (scan == NULL || scan->scanrelid == 0)
+		if (valid_members != NULL)
 		{
-			state->subplans_after_runtime = bms_add_member(state->subplans_after_runtime, i);
-		}
-		else
-		{
-			bool can_exclude = can_exclude_constraints_using_clauses(state,
-																	 lfirst(lc_constraints),
-																	 lfirst(lc_clauses),
-																	 &root,
-																	 ps);
-
-			if (!can_exclude)
+			if (IsA(ps, MergeAppendState))
 			{
-				state->subplans_after_runtime = bms_add_member(state->subplans_after_runtime, i);
+				set_merge_append_members(ps, valid_members);
 			}
 			else
 			{
-				state->runtime_number_exclusions_children++;
+				bms_free(valid_members);
 			}
+
+			state->subplans_after_runtime = bms_add_member(state->subplans_after_runtime, i);
 		}
 
 		lc_clauses = lnext(state->filtered_ri_clauses, lc_clauses);
@@ -1282,10 +1484,36 @@ can_exclude_chunk(List *constraints, List *baserestrictinfo)
  * Fetch the constraints for a relation and adjust range table indexes
  * if necessary.
  */
+static List *
+get_chunk_constraints(EState *estate, Plan *plan, List *clauses, Index initial_index)
+{
+	Scan *scan = ts_chunk_append_get_scan_plan(plan);
+
+	if (scan == NULL || scan->scanrelid == 0)
+	{
+		return NIL;
+	}
+
+	Index scanrelid = scan->scanrelid;
+	RangeTblEntry *rte = rt_fetch(scanrelid, estate->es_range_table);
+
+	/*
+	 * Adjust the RangeTableEntry indexes in the restrictinfo
+	 * clauses because during planning subquery indexes may be
+	 * different from the final index after flattening.
+	 */
+	if (scanrelid != initial_index)
+	{
+		ChangeVarNodes((Node *) clauses, initial_index, scanrelid, 0);
+	}
+
+	return ca_get_relation_constraints(rte->relid, scanrelid, true);
+}
+
 static void
 initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 {
-	ListCell *lc_clauses, *lc_plan, *lc_relid;
+	ListCell *lc_clauses, *lc_plan, *lc_relids;
 	List *constraints = NIL;
 	EState *estate = state->csstate.ss.ps.state;
 
@@ -1301,30 +1529,26 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 			  state->initial_subplans,
 			  lc_clauses,
 			  state->initial_ri_clauses,
-			  lc_relid,
+			  lc_relids,
 			  initial_rt_indexes)
 	{
-		Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_plan));
-		Index initial_index = lfirst_oid(lc_relid);
-		List *relation_constraints = NIL;
+		List *member_constraints = NIL;
+		ListCell *lc_member, *lc_member_clauses, *lc_member_relid;
 
-		if (scan != NULL && scan->scanrelid > 0)
+		forthree (lc_member,
+				  ts_chunk_append_get_members(lfirst(lc_plan)),
+				  lc_member_clauses,
+				  lfirst(lc_clauses),
+				  lc_member_relid,
+				  lfirst(lc_relids))
 		{
-			Index rt_index = scan->scanrelid;
-			RangeTblEntry *rte = rt_fetch(rt_index, estate->es_range_table);
-			relation_constraints = ca_get_relation_constraints(rte->relid, rt_index, true);
-
-			/*
-			 * Adjust the RangeTableEntry indexes in the restrictinfo
-			 * clauses because during planning subquery indexes may be
-			 * different from the final index after flattening.
-			 */
-			if (rt_index != initial_index)
-			{
-				ChangeVarNodes(lfirst(lc_clauses), initial_index, scan->scanrelid, 0);
-			}
+			member_constraints = lappend(member_constraints,
+										 get_chunk_constraints(estate,
+															   lfirst(lc_member),
+															   lfirst(lc_member_clauses),
+															   lfirst_oid(lc_member_relid)));
 		}
-		constraints = lappend(constraints, relation_constraints);
+		constraints = lappend(constraints, member_constraints);
 	}
 	state->initial_constraints = constraints;
 	state->filtered_constraints = constraints;
@@ -1363,7 +1587,7 @@ chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	{
 		ExplainPropertyInteger("Chunks excluded during startup",
 							   NULL,
-							   list_length(state->initial_subplans) - list_length(node->custom_ps),
+							   state->startup_number_exclusions,
 							   es);
 	}
 

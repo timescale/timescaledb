@@ -172,13 +172,14 @@ LIMIT 10000
                ->  Limit (actual rows=1.00 loops=27)
                      ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=1.00 loops=27)
                            Order: m2."time" DESC
+                           Chunks excluded during runtime: 6
                            ->  Merge Append (actual rows=1.00 loops=27)
                                  Sort Key: m2."time" DESC
-                                 ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_1 (actual rows=0.00 loops=27)
+                                 ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_1 (actual rows=1.00 loops=8)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk m2_2 (actual rows=0.00 loops=27)
+                                 ->  Index Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk m2_2 (actual rows=1.00 loops=10)
                                        Index Cond: (device_id = m1.device_id)
-                                 ->  Index Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk m2_3 (actual rows=0.00 loops=27)
+                                 ->  Index Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk m2_3 (actual rows=1.00 loops=9)
                                        Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC
@@ -341,16 +342,17 @@ LIMIT 10000
                ->  Limit (actual rows=1.00 loops=27)
                      ->  Custom Scan (ChunkAppend) on metrics_space_compressed m2 (actual rows=1.00 loops=27)
                            Order: m2."time" DESC
+                           Chunks excluded during runtime: 6
                            ->  Merge Append (actual rows=1.00 loops=27)
                                  Sort Key: m2."time" DESC
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk m2_1 (actual rows=0.00 loops=27)
-                                       ->  Index Scan using _hyper_4_24_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_24_chunk_compressed _hyper_4_24_chunk_compressed_1 (actual rows=0.00 loops=27)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk m2_1 (actual rows=1.00 loops=8)
+                                       ->  Index Scan using _hyper_4_24_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_24_chunk_compressed _hyper_4_24_chunk_compressed_1 (actual rows=1.00 loops=8)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk m2_2 (actual rows=0.00 loops=27)
-                                       ->  Index Scan using _hyper_4_23_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_23_chunk_compressed _hyper_4_23_chunk_compressed_1 (actual rows=0.00 loops=27)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk m2_2 (actual rows=1.00 loops=10)
+                                       ->  Index Scan using _hyper_4_23_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_23_chunk_compressed _hyper_4_23_chunk_compressed_1 (actual rows=1.00 loops=10)
                                              Index Cond: (device_id = m1.device_id)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk m2_3 (actual rows=0.00 loops=27)
-                                       ->  Index Scan using _hyper_4_22_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_22_chunk_compressed _hyper_4_22_chunk_compressed_1 (actual rows=0.00 loops=27)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk m2_3 (actual rows=1.00 loops=9)
+                                       ->  Index Scan using _hyper_4_22_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_22_chunk_compressed _hyper_4_22_chunk_compressed_1 (actual rows=1.00 loops=9)
                                              Index Cond: (device_id = m1.device_id)
                            ->  Merge Append (never executed)
                                  Sort Key: m2."time" DESC

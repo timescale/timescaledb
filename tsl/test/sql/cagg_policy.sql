@@ -33,7 +33,7 @@ GROUP BY time_bucket(1, a), a WITH NO DATA;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 
@@ -135,7 +135,7 @@ SELECT hypertable_id as mat_id FROM _timescaledb_catalog.bgw_job where id = :job
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
@@ -354,7 +354,7 @@ WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
