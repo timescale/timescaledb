@@ -93,6 +93,16 @@ collect_params_walker(Node *node, void *context)
 		return false;
 	}
 
+	if (IsA(node, SubPlan))
+	{
+		/*
+		 * Do not descend into a subplan because it is evaluated separately.
+		 * The parameters that might be needed inside it are not valid at the
+		 * ChunkAppend node. Continue walking the rest of the tree.
+		 */
+		 return false;
+	}
+
 	if (IsA(node, RestrictInfo))
 	{
 		return expression_tree_walker((Node *) castNode(RestrictInfo, node)->clause,
