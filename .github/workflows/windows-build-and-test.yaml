@@ -57,7 +57,7 @@ jobs:
 
   build:
     # Change the JOB_NAME variable below when changing the name.
-    name: ${{ (matrix.installcheck == 'true') && '' || 'Build-only '}}PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
+    name: ${{ (matrix.installcheck != 'true') && 'Build-only ' || ''}}PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
     runs-on: windows-2025
     needs: [config, check_paths]
     if: needs.check_paths.outputs.run_ci == 'true'
@@ -396,7 +396,7 @@ jobs:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
         # duplicate it to work around this nonsense.
-        JOB_NAME: PG${{ matrix.versions.pg }} ${{ matrix.build_type }}
+        JOB_NAME: ${{ (matrix.installcheck != 'true') && 'Build-only ' || ''}}PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
