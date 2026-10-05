@@ -1883,3 +1883,67 @@ call force_parallel(false);
 + timescaledb.enable_chunk_append  | off
  
   time | temp | colorid | attr 
+-- rescan with a changed outer parameter re-evaluates sorted chunk scans below ConstraintAwareAppend
+CREATE TABLE caa_rescan(time timestamptz NOT NULL, sensor text, value float) WITH (tsdb.hypertable, tsdb.chunk_interval='1 day');
+INSERT INTO caa_rescan SELECT t, s, 1 FROM generate_series('2025-01-01'::timestamptz, '2025-01-03 23:59', '10s') t, (VALUES ('A'),('B'),('C')) v(s);
+INSERT INTO caa_rescan VALUES ('2025-01-05', 'B', 1);
+-- drop the time index on the newest chunk so it needs a Sort below the MergeAppend
+SELECT format('%I.%I', i.schemaname, i.indexname) AS "RESCAN_INDEX"
+FROM show_chunks('caa_rescan', newer_than => '2025-01-04'::timestamptz) ch
+JOIN pg_indexes i ON format('%I.%I', i.schemaname, i.tablename)::regclass = ch \gset
+DROP INDEX :RESCAN_INDEX;
+VACUUM ANALYZE caa_rescan;
+SET timescaledb.enable_chunk_append = off;
+SET enable_material = off;
+\set RESCAN_QUERY 'SELECT s.sensor, (SELECT count(*) FROM generate_series(1,1) g WHERE \'2025-01-04\'::timestamptz < ANY (SELECT time FROM caa_rescan r WHERE r.sensor = s.sensor AND time < now() ORDER BY time DESC LIMIT 1)) FROM (VALUES (\'A\'),(\'B\'),(\'C\')) s(sensor)'
+EXPLAIN (costs off) :RESCAN_QUERY;
+--- QUERY PLAN ---
+ Values Scan on "*VALUES*"
+   SubPlan 2
+     ->  Aggregate
+           ->  Result
+                 One-Time Filter: (SubPlan 1)
+                 ->  Function Scan on generate_series g
+                 SubPlan 1
+                   ->  Limit
+                         ->  Custom Scan (ConstraintAwareAppend)
+                               Hypertable: caa_rescan
+                               Chunks excluded during startup: 0
+                               ->  Merge Append
+                                     Sort Key: r."time" DESC
+                                     ->  Index Scan using _hyper_16_54_chunk_caa_rescan_time_idx on _hyper_16_54_chunk r_1
+                                           Index Cond: ("time" < now())
+                                           Filter: (sensor = "*VALUES*".column1)
+                                     ->  Index Scan using _hyper_16_55_chunk_caa_rescan_time_idx on _hyper_16_55_chunk r_2
+                                           Index Cond: ("time" < now())
+                                           Filter: (sensor = "*VALUES*".column1)
+                                     ->  Index Scan using _hyper_16_56_chunk_caa_rescan_time_idx on _hyper_16_56_chunk r_3
+                                           Index Cond: ("time" < now())
+                                           Filter: (sensor = "*VALUES*".column1)
+                                     ->  Index Scan using _hyper_16_57_chunk_caa_rescan_time_idx on _hyper_16_57_chunk r_4
+                                           Index Cond: ("time" < now())
+                                           Filter: (sensor = "*VALUES*".column1)
+                                     ->  Sort
+                                           Sort Key: r_5."time" DESC
+                                           ->  Seq Scan on _hyper_16_58_chunk r_5
+                                                 Filter: ((sensor = "*VALUES*".column1) AND ("time" < now()))
+
+:RESCAN_QUERY;
+ sensor | count 
+--------+-------
+ A      |     0
+ B      |     1
+ C      |     0
+
+SET timescaledb.enable_constraint_aware_append = off;
+:RESCAN_QUERY;
+ sensor | count 
+--------+-------
+ A      |     0
+ B      |     1
+ C      |     0
+
+RESET timescaledb.enable_constraint_aware_append;
+RESET timescaledb.enable_chunk_append;
+RESET enable_material;
+DROP TABLE caa_rescan;

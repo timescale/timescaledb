@@ -53,3 +53,28 @@ SET timescaledb.enable_chunk_append TO false;
 
 :DIFF_CMD
 
+
+\set ECHO all
+-- rescan with a changed outer parameter re-evaluates sorted chunk scans below ConstraintAwareAppend
+CREATE TABLE caa_rescan(time timestamptz NOT NULL, sensor text, value float) WITH (tsdb.hypertable, tsdb.chunk_interval='1 day');
+INSERT INTO caa_rescan SELECT t, s, 1 FROM generate_series('2025-01-01'::timestamptz, '2025-01-03 23:59', '10s') t, (VALUES ('A'),('B'),('C')) v(s);
+INSERT INTO caa_rescan VALUES ('2025-01-05', 'B', 1);
+-- drop the time index on the newest chunk so it needs a Sort below the MergeAppend
+SELECT format('%I.%I', i.schemaname, i.indexname) AS "RESCAN_INDEX"
+FROM show_chunks('caa_rescan', newer_than => '2025-01-04'::timestamptz) ch
+JOIN pg_indexes i ON format('%I.%I', i.schemaname, i.tablename)::regclass = ch \gset
+DROP INDEX :RESCAN_INDEX;
+VACUUM ANALYZE caa_rescan;
+
+SET timescaledb.enable_chunk_append = off;
+SET enable_material = off;
+\set RESCAN_QUERY 'SELECT s.sensor, (SELECT count(*) FROM generate_series(1,1) g WHERE \'2025-01-04\'::timestamptz < ANY (SELECT time FROM caa_rescan r WHERE r.sensor = s.sensor AND time < now() ORDER BY time DESC LIMIT 1)) FROM (VALUES (\'A\'),(\'B\'),(\'C\')) s(sensor)'
+EXPLAIN (costs off) :RESCAN_QUERY;
+:RESCAN_QUERY;
+SET timescaledb.enable_constraint_aware_append = off;
+:RESCAN_QUERY;
+RESET timescaledb.enable_constraint_aware_append;
+RESET timescaledb.enable_chunk_append;
+RESET enable_material;
+
+DROP TABLE caa_rescan;
