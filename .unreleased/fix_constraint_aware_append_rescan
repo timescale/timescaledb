@@ -1,0 +1,1 @@
+Fixes: #10748 Fix wrong query results from ConstraintAwareAppend on rescan with changed parameters
