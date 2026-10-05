@@ -92,6 +92,11 @@ columnar_index_scan_end(CustomScanState *node)
 static void
 columnar_index_scan_rescan(CustomScanState *node)
 {
+	if (node->ss.ps.chgParam != NULL)
+	{
+		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
+	}
+
 	ExecReScan(linitial(node->custom_ps));
 }
 
