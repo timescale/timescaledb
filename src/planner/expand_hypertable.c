@@ -1059,18 +1059,16 @@ chunk_cmp_first_dimension(const void *c1, const void *c2)
 
 /*
  * Whether the first ORDER BY entry sorts descending, i.e. its sort operator
- * is the greater-than operator of its type. Valid after should_order_append
- * accepted the query, which requires the operator to be the less-than or the
- * greater-than operator of the type.
+ * is the greater-than operator of its type.
  */
 static bool
 first_sort_clause_is_descending(PlannerInfo *root)
 {
 	SortGroupClause *sort = linitial(root->parse->sortClause);
 	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
-	TypeCacheEntry *tce = lookup_type_cache(exprType((Node *) tle->expr), TYPECACHE_LT_OPR);
+	TypeCacheEntry *tce = lookup_type_cache(exprType((Node *) tle->expr), TYPECACHE_GT_OPR);
 
-	return sort->sortop != tce->lt_opr;
+	return sort->sortop == tce->gt_opr;
 }
 
 /*
