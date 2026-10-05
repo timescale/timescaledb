@@ -1009,6 +1009,37 @@ SET enable_partitionwise_aggregate = off;
                            Sort Key: _hyper_1_1_chunk_compressed_1.device
                            ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
 
+-- Expression over a grouping column in the select list.
+:PREFIX SELECT device || '!' AS dx, min(value) FROM metrics GROUP BY device ORDER BY dx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((device || '!'::text))
+   ->  HashAggregate
+         Group Key: device
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Expression over a grouping column together with count(*).
+:PREFIX SELECT device || '!' AS dx, count(*) FROM metrics GROUP BY device ORDER BY dx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((device || '!'::text))
+   ->  HashAggregate
+         Group Key: device
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
+-- Expression over one of two grouping columns, without the bare column
+-- in the select list.
+:PREFIX SELECT device, sensor || '?' AS sx, max(time) FROM metrics GROUP BY device, sensor ORDER BY device, sx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: device, ((sensor || '?'::text))
+   ->  HashAggregate
+         Group Key: device, sensor
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+               ->  Seq Scan on _hyper_1_1_chunk_compressed
+
 \set PREFIX ''
 \set ECHO errors
 --- Unoptimized results
@@ -2523,6 +2554,55 @@ SET enable_partitionwise_aggregate = off;
                            ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m2_1
                                  ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
                            ->  Seq Scan on _hyper_1_1_chunk m2_1
+
+-- Expression over a grouping column in the select list.
+:PREFIX SELECT device || '!' AS dx, min(value) FROM metrics GROUP BY device ORDER BY dx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.device || '!'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: _hyper_1_1_chunk.device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
+
+-- Expression over a grouping column together with count(*).
+:PREFIX SELECT device || '!' AS dx, count(*) FROM metrics GROUP BY device ORDER BY dx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.device || '!'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: _hyper_1_1_chunk.device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: _hyper_1_1_chunk.device
+                     ->  Seq Scan on _hyper_1_1_chunk
+
+-- Expression over one of two grouping columns, without the bare column
+-- in the select list.
+:PREFIX SELECT device, sensor || '?' AS sx, max(time) FROM metrics GROUP BY device, sensor ORDER BY device, sx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device, ((metrics.sensor || '?'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device, metrics.sensor
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+                     ->  Seq Scan on _hyper_1_1_chunk
 
 \set PREFIX ''
 \set ECHO errors
@@ -4307,6 +4387,58 @@ SET enable_partitionwise_aggregate = off;
                                  ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
                            ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m2_2
                                  ->  Seq Scan on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1
+
+-- Expression over a grouping column in the select list.
+:PREFIX SELECT device || '!' AS dx, min(value) FROM metrics GROUP BY device ORDER BY dx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.device || '!'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk metrics
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Expression over a grouping column together with count(*).
+:PREFIX SELECT device || '!' AS dx, count(*) FROM metrics GROUP BY device ORDER BY dx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.device || '!'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk metrics
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Expression over one of two grouping columns, without the bare column
+-- in the select list.
+:PREFIX SELECT device, sensor || '?' AS sx, max(time) FROM metrics GROUP BY device, sensor ORDER BY device, sx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device, ((metrics.sensor || '?'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device, metrics.sensor
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: device, sensor
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: device, sensor
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk metrics
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
 
 \set PREFIX ''
 \set ECHO errors
@@ -6254,6 +6386,58 @@ SET enable_partitionwise_aggregate = off;
                                  ->  Seq Scan on _hyper_1_1_chunk_compressed _hyper_1_1_chunk_compressed_1
                            ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m2_2
                                  ->  Seq Scan on _hyper_1_2_chunk_compressed _hyper_1_2_chunk_compressed_1
+
+-- Expression over a grouping column in the select list.
+:PREFIX SELECT device || '!' AS dx, min(value) FROM metrics GROUP BY device ORDER BY dx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.device || '!'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk metrics
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Expression over a grouping column together with count(*).
+:PREFIX SELECT device || '!' AS dx, count(*) FROM metrics GROUP BY device ORDER BY dx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: ((metrics.device || '!'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: device
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk metrics
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
+
+-- Expression over one of two grouping columns, without the bare column
+-- in the select list.
+:PREFIX SELECT device, sensor || '?' AS sx, max(time) FROM metrics GROUP BY device, sensor ORDER BY device, sx;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device, ((metrics.sensor || '?'::text))
+   ->  Finalize HashAggregate
+         Group Key: metrics.device, metrics.sensor
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: device, sensor
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
+                           ->  Seq Scan on _hyper_1_1_chunk_compressed
+               ->  Partial HashAggregate
+                     Group Key: device, sensor
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk metrics
+                           ->  Seq Scan on _hyper_1_2_chunk_compressed
 
 \set PREFIX ''
 \set ECHO errors

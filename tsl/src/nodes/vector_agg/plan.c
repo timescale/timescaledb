@@ -14,6 +14,7 @@
 #include <nodes/plannodes.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/planner.h>
+#include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 #include <utils/fmgroids.h>
 
@@ -537,80 +538,52 @@ vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqinfo)
 	return true;
 }
 
+/*
+ * Build a finalize Agg targetlist expression from a grouping targetlist
+ * expression: change Var and Aggref references to point to the targetlist items
+ * of partial aggregate. Note that we're working after set_plan_references here.
+ */
 static Node *
-mark_partial_aggref_mutator(Node *node, void *context)
+finalize_agg_reference_mutator(Node *node, void *context)
 {
+	List *partial_agg_targetlist = (List *) context;
+
 	if (node == NULL)
 	{
 		return NULL;
+	}
+
+	if (IsA(node, Var))
+	{
+		Var *grouping_tlist_var = castNode(Var, node);
+		Assert(grouping_tlist_var->varno == OUTER_VAR);
+		TargetEntry *partial_agg_tle =
+			tlist_member((Expr *) grouping_tlist_var, partial_agg_targetlist);
+		Assert(partial_agg_tle != NULL);
+		Var *partial_column_var = castNode(Var, copyObject(grouping_tlist_var));
+		partial_column_var->varattno = partial_agg_tle->resno;
+		return (Node *) partial_column_var;
 	}
 
 	if (IsA(node, Aggref))
 	{
-		mark_partial_aggref(castNode(Aggref, node), AGGSPLIT_INITIAL_SERIAL);
-		return node;
+		Aggref *aggref = castNode(Aggref, node);
+
+		TargetEntry *partial_agg_tle = tlist_member((Expr *) aggref, partial_agg_targetlist);
+		Assert(partial_agg_tle != NULL);
+
+		Var *partial_state_var = makeVarFromTargetEntry(OUTER_VAR, partial_agg_tle);
+
+		Aggref *combining_aggref = makeNode(Aggref);
+		memcpy(combining_aggref, aggref, sizeof(Aggref));
+		/* The partial stage applies the FILTER. */
+		combining_aggref->aggfilter = NULL;
+		combining_aggref->args =
+			list_make1(makeTargetEntry((Expr *) partial_state_var, 1, NULL, false));
+		return (Node *) combining_aggref;
 	}
 
-	return expression_tree_mutator(node, mark_partial_aggref_mutator, context);
-}
-
-typedef struct MakeFinalizeAggContext
-{
-	Agg *agg;
-	/* Original grpColIdx, matched against so rewritten entries don't collide. */
-	AttrNumber *old_grpColIdx;
-	List *vector_agg_targetlist;
-} MakeFinalizeAggContext;
-
-static Node *
-make_finalize_agg_mutator(Node *node, void *context)
-{
-	if (node == NULL)
-	{
-		return NULL;
-	}
-
-	if (IsA(node, TargetEntry))
-	{
-		TargetEntry *tle = castNode(TargetEntry, node);
-		MakeFinalizeAggContext *ctx = (MakeFinalizeAggContext *) context;
-
-		if (IsA(tle->expr, Var))
-		{
-			Var *var = castNode(Var, tle->expr);
-			Assert(var->varno == OUTER_VAR);
-			AttrNumber old_attno = var->varattno;
-			var->varattno = tle->resno;
-			for (int k = 0; k < ctx->agg->numCols; k++)
-			{
-				if (ctx->old_grpColIdx[k] == old_attno)
-				{
-					ctx->agg->grpColIdx[k] = tle->resno;
-				}
-			}
-			return node;
-		}
-
-		if (IsA(tle->expr, Aggref))
-		{
-			Aggref *aggref = castNode(Aggref, tle->expr);
-
-			/*
-			 * Look up the VectorAgg output type for this column, which is
-			 * the transition type set by mark_partial_aggref above.
-			 */
-			TargetEntry *vag_tle = list_nth(ctx->vector_agg_targetlist, tle->resno - 1);
-			Oid var_type = exprType((Node *) vag_tle->expr);
-
-			mark_partial_aggref(aggref, AGGSPLIT_FINAL_DESERIAL);
-
-			Var *var = makeVar(OUTER_VAR, tle->resno, var_type, -1, aggref->aggcollid, 0);
-			aggref->args = list_make1(makeTargetEntry((Expr *) var, 1, NULL, false));
-			return node;
-		}
-	}
-
-	return expression_tree_mutator(node, make_finalize_agg_mutator, context);
+	return expression_tree_mutator(node, finalize_agg_reference_mutator, context);
 }
 
 static Plan *insert_vector_agg(Plan *plan, void *context);
@@ -662,7 +635,7 @@ insert_vector_agg(Plan *plan, void *context)
 		return plan;
 	}
 
-	Plan *childplan = agg->plan.lefttree;
+	Plan *aggregation_input = agg->plan.lefttree;
 	VectorQualInfo vqinfo;
 	MemSet(&vqinfo, 0, sizeof(VectorQualInfo));
 
@@ -670,9 +643,9 @@ insert_vector_agg(Plan *plan, void *context)
 	 * Build supplementary info to determine whether we can vectorize the
 	 * aggregate FILTER clauses.
 	 */
-	if (!vectoragg_plan_possible(childplan, &vqinfo))
+	if (!vectoragg_plan_possible(aggregation_input, &vqinfo))
 	{
-		/* Not a compatible vectoragg child node */
+		/* Not a compatible VectorAgg aggregation input */
 		return plan;
 	}
 
@@ -681,7 +654,7 @@ insert_vector_agg(Plan *plan, void *context)
 	 * cannot evaluate in the columnar pipeline.
 	 */
 	List *resolved_postgres_quals =
-		(List *) ts_resolve_outer_special_vars((Node *) childplan->qual, childplan);
+		(List *) ts_resolve_outer_special_vars((Node *) aggregation_input->qual, aggregation_input);
 	ListCell *lc;
 	foreach (lc, resolved_postgres_quals)
 	{
@@ -692,40 +665,102 @@ insert_vector_agg(Plan *plan, void *context)
 	}
 
 	/*
-	 * When converting AGGSPLIT_SIMPLE to partial+finalize, the finalize Agg
-	 * needs all grouping columns in its input (VectorAgg output). The Agg's
-	 * output targetlist may not include grouping columns that aren't needed by
-	 * parent nodes. Add any missing ones before validation so they are checked
-	 * for vectorizability. If validation fails, undo the modification.
+	 * VectorAgg can only replace a partial aggregation node. Normally these are
+	 * created by chunkwise aggregation, but it is not applied when we have only
+	 * one chunk. To handle this case, we split a single-chunk Agg node here
+	 * into final and partial aggregate nodes, if we find out that we can
+	 * replace the partial aggregate with VectorAgg. First, we have to prepare
+	 * the targetlists for both the final and partial aggregate nodes, to be
+	 * able to perform the remaining checks.
+	 *
+	 * The grouping targetlist is output after projection: an item can be an
+	 * expression mixing aggregates and columns, and a grouping key does not
+	 * have to appear there at all. This makes it complicated to build the
+	 * partial agg targetlist by following the grouping targetlist layout.
+	 * Instead, we pull all aggregates and variables from grouping targetlist.
+	 * In addition, we consult the list of grouping columns in the aggregation
+	 * node, because some grouping columns might not be present in the final
+	 * output, but they still must be produced by the partial aggregation node.
+	 *
+	 * The targetlist of the finalize aggregation node follows the structure of
+	 * the grouping targetlist, but the aggregates and variables there have to
+	 * be replaced to reference the partial aggregation output.
 	 */
-	List *partial_agg_targetlist = list_copy(agg->plan.targetlist);
+	List *partial_agg_targetlist = NIL;
+	List *finalize_agg_targetlist = NIL;
+	AttrNumber *finalize_agg_grpcolidx = NULL;
 	if (agg->aggsplit == AGGSPLIT_SIMPLE)
 	{
-		Bitmapset *tlist_attnos = NULL;
-		pull_varattnos((Node *) agg->plan.targetlist, OUTER_VAR, &tlist_attnos);
-
+		finalize_agg_grpcolidx = palloc(sizeof(AttrNumber) * agg->numCols);
 		for (int k = 0; k < agg->numCols; k++)
 		{
-			AttrNumber grp_attno = agg->grpColIdx[k];
-			if (bms_is_member(grp_attno - FirstLowInvalidHeapAttributeNumber, tlist_attnos))
+			const AttrNumber resno = k + 1;
+			TargetEntry *aggregation_input_tle =
+				list_nth_node(TargetEntry,
+							  aggregation_input->targetlist,
+							  AttrNumberGetAttrOffset(agg->grpColIdx[k]));
+			Var *grouping_var = makeVar(OUTER_VAR,
+										agg->grpColIdx[k],
+										exprType((Node *) aggregation_input_tle->expr),
+										exprTypmod((Node *) aggregation_input_tle->expr),
+										exprCollation((Node *) aggregation_input_tle->expr),
+										0);
+			partial_agg_targetlist =
+				lappend(partial_agg_targetlist,
+						makeTargetEntry((Expr *) grouping_var, resno, NULL, false));
+			finalize_agg_grpcolidx[k] = resno;
+		}
+
+		List *vars_and_aggrefs =
+			pull_var_clause((Node *) agg->plan.targetlist, PVC_INCLUDE_AGGREGATES);
+		partial_agg_targetlist = add_to_flat_tlist(partial_agg_targetlist, vars_and_aggrefs);
+
+		finalize_agg_targetlist = (List *) expression_tree_mutator((Node *) agg->plan.targetlist,
+																   finalize_agg_reference_mutator,
+																   partial_agg_targetlist);
+
+		/*
+		 * The aggregates were matched across the two targetlists by
+		 * equality, in the original single-stage form. Now mark them for
+		 * the two-stage aggregation.
+		 */
+		foreach (lc, partial_agg_targetlist)
+		{
+			TargetEntry *partial_agg_tle = lfirst_node(TargetEntry, lc);
+			if (IsA(partial_agg_tle->expr, Aggref))
+			{
+				mark_partial_aggref(castNode(Aggref, partial_agg_tle->expr),
+									AGGSPLIT_INITIAL_SERIAL);
+			}
+		}
+
+		List *finalize_agg_aggrefs =
+			pull_var_clause((Node *) finalize_agg_targetlist, PVC_INCLUDE_AGGREGATES);
+		foreach (lc, finalize_agg_aggrefs)
+		{
+			if (!IsA(lfirst(lc), Aggref))
 			{
 				continue;
 			}
+			Aggref *combining_aggref = castNode(Aggref, lfirst(lc));
+			mark_partial_aggref(combining_aggref, AGGSPLIT_FINAL_DESERIAL);
 
-			TargetEntry *child_tle =
-				list_nth(childplan->targetlist, AttrNumberGetAttrOffset(grp_attno));
-			AttrNumber new_resno = AttrOffsetGetAttrNumber(list_length(partial_agg_targetlist));
-			Var *var = makeVar(OUTER_VAR,
-							   grp_attno,
-							   exprType((Node *) child_tle->expr),
-							   exprTypmod((Node *) child_tle->expr),
-							   exprCollation((Node *) child_tle->expr),
-							   0);
-			partial_agg_targetlist =
-				lappend(partial_agg_targetlist,
-						makeTargetEntry((Expr *) var, new_resno, child_tle->resname, true));
+			/*
+			 * The partial state variable gets the result type of the
+			 * partial aggregate, known only after the marking above.
+			 */
+			TargetEntry *argument_tle = linitial_node(TargetEntry, combining_aggref->args);
+			Var *partial_state_var = castNode(Var, argument_tle->expr);
+			TargetEntry *partial_agg_tle =
+				list_nth_node(TargetEntry,
+							  partial_agg_targetlist,
+							  AttrNumberGetAttrOffset(partial_state_var->varattno));
+			partial_state_var->vartype = exprType((Node *) partial_agg_tle->expr);
 		}
-		bms_free(tlist_attnos);
+	}
+	else
+	{
+		partial_agg_targetlist = list_copy(agg->plan.targetlist);
 	}
 
 	/*
@@ -734,7 +769,8 @@ insert_vector_agg(Plan *plan, void *context)
 	 * all variables resolved to uncompressed chunk variables.
 	 */
 	List *resolved_targetlist =
-		castNode(List, ts_resolve_outer_special_vars((Node *) partial_agg_targetlist, childplan));
+		castNode(List,
+				 ts_resolve_outer_special_vars((Node *) partial_agg_targetlist, aggregation_input));
 
 	const VectorAggGroupingType grouping_type =
 		get_vectorized_grouping_type(&vqinfo, agg, resolved_targetlist);
@@ -776,13 +812,12 @@ insert_vector_agg(Plan *plan, void *context)
 	 * Finally, all requirements are satisfied and we can vectorize this
 	 * aggregation node.
 	 *
-	 * The Postgres quals stay on childplan->qual for EXPLAIN display.
-	 * VectorAgg does not run the underlying ColumnarScan in the usual
-	 * Postgres way, working with compressed batches directly instead,
-	 * so these quals are not double-evaluated.
+	 * The Postgres quals stay on aggregation_input->qual for EXPLAIN
+	 * display. VectorAgg evaluates their resolved copies itself,
+	 * reading compressed batches from the ColumnarScan directly
+	 * instead of running it as a plan node.
 	 */
-	agg->plan.targetlist = partial_agg_targetlist;
-	Plan *vector_agg_plan = vector_agg_plan_create(childplan,
+	Plan *vector_agg_plan = vector_agg_plan_create(aggregation_input,
 												   agg,
 												   resolved_targetlist,
 												   resolved_postgres_quals,
@@ -791,48 +826,13 @@ insert_vector_agg(Plan *plan, void *context)
 	if (agg->aggsplit == AGGSPLIT_SIMPLE)
 	{
 		/*
-		 * Convert a non-partial aggregation into a two-phase partial + finalize
-		 * aggregation with VectorAgg performing the partial step.
-		 */
-		CustomScan *vector_agg = castNode(CustomScan, vector_agg_plan);
-		vector_agg->custom_scan_tlist =
-			(List *) expression_tree_mutator((Node *) vector_agg->custom_scan_tlist,
-											 mark_partial_aggref_mutator,
-											 NULL);
-
-		/*
-		 * Rebuild the plan output targetlist to reflect the updated types.
-		 * VectorAgg returns ps_ResultTupleSlot whose TupleDesc is derived from
-		 * plan.targetlist, so it must match the actual partial aggregate output
-		 * types for correct tuple materialization on all platforms.
-		 */
-		vector_agg->scan.plan.targetlist =
-			ts_build_trivial_custom_output_targetlist(vector_agg->custom_scan_tlist);
-
-		/*
-		 * Set up the parent Agg to finalize the partial results from VectorAgg.
+		 * We have to additionally split the single chunk aggregation node into
+		 * partial and final aggregation, as prepared above.
 		 */
 		agg->aggsplit = AGGSPLIT_FINAL_DESERIAL;
 		agg->plan.lefttree = vector_agg_plan;
-
-		AttrNumber *old_grpColIdx = NULL;
-		if (agg->numCols > 0)
-		{
-			old_grpColIdx = palloc(sizeof(AttrNumber) * agg->numCols);
-			memcpy(old_grpColIdx, agg->grpColIdx, sizeof(AttrNumber) * agg->numCols);
-		}
-
-		MakeFinalizeAggContext finalize_ctx = {
-			.agg = agg,
-			.old_grpColIdx = old_grpColIdx,
-			.vector_agg_targetlist = vector_agg->scan.plan.targetlist,
-		};
-		agg->plan.targetlist = (List *) expression_tree_mutator((Node *) agg->plan.targetlist,
-																make_finalize_agg_mutator,
-																&finalize_ctx);
-		agg->plan.qual = (List *) expression_tree_mutator((Node *) agg->plan.qual,
-														  make_finalize_agg_mutator,
-														  &finalize_ctx);
+		agg->plan.targetlist = finalize_agg_targetlist;
+		agg->grpColIdx = finalize_agg_grpcolidx;
 
 		return (Plan *) agg;
 	}
