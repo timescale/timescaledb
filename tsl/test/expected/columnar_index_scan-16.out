@@ -6659,3 +6659,60 @@ SELECT grp, first(txt COLLATE "C", time) FROM agg_coll GROUP BY grp;
    1 | a
 
 DROP TABLE agg_coll;
+-- rescan with a changed outer parameter re-evaluates the sorted compressed scan
+CREATE TABLE agg_rescan(time timestamptz NOT NULL, sensor text, value float)
+ WITH (tsdb.hypertable,tsdb.orderby='time desc',tsdb.segmentby='sensor');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO agg_rescan SELECT t, s, 1 FROM generate_series('2025-01-01'::timestamptz, '2025-01-01 02:00', '1min') t, (VALUES ('A'),('B'),('C')) v(s);
+INSERT INTO agg_rescan VALUES ('2025-01-01 05:00', 'B', 1);
+SELECT count(compress_chunk(ch)) FROM show_chunks('agg_rescan') ch;
+ count 
+-------
+     1
+
+VACUUM ANALYZE agg_rescan;
+SELECT ch AS "RESCAN_CHUNK" FROM show_chunks('agg_rescan') ch \gset
+SET enable_material = off;
+SET enable_indexscan = off;
+SET enable_bitmapscan = off;
+SET enable_hashagg = off;
+\set RESCAN_QUERY 'SELECT s.sensor, (SELECT count(*) FROM generate_series(1,1) g WHERE \'2025-01-01 03:00\'::timestamptz < ANY (SELECT max(time) FROM ' :RESCAN_CHUNK ' r WHERE r.sensor >= s.sensor GROUP BY r.sensor ORDER BY r.sensor LIMIT 1)) FROM (VALUES (\'A\'),(\'B\'),(\'C\')) s(sensor)'
+EXPLAIN (costs off) :RESCAN_QUERY;
+--- QUERY PLAN ---
+ Values Scan on "*VALUES*"
+   SubPlan 2
+     ->  Aggregate
+           ->  Result
+                 One-Time Filter: (SubPlan 1)
+                 ->  Function Scan on generate_series g
+                 SubPlan 1
+                   ->  Limit
+                         ->  GroupAggregate
+                               Group Key: sensor
+                               ->  Custom Scan (ColumnarIndexScan) on _hyper_8_9_chunk r
+                                     ->  Sort
+                                           Sort Key: _hyper_8_9_chunk_compressed.sensor
+                                           ->  Seq Scan on _hyper_8_9_chunk_compressed
+                                                 Filter: (sensor >= "*VALUES*".column1)
+
+:RESCAN_QUERY;
+ sensor | count 
+--------+-------
+ A      |     0
+ B      |     1
+ C      |     0
+
+SET timescaledb.enable_columnarindexscan = off;
+:RESCAN_QUERY;
+ sensor | count 
+--------+-------
+ A      |     0
+ B      |     1
+ C      |     0
+
+RESET timescaledb.enable_columnarindexscan;
+RESET enable_material;
+RESET enable_indexscan;
+RESET enable_bitmapscan;
+RESET enable_hashagg;
+DROP TABLE agg_rescan;
