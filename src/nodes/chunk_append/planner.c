@@ -84,15 +84,6 @@ collect_params_walker(Node *node, void *context)
 		return false;
 	}
 
-	if (IsA(node, Param))
-	{
-		List **collected_params = (List **) context;
-		*collected_params = lappend(*collected_params, node);
-
-		/* Continue walking the rest of the tree. */
-		return false;
-	}
-
 	if (IsA(node, SubPlan))
 	{
 		/*
@@ -103,11 +94,18 @@ collect_params_walker(Node *node, void *context)
 		return false;
 	}
 
+	if (IsA(node, Param))
+	{
+		List **collected_params = (List **) context;
+		*collected_params = lappend(*collected_params, node);
+
+		/* Continue walking the rest of the tree. */
+		return false;
+	}
+
 	if (IsA(node, RestrictInfo))
 	{
-		return expression_tree_walker((Node *) castNode(RestrictInfo, node)->clause,
-									  collect_params_walker,
-									  context);
+		return collect_params_walker((Node *) castNode(RestrictInfo, node)->clause, context);
 	}
 
 	return expression_tree_walker(node, collect_params_walker, context);
