@@ -100,7 +100,7 @@ collect_params_walker(Node *node, void *context)
 		 * The parameters that might be needed inside it are not valid at the
 		 * ChunkAppend node. Continue walking the rest of the tree.
 		 */
-		 return false;
+		return false;
 	}
 
 	if (IsA(node, RestrictInfo))
