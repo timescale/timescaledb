@@ -483,6 +483,37 @@ SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_month_offset';
  cagg_month_offset | 2024-12-16 00:00:00+00 | infinity
 
 -----------------------------------------------------------------------
+-- Test 5c: Negative offset moving bucket starts to the end of a month
+-- (#10746). Adding a month to such a bucket start falls short of the next
+-- one ('2024-02-29 21:00' + '1 month' is '2024-03-29 21:00', not
+-- '2024-03-31 21:00'), which made the batched refresh loop forever.
+-----------------------------------------------------------------------
+CREATE MATERIALIZED VIEW cagg_month_neg_offset
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 month'::interval, time, "offset" := INTERVAL '-3 hours') AS bucket,
+       count(*) AS cnt
+FROM offset_data
+GROUP BY 1
+WITH NO DATA;
+CALL refresh_continuous_aggregate('cagg_month_neg_offset', '2023-12-31 21:00:00', '2024-12-31 21:00:00');
+-- Buckets should start at 21:00 on the last day of each month:
+SELECT bucket, cnt FROM cagg_month_neg_offset ORDER BY bucket;
+         bucket         | cnt 
+------------------------+-----
+ 2023-12-31 21:00:00+00 |  31
+ 2024-01-31 21:00:00+00 |  31
+ 2024-02-29 21:00:00+00 |  31
+ 2024-03-31 21:00:00+00 |  30
+ 2024-04-30 21:00:00+00 |  32
+ 2024-05-31 21:00:00+00 |  31
+ 2024-06-30 21:00:00+00 |  31
+ 2024-07-31 21:00:00+00 |  31
+ 2024-08-31 21:00:00+00 |  30
+ 2024-09-30 21:00:00+00 |  31
+ 2024-10-31 21:00:00+00 |  30
+ 2024-11-30 21:00:00+00 |  31
+
+-----------------------------------------------------------------------
 -- Test 5d: Offset with timezone and variable-width bucket
 -----------------------------------------------------------------------
 SET timezone TO 'Europe/Berlin';
@@ -493,7 +524,7 @@ CREATE TABLE offset_tz_data (
 SELECT create_hypertable('offset_tz_data', 'time', chunk_time_interval => INTERVAL '1 month');
       create_hypertable       
 ------------------------------
- (11,public,offset_tz_data,t)
+ (12,public,offset_tz_data,t)
 
 CREATE MATERIALIZED VIEW cagg_offset_tz
 WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
@@ -552,7 +583,7 @@ CREATE TABLE origin_data (
 SELECT create_hypertable('origin_data', 'time', chunk_time_interval => INTERVAL '1 month');
      create_hypertable     
 ---------------------------
- (13,public,origin_data,t)
+ (14,public,origin_data,t)
 
 -- 2-month buckets with origin in Feb: shifts pairs from Jan+Feb/Mar+Apr to Feb+Mar/Apr+May
 CREATE MATERIALIZED VIEW cagg_bimonth_origin
@@ -649,7 +680,7 @@ CREATE TABLE origin_tz_data (
 SELECT create_hypertable('origin_tz_data', 'time', chunk_time_interval => INTERVAL '1 month');
       create_hypertable       
 ------------------------------
- (15,public,origin_tz_data,t)
+ (16,public,origin_tz_data,t)
 
 CREATE MATERIALIZED VIEW cagg_origin_tz
 WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
@@ -693,7 +724,7 @@ CREATE TABLE hier_data (
 SELECT create_hypertable('hier_data', 'time', chunk_time_interval => INTERVAL '1 month');
     create_hypertable    
 -------------------------
- (17,public,hier_data,t)
+ (18,public,hier_data,t)
 
 CREATE MATERIALIZED VIEW cagg_hier_monthly
 WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
@@ -763,7 +794,7 @@ SELECT bucket, cnt FROM cagg_hier_monthly WHERE bucket = '2025-02-01 00:00:00';
 SELECT * FROM hyper_inval_log;
                     hypertable                     |      inval_start       |       inval_end        
 ---------------------------------------------------+------------------------+------------------------
- _timescaledb_internal._materialized_hypertable_18 | 2025-02-01 00:00:00+00 | 2025-02-01 00:00:00+00
+ _timescaledb_internal._materialized_hypertable_19 | 2025-02-01 00:00:00+00 | 2025-02-01 00:00:00+00
 
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_hier_quarterly';
       cagg_name      |      inval_start       |           inval_end           
@@ -833,17 +864,18 @@ DROP TABLE bimonthly_data CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 3 other objects
 DROP TABLE offset_data CASCADE;
+NOTICE:  drop cascades to 4 other objects
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 DROP TABLE offset_tz_data CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_59_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_61_chunk
 DROP TABLE origin_data CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_73_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_75_chunk
 DROP TABLE origin_tz_data CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_75_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_17_77_chunk
 DROP TABLE hier_data CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 3 other objects

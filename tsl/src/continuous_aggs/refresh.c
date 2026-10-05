@@ -1864,6 +1864,14 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			next = refresh_window.end;
 		}
 
+		if (next <= cur)
+		{
+			elog(ERROR,
+				 "cannot advance to next batch cur = %s, next = %s",
+				 ts_internal_to_time_string(cur, refresh_window.type),
+				 ts_internal_to_time_string(next, refresh_window.type));
+		}
+
 		/* Emit the batch */
 		MemoryContext spi_context = MemoryContextSwitchTo(oldcontext);
 		InternalTimeRange *range = palloc0(sizeof(InternalTimeRange));
