@@ -42,7 +42,7 @@ jobs:
       with:
         repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
         ref: ${{ inputs['timescaledb-ref'] || github.ref }}
-        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -75,7 +75,7 @@ jobs:
       with:
         repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
         ref: ${{ inputs['timescaledb-ref'] || github.ref }}
-        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
 
     - name: Build extension with ${{ matrix.builder }}
       run: |

@@ -32,7 +32,7 @@ jobs:
       with:
         repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
         ref: ${{ inputs['timescaledb-ref'] || github.ref }}
-        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
 
     - name: Build matrix
       id: set-matrix
@@ -58,7 +58,7 @@ jobs:
         with:
           repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
           ref: ${{ inputs['timescaledb-ref'] || github.ref }}
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         if: ${{ !inputs['timescaledb-ref'] }}
         id: filter
@@ -138,7 +138,7 @@ jobs:
       with:
         repository: ${{ inputs['timescaledb-ref'] && 'timescale/timescaledb' || github.repository }}
         ref: ${{ inputs['timescaledb-ref'] || github.ref }}
-        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.

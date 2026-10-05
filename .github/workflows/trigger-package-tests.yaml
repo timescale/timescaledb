@@ -2,7 +2,7 @@
 #
 # Params:
 #   ref: branch, tag or SHA to checkout, defaults to `main`
-# 
+#
 name: Trigger Packaging tests
 on:
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with: 
+      with:
         ref: ${{ github.event.inputs.ref }}
-        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-    
+        token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
+
     - name: Push to package_test branch
       env:
         GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}

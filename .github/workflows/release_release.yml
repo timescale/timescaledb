@@ -32,7 +32,7 @@ jobs:
         with:
           repository: timescale/timescaledb
           ref: ${{ inputs.timescaledb-ref }}
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
 
       - name: Show checked out revision
         run: git rev-parse HEAD

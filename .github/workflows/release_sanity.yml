@@ -32,7 +32,7 @@ jobs:
         with:
           repository: timescale/timescaledb
           ref: ${{ inputs.timescaledb-ref }}
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN || github.token }}
 
       # The release branch must have the exact version the release manager
       # specified.
