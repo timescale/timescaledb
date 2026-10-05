@@ -2455,7 +2455,7 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 
 /* initialize the decompression of the current batch, and selectively
  * decompress the columns specified in attnos. segmentby columns are
- * always initialized.
+ * always initialized, the compressed columns not in attnos read as NULL.
  *
  * bulk decompressed columns initialized earlier are kept and iterators
  * are invalidated.
@@ -2515,6 +2515,7 @@ row_decompressor_init_batch(RowDecompressor *decompressor, AttrNumber *attnos, i
 
 		if (!found)
 		{
+			decompressor->decompressed_is_nulls[output_index] = true;
 			continue;
 		}
 
@@ -2552,15 +2553,16 @@ decompress_row(RowDecompressor *decompressor, int row)
 
 /*
  * Decompresses the current compressed batch into decompressed_slots, and returns
- * the number of rows in batch.
+ * the number of rows in batch. With a list of attnos only those columns are
+ * decompressed, and the other columns of the rows are NULL.
  */
 int
-decompress_batch(RowDecompressor *decompressor)
+decompress_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
 {
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
 	/* initialize all columns that have not been initialized for this batch yet */
-	row_decompressor_init_batch(decompressor, NULL, 0);
+	row_decompressor_init_batch(decompressor, attnos, num_attnos);
 
 	const int n_batch_rows = decompressor->current_batch_row_count;
 
@@ -2594,6 +2596,8 @@ decompress_batch(RowDecompressor *decompressor)
 		MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 	}
 
+	MemoryContext slot_ctx = GetMemoryChunkContext(decompressor->decompressed_slots);
+
 	/*
 	 * Decompress all compressed columns for each row of the batch.
 	 */
@@ -2607,7 +2611,7 @@ decompress_batch(RowDecompressor *decompressor)
 		 */
 		if (decompressor->decompressed_slots[current_row] == NULL)
 		{
-			MemoryContextSwitchTo(old_ctx);
+			MemoryContextSwitchTo(slot_ctx);
 			decompressor->decompressed_slots[current_row] =
 				MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsHeapTuple);
 			MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
@@ -2709,7 +2713,7 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 int
 row_decompressor_decompress_row_to_table(RowDecompressor *decompressor, BulkWriter *writer)
 {
-	const int n_batch_rows = decompress_batch(decompressor);
+	const int n_batch_rows = decompress_batch(decompressor, NULL, 0);
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
@@ -2772,7 +2776,7 @@ void
 row_decompressor_decompress_row_to_tuplesort(RowDecompressor *decompressor,
 											 Tuplesortstate *tuplesortstate)
 {
-	const int n_batch_rows = decompress_batch(decompressor);
+	const int n_batch_rows = decompress_batch(decompressor, NULL, 0);
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
@@ -2980,7 +2984,7 @@ tsl_decompress_batch(PG_FUNCTION_ARGS)
 
 		ReleaseTupleDesc(in_desc);
 
-		decompress_ctx->total_rows = decompress_batch(&decompress_ctx->decompressor);
+		decompress_ctx->total_rows = decompress_batch(&decompress_ctx->decompressor, NULL, 0);
 		decompress_ctx->next_row = 0;
 
 		funcctx->user_fctx = decompress_ctx;

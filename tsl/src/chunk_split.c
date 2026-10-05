@@ -74,6 +74,7 @@ typedef struct CompressedSplitPoint
 	AttrNumber attnum_max;
 	AttrNumber attnum_count;
 	TupleDesc noncompressed_tupdesc;
+	RowDecompressor decompressor;
 } CompressedSplitPoint;
 
 typedef struct RewriteStats
@@ -417,14 +418,9 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 
 		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
 
-		RowDecompressor decompressor = build_decompressor(slot->tts_tupleDescriptor,
-														  csp->noncompressed_tupdesc,
-														  csettings->fd.compress_relid,
-														  csettings->fd.relid);
+		row_decompressor_set_compressed_tuple(&csp->decompressor, tuple);
 
-		row_decompressor_set_compressed_tuple(&decompressor, tuple);
-
-		int nrows = decompress_batch(&decompressor);
+		int nrows = decompress_batch(&csp->decompressor, NULL, 0);
 
 		/*
 		 * Initialize a compressor for each new partition.
@@ -444,7 +440,7 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 		 */
 		for (int i = 0; i < nrows; i++)
 		{
-			int routing_index = route_tuple(decompressor.decompressed_slots[i], scontext->sp);
+			int routing_index = route_tuple(csp->decompressor.decompressed_slots[i], scontext->sp);
 			Assert(routing_index == 0 || routing_index == 1);
 			RelationWriteState *rws = &scontext->rws[routing_index];
 			/*
@@ -454,10 +450,10 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 			 * smaller.
 			 */
 			row_compressor_append_ordered_slot(&rws->compressor,
-											   decompressor.decompressed_slots[i]);
+											   csp->decompressor.decompressed_slots[i]);
 		}
 
-		row_decompressor_close(&decompressor);
+		detoaster_close(&csp->decompressor.detoaster);
 		scontext->rws_index = 0;
 
 		/*
@@ -1219,6 +1215,8 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 									   &lower_attno,
 									   &upper_attno);
 
+		Relation compressed_rel =
+			table_open(compress_settings->fd.compress_relid, AccessExclusiveLock);
 		CompressedSplitPoint csp = {
 			.base = {
 				.point = split_at,
@@ -1229,6 +1227,10 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			.attnum_max = upper_attno,
 			.attnum_count = get_attnum(compress_settings->fd.compress_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME),
 			.noncompressed_tupdesc = CreateTupleDescCopy(RelationGetDescr(srcrel)),
+			.decompressor = build_decompressor(RelationGetDescr(compressed_rel),
+											   RelationGetDescr(srcrel),
+											   compress_settings->fd.compress_relid,
+											   compress_settings->fd.relid),
 		};
 
 		csplit_relations[0] =
@@ -1236,10 +1238,9 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		csplit_relations[1] =
 			(SplitRelationInfo){ .relid = new_compressed_relid, .heap_swap = false };
 
-		Relation compressed_rel =
-			table_open(compress_settings->fd.compress_relid, AccessExclusiveLock);
 		compressed_split_relations = csplit_relations;
 		split_relation(compressed_rel, &csp.base, SPLIT_FACTOR, compressed_split_relations);
+		row_decompressor_close(&csp.decompressor);
 	}
 
 	/* Now split the non-compressed relation */
