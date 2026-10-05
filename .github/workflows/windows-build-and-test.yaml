@@ -57,7 +57,7 @@ jobs:
 
   build:
     # Change the JOB_NAME variable below when changing the name.
-    name: {{ matrix.run_installcheck && '' || 'Build-only '}}PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
+    name: ${{ (matrix.run_installcheck == 'true') && '' || 'Build-only '}}PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
     runs-on: windows-2025
     needs: [config, check_paths]
     if: needs.check_paths.outputs.run_ci == 'true'
