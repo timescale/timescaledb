@@ -181,11 +181,13 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 	/*
 	 * We need to put all Params used by clauses to custom_exprs, so that
-	 * SS_finalize() builds a correct set of Params required by this node.
+	 * SS_finalize_plan() builds a correct set of Params required by this node.
 	 * Otherwise the Params won't be initialized before this node runs. We can't
 	 * put the chunk exclusion clauses themselves into custom_exprs, because
-	 * they are evaluated against a virtual tuple describing the given chunk's
-	 * constraints, and cannot be evaluated against this node's targetlist.
+	 * they are evaluated only by the Postgres constraint exclusion machinery
+	 * against the constraints of a given chunk, and cannot be evaluated against
+	 * this node's scan targetlist (for example, it can just not have the
+	 * required variables).
 	 *
 	 * In most cases, this node just inherits the list of parameters from its
 	 * children (per-chunk scans), but there are some corner cases where the
@@ -194,8 +196,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	 * We can't directly fill the Plan.extParam/allParam bitmaps now, because
 	 * they are built later in the planning and will be overwritten.
 	 */
-	List *custom_exprs = NIL;
-	collect_params_walker((Node *) clauses, (void *) &custom_exprs);
+	List *clause_params = NIL;
+	collect_params_walker((Node *) clauses, (void *) &clause_params);
 
 	ListCell *lc_plan, *lc_path;
 	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
@@ -394,7 +396,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 	cscan->custom_private = custom_private;
 
-	cscan->custom_exprs = custom_exprs;
+	cscan->custom_exprs = clause_params;
 
 	return &cscan->scan.plan;
 }

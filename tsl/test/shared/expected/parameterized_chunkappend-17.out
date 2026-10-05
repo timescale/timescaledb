@@ -100,7 +100,7 @@ EXECUTE p9607(1, '2000-01-01'::timestamptz, '2000-01-20'::timestamptz);
 
 RESET plan_cache_mode;
 DEALLOCATE p9607;
--- Parameters used by children but not by the ChunkAppend itself
+-- Parameters used by ChunkAppend itself but not by children
 select var_pop(v0) over (order by metrics_compressed) from metrics_compressed
 where time is not null or (select name from devices limit 1) > '1'
 order by metrics_compressed limit 1
