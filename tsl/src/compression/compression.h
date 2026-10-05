@@ -479,7 +479,7 @@ extern void row_decompressor_close(RowDecompressor *decompressor);
 extern void row_decompressor_init_stats(RowDecompressor *decompressor, Oid compressed_relid,
 										Oid uncompressed_relid, CmdType cmd_type);
 extern void row_decompressor_flush_stats(RowDecompressor *decompressor);
-extern int decompress_batch(RowDecompressor *decompressor);
+extern int decompress_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos);
 extern void row_decompressor_init_batch(RowDecompressor *decompressor, AttrNumber *attnos,
 										int num_attnos);
 extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
