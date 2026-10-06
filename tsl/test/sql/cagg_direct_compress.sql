@@ -175,7 +175,6 @@ CREATE MATERIALIZED VIEW tenant_daily
 ALTER MATERIALIZED VIEW tenant_daily SET (timescaledb.enable_granular_refresh = true);
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Direct-compress a batch of 2020 rows for three tenants (1000 rows each so the
@@ -193,7 +192,6 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk)
 FROM show_chunks('tenant_conditions') chunk;
 
 RESET timescaledb.enable_direct_compress_insert;
-RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 -- A fresh 2025 row gives the refresh work to do so it drains the tracker.

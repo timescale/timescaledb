@@ -12,7 +12,6 @@
 \set BATCH_METADATA_QUERY 'SELECT _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :COMPRESSED_CHUNK_NAME;'
 \set ORDER_BY_CLAUSE ''
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Test Case 1: Unordered chunk
@@ -152,7 +151,6 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 DROP TABLE IF EXISTS recomp_comp_settings CASCADE;
 
 RESET timescaledb.enable_direct_compress_insert;
-RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 

@@ -540,6 +540,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_sort_batches"),
 							 "Enable batch sorting during direct compress COPY",
 							 NULL,
@@ -550,6 +551,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_client_sorted"),
 							 "Enable direct compress COPY with presorted data",
@@ -605,6 +607,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert_sort_batches"),
 							 "Enable batch sorting during direct compress INSERT",
 							 NULL,
@@ -615,6 +618,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert_client_sorted"),
 							 "Enable direct compress INSERT with presorted data",
