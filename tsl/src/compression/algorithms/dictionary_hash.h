@@ -79,6 +79,12 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 {
 	HashMeta *meta = palloc(sizeof(*meta));
 
+	/*
+	 * The hash function and equality operator are not used for hashing
+	 * anymore. The check is kept so that dictionary compression accepts
+	 * exactly the types that compression_get_default_algorithm() selects it
+	 * for, until that selection is revisited.
+	 */
 	if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
 	{
 		elog(ERROR,

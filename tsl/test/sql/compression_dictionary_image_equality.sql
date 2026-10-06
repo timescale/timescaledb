@@ -83,3 +83,46 @@ DROP VIEW dict_image_eq_diff;
 DROP TABLE dict_image_eq;
 DROP TABLE dict_image_eq_orig;
 DROP DOMAIN dict_numeric;
+
+-- A batch with mostly distinct values is converted from the dictionary to
+-- ARRAY at the end, using the deduplicated dictionary, so the values must
+-- not be merged on that path either. 990 rows have distinct intervals in
+-- days and the last 10 rows repeat the first 10 values in hours.
+CREATE TABLE dict_image_eq_array (ts int NOT NULL, i interval);
+SELECT create_hypertable('dict_image_eq_array', 'ts', chunk_time_interval => 10000);
+ALTER TABLE dict_image_eq_array SET (timescaledb.compress,
+	timescaledb.compress_segmentby = '',
+	timescaledb.compress_orderby = 'ts');
+
+INSERT INTO dict_image_eq_array
+SELECT ts, CASE WHEN ts <= 990 THEN make_interval(days => ts)
+	ELSE make_interval(hours => 24 * (ts - 990)) END
+FROM generate_series(1, 1000) ts;
+
+CREATE TABLE dict_image_eq_array_orig AS SELECT * FROM dict_image_eq_array;
+
+CREATE VIEW dict_image_eq_array_diff AS
+SELECT ts, o.i AS orig_i, t.i
+FROM dict_image_eq_array t FULL JOIN dict_image_eq_array_orig o USING (ts)
+WHERE t.i::text IS DISTINCT FROM o.i::text;
+
+SELECT count(compress_chunk(c)) FROM show_chunks('dict_image_eq_array') c;
+
+SELECT cs.compress_relid AS "COMPRESSED_CHUNK"
+FROM show_chunks('dict_image_eq_array') c
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = c \gset
+
+-- a single batch, stored as ARRAY
+SELECT count(*), _timescaledb_functions.compressed_data_info(i) AS i
+FROM :COMPRESSED_CHUNK GROUP BY 2;
+
+SELECT ts, i FROM dict_image_eq_array WHERE ts IN (1, 2, 991, 992) ORDER BY ts;
+SELECT * FROM dict_image_eq_array_diff;
+
+SET timescaledb.enable_bulk_decompression = off;
+SELECT * FROM dict_image_eq_array_diff;
+RESET timescaledb.enable_bulk_decompression;
+
+DROP VIEW dict_image_eq_array_diff;
+DROP TABLE dict_image_eq_array;
+DROP TABLE dict_image_eq_array_orig;
