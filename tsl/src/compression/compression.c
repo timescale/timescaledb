@@ -2065,6 +2065,11 @@ static inline RowDecompressor
 build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid in_oid,
 						  Oid out_oid, bool internal_error)
 {
+	MemoryContext row_decompressor_context = AllocSetContextCreate(CurrentMemoryContext,
+																   "row decompressor context",
+																   ALLOCSET_DEFAULT_SIZES);
+	MemoryContext old_context = MemoryContextSwitchTo(row_decompressor_context);
+
 	AttrNumber count_meta_attnum = InvalidAttrNumber;
 	AttrMap *attrmap = build_decompress_attrmap(out_desc, in_desc, &count_meta_attnum);
 
@@ -2077,6 +2082,7 @@ build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid
 	const int default_allocated_slots = 300;
 
 	RowDecompressor decompressor = {
+		.row_decompressor_context = row_decompressor_context,
 		.count_compressed_attindex = AttrNumberGetAttrOffset(count_meta_attnum),
 		.in_desc = CreateTupleDescCopyConstr(in_desc),
 		.out_desc = CreateTupleDescCopyConstr(out_desc),
@@ -2086,7 +2092,7 @@ build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid
 		/* cache memory used to store the decompressed datums/is_null for form_tuple */
 		.decompressed_datums = palloc(sizeof(Datum) * out_desc->natts),
 		.decompressed_is_nulls = palloc(sizeof(bool) * out_desc->natts),
-		.per_compressed_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
+		.per_compressed_row_ctx = AllocSetContextCreate(row_decompressor_context,
 														"decompress chunk per-compressed row",
 														ALLOCSET_DEFAULT_SIZES),
 		.decompressed_slots = (TupleTableSlot **) palloc0(sizeof(void *) * default_allocated_slots),
@@ -2104,7 +2110,7 @@ build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid
 	 */
 	memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
 
-	detoaster_init(&decompressor.detoaster, CurrentMemoryContext);
+	detoaster_init(&decompressor.detoaster, row_decompressor_context);
 
 	/*
 	 * Use CMD_UTILITY to avoid squashing chunk stats while recompressing
@@ -2112,6 +2118,7 @@ build_decompressor_common(const TupleDesc in_desc, const TupleDesc out_desc, Oid
 	 */
 	row_decompressor_init_stats(&decompressor, in_oid, out_oid, CMD_UTILITY);
 
+	MemoryContextSwitchTo(old_context);
 	return decompressor;
 }
 
@@ -2178,22 +2185,8 @@ void
 row_decompressor_close(RowDecompressor *decompressor)
 {
 	row_decompressor_flush_stats(decompressor);
-	MemoryContextDelete(decompressor->per_compressed_row_ctx);
-	if (decompressor->bulk_decompression_context != NULL)
-	{
-		MemoryContextDelete(decompressor->bulk_decompression_context);
-	}
 	detoaster_close(&decompressor->detoaster);
-	free_attrmap(decompressor->attrmap);
-	FreeTupleDesc(decompressor->in_desc);
-	FreeTupleDesc(decompressor->out_desc);
-	pfree(decompressor->compressed_datums);
-	pfree(decompressor->compressed_is_nulls);
-	pfree(decompressor->decompressed_datums);
-	pfree(decompressor->decompressed_is_nulls);
-	pfree((void *) decompressor->decompressed_slots);
-	pfree(decompressor->per_compressed_cols);
-	pfree(decompressor->column_values);
+	MemoryContextDelete(decompressor->row_decompressor_context);
 }
 
 void
@@ -2432,8 +2425,8 @@ init_column(RowDecompressor *decompressor, int input_column, bool use_bulk)
 
 	if (decompressor->bulk_decompression_context == NULL)
 	{
-		decompressor->bulk_decompression_context = create_bulk_decompression_mctx(
-			MemoryContextGetParent(decompressor->per_compressed_row_ctx));
+		decompressor->bulk_decompression_context =
+			create_bulk_decompression_mctx(decompressor->row_decompressor_context);
 	}
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->bulk_decompression_context);
@@ -2609,7 +2602,7 @@ decompress_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attn
 		 */
 		if (decompressor->decompressed_slots[current_row] == NULL)
 		{
-			MemoryContextSwitchTo(old_ctx);
+			MemoryContextSwitchTo(decompressor->row_decompressor_context);
 			decompressor->decompressed_slots[current_row] =
 				MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsHeapTuple);
 			MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);

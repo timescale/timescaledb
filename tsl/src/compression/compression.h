@@ -182,6 +182,8 @@ typedef struct RowDecompressor
 	Datum *decompressed_datums;
 	bool *decompressed_is_nulls;
 
+	/* parent of per_compressed_row_ctx and bulk_decompression_context */
+	MemoryContext row_decompressor_context;
 	MemoryContext per_compressed_row_ctx;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
