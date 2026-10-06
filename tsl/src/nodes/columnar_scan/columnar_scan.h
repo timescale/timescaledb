@@ -74,6 +74,13 @@ typedef struct ColumnarScanPath
 	/* pathkey equivalence class members matching compressed sort order on the chunk */
 	List *required_pathkey_ems;
 
+	/*
+	 * Produce only the first row of each batch from segmentby columns and
+	 * sparse index metadata, using pairs of chunk attno and compressed attno.
+	 */
+	bool metadata_only;
+	List *metadata_output_map;
+
 } ColumnarScanPath;
 
 void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,

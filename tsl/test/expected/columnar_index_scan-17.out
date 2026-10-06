@@ -6849,3 +6849,459 @@ RESET enable_indexscan;
 RESET enable_bitmapscan;
 RESET enable_hashagg;
 DROP TABLE agg_rescan;
+-- ORDER BY ... LIMIT 1 is answered from the first row of each batch
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET max_parallel_workers_per_gather = 0;
+SET timescaledb.enable_deferred_chunk_append = off;
+CREATE TABLE limit_one(time timestamptz NOT NULL, device int NOT NULL, ts2 timestamptz, val float, val2 float)
+ WITH (tsdb.hypertable,tsdb.orderby='time,ts2',tsdb.segmentby='device',tsdb.index='firstlast(val2)',tsdb.chunk_interval='1 day');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO limit_one SELECT '2000-01-01'::timestamptz + i * interval '1 minute', d, '2000-01-01'::timestamptz - i * interval '1 minute', i, i
+FROM generate_series(1, 2500) i, generate_series(1, 3) d;
+SELECT count(compress_chunk(ch)) FROM show_chunks('limit_one') ch;
+ count 
+-------
+     3
+
+-- orderby columns with min/max metadata only, with and without NULLs
+CREATE TABLE limit_one_minmax(time timestamptz NOT NULL, device int NOT NULL)
+ WITH (tsdb.hypertable,tsdb.partition_column='device',tsdb.orderby='time',tsdb.segmentby='device');
+CREATE TABLE limit_one_minmax_null(time timestamptz, device int NOT NULL)
+ WITH (tsdb.hypertable,tsdb.partition_column='device',tsdb.orderby='time',tsdb.segmentby='device');
+CREATE TABLE limit_one_null(time timestamptz, device int NOT NULL)
+ WITH (tsdb.hypertable,tsdb.partition_column='device',tsdb.orderby='time',tsdb.segmentby='device');
+INSERT INTO limit_one_minmax SELECT '2000-01-01'::timestamptz + i * interval '1 minute', 1 FROM generate_series(1, 10) i;
+INSERT INTO limit_one_minmax_null SELECT * FROM limit_one_minmax UNION ALL SELECT NULL, 1;
+INSERT INTO limit_one_null SELECT * FROM limit_one_minmax_null;
+SELECT count(compress_chunk(ch)) FROM show_chunks('limit_one_minmax') ch;
+ count 
+-------
+     1
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('limit_one_minmax_null') ch;
+ count 
+-------
+     1
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('limit_one_null') ch;
+ count 
+-------
+     1
+
+UPDATE _timescaledb_catalog.compression_settings SET index = '[{"type": "minmax", "column": "time", "source": "orderby"}]'
+WHERE relid IN (SELECT show_chunks('limit_one_minmax') UNION ALL SELECT show_chunks('limit_one_minmax_null'));
+SELECT format('ALTER TABLE %s DROP COLUMN _ts_meta_v2_first_time, DROP COLUMN _ts_meta_v2_last_time', compress_relid::regclass)
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('limit_one_minmax') UNION ALL SELECT show_chunks('limit_one_minmax_null')) \gexec
+ALTER TABLE _timescaledb_internal._hyper_10_13_chunk_compressed DROP COLUMN _ts_meta_v2_first_time, DROP COLUMN _ts_meta_v2_last_time
+ALTER TABLE _timescaledb_internal._hyper_11_14_chunk_compressed DROP COLUMN _ts_meta_v2_first_time, DROP COLUMN _ts_meta_v2_last_time
+ANALYZE limit_one, limit_one_minmax, limit_one_minmax_null, limit_one_null;
+SET timescaledb.enable_columnarscan_metadata_only = on;
+EXPLAIN (costs off) SELECT time, device FROM limit_one ORDER BY time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ChunkAppend) on limit_one
+         Order: limit_one."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_10_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_12_chunk_compressed
+
+SELECT time, device FROM limit_one ORDER BY time LIMIT 1;
+             time             | device 
+------------------------------+--------
+ Sat Jan 01 00:01:00 2000 PST |      1
+
+EXPLAIN (costs off) SELECT time, device FROM limit_one ORDER BY time DESC LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ChunkAppend) on limit_one
+         Order: limit_one."time" DESC
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _hyper_9_12_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _hyper_9_10_chunk_compressed
+
+SELECT time, device FROM limit_one ORDER BY time DESC LIMIT 1;
+             time             | device 
+------------------------------+--------
+ Sun Jan 02 17:40:00 2000 PST |      1
+
+EXPLAIN (costs off) SELECT device, time, ts2 FROM limit_one ORDER BY device DESC, time DESC, ts2 DESC LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Merge Append
+         Sort Key: limit_one.device DESC, limit_one."time" DESC, limit_one.ts2 DESC
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               Metadata Only: true
+               ->  Index Scan Backward using _hyper_9_10_chunk_compressed_device__ts_meta_v2_first_time__idx on _hyper_9_10_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               Metadata Only: true
+               ->  Index Scan Backward using _hyper_9_11_chunk_compressed_device__ts_meta_v2_first_time__idx on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               Metadata Only: true
+               ->  Index Scan Backward using _hyper_9_12_chunk_compressed_device__ts_meta_v2_first_time__idx on _hyper_9_12_chunk_compressed
+
+SELECT device, time, ts2 FROM limit_one ORDER BY device DESC, time DESC, ts2 DESC LIMIT 1;
+ device |             time             |             ts2              
+--------+------------------------------+------------------------------
+      3 | Sun Jan 02 17:40:00 2000 PST | Thu Dec 30 06:20:00 1999 PST
+
+EXPLAIN (costs off) SELECT tableoid::regclass, time FROM limit_one WHERE device = 2 ORDER BY time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Custom Scan (ChunkAppend) on limit_one
+               Order: limit_one."time"
+               ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+                     Metadata Only: true
+                     ->  Sort
+                           Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_first_time, _hyper_9_10_chunk_compressed._ts_meta_v2_last_time
+                           ->  Seq Scan on _hyper_9_10_chunk_compressed
+                                 Filter: (device = 2)
+               ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+                     Metadata Only: true
+                     ->  Sort
+                           Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_first_time, _hyper_9_11_chunk_compressed._ts_meta_v2_last_time
+                           ->  Seq Scan on _hyper_9_11_chunk_compressed
+                                 Filter: (device = 2)
+               ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+                     Metadata Only: true
+                     ->  Sort
+                           Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_first_time, _hyper_9_12_chunk_compressed._ts_meta_v2_last_time
+                           ->  Seq Scan on _hyper_9_12_chunk_compressed
+                                 Filter: (device = 2)
+
+SELECT tableoid::regclass, time FROM limit_one WHERE device = 2 ORDER BY time LIMIT 1;
+                tableoid                 |             time             
+-----------------------------------------+------------------------------
+ _timescaledb_internal._hyper_9_10_chunk | Sat Jan 01 00:01:00 2000 PST
+
+EXPLAIN (costs off) SELECT time, val2 FROM limit_one ORDER BY time DESC LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ChunkAppend) on limit_one
+         Order: limit_one."time" DESC
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _hyper_9_12_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               Metadata Only: true
+               ->  Sort
+                     Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_last_time DESC
+                     ->  Seq Scan on _hyper_9_10_chunk_compressed
+
+SELECT time, val2 FROM limit_one ORDER BY time DESC LIMIT 1;
+             time             | val2 
+------------------------------+------
+ Sun Jan 02 17:40:00 2000 PST | 2500
+
+EXPLAIN (costs off) SELECT time FROM limit_one_minmax ORDER BY time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarScan) on _hyper_10_13_chunk
+         Metadata Only: true
+         ->  Sort
+               Sort Key: _hyper_10_13_chunk_compressed._ts_meta_min_1
+               ->  Seq Scan on _hyper_10_13_chunk_compressed
+
+SELECT time FROM limit_one_minmax ORDER BY time LIMIT 1;
+             time             
+------------------------------
+ Sat Jan 01 00:01:00 2000 PST
+
+EXPLAIN (costs off) SELECT time FROM limit_one_minmax ORDER BY time DESC LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarScan) on _hyper_10_13_chunk
+         ->  Sort
+               Sort Key: _hyper_10_13_chunk_compressed._ts_meta_max_1 DESC
+               ->  Seq Scan on _hyper_10_13_chunk_compressed
+
+SELECT time FROM limit_one_minmax ORDER BY time DESC LIMIT 1;
+             time             
+------------------------------
+ Sat Jan 01 00:10:00 2000 PST
+
+EXPLAIN (costs off) SELECT time FROM limit_one_null ORDER BY time DESC LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarScan) on _hyper_12_15_chunk
+         Metadata Only: true
+         ->  Sort
+               Sort Key: _hyper_12_15_chunk_compressed._ts_meta_v2_last_time DESC
+               ->  Seq Scan on _hyper_12_15_chunk_compressed
+
+SELECT time FROM limit_one_null ORDER BY time DESC LIMIT 1;
+ time 
+------
+ 
+
+-- needs decompression
+EXPLAIN (costs off) SELECT time, val FROM limit_one ORDER BY time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ChunkAppend) on limit_one
+         Order: limit_one."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_10_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_12_chunk_compressed
+
+EXPLAIN (costs off) SELECT time FROM limit_one ORDER BY time LIMIT 2;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ChunkAppend) on limit_one
+         Order: limit_one."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_10_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_12_chunk_compressed
+
+EXPLAIN (costs off) SELECT time FROM limit_one ORDER BY time LIMIT 1 OFFSET 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ChunkAppend) on limit_one
+         Order: limit_one."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_10_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               ->  Sort
+                     Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_12_chunk_compressed
+
+EXPLAIN (costs off) SELECT time FROM limit_one WHERE val > 1000 ORDER BY time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ChunkAppend) on limit_one
+         Order: limit_one."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               Filter: (val > '1000'::double precision)
+               ->  Sort
+                     Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_10_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               Filter: (val > '1000'::double precision)
+               ->  Sort
+                     Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               Filter: (val > '1000'::double precision)
+               ->  Sort
+                     Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_first_time
+                     ->  Seq Scan on _hyper_9_12_chunk_compressed
+
+EXPLAIN (costs off) SELECT l1.time FROM limit_one l1, limit_one l2 WHERE l1.time = l2.ts2 ORDER BY l1.time LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Nested Loop
+         Join Filter: (l1."time" = l2.ts2)
+         ->  Custom Scan (ChunkAppend) on limit_one l1
+               Order: l1."time"
+               ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk l1_1
+                     ->  Sort
+                           Sort Key: _hyper_9_10_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_9_10_chunk_compressed
+               ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk l1_2
+                     ->  Sort
+                           Sort Key: _hyper_9_11_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_9_11_chunk_compressed
+               ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk l1_3
+                     ->  Sort
+                           Sort Key: _hyper_9_12_chunk_compressed._ts_meta_v2_first_time
+                           ->  Seq Scan on _hyper_9_12_chunk_compressed
+         ->  Materialize
+               ->  Append
+                     ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk l2_1
+                           ->  Seq Scan on _hyper_9_10_chunk_compressed _hyper_9_10_chunk_compressed_1
+                     ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk l2_2
+                           ->  Seq Scan on _hyper_9_11_chunk_compressed _hyper_9_11_chunk_compressed_1
+                     ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk l2_3
+                           ->  Seq Scan on _hyper_9_12_chunk_compressed _hyper_9_12_chunk_compressed_1
+
+EXPLAIN (costs off) SELECT time FROM limit_one_minmax_null ORDER BY time DESC LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Sort
+         Sort Key: _hyper_11_14_chunk."time" DESC
+         ->  Custom Scan (ColumnarScan) on _hyper_11_14_chunk
+               ->  Seq Scan on _hyper_11_14_chunk_compressed
+
+SELECT time FROM limit_one_minmax_null ORDER BY time DESC LIMIT 1;
+ time 
+------
+ 
+
+-- without ORDER BY any row will do
+EXPLAIN (costs off) SELECT time, device FROM limit_one LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               Metadata Only: true
+               ->  Seq Scan on _hyper_9_10_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               Metadata Only: true
+               ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               Metadata Only: true
+               ->  Seq Scan on _hyper_9_12_chunk_compressed
+
+SELECT time, device FROM limit_one LIMIT 1;
+             time             | device 
+------------------------------+--------
+ Sat Jan 01 00:01:00 2000 PST |      1
+
+EXPLAIN (costs off) SELECT 1 FROM limit_one WHERE device = 3 LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Result
+         ->  Append
+               ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+                     Metadata Only: true
+                     ->  Seq Scan on _hyper_9_10_chunk_compressed
+                           Filter: (device = 3)
+               ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+                     Metadata Only: true
+                     ->  Seq Scan on _hyper_9_11_chunk_compressed
+                           Filter: (device = 3)
+               ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+                     Metadata Only: true
+                     ->  Seq Scan on _hyper_9_12_chunk_compressed
+                           Filter: (device = 3)
+
+SELECT 1 FROM limit_one WHERE device = 3 LIMIT 1;
+ ?column? 
+----------
+        1
+
+EXPLAIN (costs off) SELECT time FROM limit_one_minmax_null LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (ColumnarScan) on _hyper_11_14_chunk
+         ->  Seq Scan on _hyper_11_14_chunk_compressed
+
+SELECT time FROM limit_one_minmax_null LIMIT 1;
+             time             
+------------------------------
+ Sat Jan 01 00:01:00 2000 PST
+
+EXPLAIN (costs off) SELECT val FROM limit_one LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+               ->  Seq Scan on _hyper_9_10_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_11_chunk
+               ->  Seq Scan on _hyper_9_11_chunk_compressed
+         ->  Custom Scan (ColumnarScan) on _hyper_9_12_chunk
+               ->  Seq Scan on _hyper_9_12_chunk_compressed
+
+-- results match the decompressed scan
+SET timescaledb.enable_columnarscan_metadata_only = off;
+SELECT time, device FROM limit_one ORDER BY time LIMIT 1;
+             time             | device 
+------------------------------+--------
+ Sat Jan 01 00:01:00 2000 PST |      1
+
+SELECT time, device FROM limit_one ORDER BY time DESC LIMIT 1;
+             time             | device 
+------------------------------+--------
+ Sun Jan 02 17:40:00 2000 PST |      1
+
+SELECT device, time, ts2 FROM limit_one ORDER BY device DESC, time DESC, ts2 DESC LIMIT 1;
+ device |             time             |             ts2              
+--------+------------------------------+------------------------------
+      3 | Sun Jan 02 17:40:00 2000 PST | Thu Dec 30 06:20:00 1999 PST
+
+SELECT tableoid::regclass, time FROM limit_one WHERE device = 2 ORDER BY time LIMIT 1;
+                tableoid                 |             time             
+-----------------------------------------+------------------------------
+ _timescaledb_internal._hyper_9_10_chunk | Sat Jan 01 00:01:00 2000 PST
+
+SELECT time, val2 FROM limit_one ORDER BY time DESC LIMIT 1;
+             time             | val2 
+------------------------------+------
+ Sun Jan 02 17:40:00 2000 PST | 2500
+
+SELECT time FROM limit_one_minmax ORDER BY time LIMIT 1;
+             time             
+------------------------------
+ Sat Jan 01 00:01:00 2000 PST
+
+SELECT time FROM limit_one_minmax ORDER BY time DESC LIMIT 1;
+             time             
+------------------------------
+ Sat Jan 01 00:10:00 2000 PST
+
+SELECT time FROM limit_one_null ORDER BY time DESC LIMIT 1;
+ time 
+------
+ 
+
+SELECT time, device FROM limit_one LIMIT 1;
+             time             | device 
+------------------------------+--------
+ Sat Jan 01 00:01:00 2000 PST |      1
+
+SELECT 1 FROM limit_one WHERE device = 3 LIMIT 1;
+ ?column? 
+----------
+        1
+
+RESET timescaledb.enable_columnarscan_metadata_only;
+DROP TABLE limit_one;
+DROP TABLE limit_one_minmax;
+DROP TABLE limit_one_minmax_null;
+DROP TABLE limit_one_null;

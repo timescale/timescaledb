@@ -90,6 +90,7 @@ columnar_scan_state_create(CustomScan *cscan)
 	chunk_state->decompress_context.chunk_status = list_nth_int(settings, DCS_ChunkStatus);
 	chunk_state->decompress_context.enable_bulk_decompression =
 		list_nth_int(settings, DCS_EnableBulkDecompression);
+	chunk_state->decompress_context.metadata_only = list_nth_int(settings, DCS_MetadataOnly);
 	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
@@ -565,6 +566,11 @@ columnar_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 							 node->ss.ps.instrument->ntuples2,
 							 0,
 							 es);
+	}
+
+	if (dcontext->metadata_only)
+	{
+		ExplainPropertyBool("Metadata Only", dcontext->metadata_only, es);
 	}
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)

@@ -1035,7 +1035,8 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 
 				Assert(batch_state->total_batch_rows == 0);
 				CheckCompressedData(count_value <= UINT16_MAX);
-				batch_state->total_batch_rows = count_value;
+				/* With metadata only output, the batch yields just its first row. */
+				batch_state->total_batch_rows = dcontext->metadata_only ? 1 : count_value;
 
 				break;
 			}

@@ -91,6 +91,7 @@ static SortInfo build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo
 
 static Bitmapset *find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info);
 static Var *extract_valid_column_from_em(EquivalenceMember *em);
+static bool is_var_notnull(const CompressionInfo *compression_info, Var *var);
 
 static EquivalenceClass *
 append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortInfo *sort_info,
@@ -1524,6 +1525,187 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 }
 
 /*
+ * Check that the query reads only the first row of the scan, so that
+ * producing just the first row of each batch gives a valid result.
+ */
+static bool
+metadata_only_query_supported(PlannerInfo *root)
+{
+	Query *query = root->parse;
+
+	if (!ts_guc_enable_optimizations || !ts_guc_enable_columnarscan_metadata_only ||
+		root->limit_tuples != 1.0)
+	{
+		return false;
+	}
+
+	/* Most of these are already implied by limit_tuples, but check them explicitly. */
+	if (query->commandType != CMD_SELECT || query->limitCount == NULL ||
+		query->limitOffset != NULL || query->limitOption != LIMIT_OPTION_COUNT ||
+		query->hasAggs || query->groupClause || query->groupingSets || query->hasWindowFuncs ||
+		query->distinctClause || query->setOperations || query->havingQual ||
+		query->hasModifyingCTE || query->rowMarks || query->hasTargetSRFs)
+	{
+		return false;
+	}
+
+	/* A join could discard the first row and ask for the next one. */
+	return list_length(query->jointree->fromlist) == 1 &&
+		   IsA(linitial(query->jointree->fromlist), RangeTblRef);
+}
+
+/*
+ * Find the compressed column holding the value of a chunk column in the
+ * first output row of a batch.
+ */
+static AttrNumber
+metadata_only_compressed_attno(const CompressionInfo *info, AttrNumber chunk_attno, bool reverse)
+{
+	Oid chunk_relid = info->chunk_rte->relid;
+	Oid compressed_relid = info->compressed_rte->relid;
+	char *column_name = get_attname(chunk_relid, chunk_attno, false);
+
+	if (ts_array_is_member(info->settings->fd.segmentby, column_name))
+	{
+		return get_attnum(compressed_relid, column_name);
+	}
+
+	AttrNumber attno = compressed_column_metadata_attno(info->settings,
+														chunk_relid,
+														chunk_attno,
+														compressed_relid,
+														reverse ? "last" : "first");
+	if (attno != InvalidAttrNumber)
+	{
+		return attno;
+	}
+
+	/*
+	 * Min/max holds the first row's value only for the leading NOT NULL
+	 * orderby column, and not in reverse, where ties keep an earlier row.
+	 */
+	Var var = { .xpr.type = T_Var, .varno = info->chunk_rel->relid, .varattno = chunk_attno };
+	if (reverse || ts_array_position(info->settings->fd.orderby, column_name) != 1 ||
+		!is_var_notnull(info, &var))
+	{
+		return InvalidAttrNumber;
+	}
+
+	bool desc = ts_array_get_element_bool(info->settings->fd.orderby_desc, 1);
+	return compressed_column_metadata_attno(info->settings,
+											chunk_relid,
+											chunk_attno,
+											compressed_relid,
+											desc ? "max" : "min");
+}
+
+/*
+ * Create a path that outputs only the first row of each batch, built from
+ * segmentby columns and sparse index metadata without decompression. The
+ * output is a subset of the chunk rows that starts with the first row in the
+ * requested order, if any, so it is only usable for LIMIT 1 queries.
+ */
+static Path *
+columnar_scan_metadata_only_path_create(PlannerInfo *root, const CompressionInfo *info,
+										Path *compressed_path, const SortInfo *sort_info,
+										bool all_quals_pushed_down)
+{
+	if (!metadata_only_query_supported(root))
+	{
+		return NULL;
+	}
+
+	if (info->chunk_rel->baserestrictinfo != NIL && !all_quals_pushed_down)
+	{
+		return NULL;
+	}
+
+	/* An ORDER BY must be fully satisfied by the order of the batches. */
+	const bool ordered = root->query_pathkeys != NIL;
+	if (ordered && !sort_info->use_compressed_sort && !sort_info->use_batch_sorted_merge)
+	{
+		return NULL;
+	}
+	const bool reverse = ordered && sort_info->reverse;
+
+	if (compressed_path->parallel_workers > 0 || !bms_is_empty(PATH_REQ_OUTER(compressed_path)))
+	{
+		return NULL;
+	}
+
+	Bitmapset *attrs_needed = NULL;
+	pull_varattnos((Node *) info->chunk_rel->reltarget->exprs,
+				   info->chunk_rel->relid,
+				   &attrs_needed);
+
+	List *metadata_output_map = NIL;
+	int bit = -1;
+	while ((bit = bms_next_member(attrs_needed, bit)) >= 0)
+	{
+		AttrNumber chunk_attno = bit + FirstLowInvalidHeapAttributeNumber;
+		if (chunk_attno == TableOidAttributeNumber)
+		{
+			continue;
+		}
+
+		if (chunk_attno <= 0)
+		{
+			return NULL;
+		}
+
+		AttrNumber compressed_attno =
+			metadata_only_compressed_attno(info, chunk_attno, reverse);
+		if (compressed_attno == InvalidAttrNumber)
+		{
+			return NULL;
+		}
+
+		metadata_output_map = lappend_int(metadata_output_map, chunk_attno);
+		metadata_output_map = lappend_int(metadata_output_map, compressed_attno);
+	}
+
+	ColumnarScanPath *path =
+		columnar_scan_path_create(root, info, compressed_path, all_quals_pushed_down);
+	path->metadata_only = true;
+	path->metadata_output_map = metadata_output_map;
+	path->enable_bulk_decompression = false;
+	path->reverse = reverse;
+	if (ordered)
+	{
+		path->needs_orderby_metadata = sort_info->needs_orderby_metadata;
+		path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
+		path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+	}
+
+	/* One output row per compressed tuple, and a top-1 sort if the input is not sorted. */
+	Path *input_path = compressed_path;
+	Path sort_path;
+	if (!pathkeys_contained_in(path->required_compressed_pathkeys, compressed_path->pathkeys))
+	{
+		cost_sort(&sort_path,
+				  root,
+				  path->required_compressed_pathkeys,
+#if PG18_GE
+				  compressed_path->disabled_nodes,
+#endif
+				  compressed_path->total_cost,
+				  compressed_path->rows,
+				  compressed_path->pathtarget->width,
+				  0.0,
+				  work_mem,
+				  1.0);
+		input_path = &sort_path;
+	}
+
+	path->custom_path.path.rows = compressed_path->rows;
+	path->custom_path.path.startup_cost = input_path->startup_cost;
+	path->custom_path.path.total_cost =
+		input_path->total_cost + compressed_path->rows * cpu_tuple_cost;
+
+	return &path->custom_path.path;
+}
+
+/*
  * Add various decompression paths that are possible based on the given
  * compressed path.
  */
@@ -1574,6 +1756,20 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 						compressed_path->param_info->ppi_req_outer))
 		{
 			return NIL;
+		}
+	}
+
+	/* Answering from metadata is always cheaper, so it replaces the other paths. */
+	if (!add_uncompressed_part)
+	{
+		Path *metadata_path = columnar_scan_metadata_only_path_create(root,
+																	  compression_info,
+																	  compressed_path,
+																	  sort_info,
+																	  all_quals_pushed_down);
+		if (metadata_path != NULL)
+		{
+			return list_make1(metadata_path);
 		}
 	}
 
@@ -1968,7 +2164,7 @@ compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compress
  */
 static void
 compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info,
-							   bool needs_orderby_metadata)
+							   bool needs_orderby_metadata, bool needs_firstlast_metadata)
 {
 	bool have_whole_row_var = false;
 	Bitmapset *attrs_used = NULL;
@@ -2043,6 +2239,23 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 														compressed_relid,
 														upper_name,
 														&attrs_used);
+			}
+
+			/* metadata only scans read the first and last values of the batch */
+			for (int i = 0; needs_firstlast_metadata && i < 2; i++)
+			{
+				AttrNumber attno = compressed_column_metadata_attno(info->settings,
+																	info->chunk_rte->relid,
+																	chunk_var->varattno,
+																	compressed_relid,
+																	i == 0 ? "first" : "last");
+				if (attno != InvalidAttrNumber)
+				{
+					compressed_reltarget_add_var_for_column(compressed_rel,
+															compressed_relid,
+															get_attname(compressed_relid, attno, false),
+															&attrs_used);
+				}
 			}
 		}
 	}
@@ -2585,7 +2798,10 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	}
 	table_close(r, NoLock);
 
-	compressed_rel_setup_reltarget(compressed_rel, info, needs_orderby_metadata);
+	compressed_rel_setup_reltarget(compressed_rel,
+								   info,
+								   needs_orderby_metadata,
+								   metadata_only_query_supported(root));
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
 	compressed_rel_setup_joininfo(compressed_rel, info);
@@ -2684,6 +2900,8 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->all_quals_pushed_down = all_quals_pushed_down;
 	path->required_compressed_pathkeys = NIL;
 	path->required_pathkey_ems = NIL;
+	path->metadata_only = false;
+	path->metadata_output_map = NIL;
 	cost_columnar_scan(compression_info, path, compressed_path);
 
 	return path;

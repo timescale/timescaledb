@@ -148,6 +148,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_debug_enable_columnarscan = true;
 TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
+TSDLLEXPORT bool ts_guc_enable_columnarscan_metadata_only = true;
 #if PG19_LT
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 #endif
@@ -1416,6 +1417,18 @@ _guc_init(void)
 							 "Enable experimental support for returning results directly from "
 							 "compression metadata without decompression",
 							 &ts_guc_enable_columnarindexscan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan_metadata_only"),
+							 "Enable metadata-only ColumnarScan for LIMIT 1 queries",
+							 "Answer LIMIT 1 queries, with or without ORDER BY, from the "
+							 "compression metadata without decompression",
+							 &ts_guc_enable_columnarscan_metadata_only,
 							 true,
 							 PGC_USERSET,
 							 0,

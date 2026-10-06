@@ -1786,18 +1786,21 @@ LIMIT 1;
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time"
-         ->  Sort (actual rows=1.00 loops=1)
-               Sort Key: _hyper_3_13_chunk."time"
-               Sort Method: top-N heapsort 
-               ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
+               ->  Sort (actual rows=1.00 loops=1)
+                     Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
+                     Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=20.00 loops=1)
-         ->  Sort (never executed)
-               Sort Key: _hyper_3_14_chunk."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               Metadata Only: true
+               ->  Sort (never executed)
+                     Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
                      ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-         ->  Sort (never executed)
-               Sort Key: _hyper_3_15_chunk."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+               Metadata Only: true
+               ->  Sort (never executed)
+                     Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                      ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 -- test DESC for ordered chunks
@@ -1810,18 +1813,21 @@ LIMIT 1;
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time" DESC
-         ->  Sort (actual rows=1.00 loops=1)
-               Sort Key: _hyper_3_15_chunk."time" DESC
-               Sort Method: top-N heapsort 
-               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
+               ->  Sort (actual rows=1.00 loops=1)
+                     Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_first_time DESC
+                     Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_15_chunk_compressed (actual rows=30.00 loops=1)
-         ->  Sort (never executed)
-               Sort Key: _hyper_3_14_chunk."time" DESC
-               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               Metadata Only: true
+               ->  Sort (never executed)
+                     Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_first_time DESC
                      ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-         ->  Sort (never executed)
-               Sort Key: _hyper_3_13_chunk."time" DESC
-               ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
+               Metadata Only: true
+               ->  Sort (never executed)
+                     Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_first_time DESC
                      ->  Seq Scan on _hyper_3_13_chunk_compressed (never executed)
 
 -- test query with ORDER BY column not in targetlist
@@ -1910,18 +1916,21 @@ LIMIT 1;
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                Order: metrics_compressed."time" DESC
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_3_15_chunk."time" DESC
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_first_time DESC
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_3_15_chunk_compressed (actual rows=30.00 loops=1)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_3_14_chunk."time" DESC
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_first_time DESC
                            ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_3_13_chunk."time" DESC
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_first_time DESC
                            ->  Seq Scan on _hyper_3_13_chunk_compressed (never executed)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
@@ -1935,10 +1944,13 @@ LIMIT 1;
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_compressed.device_id
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_3_13_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_13_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_3_14_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_14_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_3_15_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_15_chunk_compressed (actual rows=1.00 loops=1)
 
 -- time column must be primary sort order
@@ -1956,18 +1968,21 @@ LIMIT 1;
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_compressed.device_id, metrics_compressed."time"
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_13_chunk_compressed.device_id, _hyper_3_13_chunk_compressed._ts_meta_v2_first_time, _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
                      ->  Index Scan using _hyper_3_13_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_13_chunk_compressed (actual rows=8.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_14_chunk_compressed.device_id, _hyper_3_14_chunk_compressed._ts_meta_v2_first_time, _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
                      ->  Index Scan using _hyper_3_14_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_3_14_chunk_compressed (actual rows=12.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_15_chunk_compressed.device_id, _hyper_3_15_chunk_compressed._ts_meta_v2_first_time, _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
@@ -2048,10 +2063,13 @@ LIMIT 1;
    ->  Result (actual rows=1.00 loops=1)
          ->  Append (actual rows=1.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=1.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 RESET enable_seqscan;
@@ -2075,9 +2093,10 @@ LIMIT 1;
                      ->  Seq Scan on _hyper_3_14_chunk_compressed (actual rows=25.00 loops=1)
                            Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            Rows Removed by Filter: 5
-         ->  Sort (never executed)
-               Sort Key: _hyper_3_15_chunk."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+               Metadata Only: true
+               ->  Sort (never executed)
+                     Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                      ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 :PREFIX
@@ -2090,10 +2109,11 @@ LIMIT 1;
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time" DESC
-         ->  Sort (actual rows=1.00 loops=1)
-               Sort Key: _hyper_3_15_chunk."time" DESC
-               Sort Method: top-N heapsort 
-               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
+               ->  Sort (actual rows=1.00 loops=1)
+                     Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_first_time DESC
+                     Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_15_chunk_compressed (actual rows=30.00 loops=1)
          ->  Sort (never executed)
                Sort Key: _hyper_3_14_chunk."time" DESC
@@ -2212,18 +2232,21 @@ FROM :TEST_TABLE;
      ->  Limit (actual rows=1.00 loops=1)
            ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                  Order: metrics_compressed."time" DESC
-                 ->  Sort (actual rows=1.00 loops=1)
-                       Sort Key: _hyper_3_15_chunk."time" DESC
-                       Sort Method: top-N heapsort 
-                       ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
+                 ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
+                       Metadata Only: true
+                       ->  Sort (actual rows=1.00 loops=1)
+                             Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_first_time DESC
+                             Sort Method: quicksort 
                              ->  Seq Scan on _hyper_3_15_chunk_compressed (actual rows=30.00 loops=1)
-                 ->  Sort (never executed)
-                       Sort Key: _hyper_3_14_chunk."time" DESC
-                       ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                 ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                       Metadata Only: true
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_first_time DESC
                              ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-                 ->  Sort (never executed)
-                       Sort Key: _hyper_3_13_chunk."time" DESC
-                       ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
+                 ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
+                       Metadata Only: true
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_first_time DESC
                              ->  Seq Scan on _hyper_3_13_chunk_compressed (never executed)
 
 :PREFIX
@@ -2235,18 +2258,21 @@ FROM :TEST_TABLE;
      ->  Limit (actual rows=1.00 loops=1)
            ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                  Order: metrics_compressed."time"
-                 ->  Sort (actual rows=1.00 loops=1)
-                       Sort Key: _hyper_3_13_chunk."time"
-                       Sort Method: top-N heapsort 
-                       ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990.00 loops=1)
+                 ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+                       Metadata Only: true
+                       ->  Sort (actual rows=1.00 loops=1)
+                             Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
+                             Sort Method: quicksort 
                              ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=20.00 loops=1)
-                 ->  Sort (never executed)
-                       Sort Key: _hyper_3_14_chunk."time"
-                       ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                 ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                       Metadata Only: true
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
                              ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-                 ->  Sort (never executed)
-                       Sort Key: _hyper_3_15_chunk."time"
-                       ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                 ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                       Metadata Only: true
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                              ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 -- test first/last (doesn't use ordered append yet)
@@ -2260,18 +2286,21 @@ FROM :TEST_TABLE;
            ->  Result (actual rows=1.00 loops=1)
                  ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                        Order: metrics_compressed."time"
-                       ->  Sort (actual rows=1.00 loops=1)
-                             Sort Key: _hyper_3_13_chunk."time"
-                             Sort Method: top-N heapsort 
-                             ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990.00 loops=1)
+                       ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+                             Metadata Only: true
+                             ->  Sort (actual rows=1.00 loops=1)
+                                   Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
+                                   Sort Method: quicksort 
                                    ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=20.00 loops=1)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_3_14_chunk."time"
-                             ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
                                    ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_3_15_chunk."time"
-                             ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                                    ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 :PREFIX
@@ -2284,18 +2313,21 @@ FROM :TEST_TABLE;
            ->  Result (actual rows=1.00 loops=1)
                  ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                        Order: metrics_compressed."time" DESC
-                       ->  Sort (actual rows=1.00 loops=1)
-                             Sort Key: _hyper_3_15_chunk."time" DESC
-                             Sort Method: top-N heapsort 
-                             ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
+                       ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
+                             Metadata Only: true
+                             ->  Sort (actual rows=1.00 loops=1)
+                                   Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_first_time DESC
+                                   Sort Method: quicksort 
                                    ->  Seq Scan on _hyper_3_15_chunk_compressed (actual rows=30.00 loops=1)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_3_14_chunk."time" DESC
-                             ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_first_time DESC
                                    ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_3_13_chunk."time" DESC
-                             ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_first_time DESC
                                    ->  Seq Scan on _hyper_3_13_chunk_compressed (never executed)
 
 -- test query with time_bucket
@@ -2309,18 +2341,21 @@ LIMIT 1;
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                Order: metrics_compressed."time"
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_3_13_chunk."time"
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=20.00 loops=1)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_3_14_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_3_15_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 -- test query with ORDER BY time_bucket
@@ -2334,18 +2369,21 @@ LIMIT 1;
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                Order: time_bucket('@ 1 day'::interval, metrics_compressed."time")
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_3_13_chunk."time"))
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=20.00 loops=1)
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_3_14_chunk."time"))
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 1 day'::interval, _hyper_3_15_chunk."time"))
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 -- test query with ORDER BY time_bucket, device_id
@@ -2397,18 +2435,21 @@ LIMIT 1;
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                Order: date_trunc('day'::text, metrics_compressed."time")
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: (date_trunc('day'::text, _hyper_3_13_chunk."time"))
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=20.00 loops=1)
-               ->  Sort (never executed)
-                     Sort Key: (date_trunc('day'::text, _hyper_3_14_chunk."time"))
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (date_trunc('day'::text, _hyper_3_15_chunk."time"))
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 -- test query with ORDER BY date_trunc
@@ -2422,18 +2463,21 @@ LIMIT 1;
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                Order: date_trunc('day'::text, metrics_compressed."time")
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: (date_trunc('day'::text, _hyper_3_13_chunk."time"))
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_3_13_chunk_compressed._ts_meta_v2_last_time
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_3_13_chunk_compressed (actual rows=20.00 loops=1)
-               ->  Sort (never executed)
-                     Sort Key: (date_trunc('day'::text, _hyper_3_14_chunk."time"))
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_14_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_3_14_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (date_trunc('day'::text, _hyper_3_15_chunk."time"))
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_3_15_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_3_15_chunk_compressed (never executed)
 
 -- test query with ORDER BY date_trunc, device_id
@@ -2585,18 +2629,21 @@ ORDER BY time;
              ->  Limit (actual rows=1.00 loops=1)
                    ->  Custom Scan (ChunkAppend) on metrics_compressed metrics_compressed_1 (actual rows=1.00 loops=1)
                          Order: metrics_compressed_1."time" DESC
-                         ->  Sort (actual rows=1.00 loops=1)
-                               Sort Key: _hyper_3_15_chunk_1."time" DESC
-                               Sort Method: top-N heapsort 
-                               ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk _hyper_3_15_chunk_1 (actual rows=25190.00 loops=1)
+                         ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk _hyper_3_15_chunk_1 (actual rows=1.00 loops=1)
+                               Metadata Only: true
+                               ->  Sort (actual rows=1.00 loops=1)
+                                     Sort Key: _hyper_3_15_chunk_compressed_1._ts_meta_v2_first_time DESC
+                                     Sort Method: quicksort 
                                      ->  Seq Scan on _hyper_3_15_chunk_compressed _hyper_3_15_chunk_compressed_1 (actual rows=30.00 loops=1)
-                         ->  Sort (never executed)
-                               Sort Key: _hyper_3_14_chunk_1."time" DESC
-                               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk _hyper_3_14_chunk_1 (never executed)
+                         ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk _hyper_3_14_chunk_1 (never executed)
+                               Metadata Only: true
+                               ->  Sort (never executed)
+                                     Sort Key: _hyper_3_14_chunk_compressed_1._ts_meta_v2_first_time DESC
                                      ->  Seq Scan on _hyper_3_14_chunk_compressed _hyper_3_14_chunk_compressed_1 (never executed)
-                         ->  Sort (never executed)
-                               Sort Key: _hyper_3_13_chunk_1."time" DESC
-                               ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk _hyper_3_13_chunk_1 (never executed)
+                         ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk _hyper_3_13_chunk_1 (never executed)
+                               Metadata Only: true
+                               ->  Sort (never executed)
+                                     Sort Key: _hyper_3_13_chunk_compressed_1._ts_meta_v2_first_time DESC
                                      ->  Seq Scan on _hyper_3_13_chunk_compressed _hyper_3_13_chunk_compressed_1 (never executed)
    ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
          Filter: ("time" = (InitPlan 2).col1)
@@ -2767,48 +2814,57 @@ LIMIT 1;
          Order: metrics_space_compressed."time"
          ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: metrics_space_compressed."time"
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_4_16_chunk."time"
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=21588.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_last_time
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_4_16_chunk_compressed (actual rows=24.00 loops=1)
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_4_17_chunk."time"
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=28784.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_last_time
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_4_17_chunk_compressed (actual rows=32.00 loops=1)
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_4_18_chunk."time"
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=21588.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_last_time
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_4_18_chunk_compressed (actual rows=24.00 loops=1)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_19_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_20_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_21_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_22_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_4_22_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_23_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_4_23_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_24_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_last_time
                            ->  Seq Scan on _hyper_4_24_chunk_compressed (never executed)
 
 -- test DESC for ordered chunks
@@ -2823,48 +2879,57 @@ LIMIT 1;
          Order: metrics_space_compressed."time" DESC
          ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: metrics_space_compressed."time" DESC
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_4_24_chunk."time" DESC
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=30228.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_first_time DESC
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_4_24_chunk_compressed (actual rows=36.00 loops=1)
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_4_23_chunk."time" DESC
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=40304.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_first_time DESC
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_4_23_chunk_compressed (actual rows=48.00 loops=1)
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_4_22_chunk."time" DESC
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=30228.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_first_time DESC
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_4_22_chunk_compressed (actual rows=36.00 loops=1)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time" DESC
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_21_chunk."time" DESC
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_first_time DESC
                            ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_20_chunk."time" DESC
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_first_time DESC
                            ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_19_chunk."time" DESC
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_first_time DESC
                            ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time" DESC
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_18_chunk."time" DESC
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_first_time DESC
                            ->  Seq Scan on _hyper_4_18_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_17_chunk."time" DESC
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_first_time DESC
                            ->  Seq Scan on _hyper_4_17_chunk_compressed (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_4_16_chunk."time" DESC
-                     ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)
+                     Metadata Only: true
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_first_time DESC
                            ->  Seq Scan on _hyper_4_16_chunk_compressed (never executed)
 
 -- test query with ORDER BY column not in targetlist
@@ -2987,48 +3052,57 @@ LIMIT 1;
                Order: metrics_space_compressed."time" DESC
                ->  Merge Append (actual rows=1.00 loops=1)
                      Sort Key: metrics_space_compressed."time" DESC
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: _hyper_4_24_chunk."time" DESC
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=30228.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_first_time DESC
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_24_chunk_compressed (actual rows=36.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: _hyper_4_23_chunk."time" DESC
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=40304.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_first_time DESC
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_23_chunk_compressed (actual rows=48.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: _hyper_4_22_chunk."time" DESC
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=30228.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_first_time DESC
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_22_chunk_compressed (actual rows=36.00 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: metrics_space_compressed."time" DESC
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_21_chunk."time" DESC
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_first_time DESC
                                  ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_20_chunk."time" DESC
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_first_time DESC
                                  ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_19_chunk."time" DESC
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_first_time DESC
                                  ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
                ->  Merge Append (never executed)
                      Sort Key: metrics_space_compressed."time" DESC
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_18_chunk."time" DESC
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_first_time DESC
                                  ->  Seq Scan on _hyper_4_18_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_17_chunk."time" DESC
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_first_time DESC
                                  ->  Seq Scan on _hyper_4_17_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_16_chunk."time" DESC
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_first_time DESC
                                  ->  Seq Scan on _hyper_4_16_chunk_compressed (never executed)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
@@ -3042,22 +3116,31 @@ LIMIT 1;
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_space_compressed.device_id
          ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_16_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_16_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_17_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_17_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_18_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_18_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_19_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_19_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_20_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_20_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_21_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_21_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_22_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_22_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_23_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_23_chunk_compressed (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Index Scan using _hyper_4_24_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_24_chunk_compressed (actual rows=1.00 loops=1)
 
 -- time column must be primary sort order
@@ -3075,36 +3158,42 @@ LIMIT 1;
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_space_compressed.device_id, metrics_space_compressed."time"
          ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_4_16_chunk_compressed.device_id, _hyper_4_16_chunk_compressed._ts_meta_v2_first_time, _hyper_4_16_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
                      ->  Index Scan using _hyper_4_16_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_16_chunk_compressed (actual rows=4.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_4_17_chunk_compressed.device_id, _hyper_4_17_chunk_compressed._ts_meta_v2_first_time, _hyper_4_17_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
                      ->  Index Scan using _hyper_4_17_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_17_chunk_compressed (actual rows=4.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_4_19_chunk_compressed.device_id, _hyper_4_19_chunk_compressed._ts_meta_v2_first_time, _hyper_4_19_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
                      ->  Index Scan using _hyper_4_19_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_19_chunk_compressed (actual rows=6.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_4_20_chunk_compressed.device_id, _hyper_4_20_chunk_compressed._ts_meta_v2_first_time, _hyper_4_20_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
                      ->  Index Scan using _hyper_4_20_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_20_chunk_compressed (actual rows=6.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_4_22_chunk_compressed.device_id, _hyper_4_22_chunk_compressed._ts_meta_v2_first_time, _hyper_4_22_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
                      ->  Index Scan using _hyper_4_22_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_4_22_chunk_compressed (actual rows=6.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=1.00 loops=1)
+               Metadata Only: true
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_4_23_chunk_compressed.device_id, _hyper_4_23_chunk_compressed._ts_meta_v2_first_time, _hyper_4_23_chunk_compressed._ts_meta_v2_last_time
                      Sort Method: quicksort 
@@ -3239,22 +3328,31 @@ LIMIT 1;
    ->  Result (actual rows=1.00 loops=1)
          ->  Append (actual rows=1.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_16_chunk_compressed (actual rows=1.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_17_chunk_compressed (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_18_chunk_compressed (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_22_chunk_compressed (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_23_chunk_compressed (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                     Metadata Only: true
                      ->  Seq Scan on _hyper_4_24_chunk_compressed (never executed)
 
 RESET enable_seqscan;
@@ -3589,48 +3687,57 @@ FROM :TEST_TABLE;
                  Order: metrics_space_compressed."time" DESC
                  ->  Merge Append (actual rows=1.00 loops=1)
                        Sort Key: metrics_space_compressed."time" DESC
-                       ->  Sort (actual rows=1.00 loops=1)
-                             Sort Key: _hyper_4_24_chunk."time" DESC
-                             Sort Method: top-N heapsort 
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=30228.00 loops=1)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=1.00 loops=1)
+                             Metadata Only: true
+                             ->  Sort (actual rows=1.00 loops=1)
+                                   Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_first_time DESC
+                                   Sort Method: quicksort 
                                    ->  Seq Scan on _hyper_4_24_chunk_compressed (actual rows=36.00 loops=1)
-                       ->  Sort (actual rows=1.00 loops=1)
-                             Sort Key: _hyper_4_23_chunk."time" DESC
-                             Sort Method: top-N heapsort 
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=40304.00 loops=1)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=1.00 loops=1)
+                             Metadata Only: true
+                             ->  Sort (actual rows=1.00 loops=1)
+                                   Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_first_time DESC
+                                   Sort Method: quicksort 
                                    ->  Seq Scan on _hyper_4_23_chunk_compressed (actual rows=48.00 loops=1)
-                       ->  Sort (actual rows=1.00 loops=1)
-                             Sort Key: _hyper_4_22_chunk."time" DESC
-                             Sort Method: top-N heapsort 
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=30228.00 loops=1)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=1.00 loops=1)
+                             Metadata Only: true
+                             ->  Sort (actual rows=1.00 loops=1)
+                                   Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_first_time DESC
+                                   Sort Method: quicksort 
                                    ->  Seq Scan on _hyper_4_22_chunk_compressed (actual rows=36.00 loops=1)
                  ->  Merge Append (never executed)
                        Sort Key: metrics_space_compressed."time" DESC
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_21_chunk."time" DESC
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_first_time DESC
                                    ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_20_chunk."time" DESC
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_first_time DESC
                                    ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_19_chunk."time" DESC
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_first_time DESC
                                    ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
                  ->  Merge Append (never executed)
                        Sort Key: metrics_space_compressed."time" DESC
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_18_chunk."time" DESC
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_first_time DESC
                                    ->  Seq Scan on _hyper_4_18_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_17_chunk."time" DESC
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_first_time DESC
                                    ->  Seq Scan on _hyper_4_17_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_16_chunk."time" DESC
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_first_time DESC
                                    ->  Seq Scan on _hyper_4_16_chunk_compressed (never executed)
 
 :PREFIX
@@ -3644,48 +3751,57 @@ FROM :TEST_TABLE;
                  Order: metrics_space_compressed."time"
                  ->  Merge Append (actual rows=1.00 loops=1)
                        Sort Key: metrics_space_compressed."time"
-                       ->  Sort (actual rows=1.00 loops=1)
-                             Sort Key: _hyper_4_16_chunk."time"
-                             Sort Method: top-N heapsort 
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=21588.00 loops=1)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+                             Metadata Only: true
+                             ->  Sort (actual rows=1.00 loops=1)
+                                   Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_last_time
+                                   Sort Method: quicksort 
                                    ->  Seq Scan on _hyper_4_16_chunk_compressed (actual rows=24.00 loops=1)
-                       ->  Sort (actual rows=1.00 loops=1)
-                             Sort Key: _hyper_4_17_chunk."time"
-                             Sort Method: top-N heapsort 
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=28784.00 loops=1)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+                             Metadata Only: true
+                             ->  Sort (actual rows=1.00 loops=1)
+                                   Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_last_time
+                                   Sort Method: quicksort 
                                    ->  Seq Scan on _hyper_4_17_chunk_compressed (actual rows=32.00 loops=1)
-                       ->  Sort (actual rows=1.00 loops=1)
-                             Sort Key: _hyper_4_18_chunk."time"
-                             Sort Method: top-N heapsort 
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=21588.00 loops=1)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=1.00 loops=1)
+                             Metadata Only: true
+                             ->  Sort (actual rows=1.00 loops=1)
+                                   Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_last_time
+                                   Sort Method: quicksort 
                                    ->  Seq Scan on _hyper_4_18_chunk_compressed (actual rows=24.00 loops=1)
                  ->  Merge Append (never executed)
                        Sort Key: metrics_space_compressed."time"
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_19_chunk."time"
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_last_time
                                    ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_20_chunk."time"
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_last_time
                                    ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_21_chunk."time"
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_last_time
                                    ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
                  ->  Merge Append (never executed)
                        Sort Key: metrics_space_compressed."time"
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_22_chunk."time"
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_last_time
                                    ->  Seq Scan on _hyper_4_22_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_23_chunk."time"
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_last_time
                                    ->  Seq Scan on _hyper_4_23_chunk_compressed (never executed)
-                       ->  Sort (never executed)
-                             Sort Key: _hyper_4_24_chunk."time"
-                             ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                       ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                             Metadata Only: true
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_last_time
                                    ->  Seq Scan on _hyper_4_24_chunk_compressed (never executed)
 
 -- test first/last (doesn't use ordered append yet)
@@ -3701,48 +3817,57 @@ FROM :TEST_TABLE;
                        Order: metrics_space_compressed."time"
                        ->  Merge Append (actual rows=1.00 loops=1)
                              Sort Key: metrics_space_compressed."time"
-                             ->  Sort (actual rows=1.00 loops=1)
-                                   Sort Key: _hyper_4_16_chunk."time"
-                                   Sort Method: top-N heapsort 
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=21588.00 loops=1)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+                                   Metadata Only: true
+                                   ->  Sort (actual rows=1.00 loops=1)
+                                         Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_last_time
+                                         Sort Method: quicksort 
                                          ->  Seq Scan on _hyper_4_16_chunk_compressed (actual rows=24.00 loops=1)
-                             ->  Sort (actual rows=1.00 loops=1)
-                                   Sort Key: _hyper_4_17_chunk."time"
-                                   Sort Method: top-N heapsort 
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=28784.00 loops=1)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+                                   Metadata Only: true
+                                   ->  Sort (actual rows=1.00 loops=1)
+                                         Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_last_time
+                                         Sort Method: quicksort 
                                          ->  Seq Scan on _hyper_4_17_chunk_compressed (actual rows=32.00 loops=1)
-                             ->  Sort (actual rows=1.00 loops=1)
-                                   Sort Key: _hyper_4_18_chunk."time"
-                                   Sort Method: top-N heapsort 
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=21588.00 loops=1)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=1.00 loops=1)
+                                   Metadata Only: true
+                                   ->  Sort (actual rows=1.00 loops=1)
+                                         Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_last_time
+                                         Sort Method: quicksort 
                                          ->  Seq Scan on _hyper_4_18_chunk_compressed (actual rows=24.00 loops=1)
                        ->  Merge Append (never executed)
                              Sort Key: metrics_space_compressed."time"
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_19_chunk."time"
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_last_time
                                          ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_20_chunk."time"
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_last_time
                                          ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_21_chunk."time"
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_last_time
                                          ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
                        ->  Merge Append (never executed)
                              Sort Key: metrics_space_compressed."time"
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_22_chunk."time"
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_last_time
                                          ->  Seq Scan on _hyper_4_22_chunk_compressed (never executed)
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_23_chunk."time"
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_last_time
                                          ->  Seq Scan on _hyper_4_23_chunk_compressed (never executed)
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_24_chunk."time"
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_last_time
                                          ->  Seq Scan on _hyper_4_24_chunk_compressed (never executed)
 
 :PREFIX
@@ -3757,48 +3882,57 @@ FROM :TEST_TABLE;
                        Order: metrics_space_compressed."time" DESC
                        ->  Merge Append (actual rows=1.00 loops=1)
                              Sort Key: metrics_space_compressed."time" DESC
-                             ->  Sort (actual rows=1.00 loops=1)
-                                   Sort Key: _hyper_4_24_chunk."time" DESC
-                                   Sort Method: top-N heapsort 
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=30228.00 loops=1)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (actual rows=1.00 loops=1)
+                                   Metadata Only: true
+                                   ->  Sort (actual rows=1.00 loops=1)
+                                         Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_first_time DESC
+                                         Sort Method: quicksort 
                                          ->  Seq Scan on _hyper_4_24_chunk_compressed (actual rows=36.00 loops=1)
-                             ->  Sort (actual rows=1.00 loops=1)
-                                   Sort Key: _hyper_4_23_chunk."time" DESC
-                                   Sort Method: top-N heapsort 
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=40304.00 loops=1)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (actual rows=1.00 loops=1)
+                                   Metadata Only: true
+                                   ->  Sort (actual rows=1.00 loops=1)
+                                         Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_first_time DESC
+                                         Sort Method: quicksort 
                                          ->  Seq Scan on _hyper_4_23_chunk_compressed (actual rows=48.00 loops=1)
-                             ->  Sort (actual rows=1.00 loops=1)
-                                   Sort Key: _hyper_4_22_chunk."time" DESC
-                                   Sort Method: top-N heapsort 
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=30228.00 loops=1)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (actual rows=1.00 loops=1)
+                                   Metadata Only: true
+                                   ->  Sort (actual rows=1.00 loops=1)
+                                         Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_first_time DESC
+                                         Sort Method: quicksort 
                                          ->  Seq Scan on _hyper_4_22_chunk_compressed (actual rows=36.00 loops=1)
                        ->  Merge Append (never executed)
                              Sort Key: metrics_space_compressed."time" DESC
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_21_chunk."time" DESC
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_first_time DESC
                                          ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_20_chunk."time" DESC
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_first_time DESC
                                          ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_19_chunk."time" DESC
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_first_time DESC
                                          ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
                        ->  Merge Append (never executed)
                              Sort Key: metrics_space_compressed."time" DESC
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_18_chunk."time" DESC
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_first_time DESC
                                          ->  Seq Scan on _hyper_4_18_chunk_compressed (never executed)
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_17_chunk."time" DESC
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_first_time DESC
                                          ->  Seq Scan on _hyper_4_17_chunk_compressed (never executed)
-                             ->  Sort (never executed)
-                                   Sort Key: _hyper_4_16_chunk."time" DESC
-                                   ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)
+                             ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)
+                                   Metadata Only: true
+                                   ->  Sort (never executed)
+                                         Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_first_time DESC
                                          ->  Seq Scan on _hyper_4_16_chunk_compressed (never executed)
 
 -- test query with time_bucket
@@ -3814,48 +3948,57 @@ LIMIT 1;
                Order: metrics_space_compressed."time"
                ->  Merge Append (actual rows=1.00 loops=1)
                      Sort Key: metrics_space_compressed."time"
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: _hyper_4_16_chunk."time"
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=21588.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_16_chunk_compressed (actual rows=24.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: _hyper_4_17_chunk."time"
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=28784.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_17_chunk_compressed (actual rows=32.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: _hyper_4_18_chunk."time"
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=21588.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_18_chunk_compressed (actual rows=24.00 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: metrics_space_compressed."time"
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_19_chunk."time"
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_20_chunk."time"
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_21_chunk."time"
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
                ->  Merge Append (never executed)
                      Sort Key: metrics_space_compressed."time"
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_22_chunk."time"
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_22_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_23_chunk."time"
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_23_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_4_24_chunk."time"
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_24_chunk_compressed (never executed)
 
 -- test query with ORDER BY time_bucket
@@ -3871,48 +4014,57 @@ LIMIT 1;
                Order: time_bucket('@ 1 day'::interval, metrics_space_compressed."time")
                ->  Merge Append (actual rows=1.00 loops=1)
                      Sort Key: (time_bucket('@ 1 day'::interval, metrics_space_compressed."time"))
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_16_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=21588.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_16_chunk_compressed (actual rows=24.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_17_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=28784.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_17_chunk_compressed (actual rows=32.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_18_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=21588.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_18_chunk_compressed (actual rows=24.00 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: (time_bucket('@ 1 day'::interval, metrics_space_compressed."time"))
-                     ->  Sort (never executed)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_19_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_20_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_21_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
                ->  Merge Append (never executed)
                      Sort Key: (time_bucket('@ 1 day'::interval, metrics_space_compressed."time"))
-                     ->  Sort (never executed)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_22_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_22_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_23_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_23_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (time_bucket('@ 1 day'::interval, _hyper_4_24_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_24_chunk_compressed (never executed)
 
 -- test query with ORDER BY time_bucket, device_id
@@ -3985,48 +4137,57 @@ LIMIT 1;
                Order: date_trunc('day'::text, metrics_space_compressed."time")
                ->  Merge Append (actual rows=1.00 loops=1)
                      Sort Key: (date_trunc('day'::text, metrics_space_compressed."time"))
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_16_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=21588.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_16_chunk_compressed (actual rows=24.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_17_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=28784.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_17_chunk_compressed (actual rows=32.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_18_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=21588.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_18_chunk_compressed (actual rows=24.00 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: (date_trunc('day'::text, metrics_space_compressed."time"))
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_19_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_20_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_21_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
                ->  Merge Append (never executed)
                      Sort Key: (date_trunc('day'::text, metrics_space_compressed."time"))
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_22_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_22_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_23_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_23_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_24_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_24_chunk_compressed (never executed)
 
 -- test query with ORDER BY date_trunc
@@ -4042,48 +4203,57 @@ LIMIT 1;
                Order: date_trunc('day'::text, metrics_space_compressed."time")
                ->  Merge Append (actual rows=1.00 loops=1)
                      Sort Key: (date_trunc('day'::text, metrics_space_compressed."time"))
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_16_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=21588.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_16_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_16_chunk_compressed (actual rows=24.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_17_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=28784.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_17_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_17_chunk_compressed (actual rows=32.00 loops=1)
-                     ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_18_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=21588.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk (actual rows=1.00 loops=1)
+                           Metadata Only: true
+                           ->  Sort (actual rows=1.00 loops=1)
+                                 Sort Key: _hyper_4_18_chunk_compressed._ts_meta_v2_last_time
+                                 Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_4_18_chunk_compressed (actual rows=24.00 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: (date_trunc('day'::text, metrics_space_compressed."time"))
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_19_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_19_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_19_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_20_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_20_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_20_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_21_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_21_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_21_chunk_compressed (never executed)
                ->  Merge Append (never executed)
                      Sort Key: (date_trunc('day'::text, metrics_space_compressed."time"))
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_22_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_22_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_22_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_23_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_23_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_23_chunk_compressed (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (date_trunc('day'::text, _hyper_4_24_chunk."time"))
-                           ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk (never executed)
+                           Metadata Only: true
+                           ->  Sort (never executed)
+                                 Sort Key: _hyper_4_24_chunk_compressed._ts_meta_v2_last_time
                                  ->  Seq Scan on _hyper_4_24_chunk_compressed (never executed)
 
 -- test query with ORDER BY date_trunc, device_id
@@ -4347,48 +4517,57 @@ ORDER BY time;
                          Order: metrics_space_compressed_1."time" DESC
                          ->  Merge Append (actual rows=1.00 loops=1)
                                Sort Key: metrics_space_compressed_1."time" DESC
-                               ->  Sort (actual rows=1.00 loops=1)
-                                     Sort Key: _hyper_4_24_chunk_1."time" DESC
-                                     Sort Method: top-N heapsort 
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk _hyper_4_24_chunk_1 (actual rows=30228.00 loops=1)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_24_chunk _hyper_4_24_chunk_1 (actual rows=1.00 loops=1)
+                                     Metadata Only: true
+                                     ->  Sort (actual rows=1.00 loops=1)
+                                           Sort Key: _hyper_4_24_chunk_compressed_1._ts_meta_v2_first_time DESC
+                                           Sort Method: quicksort 
                                            ->  Seq Scan on _hyper_4_24_chunk_compressed _hyper_4_24_chunk_compressed_1 (actual rows=36.00 loops=1)
-                               ->  Sort (actual rows=1.00 loops=1)
-                                     Sort Key: _hyper_4_23_chunk_1."time" DESC
-                                     Sort Method: top-N heapsort 
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk _hyper_4_23_chunk_1 (actual rows=40304.00 loops=1)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_23_chunk _hyper_4_23_chunk_1 (actual rows=1.00 loops=1)
+                                     Metadata Only: true
+                                     ->  Sort (actual rows=1.00 loops=1)
+                                           Sort Key: _hyper_4_23_chunk_compressed_1._ts_meta_v2_first_time DESC
+                                           Sort Method: quicksort 
                                            ->  Seq Scan on _hyper_4_23_chunk_compressed _hyper_4_23_chunk_compressed_1 (actual rows=48.00 loops=1)
-                               ->  Sort (actual rows=1.00 loops=1)
-                                     Sort Key: _hyper_4_22_chunk_1."time" DESC
-                                     Sort Method: top-N heapsort 
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk _hyper_4_22_chunk_1 (actual rows=30228.00 loops=1)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_22_chunk _hyper_4_22_chunk_1 (actual rows=1.00 loops=1)
+                                     Metadata Only: true
+                                     ->  Sort (actual rows=1.00 loops=1)
+                                           Sort Key: _hyper_4_22_chunk_compressed_1._ts_meta_v2_first_time DESC
+                                           Sort Method: quicksort 
                                            ->  Seq Scan on _hyper_4_22_chunk_compressed _hyper_4_22_chunk_compressed_1 (actual rows=36.00 loops=1)
                          ->  Merge Append (never executed)
                                Sort Key: metrics_space_compressed_1."time" DESC
-                               ->  Sort (never executed)
-                                     Sort Key: _hyper_4_21_chunk_1."time" DESC
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk _hyper_4_21_chunk_1 (never executed)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_21_chunk _hyper_4_21_chunk_1 (never executed)
+                                     Metadata Only: true
+                                     ->  Sort (never executed)
+                                           Sort Key: _hyper_4_21_chunk_compressed_1._ts_meta_v2_first_time DESC
                                            ->  Seq Scan on _hyper_4_21_chunk_compressed _hyper_4_21_chunk_compressed_1 (never executed)
-                               ->  Sort (never executed)
-                                     Sort Key: _hyper_4_20_chunk_1."time" DESC
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk _hyper_4_20_chunk_1 (never executed)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_20_chunk _hyper_4_20_chunk_1 (never executed)
+                                     Metadata Only: true
+                                     ->  Sort (never executed)
+                                           Sort Key: _hyper_4_20_chunk_compressed_1._ts_meta_v2_first_time DESC
                                            ->  Seq Scan on _hyper_4_20_chunk_compressed _hyper_4_20_chunk_compressed_1 (never executed)
-                               ->  Sort (never executed)
-                                     Sort Key: _hyper_4_19_chunk_1."time" DESC
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk _hyper_4_19_chunk_1 (never executed)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_19_chunk _hyper_4_19_chunk_1 (never executed)
+                                     Metadata Only: true
+                                     ->  Sort (never executed)
+                                           Sort Key: _hyper_4_19_chunk_compressed_1._ts_meta_v2_first_time DESC
                                            ->  Seq Scan on _hyper_4_19_chunk_compressed _hyper_4_19_chunk_compressed_1 (never executed)
                          ->  Merge Append (never executed)
                                Sort Key: metrics_space_compressed_1."time" DESC
-                               ->  Sort (never executed)
-                                     Sort Key: _hyper_4_18_chunk_1."time" DESC
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk _hyper_4_18_chunk_1 (never executed)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_18_chunk _hyper_4_18_chunk_1 (never executed)
+                                     Metadata Only: true
+                                     ->  Sort (never executed)
+                                           Sort Key: _hyper_4_18_chunk_compressed_1._ts_meta_v2_first_time DESC
                                            ->  Seq Scan on _hyper_4_18_chunk_compressed _hyper_4_18_chunk_compressed_1 (never executed)
-                               ->  Sort (never executed)
-                                     Sort Key: _hyper_4_17_chunk_1."time" DESC
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk _hyper_4_17_chunk_1 (never executed)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_17_chunk _hyper_4_17_chunk_1 (never executed)
+                                     Metadata Only: true
+                                     ->  Sort (never executed)
+                                           Sort Key: _hyper_4_17_chunk_compressed_1._ts_meta_v2_first_time DESC
                                            ->  Seq Scan on _hyper_4_17_chunk_compressed _hyper_4_17_chunk_compressed_1 (never executed)
-                               ->  Sort (never executed)
-                                     Sort Key: _hyper_4_16_chunk_1."time" DESC
-                                     ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk _hyper_4_16_chunk_1 (never executed)
+                               ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk _hyper_4_16_chunk_1 (never executed)
+                                     Metadata Only: true
+                                     ->  Sort (never executed)
+                                           Sort Key: _hyper_4_16_chunk_compressed_1._ts_meta_v2_first_time DESC
                                            ->  Seq Scan on _hyper_4_16_chunk_compressed _hyper_4_16_chunk_compressed_1 (never executed)
    ->  Merge Append (never executed)
          ->  Custom Scan (ColumnarScan) on _hyper_4_16_chunk (never executed)

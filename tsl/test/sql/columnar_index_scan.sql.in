@@ -362,3 +362,89 @@ RESET enable_bitmapscan;
 RESET enable_hashagg;
 
 DROP TABLE agg_rescan;
+
+-- ORDER BY ... LIMIT 1 is answered from the first row of each batch
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET max_parallel_workers_per_gather = 0;
+SET timescaledb.enable_deferred_chunk_append = off;
+
+CREATE TABLE limit_one(time timestamptz NOT NULL, device int NOT NULL, ts2 timestamptz, val float, val2 float)
+ WITH (tsdb.hypertable,tsdb.orderby='time,ts2',tsdb.segmentby='device',tsdb.index='firstlast(val2)',tsdb.chunk_interval='1 day');
+INSERT INTO limit_one SELECT '2000-01-01'::timestamptz + i * interval '1 minute', d, '2000-01-01'::timestamptz - i * interval '1 minute', i, i
+FROM generate_series(1, 2500) i, generate_series(1, 3) d;
+SELECT count(compress_chunk(ch)) FROM show_chunks('limit_one') ch;
+
+-- orderby columns with min/max metadata only, with and without NULLs
+CREATE TABLE limit_one_minmax(time timestamptz NOT NULL, device int NOT NULL)
+ WITH (tsdb.hypertable,tsdb.partition_column='device',tsdb.orderby='time',tsdb.segmentby='device');
+CREATE TABLE limit_one_minmax_null(time timestamptz, device int NOT NULL)
+ WITH (tsdb.hypertable,tsdb.partition_column='device',tsdb.orderby='time',tsdb.segmentby='device');
+CREATE TABLE limit_one_null(time timestamptz, device int NOT NULL)
+ WITH (tsdb.hypertable,tsdb.partition_column='device',tsdb.orderby='time',tsdb.segmentby='device');
+INSERT INTO limit_one_minmax SELECT '2000-01-01'::timestamptz + i * interval '1 minute', 1 FROM generate_series(1, 10) i;
+INSERT INTO limit_one_minmax_null SELECT * FROM limit_one_minmax UNION ALL SELECT NULL, 1;
+INSERT INTO limit_one_null SELECT * FROM limit_one_minmax_null;
+SELECT count(compress_chunk(ch)) FROM show_chunks('limit_one_minmax') ch;
+SELECT count(compress_chunk(ch)) FROM show_chunks('limit_one_minmax_null') ch;
+SELECT count(compress_chunk(ch)) FROM show_chunks('limit_one_null') ch;
+UPDATE _timescaledb_catalog.compression_settings SET index = '[{"type": "minmax", "column": "time", "source": "orderby"}]'
+WHERE relid IN (SELECT show_chunks('limit_one_minmax') UNION ALL SELECT show_chunks('limit_one_minmax_null'));
+SELECT format('ALTER TABLE %s DROP COLUMN _ts_meta_v2_first_time, DROP COLUMN _ts_meta_v2_last_time', compress_relid::regclass)
+FROM _timescaledb_catalog.compression_settings
+WHERE relid IN (SELECT show_chunks('limit_one_minmax') UNION ALL SELECT show_chunks('limit_one_minmax_null')) \gexec
+ANALYZE limit_one, limit_one_minmax, limit_one_minmax_null, limit_one_null;
+
+SET timescaledb.enable_columnarscan_metadata_only = on;
+EXPLAIN (costs off) SELECT time, device FROM limit_one ORDER BY time LIMIT 1;
+SELECT time, device FROM limit_one ORDER BY time LIMIT 1;
+EXPLAIN (costs off) SELECT time, device FROM limit_one ORDER BY time DESC LIMIT 1;
+SELECT time, device FROM limit_one ORDER BY time DESC LIMIT 1;
+EXPLAIN (costs off) SELECT device, time, ts2 FROM limit_one ORDER BY device DESC, time DESC, ts2 DESC LIMIT 1;
+SELECT device, time, ts2 FROM limit_one ORDER BY device DESC, time DESC, ts2 DESC LIMIT 1;
+EXPLAIN (costs off) SELECT tableoid::regclass, time FROM limit_one WHERE device = 2 ORDER BY time LIMIT 1;
+SELECT tableoid::regclass, time FROM limit_one WHERE device = 2 ORDER BY time LIMIT 1;
+EXPLAIN (costs off) SELECT time, val2 FROM limit_one ORDER BY time DESC LIMIT 1;
+SELECT time, val2 FROM limit_one ORDER BY time DESC LIMIT 1;
+EXPLAIN (costs off) SELECT time FROM limit_one_minmax ORDER BY time LIMIT 1;
+SELECT time FROM limit_one_minmax ORDER BY time LIMIT 1;
+EXPLAIN (costs off) SELECT time FROM limit_one_minmax ORDER BY time DESC LIMIT 1;
+SELECT time FROM limit_one_minmax ORDER BY time DESC LIMIT 1;
+EXPLAIN (costs off) SELECT time FROM limit_one_null ORDER BY time DESC LIMIT 1;
+SELECT time FROM limit_one_null ORDER BY time DESC LIMIT 1;
+
+-- needs decompression
+EXPLAIN (costs off) SELECT time, val FROM limit_one ORDER BY time LIMIT 1;
+EXPLAIN (costs off) SELECT time FROM limit_one ORDER BY time LIMIT 2;
+EXPLAIN (costs off) SELECT time FROM limit_one ORDER BY time LIMIT 1 OFFSET 1;
+EXPLAIN (costs off) SELECT time FROM limit_one WHERE val > 1000 ORDER BY time LIMIT 1;
+EXPLAIN (costs off) SELECT l1.time FROM limit_one l1, limit_one l2 WHERE l1.time = l2.ts2 ORDER BY l1.time LIMIT 1;
+EXPLAIN (costs off) SELECT time FROM limit_one_minmax_null ORDER BY time DESC LIMIT 1;
+SELECT time FROM limit_one_minmax_null ORDER BY time DESC LIMIT 1;
+
+-- without ORDER BY any row will do
+EXPLAIN (costs off) SELECT time, device FROM limit_one LIMIT 1;
+SELECT time, device FROM limit_one LIMIT 1;
+EXPLAIN (costs off) SELECT 1 FROM limit_one WHERE device = 3 LIMIT 1;
+SELECT 1 FROM limit_one WHERE device = 3 LIMIT 1;
+EXPLAIN (costs off) SELECT time FROM limit_one_minmax_null LIMIT 1;
+SELECT time FROM limit_one_minmax_null LIMIT 1;
+EXPLAIN (costs off) SELECT val FROM limit_one LIMIT 1;
+
+-- results match the decompressed scan
+SET timescaledb.enable_columnarscan_metadata_only = off;
+SELECT time, device FROM limit_one ORDER BY time LIMIT 1;
+SELECT time, device FROM limit_one ORDER BY time DESC LIMIT 1;
+SELECT device, time, ts2 FROM limit_one ORDER BY device DESC, time DESC, ts2 DESC LIMIT 1;
+SELECT tableoid::regclass, time FROM limit_one WHERE device = 2 ORDER BY time LIMIT 1;
+SELECT time, val2 FROM limit_one ORDER BY time DESC LIMIT 1;
+SELECT time FROM limit_one_minmax ORDER BY time LIMIT 1;
+SELECT time FROM limit_one_minmax ORDER BY time DESC LIMIT 1;
+SELECT time FROM limit_one_null ORDER BY time DESC LIMIT 1;
+SELECT time, device FROM limit_one LIMIT 1;
+SELECT 1 FROM limit_one WHERE device = 3 LIMIT 1;
+RESET timescaledb.enable_columnarscan_metadata_only;
+
+DROP TABLE limit_one;
+DROP TABLE limit_one_minmax;
+DROP TABLE limit_one_minmax_null;
+DROP TABLE limit_one_null;
