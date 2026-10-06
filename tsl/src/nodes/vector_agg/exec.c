@@ -1469,7 +1469,6 @@ compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, Tup
 					.vectorized_quals_constified = quals,
 					.num_results = batch_state->total_batch_rows,
 					.per_vector_mcxt = batch_state->per_batch_context,
-					.slot = slot,
 					.get_arrow_array = compressed_batch_get_arrow_array,
 				},
 				.batch_state = batch_state,
