@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Test default segmentby gets set for direct compress
 BEGIN;

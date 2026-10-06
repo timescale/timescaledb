@@ -1,0 +1,92 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- need superuser for copy from program
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.orderby='time');
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = false;
+SET timescaledb.enable_direct_compress_copy_sort_batches = false;
+-- simple test with compressed copy enabled and without batch sorting
+BEGIN;
+COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+--- QUERY PLAN ---
+ Append (actual rows=3000.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=959.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2041.00 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk_compressed (actual rows=3.00 loops=1)
+
+SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
+            first             |             last             
+------------------------------+------------------------------
+ Wed Jan 01 00:01:00 2025 PST | Fri Jan 03 02:00:00 2025 PST
+
+ROLLBACK;
+-- simple test with compressed copy enabled and reversed order and no batch sorting
+BEGIN;
+COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=3000.00 loops=1)
+   ->  Seq Scan on _hyper_1_3_chunk_compressed (actual rows=3.00 loops=1)
+
+SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
+            first             |             last             
+------------------------------+------------------------------
+ Tue Dec 31 23:59:00 2024 PST | Sun Dec 29 22:00:00 2024 PST
+
+ROLLBACK;
+RESET timescaledb.enable_direct_compress_copy;
+RESET timescaledb.enable_direct_compress_copy_sort_batches;
+RESET timescaledb.enable_direct_compress_copy_client_sorted;
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = false;
+SET timescaledb.enable_direct_compress_insert_sort_batches = false;
+-- simple test with compressed insert enabled and without batch sorting
+BEGIN;
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+--- QUERY PLAN ---
+ Append (actual rows=3001.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk (actual rows=960.00 loops=1)
+         ->  Seq Scan on _hyper_1_4_chunk_compressed (actual rows=1.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk (actual rows=2041.00 loops=1)
+         ->  Seq Scan on _hyper_1_5_chunk_compressed (actual rows=3.00 loops=1)
+
+SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
+            first             |             last             
+------------------------------+------------------------------
+ Wed Jan 01 00:00:00 2025 PST | Fri Jan 03 02:00:00 2025 PST
+
+-- since the chunks are new status should be COMPRESSED, UNORDERED
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
+   chunk_status_text    
+------------------------
+ {COMPRESSED,UNORDERED}
+
+ROLLBACK;
+-- simple test with compressed insert enabled and reversed order and no batch sorting
+BEGIN;
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_6_chunk (actual rows=3001.00 loops=1)
+   ->  Seq Scan on _hyper_1_6_chunk_compressed (actual rows=4.00 loops=1)
+
+SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
+            first             |             last             
+------------------------------+------------------------------
+ Wed Jan 01 00:00:00 2025 PST | Sun Dec 29 22:00:00 2024 PST
+
+-- since the chunks are new status should be COMPRESSED, UNORDERED
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
+   chunk_status_text    
+------------------------
+ {COMPRESSED,UNORDERED}
+
+ROLLBACK;
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.enable_direct_compress_insert_sort_batches;
+RESET timescaledb.enable_direct_compress_insert_client_sorted;

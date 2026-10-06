@@ -15,7 +15,6 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 
 ROLLBACK;
 SET timescaledb.enable_direct_compress_copy = true;
-SET timescaledb.enable_direct_compress_copy_sort_batches = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = false;
 -- simple test with compressed copy enabled
 BEGIN;
@@ -48,41 +47,8 @@ SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, ti
  Sun Dec 29 22:00:00 2024 PST | Tue Dec 31 23:59:00 2024 PST
 
 ROLLBACK;
-SET timescaledb.enable_direct_compress_copy_sort_batches = false;
--- simple test with compressed copy enabled and without batch sorting
-BEGIN;
-COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
---- QUERY PLAN ---
- Append (actual rows=3000.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_6_chunk (actual rows=959.00 loops=1)
-         ->  Seq Scan on _hyper_1_6_chunk_compressed (actual rows=1.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_7_chunk (actual rows=2041.00 loops=1)
-         ->  Seq Scan on _hyper_1_7_chunk_compressed (actual rows=3.00 loops=1)
-
-SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
-            first             |             last             
-------------------------------+------------------------------
- Wed Jan 01 00:01:00 2025 PST | Fri Jan 03 02:00:00 2025 PST
-
-ROLLBACK;
--- simple test with compressed copy enabled and reversed order and no batch sorting
-BEGIN;
-COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
---- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_1_8_chunk (actual rows=3000.00 loops=1)
-   ->  Seq Scan on _hyper_1_8_chunk_compressed (actual rows=3.00 loops=1)
-
-SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
-            first             |             last             
-------------------------------+------------------------------
- Tue Dec 31 23:59:00 2024 PST | Sun Dec 29 22:00:00 2024 PST
-
-ROLLBACK;
 -- test compressing into uncompressed chunk
 RESET timescaledb.enable_direct_compress_copy;
-RESET timescaledb.enable_direct_compress_copy_sort_batches;
 RESET timescaledb.enable_direct_compress_copy_client_sorted;
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
@@ -92,12 +58,12 @@ COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
  Append (actual rows=6000.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_9_chunk (actual rows=959.00 loops=1)
-         ->  Seq Scan on _hyper_1_9_chunk_compressed (actual rows=1.00 loops=1)
-   ->  Seq Scan on _hyper_1_9_chunk (actual rows=959.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_10_chunk (actual rows=2041.00 loops=1)
-         ->  Seq Scan on _hyper_1_10_chunk_compressed (actual rows=3.00 loops=1)
-   ->  Seq Scan on _hyper_1_10_chunk (actual rows=2041.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_6_chunk (actual rows=959.00 loops=1)
+         ->  Seq Scan on _hyper_1_6_chunk_compressed (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_6_chunk (actual rows=959.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_7_chunk (actual rows=2041.00 loops=1)
+         ->  Seq Scan on _hyper_1_7_chunk_compressed (actual rows=3.00 loops=1)
+   ->  Seq Scan on _hyper_1_7_chunk (actual rows=2041.00 loops=1)
 
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
  status 
@@ -112,8 +78,8 @@ SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_1_11_chunk (actual rows=3000.00 loops=1)
-   ->  Seq Scan on _hyper_1_11_chunk_compressed (actual rows=3.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_1_8_chunk (actual rows=3000.00 loops=1)
+   ->  Seq Scan on _hyper_1_8_chunk_compressed (actual rows=3.00 loops=1)
 
 -- status should be 9
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
@@ -129,8 +95,8 @@ SET timescaledb.enable_direct_compress_copy_client_sorted = false;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_1_12_chunk (actual rows=3000.00 loops=1)
-   ->  Seq Scan on _hyper_1_12_chunk_compressed (actual rows=3.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_1_9_chunk (actual rows=3000.00 loops=1)
+   ->  Seq Scan on _hyper_1_9_chunk_compressed (actual rows=3.00 loops=1)
 
 -- status should be 11
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
@@ -148,8 +114,8 @@ SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 0 0.2 9.8 | sed -e ''s!.[0-9]$!!'' | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,dI,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_1_13_chunk (actual rows=50.00 loops=1)
-   ->  Seq Scan on _hyper_1_13_chunk_compressed (actual rows=10.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_1_10_chunk (actual rows=50.00 loops=1)
+   ->  Seq Scan on _hyper_1_10_chunk_compressed (actual rows=10.00 loops=1)
 
 SELECT compress_relid::text AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL \gset
 -- should have 10 batches
@@ -167,7 +133,7 @@ COPY metrics FROM STDIN WITH (FORMAT CSV);
 WARNING:  disabling direct compress because the destination table has unique constraints
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
- Seq Scan on _hyper_1_14_chunk (actual rows=1.00 loops=1)
+ Seq Scan on _hyper_1_11_chunk (actual rows=1.00 loops=1)
 
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
  status 
@@ -183,7 +149,7 @@ COPY metrics FROM STDIN WITH (FORMAT CSV);
 WARNING:  disabling direct compress copy due to presence of triggers on the destination table
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
- Seq Scan on _hyper_1_15_chunk (actual rows=1.00 loops=1)
+ Seq Scan on _hyper_1_12_chunk (actual rows=1.00 loops=1)
 
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
  status 
@@ -197,8 +163,8 @@ CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_buck
 COPY metrics FROM STDIN WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_1_16_chunk (actual rows=1.00 loops=1)
-   ->  Seq Scan on _hyper_1_16_chunk_compressed (actual rows=1.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_1_13_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_13_chunk_compressed (actual rows=1.00 loops=1)
 
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE relid IN (SELECT relid FROM _timescaledb_catalog.compression_settings WHERE compress_relid IS NOT NULL);
  status 
@@ -271,7 +237,7 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
 SELECT compress_chunk(show_chunks('metrics_status'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_3_20_chunk
+ _timescaledb_internal._hyper_3_17_chunk
 
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
  chunk_status_text 
@@ -333,8 +299,8 @@ SET timescaledb.direct_compress_copy_tuple_sort_limit = 1000;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-02 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_1_21_chunk (actual rows=3000.00 loops=1)
-   ->  Seq Scan on _hyper_1_21_chunk_compressed (actual rows=3.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_1_18_chunk (actual rows=3000.00 loops=1)
+   ->  Seq Scan on _hyper_1_18_chunk_compressed (actual rows=3.00 loops=1)
 
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
             first             |             last             
@@ -349,10 +315,10 @@ SET timescaledb.enable_direct_compress_copy = true;
 \set ON_ERROR_STOP 0
 -- CHECK violation should be reported
 COPY metrics_check FROM STDIN WITH (FORMAT CSV);
-ERROR:  new row for relation "_hyper_4_22_chunk" violates check constraint "metrics_check_value_check"
+ERROR:  new row for relation "_hyper_4_19_chunk" violates check constraint "metrics_check_value_check"
 -- NOT NULL violation should be reported
 COPY metrics_check FROM STDIN WITH (FORMAT CSV);
-ERROR:  null value in column "value" of relation "_hyper_4_23_chunk" violates not-null constraint
+ERROR:  null value in column "value" of relation "_hyper_4_20_chunk" violates not-null constraint
 \set ON_ERROR_STOP 1
 -- valid rows copy without error
 COPY metrics_check FROM STDIN WITH (FORMAT CSV);

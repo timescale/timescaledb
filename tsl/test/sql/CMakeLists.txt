@@ -126,6 +126,9 @@ endif()
 
 if(NOT APPLE)
   list(APPEND TEST_FILES direct_compress_copy.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES direct_compress_debug.sql)
+  endif()
 endif()
 
 list(

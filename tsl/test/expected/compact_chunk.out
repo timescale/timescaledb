@@ -7,7 +7,6 @@
 CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- compact_chunk with no overlapping batches (no-op case)
 -- Insert 3000 ordered rows: Jan 2 00:00 to Jan 4 02:00 PST.
@@ -197,7 +196,6 @@ CREATE TABLE metrics_seg (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
 WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.segmentby='device');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert 2000 rows for each of two devices: non-overlapping within each segment
 INSERT INTO metrics_seg
@@ -404,7 +402,6 @@ CREATE TABLE metrics_desc (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
 WITH (tsdb.hypertable, tsdb.orderby='time DESC', tsdb.segmentby='device');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert non-overlapping data for two devices
 INSERT INTO metrics_desc
@@ -534,7 +531,6 @@ CREATE TABLE metrics_multi (time TIMESTAMPTZ NOT NULL, device TEXT NOT NULL, val
 WITH (tsdb.hypertable, tsdb.orderby='device,time');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert 3 batches with different devices creating boundary ties on col1:
 -- Batch 1 (500 rows): device d1..d2, time [00:01..08:20]
@@ -628,7 +624,6 @@ CREATE TABLE metrics_multi_desc (time TIMESTAMPTZ NOT NULL, device TEXT NOT NULL
 WITH (tsdb.hypertable, tsdb.orderby='device,time DESC');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert 2 batches with multiple devices, DESC time ordering:
 -- Batch 1 (500 rows): device d2..d3, time [08:21..16:40] DESC
@@ -721,7 +716,6 @@ CREATE TABLE metrics_combined (time TIMESTAMPTZ NOT NULL, device TEXT, value flo
 WITH (tsdb.hypertable, tsdb.orderby='time,value', tsdb.segmentby='device');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert non-null data for two segments: 1000 rows each, non-overlapping
 INSERT INTO metrics_combined
@@ -875,7 +869,6 @@ CREATE TABLE metrics_nulls_last (time TIMESTAMPTZ NOT NULL, device TEXT, value f
 WITH (tsdb.hypertable, tsdb.orderby='value,time', tsdb.segmentby='device');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert non-null data for two segments
 INSERT INTO metrics_nulls_last
@@ -1018,7 +1011,6 @@ CREATE TABLE metrics_nulls_first (time TIMESTAMPTZ NOT NULL, device TEXT, value 
 WITH (tsdb.hypertable, tsdb.orderby='value NULLS FIRST,time', tsdb.segmentby='device');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert non-null data for two segments
 INSERT INTO metrics_nulls_first
@@ -1159,7 +1151,6 @@ CREATE TABLE metrics_mixed_nulls (time TIMESTAMPTZ NOT NULL, device TEXT, value 
 WITH (tsdb.hypertable, tsdb.orderby='value,time', tsdb.segmentby='device');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert 1800 non-null rows + 200 NULL rows for device 'd1'.
 -- DCI sorts by (value NULLS LAST, time), producing:
@@ -1255,7 +1246,6 @@ CREATE TABLE metrics_secondary_null (time TIMESTAMPTZ NOT NULL, device TEXT, val
 WITH (tsdb.hypertable, tsdb.orderby='time,value', tsdb.segmentby='device');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert batch 1 (500 rows): time [00:01..08:20], with NULL value at the
 -- last timestamp (i=500, time=08:20). With orderby='time,value NULLS LAST',
@@ -1342,7 +1332,6 @@ CREATE TABLE metrics_secondary_null_first (time TIMESTAMPTZ NOT NULL, device TEX
 WITH (tsdb.hypertable, tsdb.orderby='time,value NULLS FIRST', tsdb.segmentby='device');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Insert batch 1 (500 rows): time [00:01..08:20], all non-null values.
 INSERT INTO metrics_secondary_null_first
@@ -1427,7 +1416,6 @@ CREATE TABLE metrics_no_firstlast (time TIMESTAMPTZ NOT NULL, device TEXT, value
 WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.index='minmax(time)');
 NOTICE:  using column "time" as partitioning column
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Two inserts over the same time range (one chunk), leaving the chunk UNORDERED.
 INSERT INTO metrics_no_firstlast
@@ -1784,7 +1772,6 @@ DROP TABLE metrics_rm_seg;
 -- Compaction is maintenance, not user activity, so it must leave the chunk's
 -- operation statistics alone.
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 CREATE TABLE metrics_stats (time TIMESTAMPTZ NOT NULL, value float)
   WITH (tsdb.hypertable, tsdb.orderby='time', tsdb.chunk_interval='1 year');
