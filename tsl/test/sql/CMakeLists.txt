@@ -106,6 +106,7 @@ set(TEST_TEMPLATES
     cagg_watermark.sql.in
     columnar_index_scan.sql.in
     columnar_scan_cost.sql.in
+    columnar_scan_metadata_only.sql.in
     compress_sort_transform.sql.in
     compress_bloom_sparse.sql.in
     compress_observ.sql.in

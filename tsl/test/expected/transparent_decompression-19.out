@@ -7312,18 +7312,18 @@ PREPARE tableoid_prep AS SELECT tableoid::regclass FROM :TEST_TABLE WHERE device
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
                Order: metrics."time"
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: _hyper_1_1_chunk."time"
-                     Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=720.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                     ->  Sort (actual rows=1.00 loops=1)
+                           Sort Key: _hyper_1_1_chunk_compressed._ts_meta_min_3
+                           Sort Method: quicksort 
                            ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=1.00 loops=1)
                                  Filter: (device_id = 1)
                                  Rows Removed by Filter: 4
                ->  Index Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                      Filter: (device_id = 1)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_3_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_1_3_chunk_compressed._ts_meta_min_3
                            ->  Seq Scan on _hyper_1_3_chunk_compressed (never executed)
                                  Filter: (device_id = 1)
 

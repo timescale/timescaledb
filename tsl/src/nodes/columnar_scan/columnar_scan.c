@@ -91,6 +91,7 @@ static SortInfo build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo
 
 static Bitmapset *find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info);
 static Var *extract_valid_column_from_em(EquivalenceMember *em);
+static bool is_var_notnull(const CompressionInfo *compression_info, Var *var);
 
 static EquivalenceClass *
 append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortInfo *sort_info,
@@ -1524,6 +1525,304 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 }
 
 /*
+ * Check that the query reads only the first row of the scan, so that
+ * producing just the first row of each batch gives a valid result.
+ */
+static bool
+metadata_only_query_supported(PlannerInfo *root)
+{
+	Query *query = root->parse;
+
+	if (!ts_guc_enable_optimizations || !ts_guc_enable_columnarscan_metadata_only ||
+		root->limit_tuples != 1.0)
+	{
+		return false;
+	}
+
+	/* Most of these are already implied by limit_tuples, but check them explicitly. */
+	if (query->commandType != CMD_SELECT || query->limitCount == NULL ||
+		query->limitOffset != NULL || query->limitOption != LIMIT_OPTION_COUNT || query->hasAggs ||
+		query->groupClause || query->groupingSets || query->hasWindowFuncs ||
+		query->distinctClause || query->setOperations || query->havingQual ||
+		query->hasModifyingCTE || query->rowMarks || query->hasTargetSRFs)
+	{
+		return false;
+	}
+
+	/* limit_tuples is also set for stable LIMIT expressions that can change at execution. */
+	Const *limit = (Const *) query->limitCount;
+	if (!IsA(limit, Const) || limit->constisnull || DatumGetInt64(limit->constvalue) != 1)
+	{
+		return false;
+	}
+
+	/* A join could discard the first row and ask for the next one. */
+	return bms_membership(root->all_baserels) == BMS_SINGLETON;
+}
+
+typedef enum MetadataOnlySource
+{
+	METADATA_ONLY_SEGMENTBY,
+	METADATA_ONLY_FIRSTLAST,
+	METADATA_ONLY_MINMAX,
+} MetadataOnlySource;
+
+/*
+ * Find the compressed column holding the value of a chunk column in the
+ * first output row of a batch.
+ */
+static AttrNumber
+metadata_only_compressed_attno(const CompressionInfo *info, AttrNumber chunk_attno, bool reverse,
+							   MetadataOnlySource *source)
+{
+	Oid chunk_relid = info->chunk_rte->relid;
+	Oid compressed_relid = info->compressed_rte->relid;
+	char *column_name = get_attname(chunk_relid, chunk_attno, false);
+
+	if (ts_array_is_member(info->settings->fd.segmentby, column_name))
+	{
+		*source = METADATA_ONLY_SEGMENTBY;
+		return get_attnum(compressed_relid, column_name);
+	}
+
+	AttrNumber attno = compressed_column_metadata_attno(info->settings,
+														chunk_relid,
+														chunk_attno,
+														compressed_relid,
+														reverse ? "last" : "first");
+	if (attno != InvalidAttrNumber)
+	{
+		*source = METADATA_ONLY_FIRSTLAST;
+		return attno;
+	}
+
+	/*
+	 * Min/max holds the first or last row's value only for the leading NOT
+	 * NULL orderby column.
+	 */
+	Var var = { .xpr.type = T_Var, .varno = info->chunk_rel->relid, .varattno = chunk_attno };
+	if (ts_array_position(info->settings->fd.orderby, column_name) != 1 ||
+		!is_var_notnull(info, &var))
+	{
+		return InvalidAttrNumber;
+	}
+
+	bool desc = ts_array_get_element_bool(info->settings->fd.orderby_desc, 1);
+	*source = METADATA_ONLY_MINMAX;
+	return compressed_column_metadata_attno(info->settings,
+											chunk_relid,
+											chunk_attno,
+											compressed_relid,
+											desc != reverse ? "max" : "min");
+}
+
+/*
+ * Find a single NOT NULL ORDER BY column with min or max metadata. The top
+ * value of each batch is a value of the column in that batch, so sorting the
+ * batches on it puts the first row first.
+ */
+static EquivalenceMember *
+metadata_only_minmax_member(PlannerInfo *root, const CompressionInfo *info,
+							AttrNumber *compressed_attno)
+{
+	if (list_length(root->query_pathkeys) != 1)
+	{
+		return NULL;
+	}
+
+	PathKey *pk = linitial_node(PathKey, root->query_pathkeys);
+	if (pk->pk_eclass->ec_has_volatile)
+	{
+		return NULL;
+	}
+
+	ListCell *lc;
+	foreach (lc, ts_find_ems_for_rel(pk->pk_eclass, info->chunk_rel))
+	{
+		EquivalenceMember *em = lfirst_node(EquivalenceMember, lc);
+		if (!IsA(em->em_expr, Var))
+		{
+			continue;
+		}
+
+		Var *var = castNode(Var, em->em_expr);
+		if (var->varattno <= 0 || var->varcollid != pk->pk_eclass->ec_collation ||
+			pk->pk_opfamily !=
+				lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY)->btree_opf ||
+			!is_var_notnull(info, var))
+		{
+			continue;
+		}
+
+		AttrNumber attno =
+			compressed_column_metadata_attno(info->settings,
+											 info->chunk_rte->relid,
+											 var->varattno,
+											 info->compressed_rte->relid,
+											 pk->pk_cmptype == COMPARE_GT ? "max" : "min");
+		if (attno == InvalidAttrNumber)
+		{
+			continue;
+		}
+
+		*compressed_attno = attno;
+		return em;
+	}
+
+	return NULL;
+}
+
+/* Build the compressed pathkey on the min or max metadata column. */
+static PathKey *
+metadata_only_minmax_pathkey(PlannerInfo *root, const CompressionInfo *info,
+							 const EquivalenceMember *em, AttrNumber compressed_attno)
+{
+	PathKey *pk = linitial_node(PathKey, root->query_pathkeys);
+	Var *var = castNode(Var, em->em_expr);
+	Var *metadata_var = makeVar(info->compressed_rel->relid,
+								compressed_attno,
+								var->vartype,
+								var->vartypmod,
+								var->varcollid,
+								0);
+	EquivalenceClass *ec =
+		append_ec_for_metadata_col(root, info, (Expr *) metadata_var, pk, em->em_datatype);
+
+	return make_canonical_pathkey(root, ec, pk->pk_opfamily, pk->pk_cmptype, pk->pk_nulls_first);
+}
+
+/*
+ * Create a path that outputs only the first row of each batch, built from
+ * segmentby columns and sparse index metadata without decompression. The
+ * output is a subset of the chunk rows that starts with the first row in the
+ * requested order, if any, so it is only usable for LIMIT 1 queries.
+ */
+static Path *
+columnar_scan_metadata_only_path_create(PlannerInfo *root, const CompressionInfo *info,
+										Path *compressed_path, const SortInfo *sort_info,
+										bool all_quals_pushed_down)
+{
+	if (!metadata_only_query_supported(root))
+	{
+		return NULL;
+	}
+
+	if (info->chunk_rel->baserestrictinfo != NIL && !all_quals_pushed_down)
+	{
+		return NULL;
+	}
+
+	if (compressed_path->parallel_workers > 0 || !bms_is_empty(PATH_REQ_OUTER(compressed_path)))
+	{
+		return NULL;
+	}
+
+	/*
+	 * An ORDER BY must be fully satisfied by the order of the batches, or by
+	 * sorting them on the min/max metadata of the ORDER BY column.
+	 */
+	const bool ordered = root->query_pathkeys != NIL;
+	EquivalenceMember *minmax_em = NULL;
+	AttrNumber minmax_chunk_attno = InvalidAttrNumber;
+	AttrNumber minmax_compressed_attno = InvalidAttrNumber;
+	if (ordered && !sort_info->use_compressed_sort && !sort_info->use_batch_sorted_merge)
+	{
+		minmax_em = metadata_only_minmax_member(root, info, &minmax_compressed_attno);
+		if (minmax_em == NULL)
+		{
+			return NULL;
+		}
+		minmax_chunk_attno = castNode(Var, minmax_em->em_expr)->varattno;
+	}
+	const bool reverse = ordered && sort_info->reverse;
+
+	Bitmapset *attrs_needed = NULL;
+	pull_varattnos((Node *) info->chunk_rel->reltarget->exprs,
+				   info->chunk_rel->relid,
+				   &attrs_needed);
+
+	List *metadata_output_map = NIL;
+	bool has_minmax = false;
+	bool has_firstlast = false;
+	int bit = -1;
+	while ((bit = bms_next_member(attrs_needed, bit)) >= 0)
+	{
+		AttrNumber chunk_attno = bit + FirstLowInvalidHeapAttributeNumber;
+		if (chunk_attno == TableOidAttributeNumber)
+		{
+			continue;
+		}
+
+		if (chunk_attno <= 0)
+		{
+			return NULL;
+		}
+
+		MetadataOnlySource source = METADATA_ONLY_MINMAX;
+		AttrNumber compressed_attno = minmax_compressed_attno;
+		if (chunk_attno != minmax_chunk_attno)
+		{
+			compressed_attno = metadata_only_compressed_attno(info, chunk_attno, reverse, &source);
+			/* Sorted on min/max, other columns must be constant within a batch. */
+			if (compressed_attno == InvalidAttrNumber ||
+				(minmax_em != NULL && source != METADATA_ONLY_SEGMENTBY))
+			{
+				return NULL;
+			}
+		}
+		has_minmax |= source == METADATA_ONLY_MINMAX;
+		has_firstlast |= source == METADATA_ONLY_FIRSTLAST;
+
+		metadata_output_map = lappend_int(metadata_output_map, chunk_attno);
+		metadata_output_map = lappend_int(metadata_output_map, compressed_attno);
+	}
+
+	/*
+	 * In reverse, min/max holds the first of equal values rather than the
+	 * last row's, so it must not be combined with last row values.
+	 */
+	if (reverse && has_minmax && has_firstlast)
+	{
+		return NULL;
+	}
+
+	ColumnarScanPath *path =
+		columnar_scan_path_create(root, info, compressed_path, all_quals_pushed_down);
+	path->metadata_only = true;
+	path->metadata_output_map = metadata_output_map;
+	path->enable_bulk_decompression = false;
+	path->reverse = reverse;
+	if (ordered)
+	{
+		path->needs_orderby_metadata = sort_info->needs_orderby_metadata;
+		path->required_compressed_pathkeys =
+			minmax_em ?
+				list_make1(
+					metadata_only_minmax_pathkey(root, info, minmax_em, minmax_compressed_attno)) :
+				sort_info->required_compressed_pathkeys;
+		path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+	}
+
+	/* One output row per compressed tuple, and a top-1 sort if the input is not sorted. */
+	Path *input_path = compressed_path;
+	if (!pathkeys_contained_in(path->required_compressed_pathkeys, compressed_path->pathkeys))
+	{
+		input_path = (Path *) create_sort_path(root,
+											   info->compressed_rel,
+											   compressed_path,
+											   path->required_compressed_pathkeys,
+											   1.0);
+	}
+
+	path->custom_path.path.rows = compressed_path->rows;
+	path->custom_path.path.startup_cost = input_path->startup_cost;
+	path->custom_path.path.total_cost =
+		input_path->total_cost + compressed_path->rows * cpu_tuple_cost;
+
+	return &path->custom_path.path;
+}
+
+/*
  * Add various decompression paths that are possible based on the given
  * compressed path.
  */
@@ -1574,6 +1873,20 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 						compressed_path->param_info->ppi_req_outer))
 		{
 			return NIL;
+		}
+	}
+
+	/* Answering from metadata is always cheaper, so it replaces the other paths. */
+	if (!add_uncompressed_part)
+	{
+		Path *metadata_path = columnar_scan_metadata_only_path_create(root,
+																	  compression_info,
+																	  compressed_path,
+																	  sort_info,
+																	  all_quals_pushed_down);
+		if (metadata_path != NULL)
+		{
+			return list_make1(metadata_path);
 		}
 	}
 
@@ -1968,7 +2281,7 @@ compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compress
  */
 static void
 compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info,
-							   bool needs_orderby_metadata)
+							   bool needs_orderby_metadata, bool needs_firstlast_metadata)
 {
 	bool have_whole_row_var = false;
 	Bitmapset *attrs_used = NULL;
@@ -2043,6 +2356,45 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 														compressed_relid,
 														upper_name,
 														&attrs_used);
+			}
+		}
+	}
+
+	/* metadata only scans read the first/last or min/max value of non-segmentby output columns */
+	if (needs_firstlast_metadata)
+	{
+		Bitmapset *output_attrs = NULL;
+		pull_varattnos((Node *) info->chunk_rel->reltarget->exprs,
+					   info->chunk_rel->relid,
+					   &output_attrs);
+
+		int bit = -1;
+		while ((bit = bms_next_member(output_attrs, bit)) >= 0)
+		{
+			AttrNumber chunk_attno = bit + FirstLowInvalidHeapAttributeNumber;
+			if (chunk_attno <= 0)
+			{
+				continue;
+			}
+
+			const char *column_name = get_attname(info->chunk_rte->relid, chunk_attno, false);
+			if (ts_array_is_member(info->settings->fd.segmentby, column_name))
+			{
+				continue;
+			}
+
+			static const char *const metadata_types[] = { "first", "last", "min", "max" };
+			for (size_t i = 0; i < lengthof(metadata_types); i++)
+			{
+				char *metadata_name =
+					compressed_column_metadata_name_v2(metadata_types[i], &column_name, 1);
+				if (get_attnum(compressed_relid, metadata_name) != InvalidAttrNumber)
+				{
+					compressed_reltarget_add_var_for_column(compressed_rel,
+															compressed_relid,
+															metadata_name,
+															&attrs_used);
+				}
 			}
 		}
 	}
@@ -2585,7 +2937,10 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	}
 	table_close(r, NoLock);
 
-	compressed_rel_setup_reltarget(compressed_rel, info, needs_orderby_metadata);
+	compressed_rel_setup_reltarget(compressed_rel,
+								   info,
+								   needs_orderby_metadata,
+								   metadata_only_query_supported(root));
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
 	compressed_rel_setup_joininfo(compressed_rel, info);
@@ -2684,6 +3039,8 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->all_quals_pushed_down = all_quals_pushed_down;
 	path->required_compressed_pathkeys = NIL;
 	path->required_pathkey_ems = NIL;
+	path->metadata_only = false;
+	path->metadata_output_map = NIL;
 	cost_columnar_scan(compression_info, path, compressed_path);
 
 	return path;

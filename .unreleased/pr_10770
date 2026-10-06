@@ -1,0 +1,2 @@
+Implements: #10770 Answer LIMIT 1 queries on compressed chunks from batch metadata without decompression
+Setting: `timescaledb.enable_columnarscan_metadata_only`: answer LIMIT 1 queries on compressed chunks from batch metadata. On by default.
