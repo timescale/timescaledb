@@ -282,6 +282,21 @@ SELECT count(*) FROM (SELECT DISTINCT b, a FROM t) s;
 
 drop table t cascade;
 
+-- Issue #10758: bail on skipscan when there is gating qual on top of it
+CREATE TABLE t_10758 (ts timestamptz NOT NULL, c1 text, c2 int8);
+CREATE INDEX ON t_10758 (ts DESC);
+-- 5,000 rows over 10 distinct timestamps, so SkipScan is the cheapest DISTINCT
+INSERT INTO t_10758 SELECT '2024-01-01'::timestamptz + ((i % 10) || ' seconds')::interval, 'w' || (i % 3), i
+FROM generate_series(1, 5000) i;
+ANALYZE t_10758;
+
+-- Should return valid result, should not use SkipScan because of gating qual "s.ts IS NULL"
+SET timescaledb.debug_skip_scan_info  TO true;
+SELECT count(*) FROM t_10758 AS s, LATERAL (SELECT DISTINCT r.ts FROM t_10758 AS r WHERE s.ts IS NULL) AS q;
+RESET timescaledb.debug_skip_scan_info;
+
+drop table t_10758 cascade;
+
 RESET enable_seqscan;
 RESET enable_bitmapscan;
 RESET max_parallel_workers_per_gather;

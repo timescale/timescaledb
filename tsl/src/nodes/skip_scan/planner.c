@@ -524,6 +524,13 @@ void
 tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel,
 						UpperRelationKind stage)
 {
+	/* Issue #10758: bail on skipscan when there is gating qual on top of it:
+	 * skipscan executor currently cannot apply gating qual/projection to its results */
+	if (root->hasPseudoConstantQuals)
+	{
+		return;
+	}
+
 	DistinctPathInfo dpinfo = {
 		.stage = stage,
 		.input_rel = input_rel,
