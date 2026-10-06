@@ -970,11 +970,15 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				}
 
 				/*
+				 * We decompress the compressed columns on demand, so that we
+				 * can skip decompressing some columns, for example, if the
+				 * entire batch doesn't pass the quals.
+				 *
 				 * Save a batch-owned copy of the compressed datum in its
-				 * stored form, so that the column can be decompressed lazily
-				 * at the first access, with no reference to the compressed
-				 * slot. Do not detoast here, this is done on demand with our
-				 * custom optimized detoaster mechanism.
+				 * stored form, so that the column can be decompressed later.
+				 * In usual cases, this datum is a toast pointer, so copying it
+				 * is cheap. Do not detoast here, this is done on demand using
+				 * our custom optimized detoaster mechanism.
 				 */
 				MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
 				column_values->buffers[0] =
