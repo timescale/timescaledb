@@ -94,8 +94,14 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   MaterializationStats *mat_stats);
 static ContinuousAgg *
 process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
-											const InternalTimeRange *refresh_window);
+											const InternalTimeRange *refresh_window,
+											ContinuousAggRefreshExecutionState *execution);
 
+static bool process_cagg_invalidations_and_refresh_txn3(const ContinuousAgg *cagg,
+														const InternalTimeRange *refresh_window,
+														const ContinuousAggRefreshContext *context,
+														bool bucketing_refresh_window,
+														MaterializationStats *mat_stats);
 typedef struct CaggRefreshStats
 {
 	/* Number of batches the refresh window was split into */
@@ -115,11 +121,6 @@ typedef struct CaggRefreshStats
 	MaterializationStats mat_stats;
 } CaggRefreshStats;
 
-static bool process_cagg_invalidations_and_refresh_txn3(const ContinuousAgg *cagg,
-														const InternalTimeRange *refresh_window,
-														const ContinuousAggRefreshContext *context,
-														bool bucketing_refresh_window,
-														MaterializationStats *mat_stats);
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
 {
@@ -1066,7 +1067,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 /*
  * Transaction 2, Step 1: drain the in-memory per-tenant invalidation tracker
  * and persist it into _timescaledb_catalog.continuous_aggs_tenant_tracking,
- * stamped with the new seqnum.
+ * stamped with the drained generation's seqnum. Returns true if a generation
+ * was rotated, even when no tracking rows were persisted.
  *
  * If the tracker was INVALID (spike/overflow), nothing is written for its
  * seqnum. With no tracking rows for that seqnum, the refresh falls back to the
@@ -1075,10 +1077,13 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
  * Runs under the per-cagg serialization lock (ts_lock_continuous_agg_tuple), so
  * the rows are persisted with a single batched insert to keep the lock hold
  * time short.
+ * The generation is rotated and entries are flushed only once per
+ * refresh call (i.e. if it is split into batches, we will do this only
+ * once )
  * PERF TODO: the batch still forms and inserts one tuple at a time; consider
  * heap_multi_insert for very large snapshots.
  */
-static void
+static bool
 flush_tenant_tracking(const ContinuousAgg *cagg)
 {
 	/* Tenants are tracked by the raw (user) hypertable that received the DML. */
@@ -1087,7 +1092,7 @@ flush_tenant_tracking(const ContinuousAgg *cagg)
 
 	if (tracking == NULL)
 	{
-		return;
+		return false;
 	}
 
 	ts_hypertable_cagg_settings_get_tenant_tracking_window(cagg->data.raw_hypertable_id,
@@ -1105,11 +1110,15 @@ flush_tenant_tracking(const ContinuousAgg *cagg)
 							late_window_start,
 							late_window_end);
 	PopActiveSnapshot();
+
+	/* Empty and invalid generations also advance the tracker and its window. */
+	return true;
 }
 
 static ContinuousAgg *
 process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
-											const InternalTimeRange *refresh_window)
+											const InternalTimeRange *refresh_window,
+											ContinuousAggRefreshExecutionState *execution)
 {
 	/* Lock the continuous aggregate's catalog table entry to protect against concurrent refreshes
 	 * on the same cagg processing the cagg invalidation logs for that CAgg.
@@ -1146,9 +1155,9 @@ process_cagg_invalidations_and_refresh_txn2(int mat_hypertable_id,
 	 * cagg1 could flush the shared tracker while DDL disables cagg2.
 	 * NEEDS change when we support multiple caggs with granular refresh.
 	 */
-	if (cagg->data.granular_refresh_enabled)
+	if (cagg->data.granular_refresh_enabled && !execution->tenant_tracking_flushed)
 	{
-		flush_tenant_tracking(cagg);
+		execution->tenant_tracking_flushed = flush_tenant_tracking(cagg);
 	}
 
 	invalidation_process_cagg_log(cagg, refresh_window);
@@ -1312,7 +1321,7 @@ rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ct
 bool
 continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 								const InternalTimeRange *refresh_window_arg,
-								const ContinuousAggRefreshContext *context, bool apply_extend,
+								ContinuousAggRefreshContext *context, bool apply_extend,
 								MaterializationStats *mat_stats)
 {
 	const ContinuousAgg *volatile cagg = cagg_arg;
@@ -1360,8 +1369,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	 *
 	 * The first transaction registers the refresh window in the concurrent-
 	 * refresh tracking table to detect overlapping concurrent refreshes, then
-	 * moves the invalidation threshold (if needed) and copies invalidations
-	 * from the hypertable log to the cagg invalidation log.
+	 * moves the invalidation threshold (if needed)
+	 * It copies invalidations from the hypertable log to the
+	 * cagg invalidation log (only once per refresh, NOT every batch).
 	 *
 	 * The second transaction cuts the cagg invalidation log entries so that
 	 * they either fit entirely within the refresh window or are disjoint from
@@ -1475,22 +1485,19 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			!(IS_TIMESTAMP_TYPE(refresh_window.type) &&
 			  invalidation_threshold == ts_time_get_min(refresh_window.type)))
 		{
-			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
-
-			/*
-			 * Reclaim tracking rows no invalidation can reach any more. Runs after
-			 * the move, so this cagg's log alone settles which seqnums are still
-			 * referenced, and while the invalidation-threshold tuple lock taken
-			 * above still serializes this transaction against other refreshes of
-			 * the same hypertable.
-			 *
-			 * Once per refresh rather than once per batch: every batch would repeat
-			 * the same scan, and the first batch's move has already drained the
-			 * hypertable log, so later batches find nothing new to reclaim.
-			 */
-			if (context->execution.processing_batch <= 1)
+			if (!context->execution.ht_invalidations_processed)
 			{
+				/* Move all visible hypertable invalidations once per invocation, including
+				 * ranges outside this batch. Later writes remain pending for a future refresh
+				 * unless another refresh moves them into the cagg log. */
+				invalidation_process_hypertable_log(cagg->data.raw_hypertable_id,
+													refresh_window.type);
+
+				/* Reclaim unreachable tracking rows after the move, while the threshold
+				 * tuple lock still serializes this transaction against other refreshes of
+				 * the same hypertable */
 				invalidation_garbage_collect_tenant_tracking(cagg);
+				context->execution.ht_invalidations_processed = true;
 			}
 
 			DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn1");
@@ -1503,7 +1510,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			DEBUG_WAITPOINT(psprintf("cagg_policy_batch_%d_after_txn_1_wait",
 									 context->execution.processing_batch));
 
-			cagg = process_cagg_invalidations_and_refresh_txn2(mat_id, &refresh_window);
+			cagg = process_cagg_invalidations_and_refresh_txn2(mat_id,
+															   &refresh_window,
+															   &context->execution);
 			refreshed = process_cagg_invalidations_and_refresh_txn3(cagg,
 																	&refresh_window,
 																	context,

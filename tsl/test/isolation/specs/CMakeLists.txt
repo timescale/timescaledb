@@ -78,6 +78,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     cagg_granular_refresh.spec
+    cagg_granular_refresh_batch_races.spec
     cagg_granular_refresh_cleanup_races.spec
     cagg_granular_refresh_disable_races.spec
     cagg_granular_refresh_seqnum_race.spec

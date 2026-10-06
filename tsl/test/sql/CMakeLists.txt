@@ -143,7 +143,7 @@ list(
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
-       cagg_granular_refresh_config.sql)
+       cagg_granular_refresh_config.sql cagg_granular_refresh_policies.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)

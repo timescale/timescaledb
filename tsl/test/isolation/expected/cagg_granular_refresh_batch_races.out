@@ -1,0 +1,144 @@
+Parsed test spec with 4 sessions
+
+starting permutation: Wprime_high_refresh Winsert_old Winsert_new WPpause_first WPpause_flushed Rrefresh_newest Winsert_before_flush WPrelease_first Winsert_after_flush WPrelease_flushed Vpending_invalidations
+step Wprime_high_refresh: 
+    CALL refresh_continuous_aggregate('batch_daily', '2025-01-19 00:00:00+00',
+        '2025-01-25 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
+
+step Winsert_old: INSERT INTO batch_readings VALUES ('2025-01-20 12:00:00+00', 'old_control', 1);
+step Winsert_new: INSERT INTO batch_readings VALUES ('2025-01-23 12:00:00+00', 'new_control', 2);
+step WPpause_first: SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
+debug_waitpoint_enable
+----------------------
+                      
+
+step WPpause_flushed: SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step Rrefresh_newest: 
+    CALL refresh_continuous_aggregate('batch_daily', '2025-01-20 00:00:00+00',
+        '2025-01-24 00:00:00+00',
+        options => jsonb_build_object('buckets_per_batch', 2, 'refresh_newest_first', true));
+ <waiting ...>
+step Winsert_before_flush: INSERT INTO batch_readings VALUES ('2025-01-21 04:00:00+00', 'before_flush', 3);
+step WPrelease_first: SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
+debug_waitpoint_release
+-----------------------
+                       
+
+step Winsert_after_flush: INSERT INTO batch_readings VALUES ('2025-01-21 12:00:00+00', 'after_flush', 4);
+step WPrelease_flushed: SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+R: NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Mon Jan 20 00:00:00 2025 UTC, Fri Jan 24 00:00:00 2025 UTC ], materialized 2 row(s), deleted 0 row(s), fully granular
+step Rrefresh_newest: <... completed>
+step Vpending_invalidations: 
+    SELECT 'hypertable invalidation log' AS checking,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AT TIME ZONE 'UTC' AS start,
+           seqnum
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log h
+    WHERE hypertable_id = (SELECT raw_id FROM batch_ids)
+    ORDER BY lowest_modified_value;
+
+    SELECT 'tenant tracking catalog' AS checking, tenant_id, seqnum
+    FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+    WHERE hypertable_id = (SELECT raw_id FROM batch_ids)
+      AND tenant_id IN ('before_flush', 'after_flush')
+    ORDER BY tenant_id, seqnum;
+
+    SELECT 'cagg log entries with an unflushed seqnum' AS checking,
+           count(*) AS unflushed_cagg_invalidations
+    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log c
+    WHERE materialization_id = (SELECT mat_id FROM batch_ids) AND seqnum > 0
+      AND NOT EXISTS (SELECT FROM _timescaledb_catalog.continuous_aggs_tenant_tracking t
+                      WHERE t.hypertable_id = (SELECT raw_id FROM batch_ids) AND t.seqnum = c.seqnum);
+
+    SELECT 'materialized rows' AS checking, tenant, total
+    FROM batch_daily
+    WHERE bucket >= '2025-01-20 00:00:00+00' AND bucket < '2025-01-24 00:00:00+00'
+    ORDER BY tenant;
+
+checking                   |start                   |seqnum
+---------------------------+------------------------+------
+hypertable invalidation log|Tue Jan 21 04:00:00 2025|     1
+hypertable invalidation log|Tue Jan 21 12:00:00 2025|     2
+
+checking               |tenant_id   |seqnum
+-----------------------+------------+------
+tenant tracking catalog|before_flush|     1
+
+checking                                 |unflushed_cagg_invalidations
+-----------------------------------------+----------------------------
+cagg log entries with an unflushed seqnum|                           0
+
+checking         |tenant     |total
+-----------------+-----------+-----
+materialized rows|new_control|    2
+materialized rows|old_control|    1
+
+
+starting permutation: Wprime_low_refresh Winsert_old Winsert_new Vthreshold WPpause_first WPpause_second Rrefresh_oldest Vthreshold Winsert_ahead_of_threshold WPrelease_first Vthreshold WPrelease_second Vcheck_complete
+step Wprime_low_refresh: 
+    CALL refresh_continuous_aggregate('batch_daily', '2025-01-19 00:00:00+00',
+        '2025-01-20 00:00:00+00', options => jsonb_build_object('buckets_per_batch', 0));
+
+step Winsert_old: INSERT INTO batch_readings VALUES ('2025-01-20 12:00:00+00', 'old_control', 1);
+step Winsert_new: INSERT INTO batch_readings VALUES ('2025-01-23 12:00:00+00', 'new_control', 2);
+step Vthreshold: SELECT * FROM batch_threshold;
+threshold               
+------------------------
+Mon Jan 20 00:00:00 2025
+
+step WPpause_first: SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_txn_1_wait');
+debug_waitpoint_enable
+----------------------
+                      
+
+step WPpause_second: SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
+debug_waitpoint_enable
+----------------------
+                      
+
+step Rrefresh_oldest: 
+    CALL refresh_continuous_aggregate('batch_daily', '2025-01-20 00:00:00+00',
+        '2025-01-24 00:00:00+00',
+        options => jsonb_build_object('buckets_per_batch', 2, 'refresh_newest_first', false));
+ <waiting ...>
+step Vthreshold: SELECT * FROM batch_threshold;
+threshold               
+------------------------
+Wed Jan 22 00:00:00 2025
+
+step Winsert_ahead_of_threshold: INSERT INTO batch_readings VALUES ('2025-01-22 12:00:00+00', 'ahead_of_threshold', 5);
+step WPrelease_first: SELECT debug_waitpoint_release('cagg_policy_batch_1_after_txn_1_wait');
+debug_waitpoint_release
+-----------------------
+                       
+
+step Vthreshold: SELECT * FROM batch_threshold;
+threshold               
+------------------------
+Fri Jan 24 00:00:00 2025
+
+step WPrelease_second: SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1_wait');
+debug_waitpoint_release
+-----------------------
+                       
+
+R: NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Mon Jan 20 00:00:00 2025 UTC, Fri Jan 24 00:00:00 2025 UTC ], materialized 3 row(s), deleted 0 row(s), no granular refresh
+step Rrefresh_oldest: <... completed>
+step Vcheck_complete: 
+    SELECT bucket AT TIME ZONE 'UTC' AS bucket, tenant, total FROM batch_daily
+    WHERE bucket >= '2025-01-20 00:00:00+00' AND bucket < '2025-01-24 00:00:00+00'
+    ORDER BY bucket, tenant;
+
+bucket                  |tenant            |total
+------------------------+------------------+-----
+Mon Jan 20 00:00:00 2025|old_control       |    1
+Wed Jan 22 00:00:00 2025|ahead_of_threshold|    5
+Thu Jan 23 00:00:00 2025|new_control       |    2
+
