@@ -249,10 +249,6 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	Assert(column_values->decompression_type == DT_Invalid);
 
-	/*
-	 * The row-by-row iterator fallback starts at row zero, so decompress the
-	 * column before the batch consumes any rows.
-	 */
 	Assert(batch_state->next_batch_row == 0);
 
 	Datum value = PointerGetDatum((void *) column_values->buffers[0]);
