@@ -1141,7 +1141,27 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 	 * We can't have more open batches than the total number of compressed rows,
 	 * so clamp it for sanity of the following calculations.
 	 */
-	const double open_batches_clamped = Min(open_batches_estimated, sort_path.rows);
+	double open_batches_clamped = Min(open_batches_estimated, sort_path.rows);
+
+	/*
+	 * With a LIMIT, the merge opens the next batch only after the previous one
+	 * has returned its first tuple, so it needs about as many open batches as
+	 * the rows it returns. A filter drops some of these first tuples, so scale
+	 * the LIMIT by the filter selectivity. The LIMIT only bounds the rows read
+	 * from this relation when it is the only one in the query.
+	 */
+	if (root->limit_tuples > 0 && bms_membership(root->all_baserels) == BMS_SINGLETON)
+	{
+		const double total_rows = sort_path.rows * compression_info->compressed_batch_size;
+		double selectivity = 1.0;
+		if (total_rows > 0)
+		{
+			selectivity = dcpath->custom_path.path.rows / total_rows;
+			CLAMP_PROBABILITY(selectivity);
+		}
+		const double limit_batches = (root->limit_tuples + 1) / Max(selectivity, 1e-10);
+		open_batches_clamped = Max(1.0, Min(open_batches_clamped, limit_batches));
+	}
 
 	/*
 	 * Keeping a lot of batches open might use a lot of memory. The batch sorted

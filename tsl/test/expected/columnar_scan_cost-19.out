@@ -365,14 +365,14 @@ set enable_indexscan to off;
 explain (buffers off)
 select * from estimate_count order by time limit 5;
 --- QUERY PLAN ---
- Limit  (cost=8.57..8.92 rows=5 width=20)
-   ->  Custom Scan (ChunkAppend) on estimate_count  (cost=8.57..451.62 rows=6400 width=20)
+ Limit  (cost=8.34..8.48 rows=5 width=20)
+   ->  Custom Scan (ChunkAppend) on estimate_count  (cost=8.34..195.38 rows=6400 width=20)
          Order: estimate_count."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_2_15_chunk  (cost=8.57..451.62 rows=6400 width=20)
+         ->  Custom Scan (ColumnarScan) on _hyper_2_15_chunk  (cost=8.34..195.38 rows=6400 width=20)
                ->  Sort  (cost=8.32..8.57 rows=100 width=88)
                      Sort Key: _hyper_2_15_chunk_compressed._ts_meta_v2_first_time
                      ->  Seq Scan on _hyper_2_15_chunk_compressed  (cost=0.00..5.00 rows=100 width=88)
-         ->  Custom Scan (ColumnarScan) on _hyper_2_16_chunk  (cost=8.57..901.60 rows=12900 width=20)
+         ->  Custom Scan (ColumnarScan) on _hyper_2_16_chunk  (cost=8.34..385.11 rows=12900 width=20)
                ->  Sort  (cost=8.32..8.57 rows=100 width=88)
                      Sort Key: _hyper_2_16_chunk_compressed._ts_meta_v2_first_time
                      ->  Seq Scan on _hyper_2_16_chunk_compressed  (cost=0.00..5.00 rows=100 width=88)

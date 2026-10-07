@@ -256,7 +256,7 @@ order by 1 limit 1;
                ->  Merge Append (actual rows=1.00 loops=1)
                      Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
                      ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
-                           ->  Sort (actual rows=3.00 loops=1)
+                           ->  Sort (actual rows=1.00 loops=1)
                                  Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time
                                  Sort Method: quicksort 
                                  ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)
@@ -287,7 +287,7 @@ order by time_bucket('1 minute', time) limit 1;
          ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
-                     ->  Sort (actual rows=3.00 loops=1)
+                     ->  Sort (actual rows=1.00 loops=1)
                            Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time
                            Sort Method: quicksort 
                            ->  Seq Scan on _hyper_1_1_chunk_compressed (actual rows=3.00 loops=1)

@@ -186,6 +186,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_segment_meta.sql
     compression_sorted_merge_columns.sql
     compression_sorted_merge_filter.sql
+    compression_sorted_merge_limit.sql
     cagg.sql
     cagg_bgw.sql
     cagg_bgw_drop_chunks.sql

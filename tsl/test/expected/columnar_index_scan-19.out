@@ -3801,9 +3801,9 @@ ORDER BY device;
                        ->  Sort
                              Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_first_time DESC
                              ->  Seq Scan on _hyper_1_2_chunk_compressed
-                 ->  Sort
-                       Sort Key: _hyper_1_1_chunk."time" DESC
-                       ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                       ->  Sort
+                             Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
                              ->  Seq Scan on _hyper_1_1_chunk_compressed
    InitPlan (null)
      ->  Limit
@@ -5798,9 +5798,9 @@ ORDER BY device;
                        ->  Sort
                              Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_last_time DESC
                              ->  Seq Scan on _hyper_1_2_chunk_compressed
-                 ->  Sort
-                       Sort Key: _hyper_1_1_chunk."time" DESC
-                       ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                       ->  Sort
+                             Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_time DESC
                              ->  Seq Scan on _hyper_1_1_chunk_compressed
    InitPlan (null)
      ->  Limit

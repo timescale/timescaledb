@@ -3663,10 +3663,10 @@ ORDER BY device;
                        ->  Sort
                              Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_first_time DESC
                              ->  Seq Scan on _hyper_1_2_chunk_compressed
-                 ->  Sort
-                       Sort Key: _hyper_1_1_chunk."time" DESC
-                       ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                             Vectorized Filter: ("time" IS NOT NULL)
+                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                       Filter: ("time" IS NOT NULL)
+                       ->  Sort
+                             Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_first_time DESC
                              ->  Seq Scan on _hyper_1_1_chunk_compressed
    InitPlan 2 (returns $0)
      ->  Limit
@@ -5665,10 +5665,10 @@ ORDER BY device;
                        ->  Sort
                              Sort Key: _hyper_1_2_chunk_compressed._ts_meta_v2_last_time DESC
                              ->  Seq Scan on _hyper_1_2_chunk_compressed
-                 ->  Sort
-                       Sort Key: _hyper_1_1_chunk."time" DESC
-                       ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                             Vectorized Filter: ("time" IS NOT NULL)
+                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                       Filter: ("time" IS NOT NULL)
+                       ->  Sort
+                             Sort Key: _hyper_1_1_chunk_compressed._ts_meta_v2_last_time DESC
                              ->  Seq Scan on _hyper_1_1_chunk_compressed
    InitPlan 2 (returns $0)
      ->  Limit

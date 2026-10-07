@@ -213,16 +213,22 @@ batch_queue_heap_needs_next_batch(BatchQueue *_queue)
 
 	/*
 	 * The invariant we have to preserve is that either:
-	 * 1) the current top tuple sorts before the first tuple of the last
-	 *    added batch,
+	 * 1) the current top tuple does not sort after the first tuple of the
+	 *    last added batch,
 	 * 2) the input has ended.
 	 * Since the incoming batches arrive in the order of their first tuple,
 	 * if this invariant holds, then the current top tuple is found inside the
 	 * heap.
 	 * If it doesn't hold, the top tuple might be in the next incoming batches,
 	 * and we have to continue adding them.
+	 *
+	 * A top tuple equal to the first tuple of the last added batch can be
+	 * returned right away. The incoming batches can't have anything that sorts
+	 * before it, and equal tuples can be returned in any order. This way many
+	 * batches that start with the same value are opened one at a time, and
+	 * not all at once.
 	 */
-	return comparison_result <= 0;
+	return comparison_result < 0;
 }
 
 static void
