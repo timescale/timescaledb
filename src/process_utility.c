@@ -5675,7 +5675,7 @@ ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc, Oid 
 
 	if (DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]) != newrole_oid)
 	{
-		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = Int32GetDatum(newrole_oid);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = ObjectIdGetDatum(newrole_oid);
 		replace[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = true;
 		new_tuple = heap_modify_tuple(tuple, tupledesc, values, isnull, replace);
 		ts_catalog_update(rel, new_tuple);
