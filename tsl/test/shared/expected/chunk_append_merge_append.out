@@ -98,3 +98,14 @@ RESET enable_seqscan;
 RESET enable_hashjoin;
 RESET enable_mergejoin;
 RESET max_parallel_workers_per_gather;
+-- This query has opposite order for window function and query results. We used
+-- to arrive at a wrong order for chunk append in this case.
+SELECT bool_and((rnk = 1) = (time = first_time)) AS window_order_ok FROM (
+    SELECT time, rank() OVER (ORDER BY time) rnk, min(time) OVER () first_time
+    FROM metrics ORDER BY time DESC
+) x
+;
+ window_order_ok 
+-----------------
+ t
+
