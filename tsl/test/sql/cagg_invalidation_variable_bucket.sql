@@ -375,6 +375,26 @@ CALL refresh_continuous_aggregate('cagg_month_offset', '2024-06-01 00:00:00', '2
 SELECT * FROM cagg_inval_log WHERE cagg_name = 'cagg_month_offset';
 
 -----------------------------------------------------------------------
+-- Test 5c: Negative offset moving bucket starts to the end of a month
+-- (#10746). Adding a month to such a bucket start falls short of the next
+-- one ('2024-02-29 21:00' + '1 month' is '2024-03-29 21:00', not
+-- '2024-03-31 21:00'), which made the batched refresh loop forever.
+-----------------------------------------------------------------------
+
+CREATE MATERIALIZED VIEW cagg_month_neg_offset
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 month'::interval, time, "offset" := INTERVAL '-3 hours') AS bucket,
+       count(*) AS cnt
+FROM offset_data
+GROUP BY 1
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('cagg_month_neg_offset', '2023-12-31 21:00:00', '2024-12-31 21:00:00');
+
+-- Buckets should start at 21:00 on the last day of each month:
+SELECT bucket, cnt FROM cagg_month_neg_offset ORDER BY bucket;
+
+-----------------------------------------------------------------------
 -- Test 5d: Offset with timezone and variable-width bucket
 -----------------------------------------------------------------------
 

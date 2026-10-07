@@ -1,0 +1,2 @@
+Fixes: #10746 Fix infinite refresh loop for continuous aggregates with variable-sized buckets and negative offset
+Thanks: @salmanazmat666 for reporting a refresh that could not be cancelled and ran out of memory
