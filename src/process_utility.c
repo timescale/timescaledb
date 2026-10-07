@@ -1700,12 +1700,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 							 "instead.")));
 		}
 
-		chunk = ts_chunk_get_by_name_with_memory_context(relation->schemaname,
-														 relation->relname,
-														 AccessExclusiveLock,
-														 &slice_lock,
-														 CurrentMemoryContext,
-														 false);
+		chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, &slice_lock, false);
 
 		if (chunk)
 		{

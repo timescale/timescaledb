@@ -285,3 +285,52 @@ SELECT * FROM conditions_2 ORDER BY bucket;
      18 |   5 |     2
 
 DROP PROCEDURE refresh_cagg_by_chunk_range(REGCLASS, REGCLASS, INTEGER);
+-- DROP TABLE on a chunk invalidates the cagg with and without schema qualification
+CREATE TABLE drop_inval(time int NOT NULL, value int);
+SELECT table_name FROM create_hypertable('drop_inval', 'time', chunk_time_interval => 10);
+ table_name 
+------------
+ drop_inval
+
+CREATE FUNCTION drop_inval_now() RETURNS int LANGUAGE SQL STABLE AS 'SELECT 100';
+SELECT set_integer_now_func('drop_inval', 'drop_inval_now');
+ set_integer_now_func 
+----------------------
+ 
+
+CREATE MATERIALIZED VIEW drop_inval_cagg
+    WITH (timescaledb.continuous, timescaledb.materialized_only = true)
+    AS SELECT time_bucket(10, time) AS bucket, count(*) FROM drop_inval GROUP BY 1
+    WITH NO DATA;
+INSERT INTO drop_inval SELECT g, g FROM generate_series(0, 29) g;
+CALL refresh_continuous_aggregate('drop_inval_cagg', NULL, NULL);
+SELECT id AS drop_inval_id FROM _timescaledb_catalog.hypertable
+WHERE table_name = 'drop_inval' \gset
+SELECT chunk_schema AS chunk_schema_1, chunk_name AS chunk_name_1
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'drop_inval' AND range_start_integer = 0 \gset
+SELECT chunk_name AS chunk_name_2
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'drop_inval' AND range_start_integer = 10 \gset
+SELECT lowest_modified_value, greatest_modified_value
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = :drop_inval_id ORDER BY 1;
+ lowest_modified_value | greatest_modified_value 
+-----------------------+-------------------------
+
+DROP TABLE :chunk_schema_1.:chunk_name_1;
+SET search_path TO :chunk_schema_1, public;
+DROP TABLE :chunk_name_2;
+RESET search_path;
+SELECT lowest_modified_value, greatest_modified_value
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = :drop_inval_id ORDER BY 1;
+ lowest_modified_value | greatest_modified_value 
+-----------------------+-------------------------
+                     0 |                      10
+                    10 |                      20
+
+DROP MATERIALIZED VIEW drop_inval_cagg;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_74_chunk
+DROP TABLE drop_inval;
+DROP FUNCTION drop_inval_now();

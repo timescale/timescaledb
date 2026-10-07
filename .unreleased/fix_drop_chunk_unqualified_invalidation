@@ -1,0 +1,1 @@
+Fixes: Fix missing continuous aggregate invalidation when dropping a chunk by unqualified name
