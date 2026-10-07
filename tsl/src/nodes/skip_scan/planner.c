@@ -99,8 +99,8 @@ static bool build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *i
 							bool build_eqop);
 static List *build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo,
 						   List *top_pathkeys);
-static Var *get_distinct_var(PlannerInfo *root, PathKey *pk, IndexPath *index_path,
-							 Path *child_path, SkipKeyInfo *skinfo);
+static Var *get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, PathKey *pk,
+							 IndexPath *index_path, Path *child_path, SkipKeyInfo *skinfo);
 static TargetEntry *tlist_member_match_var(Var *var, List *targetlist);
 
 /**************************
@@ -910,7 +910,7 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		PathKey *pk = lfirst(lc);
 		/* Placeholder for skip key attributes */
 		SkipKeyInfo *skinfo = palloc(sizeof(SkipKeyInfo));
-		Var *dvar = get_distinct_var(root, pk, index_path, child_path, skinfo);
+		Var *dvar = get_distinct_var(root, dpinfo, pk, index_path, child_path, skinfo);
 		if (!dvar)
 		{
 			pfree(skinfo);
@@ -1089,15 +1089,25 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 
 /* Extract the Var to use for the SkipScan and do attno mapping if required. */
 static Var *
-get_distinct_var(PlannerInfo *root, PathKey *pk, IndexPath *index_path, Path *child_path,
-				 SkipKeyInfo *skinfo)
+get_distinct_var(PlannerInfo *root, DistinctPathInfo *dpinfo, PathKey *pk, IndexPath *index_path,
+				 Path *child_path, SkipKeyInfo *skinfo)
 {
+	RelOptInfo *ht_rel = dpinfo->input_rel;
 	RelOptInfo *chunk_rel = child_path->parent;
 	RelOptInfo *indexed_rel = index_path->path.parent;
 
+	RangeTblEntry *ht_rte = planner_rt_fetch(ht_rel->relid, root);
 	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 	RangeTblEntry *indexed_rte =
 		(indexed_rel == chunk_rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));
+
+	/* Check for hypertable if top relation is not the same as chunk relation */
+	if (ht_rel->relid != chunk_rel->relid &&
+		(!ts_is_hypertable(ht_rte->relid) ||
+		 !bms_is_member(ht_rel->relid, chunk_rel->top_parent_relids)))
+	{
+		return NULL;
+	}
 
 	/* Loop through equivalent vars for this path key
 	 * to settle on the var which will be earliest in the index i.e. of highest index order */
