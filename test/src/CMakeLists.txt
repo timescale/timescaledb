@@ -2,6 +2,7 @@ set(SOURCES
     adt_tests.c
     metadata.c
     symbol_conflict.c
+    test_copy.c
     test_compression_settings.c
     test_bmslist_utils.c
     test_jsonb_utils.c

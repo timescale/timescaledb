@@ -1282,3 +1282,93 @@ ORDER BY 1,2,3,4;
 DROP MATERIALIZED VIEW tenant_copy_daily;
 DROP TABLE tenant_copy;
 RESET timezone;
+
+-- Unbuffered COPY must invalidate already materialized data, just like buffered COPY.
+CREATE TABLE copy_invalidation(time bigint NOT NULL, dropped int, value int);
+SELECT create_hypertable('copy_invalidation', 'time', chunk_time_interval => 100);
+CREATE FUNCTION copy_invalidation_now() RETURNS bigint LANGUAGE SQL STABLE AS 'SELECT 1100::bigint';
+SELECT set_integer_now_func('copy_invalidation', 'copy_invalidation_now');
+CREATE MATERIALIZED VIEW copy_invalidation_sum
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket(10::bigint, time) AS bucket, sum(value) AS total
+FROM copy_invalidation GROUP BY 1 WITH NO DATA;
+
+-- Establish the invalidation threshold; a first refresh would mask missing invalidations.
+INSERT INTO copy_invalidation VALUES (1, 0, 1), (1000, 0, 1);
+CALL refresh_continuous_aggregate('copy_invalidation_sum', NULL, NULL);
+-- Exercise both existing and new chunks with different tuple layouts.
+ALTER TABLE copy_invalidation DROP COLUMN dropped;
+
+CREATE FUNCTION copy_invalidation_trigger() RETURNS trigger LANGUAGE plpgsql AS
+$$ BEGIN RETURN NULL; END $$;
+CREATE TRIGGER copy_invalidation_trigger AFTER INSERT ON copy_invalidation
+REFERENCING NEW TABLE AS new_rows
+FOR EACH STATEMENT EXECUTE FUNCTION copy_invalidation_trigger();
+
+SET timescaledb.enable_optimizations = on;
+COPY copy_invalidation FROM STDIN;
+2	2
+202	3
+\.
+SELECT start, "end" FROM hyper_invals_view
+WHERE hypertable_name = 'copy_invalidation' ORDER BY 1, 2;
+CALL refresh_continuous_aggregate('copy_invalidation_sum', NULL, NULL);
+SELECT * FROM copy_invalidation_sum ORDER BY 1;
+DROP TRIGGER copy_invalidation_trigger ON copy_invalidation;
+
+-- The same path is used without triggers when optimizations are disabled.
+SET timescaledb.enable_optimizations = off;
+COPY copy_invalidation FROM STDIN;
+3	4
+203	5
+\.
+RESET timescaledb.enable_optimizations;
+CALL refresh_continuous_aggregate('copy_invalidation_sum', NULL, NULL);
+SELECT * FROM copy_invalidation_sum ORDER BY 1;
+
+-- Invalidate the inserted tuple after BEFORE ROW triggers, not the input tuple.
+CREATE OR REPLACE FUNCTION copy_invalidation_trigger() RETURNS trigger LANGUAGE plpgsql AS
+$$
+BEGIN
+    IF NEW.value < 0 THEN
+        RETURN NULL;
+    END IF;
+    NEW.time := NEW.time + 10;
+    NEW.value := NEW.value * 10;
+    RETURN NEW;
+END
+$$;
+CREATE TRIGGER copy_invalidation_trigger BEFORE INSERT ON copy_invalidation
+FOR EACH ROW EXECUTE FUNCTION copy_invalidation_trigger();
+COPY copy_invalidation FROM STDIN;
+12	6
+212	7
+402	-1
+\.
+SELECT start, "end" FROM hyper_invals_view
+WHERE hypertable_name = 'copy_invalidation' ORDER BY 1, 2;
+CALL refresh_continuous_aggregate('copy_invalidation_sum', NULL, NULL);
+SELECT * FROM copy_invalidation_sum ORDER BY 1;
+
+-- Neither rolled-back rows nor explicitly skipped invalidations should be logged.
+BEGIN;
+COPY copy_invalidation FROM STDIN;
+32	8
+\.
+ROLLBACK;
+BEGIN;
+SET LOCAL timescaledb.skip_cagg_invalidation = on;
+COPY copy_invalidation FROM STDIN;
+52	9
+\.
+COMMIT;
+SELECT start, "end" FROM hyper_invals_view
+WHERE hypertable_name = 'copy_invalidation' ORDER BY 1, 2;
+CALL refresh_continuous_aggregate('copy_invalidation_sum', NULL, NULL);
+SELECT * FROM copy_invalidation_sum ORDER BY 1;
+SELECT * FROM copy_invalidation ORDER BY 1;
+
+DROP MATERIALIZED VIEW copy_invalidation_sum;
+DROP TABLE copy_invalidation;
+DROP FUNCTION copy_invalidation_trigger();
+DROP FUNCTION copy_invalidation_now();
