@@ -50,6 +50,7 @@
 #include "planner.h"
 #include "process_utility.h"
 #include "reorder.h"
+#include "segmentby_stats.h"
 
 TS_MODULE_MAGIC("timescaledb-tsl");
 
@@ -70,6 +71,7 @@ TS_MODULE_MAGIC("timescaledb-tsl");
 CrossModuleFunctions tsl_cm_functions = {
 
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
+	.get_relation_stats = tsl_get_relation_stats,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
 

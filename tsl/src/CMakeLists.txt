@@ -7,7 +7,8 @@ set(SOURCES
     init.c
     planner.c
     process_utility.c
-    reorder.c)
+    reorder.c
+    segmentby_stats.c)
 
 # Add test source code in Debug builds
 if(CMAKE_BUILD_TYPE MATCHES Debug)

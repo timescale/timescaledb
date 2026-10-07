@@ -11,6 +11,7 @@
 #include <optimizer/planner.h>
 #include <utils/array.h>
 #include <utils/jsonb.h>
+#include <utils/selfuncs.h>
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
@@ -76,6 +77,7 @@ typedef struct CrossModuleFunctions
 
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,
 									TsRelType input_reltype, Hypertable *ht, void *extra);
+	bool (*get_relation_stats)(PlannerInfo *, RangeTblEntry *, AttrNumber, VariableStatData *);
 	void (*set_rel_pathlist_dml)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);

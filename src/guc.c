@@ -155,6 +155,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_debug_enable_columnarscan = true;
 TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
+TSDLLEXPORT bool ts_guc_enable_segmentby_stats = true;
 #if PG19_LT
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 #endif
@@ -1432,6 +1433,18 @@ _guc_init(void)
 							 "this setting is used for debugging",
 							 "Do not use",
 							 &ts_guc_debug_enable_columnarscan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_segmentby_stats"),
+							 "Enable planner statistics for segmentby columns",
+							 "Estimate segmentby columns of compressed chunks from the "
+							 "statistics of their compressed relations",
+							 &ts_guc_enable_segmentby_stats,
 							 true,
 							 PGC_USERSET,
 							 0,

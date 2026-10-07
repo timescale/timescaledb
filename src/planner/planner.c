@@ -120,6 +120,7 @@ static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 static build_simple_rel_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
+static get_relation_stats_hook_type prev_get_relation_stats_hook;
 static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sortcl,
 										List *outer_tlist);
 
@@ -2034,6 +2035,35 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 	}
 }
 
+/*
+ * Statistics for columns whose rows are stored in compressed chunks. ANALYZE
+ * finds those relations empty, so the planner would otherwise fall back to
+ * default estimates.
+ */
+static bool
+timescaledb_get_relation_stats_hook(PlannerInfo *root, RangeTblEntry *rte, AttrNumber attnum,
+									VariableStatData *vardata)
+{
+	if (prev_get_relation_stats_hook != NULL &&
+		prev_get_relation_stats_hook(root, rte, attnum, vardata))
+	{
+		return true;
+	}
+
+	if (!ts_extension_is_loaded_and_not_upgrading() || !ts_guc_enable_optimizations ||
+		!ts_guc_enable_segmentby_stats)
+	{
+		return false;
+	}
+
+	if (ts_cm_functions->get_relation_stats != NULL)
+	{
+		return ts_cm_functions->get_relation_stats(root, rte, attnum, vardata);
+	}
+
+	return false;
+}
+
 static bool
 contains_join_param_walker(Node *node, void *context)
 {
@@ -2256,6 +2286,9 @@ _planner_init(void)
 
 	prev_create_upper_paths_hook = create_upper_paths_hook;
 	create_upper_paths_hook = timescaledb_create_upper_paths_hook;
+
+	prev_get_relation_stats_hook = get_relation_stats_hook;
+	get_relation_stats_hook = timescaledb_get_relation_stats_hook;
 }
 
 void
@@ -2265,4 +2298,5 @@ _planner_fini(void)
 	set_rel_pathlist_hook = prev_set_rel_pathlist_hook;
 	build_simple_rel_hook = prev_get_relation_info_hook;
 	create_upper_paths_hook = prev_create_upper_paths_hook;
+	get_relation_stats_hook = prev_get_relation_stats_hook;
 }

@@ -46,6 +46,7 @@ set(TEST_FILES
     compressed_collation.sql
     compressed_collation_icu.sql
     compressed_detoaster.sql
+    compressed_segmentby_stats.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql

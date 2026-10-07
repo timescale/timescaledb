@@ -313,6 +313,7 @@ bloom1_get_hash_function_default(Oid type, FmgrInfo **finfo)
  */
 TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_upper_paths_hook = NULL,
+	.get_relation_stats = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
 	.process_altertable_cmd = NULL,
