@@ -239,6 +239,9 @@ compressed_column_values_from_arrow(CompressedColumnValues *column_values, Arrow
 	}
 }
 
+/*
+ * Decompress a column from the compressed datum saved at batch setup.
+ */
 static void
 decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state, int i)
 {
@@ -1041,13 +1044,8 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				if (isnull)
 				{
 					/*
-					 * A column with SQL-null compressed data has the same
-					 * value for the entire batch: the missing value of a
-					 * column added after the batch was compressed, or SQL
-					 * null for a batch of explicit nulls compressed with
-					 * timescaledb.enable_null_compression off. getmissingattr()
-					 * returns the attribute's missing value or null; set it
-					 * now as a scalar column.
+					 * The column will have a default value for the entire
+					 * batch, set it now.
 					 *
 					 * We might use a custom targetlist-based scan tuple which
 					 * has no default values, so the default values are fetched
@@ -1068,9 +1066,6 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				 *
 				 * Save a batch-owned copy of the compressed datum in its
 				 * stored form, so that the column can be decompressed later.
-				 * Under first-row-from-metadata that happens when a second
-				 * row of the batch is needed -- with the heap batch queue,
-				 * after the compressed slot has moved on to another batch.
 				 * In usual cases, this datum is a toast pointer, so copying it
 				 * is cheap. Do not detoast here, this is done on demand using
 				 * our custom optimized detoaster mechanism.

@@ -56,7 +56,7 @@ typedef struct CompressedColumnValues
 	/*
 	 * The flattened source buffers for getting the decompressed datum.
 	 * Depending on decompression type, they are as follows:
-	 * invalid (not yet decompressed): raw possibly-toasted compressed datum
+	 * invalid:         raw possibly-toasted compressed datum
 	 * scalar:          isnull, value
 	 * iterator:        iterator
 	 * arrow fixed:     validity, value
