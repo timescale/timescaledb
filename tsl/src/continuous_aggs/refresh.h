@@ -19,12 +19,11 @@
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern void continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_window,
-										   ContinuousAggRefreshContext context,
-										   bool extend_last_bucket);
+										   ContinuousAggRefreshContext *context);
 extern bool continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 											const InternalTimeRange *refresh_window,
-											const ContinuousAggRefreshContext context,
-											bool bucketing_refresh_window, bool extend_last_bucket);
+											const ContinuousAggRefreshContext *context,
+											bool apply_extend);
 extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
 												 InternalTimeRange *original_refresh_window,
 												 int32 buckets_per_batch, bool force);

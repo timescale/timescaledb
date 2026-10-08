@@ -158,7 +158,6 @@ DROP TABLE recomp_large_data_test CASCADE;
 -- Batches may be uneven with direct compress but should always be even after recompression.
 \set BATCH_METADATA_QUERY 'SELECT _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :COMPRESSED_CHUNK_NAME;'
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 
 -- Test Case 5: Direct Compress Batches
@@ -189,7 +188,6 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 DROP TABLE IF EXISTS recomp_direct_compress CASCADE;
 
 RESET timescaledb.enable_direct_compress_insert;
-RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 -- Test Case 6: Disabled in-memory recompression GUC

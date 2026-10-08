@@ -419,17 +419,17 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	}
 
 	ContinuousAggRefreshContext context = {
-		.callctx = CAGG_REFRESH_POLICY,
-		.job_id = job_id,
-		.buckets_per_batch = policy_data.buckets_per_batch,
-		.max_batches_per_execution = policy_data.max_batches_per_execution,
-		.refresh_newest_first = policy_data.refresh_newest_first,
+		.options = {
+			.callctx = CAGG_REFRESH_POLICY,
+			.job_id = job_id,
+			.buckets_per_batch = policy_data.buckets_per_batch,
+			.max_batches_per_execution = policy_data.max_batches_per_execution,
+			.refresh_newest_first = policy_data.refresh_newest_first,
+			.extend_last_bucket = extend_last_bucket,
+		},
 	};
 
-	continuous_agg_refresh_batched(policy_data.cagg,
-								   &policy_data.refresh_window,
-								   context,
-								   extend_last_bucket);
+	continuous_agg_refresh_batched(policy_data.cagg, &policy_data.refresh_window, &context);
 
 	if (!policy_data.include_tiered_data_isnull)
 	{

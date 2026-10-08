@@ -79,22 +79,39 @@ typedef enum ContinuousAggRefreshCallContext
 {
 	CAGG_REFRESH_CREATION,
 	CAGG_REFRESH_WINDOW,
-	CAGG_REFRESH_WINDOW_BATCHED,
-	CAGG_REFRESH_POLICY,
-	CAGG_REFRESH_POLICY_BATCHED
+	CAGG_REFRESH_POLICY
 } ContinuousAggRefreshCallContext;
 
-typedef struct ContinuousAggRefreshContext
+/* Inputs that remain unchanged throughout one refresh invocation. */
+typedef struct ContinuousAggRefreshOptions
 {
 	ContinuousAggRefreshCallContext callctx;
 	int32 job_id;
-	int32 processing_batch;
-	int32 number_of_batches;
 	/* Batch configuration */
 	int32 buckets_per_batch;		 /* 0 = disabled */
 	int32 max_batches_per_execution; /* 0 = no limit */
 	bool refresh_newest_first;
-	bool force; /* re-materialize the whole window, ignoring invalidations */
+	bool force;				 /* re-materialize the whole window, ignoring invalidations */
+	bool extend_last_bucket; /* include the boundary bucket of an adjacent policy */
+} ContinuousAggRefreshOptions;
+
+/* Progress shared by all batches of one refresh invocation. */
+typedef struct ContinuousAggRefreshExecutionState
+{
+	int32 processing_batch;
+	int32 number_of_batches;
+	bool batched; /* split windows are already bucket-aligned */
+} ContinuousAggRefreshExecutionState;
+
+/*
+ * The context lives on the caller's stack and survives the transactions of a
+ * refresh invocation. Do not store pointers to allocations owned by a batch
+ * transaction in execution: those allocations do not survive transaction end.
+ */
+typedef struct ContinuousAggRefreshContext
+{
+	ContinuousAggRefreshOptions options;
+	ContinuousAggRefreshExecutionState execution;
 } ContinuousAggRefreshContext;
 
 #define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
@@ -180,4 +197,4 @@ extern bool caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List
 										   StringInfo msg, bool is_cagg_create,
 										   const bool for_rewrites);
 extern void emit_up_to_date_notice(const ContinuousAgg *cagg,
-								   const ContinuousAggRefreshContext context);
+								   const ContinuousAggRefreshContext *context);

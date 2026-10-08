@@ -12,7 +12,6 @@ CREATE FUNCTION unordered_count(regclass) RETURNS bigint LANGUAGE SQL AS $$
 $$;
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');

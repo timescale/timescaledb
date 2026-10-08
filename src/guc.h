@@ -92,6 +92,14 @@ extern TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info;
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings;
 
+typedef enum CaggRefreshStatsLevel
+{
+	CAGG_REFRESH_STATS_OFF,
+	CAGG_REFRESH_STATS_SUMMARY,
+	CAGG_REFRESH_STATS_VERBOSE_LOG,
+} CaggRefreshStatsLevel;
+extern TSDLLEXPORT CaggRefreshStatsLevel ts_guc_cagg_refresh_stats_level;
+
 typedef enum CompressTruncateBehaviour
 {
 	COMPRESS_TRUNCATE_ONLY,
