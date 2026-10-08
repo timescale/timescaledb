@@ -1331,3 +1331,16 @@ SELECT count(*) AS leftover_compressed_chunks FROM pg_class
 SELECT count(*) AS leftover_stats FROM _timescaledb_functions.chunk_statistics() s
   WHERE s.compressed_relid::oid IN (SELECT relid FROM drop_schema_compressed);
 DROP TABLE drop_schema_compressed;
+
+-- rows written before ADD COLUMN ... DEFAULT sort by the default value when compressed
+CREATE TABLE add_col_orderby (ts int NOT NULL, s int);
+SELECT create_hypertable('add_col_orderby', 'ts', chunk_time_interval => 1000);
+INSERT INTO add_col_orderby VALUES (1, 1), (2, 2);
+ALTER TABLE add_col_orderby ADD COLUMN v float8 DEFAULT 0;
+INSERT INTO add_col_orderby VALUES (3, 1, NULL), (4, 2, 5), (5, 3, 0);
+ALTER TABLE add_col_orderby SET (timescaledb.compress, timescaledb.compress_segmentby = 's',
+                                 timescaledb.compress_orderby = 'v DESC NULLS FIRST, ts');
+SELECT count(compress_chunk(c)) FROM show_chunks('add_col_orderby') c;
+SELECT ts, v FROM add_col_orderby ORDER BY v, ts;
+SELECT count(DISTINCT v) FROM add_col_orderby;
+DROP TABLE add_col_orderby;
