@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Report refresh statistics throughout.
+SET timescaledb.cagg_refresh_stats_level TO summary;
+
+
 -- Error / out-of-shared-memory fall back for the per-tenant invalidation tracker.
 --
 
@@ -201,3 +205,5 @@ SELECT sensor_id, bucket, avg FROM gauge_daily ORDER BY sensor_id, bucket;
 
 DROP MATERIALIZED VIEW gauge_daily;
 DROP TABLE gauges;
+
+RESET timescaledb.cagg_refresh_stats_level;
