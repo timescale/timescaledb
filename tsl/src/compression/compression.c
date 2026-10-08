@@ -1155,6 +1155,12 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 		return;
 	}
 
+	/* The rebuild drops the compressed chunk, so only do it while it is still empty */
+	if (RelationGetNumberOfBlocks(old_bulk_writer->out_rel) > 0)
+	{
+		return;
+	}
+
 	Oid old_compressed_relid = RelationGetRelid(old_bulk_writer->out_rel);
 	CompressionSettings *settings =
 		ts_compression_settings_get_by_compress_relid(old_compressed_relid);
