@@ -258,19 +258,15 @@ jobs:
         BIN="$(readlink -f install/bin)"
         SUPP="$(readlink -f pg)/src/tools/valgrind.supp"
         mv "${BIN}/postgres" "${BIN}/postgres.orig"
-        cat > "${BIN}/postgres" <'EOF'
-#!/bin/bash
-
-exec valgrind --quiet --leak-check=no --trace-children=yes
-        --num-callers=20 --time-stamp=yes --gen-suppressions=all
-        --error-markers=VALGRINDERROR-BEGIN,VALGRINDERROR-END
-        --suppressions=${SUPP}
-        --log-file=${GITHUB_WORKSPACE}/valgrind_logs/%p.log
-
-        ${BIN}/postgres.orig \"\$@\"" \
-
-EOF
-
+        cat > "${BIN}/postgres" <<EOF
+        #!/bin/bash
+        exec valgrind --quiet --leak-check=no --trace-children=yes \
+            --num-callers=20 --time-stamp=yes --gen-suppressions=all \
+            --error-markers=VALGRINDERROR-BEGIN,VALGRINDERROR-END \
+            --suppressions=${SUPP} \
+            --log-file=${GITHUB_WORKSPACE}/valgrind_logs/%p.log \
+            ${BIN}/postgres.orig "\$@"
+        EOF
         chmod +x "${BIN}/postgres"
         postgres --version
 
