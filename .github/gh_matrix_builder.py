@@ -419,9 +419,11 @@ elif len(sys.argv) > 2:
                         "pginstallcheck": False,
                         "valgrind": True,
                         "extra_packages": "clang llvm llvm-dev valgrind",
-                        "pg_extra_args": ("--enable-debug --enable-cassert "
-                        "--with-llvm LLVM_CONFIG=llvm-config "
-                        'CFLAGS="-gdwarf-4 -Og -DUSE_VALGRIND"'),
+                        "pg_extra_args": (
+                            "--enable-debug --enable-cassert "
+                            "--with-llvm LLVM_CONFIG=llvm-config "
+                            'CFLAGS="-gdwarf-4 -Og -DUSE_VALGRIND"'
+                        ),
                     }
                 )
             )
