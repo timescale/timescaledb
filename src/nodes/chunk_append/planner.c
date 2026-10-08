@@ -75,6 +75,42 @@ make_chunk_clauses(PlannerInfo *root, List *exclusion_clauses, Scan *scan)
 	return chunk_clauses;
 }
 
+static bool
+collect_params_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		/* Continue walking the rest of the tree. */
+		return false;
+	}
+
+	if (IsA(node, SubPlan))
+	{
+		/*
+		 * Do not descend into a subplan because it is evaluated separately.
+		 * The parameters that might be needed inside it are not valid at the
+		 * ChunkAppend node. Continue walking the rest of the tree.
+		 */
+		return false;
+	}
+
+	if (IsA(node, Param))
+	{
+		List **collected_params = (List **) context;
+		*collected_params = lappend(*collected_params, node);
+
+		/* Continue walking the rest of the tree. */
+		return false;
+	}
+
+	if (IsA(node, RestrictInfo))
+	{
+		return collect_params_walker((Node *) castNode(RestrictInfo, node)->clause, context);
+	}
+
+	return expression_tree_walker(node, collect_params_walker, context);
+}
+
 Plan *
 ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
 							List *clauses, List *custom_plans)
@@ -140,6 +176,26 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		}
 		clauses = transformed_clauses;
 	}
+
+	/*
+	 * We need to put all Params used by clauses to custom_exprs, so that
+	 * SS_finalize_plan() builds a correct set of Params required by this node.
+	 * Otherwise the Params won't be initialized before this node runs. We can't
+	 * put the chunk exclusion clauses themselves into custom_exprs, because
+	 * they are evaluated only by the Postgres constraint exclusion machinery
+	 * against the constraints of a given chunk, and cannot be evaluated against
+	 * this node's scan targetlist (for example, it can just not have the
+	 * required variables).
+	 *
+	 * In most cases, this node just inherits the list of parameters from its
+	 * children (per-chunk scans), but there are some corner cases where the
+	 * parameterized clauses are removed from children but not from parent.
+	 *
+	 * We can't directly fill the Plan.extParam/allParam bitmaps now, because
+	 * they are built later in the planning and will be overwritten.
+	 */
+	List *clause_params = NIL;
+	collect_params_walker((Node *) clauses, (void *) &clause_params);
 
 	ListCell *lc_plan, *lc_path;
 	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
@@ -337,6 +393,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	custom_private = lappend(custom_private, hash_values);
 
 	cscan->custom_private = custom_private;
+
+	cscan->custom_exprs = clause_params;
 
 	return &cscan->scan.plan;
 }
