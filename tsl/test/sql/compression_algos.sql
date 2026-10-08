@@ -504,7 +504,7 @@ DROP table uuid_set;
 SELECT _timescaledb_functions.compressed_data_in('AA=='::cstring);
 \set ON_ERROR_STOP 1
 
-
+-- boop --
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --
 -----------------------------------------------
