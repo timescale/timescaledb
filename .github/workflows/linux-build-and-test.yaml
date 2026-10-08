@@ -281,6 +281,7 @@ jobs:
     - name: Check valgrind logs
       if: always() && matrix.valgrind
       run: |
+        find valgrind_logs -type f -empty -delete
         mapfile -t files < <(grep -l VALGRINDERROR-BEGIN valgrind_logs/* 2>/dev/null || true)
         if (( ${#files[@]} > 0 )); then
           tail -vn +1 "${files[@]}"
