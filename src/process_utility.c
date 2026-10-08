@@ -2123,6 +2123,7 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 {
 	ListCell *lc;
 	int caggs_count = 0;
+	List *caggs = NIL;
 
 	foreach (lc, stmt->objects)
 	{
@@ -2141,9 +2142,10 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 			/* If there is at least one cagg, the drop should be treated as a
 			 * DROP VIEW. */
 			stmt->removeType = OBJECT_VIEW;
-			++caggs_count;
+			caggs = lappend(caggs, cagg);
 		}
 	}
+	caggs_count = list_length(caggs);
 
 	/* We check that there were only continuous aggregates or that there were
 	   no continuous aggregates. Otherwise, we have a mixture of tables and
@@ -2154,6 +2156,35 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("mixing continuous aggregates and other objects not allowed"),
 				 errhint("Drop continuous aggregates and other objects in separate statements.")));
+	}
+
+	/* With RESTRICT, refuse to drop a cagg that still has child caggs. A
+	 * materialized-only child's user view does not depend on its parent, so PG
+	 * would only report the child's internal views; name the child instead. */
+	if (stmt->behavior != DROP_RESTRICT)
+	{
+		return;
+	}
+
+	foreach (lc, caggs)
+	{
+		ContinuousAgg *const cagg = lfirst(lc);
+		List *const children =
+			ts_continuous_aggs_find_by_raw_table_id(cagg->data.mat_hypertable_id);
+
+		if (children != NIL)
+		{
+			ContinuousAgg *const child = linitial(children);
+
+			ereport(ERROR,
+					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
+					 errmsg("cannot drop view %s because other objects depend on it",
+							NameStr(cagg->data.user_view_name)),
+					 errdetail("continuous aggregate %s depends on continuous aggregate %s",
+							   NameStr(child->data.user_view_name),
+							   NameStr(cagg->data.user_view_name)),
+					 errhint("Use DROP ... CASCADE to drop the dependent objects too.")));
+		}
 	}
 }
 
