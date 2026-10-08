@@ -261,6 +261,7 @@ jobs:
         cat > "${BIN}/postgres" <<EOF
         #!/bin/bash
         exec valgrind --quiet --leak-check=no --trace-children=yes \
+            --exit-on-first-error=yes --error-exitcode=1 \
             --num-callers=20 --time-stamp=yes --gen-suppressions=all \
             --error-markers=VALGRINDERROR-BEGIN,VALGRINDERROR-END \
             --suppressions=${SUPP} \

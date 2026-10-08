@@ -104,3 +104,4 @@ select * from test where tag = '2';
          Rows Removed by Filter: 1
 
 reset timescaledb.read_legacy_bloom1_v1;
+-- Trigger the valgrind CI run for this test.

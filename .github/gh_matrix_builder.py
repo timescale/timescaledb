@@ -407,8 +407,9 @@ elif len(sys.argv) > 2:
                 )
             )
 
-        valgrind_tests = sorted(t for t in tests if t not in valgrind_exclude_tests)
+        valgrind_tests = [t for t in tests if t not in valgrind_exclude_tests]
         if valgrind_tests:
+            random.shuffle(valgrind_tests)
             m["include"].append(
                 build_debug_config(
                     {
