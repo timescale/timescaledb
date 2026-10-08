@@ -57,8 +57,9 @@ jobs:
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: [matrixbuilder, check_paths]
     runs-on: ${{ matrix.os }}
-    # The flaky check is advisory, so its failure must not fail the summary.
-    continue-on-error: ${{ contains(matrix.name, 'Flaky') }}
+    # The flaky and valgrind checks are advisory, so their failure must
+    # not fail the summary.
+    continue-on-error: ${{ contains(matrix.name, 'Flaky') || contains(matrix.name, 'Valgrind') }}
 
     env:
       CLANG: ${{ matrix.clang }}
@@ -135,6 +136,11 @@ jobs:
     - name: Cache suffix
       if: runner.os == 'macOS'
       run: echo "CACHE_SUFFIX=-${ImageVersion}" >> $GITHUB_ENV
+
+    # The valgrind PostgreSQL build must have a separate cache entry
+    - name: Valgrind cache suffix
+      if: matrix.valgrind
+      run: echo "CACHE_SUFFIX=-valgrind${CACHE_SUFFIX}" >> $GITHUB_ENV
 
     - name: Restore PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }} Cache
       id: restore-postgresql-cache
@@ -243,6 +249,31 @@ jobs:
       if: matrix.pginstallcheck
       run: make -C build pginstallcheck
 
+    # See https://wiki.postgresql.org/wiki/Valgrind
+    - name: Wrap postgres in valgrind
+      if: matrix.valgrind
+      run: |
+        set -xeu
+        mkdir -p "${GITHUB_WORKSPACE}/valgrind_logs"
+        BIN="$(readlink -f install/bin)"
+        SUPP="$(readlink -f pg)/src/tools/valgrind.supp"
+        mv "${BIN}/postgres" "${BIN}/postgres.orig"
+        cat > "${BIN}/postgres" <'EOF'
+#!/bin/bash
+
+exec valgrind --quiet --leak-check=no --trace-children=yes
+        --num-callers=20 --time-stamp=yes --gen-suppressions=all
+        --error-markers=VALGRINDERROR-BEGIN,VALGRINDERROR-END
+        --suppressions=${SUPP}
+        --log-file=${GITHUB_WORKSPACE}/valgrind_logs/%p.log
+
+        ${BIN}/postgres.orig \"\$@\"" \
+
+EOF
+
+        chmod +x "${BIN}/postgres"
+        postgres --version
+
     - name: make installcheck
       if: matrix.installcheck
       run: |
@@ -250,6 +281,22 @@ jobs:
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
             | tee installcheck.log
+
+    - name: Check valgrind logs
+      if: always() && matrix.valgrind
+      run: |
+        mapfile -t files < <(grep -l VALGRINDERROR-BEGIN valgrind_logs/* 2>/dev/null || true)
+        if (( ${#files[@]} > 0 )); then
+          tail -vn +1 "${files[@]}"
+          exit 1
+        fi
+
+    - name: Save valgrind logs
+      if: always() && matrix.valgrind
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: Valgrind logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: valgrind_logs/
 
     - name: Wait for checks to finish
       wait-all:
