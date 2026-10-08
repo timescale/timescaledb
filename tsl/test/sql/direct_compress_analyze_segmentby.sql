@@ -431,3 +431,23 @@ SELECT sum(count) FROM dc_cagg_inv_cagg;
 
 DROP TABLE dc_cagg_inv CASCADE;
 
+-- Test segmentby analysis does not drop batches already written when the insert returns to a chunk
+BEGIN;
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_auto_segmentby = true;
+SET timescaledb.direct_compress_segmentby_min_rows = 1000;
+CREATE TABLE dc_chunk_revisit (time timestamptz NOT NULL, device_id int NOT NULL, value float)
+WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.chunk_interval='1 day');
+
+INSERT INTO dc_chunk_revisit
+SELECT time, device_id, value FROM (
+  SELECT 1 AS ord, '2024-01-01 00:00+00'::timestamptz + i * interval '1 s' AS time, i % 5 AS device_id, 1.0::float AS value FROM generate_series(1, 20) i
+  UNION ALL
+  SELECT 2, '2024-01-05 00:00+00'::timestamptz, 1, 1.0
+  UNION ALL
+  SELECT 3, '2024-01-01 01:00+00'::timestamptz + i * interval '1 s', i % 5, 1.0 FROM generate_series(1, 5000) i
+) s ORDER BY ord;
+
+SELECT count(*) FROM dc_chunk_revisit;
+SELECT count(*) FROM dc_chunk_revisit WHERE time < '2024-01-02 00:00+00';
+ROLLBACK;
