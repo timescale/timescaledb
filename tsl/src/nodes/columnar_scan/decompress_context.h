@@ -50,6 +50,13 @@ typedef struct CompressionColumnDescription
 	 */
 	AttrNumber compressed_scan_attno;
 
+	/*
+	 * Attno of this column's boundary sparse metadata column in the input
+	 * compressed chunk scan. Used when returning first batch row from metadata
+	 * without decompression.
+	 */
+	AttrNumber boundary_metadata_attno;
+
 	bool bulk_decompression_supported;
 } CompressionColumnDescription;
 
@@ -76,6 +83,12 @@ typedef struct DecompressContext
 	bool reverse;
 	bool batch_sorted_merge; /* Batch sorted merge optimization enabled. */
 	bool enable_bulk_decompression;
+
+	/*
+	 * Return first row of the batch based on the boundary metadata columns
+	 * without decompression.
+	 */
+	bool first_row_from_metadata;
 
 	/*
 	 * Scratch space for bulk decompression which might need a lot of temporary

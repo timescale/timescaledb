@@ -16,6 +16,7 @@ typedef enum
 	DCS_EnableBulkDecompression = 4,
 	DCS_HasRowMarks = 5,
 	DCS_ChunkStatus = 6,
+	DCS_FirstRowFromMetadata = 7,
 	DCS_Count
 } ColumnarScanSettingsIndex;
 
@@ -26,6 +27,7 @@ typedef enum
 	DCP_IsSegmentbyColumn = 2,
 	DCP_BulkDecompressionColumn = 3,
 	DCP_SortInfo = 4,
+	DCP_BoundaryMetadataColumn = 5,
 	DCP_Count
 } ColumnarScanPrivateIndex;
 
