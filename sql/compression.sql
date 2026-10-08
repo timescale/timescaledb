@@ -17,3 +17,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.decompress_batch(record)
    AS '@MODULE_PATHNAME@', 'ts_decompress_batch'
    LANGUAGE C STRICT;
 
+-- Record the pg_depend links between the compressed relations and their chunk.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.restore_compressed_relation_dependencies()
+   RETURNS INTEGER
+   AS '@MODULE_PATHNAME@', 'ts_compressed_relation_restore_dependencies'
+   LANGUAGE C;

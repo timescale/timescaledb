@@ -1297,7 +1297,6 @@ ALTER TABLE alter_col_type_test ALTER COLUMN device_id TYPE text;
 
 DROP TABLE alter_col_type_test;
 
-
 -- Dropping the schema of a hypertable should also drop its compressed chunks
 -- and evict their chunk statistics, including those of a continuous aggregate
 -- in the same schema
@@ -1331,3 +1330,41 @@ SELECT count(*) AS leftover_compressed_chunks FROM pg_class
 SELECT count(*) AS leftover_stats FROM _timescaledb_functions.chunk_statistics() s
   WHERE s.compressed_relid::oid IN (SELECT relid FROM drop_schema_compressed);
 DROP TABLE drop_schema_compressed;
+
+-- the compressed relation is linked to its chunk in pg_depend
+CREATE TABLE dep_test(time timestamptz NOT NULL, device int, value float);
+SELECT create_hypertable('dep_test', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE dep_test SET (timescaledb.compress);
+INSERT INTO dep_test VALUES ('2026-01-01', 1, 1.0), ('2026-01-02', 2, 2.0);
+
+CREATE VIEW dep_test_deps AS
+SELECT d.deptype, count(*) AS links
+FROM pg_depend d
+  JOIN _timescaledb_catalog.compression_settings cs
+    ON d.objid = cs.compress_relid::oid AND d.refobjid = cs.relid::oid
+  JOIN _timescaledb_catalog.chunk ch ON ch.relid = cs.relid
+  JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id
+WHERE d.classid = 'pg_class'::regclass::oid
+  AND d.refclassid = 'pg_class'::regclass::oid
+  AND d.objsubid = 0
+  AND ht.table_name = 'dep_test'
+GROUP BY d.deptype;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('dep_test') ch;
+SELECT * FROM dep_test_deps;
+
+-- restoring the links is idempotent
+SELECT _timescaledb_functions.restore_compressed_relation_dependencies() > 0 AS restored;
+SELECT * FROM dep_test_deps;
+
+-- decompressing removes the link again
+SELECT count(decompress_chunk(ch)) FROM show_chunks('dep_test') ch;
+SELECT * FROM dep_test_deps;
+
+-- dropping the chunks takes the compressed relations with them
+SELECT count(compress_chunk(ch)) FROM show_chunks('dep_test') ch;
+SELECT count(*) FROM (SELECT drop_chunks('dep_test', older_than => '2026-01-03'::timestamptz)) c;
+SELECT * FROM dep_test_deps;
+
+DROP TABLE dep_test;
+DROP VIEW dep_test_deps;
