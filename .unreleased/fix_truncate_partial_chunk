@@ -1,1 +1,0 @@
-Fixes: #10715 Fix TRUNCATE on a partially compressed chunk only truncating the compressed part

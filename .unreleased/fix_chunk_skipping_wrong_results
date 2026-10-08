@@ -1,1 +1,0 @@
-Fixes: #10558 Fix wrong query results for chunk skipping columns at the maximum value of a chunk or after DML on a compressed chunk
