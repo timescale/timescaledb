@@ -372,7 +372,6 @@ PREPARE cagg_scan_1h AS SELECT * FROM chunks_1h;
 
 INSERT INTO chunks VALUES ('2000-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Jul 31 17:00:00 2000 PDT, Tue Aug 01 23:00:00 2000 PDT ]
 SELECT * FROM _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H));
          to_timestamp         
 ------------------------------
@@ -475,7 +474,6 @@ INSERT INTO chunks VALUES ('2002-08-01 01:01:01+01', 1, 2);
 
 -- Materialize CAgg and check for plan time chunk exclusion
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 6 batch(es) of 6 in window [ Tue Jul 31 17:00:00 2001 PDT, Thu Aug 01 23:00:00 2002 PDT ]
 :EXPLAIN_ANALYZE EXECUTE cagg_scan_1h;
 --- QUERY PLAN ---
  Append (actual rows=3.00 loops=1)
@@ -528,7 +526,6 @@ RESET timescaledb.enable_constraint_aware_append;
 -- Insert new values and check watermark changes
 INSERT INTO chunks VALUES ('2003-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Thu Jul 31 17:00:00 2003 PDT, Fri Aug 01 23:00:00 2003 PDT ]
 SELECT * FROM _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H));
          to_timestamp         
 ------------------------------
@@ -568,7 +565,6 @@ SELECT * FROM chunks_1h;
 
 INSERT INTO chunks VALUES ('2004-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sat Jul 31 17:00:00 2004 PDT, Sun Aug 01 23:00:00 2004 PDT ]
 SELECT * FROM _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H));
          to_timestamp         
 ------------------------------
@@ -593,10 +589,8 @@ SELECT * FROM _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_wa
 -- Two invalidations without prepared statement execution between
 INSERT INTO chunks VALUES ('2005-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sun Jul 31 17:00:00 2005 PDT, Mon Aug 01 23:00:00 2005 PDT ]
 INSERT INTO chunks VALUES ('2006-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Mon Jul 31 17:00:00 2006 PDT, Tue Aug 01 23:00:00 2006 PDT ]
 SELECT * FROM _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H));
          to_timestamp         
 ------------------------------
@@ -659,7 +653,6 @@ SELECT * FROM _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_wa
 
 INSERT INTO chunks VALUES ('2007-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Tue Jul 31 17:00:00 2007 PDT, Wed Aug 01 23:00:00 2007 PDT ]
 :EXPLAIN_ANALYZE EXECUTE ht_scan_realtime_1h;
 --- QUERY PLAN ---
  Append (actual rows=8.00 loops=1)
@@ -733,7 +726,6 @@ SELECT * FROM chunks_1h;
 
 -- Refresh the CAgg
 CALL refresh_continuous_aggregate('chunks_1h', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 EXECUTE cagg_scan_1h;
  bucket | device | max 
 --------+--------+-----
@@ -769,7 +761,6 @@ SELECT * FROM _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_wa
 -- Update after truncate
 INSERT INTO chunks VALUES ('2008-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Thu Jul 31 17:00:00 2008 PDT, Fri Aug 01 23:00:00 2008 PDT ]
 SELECT * FROM _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H));
          to_timestamp         
 ------------------------------
@@ -837,9 +828,7 @@ PREPARE cagg_scan_1d AS SELECT * FROM chunks_1d;
 
 INSERT INTO chunks VALUES ('2009-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Jul 31 17:00:00 2009 PDT, Sat Aug 01 23:00:00 2009 PDT ]
 CALL refresh_continuous_aggregate('chunks_1d', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Fri Aug 01 17:00:00 2008 PDT, Mon Aug 03 17:00:00 2009 PDT ]
 :EXPLAIN_ANALYZE EXECUTE ht_scan_realtime_1d;
 --- QUERY PLAN ---
  Append (actual rows=2.00 loops=1)
@@ -857,9 +846,7 @@ NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Fr
 
 INSERT INTO chunks VALUES ('2010-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sat Jul 31 17:00:00 2010 PDT, Sun Aug 01 23:00:00 2010 PDT ]
 CALL refresh_continuous_aggregate('chunks_1d', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Jan 01 00:00:00 2000 PST, Tue Jun 01 00:00:00 2021 PDT ]
 :EXPLAIN_ANALYZE EXECUTE ht_scan_realtime_1d;
 --- QUERY PLAN ---
  Append (actual rows=3.00 loops=1)
@@ -892,7 +879,6 @@ SELECT * FROM cur_watermark_plsql(:MAT_HT_ID_1H);
 
 INSERT INTO chunks VALUES ('2011-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sun Jul 31 17:00:00 2011 PDT, Mon Aug 01 23:00:00 2011 PDT ]
 SELECT * FROM cur_watermark_plsql(:MAT_HT_ID_1H);
      cur_watermark_plsql      
 ------------------------------
@@ -900,7 +886,6 @@ SELECT * FROM cur_watermark_plsql(:MAT_HT_ID_1H);
 
 INSERT INTO chunks VALUES ('2012-08-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Tue Jul 31 17:00:00 2012 PDT, Wed Aug 01 23:00:00 2012 PDT ]
 SELECT * FROM cur_watermark_plsql(:MAT_HT_ID_1H);
      cur_watermark_plsql      
 ------------------------------
@@ -930,7 +915,6 @@ SELECT * FROM cur_cagg_result_count();
 
 -- Materialize
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Wed Jul 31 17:00:00 2013 PDT, Thu Aug 01 23:00:00 2013 PDT ]
 SELECT * FROM cur_cagg_result_count();
  cur_cagg_result_count 
 -----------------------
@@ -963,7 +947,6 @@ EXECUTE watermark_query;
 
 INSERT INTO chunks VALUES ('2013-09-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sat Aug 31 17:00:00 2013 PDT, Sun Sep 01 23:00:00 2013 PDT ]
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:MAT_HT_ID_1H));
          to_timestamp         
 ------------------------------
@@ -978,7 +961,6 @@ EXECUTE watermark_query;
 SET timescaledb.enable_cagg_watermark_constify = OFF;
 INSERT INTO chunks VALUES ('2014-01-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Tue Dec 31 16:00:00 2013 PST, Wed Jan 01 22:00:00 2014 PST ]
 :EXPLAIN_ANALYZE EXECUTE ht_scan_realtime_1h;
 --- QUERY PLAN ---
  Append (actual rows=8.00 loops=1)
@@ -1029,7 +1011,6 @@ RESET timescaledb.enable_cagg_watermark_constify;
 -- Select with projection
 INSERT INTO chunks VALUES ('2015-01-01 01:01:01+01', 1, 2);
 CALL refresh_continuous_aggregate('chunks_1h', '2000-01-01', '2021-06-01');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Wed Dec 31 16:00:00 2014 PST, Thu Jan 01 22:00:00 2015 PST ]
 :EXPLAIN_ANALYZE SELECT device FROM chunks_1h;
 --- QUERY PLAN ---
  Append (actual rows=9.00 loops=1)
@@ -1710,9 +1691,7 @@ WHERE hypertable_id = (
  -infinity
 
 CALL refresh_continuous_aggregate('metric_cagg_24h', '2026-01-20 15:00:00+00', '2026-01-26 15:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 20 15:00:00 2026 UTC, Mon Jan 26 15:00:00 2026 UTC ]
 CALL refresh_continuous_aggregate('metric_cagg_24h_no_tz', '2026-01-20 15:00:00+00', '2026-01-26 15:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 20 15:00:00 2026 UTC, Mon Jan 26 15:00:00 2026 UTC ]
 SELECT * FROM metric_data;
             to_ts             | id | duration_ms 
 ------------------------------+----+-------------
@@ -1829,9 +1808,7 @@ FROM metric_data
 GROUP BY to_ts_24h, id
 WITH NO DATA;
 CALL refresh_continuous_aggregate('metric_cagg_24h_origin_tz', '2026-01-20 15:00:00+00', '2026-01-26 15:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 20 15:00:00 2026 UTC, Mon Jan 26 15:00:00 2026 UTC ]
 CALL refresh_continuous_aggregate('metric_cagg_24h_origin_no_tz', '2026-01-20 15:00:00+00', '2026-01-26 15:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 20 15:00:00 2026 UTC, Mon Jan 26 15:00:00 2026 UTC ]
 SELECT * FROM metric_cagg_24h_origin_tz;
           to_ts_24h           | id | duration_ms 
 ------------------------------+----+-------------
@@ -1934,9 +1911,7 @@ FROM metric_data
 GROUP BY to_ts_month, id
 WITH NO DATA;
 CALL refresh_continuous_aggregate('metric_cagg_monthly_offset', '2025-12-01', '2026-02-05');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Dec 01 00:00:00 2025 UTC, Thu Feb 05 00:00:00 2026 UTC ]
 CALL refresh_continuous_aggregate('metric_cagg_monthly_origin', '2025-12-01', '2026-02-05');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Dec 01 00:00:00 2025 UTC, Thu Feb 05 00:00:00 2026 UTC ]
 SELECT * FROM metric_cagg_monthly_offset;
          to_ts_month          | id | duration_ms 
 ------------------------------+----+-------------

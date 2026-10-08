@@ -26,7 +26,6 @@ WITH NO DATA;
 -- Advance the invalidation threshold so inserts below it write to the
 -- hypertable_invalidation_log.
 CALL refresh_continuous_aggregate('skip_inv_1h', NULL, '2030-01-16');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ 4714-11-24 00:00:00+00 BC, 2030-01-16 00:00:00+00 ]
 SELECT format('%I.%I', chunk_schema, chunk_name) AS skip_inv_chunk
   FROM timescaledb_information.chunks
   WHERE hypertable_name = 'skip_inv' \gset
@@ -114,7 +113,6 @@ WHERE bucket >= '2030-01-15 05:00' AND bucket < '2030-01-15 07:00';
                           0
 
 CALL refresh_continuous_aggregate('skip_inv_1h', '2030-01-15 05:00', '2030-01-15 07:00', force => true);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2030-01-15 05:00:00+00, 2030-01-15 07:00:00+00 ]
 SELECT bucket, n, s FROM skip_inv_1h
 WHERE bucket >= '2030-01-15 05:00' AND bucket < '2030-01-15 07:00'
 ORDER BY bucket;
@@ -149,7 +147,6 @@ FROM skip_inv_dc
 GROUP BY 1
 WITH NO DATA;
 CALL refresh_continuous_aggregate('skip_inv_dc_1h', NULL, '2030-02-16');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ 4714-11-24 00:00:00+00 BC, 2030-02-16 00:00:00+00 ]
 -- Direct-compress INSERT requires the planner to estimate >= 10 rows, so use
 -- generate_series. Direct-compress COPY has no row threshold.
 BEGIN;
@@ -188,7 +185,6 @@ FROM skip_inv_ddl
 GROUP BY 1
 WITH NO DATA;
 CALL refresh_continuous_aggregate('skip_inv_ddl_1h', NULL, '2030-03-06');
-NOTICE:  continuous aggregate refresh: processed 12 batch(es) of 12 in window [ 4714-11-24 00:00:00+00 BC, 2030-03-06 00:00:00+00 ]
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO 'UTC';
 SET datestyle TO 'ISO, YMD';
@@ -323,7 +319,6 @@ FROM skip_inv_hier
 GROUP BY 1
 WITH NO DATA;
 CALL refresh_continuous_aggregate('skip_inv_hier_1h', NULL, '2030-04-04');
-NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ 4714-11-24 00:00:00+00 BC, 2030-04-04 00:00:00+00 ]
 CREATE MATERIALIZED VIEW skip_inv_hier_1d
 WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 day', bucket) AS bucket, sum(n) AS n
@@ -331,7 +326,6 @@ FROM skip_inv_hier_1h
 GROUP BY 1
 WITH NO DATA;
 CALL refresh_continuous_aggregate('skip_inv_hier_1d', NULL, '2030-04-04');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 4714-11-24 00:00:00+00 BC, 2030-04-04 00:00:00+00 ]
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO 'UTC';
 SET datestyle TO 'ISO, YMD';

@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- Test default segmentby gets set for direct compress
 BEGIN;
@@ -410,9 +409,7 @@ SELECT time_bucket('1 hour', time) AS bucket, count(*)
 FROM dc_cagg_inv GROUP BY 1 WITH NO DATA;
 
 INSERT INTO dc_cagg_inv VALUES ('2025-01-01', 'x');
-SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('dc_cagg_inv_cagg', NULL, '2025-01-02');
-RESET client_min_messages;
 
 SET timescaledb.enable_direct_compress_insert = on;
 SET timescaledb.enable_direct_compress_auto_segmentby = on;
@@ -428,9 +425,7 @@ SELECT count(*) FROM dc_cagg_inv;
 SELECT sum(count) FROM dc_cagg_inv_cagg;
 SELECT count(*) FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
-SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('dc_cagg_inv_cagg', '2025-01-01', '2025-01-02');
-RESET client_min_messages;
 SELECT sum(count) FROM dc_cagg_inv_cagg;
 
 DROP TABLE dc_cagg_inv CASCADE;

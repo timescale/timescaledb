@@ -66,6 +66,13 @@ static const struct config_enum_entry loglevel_options[] = {
 };
 #endif
 
+static const struct config_enum_entry cagg_refresh_stats_level_options[] = {
+	{ "off", CAGG_REFRESH_STATS_OFF, false },
+	{ "summary", CAGG_REFRESH_STATS_SUMMARY, false },
+	{ "verbose_log", CAGG_REFRESH_STATS_VERBOSE_LOG, false },
+	{ NULL, 0, false }
+};
+
 static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
 	{ "truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false },
@@ -162,6 +169,7 @@ TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
+TSDLLEXPORT CaggRefreshStatsLevel ts_guc_cagg_refresh_stats_level = CAGG_REFRESH_STATS_OFF;
 
 bool ts_guc_enable_partitioned_hypertables = false;
 TSDLLEXPORT int ts_guc_stats_max_chunks = TS_STATS_MAX_CHUNKS_DEFAULT;
@@ -540,6 +548,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_sort_batches"),
 							 "Enable batch sorting during direct compress COPY",
 							 NULL,
@@ -550,6 +559,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_client_sorted"),
 							 "Enable direct compress COPY with presorted data",
@@ -605,6 +615,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert_sort_batches"),
 							 "Enable batch sorting during direct compress INSERT",
 							 NULL,
@@ -615,6 +626,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert_client_sorted"),
 							 "Enable direct compress INSERT with presorted data",
@@ -1141,6 +1153,22 @@ _guc_init(void)
 							 "Enable MERGE statement on cagg refresh",
 							 &ts_guc_enable_merge_on_cagg_refresh,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomEnumVariable(MAKE_EXTOPTION("cagg_refresh_stats_level"),
+							 "Continuous aggregate refresh statistics level",
+							 "Level of statistics reporting for a continuous aggregate refresh. "
+							 "'off' reports nothing. 'summary' reports a summary to the server "
+							 "log and as a notice to the client. 'verbose_log' reports the same "
+							 "as summary, and additionally records more detailed statistics, "
+							 "when applicable, to the server log.",
+							 (int *) &ts_guc_cagg_refresh_stats_level,
+							 CAGG_REFRESH_STATS_OFF,
+							 cagg_refresh_stats_level_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,

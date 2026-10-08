@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Report refresh statistics throughout.
+SET timescaledb.cagg_refresh_stats_level TO summary;
+
+
 -- Granular refresh across tenant column TYPES.
 --
 -- Exercises the tenant-key encode/decode that granular refresh relies on for the
@@ -382,3 +386,5 @@ ORDER BY sensor_id;
 
 DROP MATERIALIZED VIEW vc_daily;
 DROP TABLE vc;
+
+RESET timescaledb.cagg_refresh_stats_level;

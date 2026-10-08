@@ -58,7 +58,6 @@ step "s2_add_a"     { ALTER MATERIALIZED VIEW cagg_a     ADD COLUMN max_temp  do
 step "s2_add_child" { ALTER MATERIALIZED VIEW cagg_child ADD COLUMN max_daily double precision GENERATED ALWAYS AS (max(avg_val))   STORED; }
 
 session "r"
-setup { SET client_min_messages TO warning; }
 step "r_refresh_a" { CALL refresh_continuous_aggregate('cagg_a', '2026-01-01', '2026-01-02'); }
 
 session "reader"
