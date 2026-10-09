@@ -10,6 +10,7 @@
 #include <nodes/bitmapset.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
+#include <utils/datum.h>
 #include <utils/timestamp.h>
 #include <utils/uuid.h>
 
@@ -238,44 +239,30 @@ compressed_column_values_from_arrow(CompressedColumnValues *column_values, Arrow
 	}
 }
 
+/*
+ * Decompress a column from the compressed datum saved at batch setup.
+ */
 static void
-decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state,
-				  TupleTableSlot *compressed_slot, int i)
+decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state, int i)
 {
 	CompressionColumnDescription *column_description = &dcontext->compressed_chunk_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+	Assert(column_values->decompression_type == DT_Invalid);
+
+	Assert(batch_state->next_batch_row == 0);
+
+	Datum compressed_datum = PointerGetDatum((void *) column_values->buffers[0]);
 	column_values->arrow = NULL;
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
-	bool isnull;
-	Datum value = slot_getattr(compressed_slot, column_description->compressed_scan_attno, &isnull);
-	dcontext->compressed_relid = compressed_slot->tts_tableOid;
-
-	if (isnull)
-	{
-		/*
-		 * The column will have a default value for the entire batch,
-		 * set it now.
-		 *
-		 * We might use a custom targetlist-based scan tuple which has no
-		 * default values, so the default values are fetched from the
-		 * uncompressed chunk tuple descriptor.
-		 */
-		bool isnull;
-		Datum value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
-									 column_description->uncompressed_chunk_attno,
-									 &isnull);
-		decompress_scalar_column(column_values, value, isnull);
-		return;
-	}
-
 	/* Detoast the compressed datum. */
-	value = PointerGetDatum(detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(value),
-														&dcontext->detoaster,
-														batch_state->per_batch_context));
+	Datum detoasted = PointerGetDatum(
+		detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(compressed_datum),
+									&dcontext->detoaster,
+									batch_state->per_batch_context));
 
-	CompressedDataHeader *header = (CompressedDataHeader *) value;
+	CompressedDataHeader *header = (CompressedDataHeader *) detoasted;
 
 	/* First check if this is a block of NULL values. */
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
@@ -287,7 +274,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	dcontext->batches_decompressed++;
 	/* to backfill the column's compressed bytes. */
 	ts_stats_compression_acc_column(&dcontext->observ_acc,
-									VARSIZE_ANY_EXHDR(DatumGetPointer(value)));
+									VARSIZE_ANY_EXHDR(DatumGetPointer(detoasted)));
 
 	/* Decompress the entire batch if it is supported. */
 	ArrowArray *arrow = NULL;
@@ -357,7 +344,6 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 	DecompressContext *dcontext = cbvqstate->dcontext;
 	DecompressBatchState *batch_state = cbvqstate->batch_state;
 	CompressionColumnDescription *column_description = NULL;
-	TupleTableSlot *compressed_slot = vqstate->slot;
 	const Var *var = castNode(Var, expr);
 	int column_index = 0;
 
@@ -408,7 +394,7 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 		 * skip decompressing some columns if the entire batch doesn't pass
 		 * the quals.
 		 */
-		decompress_column(dcontext, batch_state, compressed_slot, column_index);
+		decompress_column(dcontext, batch_state, column_index);
 		Assert(column_values->decompression_type != DT_Invalid);
 	}
 
@@ -455,8 +441,7 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 }
 
 static void
-compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
-				   uint64 *restrict result)
+compute_plain_qual(VectorQualState *vqstate, Node *qual, uint64 *restrict result)
 {
 	/*
 	 * Some predicates can be evaluated to a Const at run time.
@@ -697,16 +682,14 @@ compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
 	}
 }
 
-static void compute_one_qual(VectorQualState *vqstate, TupleTableSlot *compressed_slot, Node *qual,
-							 uint64 *restrict result);
+static void compute_one_qual(VectorQualState *vqstate, Node *qual, uint64 *restrict result);
 static void
-compute_qual_conjunction(VectorQualState *vqstate, TupleTableSlot *compressed_slot, List *quals,
-						 uint64 *restrict result)
+compute_qual_conjunction(VectorQualState *vqstate, List *quals, uint64 *restrict result)
 {
 	ListCell *lc;
 	foreach (lc, quals)
 	{
-		compute_one_qual(vqstate, compressed_slot, lfirst(lc), result);
+		compute_one_qual(vqstate, lfirst(lc), result);
 		if (get_vector_qual_summary(result, vqstate->num_results) == NoRowsPass)
 		{
 			/*
@@ -719,8 +702,7 @@ compute_qual_conjunction(VectorQualState *vqstate, TupleTableSlot *compressed_sl
 }
 
 static void
-compute_qual_disjunction(VectorQualState *vqstate, TupleTableSlot *compressed_slot, List *quals,
-						 uint64 *restrict result)
+compute_qual_disjunction(VectorQualState *vqstate, List *quals, uint64 *restrict result)
 {
 	const size_t n_rows = vqstate->num_results;
 	const size_t n_result_words = (n_rows + 63) / 64;
@@ -741,7 +723,7 @@ compute_qual_disjunction(VectorQualState *vqstate, TupleTableSlot *compressed_sl
 		{
 			one_qual_result[i] = (uint64) -1;
 		}
-		compute_one_qual(vqstate, compressed_slot, lfirst(lc), one_qual_result);
+		compute_one_qual(vqstate, lfirst(lc), one_qual_result);
 		for (size_t i = 0; i < n_result_words; i++)
 		{
 			or_result[i] |= one_qual_result[i];
@@ -764,19 +746,18 @@ compute_qual_disjunction(VectorQualState *vqstate, TupleTableSlot *compressed_sl
 }
 
 static void
-compute_one_qual(VectorQualState *vqstate, TupleTableSlot *compressed_slot, Node *qual,
-				 uint64 *restrict result)
+compute_one_qual(VectorQualState *vqstate, Node *qual, uint64 *restrict result)
 {
 	if (!IsA(qual, BoolExpr))
 	{
-		compute_plain_qual(vqstate, compressed_slot, qual, result);
+		compute_plain_qual(vqstate, qual, result);
 		return;
 	}
 
 	BoolExpr *boolexpr = castNode(BoolExpr, qual);
 	if (boolexpr->boolop == AND_EXPR)
 	{
-		compute_qual_conjunction(vqstate, compressed_slot, boolexpr->args, result);
+		compute_qual_conjunction(vqstate, boolexpr->args, result);
 		return;
 	}
 
@@ -792,13 +773,13 @@ compute_one_qual(VectorQualState *vqstate, TupleTableSlot *compressed_slot, Node
 	{
 		if (list_length(boolexpr->args) == 1 && IsA(linitial(boolexpr->args), Var))
 		{
-			compute_plain_qual(vqstate, compressed_slot, qual, result);
+			compute_plain_qual(vqstate, qual, result);
 			return;
 		}
 	}
 
 	Ensure(boolexpr->boolop == OR_EXPR, "expected OR");
-	compute_qual_disjunction(vqstate, compressed_slot, boolexpr->args, result);
+	compute_qual_disjunction(vqstate, boolexpr->args, result);
 }
 
 /*
@@ -833,7 +814,6 @@ vector_qual_compute(VectorQualState *vqstate)
 	 * Compute the quals.
 	 */
 	compute_qual_conjunction(vqstate,
-							 vqstate->slot,
 							 vqstate->vectorized_quals_constified,
 							 vqstate->vector_qual_result);
 
@@ -923,6 +903,35 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	slot->tts_ops->init(slot);
 }
 
+static void
+decompress_data_columns(DecompressContext *dcontext, DecompressBatchState *batch_state)
+{
+	for (int i = 0; i < dcontext->num_data_columns; i++)
+	{
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+		if (column_values->decompression_type != DT_Invalid)
+		{
+			continue;
+		}
+
+		decompress_column(dcontext, batch_state, i);
+
+		/*
+		 * Advance the fresh row-by-row iterators past the rows already
+		 * consumed from the batch, so that they stay in sync with the batch
+		 * counter.
+		 */
+		if (column_values->decompression_type == DT_Iterator)
+		{
+			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
+			for (uint16 row = 0; row < batch_state->next_batch_row; row++)
+			{
+				iterator->try_next(iterator);
+			}
+		}
+	}
+}
+
 /*
  * Initialize the batch decompression state with the new compressed  tuple.
  */
@@ -949,6 +958,8 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 
 	MemoryContextReset(batch_state->per_batch_context);
 
+	dcontext->compressed_relid = compressed_slot->tts_tableOid;
+
 	for (int i = 0; i < dcontext->num_columns_with_metadata; i++)
 	{
 		CompressionColumnDescription *column_description = &dcontext->compressed_chunk_columns[i];
@@ -957,19 +968,54 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		{
 			case COMPRESSED_COLUMN:
 			{
-				/*
-				 * We decompress the compressed columns on demand, so that we can
-				 * skip decompressing some columns if the entire batch doesn't pass
-				 * the quals. Skip them for now.
-				 */
 				Assert(i < dcontext->num_data_columns);
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->decompression_type = DT_Invalid;
 				column_values->arrow = NULL;
+				column_values->by_ref_storage = NULL;
+
 				const AttrNumber attr =
 					AttrNumberGetAttrOffset(column_description->custom_scan_attno);
 				column_values->output_value = &decompressed_tuple->tts_values[attr];
 				column_values->output_isnull = &decompressed_tuple->tts_isnull[attr];
+
+				bool isnull;
+				Datum value = slot_getattr(compressed_slot,
+										   column_description->compressed_scan_attno,
+										   &isnull);
+				if (isnull)
+				{
+					/*
+					 * The column will have a default value for the entire
+					 * batch, set it now.
+					 *
+					 * We might use a custom targetlist-based scan tuple which
+					 * has no default values, so the default values are fetched
+					 * from the uncompressed chunk tuple descriptor.
+					 */
+					Datum default_value =
+						getmissingattr(dcontext->uncompressed_chunk_tdesc,
+									   column_description->uncompressed_chunk_attno,
+									   &isnull);
+					decompress_scalar_column(column_values, default_value, isnull);
+					break;
+				}
+
+				/*
+				 * We decompress the compressed columns on demand, so that we
+				 * can skip decompressing some columns, for example, if the
+				 * entire batch doesn't pass the quals.
+				 *
+				 * Save a batch-owned copy of the compressed datum in its
+				 * stored form, so that the column can be decompressed later.
+				 * In usual cases, this datum is a toast pointer, so copying it
+				 * is cheap. Do not detoast here, this is done on demand using
+				 * our custom optimized detoaster mechanism.
+				 */
+				MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
+				column_values->buffers[0] =
+					DatumGetPointer(datumCopy(value, /* typByVal = */ false, /* typLen = */ -1));
+				MemoryContextSwitchTo(old_context);
 				break;
 			}
 			case SEGMENTBY_COLUMN:
@@ -1056,7 +1102,6 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 			.vectorized_quals_constified = dcontext->vectorized_quals_constified,
 			.num_results = batch_state->total_batch_rows,
 			.per_vector_mcxt = batch_state->per_batch_context,
-			.slot = compressed_slot,
 			.get_arrow_array = compressed_batch_get_arrow_array,
 		},
 		.batch_state = batch_state,
@@ -1092,16 +1137,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		 * We have some rows in the batch that pass the vectorized filters, so
 		 * we have to decompress the rest of the compressed columns.
 		 */
-		const int num_data_columns = dcontext->num_data_columns;
-		for (int i = 0; i < num_data_columns; i++)
-		{
-			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-			if (column_values->decompression_type == DT_Invalid)
-			{
-				decompress_column(dcontext, batch_state, compressed_slot, i);
-				Assert(column_values->decompression_type != DT_Invalid);
-			}
-		}
+		decompress_data_columns(dcontext, batch_state);
 
 		/*
 		 * If all rows pass, no need to test the vector qual for each row. This
@@ -1120,9 +1156,10 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
  * Doesn't check the quals.
  */
 static void
-make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_data_columns)
+make_next_tuple(DecompressContext *dcontext, DecompressBatchState *batch_state, uint16 arrow_row)
 {
 	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;
+	const int num_data_columns = dcontext->num_data_columns;
 
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
@@ -1244,7 +1281,7 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 			continue;
 		}
 
-		make_next_tuple(batch_state, arrow_row, num_data_columns);
+		make_next_tuple(dcontext, batch_state, arrow_row);
 
 		if (!postgres_qual(dcontext, batch_state))
 		{
@@ -1315,7 +1352,7 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	/* Make the first tuple and save it. */
 	Assert(batch_state->next_batch_row == 0);
 	const uint16 arrow_row = dcontext->reverse ? batch_state->total_batch_rows - 1 : 0;
-	make_next_tuple(batch_state, arrow_row, dcontext->num_data_columns);
+	make_next_tuple(dcontext, batch_state, arrow_row);
 	ExecCopySlot(first_tuple_slot, &batch_state->decompressed_scan_slot_data.base);
 
 	/*
