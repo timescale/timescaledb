@@ -1228,7 +1228,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			.attnum_min = lower_attno,
 			.attnum_max = upper_attno,
 			.attnum_count = get_attnum(compress_settings->fd.compress_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME),
-			.noncompressed_tupdesc = CreateTupleDescCopy(RelationGetDescr(srcrel)),
+			.noncompressed_tupdesc = CreateTupleDescCopyConstr(RelationGetDescr(srcrel)),
 		};
 
 		csplit_relations[0] =

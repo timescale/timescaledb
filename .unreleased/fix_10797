@@ -1,0 +1,1 @@
+Fixes: #10757 Values of a column added with a default after compression become NULL when splitting a compressed chunk
