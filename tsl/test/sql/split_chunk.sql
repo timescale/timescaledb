@@ -770,3 +770,21 @@ call split_chunk_validate(:'chunk_to_split', split_at => '2024-01-10');
 select count(*), min(temp), max(temp) from split_sparse where status = 'status_2';
 select count(*) from split_sparse where temp > 4;
 drop table split_sparse;
+
+-- A column added with a default after compression keeps its default value
+-- when a compressed segment is split.
+create table split_add_col(time timestamptz not null, device int, temp float8);
+select create_hypertable('split_add_col', 'time', chunk_time_interval => interval '1 year');
+insert into split_add_col
+select t, d, d * 1.5
+from generate_series('2024-01-01'::timestamptz, '2024-01-20', '1 hour') t, generate_series(1, 3) d;
+alter table split_add_col set (timescaledb.compress, timescaledb.compress_segmentby = 'device', timescaledb.compress_orderby = 'time');
+select count(compress_chunk(c)) from show_chunks('split_add_col') c;
+alter table split_add_col add column v float8 default 7;
+select count(*), min(v), max(v), count(v) from split_add_col;
+select show_chunks('split_add_col') chunk_to_split \gset
+call split_chunk_validate(:'chunk_to_split', split_at => '2024-01-10');
+select count(*), min(v), max(v), count(v) from split_add_col;
+select count(*) from split_add_col where v = 7;
+select count(*) from split_add_col where v is null;
+drop table split_add_col;
