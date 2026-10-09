@@ -210,6 +210,23 @@ make_event_trigger_drop_trigger(const char *trigger_name, const char *schema, co
 	return obj;
 }
 
+static EventTriggerDropTableColumn *
+make_event_trigger_drop_table_column(const char *schema, const char *table, const char *column)
+{
+	EventTriggerDropTableColumn *obj = palloc(sizeof(EventTriggerDropTableColumn));
+
+	*obj = (EventTriggerDropTableColumn){
+		.obj = {
+			.type = EVENT_TRIGGER_DROP_TABLE_COLUMN,
+		},
+		.schema = schema,
+		.table = table,
+		.column = column,
+	};
+
+	return obj;
+}
+
 static EventTriggerDropForeignServer *
 make_event_trigger_drop_foreign_server(const char *server_name)
 {
@@ -309,6 +326,12 @@ ts_event_trigger_dropped_objects(void)
 															 lsecond(addrnames),
 															 linitial(addrnames),
 															 RELKIND_FOREIGN_TABLE);
+				}
+				else if (strcmp(objtype, "table column") == 0)
+				{
+					eventobj = make_event_trigger_drop_table_column(linitial(addrnames),
+																	lsecond(addrnames),
+																	lthird(addrnames));
 				}
 				break;
 			case NamespaceRelationId:
