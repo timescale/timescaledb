@@ -68,5 +68,6 @@ explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '2';
 
 reset timescaledb.read_legacy_bloom1_v1;
+-- Trigger the valgrind CI run for this test.
 
 

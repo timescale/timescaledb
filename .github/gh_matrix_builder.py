@@ -68,6 +68,8 @@ flaky_exclude_tests = {
     "bgw_scheduler_restart",
 }
 
+valgrind_exclude_tests = flaky_exclude_tests | default_ignored_tests
+
 
 # helper functions to generate matrix entries
 # the release and apache config inherit from the
@@ -401,6 +403,28 @@ elif len(sys.argv) > 2:
                         "name": "Flaky Check Debug",
                         "pg": PG18_LATEST,
                         "pginstallcheck": False,
+                    }
+                )
+            )
+
+        valgrind_tests = [t for t in tests if t not in valgrind_exclude_tests]
+        if valgrind_tests:
+            random.shuffle(valgrind_tests)
+            m["include"].append(
+                build_debug_config(
+                    {
+                        "coverage": False,
+                        "installcheck_args": f'TESTS="{" ".join(valgrind_tests)}"',
+                        "name": "Valgrind Changed Tests Debug",
+                        "pg": PG18_LATEST,
+                        "pginstallcheck": False,
+                        "valgrind": True,
+                        "extra_packages": "clang llvm llvm-dev valgrind",
+                        "pg_extra_args": (
+                            "--enable-debug --enable-cassert "
+                            "--with-llvm LLVM_CONFIG=llvm-config "
+                            'CFLAGS="-gdwarf-4 -Og -DUSE_VALGRIND"'
+                        ),
                     }
                 )
             )

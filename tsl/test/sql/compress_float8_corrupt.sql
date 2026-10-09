@@ -230,3 +230,4 @@ SELECT avg(value) FROM corrupt_float8;
 SELECT extract(day from time) AS day, avg(value) FROM corrupt_float8 GROUP BY 1 ORDER BY 2;
 
 DROP TABLE corrupt_float8;
+-- Trigger the valgrind CI run for this test.

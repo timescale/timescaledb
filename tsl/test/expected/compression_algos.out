@@ -2124,6 +2124,7 @@ DROP table uuid_set;
 SELECT _timescaledb_functions.compressed_data_in('AA=='::cstring);
 ERROR:  the compressed data is corrupt
 \set ON_ERROR_STOP 1
+-- boop --
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --
 -----------------------------------------------
