@@ -230,6 +230,53 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                      Filter: (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone)
 
 RESET enable_hashagg;
+-- GROUP BY with column equated to constant has different semantics than no
+-- GROUP BY clause at all.
+SELECT device_id, count(*), sum(v0) FROM testtable WHERE device_id = -1 GROUP BY device_id;
+ device_id | count | sum 
+-----------+-------+-----
+
+:PREFIX
+SELECT device_id, count(*), sum(v0) FROM testtable WHERE device_id = -1 GROUP BY device_id;
+--- QUERY PLAN ---
+ Finalize GroupAggregate (actual rows=0.00 loops=1)
+   Output: testtable.device_id, count(*), sum(testtable.v0)
+   ->  Append (actual rows=0.00 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=0.00 loops=1)
+               Output: _hyper_1_1_chunk.device_id, (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0))
+               Grouping Policy: per compressed batch
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (never executed)
+                     Output: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.v0
+                     Chunk Status: PARTIAL
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk_compressed (actual rows=0.00 loops=1)
+                           Output: _hyper_1_1_chunk_compressed._ts_meta_count, _hyper_1_1_chunk_compressed.device_id, _hyper_1_1_chunk_compressed.filter_1, _hyper_1_1_chunk_compressed.filler_2, _hyper_1_1_chunk_compressed.filler_3, _hyper_1_1_chunk_compressed._ts_meta_min_1, _hyper_1_1_chunk_compressed._ts_meta_max_1, _hyper_1_1_chunk_compressed._ts_meta_v2_first_time, _hyper_1_1_chunk_compressed._ts_meta_v2_last_time, _hyper_1_1_chunk_compressed."time", _hyper_1_1_chunk_compressed.v0, _hyper_1_1_chunk_compressed.v1, _hyper_1_1_chunk_compressed.v2, _hyper_1_1_chunk_compressed.v3
+                           Filter: (_hyper_1_1_chunk_compressed.device_id = '-1'::integer)
+                           Rows Removed by Filter: 5
+         ->  Partial GroupAggregate (actual rows=0.00 loops=1)
+               Output: _hyper_1_1_chunk.device_id, PARTIAL count(*), PARTIAL sum(_hyper_1_1_chunk.v0)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
+                     Output: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.v0
+                     Filter: (_hyper_1_1_chunk.device_id = '-1'::integer)
+                     Rows Removed by Filter: 25
+         ->  Custom Scan (VectorAgg) (actual rows=0.00 loops=1)
+               Output: _hyper_1_2_chunk.device_id, (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0))
+               Grouping Policy: per compressed batch
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (never executed)
+                     Output: _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.v0
+                     Chunk Status: PARTIAL
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk_compressed (actual rows=0.00 loops=1)
+                           Output: _hyper_1_2_chunk_compressed._ts_meta_count, _hyper_1_2_chunk_compressed.device_id, _hyper_1_2_chunk_compressed.filter_1, _hyper_1_2_chunk_compressed.filler_2, _hyper_1_2_chunk_compressed.filler_3, _hyper_1_2_chunk_compressed._ts_meta_min_1, _hyper_1_2_chunk_compressed._ts_meta_max_1, _hyper_1_2_chunk_compressed._ts_meta_v2_first_time, _hyper_1_2_chunk_compressed._ts_meta_v2_last_time, _hyper_1_2_chunk_compressed."time", _hyper_1_2_chunk_compressed.v0, _hyper_1_2_chunk_compressed.v1, _hyper_1_2_chunk_compressed.v2, _hyper_1_2_chunk_compressed.v3
+                           Filter: (_hyper_1_2_chunk_compressed.device_id = '-1'::integer)
+                           Rows Removed by Filter: 5
+         ->  Partial GroupAggregate (actual rows=0.00 loops=1)
+               Output: _hyper_1_2_chunk.device_id, PARTIAL count(*), PARTIAL sum(_hyper_1_2_chunk.v0)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=0.00 loops=1)
+                     Output: _hyper_1_2_chunk.device_id, _hyper_1_2_chunk.v0
+                     Filter: (_hyper_1_2_chunk.device_id = '-1'::integer)
+                     Rows Removed by Filter: 25
+
 -- Check chunk exclusion for index scans
 SET enable_seqscan = OFF;
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-09 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0'::text::timestamptz;
