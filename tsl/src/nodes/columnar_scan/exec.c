@@ -76,6 +76,8 @@ columnar_scan_state_create(CustomScan *cscan)
 	chunk_state->is_segmentby_column = list_nth(cscan->custom_private, DCP_IsSegmentbyColumn);
 	chunk_state->bulk_decompression_column =
 		list_nth(cscan->custom_private, DCP_BulkDecompressionColumn);
+	chunk_state->boundary_metadata_column =
+		list_nth(cscan->custom_private, DCP_BoundaryMetadataColumn);
 	chunk_state->sortinfo = list_nth(cscan->custom_private, DCP_SortInfo);
 
 	chunk_state->custom_scan_tlist = cscan->custom_scan_tlist;
@@ -90,6 +92,8 @@ columnar_scan_state_create(CustomScan *cscan)
 	chunk_state->decompress_context.chunk_status = list_nth_int(settings, DCS_ChunkStatus);
 	chunk_state->decompress_context.enable_bulk_decompression =
 		list_nth_int(settings, DCS_EnableBulkDecompression);
+	chunk_state->decompress_context.first_row_from_metadata =
+		list_nth_int(settings, DCS_FirstRowFromMetadata);
 	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
@@ -306,7 +310,9 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 			.compressed_scan_attno = AttrOffsetGetAttrNumber(compressed_index),
 			.custom_scan_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
 			.bulk_decompression_supported =
-				list_nth_int(chunk_state->bulk_decompression_column, compressed_index)
+				list_nth_int(chunk_state->bulk_decompression_column, compressed_index),
+			.boundary_metadata_attno =
+				list_nth_int(chunk_state->boundary_metadata_column, compressed_index),
 		};
 
 		if (column.custom_scan_attno == 0)
@@ -591,6 +597,11 @@ columnar_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 		if (dcontext->reverse)
 		{
 			ExplainPropertyBool("Reverse", dcontext->reverse, es);
+		}
+
+		if (dcontext->first_row_from_metadata)
+		{
+			ExplainPropertyBool("First Row From Metadata", true, es);
 		}
 
 		if (es->analyze)

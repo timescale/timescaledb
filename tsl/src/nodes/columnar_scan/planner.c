@@ -92,6 +92,7 @@ typedef struct
 	int uncompressed_chunk_attno;
 	bool bulk_decompression_possible;
 	bool is_segmentby;
+	AttrNumber boundary_metadata_attno;
 } CompressedColumnInfo;
 
 /*
@@ -153,6 +154,18 @@ typedef struct
 	 * column.
 	 */
 	List *bulk_decompression_column;
+
+	/*
+	 * Same structure as above, the position of the data column's boundary
+	 * sparse metadata column in the compressed scan targetlist,
+	 * InvalidAttrNumber if there is none.
+	 */
+	List *boundary_metadata_column;
+
+	/*
+	 * Build the first row of each batch from the metadata.
+	 */
+	bool first_row_from_metadata;
 
 } DecompressionMapContext;
 
@@ -433,6 +446,54 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	}
 
 	/*
+	 * With row-by-row decompression, the executor can build the first row of
+	 * each batch from the first/last sparse metadata and defer the
+	 * decompression of the data columns until a second row of the batch is
+	 * needed. Check that we have all metadata columns required for this in the
+	 * compressed scan targetlist.
+	 */
+	context->first_row_from_metadata = !path->enable_bulk_decompression;
+	if (!path->enable_bulk_decompression)
+	{
+		foreach (lc, compressed_output_tlist)
+		{
+			TargetEntry *target = lfirst_node(TargetEntry, lc);
+			const AttrNumber compressed_chunk_attno = castNode(Var, target->expr)->varattno;
+			CompressedColumnInfo *compressed_info =
+				&context->compressed_attno_info[compressed_chunk_attno];
+			if (compressed_info->uncompressed_chunk_attno <= 0 || compressed_info->is_segmentby)
+			{
+				continue;
+			}
+
+			const AttrNumber metadata_relation_attno =
+				compressed_column_metadata_attno(info->settings,
+												 info->chunk_rte->relid,
+												 compressed_info->uncompressed_chunk_attno,
+												 info->compressed_rte->relid,
+												 path->reverse ? "last" : "first");
+			if (metadata_relation_attno != InvalidAttrNumber)
+			{
+				ListCell *metadata_cell;
+				foreach (metadata_cell, compressed_output_tlist)
+				{
+					TargetEntry *tle = lfirst_node(TargetEntry, metadata_cell);
+					if (castNode(Var, tle->expr)->varattno == metadata_relation_attno)
+					{
+						compressed_info->boundary_metadata_attno = tle->resno;
+						break;
+					}
+				}
+			}
+
+			if (compressed_info->boundary_metadata_attno == InvalidAttrNumber)
+			{
+				context->first_row_from_metadata = false;
+			}
+		}
+	}
+
+	/*
 	 * Check that we have found all the needed columns in the compressed targetlist.
 	 * We can't conveniently check that we have all columns for all-row vars, so
 	 * skip attno 0 in this check.
@@ -533,6 +594,8 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 		context->bulk_decompression_column =
 			lappend_int(context->bulk_decompression_column,
 						compressed_info->bulk_decompression_possible);
+		context->boundary_metadata_column = lappend_int(context->boundary_metadata_column,
+														compressed_info->boundary_metadata_attno);
 	}
 }
 
@@ -1295,6 +1358,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		dcpath->enable_bulk_decompression;
 	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 	lfirst_int(list_nth_cell(settings, DCS_ChunkStatus)) = dcpath->chunk_status;
+	lfirst_int(list_nth_cell(settings, DCS_FirstRowFromMetadata)) = context.first_row_from_metadata;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see
@@ -1312,6 +1376,8 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_BulkDecompressionColumn)) =
 		context.bulk_decompression_column;
 	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_SortInfo)) = sort_options;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_BoundaryMetadataColumn)) =
+		context.boundary_metadata_column;
 
 	/*
 	 * We might be using a custom scan tuple if it allows us to avoid the
