@@ -37,10 +37,22 @@ typedef struct InternalTimeRange
 	bool end_isnull;
 } InternalTimeRange;
 
-void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
-										   SchemaAndName partial_view,
-										   SchemaAndName materialization_table,
-										   const NameData *time_column_name,
-										   InternalTimeRange materialization_range,
-										   const char *tenant_column, const char *tenant_coltype,
-										   int32 raw_hypertable_id, int32 tenant_seqnum);
+/* Stats about cagg materializations */
+typedef struct MaterializationStats
+{
+	/* Whether any range that changed rows was materialized tenant-scoped, and
+	 * whether any was materialized in full. A range that changed nothing is skipped */
+	bool any_granular;
+	bool any_full;
+	uint64 rows_materialized;
+	uint64 rows_deleted;
+} MaterializationStats;
+
+/*
+ * stats accumulates what this materialization did; pass NULL to not collect.
+ */
+void continuous_agg_update_materialization(
+	Hypertable *mat_ht, const ContinuousAgg *cagg, SchemaAndName partial_view,
+	SchemaAndName materialization_table, const NameData *time_column_name,
+	InternalTimeRange materialization_range, const char *tenant_column, const char *tenant_coltype,
+	int32 raw_hypertable_id, int32 tenant_seqnum, MaterializationStats *stats);

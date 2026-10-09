@@ -669,7 +669,7 @@ compression_create_tuplesort_state(CompressionSettings *settings, Relation rel, 
 	/* Make a copy of the tuple descriptor so that it is allocated on the same
 	 * memory context as the tuple sort instead of pointing into the relcache
 	 * entry that could be blown away. */
-	return tuplesort_begin_heap(CreateTupleDescCopy(tupdesc),
+	return tuplesort_begin_heap(CreateTupleDescCopyConstr(tupdesc),
 								n_keys,
 								sort_keys,
 								sort_operators,
@@ -1151,6 +1151,12 @@ compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter
 {
 	old_compressor->needs_analyze_segmentby = false;
 	if (old_compressor->sort_state == NULL || old_compressor->tuples_to_sort == 0)
+	{
+		return;
+	}
+
+	/* The rebuild drops the compressed chunk, so only do it while it is still empty */
+	if (RelationGetNumberOfBlocks(old_bulk_writer->out_rel) > 0)
 	{
 		return;
 	}
