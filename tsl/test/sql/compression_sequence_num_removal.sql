@@ -250,9 +250,14 @@ SELECT * FROM varchar WHERE device_id = '1' ORDER BY text, time LIMIT 5;
 -- index scan
 SET enable_seqscan TO OFF;
 :EXPLAIN SELECT device_id, text FROM varchar
-GROUP BY device_id, text;
+GROUP BY device_id, text
+ORDER BY device_id, text
+;
+
 SELECT device_id, text FROM varchar
-GROUP BY device_id, text;
+GROUP BY device_id, text
+ORDER BY device_id, text
+;
 
 -- backwards index scan
 :EXPLAIN SELECT * FROM varchar
