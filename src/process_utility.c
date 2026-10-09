@@ -3362,16 +3362,6 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 		}
 	}
 
-	if (is_granular_refresh_tracking_column(ht, cmd->name))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
-				 errmsg("cannot drop column \"%s\" used to set up granular refresh", cmd->name),
-				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
-						   "column.",
-						   get_rel_name(ht->main_table_relid))));
-	}
-
 	/* Delete dimension range entries on this column, if any.  */
 	ts_chunk_column_stats_drop(ht, cmd->name, &dropped);
 }
