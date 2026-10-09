@@ -13,15 +13,23 @@
  * `simple8b_rle`).
  */
 #include <postgres.h>
-#include <funcapi.h>
+#include <utils/datum.h>
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
 
+/*
+ * The dictionary deduplicates values by their binary image, not by the
+ * equality operator of the type. Values that compare equal with the type's
+ * equality operator can still be distinguishable, e.g. the intervals '1 mon'
+ * and '30 days', the numerics 1.0 and 1.00, or the floats 0 and -0 inside an
+ * array. Replacing one of them with the other would change the data, so they
+ * must get separate dictionary entries (see #10709).
+ */
 typedef struct HashMeta
 {
-	FunctionCallInfo hash_info;
-	FunctionCallInfo eq_info;
+	int16 typlen;
+	bool typbyval;
 } HashMeta;
 
 typedef struct DictionaryHashItem
@@ -54,42 +62,29 @@ static uint32
 datum_hash(dictionary_hash *tb, Datum key)
 {
 	HashMeta *meta = (HashMeta *) tb->private_data;
-	FunctionCallInfo fcinfo = meta->hash_info;
-	Datum value;
 
-	FC_SET_ARG(fcinfo, 0, key);
-	fcinfo->isnull = false;
-
-	value = FunctionCallInvoke(fcinfo);
-	Assert(!fcinfo->isnull);
-
-	return DatumGetUInt32(value);
+	return datum_image_hash(key, meta->typbyval, meta->typlen);
 }
 
 static bool
 datum_eq(dictionary_hash *tb, Datum a, Datum b)
 {
 	HashMeta *meta = (HashMeta *) tb->private_data;
-	FunctionCallInfo fcinfo = meta->eq_info;
-	Datum value;
 
-	FC_SET_ARG(fcinfo, 0, a);
-	FC_SET_ARG(fcinfo, 1, b);
-	fcinfo->isnull = false;
-
-	value = FunctionCallInvoke(fcinfo);
-	Assert(!fcinfo->isnull);
-
-	return DatumGetBool(value);
+	return datum_image_eq(a, b, meta->typbyval, meta->typlen);
 }
 
 static dictionary_hash *
 dictionary_hash_alloc(TypeCacheEntry *tentry)
 {
 	HashMeta *meta = palloc(sizeof(*meta));
-	Oid collation = InvalidOid;
-	collation = tentry->typcollation;
 
+	/*
+	 * The hash function and equality operator are not used for hashing
+	 * anymore. The check is kept so that dictionary compression accepts
+	 * exactly the types that compression_get_default_algorithm() selects it
+	 * for, until that selection is revisited.
+	 */
 	if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
 	{
 		elog(ERROR,
@@ -97,16 +92,8 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 			 "equality function");
 	}
 
-	/* May be more correct to get collation defined on the column, which may be different than the
-	 * collation defined on the type (what we're currently using). We need to think about
-	 * backwards compatibility, and different collations. Should only affect compression ratios
-	 * anyway.
-	 */
-	meta->eq_info = HEAP_FCINFO(2);
-	InitFunctionCallInfoData(*meta->eq_info, &tentry->eq_opr_finfo, 2, collation, NULL, NULL);
-
-	meta->hash_info = HEAP_FCINFO(2);
-	InitFunctionCallInfoData(*meta->hash_info, &tentry->hash_proc_finfo, 1, collation, NULL, NULL);
+	meta->typlen = tentry->typlen;
+	meta->typbyval = tentry->typbyval;
 
 	return dictionary_create(CurrentMemoryContext, 10, meta);
 }
