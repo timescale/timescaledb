@@ -55,7 +55,7 @@ jobs:
           || github.event_name == 'workflow_call'
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
-      run_installcheck: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || steps.filter.outputs.windows-workflow == 'true' }}
+      installcheck: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || steps.filter.outputs.windows-workflow == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,7 +69,7 @@ jobs:
 
   build:
     # Change the JOB_NAME variable below when changing the name.
-    name: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
+    name: ${{ !matrix.installcheck && 'Build-only ' || ''}}PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
     runs-on: windows-2025
     needs: [config, check_paths]
     if: needs.check_paths.outputs.run_ci == 'true'
@@ -83,10 +83,11 @@ jobs:
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         pg_config: ["-cfsync=off -cstatement_timeout=60s -clisten_addresses=0.0.0.0"]
         event_name: ["${{ github.event_name }}"]
-        run_installcheck: ["${{ needs.check_paths.outputs.run_installcheck }}"]
+        installcheck: ["${{ fromJSON(needs.check_paths.outputs.installcheck) }}"]
+
         exclude:
           - versions: { pg: 16, pg_version: "${{ fromJson(needs.config.outputs.pg16_latest) }}" }
-            run_installcheck: false
+            installcheck: false
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -145,13 +146,13 @@ jobs:
         }
 
     - name: Setup WSL
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
       with:
         distribution: Debian-13
 
     - name: Configure apt retries and timeout in WSL
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       shell: wsl-bash {0}
       run: |
         echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
@@ -159,7 +160,7 @@ jobs:
         echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
 
     - name: Install additional packages in WSL
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       shell: wsl-bash {0}
       run: |
         apt-get update
@@ -238,7 +239,7 @@ jobs:
       run: cmake --install build_win --config ${{ matrix.build_type }}
 
     - name: Enable crash dumps for postgres.exe (WER LocalDumps)
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       shell: powershell
       run: |
         $DumpDir = Join-Path $env:GITHUB_WORKSPACE "crashdumps"
@@ -253,7 +254,7 @@ jobs:
         Write-Host "Configured WER LocalDumps for postgres.exe => $DumpDir"
 
     - name: Setup postgres cluster
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       run: |
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         mkdir -p ${{ env.TABLESPACE1 }}\_default
@@ -279,7 +280,7 @@ jobs:
         New-NetFirewallRule -DisplayName "Allow PG from WSL" -Direction Inbound -LocalPort 55432 -Protocol TCP -Action Allow
 
     - name: Install postgres for test runner
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
@@ -289,7 +290,7 @@ jobs:
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.versions.pg }}
 
     - name: Run tests
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"
@@ -303,7 +304,7 @@ jobs:
         make -C build_wsl regresschecklocal IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       run: |
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl stop
         timeout 10
@@ -316,7 +317,7 @@ jobs:
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
     - name: Run TSL tests
-      if: needs.check_paths.outputs.run_installcheck == 'true'
+      if: matrix.installcheck
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"
@@ -329,7 +330,7 @@ jobs:
 
     - name: Show regression diffs
       id: collectlogs
-      if: always() && needs.check_paths.outputs.run_installcheck == 'true'
+      if: always() && matrix.installcheck
       env:
         WSLENV: GITHUB_OUTPUT/p
       shell: wsl-bash {0}
@@ -401,7 +402,7 @@ jobs:
             build_wsl/compile_commands.json
 
     - name: Upload test results to the database
-      if: always() && needs.check_paths.outputs.run_installcheck == 'true'
+      if: always() && matrix.installcheck
       shell: wsl-bash {0}
       env:
         # Update when adding new variables.
@@ -411,7 +412,7 @@ jobs:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
         # duplicate it to work around this nonsense.
-        JOB_NAME: PG${{ matrix.versions.pg }} ${{ matrix.build_type }}
+        JOB_NAME: ${{ !matrix.installcheck && 'Build-only ' || ''}}PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
