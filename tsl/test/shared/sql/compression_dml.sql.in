@@ -354,6 +354,11 @@ BEGIN;
 SELECT * FROM compress_dml t ORDER BY t;
 ROLLBACK;
 
+BEGIN;
+EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)
+UPDATE compress_dml SET value = 1111 WHERE time IS NULL;
+ROLLBACK;
+
 DROP TABLE compress_dml;
 
 -- Test issue #8241: invalidate generic plans for prepared statements
