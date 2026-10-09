@@ -535,3 +535,39 @@ alter table test_rename_token rename column minmax to _ts_meta_count;
 
 drop table test_rename_token;
 
+-- Test DML and queries on chunks compressed with an empty sparse index
+-- setting. The empty setting is stored as a {"source": "config"} object
+-- without columns, which must be skipped when resolving sparse index
+-- columns to attribute numbers (#10414).
+create table test_empty_sparse(id int, day date not null, value int, primary key (id, day));
+select create_hypertable('test_empty_sparse', 'day', chunk_time_interval => interval '30 days');
+insert into test_empty_sparse select i, '2025-01-01'::date + i, i from generate_series(0, 9) i;
+alter table test_empty_sparse set (timescaledb.compress,
+    timescaledb.compress_orderby = 'day desc',
+    timescaledb.compress_index = '');
+select count(compress_chunk(c)) from show_chunks('test_empty_sparse') c;
+select relid::regclass, index from settings where relid = 'test_empty_sparse'::regclass;
+
+set timescaledb.enable_sparse_index_bloom to on;
+set timescaledb.enable_composite_bloom_indexes to on;
+set timescaledb.enable_dml_bloom_filter to on;
+set timescaledb.enable_dml_decompression_tuple_filtering to on;
+
+-- SELECT with equality predicates on two columns
+select * from test_empty_sparse where id = 1 and day = '2025-01-02';
+
+-- UPDATE and DELETE with an equality predicate
+update test_empty_sparse set value = 100 where day = '2025-01-03';
+delete from test_empty_sparse where day = '2025-01-05';
+
+-- INSERT ON CONFLICT on the unique index
+insert into test_empty_sparse values (1, '2025-01-02', 42) on conflict (id, day) do nothing;
+insert into test_empty_sparse values (2, '2025-01-03', 42) on conflict (id, day) do update set value = excluded.value;
+
+select * from test_empty_sparse order by id;
+
+reset timescaledb.enable_sparse_index_bloom;
+reset timescaledb.enable_composite_bloom_indexes;
+reset timescaledb.enable_dml_bloom_filter;
+reset timescaledb.enable_dml_decompression_tuple_filtering;
+drop table test_empty_sparse;
