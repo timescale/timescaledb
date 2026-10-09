@@ -925,8 +925,15 @@ ts_find_ems_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	foreach (lc_em, ec->ec_members)
 	{
 		em = lfirst(lc_em);
-#endif
 
+		/* Before PG18, equivalence members on all chunks were stored in a single list.
+		 * Stop traversing the list after we find all EMs from the given relation and see an EM from
+		 * a different relation */
+		if (ems && !bms_is_subset(em->em_relids, rel->relids))
+		{
+			return ems;
+		}
+#endif
 		if (bms_is_subset(em->em_relids, rel->relids) && !bms_is_empty(em->em_relids))
 		{
 			/*
