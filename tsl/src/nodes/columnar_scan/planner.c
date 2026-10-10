@@ -337,6 +337,40 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 											  /* missing_ok = */ false);
 		AttrNumber uncompressed_chunk_attno = get_attnum(info->chunk_rte->relid, column_name);
 
+		if (path->metadata_only)
+		{
+			/*
+			 * Metadata only: the batch values are copied like segmentby
+			 * columns, and no column is decompressed.
+			 */
+			AttrNumber destination_attno = 0;
+			if (strcmp(column_name, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
+			{
+				destination_attno = COLUMNAR_SCAN_COUNT_ID;
+				missing_count = false;
+			}
+			else
+			{
+				for (int i = 0; i < list_length(path->metadata_output_map); i += 2)
+				{
+					if (list_nth_int(path->metadata_output_map, i + 1) == compressed_chunk_attno)
+					{
+						destination_attno = list_nth_int(path->metadata_output_map, i);
+						uncompressed_attrs_found =
+							bms_add_member(uncompressed_attrs_found,
+										   destination_attno - FirstLowInvalidHeapAttributeNumber);
+						break;
+					}
+				}
+			}
+
+			context->compressed_attno_info[compressed_chunk_attno] = (CompressedColumnInfo){
+				.uncompressed_chunk_attno = destination_attno,
+				.is_segmentby = destination_attno > 0,
+			};
+			continue;
+		}
+
 		AttrNumber destination_attno = 0;
 		if (uncompressed_chunk_attno != InvalidAttrNumber)
 		{
@@ -1241,7 +1275,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 										 compressed_path,
 										 dcpath->required_compressed_pathkeys,
 										 /* reqColIdx = */ NULL,
-										 /* limit_tuples = */ -1.0));
+										 /* limit_tuples = */ dcpath->metadata_only ? 1.0 : -1.0));
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
@@ -1295,6 +1329,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		dcpath->enable_bulk_decompression;
 	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 	lfirst_int(list_nth_cell(settings, DCS_ChunkStatus)) = dcpath->chunk_status;
+	lfirst_int(list_nth_cell(settings, DCS_MetadataOnly)) = dcpath->metadata_only;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see

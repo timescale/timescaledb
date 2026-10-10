@@ -63,6 +63,8 @@ VACUUM FULL ANALYZE metrics_space_compressed;
 SET enable_indexonlyscan TO OFF;
 SET work_mem TO '64MB';
 SET enable_memoize TO on;
+-- metadata only scans make the compressed plans differ between PG versions
+SET timescaledb.enable_columnarscan_metadata_only TO off;
 
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME
@@ -110,3 +112,4 @@ SET enable_memoize TO off;
 
 RESET work_mem;
 RESET enable_indexonlyscan;
+RESET timescaledb.enable_columnarscan_metadata_only;

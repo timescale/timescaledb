@@ -4,6 +4,7 @@
 /chunk_utils_internal-*.sql
 /columnar_index_scan-*.sql
 /columnar_scan_cost-*.sql
+/columnar_scan_metadata_only-*.sql
 /compress_bloom_sparse-*.sql
 /compress_observ-*.sql
 /compress_sort_transform-*.sql
