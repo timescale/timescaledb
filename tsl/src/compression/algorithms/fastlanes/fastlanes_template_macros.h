@@ -31,20 +31,20 @@
 	tmp |= src << FL_SHIFT(row, W, T);                                                             \
 	if (FL_SPLITS(row, W, T))                                                                      \
 	{                                                                                              \
-		out[FL_WORD(row, W, T) * (S) + lane] = tmp;                                                \
+		out[FL_WORD(row, W, T) * (S) + lane] = FL_LE(T, tmp);                                      \
 		tmp = (FL_REM(row, W, T) != 0) ? (src >> FL_CUR_SAFE(row, W, T)) : 0;                      \
 	}
 
 #define FL_PACK_FLUSH(T, S, W, T_ROWS)                                                             \
 	if (!FL_SPLITS((T_ROWS) -1, W, T))                                                             \
 	{                                                                                              \
-		out[FL_WORD((T_ROWS) -1, W, T) * (S) + lane] = tmp;                                        \
+		out[FL_WORD((T_ROWS) -1, W, T) * (S) + lane] = FL_LE(T, tmp);                              \
 	}
 
 #define FL_UNPACK_LOAD(T, S, W, row)                                                               \
 	if (FL_WORD(row, W, T) > FL_WORD((row) -1, W, T) && FL_REM((row) -1, W, T) == 0)               \
 	{                                                                                              \
-		src = packed[FL_WORD(row, W, T) * (S) + lane];                                             \
+		src = FL_LE(T, packed[FL_WORD(row, W, T) * (S) + lane]);                                   \
 	}
 
 #define FL_UNPACK_ROW(TYPE, T, S, W, row)                                                          \
@@ -55,7 +55,7 @@
 											(((TYPE) 1 << FL_CUR_SAFE(row, W, T)) - 1));           \
 		if (FL_REM(row, W, T) != 0)                                                                \
 		{                                                                                          \
-			src = packed[FL_NWORD(row, W, T) * (S) + lane];                                        \
+			src = FL_LE(T, packed[FL_NWORD(row, W, T) * (S) + lane]);                              \
 			tmp |= (src & (((TYPE) 1 << FL_REM(row, W, T)) - 1)) << FL_CUR_SAFE(row, W, T);        \
 		}                                                                                          \
 	}                                                                                              \
@@ -70,7 +70,7 @@
 	tmp |= src << FL_SHIFT(row, W, T);                                                             \
 	if (FL_SPLITS(row, W, T))                                                                      \
 	{                                                                                              \
-		out[FL_WORD(row, W, T) * (S) + lane] = tmp;                                                \
+		out[FL_WORD(row, W, T) * (S) + lane] = FL_LE(T, tmp);                                      \
 		tmp = (FL_REM(row, W, T) != 0) ? (src >> FL_CUR_SAFE(row, W, T)) : 0;                      \
 	}
 
@@ -82,7 +82,7 @@
 											(((TYPE) 1 << FL_CUR_SAFE(row, W, T)) - 1));           \
 		if (FL_REM(row, W, T) != 0)                                                                \
 		{                                                                                          \
-			src = packed[FL_NWORD(row, W, T) * (S) + lane];                                        \
+			src = FL_LE(T, packed[FL_NWORD(row, W, T) * (S) + lane]);                              \
 			tmp |= (src & (((TYPE) 1 << FL_REM(row, W, T)) - 1)) << FL_CUR_SAFE(row, W, T);        \
 		}                                                                                          \
 	}                                                                                              \

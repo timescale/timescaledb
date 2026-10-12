@@ -8,6 +8,10 @@
 -- this database has granular refresh enabled yet, so the map holds no entry for
 -- it and the listing comes back empty
 \c :TEST_DBNAME :ROLE_SUPERUSER
+-- Report refresh statistics throughout. Set on the database so it survives the
+-- reconnections below; that takes the database owner, hence doing it here.
+ALTER DATABASE :TEST_DBNAME SET timescaledb.cagg_refresh_stats_level TO summary;
+
 SELECT count(*) AS entries_for_this_database
 FROM _timescaledb_functions.tenant_tracking_map()
 WHERE database_id = (SELECT oid FROM pg_database WHERE datname = current_database());
@@ -28,9 +32,10 @@ SELECT (CURRENT_DATE - DATE '2019-01-01') AS granular_refresh_lookback_days,
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW cond_daily
@@ -68,9 +73,10 @@ CREATE OR REPLACE FUNCTION metrics_now() RETURNS bigint LANGUAGE SQL STABLE AS
   $$ SELECT 1000::bigint $$;
 SELECT set_integer_now_func('metrics', 'metrics_now');
 ALTER TABLE metrics SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = 900,
-    timescaledb.granular_refresh_end_offset = 100
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = 900,
+    timescaledb.cagg_granular_refresh_end_offset = 100
 );
 
 CREATE MATERIALIZED VIEW metrics_by_bucket
@@ -96,9 +102,10 @@ DROP TABLE metrics;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW cond_daily
@@ -141,9 +148,10 @@ DROP TABLE conditions;
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW cond_daily
@@ -177,7 +185,8 @@ JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
 WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
 ORDER BY h.table_name;
 
--- Entries for hypertables dropped earlier in this test outlive them.
+-- Dropping a hypertable releases its tracker, so no entry outlives the
+-- hypertable it belongs to.
 SELECT count(*) > 0 AS dropped_hypertables_still_listed
 FROM _timescaledb_functions.tenant_tracking_map() m
 WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
@@ -223,9 +232,10 @@ CREATE TABLE metrics(time timestamptz NOT NULL, tenant text NOT NULL, value floa
 
 SELECT create_hypertable('metrics', 'time', chunk_time_interval => INTERVAL '30 days');
 ALTER TABLE metrics SET (
-    timescaledb.granular_refresh_column = 'tenant',
-    timescaledb.granular_refresh_start_offset = '3 days',
-    timescaledb.granular_refresh_end_offset = '1 hour'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'tenant',
+    timescaledb.cagg_granular_refresh_start_offset = '3 days',
+    timescaledb.cagg_granular_refresh_end_offset = '1 hour'
 );
 
 INSERT INTO metrics VALUES ('2025-01-07 10:00:00+00', 'x', 10),
@@ -518,9 +528,10 @@ CREATE TABLE crossed(time timestamptz NOT NULL, tenant text NOT NULL, value floa
 
 SELECT create_hypertable('crossed', 'time', chunk_time_interval => INTERVAL '30 days');
 ALTER TABLE crossed SET (
-    timescaledb.granular_refresh_column = 'tenant',
-    timescaledb.granular_refresh_start_offset = '1 month',
-    timescaledb.granular_refresh_end_offset = '29 days'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'tenant',
+    timescaledb.cagg_granular_refresh_start_offset = '1 month',
+    timescaledb.cagg_granular_refresh_end_offset = '29 days'
 );
 
 SELECT '2025-03-15 12:00:00+00'::timestamptz - INTERVAL '1 month' AS window_start,
@@ -594,9 +605,10 @@ SET timescaledb.current_timestamp_mock = '2025-03-09 07:30:00+00';
 CREATE TABLE crossed(time timestamptz NOT NULL, tenant text NOT NULL, value float);
 SELECT create_hypertable('crossed', 'time', chunk_time_interval => INTERVAL '1 day');
 ALTER TABLE crossed SET (
-    timescaledb.granular_refresh_column = 'tenant',
-    timescaledb.granular_refresh_start_offset = '1 day',
-    timescaledb.granular_refresh_end_offset = '23 hours 30 minutes'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'tenant',
+    timescaledb.cagg_granular_refresh_start_offset = '1 day',
+    timescaledb.cagg_granular_refresh_end_offset = '23 hours 30 minutes'
 );
 
 SELECT '2025-03-09 07:30:00+00'::timestamptz - INTERVAL '1 day' AS window_start,
@@ -653,3 +665,435 @@ ORDER BY 1;
 DROP MATERIALIZED VIEW crossed_hourly;
 DROP TABLE crossed;
 RESET timezone;
+
+-- TEST 7: the disable inside a PL/pgSQL EXCEPTION block that never raises.
+-- A block with a handler always runs in a subtransaction, so the successful
+-- path ends in SUBXACT_EVENT_COMMIT_SUB.
+-- queued tenant tracker free request must survive sub transaction commit and be
+-- applied by the top level commit.
+SET timezone TO 'UTC';
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time');
+ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+-- Creates the tracker.
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT count(*) AS tracker_entries_before
+FROM _timescaledb_functions.tenant_tracking_map() m
+JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
+WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
+  AND h.table_name = 'conditions';
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- subtransaction commits successfully
+DO $$
+BEGIN
+    ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = false);
+    ALTER TABLE conditions SET (timescaledb.cagg_enable_granular_refresh = false);
+EXCEPTION WHEN others THEN
+    RAISE;
+END $$;
+
+SELECT count(*) AS settings_rows
+FROM _timescaledb_catalog.hypertable_cagg_settings s
+JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id
+WHERE h.table_name = 'conditions';
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Must be zero
+SELECT count(*) AS tracker_entries_after
+FROM _timescaledb_functions.tenant_tracking_map() m
+JOIN _timescaledb_catalog.hypertable h ON h.id = m.hypertable_id
+WHERE m.database_id = (SELECT oid FROM pg_database WHERE datname = current_database())
+  AND h.table_name = 'conditions';
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+RESET timezone;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO 'UTC';
+SET client_min_messages TO warning;
+SET timescaledb.current_timestamp_mock = '2026-09-01 00:00:00+00';
+
+-- Test 8: Both late-arriving tenants must remain tracked when caches are
+-- repeatedly discarded and relations are analyzed or changed.
+CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('conditions', 'time') \gset
+ALTER TABLE conditions SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = '8 years',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW cond_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, avg(value)
+  FROM conditions
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW cond_daily SET (timescaledb.enable_granular_refresh = true);
+
+SELECT max_val::integer > 0 AS have_debug_discard_caches
+FROM pg_settings WHERE name = 'debug_discard_caches' \gset
+\if :have_debug_discard_caches
+SET debug_discard_caches = 1;
+\endif
+INSERT INTO conditions VALUES ('2020-01-01 00:00+00', 'sensor_a', 1);
+RESET debug_discard_caches;
+\unset have_debug_discard_caches
+
+ANALYZE conditions;
+CREATE TABLE other(time timestamptz NOT NULL, value float);
+SELECT create_hypertable('other', 'time') \gset
+INSERT INTO other VALUES ('2026-09-01 00:00+00', 1);
+DROP TABLE other;
+INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'sensor_b', 2);
+INSERT INTO conditions VALUES ('2026-09-01 00:00+00', 'sensor_recent', 3);
+
+CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
+
+SELECT tenant_id
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cond_daily')
+  AND tenant_id IS NOT NULL
+ORDER BY tenant_id;
+
+DROP MATERIALIZED VIEW cond_daily;
+DROP TABLE conditions;
+RESET timescaledb.current_timestamp_mock;
+RESET client_min_messages;
+RESET timezone;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- TEST 8: a changed offset reaches the tracker only when a flush installs it on
+-- the generation it activates. Until then writes keep gating on the window the
+-- active generation already carries, so the catalog and the tracker disagree for
+-- as long as no refresh runs.
+--
+-- W1 = [2025-01-08 12:00, 2025-01-10 11:00) from offsets 3 days / 1 hour
+-- W2 = [2025-01-09 12:00, 2025-01-10 11:00) from offsets 1 day  / 1 hour
+-- Every write below is at 2025-01-08 12:00, which is inside W1 and outside W2.
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00';
+
+CREATE TABLE thresholds(time timestamptz NOT NULL, tenant text NOT NULL, value float);
+SELECT create_hypertable('thresholds', 'time', chunk_time_interval => INTERVAL '1 day');
+ALTER TABLE thresholds SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'tenant',
+    timescaledb.cagg_granular_refresh_start_offset = '3 days',
+    timescaledb.cagg_granular_refresh_end_offset = '1 hour'
+);
+
+-- Seeded before the cagg exists, so those don't create invalidations
+INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 1),
+                              ('2025-01-10 10:00:00+00', 'b', 2);
+
+CREATE MATERIALIZED VIEW thresholds_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, tenant, avg(value)
+  FROM thresholds
+  GROUP BY bucket, tenant
+  WITH NO DATA;
+
+-- Initial refresh to carry the invalidation threshold past the writes below.
+CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+
+ALTER MATERIALIZED VIEW thresholds_hourly SET (timescaledb.enable_granular_refresh = true);
+
+-- Under W1. This is also the first tracked write, so it creates the tracker.
+INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 3);
+
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS generation_window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS generation_window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('thresholds');
+
+-- Inside W1, so the entry carries a seqnum.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'thresholds_hourly')
+ORDER BY lowest_modified_value;
+
+CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+
+-- Narrow the window to W2. Only the catalog changes here.
+ALTER TABLE thresholds SET (timescaledb.cagg_granular_refresh_start_offset = '1 day');
+
+-- The tracker is still gating on W1.
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS generation_window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS generation_window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('thresholds');
+
+INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 4);
+
+-- Still inside the window the generation carries, so still a seqnum, even
+-- though the stored offsets no longer cover this write.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'thresholds_hourly')
+ORDER BY lowest_modified_value;
+
+-- The flush in this refresh is what installs W2 on the next generation.
+CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+
+SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS generation_window_start,
+       _timescaledb_functions.to_timestamp(late_threshold_end)   AS generation_window_end
+FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('thresholds');
+
+INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 5);
+
+-- Now outside the window, so the entry is untracked and invalidations has NULL seqnum
+-- (the range falls back to a full refresh)
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'thresholds_hourly')
+ORDER BY lowest_modified_value;
+
+CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+
+-- Sanity check: cagg content should match the corresponding query from the raw table
+SELECT tenant, bucket, avg FROM thresholds_hourly ORDER BY tenant, bucket;
+SELECT tenant, time_bucket('1 hour', time) AS bucket, avg(value)
+FROM thresholds
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+DROP MATERIALIZED VIEW thresholds_hourly;
+DROP TABLE thresholds;
+RESET timezone;
+
+-- TEST 9: enabling drops the tracking rows an earlier configuration left behind.
+--
+-- Late-arrival window is [2025-01-07 12:00, 2025-01-10 11:00) from offsets
+-- 3 days / 1 hour against the mocked now.
+SET timezone TO 'UTC';
+SET timescaledb.current_timestamp_mock = '2025-01-10 12:00:00+00';
+
+CREATE TABLE relabel(time timestamptz NOT NULL, sensor_id text, region text, value float);
+SELECT create_hypertable('relabel', 'time', chunk_time_interval => INTERVAL '1 day');
+ALTER TABLE relabel SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = '3 days',
+    timescaledb.cagg_granular_refresh_end_offset = '1 hour'
+);
+
+-- Seeded before the cagg exists, so these create no invalidation.
+INSERT INTO relabel VALUES ('2025-01-01 00:00:00+00', 'sensor_seed', 'east', 0),
+                           ('2025-01-10 10:00:00+00', 'sensor_seed', 'east', 0);
+
+CREATE MATERIALIZED VIEW relabel_hourly
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 hour', time) AS bucket, sensor_id, region, avg(value)
+  FROM relabel
+  GROUP BY bucket, sensor_id, region
+  WITH NO DATA;
+
+-- Initial refresh to carry the invalidation threshold past the writes below.
+CALL refresh_continuous_aggregate('relabel_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+
+ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh = true);
+
+-- Inside the window, so tracked under the sensor_id column.
+INSERT INTO relabel VALUES ('2025-01-07 20:00:00+00', 'sensor_x', 'east', 1),
+                           ('2025-01-08 12:00:00+00', 'sensor_a', 'east', 1);
+-- After the window end, so untracked. It gives the refresh below work to do.
+INSERT INTO relabel VALUES ('2025-01-10 11:30:00+00', 'sensor_b', 'west', 2);
+
+-- The Jan 8 write is inside the window, so its invalidation carries a seqnum;
+-- the Jan 10 one is outside and carries none.
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+ORDER BY lowest_modified_value;
+
+-- Refresh a window that covers the untracked write but not the
+-- tracked one, so the flush persists the tracking row but not consumes its invalidation.
+CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
+
+-- The tenant ids here are sensor_id values.
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+-- The flush above moved the tracker on to the next generation, so a second
+-- tracked write lands under a higher seqnum.
+INSERT INTO relabel VALUES ('2025-01-09 09:00:00+00', 'sensor_c', 'north', 3);
+
+-- Covers the Jan 9 (sensor_c)write but not the earlier ones.
+CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-09 09:00:00+00', '2025-01-09 10:00:00+00');
+
+--Check the tracking. Note that the sensor_c tracking is still there because the GC has not removed it yet.
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+-- Disabling clears the settings row but leaves the tracking row.
+ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh = false);
+ALTER TABLE relabel SET (timescaledb.cagg_enable_granular_refresh = false);
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+-- Enabling again, on a different column. The tracking rows from the previous
+-- configuration should now be all removed
+ALTER TABLE relabel SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'region',
+    timescaledb.cagg_granular_refresh_start_offset = '3 days',
+    timescaledb.cagg_granular_refresh_end_offset = '1 hour'
+);
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+-- The invalidation is untouched: enabling clears tracking rows, not the log.
+-- Its seqnum now resolves to no tenants at all, which is what makes the refresh
+-- below re-materialize the whole range
+
+SELECT CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+            THEN '-infinity'::timestamptz
+            ELSE _timescaledb_functions.to_timestamp(lowest_modified_value) END AS lowest,
+       CASE WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+            THEN 'infinity'::timestamptz
+            ELSE _timescaledb_functions.to_timestamp(greatest_modified_value) END AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+ORDER BY lowest_modified_value, seqnum;
+
+ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh = true);
+
+-- Consumes the Jan 8 invalidation but not the Jan 7 one, so seqnum 1 is still
+-- in the log.
+CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-08 12:00:00+00', '2025-01-08 13:00:00+00');
+
+--should see the Jan 8 row
+SELECT bucket, sensor_id, region, avg
+FROM relabel_hourly
+ORDER BY bucket, sensor_id;
+
+-- Writes under the new configuration: the first is inside the window, the
+-- second outside it and there to give the refresh work.
+-- The write should create a new tracker for the hypertable, with a seqnum above
+-- those in the invalidation logs of that hypertable (2 in this case)
+INSERT INTO relabel VALUES ('2025-01-08 18:00:00+00', 'sensor_e', 'north', 3);
+INSERT INTO relabel VALUES ('2025-01-10 11:45:00+00', 'sensor_d', 'south', 4);
+CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
+
+-- The tenant ids are region values now. The seqnum is one above the highest
+-- the logs still hold, so it cannot collide with the invalidation's seqnums
+-- left from the previous configuration.
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+-- The same re-enabling test, this time leave a tracked write unflushed
+-- and invalidation still in the hypertable invalidation log. After
+-- re-enabling the new tracker should be seed with a seqnum that is above
+-- the existing highest seqnum.
+INSERT INTO relabel VALUES ('2025-01-09 18:00:00+00', 'sensor_f', 'west', 5);
+
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest,
+       seqnum
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+ORDER BY lowest_modified_value;
+
+ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh = false);
+ALTER TABLE relabel SET (timescaledb.cagg_enable_granular_refresh = false);
+ALTER TABLE relabel SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'region',
+    timescaledb.cagg_granular_refresh_start_offset = '3 days',
+    timescaledb.cagg_granular_refresh_end_offset = '1 hour'
+);
+ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh = true);
+
+INSERT INTO relabel VALUES ('2025-01-08 21:00:00+00', 'sensor_g', 'east', 6);
+INSERT INTO relabel VALUES ('2025-01-10 11:50:00+00', 'sensor_h', 'south', 7);
+CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
+
+-- Check the new trackings. The seqnum of the hypertable invalidation log counts too:
+-- the new seqnum should be above that too.
+SELECT tenant_id, seqnum
+FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'relabel_hourly')
+  AND tenant_id IS NOT NULL
+ORDER BY seqnum, tenant_id;
+
+CALL refresh_continuous_aggregate('relabel_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
+
+SELECT bucket, sensor_id, region, avg
+FROM relabel_hourly
+ORDER BY bucket, sensor_id;
+
+DROP MATERIALIZED VIEW relabel_hourly;
+DROP TABLE relabel;
+RESET timezone;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME RESET timescaledb.cagg_refresh_stats_level;

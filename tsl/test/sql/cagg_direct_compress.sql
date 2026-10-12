@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TABLE conditions (
   time         TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -160,9 +160,10 @@ FROM _timescaledb_catalog.continuous_aggs_tenant_tracking;
 CREATE TABLE tenant_conditions(time timestamptz NOT NULL, sensor_id text, value float)
   WITH (tsdb.hypertable, tsdb.orderby = 'time', tsdb.segmentby = 'sensor_id');
 ALTER TABLE tenant_conditions SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW tenant_daily
@@ -174,7 +175,6 @@ CREATE MATERIALIZED VIEW tenant_daily
 ALTER MATERIALIZED VIEW tenant_daily SET (timescaledb.enable_granular_refresh = true);
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- Direct-compress a batch of 2020 rows for three tenants (1000 rows each so the
@@ -192,7 +192,6 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk)
 FROM show_chunks('tenant_conditions') chunk;
 
 RESET timescaledb.enable_direct_compress_insert;
-RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 -- A fresh 2025 row gives the refresh work to do so it drains the tracker.

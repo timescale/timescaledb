@@ -5,19 +5,16 @@
  */
 
 /*
- * fastlanes/fastlanes_tier_sizing.h -- per-tier sizing/alignment helpers.
+ * fastlanes/fastlanes_tier_sizing.h -- per-tier sizing helper.
  *
  * Usage:
  *     #define FL_TIER 256                 // 8/16/32/64/128/256
  *     #include "fastlanes_tier_sizing.h"
  *     #undef FL_TIER
  *
- * Emits seven static inline helpers per included tier:
+ * Emits this static inline helper per included tier:
  *
- *   fl{T}_words_needed, fl{T}_words_full,     // bit-arithmetic primitives
- *   fl{T}_alignment, fl{T}_required_bytes,    // public sizing dispatch backers
- *   fl{T}_result_bytes,
- *   fl{T}_input_count, fl{T}_input_bytes
+ *   fl{T}_words_needed     // bit-arithmetic primitive
  */
 
 #if !defined(FL_TIER)
@@ -44,42 +41,6 @@ FL_FN(_words_needed)(uint32 n, uint8 w, fl_elem_width_t t)
 	uint32 s = FL_VEC_SIZE / t;
 	uint32 r = (n + s - 1) / s;
 	return (r * w + t - 1) / t;
-}
-
-static inline uint32
-FL_FN(_words_full)(uint8 w, fl_elem_width_t t)
-{
-	return FL_FN(_words_needed)(FL_VEC_SIZE, w, t);
-}
-
-static inline size_t
-FL_FN(_alignment)(void)
-{
-	return FL_WORD_BYTES;
-}
-
-static inline size_t
-FL_FN(_required_bytes)(uint8 w, fl_elem_width_t t)
-{
-	return (size_t) FL_FN(_words_full)(w, t) * FL_WORD_BYTES;
-}
-
-static inline size_t
-FL_FN(_result_bytes)(uint32 n, uint8 w, fl_elem_width_t t)
-{
-	return (size_t) FL_FN(_words_needed)(n, w, t) * FL_WORD_BYTES;
-}
-
-static inline uint32
-FL_FN(_input_count)(void)
-{
-	return FL_VEC_SIZE;
-}
-
-static inline size_t
-FL_FN(_input_bytes)(fl_elem_width_t t)
-{
-	return (size_t) FL_VEC_SIZE * t / 8;
 }
 
 /* Teardown */

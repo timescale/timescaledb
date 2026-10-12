@@ -1,0 +1,1 @@
+Implements: #10724 Use bulk decompression in UPDATE, DELETE and recompress

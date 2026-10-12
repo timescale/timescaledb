@@ -140,7 +140,7 @@ extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index 
 													   bool missing_ok);
 
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
-extern TSDLLEXPORT EquivalenceMember *ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
+extern TSDLLEXPORT List *ts_find_ems_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 extern TSDLLEXPORT bool ts_has_owner_privs(Oid userid, Oid ownerid);
@@ -171,16 +171,6 @@ ts_fetch_att(const void *T, bool attbyval, int attlen)
 	 * violations. */
 	Assert(!attbyval || (attlen > 0 && attlen <= 8));
 	return fetch_att(T, attbyval, attlen);
-}
-
-static inline int64
-int64_min(int64 a, int64 b)
-{
-	if (a <= b)
-	{
-		return a;
-	}
-	return b;
 }
 
 static inline int64

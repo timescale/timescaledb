@@ -28,7 +28,6 @@
 #include "compression/create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
-#include "import/createplan.h"
 #include "import/list.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/transform.h"
@@ -37,6 +36,7 @@
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg/exec.h"
+#include "planner/planner.h"
 #include "ts_catalog/array_utils.h"
 #include "vector_predicates.h"
 
@@ -336,6 +336,44 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 											  compressed_chunk_attno,
 											  /* missing_ok = */ false);
 		AttrNumber uncompressed_chunk_attno = get_attnum(info->chunk_rte->relid, column_name);
+
+		if (path->metadata_only)
+		{
+			/*
+			 * Metadata only: the batch values are copied like segmentby
+			 * columns, and no column is decompressed.
+			 */
+			AttrNumber destination_attno = 0;
+			if (strcmp(column_name, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
+			{
+				destination_attno = COLUMNAR_SCAN_COUNT_ID;
+				missing_count = false;
+			}
+			else
+			{
+				ListCell *chunk_lc, *compressed_lc;
+				forboth (chunk_lc,
+						 path->metadata_chunk_attnos,
+						 compressed_lc,
+						 path->metadata_compressed_attnos)
+				{
+					if (lfirst_int(compressed_lc) == compressed_chunk_attno)
+					{
+						destination_attno = lfirst_int(chunk_lc);
+						uncompressed_attrs_found =
+							bms_add_member(uncompressed_attrs_found,
+										   destination_attno - FirstLowInvalidHeapAttributeNumber);
+						break;
+					}
+				}
+			}
+
+			context->compressed_attno_info[compressed_chunk_attno] = (CompressedColumnInfo){
+				.uncompressed_chunk_attno = destination_attno,
+				.is_segmentby = destination_attno > 0,
+			};
+			continue;
+		}
 
 		AttrNumber destination_attno = 0;
 		if (uncompressed_chunk_attno != InvalidAttrNumber)
@@ -872,15 +910,14 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		return NULL;
 	}
 
-	if (OidIsValid(var->varcollid) && !get_collation_isdeterministic(var->varcollid))
+	/*
+	 * The vector predicates compare bytes. That is only correct for a
+	 * deterministic collation, and the collation the operator runs with can
+	 * differ from the column's, for example with COLLATE in the query.
+	 */
+	Oid collation = opexpr ? opexpr->inputcollid : saop->inputcollid;
+	if (OidIsValid(collation) && !get_collation_isdeterministic(collation))
 	{
-		/*
-		 * Can't vectorize string equality with a nondeterministic collation.
-		 * Not sure if we have to check the collation of Const as well, but it
-		 * will be known only at planning time. Currently we don't check it at
-		 * all. Also this is untested because we don't have nondeterministic
-		 * collations in all test configurations.
-		 */
 		return NULL;
 	}
 
@@ -1162,61 +1199,28 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		List *sort_collations = NIL;
 		List *sort_nulls = NIL;
 
-		ListCell *lc;
-		foreach (lc, dcpath->custom_path.path.pathkeys)
+		Assert(dcpath->required_pathkey_ems && list_length(dcpath->custom_path.path.pathkeys) ==
+												   list_length(dcpath->required_pathkey_ems));
+		for (int i = 0; i < list_length(dcpath->custom_path.path.pathkeys); i++)
 		{
-			PathKey *pk = lfirst(lc);
-			EquivalenceClass *ec = pk->pk_eclass;
+			PathKey *pk = (PathKey *) list_nth(dcpath->custom_path.path.pathkeys, i);
+			List *ems = (List *) list_nth(dcpath->required_pathkey_ems, i);
 
-			/*
-			 * Find the equivalence member that belongs to decompressed relation.
-			 */
-			EquivalenceMember *em;
+			/* Find EM on the compressed chunk matching decompressed target */
 			bool found = false;
-#if PG18_GE
-			/* In PG18, iterating over child ems requires you to
-			 * use child relids with a special iterator. Here we gather
-			 * them by collecting them from childmembers array.
-			 *
-			 * https://github.com/postgres/postgres/commit/d69d45a5
-			 */
-			EquivalenceMemberIterator it;
-
-			setup_eclass_member_iterator(&it, ec, dcpath->custom_path.path.parent->relids);
-			while ((em = eclass_member_iterator_next(&it)) != NULL)
+			ListCell *lm;
+			foreach (lm, ems)
 			{
-#else
-			ListCell *membercell;
-			foreach (membercell, ec->ec_members)
-			{
-				em = lfirst(membercell);
-#endif
-				if (em->em_is_const)
-				{
-					continue;
-				}
-
-				int em_relid;
-				if (!bms_get_singleton_member(em->em_relids, &em_relid))
-				{
-					continue;
-				}
-
-				if ((Index) em_relid != dcpath->info->chunk_rel->relid)
-				{
-					continue;
-				}
+				EquivalenceMember *em = (EquivalenceMember *) lfirst(lm);
 
 				/*
 				 * The equivalence member expression might be a monotonous
 				 * expression of the decompressed relation Var, so recurse to
 				 * find it.
 				 */
-				Var *var = find_var_subexpression(em->em_expr, em_relid);
+				Var *var = find_var_subexpression(em->em_expr, dcpath->info->chunk_rel->relid);
 				Ensure(var != NULL,
 					   "non-Var pathkey not expected for compressed batch sorted merge");
-
-				Assert((Index) var->varno == (Index) em_relid);
 
 				/*
 				 * Convert its varattno which is the varattno of the
@@ -1225,24 +1229,31 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				 */
 				const int decompressed_scan_attno =
 					context.uncompressed_attno_info[var->varattno].custom_scan_attno;
-				Assert(decompressed_scan_attno > 0);
+				if (decompressed_scan_attno <= 0)
+				{
+					continue;
+				}
 
 				/*
 				 * Look up the correct sort operator from the PathKey's slightly
 				 * abstracted representation.
+				 * Take the type from the equivalence member and not from the
+				 * Var, like prepare_sort_from_pathkeys does. The operators of
+				 * an array or enum family are declared on anyarray or anyenum
+				 * and there is none for the concrete type.
 				 */
 
 				Oid sortop = get_opfamily_member(pk->pk_opfamily,
-												 var->vartype,
-												 var->vartype,
+												 em->em_datatype,
+												 em->em_datatype,
 												 pk->pk_cmptype);
 				if (!OidIsValid(sortop)) /* should not happen */
 				{
 					elog(ERROR,
 						 "missing operator %d(%u,%u) in opfamily %u",
 						 pk->pk_cmptype,
-						 var->vartype,
-						 var->vartype,
+						 em->em_datatype,
+						 em->em_datatype,
 						 pk->pk_opfamily);
 				}
 
@@ -1250,7 +1261,6 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				sort_collations = lappend_oid(sort_collations, var->varcollid);
 				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
 				sort_ops = lappend_oid(sort_ops, sortop);
-
 				found = true;
 				break;
 			}
@@ -1264,23 +1274,13 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	/*
 	 * Add a sort if the compressed scan is not ordered appropriately.
 	 */
-	if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
-	{
-		List *compressed_pks = dcpath->required_compressed_pathkeys;
-		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
-												compressed_pks,
-												bms_make_singleton(compressed_scan->scanrelid));
-
-		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ -1.0);
-
-		decompress_plan->custom_plans = list_make1(sort);
-	}
-	else
-	{
-		decompress_plan->custom_plans = custom_plans;
-	}
-
-	Assert(list_length(custom_plans) == 1);
+	decompress_plan->custom_plans =
+		list_make1(ts_add_sort_if_needed(root,
+										 (Plan *) compressed_scan,
+										 compressed_path,
+										 dcpath->required_compressed_pathkeys,
+										 /* reqColIdx = */ NULL,
+										 /* limit_tuples = */ dcpath->metadata_only ? 1.0 : -1.0));
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
@@ -1334,6 +1334,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		dcpath->enable_bulk_decompression;
 	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 	lfirst_int(list_nth_cell(settings, DCS_ChunkStatus)) = dcpath->chunk_status;
+	lfirst_int(list_nth_cell(settings, DCS_MetadataOnly)) = dcpath->metadata_only;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see

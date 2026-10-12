@@ -50,6 +50,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
+#include "import/createplan.h"
 #include "import/optimizer/plancat.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
@@ -1019,27 +1020,48 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
-	if (path->param_info != NULL && ordered)
+	if (!ts_guc_enable_chunk_append)
+	{
+		return false;
+	}
+
+	if ((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
+		bms_num_members(root->all_baserels) > 1)
 	{
 		/*
-		 * Ordered ChunkAppend might create MergeAppend path for individual
-		 * chunks when we have space partitioning or partial chunks. MergeAppend
-		 * paths cannot be parameterized. Refuse to use parameterized ordered
-		 * ChunkAppend altogether, because the more precise conditions are
-		 * difficult to check.
+		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved.
 		 */
 		return false;
 	}
 
-	if (
-		/*
-		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
-		 */
-		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
-		 bms_num_members(root->all_baserels) > 1) ||
-		!ts_guc_enable_chunk_append)
+	if (path->param_info != NULL)
 	{
-		return false;
+		if (ordered)
+		{
+			/*
+			 * Ordered ChunkAppend might create MergeAppend path for individual
+			 * chunks when we have space partitioning or partial chunks. MergeAppend
+			 * paths cannot be parameterized. Refuse to use parameterized ordered
+			 * ChunkAppend altogether, because the more precise conditions are
+			 * difficult to check.
+			 */
+			return false;
+		}
+
+		if (path->param_info->ppi_clauses != NIL)
+		{
+			/*
+			 * If we have any clauses with join parameters, we can apply runtime
+			 * chunk exclusion.
+			 */
+			return true;
+		}
+
+		/*
+		 * The path can be parameterized but not have any parameterized clauses,
+		 * effectively if it's a cross join written as LATERAL. Check the other
+		 * conditions for chunk append in this case.
+		 */
 	}
 
 	switch (nodeTag(path))
@@ -1406,7 +1428,6 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 		TimescaleDBPrivate *private = ts_get_private_reloptinfo(rel);
 		bool ordered = private->appends_ordered;
 		int order_attno = private->order_attno;
-		List *nested_oids = private->nested_oids;
 		ListCell *lc;
 
 		Assert(ht != NULL);
@@ -1421,13 +1442,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				case T_MergeAppendPath:
 					if (should_chunk_append(ht, root, rel, *pathptr, ordered, order_attno))
 					{
-						*pathptr = ts_chunk_append_path_create(root,
-															   rel,
-															   ht,
-															   *pathptr,
-															   false,
-															   ordered,
-															   nested_oids);
+						*pathptr =
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, false, ordered);
 					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
 					{
@@ -1450,7 +1466,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 					if (should_chunk_append(ht, root, rel, *pathptr, false, 0))
 					{
 						*pathptr =
-							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
+							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false);
 					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
 					{
@@ -1508,7 +1524,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	 */
 	if (reltype == TS_REL_HYPERTABLE && ht && ts_get_private_reloptinfo(rel)->deferred_chunk_append)
 	{
-		ts_deferred_chunk_scan_add_path(root, rel, ht);
+		ts_deferred_chunk_append_add_path(root, rel, ht);
 		if (prev_set_rel_pathlist_hook != NULL)
 		{
 			(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
@@ -1662,7 +1678,8 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * `inhparent` goes to false in two cases: a hypertable without
 			 * chunks or a SELECT FROM ONLY hypertable.
 			 */
-			bool use_deferred_chunk_append = inhparent && ts_should_deferred_chunk_scan(query, ht);
+			bool use_deferred_chunk_append =
+				inhparent && ts_should_deferred_chunk_append(query, ht);
 			if (use_deferred_chunk_append)
 			{
 				rte->inh = false;
@@ -1734,7 +1751,7 @@ timescaledb_get_relation_info(PlannerInfo *root, RelOptInfo *rel, bool inhparent
 			 * in cases when these functions don't run, we have to do it here.
 			 */
 			const bool use_columnar_scan =
-				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
+				ts_guc_debug_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
 			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
@@ -2185,6 +2202,45 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
 			subq->groupClause = fill_missing_groupclause(new_groupclause, subq_groupclause_copy);
 		}
 	}
+}
+
+/*
+ * Add Sort over a given plan if it's not sufficiently ordered.
+ */
+Plan *
+ts_add_sort_if_needed(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
+					  const AttrNumber *reqColIdx, double limit_tuples)
+{
+	int numsortkeys;
+	AttrNumber *sortColIdx;
+	Oid *sortOperators;
+	Oid *collations;
+	bool *nullsFirst;
+
+	/* Compute sort column info, and adjust the child's tlist as needed */
+	plan = ts_prepare_sort_from_pathkeys(plan,
+										 pathkeys,
+										 path->parent->relids,
+										 reqColIdx,
+										 true,
+										 &numsortkeys,
+										 &sortColIdx,
+										 &sortOperators,
+										 &collations,
+										 &nullsFirst);
+
+	/* Now, insert a Sort node if child isn't sufficiently ordered */
+	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
+	{
+		Sort *sort;
+
+		Assert(!IsA(plan, Sort));
+		sort = ts_make_sort(plan, numsortkeys, sortColIdx, sortOperators, collations, nullsFirst);
+		ts_label_sort_with_costsize(root, sort, limit_tuples);
+		plan = (Plan *) sort;
+	}
+
+	return plan;
 }
 
 void

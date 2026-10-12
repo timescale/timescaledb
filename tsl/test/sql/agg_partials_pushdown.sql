@@ -185,3 +185,67 @@ RESET enable_seqscan;
 RESET random_page_cost;
 RESET cpu_operator_cost;
 RESET enable_hashagg;
+
+-- Chunkwise aggregation must account for the cost of sorting the per-chunk
+-- partially aggregated results.
+SET enable_seqscan = OFF;
+
+CREATE TABLE sensor_readings(ts bigint NOT NULL, sensor_id bigint);
+SELECT create_hypertable('sensor_readings', 'ts', chunk_time_interval => 1000);
+
+INSERT INTO sensor_readings
+SELECT g, g % 7 FROM generate_series(1, 3000) g;
+
+VACUUM ANALYZE sensor_readings;
+
+SELECT ts, sensor_id, count(*) FROM sensor_readings
+GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
+
+:PREFIX
+SELECT ts, sensor_id, count(*) FROM sensor_readings
+GROUP BY ts, sensor_id ORDER BY ts, sensor_id LIMIT 5;
+
+RESET enable_seqscan;
+
+-- Chunkwise aggregation with a parallel-restricted aggregate expression
+CREATE TABLE ticks(ts timestamptz NOT NULL, sym text NOT NULL);
+SELECT create_hypertable('ticks', 'ts', chunk_time_interval => interval '1 day');
+
+INSERT INTO ticks
+SELECT t, s
+FROM generate_series('2024-01-01 00:00+00'::timestamptz, '2024-01-03 23:59+00', '1 minute') t,
+     unnest(ARRAY['A','B','C']) s;
+
+VACUUM ANALYZE ticks;
+
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SET min_parallel_table_scan_size = 0;
+SET max_parallel_workers_per_gather = 2;
+SET parallel_leader_participation = on;
+
+-- Strip SubPlan names since PG19 prints them differently
+CREATE FUNCTION explain_subplan(query text) RETURNS SETOF text LANGUAGE plpgsql AS
+$$
+DECLARE
+    line text;
+BEGIN
+    FOR line IN EXECUTE 'EXPLAIN (costs off) ' || query LOOP
+        RETURN NEXT regexp_replace(line, 'SubPlan \S+', 'SubPlan');
+    END LOOP;
+END
+$$;
+
+SELECT explain_subplan($$
+SELECT sym, count(*) FILTER (WHERE EXISTS (SELECT FROM ticks t2 WHERE t2.sym = t1.sym AND t2.ts = t1.ts - interval '1 minute'))
+FROM ticks t1 GROUP BY sym
+$$);
+
+SELECT sym, count(*) FILTER (WHERE EXISTS (SELECT FROM ticks t2 WHERE t2.sym = t1.sym AND t2.ts = t1.ts - interval '1 minute'))
+FROM ticks t1 GROUP BY sym ORDER BY sym;
+
+RESET parallel_setup_cost;
+RESET parallel_tuple_cost;
+RESET min_parallel_table_scan_size;
+SET max_parallel_workers_per_gather = 1;
+SET parallel_leader_participation = off;

@@ -4,7 +4,7 @@
 
 -- Enable MERGE statements for continuous aggregate refresh
 SET timescaledb.enable_merge_on_cagg_refresh TO ON;
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 \ir include/cagg_refresh_common.sql
 

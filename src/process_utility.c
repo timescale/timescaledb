@@ -92,6 +92,7 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
+#include "ts_catalog/hypertable_cagg_settings.h"
 #include "ts_stats/ts_stats_record.h"
 #include "tss_callbacks.h"
 #include "utils.h"
@@ -114,6 +115,7 @@ static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPL
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
+static bool is_granular_refresh_tracking_column(Hypertable *ht, const char *colname);
 static void ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc,
 									Oid newrole_oid);
 
@@ -1365,6 +1367,8 @@ process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	/* Drop FKs referencing the chunk so CASCADE does not drop the hypertable FK */
+	ts_chunk_drop_referencing_fk_by_relid(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
@@ -1577,7 +1581,8 @@ process_truncate(ProcessUtilityArgs *args)
 								char *schema_name =
 									get_namespace_name(get_rel_namespace(compressed_relid));
 								char *table_name = get_rel_name(compressed_relid);
-								rv = makeRangeVar(schema_name, table_name, -1);
+								relations =
+									lappend(relations, makeRangeVar(schema_name, table_name, -1));
 								MemoryContextSwitchTo(oldctx);
 								list_changed = true;
 							}
@@ -1705,20 +1710,6 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		if (chunk)
 		{
 			Hypertable *ht;
-
-			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
-			 *  it would be blocked if there are dependent objects */
-			if (stmt->behavior == DROP_CASCADE && ts_chunk_is_compressed(chunk))
-			{
-				Oid compressed_relid = ts_relation_get_compressed_relid(chunk->fd.relid);
-				/* The chunk may have been delete by a CASCADE */
-				if (OidIsValid(compressed_relid))
-				{
-					LockRelationOid(compressed_relid, AccessExclusiveLock);
-					ts_chunk_drop_by_relid(compressed_relid, stmt->behavior, DEBUG1);
-				}
-			}
-
 			ht = ts_hypertable_cache_get_entry(hcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
 
 			Assert(ht != NULL);
@@ -2416,6 +2407,17 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	Dimension *dim;
 	bool is_cagg = false;
 
+	if (ht && is_granular_refresh_tracking_column(ht, stmt->subname))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot rename column \"%s\" used to set up granular refresh",
+						stmt->subname),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(relid))));
+	}
+
 	if (!ht)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
@@ -2447,6 +2449,18 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 			 * aggregate rather than one of the internal views, which is what
 			 * the ExecRenameStmt calls below would otherwise report. */
 			ts_cagg_permissions_check(relid, GetUserId());
+
+			/* Block renaming granular refresh column */
+			Hypertable *raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
+			if (raw_ht && is_granular_refresh_tracking_column(raw_ht, stmt->subname))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+						 errmsg("cannot rename column \"%s\" used to set up granular refresh",
+								stmt->subname),
+						 errdetail("Renaming the timescaledb.cagg_granular_refresh_column is not "
+								   "supported.")));
+			}
 
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
@@ -3319,6 +3333,15 @@ process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 	}
 }
 
+static bool
+is_granular_refresh_tracking_column(Hypertable *ht, const char *colname)
+{
+	FormData_hypertable_cagg_settings settings;
+
+	return ts_hypertable_cagg_settings_get(ht->fd.id, &settings, NULL) &&
+		   namestrcmp(&settings.granular_refresh_column, colname) == 0;
+}
+
 static void
 process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 {
@@ -3337,6 +3360,16 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
 		}
+	}
+
+	if (is_granular_refresh_tracking_column(ht, cmd->name))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot drop column \"%s\" used to set up granular refresh", cmd->name),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(ht->main_table_relid))));
 	}
 
 	/* Delete dimension range entries on this column, if any.  */
@@ -4538,6 +4571,17 @@ process_alter_column_type_start(ParseState *pstate, Hypertable *ht, AlterTableCm
 								 " before changing the type")));
 		}
 	}
+
+	if (is_granular_refresh_tracking_column(ht, cmd->name))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("cannot change type of column \"%s\" used to set up granular refresh",
+						cmd->name),
+				 errdetail("Granular refresh on hypertable \"%s\" tracks changes using this "
+						   "column.",
+						   get_rel_name(ht->main_table_relid))));
+	}
 }
 
 static void
@@ -5631,7 +5675,7 @@ ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc, Oid 
 
 	if (DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]) != newrole_oid)
 	{
-		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = Int32GetDatum(newrole_oid);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = ObjectIdGetDatum(newrole_oid);
 		replace[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = true;
 		new_tuple = heap_modify_tuple(tuple, tupledesc, values, isnull, replace);
 		ts_catalog_update(rel, new_tuple);
@@ -5731,7 +5775,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 
 	if (ht && (!parse_results[AlterTableFlagGranularRefreshColumn].is_default ||
 			   !parse_results[AlterTableFlagGranularRefreshStartOffset].is_default ||
-			   !parse_results[AlterTableFlagGranularRefreshEndOffset].is_default))
+			   !parse_results[AlterTableFlagGranularRefreshEndOffset].is_default ||
+			   !parse_results[AlterTableFlagCaggEnableGranularRefresh].is_default))
 	{
 		ts_cm_functions->process_granular_refresh_options(ht, parse_results);
 	}
@@ -6422,13 +6467,13 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 }
 
 static void
-process_drop_table(EventTriggerDropObject *obj)
+process_drop_table(EventTriggerDropObject *obj, DropBehavior behavior)
 {
 	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
-	ts_chunk_delete_by_relid(table->relid, DROP_RESTRICT);
-	ts_hypertable_delete_by_name(table->schema, table->name);
+	ts_chunk_delete_by_relid(table->relid, behavior);
+	ts_hypertable_delete_by_name(table->schema, table->name, table->relid);
 	/*
 	 * Normally, dependent catalogs (like compression settings) are cleaned up
 	 * when deleting the hypertable or chunk. However, in some cases, e.g.,
@@ -6501,7 +6546,7 @@ process_drop_view(EventTriggerDropView *dropped_view)
 }
 
 static void
-process_ddl_sql_drop(EventTriggerDropObject *obj)
+process_ddl_sql_drop(EventTriggerDropObject *obj, DropBehavior behavior)
 {
 	switch (obj->type)
 	{
@@ -6509,7 +6554,7 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			process_drop_table_constraint(obj);
 			break;
 		case EVENT_TRIGGER_DROP_TABLE:
-			process_drop_table(obj);
+			process_drop_table(obj, behavior);
 			break;
 		case EVENT_TRIGGER_DROP_SCHEMA:
 			process_sql_drop_schema(obj);
@@ -6615,15 +6660,36 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 	EventTriggerUndoInhibitCommandCollection();
 }
 
+/* Get the drop behavior of the statement that caused the drop. */
+static DropBehavior
+event_trigger_drop_behavior(Node *parsetree)
+{
+	if (parsetree != NULL)
+	{
+		switch (nodeTag(parsetree))
+		{
+			case T_DropStmt:
+				return castNode(DropStmt, parsetree)->behavior;
+			case T_DropOwnedStmt:
+				return castNode(DropOwnedStmt, parsetree)->behavior;
+			default:
+				break;
+		}
+	}
+
+	return DROP_RESTRICT;
+}
+
 static void
 process_ddl_event_sql_drop(EventTriggerData *trigdata)
 {
 	ListCell *lc;
 	List *dropped_objects = ts_event_trigger_dropped_objects();
+	DropBehavior behavior = event_trigger_drop_behavior(trigdata->parsetree);
 
 	foreach (lc, dropped_objects)
 	{
-		process_ddl_sql_drop(lfirst(lc));
+		process_ddl_sql_drop(lfirst(lc), behavior);
 	}
 }
 

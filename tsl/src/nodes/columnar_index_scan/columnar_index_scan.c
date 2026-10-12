@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include <access/sysattr.h>
+#include <catalog/pg_aggregate.h>
 #include <nodes/bitmapset.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
@@ -15,6 +16,8 @@
 #include <parser/parsetree.h>
 #include <utils/fmgroids.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
+#include <utils/typcache.h>
 
 #include "columnar_index_scan.h"
 #include "compression/create.h"
@@ -39,6 +42,57 @@ _columnar_index_scan_init(void)
 }
 
 /*
+ * Check that the aggregate orders values the same way the sparse index
+ * metadata was built, which is with the default btree operator class of the
+ * column type and the collation of the column. A cast or a collation in the
+ * aggregate argument can ask for a different order, int and oid compare
+ * differently, and then the metadata does not answer the aggregate.
+ */
+static bool
+agg_order_matches_column(Aggref *aggref, Var *var, bool is_min)
+{
+	HeapTuple tuple = SearchSysCache1(AGGFNOID, ObjectIdGetDatum(aggref->aggfnoid));
+	if (!HeapTupleIsValid(tuple))
+	{
+		return false;
+	}
+	Oid aggsortop = ((Form_pg_aggregate) GETSTRUCT(tuple))->aggsortop;
+	ReleaseSysCache(tuple);
+
+	TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
+	if (aggsortop != (is_min ? tce->lt_opr : tce->gt_opr))
+	{
+		return false;
+	}
+
+	return aggref->inputcollid == var->varcollid;
+}
+
+/*
+ * first and last take their order from the second argument. Check that its
+ * type and its collation give the same order as the column the metadata was
+ * built from.
+ */
+static bool
+first_last_order_matches_column(Aggref *aggref, Var *var)
+{
+	Oid order_type = list_nth_oid(aggref->aggargtypes, 1);
+	TypeCacheEntry *order_tce = lookup_type_cache(order_type, TYPECACHE_LT_OPR);
+	TypeCacheEntry *column_tce = lookup_type_cache(var->vartype, TYPECACHE_LT_OPR);
+
+	if (!OidIsValid(order_tce->lt_opr) || order_tce->lt_opr != column_tce->lt_opr)
+	{
+		return false;
+	}
+
+	/*
+	 * The comparison runs with the input collation of the aggregate, which
+	 * only matters when the order column is collatable.
+	 */
+	return !OidIsValid(var->varcollid) || aggref->inputcollid == var->varcollid;
+}
+
+/*
  * Check if an aggregate function can use compressed chunk sparse index.
  *
  * Currently supported aggregates are min, max, first, and last.
@@ -53,10 +107,10 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 		return false;
 	}
 
-	/* Get the argument - must be a Var (possibly with implicit coercions) */
+	/* Get the argument - must be a Var (possibly with relabels) */
 	TargetEntry *arg_te = linitial_node(TargetEntry, aggref->args);
 
-	Node *arg_expr = strip_implicit_coercions((Node *) arg_te->expr);
+	Node *arg_expr = ts_strip_relabel_types((Node *) arg_te->expr);
 	if (!IsA(arg_expr, Var))
 	{
 		return false;
@@ -100,6 +154,10 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 		case F_MIN_TIMESTAMPTZ:
 		case F_MIN_TIMETZ:
 		case F_MIN_XID8:
+			if (!agg_order_matches_column(aggref, var, /* is_min = */ true))
+			{
+				return false;
+			}
 			*meta_type_out = "min";
 			*arg_var_out = var;
 			return true;
@@ -131,6 +189,10 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 		case F_MAX_TIMESTAMPTZ:
 		case F_MAX_TIMETZ:
 		case F_MAX_XID8:
+			if (!agg_order_matches_column(aggref, var, /* is_min = */ false))
+			{
+				return false;
+			}
 			*meta_type_out = "max";
 			*arg_var_out = var;
 			return true;
@@ -148,11 +210,15 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 					return false;
 				}
 				TargetEntry *tle2 = castNode(TargetEntry, lsecond(aggref->args));
-				Node *arg2_expr = strip_implicit_coercions((Node *) tle2->expr);
+				Node *arg2_expr = ts_strip_relabel_types((Node *) tle2->expr);
 
 				if (equal(var, arg2_expr))
 				{
 					/* Same column: first(x,x) / last(x,x) */
+					if (!first_last_order_matches_column(aggref, var))
+					{
+						return false;
+					}
 					*meta_type_out = (aggref->aggfnoid == ts_first_func_oid) ? "min" : "max";
 					*arg_var_out = var;
 					return true;
@@ -166,6 +232,11 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 
 				Var *arg2_var = castNode(Var, arg2_expr);
 				if (arg2_var->varattno <= 0)
+				{
+					return false;
+				}
+
+				if (!first_last_order_matches_column(aggref, arg2_var))
 				{
 					return false;
 				}
@@ -624,8 +695,8 @@ rewrite_agg_tlist_mutator(Node *node, void *context)
 		{
 			TargetEntry *orig_te1 = linitial_node(TargetEntry, orig->args);
 			TargetEntry *orig_te2 = lsecond_node(TargetEntry, orig->args);
-			Node *orig_arg1 = strip_implicit_coercions((Node *) orig_te1->expr);
-			Node *orig_arg2 = strip_implicit_coercions((Node *) orig_te2->expr);
+			Node *orig_arg1 = ts_strip_relabel_types((Node *) orig_te1->expr);
+			Node *orig_arg2 = ts_strip_relabel_types((Node *) orig_te2->expr);
 
 			if (!equal(orig_arg1, orig_arg2))
 			{

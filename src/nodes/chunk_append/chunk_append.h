@@ -33,6 +33,7 @@ typedef enum
 	CAP_RTIndexes = 2,
 	CAP_SortOptions = 3,
 	CAP_ParentClauses = 4,
+	CAP_HashValues = 5,
 	CAP_Count
 } ChunkAppendPrivateIndex;
 
@@ -50,8 +51,7 @@ typedef struct ChunkAppendPath
 extern TSDLLEXPORT ChunkAppendPath *ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths,
 															  PathTarget *pathtarget);
 extern Path *ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-										 Path *subpath, bool parallel_aware, bool ordered,
-										 List *nested_oids);
+										 Path *subpath, bool parallel_aware, bool ordered);
 extern Plan *ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 										 List *tlist, List *clauses, List *custom_plans);
 extern Node *ts_chunk_append_state_create(CustomScan *cscan);
@@ -63,6 +63,7 @@ extern TSDLLEXPORT bool ts_is_chunk_append_path(Path *path);
 extern TSDLLEXPORT bool ts_is_chunk_append_plan(Plan *plan);
 
 extern Scan *ts_chunk_append_get_scan_plan(Plan *plan);
+extern List *ts_chunk_append_get_members(Plan *plan);
 
 void _chunk_append_init(void);
 

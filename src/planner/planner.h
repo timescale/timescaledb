@@ -32,8 +32,6 @@ typedef struct TimescaleDBPrivate
 	bool appends_ordered;
 	/* attno of the time dimension in the parent table if appends are ordered */
 	int order_attno;
-	List *nested_oids;
-	List *chunk_oids;
 
 	/* Cached chunk data for the chunk relinfo. */
 	Chunk *cached_chunk_struct;
@@ -54,6 +52,9 @@ extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte)
 extern TSDLLEXPORT void ts_rte_mark_compressed_relation(RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_contains_external_param(Node *node);
 extern TSDLLEXPORT bool ts_contains_join_param(Node *node);
+extern TSDLLEXPORT Plan *ts_add_sort_if_needed(PlannerInfo *root, Plan *plan, Path *path,
+											   List *pathkeys, const AttrNumber *reqColIdx,
+											   double limit_tuples);
 
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)
@@ -104,6 +105,8 @@ extern Expr *ts_transform_nested_time_bucket_comparison(Expr *);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);
+extern Expr *ts_make_partition_hash_clause(PlannerInfo *root, List *rtable, Index relid,
+										   Expr *clause);
 
 extern TSDLLEXPORT void ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid,
 															 Hypertable *hypertable);

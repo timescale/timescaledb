@@ -100,7 +100,7 @@
 		const uint64 mask = ((W) == 64) ? UINT64_MAX : ((uint64) 1 << ((W) & 63)) - 1;             \
 		for (int lane = 0; lane < FL_S64; lane++)                                                  \
 		{                                                                                          \
-			uint64 src = packed[lane], tmp;                                                        \
+			uint64 src = FL_LE64(packed[lane]), tmp;                                               \
 			FL_UNPACK_ALL_64(uint64, FL_S64, W)                                                    \
 		}                                                                                          \
 	}
@@ -126,7 +126,7 @@ FL_W_LIST_64(FL_DEF_UNPACK_U64)
 		const uint32 mask = ((W) == 32) ? UINT32_MAX : ((uint32) 1 << ((W) & 31)) - 1;             \
 		for (int lane = 0; lane < FL_S32; lane++)                                                  \
 		{                                                                                          \
-			uint32 src = packed[lane], tmp;                                                        \
+			uint32 src = FL_LE32(packed[lane]), tmp;                                               \
 			FL_UNPACK_ALL_32(uint32, FL_S32, W)                                                    \
 		}                                                                                          \
 	}
@@ -154,7 +154,7 @@ FL_W_LIST_32(FL_DEF_UNPACK_U32)
 			((W) == 16) ? (uint16) UINT16_MAX : (uint16) (((uint16) 1 << ((W) & 15)) - 1);         \
 		for (int lane = 0; lane < FL_S16; lane++)                                                  \
 		{                                                                                          \
-			uint16 src = packed[lane], tmp;                                                        \
+			uint16 src = FL_LE16(packed[lane]), tmp;                                               \
 			FL_UNPACK_ALL_16(uint16, FL_S16, W)                                                    \
 		}                                                                                          \
 	}
@@ -182,7 +182,7 @@ FL_W_LIST_16(FL_DEF_UNPACK_U16)
 			((W) == 8) ? (uint8) UINT8_MAX : (uint8) (((uint8) 1 << ((W) & 7)) - 1);               \
 		for (int lane = 0; lane < FL_S8; lane++)                                                   \
 		{                                                                                          \
-			uint8 src = packed[lane], tmp;                                                         \
+			uint8 src = FL_LE8(packed[lane]), tmp;                                                 \
 			FL_UNPACK_ALL_8(uint8, FL_S8, W)                                                       \
 		}                                                                                          \
 	}

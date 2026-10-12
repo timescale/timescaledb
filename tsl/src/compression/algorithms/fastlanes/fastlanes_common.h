@@ -23,6 +23,7 @@
 #pragma once
 
 #include "fastlanes_types.h"
+#include <port/pg_bswap.h>
 
 /*
  * Bit-position helpers -- compile-time when (row, W, T) are constants.
@@ -98,3 +99,27 @@
 #define FL_FFOR_UNPACK_ALL_16(TYPE, S, W) FL_FU16(TYPE, 16, S, W, 0)
 #define FL_FFOR_UNPACK_ALL_32(TYPE, S, W) FL_FU32(TYPE, 32, S, W, 0)
 #define FL_FFOR_UNPACK_ALL_64(TYPE, S, W) FL_FU64(TYPE, 64, S, W, 0)
+
+/*
+ * Packed-word byte order.
+ *
+ * The packed buffer is little-endian (see fastlanes.h).
+ * FL_LE(T, x) converts a T-bit packed word between native and
+ * little-endian order at the moment it is stored to or loaded from
+ * the packed buffer.
+ */
+#ifndef WORDS_BIGENDIAN
+#define FL_LE8(x) (x)
+#define FL_LE16(x) (x)
+#define FL_LE32(x) (x)
+#define FL_LE64(x) (x)
+#else
+#define FL_LE8(x) (x)
+#define FL_LE16(x) pg_bswap16(x)
+#define FL_LE32(x) pg_bswap32(x)
+#define FL_LE64(x) pg_bswap64(x)
+#endif
+
+/* two-level paste so T expands to its literal before pasting */
+#define FL_LE_(T, x) FL_LE##T(x)
+#define FL_LE(T, x) FL_LE_(T, x)

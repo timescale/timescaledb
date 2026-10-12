@@ -33,7 +33,7 @@ SELECT a, count(b)
 FROM int_tab
 GROUP BY time_bucket(1, a), a WITH NO DATA;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT count(*) FROM _timescaledb_catalog.bgw_job;
@@ -229,7 +229,7 @@ SELECT hypertable_id as mat_id FROM _timescaledb_catalog.bgw_job where id = :job
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
@@ -724,7 +724,7 @@ WHERE id = :job_id;
  {"end_offset": "@ 1 hour", "start_offset": "@ 15 days", "mat_hypertable_id": 7}
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;

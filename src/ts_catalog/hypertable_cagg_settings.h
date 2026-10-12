@@ -8,6 +8,7 @@
 #include <postgres.h>
 
 #include "export.h"
+#include "scanner.h"
 #include "ts_catalog/catalog.h"
 
 /* Whether typid is allowed as a granular-refresh tracking column. */
@@ -22,9 +23,13 @@ extern TSDLLEXPORT bool ts_tenant_type_is_supported(Oid typid);
  */
 
 extern TSDLLEXPORT bool ts_hypertable_cagg_settings_get(int32 hypertable_id,
-														FormData_hypertable_cagg_settings *form);
+														FormData_hypertable_cagg_settings *form,
+														const ScanTupLock *tuplock);
 extern TSDLLEXPORT void
 ts_hypertable_cagg_settings_insert(const FormData_hypertable_cagg_settings *form);
+extern TSDLLEXPORT void
+ts_hypertable_cagg_settings_update(const FormData_hypertable_cagg_settings *form);
+extern TSDLLEXPORT Datum ts_hypertable_cagg_settings_cast_offset(const text *offset, Oid dimtype);
 extern TSDLLEXPORT void ts_hypertable_cagg_settings_delete(int32 hypertable_id);
 extern TSDLLEXPORT bool ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id,
 																			   int64 *window_start,

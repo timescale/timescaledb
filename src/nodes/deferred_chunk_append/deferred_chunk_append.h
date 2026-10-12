@@ -16,10 +16,10 @@
 
 #include "hypertable.h"
 
-extern bool ts_should_deferred_chunk_scan(const Query *query, const Hypertable *ht);
-extern void ts_deferred_chunk_scan_add_path(PlannerInfo *root, RelOptInfo *rel,
-											const Hypertable *ht);
-extern void _deferred_chunk_scan_init(void);
+extern bool ts_should_deferred_chunk_append(const Query *query, const Hypertable *ht);
+extern void ts_deferred_chunk_append_add_path(PlannerInfo *root, RelOptInfo *rel,
+											  const Hypertable *ht);
+extern void _deferred_chunk_append_init(void);
 
 /*
  * DeferredChunkAppendState is the execution state for a deferred chunk append scan.

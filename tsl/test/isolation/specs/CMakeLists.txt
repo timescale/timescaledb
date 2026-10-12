@@ -57,8 +57,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_freeze.spec
     compression_merge_race.spec
     compression_recompress.spec
+    recompress_concurrent_dml.spec
     decompression_chunk_and_parallel_query_wo_idx.spec
     merge_chunks_concurrent.spec
+    move_to_columnstore_concurrent.spec
     split_chunk_concurrent.spec
     freeze_chunk.spec
     compression_dml_iso.spec
@@ -71,11 +73,12 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
-if(TMP_ENABLE_GRANULAR_REFRESH_TESTS AND CMAKE_BUILD_TYPE MATCHES Debug)
+if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
     cagg_granular_refresh.spec
+    cagg_granular_refresh_batch_races.spec
     cagg_granular_refresh_cleanup_races.spec
     cagg_granular_refresh_disable_races.spec
     cagg_granular_refresh_seqnum_race.spec
