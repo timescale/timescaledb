@@ -343,3 +343,67 @@ CREATE INDEX test_temp_idx ON ONLY test (time);
 
 SELECT * FROM test.show_indexes('test');
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
+
+-- #10736 partial indexes do not cover all rows and cannot replace default indexes.
+CREATE TABLE idx_partial(time timestamptz NOT NULL, device int, value int);
+CREATE INDEX idx_partial_time ON idx_partial(time) WHERE value IS NULL;
+SELECT * FROM create_hypertable('idx_partial', 'time', create_default_indexes => true) \gset
+SELECT indkey, count(*) FILTER (WHERE indpred IS NULL) AS full,
+       count(*) FILTER (WHERE indpred IS NOT NULL) AS partial
+FROM pg_index WHERE indrelid = 'idx_partial'::regclass
+GROUP BY indkey ORDER BY indkey;
+
+DROP TABLE idx_partial;
+
+-- Both time and space/time defaults must coexist with matching partial indexes.
+CREATE TABLE idx_partial(time timestamptz NOT NULL, device int, value int);
+CREATE INDEX idx_partial_time ON idx_partial(time) WHERE value IS NULL;
+CREATE INDEX idx_partial_device_time ON idx_partial(device, time) WHERE value IS NULL;
+SELECT * FROM create_hypertable('idx_partial', 'time', 'device', 2) \gset
+SELECT indkey, count(*) FILTER (WHERE indpred IS NULL) AS full,
+       count(*) FILTER (WHERE indpred IS NOT NULL) AS partial
+FROM pg_index WHERE indrelid = 'idx_partial'::regclass
+GROUP BY indkey ORDER BY indkey;
+
+-- Each of two new chunks inherits both the full and partial indexes.
+INSERT INTO idx_partial VALUES ('2000-01-01', 1, NULL), ('2001-01-01', 1, 1);
+SELECT indkey, count(*) FILTER (WHERE indpred IS NULL) AS full,
+       count(*) FILTER (WHERE indpred IS NOT NULL) AS partial
+FROM pg_index WHERE indrelid IN (SELECT show_chunks('idx_partial'))
+GROUP BY indkey ORDER BY indkey;
+
+DROP TABLE idx_partial;
+
+-- Existing full indexes still prevent redundant defaults.
+CREATE TABLE idx_full(time timestamptz NOT NULL, device int, value int);
+CREATE INDEX idx_full_time ON idx_full(time);
+CREATE INDEX idx_full_device_time ON idx_full(device, time);
+SELECT * FROM create_hypertable('idx_full', 'time', 'device', 2) \gset
+SELECT indkey, count(*) FILTER (WHERE indpred IS NULL) AS full,
+       count(*) FILTER (WHERE indpred IS NOT NULL) AS partial
+FROM pg_index WHERE indrelid = 'idx_full'::regclass
+GROUP BY indkey ORDER BY indkey;
+
+DROP TABLE idx_full;
+
+-- Disabling defaults leaves only the explicitly created partial indexes.
+CREATE TABLE idx_disabled(time timestamptz NOT NULL, device int, value int);
+CREATE INDEX idx_disabled_time ON idx_disabled(time) WHERE value IS NULL;
+CREATE INDEX idx_disabled_device_time ON idx_disabled(device, time) WHERE value IS NULL;
+SELECT * FROM create_hypertable('idx_disabled', 'time', 'device', 2,
+                               create_default_indexes => false) \gset
+SELECT indkey, count(*) FILTER (WHERE indpred IS NULL) AS full,
+       count(*) FILTER (WHERE indpred IS NOT NULL) AS partial
+FROM pg_index WHERE indrelid = 'idx_disabled'::regclass
+GROUP BY indkey ORDER BY indkey;
+
+DROP TABLE idx_disabled;
+
+-- Partial unique indexes must still cover every partitioning column.
+CREATE TABLE idx_unique(time timestamptz NOT NULL, device int, value int);
+CREATE UNIQUE INDEX idx_unique_time ON idx_unique(time) WHERE value IS NULL;
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('idx_unique', 'time', 'device', 2);
+
+\set ON_ERROR_STOP 1
+DROP TABLE idx_unique;
