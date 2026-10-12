@@ -57,7 +57,6 @@ set(TEST_FILES
     reloptions.sql
     size_utils.sql
     sort_optimization.sql
-    sql_query.sql
     tableam.sql
     tableam_alter.sql
     tablespace.sql
@@ -84,7 +83,8 @@ set(TEST_TEMPLATES
     rowsecurity.sql.in
     parallel.sql.in
     plan_expand_hypertable.sql.in
-    ts_merge.sql.in)
+    ts_merge.sql.in
+    sql_query.sql.in)
 
 # tests that fail or are unreliable when run in parallel bgw tests need to run
 # first otherwise they are flaky
