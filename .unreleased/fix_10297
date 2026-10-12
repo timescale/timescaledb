@@ -1,0 +1,1 @@
+Fixes: #10297 Unique constraint check on compressed INSERT ignores the collation of the unique index

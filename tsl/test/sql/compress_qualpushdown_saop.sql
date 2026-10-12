@@ -18,6 +18,7 @@ create function stable_lower(x text) returns text as 'lower' language internal s
 create function volatile_lower(x text) returns text as 'lower' language internal volatile;
 
 set max_parallel_workers_per_gather = 0;
+set enable_material = 0;
 
 -- On PG18 the btree indexes have support for scalar array operations, which
 -- leads to different query plans. We don't care about index scan in particular
@@ -196,16 +197,16 @@ select * from saop where segmentby = '1' or (with_bloom = stable_lower('1') and 
 
 
 -- Some joins.
+create table arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10);
+vacuum analyze arrays;
+
 explain (analyze, buffers off, costs off, timing off, summary off)
-with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where segmentby = any(a);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
-with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where with_minmax = any(a);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
-with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where with_bloom = any(a);
 
 
@@ -253,6 +254,8 @@ select * from saop where segmentby = '3';
 
 reset timescaledb.enable_columnar_scan_filter_pushdown;
 
+
+reset enable_material;
 
 reset max_parallel_workers_per_gather;
 

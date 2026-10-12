@@ -337,6 +337,44 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 											  /* missing_ok = */ false);
 		AttrNumber uncompressed_chunk_attno = get_attnum(info->chunk_rte->relid, column_name);
 
+		if (path->metadata_only)
+		{
+			/*
+			 * Metadata only: the batch values are copied like segmentby
+			 * columns, and no column is decompressed.
+			 */
+			AttrNumber destination_attno = 0;
+			if (strcmp(column_name, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
+			{
+				destination_attno = COLUMNAR_SCAN_COUNT_ID;
+				missing_count = false;
+			}
+			else
+			{
+				ListCell *chunk_lc, *compressed_lc;
+				forboth (chunk_lc,
+						 path->metadata_chunk_attnos,
+						 compressed_lc,
+						 path->metadata_compressed_attnos)
+				{
+					if (lfirst_int(compressed_lc) == compressed_chunk_attno)
+					{
+						destination_attno = lfirst_int(chunk_lc);
+						uncompressed_attrs_found =
+							bms_add_member(uncompressed_attrs_found,
+										   destination_attno - FirstLowInvalidHeapAttributeNumber);
+						break;
+					}
+				}
+			}
+
+			context->compressed_attno_info[compressed_chunk_attno] = (CompressedColumnInfo){
+				.uncompressed_chunk_attno = destination_attno,
+				.is_segmentby = destination_attno > 0,
+			};
+			continue;
+		}
+
 		AttrNumber destination_attno = 0;
 		if (uncompressed_chunk_attno != InvalidAttrNumber)
 		{
@@ -872,15 +910,14 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		return NULL;
 	}
 
-	if (OidIsValid(var->varcollid) && !get_collation_isdeterministic(var->varcollid))
+	/*
+	 * The vector predicates compare bytes. That is only correct for a
+	 * deterministic collation, and the collation the operator runs with can
+	 * differ from the column's, for example with COLLATE in the query.
+	 */
+	Oid collation = opexpr ? opexpr->inputcollid : saop->inputcollid;
+	if (OidIsValid(collation) && !get_collation_isdeterministic(collation))
 	{
-		/*
-		 * Can't vectorize string equality with a nondeterministic collation.
-		 * Not sure if we have to check the collation of Const as well, but it
-		 * will be known only at planning time. Currently we don't check it at
-		 * all. Also this is untested because we don't have nondeterministic
-		 * collations in all test configurations.
-		 */
 		return NULL;
 	}
 
@@ -1242,7 +1279,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 										 compressed_path,
 										 dcpath->required_compressed_pathkeys,
 										 /* reqColIdx = */ NULL,
-										 /* limit_tuples = */ -1.0));
+										 /* limit_tuples = */ dcpath->metadata_only ? 1.0 : -1.0));
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
@@ -1296,6 +1333,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 		dcpath->enable_bulk_decompression;
 	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 	lfirst_int(list_nth_cell(settings, DCS_ChunkStatus)) = dcpath->chunk_status;
+	lfirst_int(list_nth_cell(settings, DCS_MetadataOnly)) = dcpath->metadata_only;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see

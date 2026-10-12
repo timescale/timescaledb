@@ -414,6 +414,9 @@ SELECT * FROM hypertable_approximate_size('ht_try');
 \set ON_ERROR_STOP 0
 -- Error for a hypertable that has no OSM chunk
 SELECT _timescaledb_functions.lock_osm_chunk_dimension_slice('test1.hyper1');
+
+-- Cannot add dimensions with tiering
+SELECT add_dimension('ht_try', 'acq_id', number_partitions => 2);
 \set ON_ERROR_STOP 1
 
 --TEST GUC variable to enable/disable OSM chunk

@@ -15,6 +15,12 @@ name: Regression Linux i386
       - trigger/regression
   pull_request:
   workflow_call:
+    inputs:
+      # Ref in timescale/timescaledb to test when called by release sanity,
+      # usually the release branch (e.g. 2.30.x).
+      timescaledb-ref:
+        required: true
+        type: string
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -23,6 +29,9 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -37,6 +46,9 @@ jobs:
          }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+          ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         if: github.event_name != 'workflow_call'
         id: filter
@@ -77,6 +89,8 @@ jobs:
           compress_qualpushdown_saop
           compress_sort_transform
           compression_allocation
+          compressed_collation_icu
+          hash_collation_icu
           merge_append_partially_compressed
           net
           pg_dump
@@ -133,6 +147,9 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: ${{ github.event_name == 'workflow_call' && 'timescale/timescaledb' || github.repository }}
+        ref: ${{ github.event_name == 'workflow_call' && inputs['timescaledb-ref'] || github.ref }}
 
     # We are going to rebuild Postgres weekly, so that it doesn't suddenly break
     # ages after the original problem.
@@ -194,13 +211,9 @@ jobs:
         # Git's "safe.directory" setting. Otherwise git would complain about
         # 'detected dubious ownership in repository'
         git config --global --add safe.directory $(pwd)
-        # The granular refresh tracker allocates DSM segments out of /dev/shm,
-        # which is only 64 MB in this container, so skip those tests here. They
-        # run in every other workflow.
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           -DREQUIRE_ALL_TESTS=ON \
-          -DTMP_ENABLE_GRANULAR_REFRESH_TESTS=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install

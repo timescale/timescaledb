@@ -3145,8 +3145,8 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		 * If the chunk is deleted as a result of deleting the Hypertable, and
 		 * it is cleaned up in the DROP eventtrigger hook, it might not be
 		 * possible to resolve the relid because the relation is already gone
-		 * in pg_catalog. But that's OK, because compression settings will be
-		 * cleaned up when processing the eventtrigger.
+		 * in pg_catalog. The compressed chunk is still found below through
+		 * form.relid, since compression settings are keyed on that oid.
 		 */
 		if (OidIsValid(form.relid) && SearchSysCacheExists1(RELOID, ObjectIdGetDatum(form.relid)))
 		{
@@ -3164,12 +3164,9 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 
 	if (ts_flags_are_set_32(DatumGetInt32(form.status), CHUNK_STATUS_COMPRESSED))
 	{
-		Oid compressed_relid = ts_relation_get_compressed_relid(relid);
+		Oid compressed_relid = ts_relation_get_compressed_relid(form.relid);
 
-		if (OidIsValid(relid))
-		{
-			ts_compression_settings_delete(relid);
-		}
+		ts_compression_settings_delete(form.relid);
 
 		/* The compressed relation's oid is recorded in the compression
 		 * settings, but the relation itself may already have been dropped by a
