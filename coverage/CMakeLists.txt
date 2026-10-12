@@ -67,12 +67,13 @@ else()
   # Common options for lcov capture commands. We disable branch coverage for
   # Assert and Ensure, because these are never supposed to be hit and always
   # have partial coverage. The ereport macro also has some internal conditions
-  # that lead to partial coverage.
+  # that lead to partial coverage. RESUME_INTERRUPTS expands to an Assert, but
+  # that Assert is not visible as text on the call line.
   set(LCOV_CAPTURE_OPTS
       --rc
       lcov_branch_coverage=1
       --rc
-      "lcov_excl_br_line=TestAssert(Int64Eq|True)\\(|Assert\\(|Ensure\\(|ereport\\("
+      "lcov_excl_br_line=TestAssert(Int64Eq|True)\\(|Assert\\(|Ensure\\(|ereport\\(|RESUME_INTERRUPTS\\("
       --no-external
       --base-directory
       ${CMAKE_SOURCE_DIR}
