@@ -55,7 +55,7 @@ WHERE materialization_id = (SELECT mat_hypertable_id
 -- later inserts are late-arriving and produce narrow per-bucket invalidations.
 INSERT INTO conditions VALUES ('2020-06-01 00:00+00', 'prime', 9);
 CALL refresh_continuous_aggregate('cond_daily', '2019-01-01', '2021-01-01');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, Fri Jan 01 00:00:00 2021 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, Fri Jan 01 00:00:00 2021 UTC ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 \echo -- after priming
 -- after priming
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
@@ -97,10 +97,10 @@ WHERE hypertable_id = (SELECT raw_hypertable_id
                        WHERE user_view_name = 'cond2_daily');
 INSERT INTO conditions2 VALUES ('2020-06-01 00:00+00', 'prime2', 9);
 CALL refresh_continuous_aggregate('cond2_daily', '2019-01-01', '2021-01-01');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, Fri Jan 01 00:00:00 2021 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue Jan 01 00:00:00 2019 UTC, Fri Jan 01 00:00:00 2021 UTC ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 INSERT INTO conditions2 VALUES ('2020-01-02 00:00+00', 'c1', 1);
 CALL refresh_continuous_aggregate('cond2_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking2 ORDER BY seqnum, tenant_id;
  tenant_id | seqnum 
 -----------+--------
@@ -114,7 +114,7 @@ SELECT * FROM tracking2 ORDER BY seqnum, tenant_id;
 INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 's1', 1);
 -- round 1
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -128,7 +128,7 @@ SELECT * FROM live_seqnums ORDER BY seqnum;
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 's2', 2);
 -- round 2
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -138,7 +138,7 @@ SELECT * FROM tracking ORDER BY seqnum, tenant_id;
 INSERT INTO conditions VALUES ('2020-01-04 00:00+00', 's3', 3);
 -- round 3
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -148,7 +148,7 @@ SELECT * FROM tracking ORDER BY seqnum, tenant_id;
 INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 's4', 4);
 -- round 4
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -167,7 +167,7 @@ INSERT INTO conditions VALUES ('2020-01-02 00:00+00', 'a1', 1);
 -- dead trackings with seqnum <=4 are collected by the gc.
 -- Note that refresh later flushes trackings so max seqnum after refresh is 6.
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -188,7 +188,7 @@ SELECT * FROM tracking ORDER BY seqnum, tenant_id;
 --max = 7, 6 collected
 INSERT INTO conditions VALUES ('2020-01-03 00:00+00', 'a2', 2);
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -210,7 +210,7 @@ SELECT * FROM tracking ORDER BY seqnum, tenant_id;
 INSERT INTO conditions VALUES ('2020-01-04 00:00+00', 'a3', 3);
 --Refresh the Jan window, which consumes the Jan invalidations and leaves the Feb ones live.
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -230,7 +230,7 @@ SELECT * FROM live_seqnums ORDER BY seqnum;
 -- This also pump in-memory seqnum to 12 without inserting any trackings with seqnum 11,
 -- As there is no new data between this and the previous refresh.
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-02-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Mon Feb 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Mon Feb 10 00:00:00 2020 UTC ], materialized 2 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -247,7 +247,7 @@ SELECT * FROM live_seqnums ORDER BY seqnum;
 --7 and 9 are collected
 INSERT INTO conditions VALUES ('2020-01-05 00:00+00', 'a4', 4);
 CALL refresh_continuous_aggregate('cond_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking ORDER BY seqnum, tenant_id;
  tenant_id |            min_ts            | seqnum 
 -----------+------------------------------+--------
@@ -301,7 +301,7 @@ SELECT * FROM tracking2 ORDER BY seqnum, tenant_id;
 -- Its own refresh does reclaim it, so what held it was the hypertable scoping.
 INSERT INTO conditions2 VALUES ('2020-01-03 00:00+00', 'c2', 2);
 CALL refresh_continuous_aggregate('cond2_daily', '2020-01-01', '2020-01-10');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 00:00:00 2020 UTC ], materialized 1 row(s), deleted 0 row(s), fully granular
 SELECT * FROM tracking2 ORDER BY seqnum, tenant_id;
  tenant_id | seqnum 
 -----------+--------

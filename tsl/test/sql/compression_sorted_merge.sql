@@ -6,6 +6,8 @@
 -- will be penalized for segmentby cardinalities larger than 100, where it is
 -- still faster than sort.
 SET work_mem to '16MB';
+-- keep LIMIT 1 queries on the batch sorted merge path
+SET timescaledb.enable_columnarscan_metadata_only = off;
 
 \set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
@@ -674,6 +676,7 @@ drop table test cascade;
 
 -- Test issue #9922: wrong sort order for Batch Sorted Merge with multikey minmax index
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.enable_columnarscan_metadata_only = off;
 
 CREATE TABLE bsm_segby(ts timestamptz NOT NULL, grp int NOT NULL, name text NOT NULL);
 SELECT table_name FROM create_hypertable('bsm_segby','ts',chunk_time_interval=>interval '100 day');

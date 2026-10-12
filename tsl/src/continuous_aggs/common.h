@@ -95,12 +95,14 @@ typedef struct ContinuousAggRefreshOptions
 	bool extend_last_bucket; /* include the boundary bucket of an adjacent policy */
 } ContinuousAggRefreshOptions;
 
-/* Progress shared by all batches of one refresh invocation. */
+/* State shared by all batches of one refresh invocation. */
 typedef struct ContinuousAggRefreshExecutionState
 {
 	int32 processing_batch;
 	int32 number_of_batches;
-	bool batched; /* split windows are already bucket-aligned */
+	bool batched;					 /* split windows are already bucket-aligned */
+	bool ht_invalidations_processed; /* only once per invocation */
+	bool tenant_tracking_flushed;	 /* only once per invocation */
 } ContinuousAggRefreshExecutionState;
 
 /*
