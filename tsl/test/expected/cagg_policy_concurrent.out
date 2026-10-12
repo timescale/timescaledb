@@ -354,11 +354,8 @@ TRUNCATE mat_m1;
 TRUNCATE mat_m2;
 /* Refresh both continuous aggs immediately */
 CALL run_job(:agg_m1_job_1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -3000, -1000 ]
 CALL run_job(:agg_m1_job_2);
-NOTICE:  continuous aggregate refresh: processed 10 batch(es) of 10 in window [ 0, 1000 ]
 CALL run_job(:agg_m2_job);
-NOTICE:  continuous aggregate refresh: processed 10 batch(es) of 10 in window [ 0, 1000 ]
 /* Compare both outputs */
 SELECT count(*) AS exp_row_count from mat_m1 \gset
 SELECT count(*) AS actual_row_count from (
@@ -805,11 +802,8 @@ TRUNCATE mat_m1;
 TRUNCATE mat_m2;
 /* Refresh both continuous aggs immediately */
 CALL run_job(:agg_m1_job_1);
-NOTICE:  continuous aggregate refresh: processed 13 batch(es) of 13 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Thu May 01 17:00:00 2025 PDT ]
 CALL run_job(:agg_m1_job_2);
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri May 02 17:00:00 2025 PDT, infinity ]
 CALL run_job(:agg_m2_job);
-NOTICE:  continuous aggregate refresh: processed 16 batch(es) of 16 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 /* Compare both outputs */
 SELECT count(*) AS exp_row_count from mat_m1 \gset
 SELECT count(*) AS actual_row_count from (
@@ -1245,11 +1239,8 @@ TRUNCATE mat_m1;
 TRUNCATE mat_m2;
 /* Refresh both continuous aggs immediately */
 CALL run_job(:agg_m1_job_1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, Thu May 01 17:30:00 2025 PDT ]
 CALL run_job(:agg_m1_job_2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Thu May 01 17:30:00 2025 PDT, infinity ]
 CALL run_job(:agg_m2_job);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, infinity ]
 /* Compare both outputs */
 SELECT count(*) AS exp_row_count from mat_m1 \gset
 SELECT count(*) AS actual_row_count from (
@@ -1360,13 +1351,9 @@ SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interva
 SELECT add_continuous_aggregate_policy('mat_m1_rollup', '30 days'::interval, NULL, '12 h'::interval, buckets_per_batch => 0) AS m1_rollup_job_2 \gset
 /* Refresh both continuous aggs */
 CALL run_job(:agg_m1_job_1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Fri May 02 00:30:00 2025 UTC ]
 CALL run_job(:agg_m1_job_2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri May 02 00:30:00 2025 UTC, infinity ]
 CALL run_job(:m1_rollup_job_1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, Fri May 02 00:30:00 2025 UTC ]
 CALL run_job(:m1_rollup_job_2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri May 02 00:30:00 2025 UTC, infinity ]
 /* Insert new data to generate invalidations */
 INSERT INTO overlap_test_timestamptz
 SELECT t, (i % 5), random() * 100
@@ -1387,9 +1374,7 @@ GROUP BY ht.schema_name, ht.table_name;
 
 /* Run both L1 policies */
 CALL run_job(:agg_m1_job_1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, Fri May 02 00:30:00 2025 UTC ]
 CALL run_job(:agg_m1_job_2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri May 02 00:30:00 2025 UTC, infinity ]
 SELECT
     ht.table_name AS hypertable_name,
     count(*),
@@ -1404,9 +1389,7 @@ GROUP BY ht.schema_name, ht.table_name;
 
 /* Run both L2 policies */
 CALL run_job(:m1_rollup_job_1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, Fri May 02 00:30:00 2025 UTC ]
 CALL run_job(:m1_rollup_job_2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri May 02 00:30:00 2025 UTC, infinity ]
 /* L2 must be consistent with L1 after both policies run */
 SELECT r.bucket,
        (r.counta = l.reagg_counta) AS counta_match,
@@ -1506,7 +1489,6 @@ SELECT add_continuous_aggregate_policy('mat_varwidth_m2', NULL, NULL, '12 h'::in
 SET timescaledb.current_timestamp_mock TO '2025-06-01 05:30:00+00';
 /* Refresh both continuous aggs immediately */
 CALL run_job(:varwidth_m1_job_1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, Sun Dec 01 05:30:00 2024 UTC ]
 SELECT * FROM mat_varwidth_m1 ORDER BY 1;
             bucket            | count |  sum  
 ------------------------------+-------+-------
@@ -1536,9 +1518,7 @@ GROUP BY 1;
  Sun Dec 01 00:00:00 2024 UTC |   310 | 14982
 
 CALL run_job(:varwidth_m1_job_2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Dec 01 05:30:00 2024 UTC, infinity ]
 CALL run_job(:varwidth_m2_job);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, infinity ]
 --verify that all the data has been materialized now
 SELECT min(bucket), max(bucket) FROM mat_varwidth_m1;
              min              |             max              
@@ -1619,7 +1599,6 @@ SELECT ts_now_mock(),
  Tue May 27 12:30:00 2025 UTC | Tue May 20 12:30:00 2025 UTC | Sat May 24 12:30:00 2025 UTC
 
 CALL run_job(:pol3_m1_job_1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue May 20 12:30:00 2025 UTC, Sat May 24 12:30:00 2025 UTC ]
 SELECT min(bucket), max(bucket) FROM mat_3pol_m1;
              min              |             max              
 ------------------------------+------------------------------
@@ -1635,7 +1614,6 @@ SELECT ts_now_mock(),
  Tue May 27 12:30:00 2025 UTC | Sat May 24 12:30:00 2025 UTC | Mon May 26 12:30:00 2025 UTC
 
 CALL run_job(:pol3_m1_job_2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat May 24 12:30:00 2025 UTC, Mon May 26 12:30:00 2025 UTC ]
 SELECT min(bucket), max(bucket) FROM mat_3pol_m1;
              min              |             max              
 ------------------------------+------------------------------
@@ -1651,14 +1629,12 @@ SELECT ts_now_mock(),
  Tue May 27 12:30:00 2025 UTC | Mon May 26 12:30:00 2025 UTC | Tue May 27 11:30:00 2025 UTC
 
 CALL run_job(:pol3_m1_job_3);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon May 26 12:30:00 2025 UTC, Tue May 27 11:30:00 2025 UTC ]
 SELECT min(bucket), max(bucket) FROM mat_3pol_m1;
              min              |             max              
 ------------------------------+------------------------------
  Tue May 20 13:00:00 2025 UTC | Tue May 27 10:00:00 2025 UTC
 
 CALL run_job(:pol3_m2_job);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Tue May 20 12:30:00 2025 UTC, Tue May 27 11:30:00 2025 UTC ]
 /* Output should be the same */
 SELECT * from mat_3pol_m2 EXCEPT SELECT * from mat_3pol_m1;
  bucket | count | sum 

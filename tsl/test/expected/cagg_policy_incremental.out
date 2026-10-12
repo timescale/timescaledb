@@ -15,20 +15,6 @@ CREATE ROLE test_cagg_refresh_policy_user WITH LOGIN;
 ALTER ROLE test_cagg_refresh_policy_user SET timezone TO 'UTC';
 ALTER ROLE test_cagg_refresh_policy_user SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
 GRANT ALL ON SCHEMA public TO test_cagg_refresh_policy_user;
--- The parameter that controls the background worker log level differs by
--- PostgreSQL version: timescaledb.bgw_log_level before PG19, and the native
--- per-backend-type log_min_messages from PG19 on.
-SELECT CASE WHEN current_setting('server_version_num')::int >= 190000
-            THEN 'log_min_messages' ELSE 'timescaledb.bgw_log_level' END AS bgw_log_param,
-       CASE WHEN current_setting('server_version_num')::int >= 190000
-            THEN 'warning, bgworker:warning' ELSE 'warning' END AS bgw_log_value
-\gset
-ALTER SYSTEM SET :bgw_log_param TO :'bgw_log_value';
-SELECT pg_reload_conf();
- pg_reload_conf 
-----------------
- t
-
 \c :TEST_DBNAME test_cagg_refresh_policy_user
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -152,7 +138,6 @@ GROUP BY
     1, 2
 WITH NO DATA;
 CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
@@ -347,7 +332,6 @@ SELECT count(*) FROM conditions_by_day_manual_refresh;
    145
 
 CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
@@ -969,10 +953,8 @@ SELECT debug_waitpoint_release('cagg_policy_batch_1_after_refresh');
 
 -- Process reminaing invalidations and verify
 CALL run_job(:crash_job_id2);
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Fri Feb 28 16:00:00 2025 PST ]
 -- Verify against manual refresh
 CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, '1 hour'::interval);
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Sun Mar 09 17:00:00 2025 PDT ]
 SELECT
     count(*) > 0 AS has_diff
 FROM
@@ -1037,7 +1019,6 @@ WITH NO DATA;
 -- Consume June's invalidation so the June bucket has no pending invalidation.
 CALL refresh_continuous_aggregate('sparse_cagg',
     '2024-06-01'::timestamptz, '2024-07-01'::timestamptz);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Jun 01 00:00:00 2024 UTC, Mon Jul 01 00:00:00 2024 UTC ]
 -- Validate dimension slices: four chunks showing the epoch-aligned boundaries.
 SELECT
     _timescaledb_functions.to_timestamp(ds.range_start) AS range_start,
@@ -1109,7 +1090,6 @@ DEBUG:  refreshing continuous aggregate "sparse_cagg" from Tue Oct 01 00:00:00 2
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg" in window [ Tue Oct 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] (batch 4 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_8"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_8"
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Thu Feb 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 ------------------------------------------------------------------------------------------
@@ -1152,7 +1132,6 @@ WITH NO DATA;
 -- Consume [Jun 5, Jun 25) to create an invalidation gap for those two June buckets.
 CALL refresh_continuous_aggregate('sparse_cagg_fixed',
     '2024-06-05'::timestamptz, '2024-06-25'::timestamptz);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jun 05 00:00:00 2024 UTC, Tue Jun 25 00:00:00 2024 UTC ]
 -- Validate invalidation log: two residuals with a gap over [Jun 5, Jun 25).
 SELECT
     _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
@@ -1251,7 +1230,6 @@ DEBUG:  refreshing continuous aggregate "sparse_cagg_fixed" from Wed Oct 23 00:0
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_fixed" in window [ Wed Oct 23 00:00:00 2024 UTC, Sat Nov 02 00:00:00 2024 UTC ] (batch 11 of 11)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_9"
 LOG:  inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_9"
-NOTICE:  continuous aggregate refresh: processed 11 batch(es) of 11 in window [ Fri Feb 16 00:00:00 2024 UTC, Sat Nov 02 00:00:00 2024 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 ------------------------------------------------------------------------------------------
@@ -1293,7 +1271,6 @@ WITH NO DATA;
 -- Pre-refresh June to consume June's invalidation, creating the same inval gap.
 CALL refresh_continuous_aggregate('sparse_cagg_bp3',
     '2024-06-01'::timestamptz, '2024-07-01'::timestamptz);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Jun 01 00:00:00 2024 UTC, Mon Jul 01 00:00:00 2024 UTC ]
 SELECT add_continuous_aggregate_policy('sparse_cagg_bp3',
     start_offset => INTERVAL '10 years',
     end_offset => INTERVAL '1 month',
@@ -1331,7 +1308,6 @@ DEBUG:  refreshing continuous aggregate "sparse_cagg_bp3" from Tue Oct 01 00:00:
 LOG:  continuous aggregate refresh (individual invalidation) on "sparse_cagg_bp3" in window [ Tue Oct 01 00:00:00 2024 UTC, Wed Jan 01 00:00:00 2025 UTC ] (batch 3 of 3)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_10"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_10"
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Thu Feb 01 00:00:00 2024 UTC, Wed Jan 01 00:00:00 2025 UTC ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 ------------------------------------------------------------------------------------------
@@ -1389,7 +1365,6 @@ WITH NO DATA;
 -- Consume June's invalidation to create an inval gap over June.
 CALL refresh_continuous_aggregate('end_null_cagg',
     '2024-06-01'::timestamptz, '2024-07-01'::timestamptz);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sat Jun 01 00:00:00 2024 UTC, Mon Jul 01 00:00:00 2024 UTC ]
 -- Validate invalidation log: two residuals with a gap over June.
 SELECT
     _timescaledb_functions.to_timestamp(lowest_modified_value)   AS lowest,
@@ -1450,7 +1425,6 @@ DEBUG:  refreshing continuous aggregate "end_null_cagg" from Tue Oct 01 00:00:00
 LOG:  continuous aggregate refresh (individual invalidation) on "end_null_cagg" in window [ Tue Oct 01 00:00:00 2024 UTC, Fri Nov 01 00:00:00 2024 UTC ] (batch 4 of 4)
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_12"
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_12"
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ -infinity, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 DROP TABLE end_null_data CASCADE;
@@ -1516,9 +1490,7 @@ SELECT add_continuous_aggregate_policy('threshold_inc_cagg',
     buckets_per_batch => 1   -- incremental: one 3-day batch at a time
 ) AS inc_job \gset
 CALL run_job(:sp_job);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 CALL run_job(:inc_job);
-NOTICE:  continuous aggregate refresh: processed 6 batch(es) of 6 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 -- Both must equal 2024-01-06 00:00:00+00 = cagg_next_bucket_start(MAX(data) = Jan 05 12:00).
 -- Before the fix incremental_threshold was 2024-01-15 00:00:00+00 (9 days too far).
 SELECT
@@ -1555,7 +1527,6 @@ DEBUG:  hypertable 14 existing watermark >= new invalidation threshold 170449920
 LOG:  continuous aggregate refresh (individual invalidation) on "threshold_inc_cagg" in window [ Tue Nov 25 00:00:00 4714 UTC BC, Sat Jan 06 00:00:00 2024 UTC ]
 LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_16"
 LOG:  inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_16"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Mon Nov 24 00:00:00 4714 UTC BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 DROP TABLE threshold_inc_data CASCADE;
@@ -1600,7 +1571,6 @@ SELECT add_continuous_aggregate_policy('pol_boundary_cagg',
 ) AS pol_boundary_job_id \gset
 -- First run materializes everything and advances the watermark to 2025-03-09
 CALL run_job(:pol_boundary_job_id);
-NOTICE:  continuous aggregate refresh: processed 11 batch(es) of 11 in window [ Thu Feb 27 00:00:00 2025 UTC, Mon Mar 10 00:00:00 2025 UTC ]
 -- device 2: three rows below the watermark whose greatest value (2025-03-04
 -- 00:00) lands exactly on a bucket start
 INSERT INTO pol_boundary VALUES
@@ -1610,7 +1580,6 @@ INSERT INTO pol_boundary VALUES
 -- Second run must refresh all three device-2 buckets, including
 -- [2025-03-04, 2025-03-05)
 CALL run_job(:pol_boundary_job_id);
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Sun Mar 02 00:00:00 2025 UTC, Wed Mar 05 00:00:00 2025 UTC ]
 SELECT * FROM pol_boundary_cagg WHERE device = 2 ORDER BY bucket;
             bucket            | device | cnt 
 ------------------------------+--------+-----
@@ -1637,9 +1606,3 @@ RESET timezone;
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
 DROP ROLE test_cagg_refresh_policy_user;
-ALTER SYSTEM RESET :bgw_log_param;
-SELECT pg_reload_conf();
- pg_reload_conf 
-----------------
- t
-

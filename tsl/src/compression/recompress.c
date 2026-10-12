@@ -1099,12 +1099,7 @@ decompress_batch_to_tuplesort(TupleTableSlot *slot, RowDecompressor *decompresso
 
 	row_decompressor_set_compressed_tuple(decompressor, compressed_tuple);
 
-	int n_rows = decompress_batch(decompressor);
-
-	for (int i = 0; i < n_rows; i++)
-	{
-		tuplesort_puttupleslot(recompress_tuplesortstate, decompressor->decompressed_slots[i]);
-	}
+	row_decompressor_decompress_row_to_tuplesort(decompressor, recompress_tuplesortstate);
 
 	if (!delete_tuple_for_recompression(compressed_chunk_rel, &slot->tts_tid, snapshot))
 	{
@@ -2393,11 +2388,12 @@ add_sparse_index_columns(Chunk *chunk, Oid compressed_relid, List *index_objs)
 /*
  * Create BatchMetadataBuilders for the sparse index objects in to_add.
  * Must be called after add_sparse_index_columns so the compressed chunk
- * already has the metadata columns.
+ * already has the metadata columns. The columns of the uncompressed chunk
+ * that the builders read are added to index_columns.
  */
 static List *
 create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, List *index_objs,
-							 bool *repl)
+							 bool *repl, Bitmapset **index_columns)
 {
 	List *builders = NIL;
 	TupleDesc tupdesc = RelationGetDescr(uncompressed_rel);
@@ -2422,6 +2418,7 @@ create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, Li
 			foreach_ptr(const char, colname, columns)
 			{
 				AttrNumber attno = get_attnum(chunk_relid, colname);
+				*index_columns = bms_add_member(*index_columns, attno);
 				attnums[col_idx] = attno;
 				type_oids[col_idx] = TupleDescAttr(tupdesc, attno - 1)->atttypid;
 				col_idx++;
@@ -2444,6 +2441,7 @@ create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, Li
 		{
 			const char *colname = (const char *) lfirst(list_head(columns));
 			AttrNumber attno = get_attnum(chunk_relid, colname);
+			*index_columns = bms_add_member(*index_columns, attno);
 			Form_pg_attribute attr = TupleDescAttr(tupdesc, attno - 1);
 
 			char *min_name = compressed_column_metadata_name_v2("min", &colname, 1);
@@ -2465,6 +2463,7 @@ create_sparse_index_builders(Relation uncompressed_rel, Oid compressed_relid, Li
 		{
 			const char *colname = (const char *) lfirst(list_head(columns));
 			AttrNumber attno = get_attnum(chunk_relid, colname);
+			*index_columns = bms_add_member(*index_columns, attno);
 
 			char *first_name = compressed_column_metadata_name_v2("first", &colname, 1);
 			char *last_name = compressed_column_metadata_name_v2("last", &colname, 1);
@@ -2577,14 +2576,22 @@ modify_compressed_table(Chunk *chunk, bool force)
 }
 
 /*
- * Scan every compressed batch, decompress it, feed the rows through the
- * builders, and update the compressed tuple with the computed sparse index
- * values.
+ * Scan every compressed batch, decompress the columns the builders read, feed
+ * the rows through the builders, and update the compressed tuple with the
+ * computed sparse index values.
  */
 static void
 populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompressor,
-							  List *builders, bool *repl)
+							  List *builders, bool *repl, Bitmapset *index_columns)
 {
+	int num_attnos = 0;
+	AttrNumber *attnos = palloc(sizeof(AttrNumber) * bms_num_members(index_columns));
+	int attno = -1;
+	while ((attno = bms_next_member(index_columns, attno)) >= 0)
+	{
+		attnos[num_attnos++] = attno;
+	}
+
 	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
 	TableScanDesc scan = table_beginscan_compat(compressed_rel, GetActiveSnapshot(), 0, NULL, 0);
 	TupleTableSlot *scan_slot = table_slot_create(compressed_rel, NULL);
@@ -2599,7 +2606,7 @@ populate_sparse_index_columns(Relation compressed_rel, RowDecompressor *decompre
 
 		row_decompressor_set_compressed_tuple(decompressor, compressed_tuple);
 
-		int n_batch_rows = decompress_batch(decompressor);
+		int n_batch_rows = decompress_batch(decompressor, attnos, num_attnos);
 
 		/* Feed each decompressed row through the builders */
 		for (int i = 0; i < n_batch_rows; i++)
@@ -2723,8 +2730,12 @@ rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
 	TupleDesc compressed_desc = RelationGetDescr(compressed_rel);
 
 	bool *repl = palloc0(sizeof(bool) * compressed_desc->natts);
-	List *builders =
-		create_sparse_index_builders(uncompressed_rel, compressed_relid, added_indexes, repl);
+	Bitmapset *index_columns = NULL;
+	List *builders = create_sparse_index_builders(uncompressed_rel,
+												  compressed_relid,
+												  added_indexes,
+												  repl,
+												  &index_columns);
 
 	RowDecompressor decompressor = build_decompressor(compressed_desc,
 													  RelationGetDescr(uncompressed_rel),
@@ -2732,7 +2743,7 @@ rebuild_sparse_index_impl(Chunk *uncompressed_chunk, bool force)
 													  uncompressed_chunk->fd.relid);
 
 	/* Step 3: scan, decompress, populate, update */
-	populate_sparse_index_columns(compressed_rel, &decompressor, builders, repl);
+	populate_sparse_index_columns(compressed_rel, &decompressor, builders, repl, index_columns);
 
 	row_decompressor_close(&decompressor);
 	table_close(uncompressed_rel, AccessShareLock);

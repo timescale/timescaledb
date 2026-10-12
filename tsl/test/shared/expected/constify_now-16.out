@@ -583,7 +583,6 @@ INSERT INTO cagg_now_test SELECT generate_series('2000-01-01'::timestamptz,'2004
 CREATE MATERIALIZED VIEW cagg_now_view WITH (tsdb.continuous, tsdb.materialized_only=false)
 AS SELECT time_bucket('1 day', time) AS bucket, device FROM cagg_now_test GROUP BY 1, 2 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_now_view', NULL, '2004-01-01');
-NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Mon Nov 24 01:00:00 4714 UTC BC, Wed Dec 31 01:00:00 2003 UTC ]
 -- should have all chunks in EXPLAIN (no filter)
 :PREFIX SELECT * FROM cagg_now_view;
 --- QUERY PLAN ---
@@ -662,9 +661,7 @@ AS SELECT time_bucket('1 day', time) AS bucket, device, avg(value) AS avg_val FR
 CREATE MATERIALIZED VIEW cagg_hierarch_l2 WITH (tsdb.continuous, tsdb.materialized_only=false)
 AS SELECT time_bucket('1 month', bucket) AS bucket, device, avg(avg_val) AS avg_val FROM cagg_hierarch_l1 GROUP BY 1, 2 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_hierarch_l1', NULL, '2004-01-01');
-NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Mon Nov 24 01:00:00 4714 UTC BC, Wed Dec 31 01:00:00 2003 UTC ]
 CALL refresh_continuous_aggregate('cagg_hierarch_l2', NULL, '2004-01-01');
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ -infinity, Wed Oct 01 01:00:00 2003 UTC ]
 -- should have all chunks in EXPLAIN (no filter)
 :PREFIX SELECT * FROM cagg_hierarch_l2;
 --- QUERY PLAN ---
