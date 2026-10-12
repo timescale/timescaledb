@@ -792,14 +792,7 @@ reset enable_material;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > '01-10-2000'::date)
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > '01-10-2000'::date)
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > '01-10-2000'::date)
+   Chunks excluded during startup: 3
    ->  Merge Append (actual rows=7670.00 loops=1)
          Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
@@ -821,14 +814,7 @@ reset enable_material;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+   Chunks excluded during startup: 3
    ->  Merge Append (actual rows=7670.00 loops=1)
          Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
@@ -873,14 +859,7 @@ reset enable_material;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > '01-10-2000'::date)
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > '01-10-2000'::date)
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > '01-10-2000'::date)
+   Chunks excluded during startup: 3
    ->  Merge Append (actual rows=7670.00 loops=1)
          Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
@@ -902,14 +881,7 @@ reset enable_material;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
+   Chunks excluded during startup: 3
    ->  Merge Append (actual rows=7670.00 loops=1)
          Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
@@ -954,14 +926,7 @@ reset enable_material;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
+   Chunks excluded during startup: 3
    ->  Merge Append (actual rows=7670.00 loops=1)
          Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
@@ -983,14 +948,7 @@ reset enable_material;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
+   Chunks excluded during startup: 3
    ->  Merge Append (actual rows=7670.00 loops=1)
          Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
@@ -1169,30 +1127,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
-         ->  Index Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
-         ->  Index Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
-         ->  Index Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
-         ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_DATE)
+   Chunks excluded during startup: 9
 
 -- test CURRENT_TIMESTAMP
 -- should be 0 chunks
@@ -1218,30 +1153,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
-         ->  Index Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
-         ->  Index Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
-         ->  Index Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
-         ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > CURRENT_TIMESTAMP)
+   Chunks excluded during startup: 9
 
 -- test now()
 -- should be 0 chunks
@@ -1267,30 +1179,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
-         ->  Index Scan Backward using _hyper_6_23_chunk_metrics_space_time_idx on _hyper_6_23_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
-         ->  Index Scan Backward using _hyper_6_24_chunk_metrics_space_time_idx on _hyper_6_24_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
-         ->  Index Scan Backward using _hyper_6_26_chunk_metrics_space_time_idx on _hyper_6_26_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
-         ->  Index Scan Backward using _hyper_6_27_chunk_metrics_space_time_idx on _hyper_6_27_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
-   ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: metrics_space."time"
-         ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
-         ->  Index Scan Backward using _hyper_6_29_chunk_metrics_space_time_idx on _hyper_6_29_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
-         ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0.00 loops=1)
-               Index Cond: ("time" > now())
+   Chunks excluded during startup: 9
 
 -- query with tablesample and planner exclusion
 :PREFIX
@@ -1986,3 +1875,67 @@ call force_parallel(false);
 + timescaledb.enable_chunk_append  | off
  
   time | temp | colorid | attr 
+-- rescan with a changed outer parameter re-evaluates sorted chunk scans below ConstraintAwareAppend
+CREATE TABLE caa_rescan(time timestamptz NOT NULL, sensor text, value float) WITH (tsdb.hypertable, tsdb.chunk_interval='1 day');
+INSERT INTO caa_rescan SELECT t, s, 1 FROM generate_series('2025-01-01'::timestamptz, '2025-01-03 23:59', '10s') t, (VALUES ('A'),('B'),('C')) v(s);
+INSERT INTO caa_rescan VALUES ('2025-01-05', 'B', 1);
+-- drop the time index on the newest chunk so it needs a Sort below the MergeAppend
+SELECT format('%I.%I', i.schemaname, i.indexname) AS "RESCAN_INDEX"
+FROM show_chunks('caa_rescan', newer_than => '2025-01-04'::timestamptz) ch
+JOIN pg_indexes i ON format('%I.%I', i.schemaname, i.tablename)::regclass = ch \gset
+DROP INDEX :RESCAN_INDEX;
+VACUUM ANALYZE caa_rescan;
+SET timescaledb.enable_chunk_append = off;
+SET enable_material = off;
+\set RESCAN_QUERY 'SELECT s.sensor, (SELECT count(*) FROM generate_series(1,1) g WHERE \'2025-01-04\'::timestamptz < ANY (SELECT time FROM caa_rescan r WHERE r.sensor = s.sensor AND time < now() ORDER BY time DESC LIMIT 1)) FROM (VALUES (\'A\'),(\'B\'),(\'C\')) s(sensor)'
+EXPLAIN (costs off) :RESCAN_QUERY;
+--- QUERY PLAN ---
+ Values Scan on "*VALUES*"
+   SubPlan 2
+     ->  Aggregate
+           ->  Result
+                 One-Time Filter: (ANY ('Sat Jan 04 00:00:00 2025 PST'::timestamp with time zone < (SubPlan 1).col1))
+                 ->  Function Scan on generate_series g
+                 SubPlan 1
+                   ->  Limit
+                         ->  Custom Scan (ConstraintAwareAppend)
+                               Hypertable: caa_rescan
+                               Chunks excluded during startup: 0
+                               ->  Merge Append
+                                     Sort Key: r."time" DESC
+                                     ->  Index Scan using _hyper_16_54_chunk_caa_rescan_time_idx on _hyper_16_54_chunk r_1
+                                           Index Cond: ("time" < now())
+                                           Filter: (sensor = "*VALUES*".column1)
+                                     ->  Index Scan using _hyper_16_55_chunk_caa_rescan_time_idx on _hyper_16_55_chunk r_2
+                                           Index Cond: ("time" < now())
+                                           Filter: (sensor = "*VALUES*".column1)
+                                     ->  Index Scan using _hyper_16_56_chunk_caa_rescan_time_idx on _hyper_16_56_chunk r_3
+                                           Index Cond: ("time" < now())
+                                           Filter: (sensor = "*VALUES*".column1)
+                                     ->  Index Scan using _hyper_16_57_chunk_caa_rescan_time_idx on _hyper_16_57_chunk r_4
+                                           Index Cond: ("time" < now())
+                                           Filter: (sensor = "*VALUES*".column1)
+                                     ->  Sort
+                                           Sort Key: r_5."time" DESC
+                                           ->  Seq Scan on _hyper_16_58_chunk r_5
+                                                 Filter: ((sensor = "*VALUES*".column1) AND ("time" < now()))
+
+:RESCAN_QUERY;
+ sensor | count 
+--------+-------
+ A      |     0
+ B      |     1
+ C      |     0
+
+SET timescaledb.enable_constraint_aware_append = off;
+:RESCAN_QUERY;
+ sensor | count 
+--------+-------
+ A      |     0
+ B      |     1
+ C      |     0
+
+RESET timescaledb.enable_constraint_aware_append;
+RESET timescaledb.enable_chunk_append;
+RESET enable_material;
+DROP TABLE caa_rescan;

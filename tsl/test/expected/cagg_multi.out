@@ -44,7 +44,6 @@ from timescaledb_information.continuous_aggregates ORDER BY 1;
 
 --TEST1: cagg_1 is materialized, not cagg_2.
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -69,7 +68,6 @@ select * from cagg_2 order by 1,2;
 -------+-----+--------
 
 CALL refresh_continuous_aggregate('cagg_2', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 select * from cagg_2 order by 1,2;
  timed | grp | maxval 
 -------+-----+--------
@@ -94,7 +92,6 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
              1 |        18
 
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -136,7 +133,6 @@ order by 1,2 ;
           16 |   -4 |  23
 
 CALL refresh_continuous_aggregate('cagg_2', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 select * from cagg_2 order by 1, 2;
  timed | grp | maxval 
 -------+-----+--------
@@ -161,7 +157,6 @@ select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invali
      4
 
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  count 
 -------
@@ -242,7 +237,6 @@ select * from cagg_1 order by 1;
 --partially refresh cagg_2 to 14 to test inserts that won't be seen in
 --one of the caggs
 CALL refresh_continuous_aggregate('cagg_2', NULL, 14);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 14 ]
 select * from cagg_2 order by 1;
  timed | maxval 
 -------+--------
@@ -270,7 +264,6 @@ select hypertable_id, lowest_modified_value, greatest_modified_value from _times
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -307,7 +300,6 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 --one
 insert into continuous_agg_test values( 18, -2, 200);
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 select * from cagg_1 order by 1;
  timed | cnt 
 -------+-----
@@ -319,7 +311,6 @@ select * from cagg_1 order by 1;
 
 -- Now make changes visible up to 16
 CALL refresh_continuous_aggregate('cagg_2', NULL, 16);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 16 ]
 select * from cagg_2 order by 1;
  timed | maxval 
 -------+--------
@@ -337,7 +328,6 @@ select hypertable_id, lowest_modified_value, greatest_modified_value from _times
              4 |                    18 |                      18
 
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 select * from cagg_1 where timed = 18 ;
  timed | cnt 
 -------+-----
@@ -406,9 +396,7 @@ order by view_name;
  mat_m2    | f
 
 CALL refresh_continuous_aggregate('mat_m1', NULL, 35);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 35 ]
 CALL refresh_continuous_aggregate('mat_m2', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 -- the results from the view should match the direct query
 SELECT * from mat_m1 order by 1;
  a  | countb 
