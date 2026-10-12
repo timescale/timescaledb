@@ -94,6 +94,7 @@ columnar_scan_state_create(CustomScan *cscan)
 		list_nth_int(settings, DCS_EnableBulkDecompression);
 	chunk_state->decompress_context.first_row_from_metadata =
 		list_nth_int(settings, DCS_FirstRowFromMetadata);
+	chunk_state->decompress_context.metadata_only = list_nth_int(settings, DCS_MetadataOnly);
 	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
@@ -248,6 +249,12 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	 * Init the underlying compressed scan.
 	 */
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
+
+	/* Only the first row of a metadata only scan matters, so bound the sort below. */
+	if (dcontext->metadata_only)
+	{
+		ExecSetTupleBound(1, linitial(node->custom_ps));
+	}
 
 	/*
 	 * Count the actual data columns we have to decompress, skipping the
@@ -592,6 +599,11 @@ columnar_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 		if (dcontext->batch_sorted_merge)
 		{
 			ExplainPropertyBool("Batch Sorted Merge", dcontext->batch_sorted_merge, es);
+		}
+
+		if (dcontext->metadata_only)
+		{
+			ExplainPropertyBool("Metadata Only", dcontext->metadata_only, es);
 		}
 
 		if (dcontext->reverse)

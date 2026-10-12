@@ -905,7 +905,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refreshed = continuous_agg_refresh_internal(cagg,
 													&refresh_window,
 													&context,
-													false /* apply_extend */);
+													false /* apply_extend */,
+													NULL /* mat_stats: not reported here */);
 		if (!refreshed)
 		{
 			emit_up_to_date_notice(cagg, &context);

@@ -83,6 +83,7 @@ typedef struct DecompressContext
 	bool reverse;
 	bool batch_sorted_merge; /* Batch sorted merge optimization enabled. */
 	bool enable_bulk_decompression;
+	bool metadata_only; /* Output only the first row of each batch. */
 
 	/*
 	 * Return first row of the batch based on the boundary metadata columns

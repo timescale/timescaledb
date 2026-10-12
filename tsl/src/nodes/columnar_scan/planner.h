@@ -16,7 +16,9 @@ typedef enum
 	DCS_EnableBulkDecompression = 4,
 	DCS_HasRowMarks = 5,
 	DCS_ChunkStatus = 6,
-	DCS_FirstRowFromMetadata = 7,
+	DCS_MetadataOnly = 7,
+	DCS_FirstRowFromMetadata = 8,
+
 	DCS_Count
 } ColumnarScanSettingsIndex;
 
