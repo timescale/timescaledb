@@ -51,9 +51,7 @@ SELECT * FROM approximate_row_count('hypersize_cagg');
                      0
 
 -- Test size functions on non-empty countinuous aggregate
-SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('hypersize_cagg', NULL, NULL);
-RESET client_min_messages;
 SELECT * FROM hypertable_size('hypersize_cagg');
  hypertable_size 
 -----------------

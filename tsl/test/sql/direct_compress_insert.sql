@@ -13,7 +13,6 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 ROLLBACK;
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- EXPLAIN with too small batch
@@ -44,28 +43,8 @@ SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, ti
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
 ROLLBACK;
 
-SET timescaledb.enable_direct_compress_insert_sort_batches = false;
--- simple test with compressed insert enabled and without batch sorting
-BEGIN;
-INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
-EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
--- since the chunks are new status should be COMPRESSED, UNORDERED
-SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
-ROLLBACK;
-
--- simple test with compressed insert enabled and reversed order and no batch sorting
-BEGIN;
-INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
-EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
--- since the chunks are new status should be COMPRESSED, UNORDERED
-SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
-ROLLBACK;
-
 -- test compressing into uncompressed chunk
 RESET timescaledb.enable_direct_compress_insert;
-RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 BEGIN;
@@ -364,7 +343,6 @@ ROLLBACK;
 BEGIN;
 ALTER TABLE metrics SET (tsdb.segmentby = 'device');
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 SET timescaledb.direct_compress_insert_tuple_sort_limit = 50;
 INSERT INTO metrics

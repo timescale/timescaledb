@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set VERBOSITY default
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 CREATE TABLE conditions(
   day TIMESTAMPTZ NOT NULL,
   city text NOT NULL,
@@ -1198,7 +1198,7 @@ ALTER USER MAPPING FOR :ROLE_DEFAULT_PERM_USER
    OPTIONS (ADD password_required 'false');
 GRANT USAGE ON FOREIGN SERVER loopback TO :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 CREATE FOREIGN TABLE devices_fdw (
    device_id int not null,
    name text,
