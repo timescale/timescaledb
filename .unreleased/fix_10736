@@ -1,0 +1,2 @@
+Fixes: #10736 Create default hypertable indexes when matching partial indexes already exist
+Thanks: @jflambert for reporting the default index issue
