@@ -122,9 +122,9 @@ SELECT * FROM agg_data ORDER BY device;
 SELECT * FROM agg_data ORDER BY device;
 
 -- test parallel queries (not supported with ColumnarIndexScan)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 
 -- test with UNION ALL (Append node)
 :PREFIX SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
@@ -263,3 +263,12 @@ SET enable_partitionwise_aggregate = off;
 -- self-join on the same hypertable
 :PREFIX SELECT m1.device, min(m1.time) FROM metrics m1 JOIN metrics m2 ON m1.device = m2.device GROUP BY m1.device ORDER BY m1.device;
 
+-- Expression over a grouping column in the select list.
+:PREFIX SELECT device || '!' AS dx, min(value) FROM metrics GROUP BY device ORDER BY dx;
+
+-- Expression over a grouping column together with count(*).
+:PREFIX SELECT device || '!' AS dx, count(*) FROM metrics GROUP BY device ORDER BY dx;
+
+-- Expression over one of two grouping columns, without the bare column
+-- in the select list.
+:PREFIX SELECT device, sensor || '?' AS sx, max(time) FROM metrics GROUP BY device, sensor ORDER BY device, sx;

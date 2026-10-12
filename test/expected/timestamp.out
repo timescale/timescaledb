@@ -242,6 +242,28 @@ SELECT time_bucket('1 day', DATE '2012-01-01', '1 hour'::interval);
 ERROR:  interval must not have sub-day precision
 SELECT time_bucket('1 week', DATE '2012-01-01', '30 minutes'::interval);
 ERROR:  interval must not have sub-day precision
+SELECT time_bucket('1 day', DATE '2012-01-01', '-1 hour'::interval);
+ERROR:  interval must not have sub-day precision
+SELECT time_bucket('1 day', DATE '2012-01-01', '-12 hours'::interval);
+ERROR:  interval must not have sub-day precision
+SELECT time_bucket('1 day', DATE '2012-01-01', '-25 hours'::interval);
+ERROR:  interval must be a multiple of a day
+-- negative whole-day offsets are supported for time_bucket of type Date
+SELECT time_bucket('1 day', DATE '2012-01-05', '-1 day'::interval);
+ time_bucket 
+-------------
+ 01-05-2012
+
+SELECT time_bucket('1 week', DATE '2012-01-05', '-7 days'::interval);
+ time_bucket 
+-------------
+ 01-02-2012
+
+SELECT time_bucket('1 week', DATE '2012-01-05', '-24 hours'::interval);
+ time_bucket 
+-------------
+ 01-01-2012
+
 \set ON_ERROR_STOP 1
 SELECT time_bucket(INTERVAL '1 day', TIMESTAMP '2011-01-02 01:01:01');
        time_bucket        

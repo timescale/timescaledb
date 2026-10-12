@@ -35,6 +35,7 @@
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/rewrite_with_caggs.h"
+#include "continuous_aggs/tenant_tracker.h"
 #include "continuous_aggs/tenant_tracker_function.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
@@ -128,6 +129,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
+	.tenant_tracker_cache_invalidate = continuous_agg_tenant_tracker_cache_invalidate,
+	.tenant_tracker_remove_at_commit = ts_tenant_tracker_remove_at_commit,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_add_column = continuous_agg_add_column,
 	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
@@ -173,6 +176,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_chunk = tsl_decompress_chunk,
 	.rebuild_columnstore = tsl_rebuild_columnstore,
 	.rebuild_sparse_index = tsl_rebuild_sparse_index,
+	.move_to_columnstore = tsl_move_to_columnstore,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
@@ -207,6 +211,7 @@ static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
 	_continuous_aggs_cache_inval_fini();
+	_tenant_tracker_fini();
 }
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -220,6 +225,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
+	_tenant_tracker_init();
 	_columnar_index_scan_init();
 	_columnar_scan_init();
 	_skip_scan_init();

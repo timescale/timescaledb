@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Report refresh statistics throughout.
+SET timescaledb.cagg_refresh_stats_level TO summary;
+
+
 -- Error / out-of-shared-memory fall back for the per-tenant invalidation tracker.
 --
 
@@ -15,9 +19,10 @@ SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_l
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW cond_daily
@@ -93,9 +98,10 @@ ORDER BY sensor_id, bucket;
 CREATE TABLE metrics(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('metrics', 'time');
 ALTER TABLE metrics SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW metric_daily
@@ -161,9 +167,10 @@ WHERE hypertable_id = (
 CREATE TABLE gauges(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('gauges', 'time');
 ALTER TABLE gauges SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW gauge_daily
@@ -180,8 +187,12 @@ SELECT debug_waitpoint_enable('tenant_tracker_seqnum_scan_oom');
 -- rolls back (no relation/snapshot leak) and the INSERT still commits.
 INSERT INTO gauges VALUES ('2020-01-01 00:00+00', 'sensor_z', 10);
 
--- Second INSERT does not hang (scan resources released) and stays untracked
--- (resolution cached DISABLED, so no re-scan).
+-- Second INSERT does not hang (scan resources released) and stays untracked.
+-- The tracker resolves again: the first INSERT created the hypertable's
+-- first chunk, which flips relhassubclass on the hypertable and so invalidates
+-- its relcache entry.  That marks the cached result as stale, so the
+-- re-scan hits the still-enabled injection, and the fallback is reported
+-- once more.
 INSERT INTO gauges VALUES ('2020-01-01 06:00+00', 'sensor_z', 20);
 
 SELECT count(*) AS gauges_rows FROM gauges;
@@ -194,3 +205,5 @@ SELECT sensor_id, bucket, avg FROM gauge_daily ORDER BY sensor_id, bucket;
 
 DROP MATERIALIZED VIEW gauge_daily;
 DROP TABLE gauges;
+
+RESET timescaledb.cagg_refresh_stats_level;

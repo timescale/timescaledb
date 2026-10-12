@@ -11,6 +11,7 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <storage/lwlock.h>
+#include <utils.h>
 #include <utils/guc.h>
 #include <utils/hsearch.h>
 #include <utils/lsyscache.h>
@@ -87,7 +88,8 @@ typedef struct TenantLocalKey
 
 typedef struct TenantLocalEntry
 {
-	TenantLocalKey key; /* must be first: dynahash key */
+	TenantLocalKey key;	  /* must be first: dynahash key */
+	Oid hypertable_relid; /* key into the resolved-tracker cache at drain */
 	int64 min_ts;
 	int64 max_ts;
 } TenantLocalEntry;
@@ -106,6 +108,13 @@ typedef struct ContinuousAggsCacheHyperInvalThresholdEntry
 	int64 watermark;
 } ContinuousAggsCacheHyperInvalThresholdEntry;
 
+typedef struct ContinuousAggsCacheHyperTenantColEntry
+{
+	int32 hypertable_id;
+	bool configured;
+	NameData column_name;
+} ContinuousAggsCacheHyperTenantColEntry;
+
 /*
  * Backend-local cache of this backend's resolved handle to hypertable's
  * shared tracker.  Tracking entries are held in shared mem. Each backend
@@ -114,14 +123,21 @@ typedef struct ContinuousAggsCacheHyperInvalThresholdEntry
  * the DML path and avoids any additional lookups.
  * tracking == NULL means DISABLED, tracking = non NULL means we have a valid
  * entry in shared mem.
- * Both outcomes are stable for the backend's life: a tracker is
- * never moved or freed and its mapping is pinned, and a DISABLED marker persists
- * until restart . So entries never need invalidation.  MyDatabaseId is fixed
- * per backend, so hypertable_id alone is a sufficient key.
+ *
+ * A tracker is freed only when granular refresh is disabled on its hypertable,
+ * which invalidates the hypertable's relcache entry (see granular_refresh_disable).
+ * The cache is keyed by the hypertable's relid so the relcache callback can find
+ * the one entry the message is about and mark it stale; the next resolve treats
+ * a stale entry as a miss and overwrites it in place.  Entries are never removed
+ * and the table is never destroyed, so the callback can run at any
+ * AcceptInvalidationMessages() without pulling memory out from under a caller.
+ * MyDatabaseId is fixed per backend, so the relid alone is a sufficient key.
  */
 typedef struct TenantTrackerCacheEntry
 {
-	int32 hypertable_id;
+	Oid main_table_relid; /* must be first: dynahash key; what relcache messages carry */
+	int32 hypertable_id;  /* what the shared tracker map is keyed by */
+	bool stale;			  /* set by the relcache callback; re-resolve on next use */
 	TenantTracking *tracking;
 } TenantTrackerCacheEntry;
 
@@ -132,6 +148,7 @@ static inline int64 cache_get_lowest_invalidated_time_for_hypertable(int32 hyper
 
 static HTAB *continuous_aggs_cache_inval_htab = NULL;
 static HTAB *continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
+static HTAB *continuous_aggs_cache_hyper_tenant_col_htab = NULL;
 
 /* Per-transaction tenant buffer (drained to shared memory at commit). */
 static HTAB *tenant_local_htab = NULL;
@@ -159,7 +176,7 @@ static inline ContinuousAggsCacheInvalEntry *get_cache_inval_entry(int32 hyperta
 static void cache_inval_cleanup(void);
 static void cache_inval_htab_write(List *hypertable_seqnums);
 static HTAB *get_tenant_local_htab(void);
-static TenantTracking *resolve_tenant_tracker(int32 hypertable_id);
+static TenantTracking *resolve_tenant_tracker(Oid main_table_relid, int32 hypertable_id);
 static List *tenant_local_htab_write(void);
 static void continuous_agg_xact_invalidation_callback(XactEvent event, void *arg);
 static ScanTupleResult invalidation_tuple_found(TupleInfo *ti, void *min);
@@ -195,6 +212,55 @@ cache_inval_init()
 					CA_CACHE_INVAL_INIT_HTAB_SIZE,
 					&ctl,
 					HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+	memset(&ctl, 0, sizeof(ctl));
+	ctl.keysize = sizeof(int32);
+	ctl.entrysize = sizeof(ContinuousAggsCacheHyperTenantColEntry);
+	ctl.hcxt = continuous_aggs_invalidation_mctx;
+
+	continuous_aggs_cache_hyper_tenant_col_htab =
+		hash_create("TS Continuous Aggs Hypertable Tenant Column",
+					CA_CACHE_INVAL_INIT_HTAB_SIZE,
+					&ctl,
+					HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+/* Tenant tracking column of a hypertable, or NULL. Read from the catalog once
+ * per transaction so every chunk the transaction touches agrees. */
+static const char *
+tenant_tracking_column_for_hypertable(int32 hypertable_id)
+{
+	ContinuousAggsCacheHyperTenantColEntry *entry;
+	bool found;
+
+	if (!continuous_aggs_cache_inval_htab)
+	{
+		cache_inval_init();
+	}
+
+	entry = hash_search(continuous_aggs_cache_hyper_tenant_col_htab,
+						&hypertable_id,
+						HASH_ENTER,
+						&found);
+	if (!found)
+	{
+		const char *column_name;
+
+		entry->configured =
+			ts_hypertable_cagg_settings_get_tenant_tracking_column(hypertable_id, &column_name);
+		if (entry->configured)
+		{
+			namestrcpy(&entry->column_name, column_name);
+		}
+	}
+
+	return entry->configured ? NameStr(entry->column_name) : NULL;
+}
+
+bool
+continuous_agg_tenant_tracking_enabled(int32 hypertable_id)
+{
+	return tenant_tracking_column_for_hypertable(hypertable_id) != NULL;
 }
 
 static void
@@ -252,9 +318,8 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	 * when tenant tracking isn't configured for this hypertable or this chunk
 	 * lacks the column; otherwise cache the type facts used to encode the key. */
 	MemSet(&cache_entry->tenant_col, 0, sizeof(cache_entry->tenant_col));
-	const char *tracking_column_name;
-	if (ts_hypertable_cagg_settings_get_tenant_tracking_column(hypertable_id,
-															   &tracking_column_name))
+	const char *tracking_column_name = tenant_tracking_column_for_hypertable(hypertable_id);
+	if (tracking_column_name != NULL)
 	{
 		cache_entry->tenant_col.attno = get_attnum(chunk_relid, tracking_column_name);
 		if (cache_entry->tenant_col.attno != InvalidAttrNumber)
@@ -364,10 +429,10 @@ get_tenant_local_htab(void)
  *
  * Returns the tracker, or NULL when tracking is disabled for this hypertable
  * (negative-cache marker, loader absent, or a contained OOM).  Both outcomes are
- * cached and stable for the backend's life.
+ * cached until a relcache invalidation for the hypertable marks the entry stale.
  */
 static TenantTracking *
-resolve_tenant_tracker(int32 hypertable_id)
+resolve_tenant_tracker(Oid main_table_relid, int32 hypertable_id)
 {
 	TenantTrackerCacheEntry *ce;
 	TenantTracking *volatile tracking = NULL;
@@ -379,7 +444,7 @@ resolve_tenant_tracker(int32 hypertable_id)
 		HASHCTL ctl;
 
 		memset(&ctl, 0, sizeof(ctl));
-		ctl.keysize = sizeof(int32);
+		ctl.keysize = sizeof(Oid);
 		ctl.entrysize = sizeof(TenantTrackerCacheEntry);
 		ctl.hcxt = TopMemoryContext; /* backend lifetime: entries never expire */
 		tenant_tracker_resolved_htab = hash_create("TS Tenant Tracker Resolved",
@@ -388,14 +453,15 @@ resolve_tenant_tracker(int32 hypertable_id)
 												   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 	}
 
-	ce = hash_search(tenant_tracker_resolved_htab, &hypertable_id, HASH_FIND, NULL);
-	if (ce != NULL)
+	ce = hash_search(tenant_tracker_resolved_htab, &main_table_relid, HASH_FIND, NULL);
+	if (ce != NULL && !ce->stale)
 	{
 		return ce->tracking; /* cached FOUND (ptr) or DISABLED (NULL) */
 	}
 
 	/*
-	 * First time this backend touches this hypertable.  Park here so the
+	 * First time this backend touches this hypertable, or the cached entry was
+	 * invalidated.  Park here so the
 	 * first-touch race isolation test can line up two backends before the
 	 * get_or_attach below (which serializes on the dshash partition lock).
 	 */
@@ -467,9 +533,63 @@ resolve_tenant_tracker(int32 hypertable_id)
 	}
 	PG_END_TRY();
 
-	ce = hash_search(tenant_tracker_resolved_htab, &hypertable_id, HASH_ENTER, NULL);
+	/* Re-find: the catalog scans above can run relcache callbacks, but those only
+	 * flip the stale flag; the table itself is never freed under us. */
+	ce = hash_search(tenant_tracker_resolved_htab, &main_table_relid, HASH_ENTER, NULL);
+	ce->hypertable_id = hypertable_id;
 	ce->tracking = tracking;
+	ce->stale = false;
 	return tracking;
+}
+
+/*
+ * Relcache invalidation callback: mark this backend's cached tracker
+ * entry for hypertable as stale
+ * Sometimes cache invalidation message pass InvalidOid, in this case, we mark
+ * all entries as stale
+ *
+ * Disabling granular refresh frees the hypertable's tracker at commit and
+ * invalidates the hypertable's relcache entry. The other backends learn about
+ * this when they receive a cache invalidation message with that hypertable Oid.
+ * The relation's ordinary relcache events (ANALYZE, ALTER TABLE) also
+ * send invalidation messages and we will mark the pointer as stale and
+ * revalidate on the next read
+ *
+ * This is also called directly by the commit callback that frees a tracker,
+ * so that the freeing backend's own entry is stale from the moment of
+ * the free (rather than when it receives the invalidation message)
+ *
+ * Runs from AcceptInvalidationMessages(), possibly in the middle of
+ * resolve_tenant_tracker(): so this function must not allocate, free
+ * or throw.  That is why we just use a flag and mark the entry as stale.
+ */
+void
+continuous_agg_tenant_tracker_cache_invalidate(Oid relid)
+{
+	TenantTrackerCacheEntry *ce;
+
+	if (tenant_tracker_resolved_htab == NULL)
+	{
+		return;
+	}
+
+	if (!OidIsValid(relid))
+	{
+		HASH_SEQ_STATUS status;
+
+		hash_seq_init(&status, tenant_tracker_resolved_htab);
+		while ((ce = hash_seq_search(&status)) != NULL)
+		{
+			ce->stale = true;
+		}
+		return;
+	}
+
+	ce = hash_search(tenant_tracker_resolved_htab, &relid, HASH_FIND, NULL);
+	if (ce != NULL)
+	{
+		ce->stale = true;
+	}
 }
 
 /*
@@ -550,11 +670,13 @@ record_tenant_invalidation_values(const ContinuousAggsCacheInvalEntry *cache_ent
 	// TODO: try to see if there's a way to avoid allocate and free memory for every key.
 	pfree(key);
 
-	resolve_tenant_tracker(cache_entry->hypertable_id);
+	resolve_tenant_tracker(cache_entry->hypertable_open_dimension.main_table_relid,
+						   cache_entry->hypertable_id);
 
 	entry = (TenantLocalEntry *) hash_search(get_tenant_local_htab(), &lookup, HASH_ENTER, &found);
 	if (!found)
 	{
+		entry->hypertable_relid = cache_entry->hypertable_open_dimension.main_table_relid;
 		entry->min_ts = timeval;
 		entry->max_ts = timeval;
 	}
@@ -663,26 +785,33 @@ tenant_local_htab_write(void)
 	HASH_SEQ_STATUS hash_seq;
 	TenantLocalEntry *entry;
 	List *hypertable_ids = NIL;
+	List *hypertable_relids = NIL;
 	List *hypertable_seqnums = NIL;
-	ListCell *lc;
+	ListCell *lc, *lc_relid;
 
 	if (tenant_local_htab == NULL)
 	{
 		return NIL;
 	}
 
-	/* Distinct hypertables present in the buffer (usually just one). */
+	/* Distinct hypertables present in the buffer (usually just one), with the
+	 * relid each was resolved under -- that is the resolved cache's key. */
 	hash_seq_init(&hash_seq, tenant_local_htab);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 	{
-		hypertable_ids = list_append_unique_int(hypertable_ids, entry->key.hypertable_id);
+		if (!list_member_int(hypertable_ids, entry->key.hypertable_id))
+		{
+			hypertable_ids = lappend_int(hypertable_ids, entry->key.hypertable_id);
+			hypertable_relids = lappend_oid(hypertable_relids, entry->hypertable_relid);
+		}
 	}
 
 	/* Drain each hypertable's tenants into its own tracker (one generation pin
 	 * per hypertable). */
-	foreach (lc, hypertable_ids)
+	forboth (lc, hypertable_ids, lc_relid, hypertable_relids)
 	{
 		int32 hypertable_id = lfirst_int(lc);
+		Oid hypertable_relid = lfirst_oid(lc_relid);
 		TenantTracking *tracking;
 		TenantGeneration *generation;
 		int32 seqnum = 0;
@@ -711,9 +840,17 @@ tenant_local_htab_write(void)
 		 * relying on this staying throw-free.  A NULL entry means tracking is
 		 * disabled for this hypertable; a missing entry means nothing was buffered
 		 * for it (shouldn't happen), both -> skip (untracked, seqnum 0).
+		 *
+		 * The stale flag is deliberately ignored here.  Every hypertable in the
+		 * buffer was resolved in this transaction while this backend held a lock
+		 * on it, and that lock is held to transaction end, so the free (which
+		 * needs AccessExclusiveLock) cannot have happened.  A stale mark seen
+		 * here comes from a non-conflicting relcache event on the same relation
+		 * (e.g. ANALYZE); honoring it would only force a needless seqnum-0
+		 * fallback, and re-resolving would put dshash locks on this path.
 		 */
 		ce = (tenant_tracker_resolved_htab != NULL) ?
-				 hash_search(tenant_tracker_resolved_htab, &hypertable_id, HASH_FIND, NULL) :
+				 hash_search(tenant_tracker_resolved_htab, &hypertable_relid, HASH_FIND, NULL) :
 				 NULL;
 		tracking = (ce != NULL) ? ce->tracking : NULL;
 
@@ -821,6 +958,46 @@ tenant_tracking_for_hypertable(List *hypertable_seqnums, int32 hypertable_id)
 	return NULL;
 }
 
+/*
+ * Add an invalidation to the hypertable log, split at the edges of the
+ * granular tracking window. The part outside the tracking window will
+ * be written with seqnum 0, and the one inside with the current, non-zero
+ * seqnum.
+ */
+static void
+add_invalidation_split_on_late_window(int32 hyper_id, int64 start, int64 end, int32 seqnum,
+									  const HypertableSeqnumEntry *tracking_entry)
+{
+	if (seqnum == 0)
+	{
+		invalidation_hyper_log_add_entry(hyper_id, start, end, seqnum);
+		return;
+	}
+	/* We don't call this function for entries that are completely outside the
+	 * tracking window, so an entry here should overlap the window.
+	 */
+	Assert(start < tracking_entry->late_threshold_end &&
+		   end >= tracking_entry->late_threshold_start);
+
+	if (start < tracking_entry->late_threshold_start)
+	{
+		invalidation_hyper_log_add_entry(hyper_id,
+										 start,
+										 int64_saturating_sub(tracking_entry->late_threshold_start,
+															  1),
+										 0);
+		start = tracking_entry->late_threshold_start;
+	}
+
+	if (end >= tracking_entry->late_threshold_end)
+	{
+		invalidation_hyper_log_add_entry(hyper_id, tracking_entry->late_threshold_end, end, 0);
+		end = int64_saturating_sub(tracking_entry->late_threshold_end, 1);
+	}
+
+	invalidation_hyper_log_add_entry(hyper_id, start, end, seqnum);
+}
+
 static inline void
 cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_seqnums)
 {
@@ -853,10 +1030,11 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_s
 	 */
 	if (IsolationUsesXactSnapshot())
 	{
-		invalidation_hyper_log_add_entry(entry->hypertable_id,
-										 entry->lowest_modified_value,
-										 entry->greatest_modified_value,
-										 seqnum);
+		add_invalidation_split_on_late_window(entry->hypertable_id,
+											  entry->lowest_modified_value,
+											  entry->greatest_modified_value,
+											  seqnum,
+											  tracking_entry);
 		return;
 	}
 
@@ -864,10 +1042,11 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry, List *hypertable_s
 
 	if (entry->lowest_modified_value < liv)
 	{
-		invalidation_hyper_log_add_entry(entry->hypertable_id,
-										 entry->lowest_modified_value,
-										 entry->greatest_modified_value,
-										 seqnum);
+		add_invalidation_split_on_late_window(entry->hypertable_id,
+											  entry->lowest_modified_value,
+											  entry->greatest_modified_value,
+											  seqnum,
+											  tracking_entry);
 	}
 };
 
@@ -878,6 +1057,7 @@ cache_inval_cleanup(void)
 	Assert(continuous_aggs_cache_hyper_inval_threshold_htab != NULL);
 	hash_destroy(continuous_aggs_cache_inval_htab);
 	hash_destroy(continuous_aggs_cache_hyper_inval_threshold_htab);
+	hash_destroy(continuous_aggs_cache_hyper_tenant_col_htab);
 	if (tenant_local_htab != NULL)
 	{
 		hash_destroy(tenant_local_htab);
@@ -886,6 +1066,7 @@ cache_inval_cleanup(void)
 
 	continuous_aggs_cache_inval_htab = NULL;
 	continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
+	continuous_aggs_cache_hyper_tenant_col_htab = NULL;
 	tenant_local_htab = NULL;
 	tenant_buffer_unencodable = false;
 	continuous_aggs_invalidation_mctx = NULL;
@@ -986,6 +1167,8 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 			 * the same generation (seqnum 0 == untracked -> full-log fallback).
 			 */
 			List *hypertable_seqnums = tenant_local_htab_write();
+
+			DEBUG_WAITPOINT("tenant_tracker_before_inval_write");
 
 			cache_inval_htab_write(hypertable_seqnums);
 			list_free_deep(hypertable_seqnums);

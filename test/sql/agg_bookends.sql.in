@@ -92,3 +92,8 @@ SELECT first(location, location) FROM weather_observations;
 SELECT last(location, location) FROM weather_observations;
 \set ON_ERROR_STOP 1
 
+
+-- types whose comparison operators come from a binary coercible type
+CREATE TABLE vc_plain(vc varchar NOT NULL);
+INSERT INTO vc_plain VALUES ('b'), ('c');
+SELECT first(vc, vc), last(vc, vc) FROM vc_plain;

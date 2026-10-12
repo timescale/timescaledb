@@ -14,7 +14,6 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 ROLLBACK;
 
 SET timescaledb.enable_direct_compress_copy = true;
-SET timescaledb.enable_direct_compress_copy_sort_batches = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = false;
 
 -- simple test with compressed copy enabled
@@ -31,24 +30,8 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
 ROLLBACK;
 
-SET timescaledb.enable_direct_compress_copy_sort_batches = false;
--- simple test with compressed copy enabled and without batch sorting
-BEGIN;
-COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
-ROLLBACK;
-
--- simple test with compressed copy enabled and reversed order and no batch sorting
-BEGIN;
-COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
-ROLLBACK;
-
 -- test compressing into uncompressed chunk
 RESET timescaledb.enable_direct_compress_copy;
-RESET timescaledb.enable_direct_compress_copy_sort_batches;
 RESET timescaledb.enable_direct_compress_copy_client_sorted;
 
 BEGIN;

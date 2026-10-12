@@ -66,11 +66,11 @@ def get_referenced_issues(pr_number):
 # Check if a line matches any of the specified patterns
 def is_valid_line(line):
     patterns = [
-        r"^Fixes:\s*.*$",
-        r"^Implements:\s*.*$",
-        r"^Thanks:\s*.*$",
-        r"^Backward-Incompatible Change:\s*.*$",
-        r"^Setting:\s*.*$",
+        r"^Fixes:\s#[0-9]+.*$",
+        r"^Implements:\s#[0-9]+.*$",
+        r"^Thanks:\s.*$",
+        r"^Backward-Incompatible Change:\s#[0-9]+.*$",
+        r"^Setting:\s.*$",
     ]
     for pattern in patterns:
         if re.match(pattern, line):

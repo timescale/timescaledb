@@ -407,6 +407,12 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 
 	Assert(top_append != NULL);
 
+	/* Can't push the aggregation below Gather if it is not parallel safe */
+	if (top_gather != NULL && !partially_grouped_rel->consider_parallel)
+	{
+		return;
+	}
+
 	if (list_length(subpaths) < 2)
 	{
 		/*
@@ -490,28 +496,42 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		}
 	}
 
-	/* Create new append paths */
+	/*
+	 * Create new append paths.
+	 *
+	 * We make the cost-based choice of the plans already at the level of the
+	 * partially grouped relation, i.e. Append of individual chunk-wise Partial
+	 * Aggregate nodes. This is not entrely correct, because different kinds of
+	 * Append might require another plan node before final aggregation (e.g. Sort),
+	 * that can change the total cost significantly.
+	 *
+	 * We add the append over hashed partial aggregates first, and then the
+	 * append over grouped partial aggregation. If they have similar cost and
+	 * pathkeys, only the first of them survives. The hash aggregation can be
+	 * disabled with a GUC, but the group aggregation cannot, so adding them in
+	 * this order lets the user try both by changing the GUC.
+	 */
 	if (top_gather == NULL)
 	{
 		/*
 		 * The original aggregation plan was non-parallel, so we're creating a
 		 * non-parallel plan as well.
 		 */
-		if (sorted_subpaths != NIL)
-		{
-			add_path(partially_grouped_rel,
-					 copy_append_like_path(root,
-										   top_append,
-										   sorted_subpaths,
-										   partial_grouping_target));
-		}
-
 		if (hashed_subpaths != NIL)
 		{
 			add_path(partially_grouped_rel,
 					 copy_append_like_path(root,
 										   top_append,
 										   hashed_subpaths,
+										   partial_grouping_target));
+		}
+
+		if (sorted_subpaths != NIL)
+		{
+			add_path(partially_grouped_rel,
+					 copy_append_like_path(root,
+										   top_append,
+										   sorted_subpaths,
 										   partial_grouping_target));
 		}
 	}
@@ -521,22 +541,18 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		 * The cheapest aggregation plan was parallel, so we're creating a
 		 * parallel plan as well.
 		 */
-		if (sorted_subpaths != NIL)
-		{
-			add_partial_path(partially_grouped_rel,
-							 copy_append_like_path(root,
-												   top_append,
-												   sorted_subpaths,
-												   partial_grouping_target));
-		}
-
 		if (hashed_subpaths != NIL)
 		{
-			add_partial_path(partially_grouped_rel,
-							 copy_append_like_path(root,
-												   top_append,
-												   hashed_subpaths,
-												   partial_grouping_target));
+			Path *path =
+				copy_append_like_path(root, top_append, hashed_subpaths, partial_grouping_target);
+			add_partial_path(partially_grouped_rel, path);
+		}
+
+		if (sorted_subpaths != NIL)
+		{
+			Path *path =
+				copy_append_like_path(root, top_append, sorted_subpaths, partial_grouping_target);
+			add_partial_path(partially_grouped_rel, path);
 		}
 	}
 }
@@ -663,7 +679,7 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	/* Construct partial group agg upper relation */
 	RelOptInfo *partially_grouped_rel =
 		fetch_upper_rel(root, UPPERREL_PARTIAL_GROUP_AGG, input_rel->relids);
-	partially_grouped_rel->consider_parallel = input_rel->consider_parallel;
+	partially_grouped_rel->consider_parallel = output_rel->consider_parallel;
 	partially_grouped_rel->consider_startup = input_rel->consider_startup;
 	partially_grouped_rel->reloptkind = input_rel->reloptkind;
 	partially_grouped_rel->serverid = input_rel->serverid;

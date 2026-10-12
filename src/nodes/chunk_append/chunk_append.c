@@ -5,16 +5,23 @@
  */
 #include <postgres.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
 #include <utils/builtins.h>
+#include <utils/lsyscache.h>
 #include <utils/typcache.h>
 
+#include "chunk.h"
+#include "dimension.h"
+#include "dimension_slice.h"
+#include "expression_utils.h"
 #include "func_cache.h"
 #include "guc.h"
 #include "nodes/chunk_append/chunk_append.h"
+#include "partitioning.h"
 #include "planner/planner.h"
 
 static Var *find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions);
@@ -35,6 +42,54 @@ static bool
 has_joins(FromExpr *jointree)
 {
 	return list_length(jointree->fromlist) != 1 || !IsA(linitial(jointree->fromlist), RangeTblRef);
+}
+
+/*
+ * Build the nested oids list for the ChunkAppend with ordering with space
+ * partitioning.
+ *
+ * nested_oids is a list of lists, chunks that occupy the same time slice will be
+ * in the same list. In the list [[1,2,3],[4,5,6]] chunks 1, 2 and 3 are space partitions of
+ * the same time slice and 4, 5 and 6 are space partitions of the next time slice.
+ */
+static List *
+build_nested_oids(PlannerInfo *root, List *children)
+{
+	List *nested_oids = NIL;
+	List *slice_oids = NIL;
+	const DimensionSlice *prev_slice = NULL;
+
+	ListCell *lc;
+	foreach (lc, children)
+	{
+		Path *child = (Path *) lfirst(lc);
+		const Chunk *chunk = ts_planner_chunk_fetch(root, child->parent);
+
+		/*
+		 * The children should be only plain chunks since we're creating a
+		 * ChunkAppend, but don't segfault.
+		 */
+		Ensure(chunk != NULL,
+			   "unexpected ChunkAppend child relation (index %d)",
+			   child->parent->relid);
+
+		if (prev_slice != NULL && ts_dimension_slice_cmp(prev_slice, chunk->cube->slices[0]) != 0)
+		{
+			nested_oids = lappend(nested_oids, slice_oids);
+			slice_oids = NIL;
+		}
+
+		slice_oids = lappend_oid(slice_oids, chunk->fd.relid);
+
+		prev_slice = chunk->cube->slices[0];
+	}
+
+	if (slice_oids != NIL)
+	{
+		nested_oids = lappend(nested_oids, slice_oids);
+	}
+
+	return nested_oids;
 }
 
 /*
@@ -73,7 +128,10 @@ ChunkAppendPath *
 ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *pathtarget)
 {
 	ListCell *lc;
-	double total_cost = 0, rows = 0;
+	double startup_cost = 0;
+	double total_cost = 0;
+	double rows = 0;
+	List *pathkeys = ca->cpath.path.pathkeys;
 	ChunkAppendPath *new = palloc(sizeof(ChunkAppendPath));
 	memcpy(new, ca, sizeof(ChunkAppendPath));
 	new->cpath.custom_paths = subpaths;
@@ -84,12 +142,41 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *patht
 	foreach (lc, subpaths)
 	{
 		Path *child = lfirst(lc);
-		total_cost += child->total_cost;
+
+		/*
+		 * cost_append() accounts for the cost of sorting the children separately,
+		 * so here we must follow this logic.
+		 */
+		if (pathkeys != NIL && !pathkeys_contained_in(pathkeys, child->pathkeys))
+		{
+			Path sort_path; /* dummy for result of cost_sort */
+
+			cost_sort(&sort_path,
+					  /* root = */ NULL,
+					  pathkeys,
+#if PG18_GE
+					  child->disabled_nodes,
+#endif
+					  child->total_cost,
+					  child->rows,
+					  child->pathtarget->width,
+					  0.0,
+					  work_mem,
+					  /* limit_tuples = */ -1);
+			startup_cost += sort_path.startup_cost;
+			total_cost += sort_path.total_cost;
+		}
+		else
+		{
+			startup_cost += child->startup_cost;
+			total_cost += child->total_cost;
+		}
 		rows += child->rows;
 #if PG18_GE
 		disabled_nodes += child->disabled_nodes;
 #endif
 	}
+	new->cpath.path.startup_cost = startup_cost;
 	new->cpath.path.total_cost = total_cost;
 	new->cpath.path.rows = rows;
 #if PG18_GE
@@ -100,9 +187,150 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *patht
 	return new;
 }
 
+typedef struct PartitioningComparisonContext
+{
+	Index relid;
+	const Hypertable *ht;
+} PartitioningComparisonContext;
+
+/*
+ * Check whether this is the expression the chunk constraints of an open
+ * dimension are on: the column itself, or the partitioning function applied
+ * to the column when the dimension has one. A relabel around the column
+ * appears when it is compared through the operators of a binary compatible
+ * type.
+ */
+static bool
+is_open_dimension_expr(Node *node, PartitioningComparisonContext *context)
+{
+	Oid funcid = InvalidOid;
+
+	node = ts_strip_relabel_types(node);
+
+	if (IsA(node, FuncExpr) && list_length(castNode(FuncExpr, node)->args) == 1)
+	{
+		funcid = castNode(FuncExpr, node)->funcid;
+		node = ts_strip_relabel_types(linitial(castNode(FuncExpr, node)->args));
+	}
+
+	if (!IsA(node, Var))
+	{
+		return false;
+	}
+
+	Var *var = castNode(Var, node);
+
+	/*
+	 * varattno 0 is whole row and varattno less than zero are system columns
+	 * so we skip those
+	 */
+	if ((Index) var->varno != context->relid || var->varlevelsup != 0 || var->varattno <= 0)
+	{
+		return false;
+	}
+
+	const Dimension *dim = ts_hyperspace_get_dimension_by_attno(context->ht->space,
+																DIMENSION_TYPE_OPEN,
+																var->varattno);
+
+	if (dim == NULL)
+	{
+		return false;
+	}
+
+	return funcid ==
+		   (dim->partitioning != NULL ? dim->partitioning->partfunc.func_fmgr.fn_oid : InvalidOid);
+}
+
+/*
+ * Check whether this is a comparison on an open dimension. Only operators of
+ * the default btree operator family can contradict the constraints of a chunk.
+ */
+static bool
+is_open_dimension_comparison(Oid opno, List *args, PartitioningComparisonContext *context)
+{
+	ListCell *lc;
+
+	if (list_length(args) != 2)
+	{
+		return false;
+	}
+
+	foreach (lc, args)
+	{
+		if (is_open_dimension_expr(lfirst(lc), context))
+		{
+			TypeCacheEntry *tce = lookup_type_cache(exprType(lfirst(lc)), TYPECACHE_BTREE_OPFAMILY);
+
+			return op_in_opfamily(opno, tce->btree_opf);
+		}
+	}
+
+	return false;
+}
+
+static bool
+open_dimension_comparison_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, OpExpr) && is_open_dimension_comparison(castNode(OpExpr, node)->opno,
+														  castNode(OpExpr, node)->args,
+														  context))
+	{
+		return true;
+	}
+
+	if (IsA(node, ScalarArrayOpExpr) &&
+		is_open_dimension_comparison(castNode(ScalarArrayOpExpr, node)->opno,
+									 castNode(ScalarArrayOpExpr, node)->args,
+									 context))
+	{
+		return true;
+	}
+
+	return expression_tree_walker(node, open_dimension_comparison_walker, context);
+}
+
+/*
+ * Check whether any of the clauses can contradict the constraints of a chunk.
+ * Without such a clause there is nothing to gain from checking every chunk.
+ *
+ * For an open dimension any comparison inside the clause can contradict the
+ * range constraints of a chunk. A closed dimension needs a clause on the
+ * partition hash, which we can only derive when the clause itself is an
+ * equality on the column.
+ */
+static bool
+clauses_allow_exclusion(PlannerInfo *root, List *clauses, Index relid, const Hypertable *ht)
+{
+	PartitioningComparisonContext context = { .relid = relid, .ht = ht };
+	ListCell *lc;
+
+	foreach (lc, clauses)
+	{
+		RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+
+		if (open_dimension_comparison_walker((Node *) rinfo->clause, &context))
+		{
+			return true;
+		}
+
+		if (ts_make_partition_hash_clause(root, root->parse->rtable, relid, rinfo->clause) != NULL)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 Path *
 ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, Path *subpath,
-							bool parallel_aware, bool ordered, List *nested_oids)
+							bool parallel_aware, bool ordered)
 {
 	ChunkAppendPath *path;
 	ListCell *lc;
@@ -169,6 +397,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	/*
 	 * check if we should do startup and runtime exclusion
 	 */
+	List *join_param_clauses = NIL;
+
 	foreach (lc, rel->baserestrictinfo)
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
@@ -188,77 +418,43 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 
 		if (ts_guc_enable_runtime_exclusion && ts_contains_join_param((Node *) rinfo->clause))
 		{
-			ListCell *lc_var;
-
-			/* We have two types of exclusion:
-			 *
-			 * Parent exclusion fires if the entire hypertable can be excluded.
-			 * This happens if doing things like joining against a parameter
-			 * value that is an empty array or NULL. It doesn't happen often,
-			 * but when it does, it speeds up the query immensely. It's also cheap
-			 * to check for this condition as you check this once per hypertable
-			 * at runtime.
-			 *
-			 * Child exclusion works by seeing if there is a contradiction between
-			 * the chunks constraints and the expression on parameter values. For example,
-			 * it can evaluate whether a time parameter from a subquery falls outside
-			 * the range of the chunk. It is more widely applicable than the parent
-			 * exclusion but is also more expensive to evaluate since you have to perform
-			 * the check on every chunk. Child exclusion can only apply if one of the quals
-			 * involves a partitioning column.
-			 *
-			 */
-			path->runtime_exclusion_parent = true;
-			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, PVC_RECURSE_PLACEHOLDERS))
-			{
-				Var *var = lfirst(lc_var);
-				/*
-				 * varattno 0 is whole row and varattno less than zero are
-				 * system columns so we skip those even though
-				 * ts_is_partitioning_column would return the correct
-				 * answer for those as well
-				 */
-				if ((Index) var->varno == rel->relid && var->varattno > 0 &&
-					ts_is_partitioning_column(ht, var->varattno))
-				{
-					path->runtime_exclusion_children = true;
-					break;
-				}
-			}
+			join_param_clauses = lappend(join_param_clauses, rinfo);
 		}
 	}
 
 	/*
-	 * For parameterized paths (e.g., inner side of LATERAL joins), also check
-	 * ppi_clauses for runtime exclusion. Any clause in ppi_clauses references
-	 * outer relations by definition.
+	 * For parameterized paths (e.g., inner side of LATERAL joins) the clauses
+	 * referencing the outer relations are not part of baserestrictinfo but in
+	 * ppi_clauses, so we have to look at those as well.
 	 */
-	if (ts_guc_enable_runtime_exclusion && subpath->param_info != NULL &&
-		subpath->param_info->ppi_clauses != NIL)
+	if (ts_guc_enable_runtime_exclusion && subpath->param_info != NULL)
+	{
+		join_param_clauses = list_concat(join_param_clauses, subpath->param_info->ppi_clauses);
+	}
+
+	/* We have two types of exclusion:
+	 *
+	 * Parent exclusion fires if the entire hypertable can be excluded.
+	 * This happens if doing things like joining against a parameter
+	 * value that is an empty array or NULL. It doesn't happen often,
+	 * but when it does, it speeds up the query immensely. It's also cheap
+	 * to check for this condition as you check this once per hypertable
+	 * at runtime.
+	 *
+	 * Child exclusion works by seeing if there is a contradiction between
+	 * the chunks constraints and the expression on parameter values. For example,
+	 * it can evaluate whether a time parameter from a subquery falls outside
+	 * the range of the chunk. It is more widely applicable than the parent
+	 * exclusion but is also more expensive to evaluate since you have to perform
+	 * the check on every chunk. Child exclusion can only apply if one of the quals
+	 * involves a partitioning column.
+	 *
+	 */
+	if (join_param_clauses != NIL)
 	{
 		path->runtime_exclusion_parent = true;
-
-		/* Check if any clause involves a partitioning column for child exclusion */
-		foreach (lc, subpath->param_info->ppi_clauses)
-		{
-			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
-			ListCell *lc_var;
-
-			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, PVC_RECURSE_PLACEHOLDERS))
-			{
-				Var *var = lfirst(lc_var);
-				if ((Index) var->varno == rel->relid && var->varattno > 0 &&
-					ts_is_partitioning_column(ht, var->varattno))
-				{
-					path->runtime_exclusion_children = true;
-					break;
-				}
-			}
-			if (path->runtime_exclusion_children)
-			{
-				break;
-			}
-		}
+		path->runtime_exclusion_children =
+			clauses_allow_exclusion(root, join_param_clauses, rel->relid, ht);
 	}
 
 	/*
@@ -389,9 +585,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		 * We do not check sort order at this stage but injecting of Sort
 		 * nodes happens when the plan is created instead.
 		 */
+		List *nested_oids = build_nested_oids(root, children);
 		ListCell *flat = list_head(children);
 		List *nested_children = NIL;
-		bool has_scan_childs = false;
 
 		foreach (lc, nested_oids)
 		{
@@ -458,24 +654,11 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			}
 			else if (list_length(merge_childs) == 1)
 			{
-				has_scan_childs = true;
 				nested_children = lappend(nested_children, linitial(merge_childs));
 			}
 		}
 
 		Assert(flat == NULL);
-
-		/*
-		 * if we do not have scans as direct children of this
-		 * node we disable startup and runtime exclusion
-		 * in this node
-		 */
-		if (!has_scan_childs)
-		{
-			path->startup_exclusion = false;
-			path->runtime_exclusion_parent = false;
-			path->runtime_exclusion_children = false;
-		}
 
 		path->cpath.custom_paths = nested_children;
 	}

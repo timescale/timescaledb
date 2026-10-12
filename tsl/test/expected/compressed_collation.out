@@ -181,3 +181,44 @@ select note from t9997 where actor = 'alice' collate "C";
    99
 
 drop table t9997 cascade;
+-- The min/max metadata of an orderby text column follow the column collation,
+-- and so does the batch filtering of an INSERT with a unique index on it.
+-- Under en_US the batch spans 'á' .. 'ç' and contains 'b'; under "C" byte
+-- order 'b' would lie before 'á' and the duplicate would slip through.
+create table t_minmax (
+    ts   timestamptz not null,
+    name text collate :"COLLATION" not null,
+    unique (name, ts)
+);
+select count(*) from create_hypertable('t_minmax', 'ts');
+ count 
+-------
+     1
+
+alter table t_minmax set (timescaledb.compress, timescaledb.compress_orderby = 'name');
+insert into t_minmax values ('2024-01-01', 'á'), ('2024-01-01', 'b'), ('2024-01-01', 'ç');
+select count(compress_chunk(ch)) from show_chunks('t_minmax') ch;
+ count 
+-------
+     1
+
+\set ON_ERROR_STOP 0
+insert into t_minmax values ('2024-01-01', 'b');
+ERROR:  duplicate key value violates unique constraint "12_t_minmax_name_ts_key"
+\set ON_ERROR_STOP 1
+-- a name outside the batch range does not decompress it
+explain (analyze, buffers off, costs off, timing off, summary off) insert into t_minmax values ('2024-01-01', 'a');
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Insert on t_minmax (actual rows=0.00 loops=1)
+         ->  Result (actual rows=1.00 loops=1)
+
+select name from t_minmax order by name collate "C";
+ name 
+------
+ a
+ b
+ á
+ ç
+
+drop table t_minmax cascade;

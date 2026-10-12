@@ -2563,7 +2563,15 @@ SELECT first(location, ts) FROM weather_observations;
 -- should raise a proper user-facing error, not an internal error
 \set ON_ERROR_STOP 0
 SELECT first(location, location) FROM weather_observations;
-ERROR:  could not find a < operator for type point
+ERROR:  could not identify an ordering operator for type point
 SELECT last(location, location) FROM weather_observations;
-ERROR:  could not find a > operator for type point
+ERROR:  could not identify an ordering operator for type point
 \set ON_ERROR_STOP 1
+-- types whose comparison operators come from a binary coercible type
+CREATE TABLE vc_plain(vc varchar NOT NULL);
+INSERT INTO vc_plain VALUES ('b'), ('c');
+SELECT first(vc, vc), last(vc, vc) FROM vc_plain;
+ first | last 
+-------+------
+ b     | c
+

@@ -5,7 +5,6 @@ set(TEST_FILES_SHARED
     compat.sql
     compress_bloom_sparse_compat.sql
     compress_unique_index.sql
-    compression_nulls_not_distinct.sql
     constraint_aware_append.sql
     decompress_join.sql
     decompress_placeholdervar.sql

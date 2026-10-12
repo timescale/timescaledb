@@ -219,9 +219,9 @@ DEALLOCATE prep;
 :PREFIX INSERT INTO skip_scan_insert(dev, val, query) SELECT dev, sd, 'q10_1' FROM (SELECT sum(DISTINCT dev) sd, dev FROM :TABLE GROUP BY dev) a;
 
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 
 TRUNCATE skip_scan_insert;
 

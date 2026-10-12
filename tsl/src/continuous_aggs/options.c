@@ -12,6 +12,7 @@
 #include <nodes/makefuncs.h>
 #include <optimizer/optimizer.h>
 #include <rewrite/rewriteManip.h>
+#include <storage/lmgr.h>
 #include <utils/builtins.h>
 
 #include "cache.h"
@@ -19,6 +20,7 @@
 #include "continuous_aggs/common.h"
 #include "continuous_aggs/create.h"
 #include "errors.h"
+#include "hypertable.h"
 #include "hypertable_cache.h"
 #include "options.h"
 #include "scan_iterator.h"
@@ -134,13 +136,13 @@ validate_granular_refresh_enable(ContinuousAgg *agg, Hypertable *mat_ht)
 {
 	FormData_hypertable_cagg_settings settings;
 
-	if (!ts_hypertable_cagg_settings_get(agg->data.raw_hypertable_id, &settings))
+	if (!ts_hypertable_cagg_settings_get(agg->data.raw_hypertable_id, &settings, NULL))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("granular refresh is not configured on the hypertable"),
 				 errhint("Configure granular refresh on the hypertable first using "
-						 "ALTER TABLE ... SET (timescaledb.granular_refresh_column = ...).")));
+						 "ALTER TABLE ... SET (timescaledb.cagg_granular_refresh_column = ...).")));
 	}
 
 	const char *refresh_column = NameStr(settings.granular_refresh_column);
@@ -212,6 +214,18 @@ continuous_agg_set_granular_refresh_enabled(ContinuousAgg *agg, bool enabled)
 	{
 		return;
 	}
+
+	/*
+	 * Serialize against ALTER TABLE ... SET (timescaledb.cagg_enable_granular_refresh
+	 * = false) on the raw hypertable, which takes AccessExclusiveLock on it and
+	 * refuses to clear the configuration while any cagg still has granular
+	 * refresh enabled. Without this lock that check and this update could
+	 * interleave, leaving an enabled cagg with no hypertable configuration.
+	 * ShareUpdateExclusiveLock is enough: it conflicts with that DDL but not
+	 * with DML.
+	 */
+	LockRelationOid(ts_hypertable_id_to_relid(agg->data.raw_hypertable_id, false),
+					ShareUpdateExclusiveLock);
 
 	/* Same lock a refresh takes, so the flag cannot flip mid-refresh. */
 	if (!ts_lock_continuous_agg_tuple(agg->data.mat_hypertable_id))

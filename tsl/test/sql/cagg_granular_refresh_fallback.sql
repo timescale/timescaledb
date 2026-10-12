@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Report refresh statistics throughout.
+SET timescaledb.cagg_refresh_stats_level TO summary;
+
+
 -- Correctness when per-tenant tracking degrades to a full refresh.
 --
 -- The tracker is an optimization layered over the invalidation log: an
@@ -20,9 +24,10 @@ SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_l
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW cond_daily
@@ -123,7 +128,6 @@ ORDER BY sensor_id NULLS LAST;
 ALTER TABLE conditions SET (timescaledb.compress, timescaledb.compress_orderby = 'time');
 
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.enable_direct_compress_insert_sort_batches = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 
 -- 2000 rows (large enough to engage direct compress): 1000 for 'named' and 1000
@@ -140,7 +144,6 @@ FROM show_chunks('conditions', older_than => '2020-06-15 00:00+00'::timestamptz,
                                newer_than => '2020-05-15 00:00+00'::timestamptz) chunk;
 
 RESET timescaledb.enable_direct_compress_insert;
-RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 -- Same as the DML path: generation INVALID (status 1), nothing buffered.
@@ -220,9 +223,10 @@ SELECT create_hypertable('readings', 'time');
 SELECT (CURRENT_DATE - DATE '2021-01-01')::text || ' days' AS window_start_offset,
        (CURRENT_DATE - DATE '2023-01-01')::text || ' days' AS window_end_offset \gset
 ALTER TABLE readings SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'window_start_offset',
-    timescaledb.granular_refresh_end_offset = :'window_end_offset'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'window_start_offset',
+    timescaledb.cagg_granular_refresh_end_offset = :'window_end_offset'
 );
 
 CREATE MATERIALIZED VIEW readings_daily
@@ -303,3 +307,5 @@ SELECT sensor_id, avg FROM readings_daily ORDER BY sensor_id;
 
 DROP MATERIALIZED VIEW readings_daily;
 DROP TABLE readings;
+
+RESET timescaledb.cagg_refresh_stats_level;

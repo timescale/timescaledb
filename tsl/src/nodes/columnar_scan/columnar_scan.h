@@ -70,6 +70,18 @@ typedef struct ColumnarScanPath
 	 * for example with ColumnarIndexScan.
 	 */
 	bool all_quals_pushed_down;
+
+	/* pathkey equivalence class members matching compressed sort order on the chunk */
+	List *required_pathkey_ems;
+
+	/*
+	 * Produce only the first row of each batch from segmentby columns and
+	 * sparse index metadata, mapping compressed attnos to chunk attnos.
+	 */
+	bool metadata_only;
+	List *metadata_chunk_attnos;
+	List *metadata_compressed_attnos;
+
 } ColumnarScanPath;
 
 void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,

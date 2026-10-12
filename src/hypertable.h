@@ -120,8 +120,17 @@ extern bool ts_hypertable_clear_status(Hypertable *ht, int32 status);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
-extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
-extern int ts_hypertable_delete_by_id(int32 hypertable_id);
+/*
+ * For the delete functions below, relid is the main table's OID as already
+ * known by the caller, from before the drop. It may no longer resolve to a
+ * live pg_class row by the time this runs (e.g. a plain DROP TABLE removes
+ * the relation before our sql_drop event trigger fires), so it must never be
+ * looked up or dereferenced here - it is only passed through to compare
+ * against previously cached values that need to be invalidated, such as a
+ * stale tenant tracker entry.
+ */
+extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name, Oid relid);
+extern int ts_hypertable_delete_by_id(int32 hypertable_id, Oid relid);
 extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(const Hypertable *ht,
 															  CreateTrigStmt *stmt,
 															  const char *query);
@@ -148,7 +157,6 @@ extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_
 extern TSDLLEXPORT bool ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode);
 extern TSDLLEXPORT bool ts_hypertable_has_noncontiguous_osm_chunk(const Hypertable *ht);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
-extern bool ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno);
 extern bool ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name);
 extern TSDLLEXPORT bool ts_hypertable_set_compression(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_unset_compression(Hypertable *ht);

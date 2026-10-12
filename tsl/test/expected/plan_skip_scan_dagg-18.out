@@ -970,11 +970,7 @@ DEALLOCATE prep;
                            Index Cond: (dev > NULL::integer)
 
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
@@ -982,11 +978,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
          ->  Index Only Scan using skip_scan_dev_idx on skip_scan (actual rows=0.92 loops=13)
                Index Cond: (dev > NULL::integer)
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT count(DISTINCT time) FROM skip_scan_nulls;
@@ -2745,11 +2737,7 @@ DEALLOCATE prep;
                                  Index Cond: (dev > NULL::integer)
 
 -- parallel query
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
@@ -2768,11 +2756,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=0.92 loops=12)
                      Index Cond: (dev > NULL::integer)
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT count(DISTINCT time) FROM skip_scan_nulls;
@@ -3210,20 +3194,24 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT dev), count(DISTINCT dev_name) FROM :TABLE WHERE dev_name = 'device_1';
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
-   ->  Merge Append (actual rows=1000.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
          Sort Key: skip_scan_htc.dev
-         ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk (actual rows=250.00 loops=1)
-               ->  Index Scan using _hyper_2_5_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_5_chunk_compressed (actual rows=1.00 loops=1)
-                     Index Cond: (dev_name = 'device_1'::text)
-         ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=250.00 loops=1)
-               ->  Index Scan using _hyper_2_6_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_6_chunk_compressed (actual rows=1.00 loops=1)
-                     Index Cond: (dev_name = 'device_1'::text)
-         ->  Custom Scan (ColumnarScan) on _hyper_2_7_chunk (actual rows=250.00 loops=1)
-               ->  Index Scan using _hyper_2_7_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_7_chunk_compressed (actual rows=1.00 loops=1)
-                     Index Cond: (dev_name = 'device_1'::text)
-         ->  Custom Scan (ColumnarScan) on _hyper_2_8_chunk (actual rows=250.00 loops=1)
-               ->  Index Scan using _hyper_2_8_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_8_chunk_compressed (actual rows=1.00 loops=1)
-                     Index Cond: (dev_name = 'device_1'::text)
+         ->  Custom Scan (SkipScan) on _hyper_2_5_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk (actual rows=0.33 loops=3)
+                     ->  Index Scan using _hyper_2_5_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_5_chunk_compressed (actual rows=0.33 loops=3)
+                           Index Cond: (dev_name = 'device_1'::text)
+         ->  Custom Scan (SkipScan) on _hyper_2_6_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=0.33 loops=3)
+                     ->  Index Scan using _hyper_2_6_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_6_chunk_compressed (actual rows=0.33 loops=3)
+                           Index Cond: (dev_name = 'device_1'::text)
+         ->  Custom Scan (SkipScan) on _hyper_2_7_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_7_chunk (actual rows=0.33 loops=3)
+                     ->  Index Scan using _hyper_2_7_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_7_chunk_compressed (actual rows=0.33 loops=3)
+                           Index Cond: (dev_name = 'device_1'::text)
+         ->  Custom Scan (SkipScan) on _hyper_2_8_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_8_chunk (actual rows=0.33 loops=3)
+                     ->  Index Scan using _hyper_2_8_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_8_chunk_compressed (actual rows=0.33 loops=3)
+                           Index Cond: (dev_name = 'device_1'::text)
 
 -- multicolumn compressed index with dev as non-leading column
 :PREFIX SELECT count(DISTINCT dev_name) FROM :TABLE WHERE dev = 1;
@@ -3276,20 +3264,24 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT dev), count(DISTINCT dev_name) FROM :TABLE WHERE dev = 1;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
-   ->  Merge Append (actual rows=1000.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
          Sort Key: skip_scan_htc.dev_name
-         ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk (actual rows=250.00 loops=1)
-               ->  Index Scan using _hyper_2_5_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_5_chunk_compressed (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=250.00 loops=1)
-               ->  Index Scan using _hyper_2_6_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_6_chunk_compressed (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_2_7_chunk (actual rows=250.00 loops=1)
-               ->  Index Scan using _hyper_2_7_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_7_chunk_compressed (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
-         ->  Custom Scan (ColumnarScan) on _hyper_2_8_chunk (actual rows=250.00 loops=1)
-               ->  Index Scan using _hyper_2_8_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_8_chunk_compressed (actual rows=1.00 loops=1)
-                     Index Cond: (dev = 1)
+         ->  Custom Scan (SkipScan) on _hyper_2_5_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk (actual rows=0.33 loops=3)
+                     ->  Index Scan using _hyper_2_5_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_5_chunk_compressed (actual rows=0.33 loops=3)
+                           Index Cond: (dev = 1)
+         ->  Custom Scan (SkipScan) on _hyper_2_6_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk (actual rows=0.33 loops=3)
+                     ->  Index Scan using _hyper_2_6_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_6_chunk_compressed (actual rows=0.33 loops=3)
+                           Index Cond: (dev = 1)
+         ->  Custom Scan (SkipScan) on _hyper_2_7_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_7_chunk (actual rows=0.33 loops=3)
+                     ->  Index Scan using _hyper_2_7_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_7_chunk_compressed (actual rows=0.33 loops=3)
+                           Index Cond: (dev = 1)
+         ->  Custom Scan (SkipScan) on _hyper_2_8_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_2_8_chunk (actual rows=0.33 loops=3)
+                     ->  Index Scan using _hyper_2_8_chunk_compressed_dev_dev_name__ts_meta_v2_first__idx on _hyper_2_8_chunk_compressed (actual rows=0.33 loops=3)
+                           Index Cond: (dev = 1)
 
 -- Basic tests for "segmentby = 'dev'"
 -----------------------------------------
@@ -4985,11 +4977,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 
 -- parallel query
 RESET max_parallel_workers_per_gather;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
- set_config 
-------------
- on
-
+SET debug_parallel_query = 'on';
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 --- QUERY PLAN ---
  Aggregate (actual rows=1.00 loops=1)
@@ -5008,11 +4996,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
                ->  Custom Scan (ColumnarScan) on _hyper_2_8_chunk (actual rows=0.92 loops=12)
                      ->  Index Scan using _hyper_2_8_chunk_compressed_dev_val__ts_meta_v2_first_time__idx on _hyper_2_8_chunk_compressed (actual rows=0.92 loops=12)
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
- set_config 
-------------
- off
-
+SET debug_parallel_query = 'off';
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE where val IS NULL;
