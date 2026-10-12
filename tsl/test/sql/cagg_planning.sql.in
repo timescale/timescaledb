@@ -12,7 +12,7 @@ SELECT
 
 SELECT format('\! diff -u --label Baseline --label Optimized %s %s', :'TEST_RESULTS_BASELINE', :'TEST_RESULTS_OPTIMIZED') AS "DIFF_CMD" \gset
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 CREATE TABLE metrics(time timestamptz, device text, metric text, value float);
 SELECT create_hypertable('metrics', 'time');
@@ -89,7 +89,7 @@ SELECT
 
 SELECT format('\! diff -u --label Baseline --label Optimized %s %s', :'TEST_RESULTS_BASELINE_AFTER_RESTORE', :'TEST_RESULTS_OPTIMIZED_AFTER_RESTORE') AS "DIFF_CMD" \gset
 
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 \ir :TEST_QUERY_NAME
 

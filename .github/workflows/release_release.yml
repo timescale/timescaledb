@@ -1,0 +1,118 @@
+# Runs the mechanical part of creating a TimescaleDB release:
+# - create the public TimescaleDB tag
+# - create a public TimescaleDB draft release
+# - build and upload Windows binaries
+# - publish the public TimescaleDB release
+
+name: Release
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      # Ref in timescale/timescaledb to tag and release, usually the release
+      # branch (e.g. 2.30.x), not an already-created release tag.
+      timescaledb-ref:
+        description: "TimescaleDB branch/ref to tag."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+
+jobs:
+  create_release:
+    name: Release creation
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
+        with:
+          repository: timescale/timescaledb
+          ref: ${{ inputs.timescaledb-ref }}
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+
+      - name: Show checked out revision
+        run: git rev-parse HEAD
+
+      # git user config timescale-automation
+      - run: |
+          git config user.name "timescale-automation"
+          git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create tag
+        run: |
+          set -euo pipefail
+          tsdb_version="$(awk -F ' = ' '$1 == "version" { print $2 }' version.config)"
+
+          echo "Release version is ${{ inputs.version }}"
+          echo "Current local tsdb version is ${tsdb_version}"
+
+          if [ "${tsdb_version}" != "${{ inputs.version }}" ]; then
+            echo "::error::version.config must contain '${{ inputs.version }}', got '${tsdb_version}'"
+            exit 1
+          fi
+
+          git remote -v
+          git status
+
+          git tag "${{ inputs.version }}"
+          git push origin "${{ inputs.version }}"
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          release_date="$(date +%F)"
+          title="${{ inputs.version }} ($release_date)"
+
+          gh release create "${{ inputs.version }}" \
+            --repo timescale/timescaledb \
+            --draft \
+            --title "${title}" \
+            --notes "Draft release for ${{ inputs.version }}"
+
+  build_windows:
+    name: Build Windows binaries
+    needs: create_release
+    uses: timescale/release-build-scripts/.github/workflows/timescaledb-windows.yml@main
+    with:
+      version: ${{ inputs.version }}
+      upload-artifacts: true
+    secrets: inherit
+  publish_release:
+    needs:
+      - create_release
+      - build_windows
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    steps:
+      - name: Check Windows binaries are uploaded
+        env:
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "${{ inputs.version }}" --repo timescale/timescaledb --json assets --jq '.assets[].name')"
+
+          windows_assets="$(
+            grep -E '^timescaledb-postgresql-[0-9]+-windows-amd64\.zip$' <<< "${assets}" || true
+          )"
+
+          if [ -z "${windows_assets}" ]; then
+            echo "Windows binaries were not uploaded to the draft release, aborting."
+            exit 1
+          fi
+
+          echo "Found Windows assets: ${windows_assets}"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release edit "${{ inputs.version }}" \
+            --repo timescale/timescaledb \
+            --draft=false \
+            --latest

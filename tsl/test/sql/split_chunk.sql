@@ -751,3 +751,22 @@ ORDER BY schemaname, tablename;
 -- Cleanup
 DROP PUBLICATION test_split_pub CASCADE;
 DROP TABLE pub_split_test CASCADE;
+
+-- A sparse index rebuilt on a compressed chunk adds its metadata columns
+-- at the end of that relation, while the chunk created by a split gets them
+-- in the order of the settings. The sub-segments of a split segment must be
+-- converted to that layout like the segments routed whole.
+create table split_sparse(time timestamptz not null, device int, temp float8, status text);
+select create_hypertable('split_sparse', 'time', chunk_time_interval => interval '1 year');
+insert into split_sparse
+select t, d, d * 1.5, 'status_' || d
+from generate_series('2024-01-01'::timestamptz, '2024-01-20', '1 hour') t, generate_series(1, 3) d;
+alter table split_sparse set (timescaledb.compress, timescaledb.compress_segmentby = 'device', timescaledb.compress_orderby = 'time');
+select compress_chunk(c) from show_chunks('split_sparse') c;
+alter table split_sparse set (timescaledb.compress_index = 'firstlast("temp"), bloom("status")');
+select _timescaledb_functions.rebuild_sparse_index(c, true) from show_chunks('split_sparse') c;
+select show_chunks('split_sparse') chunk_to_split \gset
+call split_chunk_validate(:'chunk_to_split', split_at => '2024-01-10');
+select count(*), min(temp), max(temp) from split_sparse where status = 'status_2';
+select count(*) from split_sparse where temp > 4;
+drop table split_sparse;

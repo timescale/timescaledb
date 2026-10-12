@@ -1,0 +1,1 @@
+Fixes: #10454 SkipScan should skip on the correct index column in case of equivalent distinct columns

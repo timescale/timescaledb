@@ -118,6 +118,24 @@ ts_hyperspace_get_dimension_by_name(const Hyperspace *hs, DimensionType type, co
 	return ts_hyperspace_get_mutable_dimension_by_name((Hyperspace *) hs, type, name);
 }
 
+const Dimension *
+ts_hyperspace_get_dimension_by_attno(const Hyperspace *hs, DimensionType type, AttrNumber attno)
+{
+	int i;
+
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		const Dimension *dim = &hs->dimensions[i];
+
+		if ((type == DIMENSION_TYPE_ANY || dim->type == type) && dim->column_attno == attno)
+		{
+			return dim;
+		}
+	}
+
+	return NULL;
+}
+
 Dimension *
 ts_hyperspace_get_mutable_dimension(Hyperspace *hs, DimensionType type, Index n)
 {
@@ -1696,6 +1714,14 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 	DEBUG_WAITPOINT("add_dimension_ht_lock");
 
 	info->ht = ts_hypertable_cache_get_cache_and_entry(info->table_relid, CACHE_FLAG_NONE, &hcache);
+
+	if (ts_chunk_get_osm_chunk_id(info->ht->fd.id) != INVALID_CHUNK_ID)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("multiple dimensions not supported for hypertables with data tiering "
+						"enabled")));
+	}
 
 	if (info->num_slices_is_set && OidIsValid(info->chunk_interval.type))
 	{

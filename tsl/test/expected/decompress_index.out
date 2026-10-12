@@ -234,7 +234,7 @@ explain (buffers off, costs off) SELECT count(*) FROM reading r JOIN device d ON
  Aggregate
    ->  Nested Loop
          ->  Index Only Scan using device_pkey on device d
-         ->  Append
+         ->  Custom Scan (ChunkAppend) on reading r
                ->  Custom Scan (ColumnarScan) on _hyper_4_6_chunk r_1
                      ->  Index Scan using _hyper_4_6_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_4_6_chunk_compressed
                            Index Cond: ((device)::text = (d.name)::text)
@@ -250,7 +250,7 @@ explain (buffers off, costs off) SELECT count(*) FROM reading r JOIN device d ON
  Aggregate
    ->  Nested Loop
          ->  Index Only Scan using device_pkey on device d
-         ->  Append
+         ->  Custom Scan (ChunkAppend) on reading r
                ->  Custom Scan (ColumnarScan) on _hyper_4_6_chunk r_1
                      ->  Index Scan using _hyper_4_6_chunk_compressed_device__ts_meta_v2_first_time___idx on _hyper_4_6_chunk_compressed
                            Index Cond: ((device)::text = (d.name)::text)
@@ -353,7 +353,7 @@ explain (buffers off, costs off) SELECT count(*) FROM reading_mixed r JOIN devic
  Aggregate
    ->  Nested Loop
          ->  Seq Scan on device_mixed d
-         ->  Append
+         ->  Custom Scan (ChunkAppend) on reading_mixed r
                ->  Custom Scan (ColumnarScan) on _hyper_6_12_chunk r_1
                      Filter: (d.val = (device)::numeric)
                      ->  Index Scan using _hyper_6_12_chunk_compressed_ident_device__ts_meta_v2_first_idx on _hyper_6_12_chunk_compressed

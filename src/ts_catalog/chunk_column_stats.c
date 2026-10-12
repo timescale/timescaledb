@@ -611,15 +611,16 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 		compexprs = lappend(compexprs, ge_expr);
 	}
 
+	/* Use the inclusive max, the exclusive end can overflow or round down for dates */
 	if (info->range_end != PG_INT64_MAX)
 	{
 		A_Const *end_const = makeNode(A_Const);
 		memcpy(&end_const->val,
-			   makeString(ts_internal_to_time_string(info->range_end, col_type)),
+			   makeString(ts_internal_to_time_string(info->range_end - 1, col_type)),
 			   sizeof(end_const->val));
 		end_const->location = -1;
-		A_Expr *lt_expr = makeSimpleA_Expr(AEXPR_OP, "<", rangedef, (Node *) end_const, -1);
-		compexprs = lappend(compexprs, lt_expr);
+		A_Expr *le_expr = makeSimpleA_Expr(AEXPR_OP, "<=", rangedef, (Node *) end_const, -1);
+		compexprs = lappend(compexprs, le_expr);
 	}
 
 	constr = makeNode(Constraint);
@@ -1511,7 +1512,9 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
 
 	fill_form_from_slot(ti->slot, &fd);
 
-	constr = create_col_stats_check_constraint(&fd, checklist->main_table_relid, NULL);
+	/* Invalid ranges no longer cover all rows in the chunk */
+	constr =
+		fd.valid ? create_col_stats_check_constraint(&fd, checklist->main_table_relid, NULL) : NULL;
 
 	if (constr)
 	{
