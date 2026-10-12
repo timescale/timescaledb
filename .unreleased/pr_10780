@@ -1,0 +1,1 @@
+Implements: #10780 Report materialized and deleted row counts in the continuous aggregate refresh statistics

@@ -129,6 +129,7 @@ extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_debug_enable_columnarscan;
 extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
+extern TSDLLEXPORT bool ts_guc_enable_columnarscan_metadata_only;
 #if PG19_LT
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 #endif

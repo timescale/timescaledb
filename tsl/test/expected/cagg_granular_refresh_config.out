@@ -139,7 +139,7 @@ INSERT INTO conditions VALUES (now(), 'sensor_recent', 3);
 -- refresh window, so they are persisted and NOT consumed -- letting us observe
 -- exactly which tenants were tracked.
 CALL refresh_continuous_aggregate('cond_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2025 UTC, infinity ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- Expect sensor_a and sensor_b (late), never sensor_recent (gated out).
 SELECT tenant_id
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
@@ -275,7 +275,7 @@ CREATE MATERIALIZED VIEW metrics_hourly
   WITH NO DATA;
 --Initial refresh to set invalidation threshold forward.
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 69 batch(es) of 69 in window [ Fri Dec 13 00:00:00 2024 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 69 batch(es) of 69 in window [ Fri Dec 13 00:00:00 2024 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 2 row(s), deleted 0 row(s)
 ALTER MATERIALIZED VIEW metrics_hourly SET (timescaledb.enable_granular_refresh = true);
 --Check current cagg content
 SELECT tenant, bucket, avg FROM metrics_hourly ORDER BY tenant, bucket;
@@ -308,7 +308,7 @@ ORDER BY lowest_modified_value;
 --Refresh the range that covers the newly inserted rows. This also flush the corresponding
 --trackings.
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 2 row(s), deleted 2 row(s), partly granular
 -- Check the content of the trackings, we can see
 -- 'x' lies wholly below the granular window, so its tracking was not written
 SELECT tenant_id, seqnum
@@ -366,7 +366,7 @@ ORDER BY lowest_modified_value;
  Tue Jan 07 12:00:00 2025 UTC | Tue Jan 07 16:00:00 2025 UTC        |      2
 
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 3 row(s), deleted 1 row(s), partly granular
 -- The tracking row spans the window's left boundary, not splitted like the invalidation
 SELECT tenant_id, seqnum,
        _timescaledb_functions.to_timestamp(min_timestamp) AS min_ts,
@@ -406,7 +406,7 @@ ORDER BY 2;
 INSERT INTO metrics VALUES ('2025-01-10 10:00:00+00', 'p', 10),
                            ('2025-01-10 11:35:00+00', 'q', 20);
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 2 row(s), deleted 0 row(s), partly granular
 SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('p','q') ORDER BY tenant;
  tenant |            bucket            | avg 
 --------+------------------------------+-----
@@ -434,7 +434,7 @@ ORDER BY lowest_modified_value;
  Fri Jan 10 11:00:00 2025 UTC | Fri Jan 10 11:30:00 2025 UTC        |       
 
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 2 row(s), deleted 2 row(s), partly granular
 --cagg content should match the corresponding query from the raw table
 SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('p','q') ORDER BY tenant;
  tenant |            bucket            | avg 
@@ -471,7 +471,7 @@ CREATE MATERIALIZED VIEW metrics_daily
 SET timescaledb.current_timestamp_mock = '2025-01-10 12:30:00+00';
 --refresh to move invalidation threshold forward
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-30 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Fri Jan 10 12:00:00 2025 UTC, Sun Jan 12 04:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 4 batch(es) of 4 in window [ Fri Jan 10 12:00:00 2025 UTC, Sun Jan 12 04:00:00 2025 UTC ], materialized 0 row(s), deleted 0 row(s)
 --print the bucket that contain now()
 SELECT '2025-01-10 12:30:00+00'::timestamptz - INTERVAL '3 days' AS window_start,
        time_bucket('1 hour', '2025-01-10 12:30:00+00'::timestamptz - INTERVAL '3 days')
@@ -501,13 +501,13 @@ ORDER BY lowest_modified_value;
             lowest            |              greatest               | seqnum 
 ------------------------------+-------------------------------------+--------
  Tue Jan 07 11:10:00 2025 UTC | Tue Jan 07 12:29:59.999999 2025 UTC |       
- Tue Jan 07 12:30:00 2025 UTC | Tue Jan 07 12:50:00 2025 UTC        |      9
+ Tue Jan 07 12:30:00 2025 UTC | Tue Jan 07 12:50:00 2025 UTC        |      6
 
 -- Refreshing the other cagg to move invalidations from hypertable inval. log to
 -- cagg invalidation log, expanding both halves to bucket
 -- boundaries in metrics_hourly's log without consuming them.
 CALL refresh_continuous_aggregate('metrics_daily', '2020-01-01', '2025-01-10 12:30:00+00');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Dec 13 00:00:00 2024 UTC, Fri Jan 10 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Dec 13 00:00:00 2024 UTC, Fri Jan 10 00:00:00 2025 UTC ], materialized 5 row(s), deleted 0 row(s)
 -- The two halves now overlap at the 12:00 bucket, one untracked and one carrying
 -- the seqnum: that bucket gets a full pass and a tenant-scoped pass.
 SELECT CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
@@ -526,11 +526,11 @@ ORDER BY lowest_modified_value, seqnum;
 ------------------------------+-------------------------------------+--------
  -infinity                    | Tue Dec 31 23:59:59.999999 2019 UTC |       
  Tue Jan 07 11:00:00 2025 UTC | Tue Jan 07 12:59:59.999999 2025 UTC |       
- Tue Jan 07 12:00:00 2025 UTC | Tue Jan 07 12:59:59.999999 2025 UTC |      9
+ Tue Jan 07 12:00:00 2025 UTC | Tue Jan 07 12:59:59.999999 2025 UTC |      6
  Sun Jan 12 04:00:00 2025 UTC | infinity                            |       
 
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:30:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:30:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:30:00 2025 UTC ], materialized 3 row(s), deleted 1 row(s), partly granular
 -- m is recomputed by the full pass over the bucket, n by the tenant-scoped pass
 -- over the same bucket. Both should match the raw data.
 SELECT tenant, bucket, avg FROM metrics_hourly WHERE tenant IN ('m','n') ORDER BY tenant;
@@ -583,11 +583,11 @@ ORDER BY lowest_modified_value;
             lowest            |              greatest               | seqnum 
 ------------------------------+-------------------------------------+--------
  Tue Jan 07 11:00:00 2025 UTC | Tue Jan 07 12:29:59.999999 2025 UTC |       
- Tue Jan 07 12:30:00 2025 UTC | Fri Jan 10 11:29:59.999999 2025 UTC |     10
+ Tue Jan 07 12:30:00 2025 UTC | Fri Jan 10 11:29:59.999999 2025 UTC |      7
  Fri Jan 10 11:30:00 2025 UTC | Fri Jan 10 11:45:00 2025 UTC        |       
 
 CALL refresh_continuous_aggregate('metrics_hourly', '2020-01-01', '2025-01-10 12:30:00+00');
-NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Tue Jan 07 11:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Tue Jan 07 11:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 6 row(s), deleted 3 row(s), partly granular
 -- 'before' and 'after' are outside the window, so neither was tracked.
 SELECT tenant_id, seqnum
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
@@ -598,7 +598,7 @@ WHERE hypertable_id = (
 ORDER BY seqnum, tenant_id;
  tenant_id | seqnum 
 -----------+--------
- inside    |     10
+ inside    |      7
 
 --cagg content should match the corresponding query from the raw table
 SELECT tenant, bucket, avg FROM metrics_hourly
@@ -665,7 +665,7 @@ CREATE MATERIALIZED VIEW crossed_hourly
   GROUP BY bucket, tenant
   WITH NO DATA;
 CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-15 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 72 batch(es) of 72 in window [ Tue Feb 11 00:00:00 2025 UTC, Thu Mar 13 00:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 72 batch(es) of 72 in window [ Tue Feb 11 00:00:00 2025 UTC, Thu Mar 13 00:00:00 2025 UTC ], materialized 2 row(s), deleted 0 row(s)
 ALTER MATERIALIZED VIEW crossed_hourly SET (timescaledb.enable_granular_refresh = true);
 -- One transaction, one chunk, one tenant on either side of the crossed bounds.
 -- The first tracked write seeds the tracker, which is where the crossed window
@@ -696,7 +696,7 @@ ORDER BY lowest_modified_value;
  Fri Feb 14 10:00:00 2025 UTC | Sat Feb 15 14:00:00 2025 UTC |       
 
 CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-15 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Feb 14 10:00:00 2025 UTC, Sat Feb 15 16:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Feb 14 10:00:00 2025 UTC, Sat Feb 15 16:00:00 2025 UTC ], materialized 2 row(s), deleted 2 row(s), no granular refresh
 -- Nothing is tracked while the window is empty.
 SELECT tenant_id, seqnum
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
@@ -764,7 +764,7 @@ CREATE MATERIALIZED VIEW crossed_hourly
   GROUP BY bucket, tenant
   WITH NO DATA;
 CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-09 07:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Mar 07 19:00:00 2025 EST, Sun Mar 09 01:00:00 2025 EST ]
+NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ Fri Mar 07 19:00:00 2025 EST, Sun Mar 09 01:00:00 2025 EST ], materialized 2 row(s), deleted 0 row(s)
 ALTER MATERIALIZED VIEW crossed_hourly SET (timescaledb.enable_granular_refresh = true);
 SET client_min_messages TO LOG;
 BEGIN;
@@ -791,7 +791,7 @@ ORDER BY lowest_modified_value;
  Sat Mar 08 02:30:00 2025 EST | Sat Mar 08 04:00:00 2025 EST |       
 
 CALL refresh_continuous_aggregate('crossed_hourly', '2020-01-01', '2025-03-09 07:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 EST, Sun Mar 09 03:00:00 2025 EDT ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 EST, Sun Mar 09 03:00:00 2025 EDT ], materialized 2 row(s), deleted 2 row(s), no granular refresh
 SELECT tenant_id, seqnum
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
 WHERE hypertable_id = (
@@ -979,7 +979,7 @@ CREATE MATERIALIZED VIEW thresholds_hourly
   WITH NO DATA;
 -- Initial refresh to carry the invalidation threshold past the writes below.
 CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Wed Jan 08 00:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Wed Jan 08 00:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 2 row(s), deleted 0 row(s)
 ALTER MATERIALIZED VIEW thresholds_hourly SET (timescaledb.enable_granular_refresh = true);
 -- Under W1. This is also the first tracked write, so it creates the tracker.
 INSERT INTO thresholds VALUES ('2025-01-08 12:00:00+00', 'a', 3);
@@ -1004,7 +1004,7 @@ ORDER BY lowest_modified_value;
  Wed Jan 08 12:00:00 2025 UTC | Wed Jan 08 12:00:00 2025 UTC |      1
 
 CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 1 row(s), deleted 1 row(s), fully granular
 -- Narrow the window to W2. Only the catalog changes here.
 ALTER TABLE thresholds SET (timescaledb.cagg_granular_refresh_start_offset = '1 day');
 -- The tracker is still gating on W1.
@@ -1032,7 +1032,7 @@ ORDER BY lowest_modified_value;
 
 -- The flush in this refresh is what installs W2 on the next generation.
 CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 1 row(s), deleted 1 row(s), fully granular
 SELECT _timescaledb_functions.to_timestamp(late_threshold_start) AS generation_window_start,
        _timescaledb_functions.to_timestamp(late_threshold_end)   AS generation_window_end
 FROM _timescaledb_functions.hypertable_get_tenant_tracking_info('thresholds');
@@ -1056,7 +1056,7 @@ ORDER BY lowest_modified_value;
  Wed Jan 08 12:00:00 2025 UTC | Wed Jan 08 12:00:00 2025 UTC |       
 
 CALL refresh_continuous_aggregate('thresholds_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 01 00:00:00 2020 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 1 row(s), deleted 1 row(s), no granular refresh
 -- Sanity check: cagg content should match the corresponding query from the raw table
 SELECT tenant, bucket, avg FROM thresholds_hourly ORDER BY tenant, bucket;
  tenant |            bucket            | avg  
@@ -1106,7 +1106,7 @@ CREATE MATERIALIZED VIEW relabel_hourly
   WITH NO DATA;
 -- Initial refresh to carry the invalidation threshold past the writes below.
 CALL refresh_continuous_aggregate('relabel_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Wed Jan 01 00:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 5 batch(es) of 5 in window [ Wed Jan 01 00:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 2 row(s), deleted 0 row(s)
 ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh = true);
 -- Inside the window, so tracked under the sensor_id column.
 INSERT INTO relabel VALUES ('2025-01-07 20:00:00+00', 'sensor_x', 'east', 1),
@@ -1132,7 +1132,7 @@ ORDER BY lowest_modified_value;
 -- Refresh a window that covers the untracked write but not the
 -- tracked one, so the flush persists the tracking row but not consumes its invalidation.
 CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jan 10 11:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jan 10 11:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 1 row(s), deleted 0 row(s), no granular refresh
 -- The tenant ids here are sensor_id values.
 SELECT tenant_id, seqnum
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
@@ -1151,7 +1151,7 @@ ORDER BY seqnum, tenant_id;
 INSERT INTO relabel VALUES ('2025-01-09 09:00:00+00', 'sensor_c', 'north', 3);
 -- Covers the Jan 9 (sensor_c)write but not the earlier ones.
 CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-09 09:00:00+00', '2025-01-09 10:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Thu Jan 09 09:00:00 2025 UTC, Thu Jan 09 10:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Thu Jan 09 09:00:00 2025 UTC, Thu Jan 09 10:00:00 2025 UTC ], materialized 2 row(s), deleted 1 row(s), partly granular
 --Check the tracking. Note that the sensor_c tracking is still there because the GC has not removed it yet.
 SELECT tenant_id, seqnum
 FROM _timescaledb_catalog.continuous_aggs_tenant_tracking
@@ -1228,7 +1228,7 @@ ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh 
 -- Consumes the Jan 8 invalidation but not the Jan 7 one, so seqnum 1 is still
 -- in the log.
 CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-08 12:00:00+00', '2025-01-08 13:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 08 12:00:00 2025 UTC, Wed Jan 08 13:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Wed Jan 08 12:00:00 2025 UTC, Wed Jan 08 13:00:00 2025 UTC ], materialized 2 row(s), deleted 1 row(s), no granular refresh
 --should see the Jan 8 row
 SELECT bucket, sensor_id, region, avg
 FROM relabel_hourly
@@ -1248,7 +1248,7 @@ ORDER BY bucket, sensor_id;
 INSERT INTO relabel VALUES ('2025-01-08 18:00:00+00', 'sensor_e', 'north', 3);
 INSERT INTO relabel VALUES ('2025-01-10 11:45:00+00', 'sensor_d', 'south', 4);
 CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jan 10 11:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jan 10 11:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 2 row(s), deleted 1 row(s), no granular refresh
 -- The tenant ids are region values now. The seqnum is one above the highest
 -- the logs still hold, so it cannot collide with the invalidation's seqnums
 -- left from the previous configuration.
@@ -1292,7 +1292,7 @@ ALTER MATERIALIZED VIEW relabel_hourly SET (timescaledb.enable_granular_refresh 
 INSERT INTO relabel VALUES ('2025-01-08 21:00:00+00', 'sensor_g', 'east', 6);
 INSERT INTO relabel VALUES ('2025-01-10 11:50:00+00', 'sensor_h', 'south', 7);
 CALL refresh_continuous_aggregate('relabel_hourly', '2025-01-10 11:00:00+00', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jan 10 11:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Fri Jan 10 11:00:00 2025 UTC, Fri Jan 10 12:00:00 2025 UTC ], materialized 3 row(s), deleted 2 row(s), no granular refresh
 -- Check the new trackings. The seqnum of the hypertable invalidation log counts too:
 -- the new seqnum should be above that too.
 SELECT tenant_id, seqnum
@@ -1307,7 +1307,7 @@ ORDER BY seqnum, tenant_id;
  east      |      4
 
 CALL refresh_continuous_aggregate('relabel_hourly', '2020-01-01', '2025-01-10 12:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Tue Jan 07 00:00:00 2025 UTC, Fri Jan 10 08:00:00 2025 UTC ]
+NOTICE:  continuous aggregate refresh: processed 8 batch(es) of 8 in window [ Tue Jan 07 00:00:00 2025 UTC, Fri Jan 10 08:00:00 2025 UTC ], materialized 8 row(s), deleted 4 row(s), partly granular
 SELECT bucket, sensor_id, region, avg
 FROM relabel_hourly
 ORDER BY bucket, sensor_id;

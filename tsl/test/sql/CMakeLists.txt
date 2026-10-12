@@ -106,6 +106,7 @@ set(TEST_TEMPLATES
     cagg_watermark.sql.in
     columnar_index_scan.sql.in
     columnar_scan_cost.sql.in
+    columnar_scan_metadata_only.sql.in
     compress_sort_transform.sql.in
     compress_bloom_sparse.sql.in
     compress_observ.sql.in
@@ -143,7 +144,7 @@ list(
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
-       cagg_granular_refresh_config.sql)
+       cagg_granular_refresh_config.sql cagg_granular_refresh_policies.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
