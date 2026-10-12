@@ -4,14 +4,14 @@
 /chunk_utils_internal-*.sql
 /columnar_index_scan-*.sql
 /columnar_scan_cost-*.sql
+/columnar_scan_metadata_only-*.sql
 /compress_bloom_sparse-*.sql
 /compress_observ-*.sql
 /compress_sort_transform-*.sql
 /compression*-1[3-9].sql
-/deferredchunkscan-*.sql
+/deferredchunkappend-*.sql
 /explain_wal-*.sql
 /foreign_keys_test-*.sql
-/memoize-*.sql
 /merge_append_partially_compressed-*.sql
 /modify_exclusion-*.sql
 /ordered_append-*.sql

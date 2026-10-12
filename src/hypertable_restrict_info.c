@@ -361,8 +361,8 @@ typedef DimensionValues *(*get_dimension_values)(Const *c, bool use_or);
  */
 static bool
 hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root, Var *v,
-								  Expr *expr, Oid op_oid, get_dimension_values func_get_dim_values,
-								  bool use_or)
+								  Expr *expr, Oid op_oid, Oid inputcollid,
+								  get_dimension_values func_get_dim_values, bool use_or)
 {
 	DimensionRestrictInfo *dri;
 	Const *c;
@@ -388,6 +388,12 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	}
 
 	c = (Const *) expr;
+
+	if (IS_CLOSED_DIMENSION(dri->dimension) &&
+		!ts_partitioning_collation_matches(inputcollid, v->varcollid))
+	{
+		return false;
+	}
 
 	/* quick check for a NULL constant */
 	if (c->constisnull)
@@ -503,7 +509,7 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	{
 		proven_true_by_hri = dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
 																strategy,
-																c->constcollid,
+																v->varcollid,
 																dimvalues);
 	}
 	else
@@ -523,7 +529,7 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 				/* Apply partitioning function first, then convert result to int64 */
 				Oid restype;
 				value = ts_dimension_transform_value(dri->dimension,
-													 c->constcollid,
+													 v->varcollid,
 													 value,
 													 valuetype,
 													 &restype);
@@ -621,6 +627,7 @@ ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo 
 
 	get_dimension_values value_func;
 	bool use_or;
+	Oid inputcollid;
 
 	switch (nodeTag(e))
 	{
@@ -628,12 +635,14 @@ ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo 
 		{
 			value_func = dimension_values_create_from_single_element;
 			use_or = false;
+			inputcollid = castNode(OpExpr, e)->inputcollid;
 			break;
 		}
 		case T_ScalarArrayOpExpr:
 		{
 			value_func = dimension_values_create_from_array;
 			use_or = castNode(ScalarArrayOpExpr, e)->useOr;
+			inputcollid = castNode(ScalarArrayOpExpr, e)->inputcollid;
 			break;
 		}
 		default:
@@ -641,7 +650,14 @@ ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo 
 			return false;
 	}
 
-	return hypertable_restrict_info_add_expr(hri, root, var, arg_value, opno, value_func, use_or);
+	return hypertable_restrict_info_add_expr(hri,
+											 root,
+											 var,
+											 arg_value,
+											 opno,
+											 inputcollid,
+											 value_func,
+											 use_or);
 }
 
 void
@@ -1012,21 +1028,12 @@ chunk_cmp_reverse(const void *c1, const void *c2)
  *
  * if "chunks" is NULL, we get all the chunks from the catalog. Otherwise we
  * restrict ourselves to the passed in chunks list.
- *
- * nested_oids is a list of lists, chunks that occupy the same time slice will be
- * in the same list. In the list [[1,2,3],[4,5,6]] chunks 1, 2 and 3 are space partitions of
- * the same time slice and 4, 5 and 6 are space partitions of the next time slice.
- *
  */
 Chunk **
 ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hypertable *ht,
 											   bool include_osm, Chunk **chunks, bool reverse,
-											   List **nested_oids, unsigned int *num_chunks)
+											   unsigned int *num_chunks)
 {
-	List *slot_chunk_oids = NIL;
-	DimensionSlice *slice = NULL;
-	unsigned int i;
-
 	if (chunks == NULL)
 	{
 		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, include_osm, num_chunks);
@@ -1047,30 +1054,6 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 	else
 	{
 		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp);
-	}
-
-	for (i = 0; i < *num_chunks; i++)
-	{
-		Chunk *chunk = chunks[i];
-
-		if (NULL != slice && ts_dimension_slice_cmp(slice, chunk->cube->slices[0]) != 0 &&
-			slot_chunk_oids != NIL)
-		{
-			*nested_oids = lappend(*nested_oids, slot_chunk_oids);
-			slot_chunk_oids = NIL;
-		}
-
-		if (NULL != nested_oids)
-		{
-			slot_chunk_oids = lappend_oid(slot_chunk_oids, chunk->fd.relid);
-		}
-
-		slice = chunk->cube->slices[0];
-	}
-
-	if (slot_chunk_oids != NIL)
-	{
-		*nested_oids = lappend(*nested_oids, slot_chunk_oids);
 	}
 
 	return chunks;

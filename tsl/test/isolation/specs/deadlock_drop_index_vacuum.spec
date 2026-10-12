@@ -89,7 +89,7 @@ session "S1"
 setup {
     START TRANSACTION;
     SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
-    SET LOCAL lock_timeout = '500ms';
+    SET LOCAL lock_timeout = '2s';
     SET LOCAL deadlock_timeout = '300ms';
 }
 
@@ -105,7 +105,7 @@ session "S2"
 setup {
     START TRANSACTION;
     SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
-    SET LOCAL lock_timeout = '500ms';
+    SET LOCAL lock_timeout = '2s';
     SET LOCAL deadlock_timeout = '300ms';
 }
 

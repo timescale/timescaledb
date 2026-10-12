@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-SET timescaledb.enable_deferred_chunk_scan TO off;
+SET timescaledb.enable_deferred_chunk_append TO off;
 -- Test the behavior of bulk decompression in various queries with small LIMIT.
 -- Eventually we expect the row-by-row decompression to be preferred in some
 -- queries, but at the moment this is not implemented.
@@ -404,7 +404,7 @@ LIMIT 1::numeric;
                      Reverse: true
                      Bulk Decompression: false
                      ->  Index Scan Backward using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _timescaledb_internal._hyper_X_X_chunk_compressed (actual rows=1.00 loops=1)
-                           Output: _hyper_X_X_chunk_compressed."time", _hyper_X_X_chunk_compressed._ts_meta_v2_last_time, _hyper_X_X_chunk_compressed._ts_meta_v2_first_time, _hyper_X_X_chunk_compressed.device_id, _hyper_X_X_chunk_compressed.v0, _hyper_X_X_chunk_compressed._ts_meta_count
+                           Output: _hyper_X_X_chunk_compressed."time", _hyper_X_X_chunk_compressed._ts_meta_v2_last_time, _hyper_X_X_chunk_compressed._ts_meta_v2_first_time, _hyper_X_X_chunk_compressed.device_id, _hyper_X_X_chunk_compressed.v0, _hyper_X_X_chunk_compressed._ts_meta_min_1, _hyper_X_X_chunk_compressed._ts_meta_max_1, _hyper_X_X_chunk_compressed._ts_meta_count
                            Index Cond: (_hyper_X_X_chunk_compressed.device_id = 1)
                ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0
@@ -445,7 +445,7 @@ LIMIT 1.1;
                      Reverse: true
                      Bulk Decompression: false
                      ->  Index Scan Backward using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _timescaledb_internal._hyper_X_X_chunk_compressed (actual rows=1.00 loops=1)
-                           Output: _hyper_X_X_chunk_compressed."time", _hyper_X_X_chunk_compressed._ts_meta_v2_last_time, _hyper_X_X_chunk_compressed._ts_meta_v2_first_time, _hyper_X_X_chunk_compressed.device_id, _hyper_X_X_chunk_compressed.v0, _hyper_X_X_chunk_compressed._ts_meta_count
+                           Output: _hyper_X_X_chunk_compressed."time", _hyper_X_X_chunk_compressed._ts_meta_v2_last_time, _hyper_X_X_chunk_compressed._ts_meta_v2_first_time, _hyper_X_X_chunk_compressed.device_id, _hyper_X_X_chunk_compressed.v0, _hyper_X_X_chunk_compressed._ts_meta_min_1, _hyper_X_X_chunk_compressed._ts_meta_max_1, _hyper_X_X_chunk_compressed._ts_meta_count
                            Index Cond: (_hyper_X_X_chunk_compressed.device_id = 1)
                ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0
@@ -486,7 +486,7 @@ LIMIT 1.1::float;
                      Reverse: true
                      Bulk Decompression: false
                      ->  Index Scan Backward using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _timescaledb_internal._hyper_X_X_chunk_compressed (actual rows=1.00 loops=1)
-                           Output: _hyper_X_X_chunk_compressed."time", _hyper_X_X_chunk_compressed._ts_meta_v2_last_time, _hyper_X_X_chunk_compressed._ts_meta_v2_first_time, _hyper_X_X_chunk_compressed.device_id, _hyper_X_X_chunk_compressed.v0, _hyper_X_X_chunk_compressed._ts_meta_count
+                           Output: _hyper_X_X_chunk_compressed."time", _hyper_X_X_chunk_compressed._ts_meta_v2_last_time, _hyper_X_X_chunk_compressed._ts_meta_v2_first_time, _hyper_X_X_chunk_compressed.device_id, _hyper_X_X_chunk_compressed.v0, _hyper_X_X_chunk_compressed._ts_meta_min_1, _hyper_X_X_chunk_compressed._ts_meta_max_1, _hyper_X_X_chunk_compressed._ts_meta_count
                            Index Cond: (_hyper_X_X_chunk_compressed.device_id = 1)
                ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0

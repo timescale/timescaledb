@@ -6,7 +6,7 @@
 -- path that combines the uncompressed and compressed parts of a chunk.
 set work_mem to '64MB';
 set enable_hashagg to off;
-set timescaledb.enable_deferred_chunk_scan TO false;
+set timescaledb.enable_deferred_chunk_append TO false;
 \set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 CREATE TABLE ht_metrics_partially_compressed(time timestamptz, device int, value float);
 SELECT create_hypertable('ht_metrics_partially_compressed','time');

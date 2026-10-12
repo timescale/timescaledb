@@ -1,0 +1,81 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_wp_on s1_recompress s2_update s3_wp_off s1_status s1_count
+step s3_wp_on: SELECT debug_waitpoint_enable('recompress_after_delete');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_recompress: 
+    SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(c)) AS recompressed
+    FROM show_chunks('metrics') c;
+ <waiting ...>
+step s2_update: 
+    UPDATE metrics SET value = -2.0 WHERE value = 1.0;
+ <waiting ...>
+step s3_wp_off: SELECT debug_waitpoint_release('recompress_after_delete');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_recompress: <... completed>
+recompressed
+------------
+           1
+
+step s2_update: <... completed>
+ERROR:  could not modify row in chunk "_hyper_X_X_chunk" because it was concurrently moved to the columnstore
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(c) AS status FROM show_chunks('metrics') c;
+
+status              
+--------------------
+{COMPRESSED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  121
+
+
+starting permutation: s3_wp_on s1_recompress s2_delete s3_wp_off s1_status s1_count
+step s3_wp_on: SELECT debug_waitpoint_enable('recompress_after_delete');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_recompress: 
+    SELECT count(_timescaledb_functions.recompress_chunk_segmentwise(c)) AS recompressed
+    FROM show_chunks('metrics') c;
+ <waiting ...>
+step s2_delete: 
+    DELETE FROM metrics WHERE value = 1.0;
+ <waiting ...>
+step s3_wp_off: SELECT debug_waitpoint_release('recompress_after_delete');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_recompress: <... completed>
+recompressed
+------------
+           1
+
+step s2_delete: <... completed>
+ERROR:  could not modify row in chunk "_hyper_X_X_chunk" because it was concurrently moved to the columnstore
+step s1_status: 
+    SELECT _timescaledb_functions.chunk_status_text(c) AS status FROM show_chunks('metrics') c;
+
+status              
+--------------------
+{COMPRESSED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+  121
+

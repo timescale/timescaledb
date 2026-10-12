@@ -64,9 +64,6 @@ BEGIN
 END
 $$;
 
-ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
-ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
-
 -- Add chunk_id to `_timescaledb_catalog.dimension_slice`
 CREATE TABLE _timescaledb_internal.tmp_dimension_slice AS
     SELECT * FROM _timescaledb_catalog.dimension_slice;

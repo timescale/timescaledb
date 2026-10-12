@@ -2198,9 +2198,9 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   106 | XX001       | XX001
+   108 | XX001       | XX001
+     8 | 22021       | 22021
      6 | 08P01       | 08P01
-     6 | 22021       | 22021
      5 | true        | true
      1 | XX001       | true
      1 | false       | false

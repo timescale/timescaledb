@@ -121,7 +121,7 @@ SHOW timescaledb.enable_optimizations;
 :PREFIX SELECT * FROM hyper_1 ORDER BY "time" DESC limit 2;
 --- QUERY PLAN ---
  Limit
-   ->  Custom Scan (DeferredChunkScan) on hyper_1
+   ->  Custom Scan (DeferredChunkAppend) on hyper_1
          Order: "time" DESC
 
 :PREFIX SELECT * FROM hyper_timefunc ORDER BY unix_to_timestamp("time") DESC limit 2;

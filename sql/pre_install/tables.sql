@@ -58,7 +58,7 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   CONSTRAINT hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
   CONSTRAINT hypertable_schema_name_check CHECK (schema_name != '_timescaledb_catalog'),
   CONSTRAINT hypertable_num_dimensions_check CHECK (num_dimensions > 0)
-) WITH (user_catalog_table = true);
+);
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
 
@@ -129,7 +129,7 @@ CREATE TABLE _timescaledb_catalog.chunk (
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_relid_key UNIQUE (relid),
   CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
-) WITH (user_catalog_table = true);
+);
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 
 CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
@@ -300,7 +300,7 @@ CREATE TABLE _timescaledb_internal.bgw_policy_chunk_stats (
   num_times_job_run integer,
   last_time_job_run timestamptz,
   -- table constraints
-  CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key UNIQUE (job_id, chunk_id),
+  CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key PRIMARY KEY (job_id, chunk_id),
   CONSTRAINT bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   CONSTRAINT bgw_policy_chunk_stats_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_catalog.bgw_job (id) ON DELETE CASCADE
 );

@@ -30,7 +30,7 @@
  */
 
 #define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
-#define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
+#define is_supported_pg_version_17(version) ((version >= 170003) && (version < 180000))
 #define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
 #define is_supported_pg_version_19(version) ((version >= 190000) && (version < 200000))
 
@@ -522,12 +522,6 @@ murmurhash64(uint64 data)
 	vacuum_is_relation_owner(relid, reltuple, options)
 
 /*
- * 'BackendIdGetProc' was renamed to 'ProcNumberGetProc' in 024c52111757.
- * Also 'backendId' was renamed to 'procNumber'
- */
-#define VirtualTransactionGetProcCompat(vxid) BackendIdGetProc((vxid)->backendId)
-
-/*
  * 'opclassOptions' argument was added in 784162357130.
  * Previously indexInfo->ii_OpclassOptions was used instead.
  * On top of that 'stattargets' argument was added in 6a004f1be87d.
@@ -632,34 +626,14 @@ murmurhash64(uint64 data)
 
 #if PG17_LT
 /* 'mergeActions' argument was added in 5f2e179bd31e */
-#define CheckValidResultRelCompat(resultRelInfo,                                                   \
-								  operation,                                                       \
-								  onConflictAction,                                                \
-								  mergeActions,                                                    \
-								  mtnode)                                                          \
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
 	CheckValidResultRel(resultRelInfo, operation)
 #elif PG18_LT
-#define CheckValidResultRelCompat(resultRelInfo,                                                   \
-								  operation,                                                       \
-								  onConflictAction,                                                \
-								  mergeActions,                                                    \
-								  mtnode)                                                          \
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
 	CheckValidResultRel(resultRelInfo, operation, mergeActions)
-#elif PG19_LT
-#define CheckValidResultRelCompat(resultRelInfo,                                                   \
-								  operation,                                                       \
-								  onConflictAction,                                                \
-								  mergeActions,                                                    \
-								  mtnode)                                                          \
-	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions)
 #else
-/* 'mtnode' argument was added in PG19 */
-#define CheckValidResultRelCompat(resultRelInfo,                                                   \
-								  operation,                                                       \
-								  onConflictAction,                                                \
-								  mergeActions,                                                    \
-								  mtnode)                                                          \
-	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions, mtnode)
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions)
 #endif
 
 #if PG17_LT
@@ -704,18 +678,6 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   nkeys,                                                              \
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys, 0)
-#endif
-
-/* Copied from PG17. We can remove it once we deprecate older versions. */
-#if PG17_LT
-static inline void
-initReadOnlyStringInfo(StringInfo str, char *data, int len)
-{
-	str->data = data;
-	str->len = len;
-	str->maxlen = 0; /* read-only */
-	str->cursor = 0;
-}
 #endif
 
 /*

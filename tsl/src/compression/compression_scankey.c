@@ -33,7 +33,7 @@ static bool create_segment_filter_scankey(Relation in_rel, char *segment_filter_
  * and (key <= NULL) returns True for !nulls_first (i.e. for NULLS LAST).
  */
 bool
-slot_key_test(TupleTableSlot *compressed_slot, ScanKey key, bool nulls_first)
+slot_key_test(TupleTableSlot *compressed_slot, ScanKey key, bool null_slot_attribute_passes_test)
 {
 	/* No need to get the datum if we are only checking for NULL key */
 	if (key->sk_flags & SK_ISNULL)
@@ -47,21 +47,7 @@ slot_key_test(TupleTableSlot *compressed_slot, ScanKey key, bool nulls_first)
 
 	if (is_null)
 	{
-		/* NULL < key i.e. NULL sorts before key argument */
-		if (nulls_first && (key->sk_strategy == BTLessStrategyNumber ||
-							key->sk_strategy == BTLessEqualStrategyNumber))
-		{
-			return true;
-		}
-
-		/* NULL > key i.e. NULL sorts after key argument */
-		if (!nulls_first && (key->sk_strategy == BTGreaterStrategyNumber ||
-							 key->sk_strategy == BTGreaterEqualStrategyNumber))
-		{
-			return true;
-		}
-
-		return false;
+		return null_slot_attribute_passes_test;
 	}
 
 	return DatumGetBool(FunctionCall2Coll(&key->sk_func, key->sk_collation, val, key->sk_argument));
@@ -151,8 +137,7 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 							   attno,
 							   BTEqualStrategyNumber,
 							   atttypid,
-							   TupleDescAttr(out_desc, AttrNumberGetAttrOffset(attno))
-								   ->attcollation,
+							   constraints->key_collations[attno],
 							   get_opcode(opr),
 							   isnull ? 0 : value);
 	}
@@ -167,8 +152,9 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
  */
 ScanKeyData *
 build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
-					CompressionSettings *settings, Bitmapset *key_columns, Bitmapset **null_columns,
-					TupleTableSlot *slot, int *num_scankeys, AttrNumber **slot_attnos)
+					CompressionSettings *settings, Bitmapset *key_columns, Oid *key_collations,
+					Bitmapset **null_columns, TupleTableSlot *slot, int *num_scankeys,
+					AttrNumber **slot_attnos)
 {
 	int key_index = 0;
 	ScanKeyData *scankeys = NULL;
@@ -230,14 +216,19 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 												  false))
 				{
 					(*slot_attnos)[key_index - 1] = ht_attno;
+					/* compare with the collation of the unique index, not of the column */
+					scankeys[key_index - 1].sk_collation = key_collations[attno];
 				}
 			}
 			if (ts_array_is_member(settings->fd.orderby, attname))
 			{
-				/* Cannot optimize orderby columns with NULL values since those
-				 * are not visible in metadata
+				/*
+				 * Cannot optimize orderby columns with NULL values since those
+				 * are not visible in metadata. The min/max metadata follow the
+				 * column collation and cannot filter for a non-deterministic
+				 * unique index collation.
 				 */
-				if (isnull)
+				if (isnull || !collation_is_deterministic(key_collations[attno]))
 				{
 					continue;
 				}
@@ -340,7 +331,7 @@ build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys)
  */
 ScanKeyData *
 build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation out_rel,
-								Bitmapset *key_columns, TupleTableSlot *slot,
+								Bitmapset *key_columns, Oid *key_collations, TupleTableSlot *slot,
 								Relation *result_index_rel, Bitmapset **index_columns,
 								int *num_scan_keys, AttrNumber **slot_attnos)
 {
@@ -396,6 +387,14 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 
 			/* Make sure we find columns in key columns in order to select the right index */
 			if (!bms_is_member(column_attno, key_columns))
+			{
+				break;
+			}
+
+			Oid index_collation = attnumCollationId(index_rel, idx_attnum);
+			if (index_collation != key_collations[column_attno] &&
+				!(collation_is_deterministic(index_collation) &&
+				  collation_is_deterministic(key_collations[column_attno])))
 			{
 				break;
 			}

@@ -348,7 +348,10 @@ COMMIT;
 -- Test that newly created chunks are automatically added to publications
 SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.enable_chunk_auto_publication = true;
+-- This suite runs at wal_level = replica, so hide the warning about that
+SET client_min_messages TO error;
 CREATE PUBLICATION test_chunk_pub FOR TABLE chunkapi;
+RESET client_min_messages;
 -- Verify existing chunks are in the publication
 SELECT COUNT(*) as initial_chunk_count
 FROM pg_publication_tables

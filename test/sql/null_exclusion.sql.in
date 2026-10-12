@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SET timescaledb.enable_deferred_chunk_scan TO false;
+SET timescaledb.enable_deferred_chunk_append TO false;
 
 create table metrics(ts timestamp, id int, value float);
 select create_hypertable('metrics', 'ts');

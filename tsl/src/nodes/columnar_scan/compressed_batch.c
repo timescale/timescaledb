@@ -178,9 +178,64 @@ decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnul
 	column->decompression_type = DT_Scalar;
 	column->buffers[0] = DatumGetPointer(BoolGetDatum(isnull));
 	column->buffers[1] = DatumGetPointer(value);
+	column->by_ref_storage = DatumGetPointer(value);
 
 	*column->output_isnull = isnull;
 	*column->output_value = value;
+}
+
+void
+compressed_column_values_from_arrow(CompressedColumnValues *column_values, ArrowArray *arrow,
+									Oid typid, int value_bytes, MemoryContext text_context)
+{
+	column_values->arrow = arrow;
+
+	if (value_bytes > 0)
+	{
+		/* Fixed-width column. */
+		column_values->decompression_type = value_bytes;
+		column_values->buffers[0] = arrow->buffers[0];
+		column_values->buffers[1] = arrow->buffers[1];
+		column_values->buffers[2] = NULL;
+		column_values->buffers[3] = NULL;
+
+		if (typid == BOOLOID)
+		{
+			/* The bool columns have a dedicated storage format. */
+			column_values->decompression_type = DT_ArrowBits;
+		}
+	}
+	else
+	{
+		/*
+		 * Text column. Pre-allocate memory for its text Datum. We can't put
+		 * direct references to Arrow memory into the output, because it
+		 * doesn't have the varlena headers that Postgres expects for text.
+		 */
+		const int maxbytes = get_max_varlena_bytes(arrow);
+		column_values->by_ref_storage = MemoryContextAlloc(text_context, maxbytes);
+		*column_values->output_value = PointerGetDatum(column_values->by_ref_storage);
+
+		/*
+		 * Set up the datum conversion based on whether we use the dictionary.
+		 */
+		if (arrow->dictionary == NULL)
+		{
+			column_values->decompression_type = DT_ArrowText;
+			column_values->buffers[0] = arrow->buffers[0];
+			column_values->buffers[1] = arrow->buffers[1];
+			column_values->buffers[2] = arrow->buffers[2];
+			column_values->buffers[3] = NULL;
+		}
+		else
+		{
+			column_values->decompression_type = DT_ArrowTextDict;
+			column_values->buffers[0] = arrow->buffers[0];
+			column_values->buffers[1] = arrow->dictionary->buffers[1];
+			column_values->buffers[2] = arrow->dictionary->buffers[2];
+			column_values->buffers[3] = arrow->buffers[1];
+		}
+	}
 }
 
 static void
@@ -281,55 +336,11 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		elog(ERROR, "compressed column out of sync with batch counter");
 	}
 
-	column_values->arrow = arrow;
-
-	if (value_bytes > 0)
-	{
-		/* Fixed-width column. */
-		column_values->decompression_type = value_bytes;
-		column_values->buffers[0] = arrow->buffers[0];
-		column_values->buffers[1] = arrow->buffers[1];
-		column_values->buffers[2] = NULL;
-		column_values->buffers[3] = NULL;
-
-		if (column_description->typid == BOOLOID)
-		{
-			/* The bool columns have a dedicated storage format. */
-			column_values->decompression_type = DT_ArrowBits;
-		}
-	}
-	else
-	{
-		/*
-		 * Text column. Pre-allocate memory for its text Datum in the
-		 * decompressed scan slot. We can't put direct references to Arrow
-		 * memory there, because it doesn't have the varlena headers that
-		 * Postgres expects for text.
-		 */
-		const int maxbytes = get_max_varlena_bytes(arrow);
-		*column_values->output_value =
-			PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
-
-		/*
-		 * Set up the datum conversion based on whether we use the dictionary.
-		 */
-		if (arrow->dictionary == NULL)
-		{
-			column_values->decompression_type = DT_ArrowText;
-			column_values->buffers[0] = arrow->buffers[0];
-			column_values->buffers[1] = arrow->buffers[1];
-			column_values->buffers[2] = arrow->buffers[2];
-			column_values->buffers[3] = NULL;
-		}
-		else
-		{
-			column_values->decompression_type = DT_ArrowTextDict;
-			column_values->buffers[0] = arrow->buffers[0];
-			column_values->buffers[1] = arrow->dictionary->buffers[1];
-			column_values->buffers[2] = arrow->dictionary->buffers[2];
-			column_values->buffers[3] = arrow->buffers[1];
-		}
-	}
+	compressed_column_values_from_arrow(column_values,
+										arrow,
+										column_description->typid,
+										value_bytes,
+										batch_state->per_batch_context);
 }
 
 /*
@@ -1024,7 +1035,8 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 
 				Assert(batch_state->total_batch_rows == 0);
 				CheckCompressedData(count_value <= UINT16_MAX);
-				batch_state->total_batch_rows = count_value;
+				/* With metadata only output, the batch yields just its first row. */
+				batch_state->total_batch_rows = dcontext->metadata_only ? 1 : count_value;
 
 				break;
 			}
@@ -1037,8 +1049,12 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		}
 	}
 
-	dcontext->tuples_decompressed += batch_state->total_batch_rows;
-	ts_stats_compression_acc_batch(&dcontext->observ_acc, batch_state->total_batch_rows);
+	/* Metadata only output decompresses nothing. */
+	if (!dcontext->metadata_only)
+	{
+		dcontext->tuples_decompressed += batch_state->total_batch_rows;
+		ts_stats_compression_acc_batch(&dcontext->observ_acc, batch_state->total_batch_rows);
+	}
 
 	CompressedBatchVectorQualState cbvqstate = {
 		.vqstate = {
@@ -1116,24 +1132,45 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
+	/*
+	 * The typical Postgres protocol is to re-construct each output tuple anew
+	 * because it might have been modified by the caller. We know we're working
+	 * with a virtual tuple here, so we can make some simplifications below to
+	 * speed things up.
+	 */
+	Assert(TTS_IS_VIRTUAL(decompressed_scan_slot));
+
+	/*
+	 * If the caller materialized the tuple into caller's memory context, have
+	 * to free it. Materializing it also overwrites the attribute values in
+	 * place, see tts_virtual_materialize().
+	 */
+	if (TTS_SHOULDFREE(decompressed_scan_slot))
+	{
+		ExecClearTuple(decompressed_scan_slot);
+	}
+
+	/*
+	 * If the tuple was cleared, have to mark it valid again. Also have to reset
+	 * the pointers for by-refrence data in the tuple, that might have been
+	 * overwritten by materialization.
+	 */
+	if (TTS_EMPTY(decompressed_scan_slot))
+	{
+		for (int i = 0; i < num_data_columns; i++)
+		{
+			CompressedColumnValues *column = &batch_state->compressed_columns[i];
+			if (column->by_ref_storage != NULL)
+			{
+				*column->output_value = PointerGetDatum(column->by_ref_storage);
+			}
+		}
+		ExecStoreVirtualTuple(decompressed_scan_slot);
+	}
+
 	compressed_columns_to_postgres_data(batch_state->compressed_columns,
 										num_data_columns,
 										arrow_row);
-
-	/*
-	 * It's a virtual tuple slot, so no point in clearing/storing it
-	 * per each row, we can just update the values in-place. This saves
-	 * some CPU. We have to store it after ExecQual returns false (the tuple
-	 * didn't pass the filter), or after a new batch. The standard protocol
-	 * is to clear and set the tuple slot for each row, but our output tuple
-	 * slots are read-only, and the memory is owned by this node, so it is
-	 * safe to violate this protocol.
-	 */
-	Assert(TTS_IS_VIRTUAL(decompressed_scan_slot));
-	if (TTS_EMPTY(decompressed_scan_slot))
-	{
-		ExecStoreVirtualTuple(decompressed_scan_slot);
-	}
 }
 
 static bool

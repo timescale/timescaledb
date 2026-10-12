@@ -10,6 +10,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/appendinfo.h>
+#include <optimizer/clauses.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
@@ -27,9 +28,7 @@
 #include "nodes/chunk_append/transform.h"
 #include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
-
-static Plan *adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys,
-							  List *tlist, AttrNumber *sortColIdx);
+#include "planner/planner.h"
 
 static CustomScanMethods chunk_append_plan_methods = {
 	.CustomName = "ChunkAppend",
@@ -49,37 +48,67 @@ _chunk_append_init(void)
 	TryRegisterCustomScanMethods(&chunk_append_plan_methods);
 }
 
-static Plan *
-adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List *tlist,
-				 AttrNumber *sortColIdx)
+/*
+ * Adjust the exclusion clauses to the chunk scanned by this plan. Returns NIL
+ * when the plan does not scan a chunk.
+ */
+static List *
+make_chunk_clauses(PlannerInfo *root, List *exclusion_clauses, Scan *scan)
 {
-	int childSortCols;
-	Oid *sortOperators;
-	Oid *collations;
-	bool *nullsFirst;
-	AttrNumber *childColIdx;
+	List *chunk_clauses = NIL;
+	ListCell *lc;
 
-	/* Compute sort column info, and adjust subplan's tlist as needed */
-	plan = ts_prepare_sort_from_pathkeys(plan,
-										 pathkeys,
-										 path->parent->relids,
-										 sortColIdx,
-										 true,
-										 &childSortCols,
-										 &childColIdx,
-										 &sortOperators,
-										 &collations,
-										 &nullsFirst);
-
-	/* inject sort node if child sort order does not match desired order */
-	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
+	if (scan == NULL || scan->scanrelid == 0)
 	{
-		Assert(!IsA(plan, Sort));
-
-		plan = (Plan *)
-			ts_make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
+		return NIL;
 	}
-	return plan;
+
+	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scan->scanrelid, false);
+
+	foreach (lc, exclusion_clauses)
+	{
+		Node *clause = (Node *) ts_transform_cross_datatype_comparison(lfirst(lc));
+		clause = adjust_appendrel_attrs(root, clause, 1, &appinfo);
+		chunk_clauses = lappend(chunk_clauses, clause);
+	}
+
+	return chunk_clauses;
+}
+
+static bool
+collect_params_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		/* Continue walking the rest of the tree. */
+		return false;
+	}
+
+	if (IsA(node, SubPlan))
+	{
+		/*
+		 * Do not descend into a subplan because it is evaluated separately.
+		 * The parameters that might be needed inside it are not valid at the
+		 * ChunkAppend node. Continue walking the rest of the tree.
+		 */
+		return false;
+	}
+
+	if (IsA(node, Param))
+	{
+		List **collected_params = (List **) context;
+		*collected_params = lappend(*collected_params, node);
+
+		/* Continue walking the rest of the tree. */
+		return false;
+	}
+
+	if (IsA(node, RestrictInfo))
+	{
+		return collect_params_walker((Node *) castNode(RestrictInfo, node)->clause, context);
+	}
+
+	return expression_tree_walker(node, collect_params_walker, context);
 }
 
 Plan *
@@ -90,6 +119,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	List *parent_clauses = NIL;
 	List *chunk_ri_clauses = NIL;
 	List *chunk_rt_indexes = NIL;
+	List *hash_values = NIL;
 	List *sort_options = NIL;
 	List *custom_private = NIL;
 	uint32 limit = 0;
@@ -146,6 +176,26 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		}
 		clauses = transformed_clauses;
 	}
+
+	/*
+	 * We need to put all Params used by clauses to custom_exprs, so that
+	 * SS_finalize_plan() builds a correct set of Params required by this node.
+	 * Otherwise the Params won't be initialized before this node runs. We can't
+	 * put the chunk exclusion clauses themselves into custom_exprs, because
+	 * they are evaluated only by the Postgres constraint exclusion machinery
+	 * against the constraints of a given chunk, and cannot be evaluated against
+	 * this node's scan targetlist (for example, it can just not have the
+	 * required variables).
+	 *
+	 * In most cases, this node just inherits the list of parameters from its
+	 * children (per-chunk scans), but there are some corner cases where the
+	 * parameterized clauses are removed from children but not from parent.
+	 *
+	 * We can't directly fill the Plan.extParam/allParam bitmaps now, because
+	 * they are built later in the planning and will be overwritten.
+	 */
+	List *clause_params = NIL;
+	collect_params_walker((Node *) clauses, (void *) &clause_params);
 
 	ListCell *lc_plan, *lc_path;
 	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
@@ -240,12 +290,12 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			 */
 			if (!IsA(lfirst(lc_plan), MergeAppend))
 			{
-				lfirst(lc_plan) = adjust_childscan(root,
-												   lfirst(lc_plan),
-												   lfirst(lc_path),
-												   path->path.pathkeys,
-												   orig_tlist,
-												   sortColIdx);
+				lfirst(lc_plan) = ts_add_sort_if_needed(root,
+														lfirst(lc_plan),
+														lfirst(lc_path),
+														path->path.pathkeys,
+														sortColIdx,
+														capath->limit_tuples);
 			}
 		}
 	}
@@ -260,31 +310,56 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	 */
 	if (capath->startup_exclusion || capath->runtime_exclusion_children)
 	{
+		List *exclusion_clauses = NIL;
+		ListCell *lc;
+
+		foreach (lc, clauses)
+		{
+			Expr *clause = castNode(RestrictInfo, lfirst(lc))->clause;
+
+			exclusion_clauses = lappend(exclusion_clauses, clause);
+
+			/*
+			 * Clauses on a space partitioning column need an additional clause
+			 * on the partition hash to be able to exclude chunks.
+			 */
+			Expr *hash_clause =
+				ts_make_partition_hash_clause(root, root->parse->rtable, rel->relid, clause);
+
+			if (hash_clause != NULL)
+			{
+				Node *value_hash = lsecond(castNode(OpExpr, hash_clause)->args);
+
+				exclusion_clauses = lappend(exclusion_clauses, hash_clause);
+
+				/* the hash of the value is computed once for all chunks */
+				if (!IsA(value_hash, Const) && !contain_volatile_functions(value_hash) &&
+					!contain_subplans(value_hash))
+				{
+					hash_values = list_append_unique(hash_values, value_hash);
+				}
+			}
+		}
+
+		/* keep the clauses for every chunk of a child */
 		foreach (lc_child, cscan->custom_plans)
 		{
-			Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_child));
+			List *member_clauses = NIL;
+			List *member_rt_indexes = NIL;
+			ListCell *lc_member;
 
-			if (scan == NULL || scan->scanrelid == 0)
+			foreach (lc_member, ts_chunk_append_get_members(lfirst(lc_child)))
 			{
-				chunk_ri_clauses = lappend(chunk_ri_clauses, NIL);
-				chunk_rt_indexes = lappend_oid(chunk_rt_indexes, 0);
-			}
-			else
-			{
-				List *chunk_clauses = NIL;
-				ListCell *lc;
-				AppendRelInfo *appinfo = ts_get_appendrelinfo(root, scan->scanrelid, false);
+				Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_member));
 
-				foreach (lc, clauses)
-				{
-					Node *clause = (Node *) ts_transform_cross_datatype_comparison(
-						castNode(RestrictInfo, lfirst(lc))->clause);
-					clause = adjust_appendrel_attrs(root, clause, 1, &appinfo);
-					chunk_clauses = lappend(chunk_clauses, clause);
-				}
-				chunk_ri_clauses = lappend(chunk_ri_clauses, chunk_clauses);
-				chunk_rt_indexes = lappend_oid(chunk_rt_indexes, scan->scanrelid);
+				member_clauses =
+					lappend(member_clauses, make_chunk_clauses(root, exclusion_clauses, scan));
+				member_rt_indexes =
+					lappend_oid(member_rt_indexes, scan != NULL ? scan->scanrelid : 0);
 			}
+
+			chunk_ri_clauses = lappend(chunk_ri_clauses, member_clauses);
+			chunk_rt_indexes = lappend(chunk_rt_indexes, member_rt_indexes);
 		}
 
 		Assert(list_length(cscan->custom_plans) == list_length(chunk_ri_clauses));
@@ -315,10 +390,29 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	custom_private = lappend(custom_private, chunk_rt_indexes);
 	custom_private = lappend(custom_private, sort_options);
 	custom_private = lappend(custom_private, parent_clauses);
+	custom_private = lappend(custom_private, hash_values);
 
 	cscan->custom_private = custom_private;
 
+	cscan->custom_exprs = clause_params;
+
 	return &cscan->scan.plan;
+}
+
+/*
+ * Get the plans of the chunks of a child. A MergeAppend combines the chunks of
+ * a time slice of a space partitioned hypertable, any other child is a single
+ * chunk.
+ */
+List *
+ts_chunk_append_get_members(Plan *plan)
+{
+	if (IsA(plan, MergeAppend))
+	{
+		return castNode(MergeAppend, plan)->mergeplans;
+	}
+
+	return list_make1(plan);
 }
 
 Scan *

@@ -5,7 +5,6 @@ set(TEST_FILES_SHARED
     compat.sql
     compress_bloom_sparse_compat.sql
     compress_unique_index.sql
-    compression_nulls_not_distinct.sql
     constraint_aware_append.sql
     decompress_join.sql
     decompress_placeholdervar.sql
@@ -59,7 +58,7 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES_SHARED})
   list(APPEND TEST_FILES_SHARED ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
-if(DEFINED GIT_FOUND)
+if(GIT_COMMIT_INFO_FOUND)
   list(APPEND TEST_FILES_SHARED build_info.sql)
 endif()
 

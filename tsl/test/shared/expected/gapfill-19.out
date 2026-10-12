@@ -96,6 +96,7 @@ GROUP BY 1;
                Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
                ->  Values Scan on "*VALUES*"
 
+SET parallel_setup_cost TO 0;
 -- test parallel query
 :EXPLAIN
 SELECT
@@ -106,20 +107,25 @@ GROUP BY 1
 ORDER BY 1;
 --- QUERY PLAN ---
  Custom Scan (GapFill)
-   ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-         ->  Gather Merge
-               Workers Planned: 2
-               ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-                     ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
-                           ->  Result
-                                 ->  Parallel Append
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+   ->  Sort
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+               ->  Gather
+                     Workers Planned: 2
+                     ->  Parallel Append
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
 
 -- test parallel query with locf
 :EXPLAIN
@@ -131,20 +137,25 @@ GROUP BY 1
 ORDER BY 1;
 --- QUERY PLAN ---
  Custom Scan (GapFill)
-   ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-         ->  Gather Merge
-               Workers Planned: 2
-               ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-                     ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
-                           ->  Result
-                                 ->  Parallel Append
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+   ->  Sort
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+               ->  Gather
+                     Workers Planned: 2
+                     ->  Parallel Append
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
 
 -- test parallel query with interpolate
 :EXPLAIN
@@ -156,20 +167,25 @@ GROUP BY 1
 ORDER BY 1;
 --- QUERY PLAN ---
  Custom Scan (GapFill)
-   ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-         ->  Gather Merge
-               Workers Planned: 2
-               ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-                     ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
-                           ->  Result
-                                 ->  Parallel Append
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                       ->  Parallel Seq Scan on _hyper_X_X_chunk
+   ->  Sort
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+               ->  Gather
+                     Workers Planned: 2
+                     ->  Parallel Append
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                 ->  Parallel Seq Scan on _hyper_X_X_chunk
 
 -- make sure we can run gapfill in parallel workers
 -- ensure this plan runs in parallel
@@ -186,20 +202,25 @@ LIMIT 1;
    ->  Sort
          Sort Key: (interpolate(avg(gapfill_plan_test.value), NULL::record, NULL::record))
          ->  Custom Scan (GapFill)
-               ->  Finalize GroupAggregate
-                     Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-                     ->  Gather Merge
-                           Workers Planned: 2
-                           ->  Sort
-                                 Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-                                 ->  Partial HashAggregate
-                                       Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
-                                       ->  Result
-                                             ->  Parallel Append
-                                                   ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                                   ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                                   ->  Parallel Seq Scan on _hyper_X_X_chunk
-                                                   ->  Parallel Seq Scan on _hyper_X_X_chunk
+               ->  Sort
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     ->  Finalize HashAggregate
+                           Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                           ->  Gather
+                                 Workers Planned: 2
+                                 ->  Parallel Append
+                                       ->  Partial HashAggregate
+                                             Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                             ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Partial HashAggregate
+                                             Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                             ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Partial HashAggregate
+                                             Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                             ->  Parallel Seq Scan on _hyper_X_X_chunk
+                                       ->  Partial HashAggregate
+                                             Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                             ->  Parallel Seq Scan on _hyper_X_X_chunk
 
 -- actually run a parallel gapfill
 SELECT
@@ -213,6 +234,7 @@ LIMIT 1;
 ------------------------------+-------------
  Mon Jan 01 00:00:00 2018 PST |           1
 
+RESET parallel_setup_cost;
 -- test sort optimizations
 -- test sort optimization with single member order by,
 -- should use index scan (no GapFill node for this one since we're not gapfilling)
@@ -238,13 +260,20 @@ ORDER BY 1;
  Custom Scan (GapFill)
    ->  Sort
          Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-         ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
-               ->  Result
-                     ->  Append
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Seq Scan on _hyper_X_X_chunk
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Seq Scan on _hyper_X_X_chunk
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Seq Scan on _hyper_X_X_chunk
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Seq Scan on _hyper_X_X_chunk
 
 -- test sort optimizations with interpolate
@@ -256,13 +285,20 @@ ORDER BY 1;
  Custom Scan (GapFill)
    ->  Sort
          Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
-         ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
-               ->  Result
-                     ->  Append
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Seq Scan on _hyper_X_X_chunk
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Seq Scan on _hyper_X_X_chunk
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Seq Scan on _hyper_X_X_chunk
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Seq Scan on _hyper_X_X_chunk
 
 RESET max_parallel_workers_per_gather;
@@ -3036,13 +3072,18 @@ FROM metrics
 GROUP BY 1;
 --- QUERY PLAN ---
  Custom Scan (GapFill)
-   ->  GroupAggregate
+   ->  Finalize GroupAggregate
          Group Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Merge Append
+               Sort Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+               ->  Partial GroupAggregate
+                     Group Key: time_bucket_gapfill('@ 364 days'::interval, _hyper_X_X_chunk."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
+               ->  Partial GroupAggregate
+                     Group Key: time_bucket_gapfill('@ 364 days'::interval, _hyper_X_X_chunk."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
+               ->  Partial GroupAggregate
+                     Group Key: time_bucket_gapfill('@ 364 days'::interval, _hyper_X_X_chunk."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
 
 -- issue #3834
@@ -3637,14 +3678,14 @@ ORDER BY 1,2;
                  ->  Result
                        InitPlan minmax_1
                          ->  Limit
-                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2
+                               ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2
                                      Order: "time"
                                      Filter: (("time" IS NOT NULL))
                InitPlan expr_2
                  ->  Result
                        InitPlan minmax_2
                          ->  Limit
-                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_1
+                               ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2_1
                                      Order: "time" DESC
                                      Filter: (("time" IS NOT NULL))
                ->  GroupAggregate
@@ -3719,14 +3760,14 @@ ORDER BY 1,2;
                  ->  Result
                        InitPlan minmax_1
                          ->  Limit
-                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_2
+                               ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2_2
                                      Order: "time"
                                      Filter: (("time" IS NOT NULL))
                InitPlan expr_3
                  ->  Result
                        InitPlan minmax_2
                          ->  Limit
-                               ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_3
+                               ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2_3
                                      Order: "time" DESC
                                      Filter: (("time" IS NOT NULL))
                ->  Group
@@ -3758,7 +3799,7 @@ GROUP BY 1,2 ORDER BY 2,1;
      ->  Result
            InitPlan minmax_2
              ->  Limit
-                   ->  Custom Scan (DeferredChunkScan) on metrics_tstz m2_2
+                   ->  Custom Scan (DeferredChunkAppend) on metrics_tstz m2_2
                          Order: "time" DESC
                          Filter: (("time" IS NOT NULL))
    ->  GroupAggregate
@@ -3770,13 +3811,10 @@ GROUP BY 1,2 ORDER BY 2,1;
                            ->  Seq Scan on _hyper_X_X_chunk m1_1
                                  Filter: (("time" < (InitPlan expr_2).col1) AND ("time" >= (SubPlan expr_1)))
                                  SubPlan expr_1
-                                   ->  Result
-                                         InitPlan minmax_1
-                                           ->  Limit
-                                                 ->  Custom Scan (ChunkAppend) on metrics_tstz m2
-                                                       Order: m2."time"
-                                                       ->  Index Scan Backward using _hyper_X_X_chunk_metrics_tstz_time_idx on _hyper_X_X_chunk m2_1
-                                                             Filter: (device_id = m1_1.device_id)
+                                   ->  Aggregate
+                                         ->  Custom Scan (ChunkAppend) on metrics_tstz m2
+                                               ->  Seq Scan on _hyper_X_X_chunk m2_1
+                                                     Filter: (device_id = m1_1.device_id)
 
 \set ON_ERROR_STOP 0
 SELECT

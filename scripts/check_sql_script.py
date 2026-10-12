@@ -99,6 +99,15 @@ class SQLVisitor(Visitor):
             fn_str = ("FUNCTION", "PROCEDURE")[node.is_procedure is True]
             self.error(node, f"Consider using CREATE OR REPLACE {fn_str}")
 
+        security = [option for option in node.options if option.defname == "security"]
+        if security and security[0].arg.boolval:
+            self.error(
+                node,
+                "SECURITY DEFINER functions created by extension scripts execute "
+                "as postgres; "
+                "use SECURITY INVOKER and grant the required privileges explicitly",
+            )
+
         return Skip
 
 

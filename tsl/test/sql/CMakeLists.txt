@@ -34,6 +34,7 @@ set(TEST_FILES
     compress_dml_aux.sql
     compress_dml_bitmap_rescan.sql
     compress_dml_copy.sql
+    compress_dml_vectorized.sql
     compress_explain.sql
     compress_firstlast_sparse.sql
     compress_float8_corrupt.sql
@@ -43,6 +44,7 @@ set(TEST_FILES
     compress_stats.sql
     compress_unordered_sort.sql
     compressed_collation.sql
+    compressed_collation_icu.sql
     compressed_detoaster.sql
     compression.sql
     compression_allocation.sql
@@ -50,6 +52,7 @@ set(TEST_FILES
     compression_constraints.sql
     compression_create_compressed_table.sql
     compression_defaults.sql
+    compression_equivalent_sortkeys.sql
     compression_fks.sql
     compression_indexcreate.sql
     compression_insert.sql
@@ -62,6 +65,7 @@ set(TEST_FILES
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_unordered.sql
+    compression_sorted_merge_segmentwise.sql
     compression_trigger.sql
     compression_uuid.sql
     create_table_with.sql
@@ -70,7 +74,9 @@ set(TEST_FILES
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
     direct_compress_policy.sql
+    memoize.sql
     move.sql
+    move_to_columnstore.sql
     plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
@@ -100,12 +106,12 @@ set(TEST_TEMPLATES
     cagg_watermark.sql.in
     columnar_index_scan.sql.in
     columnar_scan_cost.sql.in
+    columnar_scan_metadata_only.sql.in
     compress_sort_transform.sql.in
     compress_bloom_sparse.sql.in
     compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
-    memoize.sql.in
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
@@ -121,23 +127,24 @@ endif()
 
 if(NOT APPLE)
   list(APPEND TEST_FILES direct_compress_copy.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES direct_compress_debug.sql)
+  endif()
 endif()
 
-if(TMP_ENABLE_GRANULAR_REFRESH_TESTS)
-  list(
-    APPEND
-    TEST_FILES
-    cagg_granular_refresh.sql
-    cagg_granular_refresh_api.sql
-    cagg_granular_refresh_coltypes.sql
-    cagg_granular_refresh_fallback.sql
-    cagg_granular_refresh_garbage_collector.sql)
+list(
+  APPEND
+  TEST_FILES
+  cagg_granular_refresh.sql
+  cagg_granular_refresh_api.sql
+  cagg_granular_refresh_coltypes.sql
+  cagg_granular_refresh_fallback.sql
+  cagg_granular_refresh_garbage_collector.sql
+  cagg_granular_refresh_hierarchical.sql)
 
-  if(CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
-         cagg_granular_refresh_config.sql)
-
-  endif()
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
+       cagg_granular_refresh_config.sql cagg_granular_refresh_policies.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -224,7 +231,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vacuum.sql)
 
   list(APPEND TEST_TEMPLATES attach_chunk.sql.in
-       compression_update_delete.sql.in deferredchunkscan.sql.in
+       compression_update_delete.sql.in deferredchunkappend.sql.in
        transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)

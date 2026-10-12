@@ -7078,6 +7078,17 @@ select round(stddev(cint4)), count(cint4), sum(cint4), round(avg(cint4)) from ag
 -------+--------+---------+-------
   9450 | 200000 | -987383 |    -5
 
+-- Stable function in CASE condition
+select count(*) from aggfns where s = (case when ctstz > now() then 1 else 2 end);
+ count 
+-------
+ 20000
+
+select count(*) from aggfns where cint2 = (case when ctstz > now() then 1 else 2 end);
+ count 
+-------
+     4
+
 -- Test edge cases for various batch sizes and the filter matching around batch
 -- end.
 select count(*) from edges;

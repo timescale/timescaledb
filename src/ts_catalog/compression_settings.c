@@ -63,7 +63,8 @@ ts_compression_settings_equal_with_defaults(const CompressionSettings *ht,
 			ts_array_equal(ht->fd.orderby_desc, chunk->fd.orderby_desc)) &&
 		   (ht->fd.orderby_nullsfirst == NULL ||
 			ts_array_equal(ht->fd.orderby_nullsfirst, chunk->fd.orderby_nullsfirst)) &&
-		   (ht->fd.index == NULL || ts_sparse_index_equal(ht->fd.index, chunk->fd.index));
+		   (ts_can_set_default_sparse_index(ht) ||
+			ts_sparse_index_equal(ht->fd.index, chunk->fd.index));
 }
 
 /*
@@ -1105,9 +1106,10 @@ ts_accept_for_segmentby(CompressionSettings *settings, Form_pg_attribute attr)
 
 	return false;
 }
+
 /* Sparse indexes are only set by default when no user configuration exists */
 bool
-ts_can_set_default_sparse_index(CompressionSettings *settings)
+ts_can_set_default_sparse_index(const CompressionSettings *settings)
 {
 	return (settings->fd.index == NULL) ||
 		   !ts_jsonb_has_key_value_str_field(settings->fd.index,

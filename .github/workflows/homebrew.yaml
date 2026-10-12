@@ -14,6 +14,7 @@ name: "Packaging tests: Homebrew"
     - trigger/package_test
     - trigger/homebrew_test
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   homebrew:
@@ -62,4 +63,3 @@ jobs:
           echo "Installed version \"${installed_version}\" does not match expected version \"${version}\"."
           false
         fi
-

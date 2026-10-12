@@ -238,9 +238,9 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- parallel query
 RESET max_parallel_workers_per_gather;
 
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+SET debug_parallel_query = 'on';
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+SET debug_parallel_query = 'off';
 
 TRUNCATE skip_scan_insert;
 

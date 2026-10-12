@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Report refresh statistics throughout.
+SET timescaledb.cagg_refresh_stats_level TO summary;
+
+
 -- Reclamation of tenant-tracking rows.
 --
 -- Each refresh flushes one generation, so its rows are written stamped with that
@@ -20,9 +24,10 @@ SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_l
 CREATE TABLE conditions(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions', 'time');
 ALTER TABLE conditions SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 
 CREATE MATERIALIZED VIEW cond_daily
@@ -68,9 +73,10 @@ SELECT * FROM live_seqnums ORDER BY seqnum;
 CREATE TABLE conditions2(time timestamptz NOT NULL, sensor_id text, value float);
 SELECT create_hypertable('conditions2', 'time');
 ALTER TABLE conditions2 SET (
-    timescaledb.granular_refresh_column = 'sensor_id',
-    timescaledb.granular_refresh_start_offset = :'granular_refresh_lookback',
-    timescaledb.granular_refresh_end_offset = '1 day'
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
 );
 CREATE MATERIALIZED VIEW cond2_daily
   WITH (timescaledb.continuous) AS
@@ -191,3 +197,5 @@ DROP MATERIALIZED VIEW cond_daily;
 DROP TABLE conditions;
 DROP MATERIALIZED VIEW cond2_daily;
 DROP TABLE conditions2;
+
+RESET timescaledb.cagg_refresh_stats_level;

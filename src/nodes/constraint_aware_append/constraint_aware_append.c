@@ -346,6 +346,11 @@ ca_append_rescan(CustomScanState *node)
 {
 	if (node->custom_ps != NIL)
 	{
+		if (node->ss.ps.chgParam != NULL)
+		{
+			UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
+		}
+
 		ExecReScan(linitial(node->custom_ps));
 	}
 }

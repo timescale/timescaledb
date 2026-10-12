@@ -14,8 +14,11 @@ use Test::More;
 # Publishing node - create with manual initialization to set max_worker_processes=0
 my $db = TimescaleNode->new('publisher');
 $db->init(allows_streaming => 'logical');
-# Set max_process_workers to 0 before starting the node
-$db->append_conf('postgresql.conf', 'max_worker_processes=0');
+# Set max_process_workers to 0 before starting the node. wal_level has to be
+# set here too: init() appends the shared test config, which puts wal_level
+# back to replica, after what allows_streaming asked for.
+$db->append_conf('postgresql.conf',
+	"max_worker_processes=0\nwal_level=logical\n");
 $db->start();
 $db->safe_psql('postgres', 'CREATE EXTENSION timescaledb');
 

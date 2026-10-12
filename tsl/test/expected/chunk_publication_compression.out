@@ -21,7 +21,10 @@ INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
 INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
 INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
 -- Create publication and add hypertable
+-- This suite runs at wal_level = replica, so hide the warning about that
+SET client_min_messages TO error;
 CREATE PUBLICATION test_pub FOR TABLE test_hypertable;
+RESET client_min_messages;
 -- Verify initial state (3 uncompressed chunks)
 SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub' ORDER BY schemaname, tablename;
       schemaname       |    tablename     |           attnames           | rowfilter 

@@ -19,15 +19,11 @@
 #include <postgres.h>
 #include <nodes/execnodes.h>
 #include <utils/rel.h>
-#include <utils/selfuncs.h>
 
 #include "export.h"
 
 extern TSDLLEXPORT struct PathTarget *ts_make_partial_grouping_target(struct PlannerInfo *root,
 																	  PathTarget *grouping_target);
-
-extern bool ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop,
-								  Datum *min, Datum *max);
 
 extern TSDLLEXPORT PathKey *ts_make_pathkey_from_sortop(PlannerInfo *root, Expr *expr,
 														Relids nullable_relids, Oid ordering_op,

@@ -21,6 +21,7 @@
 #include <rewrite/rewriteManip.h>
 #include <storage/lwlock.h>
 #include <utils/builtins.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/ruleutils.h>
 #include <utils/typcache.h>
@@ -47,7 +48,9 @@ typedef enum ChunkAppendSubplanState
 	CASS_Finished = 1 << 1, /* The subplan is finished */
 } ChunkAppendSubplanState;
 
-/* ParallelChunkAppendState is stored in shared memory to coordinate the parallel workers.
+/*
+ * ParallelChunkAppendState is stored in shared memory to coordinate the
+ * parallel workers.
  *
  * subplan_state is accessed by two different indexes. This is done because a C struct can have only
  * one FLEXIBLE_ARRAY_MEMBER, two pieces of information must be stored per subplan in shared memory,
@@ -69,9 +72,10 @@ typedef struct ParallelChunkAppendState
 typedef struct ChunkAppendState
 {
 	CustomScanState csstate;
-	PlanState **subplanstates;
+	PlanState **subplan_states;
 
 	MemoryContext exclusion_ctx;
+	MemoryContext hash_value_ctx;
 
 	int num_subplans;
 	int first_partial_plan;
@@ -86,7 +90,7 @@ typedef struct ChunkAppendState
 	uint32 limit;
 
 #ifdef USE_ASSERT_CHECKING
-	bool init_done;
+	bool child_exec_nodes_initialized;
 #endif
 
 	/* list of subplans after planning */
@@ -97,6 +101,9 @@ typedef struct ChunkAppendState
 	List *initial_ri_clauses;
 	/* List of restrictinfo clauses on the parent hypertable */
 	List *initial_parent_clauses;
+	/* hashes of values in the clauses, computed once for all chunks */
+	List *hash_values;
+	List *hash_value_consts;
 
 	/* list of subplans after startup exclusion */
 	List *filtered_subplans;
@@ -104,17 +111,20 @@ typedef struct ChunkAppendState
 	List *filtered_constraints;
 	/* list of restrictinfo clauses after startup exclusion */
 	List *filtered_ri_clauses;
-	/* included subplans by startup exclusion */
-	Bitmapset *included_subplans_by_se;
+	/* subplans remaining after startup exclusion (indexes into initial_subplans) */
+	Bitmapset *subplans_after_startup;
+	/* chunks of each child remaining after startup exclusion, indexed like filtered_subplans */
+	List *filtered_valid_members;
 
-	/* valid subplans for runtime exclusion */
-	Bitmapset *valid_subplans;
+	/* subplans remaining after runtime exclusion */
+	Bitmapset *subplans_after_runtime;
 	Bitmapset *params;
 
 	/* sort options if this append is ordered, only used for EXPLAIN */
 	List *sort_options;
 
 	/* number of loops and exclusions for EXPLAIN */
+	int startup_number_exclusions;
 	int runtime_number_loops;
 	int runtime_number_exclusions_parent;
 	int runtime_number_exclusions_children;
@@ -165,7 +175,7 @@ static void show_sort_group_keys(ChunkAppendState *planstate, List *ancestors, E
 static void show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
 								   bool nullsFirst);
 
-static void init_subplanstates(ChunkAppendState *state, EState *estate, int eflags);
+static void init_subplans(ChunkAppendState *state, EState *estate, int eflags);
 
 Node *
 ts_chunk_append_state_create(CustomScan *cscan)
@@ -191,6 +201,7 @@ ts_chunk_append_state_create(CustomScan *cscan)
 		(List *) copyObject(list_nth(cscan->custom_private, CAP_ChunkRIClauses));
 	state->sort_options = list_nth(cscan->custom_private, CAP_SortOptions);
 	state->initial_parent_clauses = list_nth(cscan->custom_private, CAP_ParentClauses);
+	state->hash_values = list_nth(cscan->custom_private, CAP_HashValues);
 
 	state->startup_exclusion = list_nth_int(settings, CAS_StartupExclusion);
 	state->runtime_exclusion_parent = list_nth_int(settings, CAS_RuntimeExclusionParent);
@@ -208,8 +219,122 @@ ts_chunk_append_state_create(CustomScan *cscan)
 	state->exclusion_ctx = AllocSetContextCreate(CurrentMemoryContext,
 												 "ChunkApppend exclusion",
 												 ALLOCSET_DEFAULT_SIZES);
+	state->hash_value_ctx = AllocSetContextCreate(CurrentMemoryContext,
+												  "ChunkApppend hash values",
+												  ALLOCSET_SMALL_SIZES);
 
 	return (Node *) state;
+}
+
+static List *
+make_restrictinfos(List *clauses)
+{
+	List *restrictinfos = NIL;
+	ListCell *lc;
+
+	foreach (lc, clauses)
+	{
+		RestrictInfo *ri = makeNode(RestrictInfo);
+		ri->clause = lfirst(lc);
+		restrictinfos = lappend(restrictinfos, ri);
+	}
+
+	return restrictinfos;
+}
+
+/*
+ * Replace the hash of a value in a clause by its result computed for all
+ * chunks.
+ */
+static List *
+replace_hash_values(List *hash_values, List *hash_value_consts, List *clauses)
+{
+	List *result = NIL;
+	ListCell *lc;
+
+	if (hash_value_consts == NIL)
+	{
+		return clauses;
+	}
+
+	foreach (lc, clauses)
+	{
+		Expr *clause = lfirst(lc);
+
+		if (IsA(clause, OpExpr) && list_length(castNode(OpExpr, clause)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, clause);
+			ListCell *lc_value, *lc_const;
+
+			forboth (lc_value, hash_values, lc_const, hash_value_consts)
+			{
+				if (lfirst(lc_const) != NULL && equal(lsecond(op->args), lfirst(lc_value)))
+				{
+					OpExpr *new_op = makeNode(OpExpr);
+
+					memcpy(new_op, op, sizeof(OpExpr));
+					new_op->args = list_make2(linitial(op->args), lfirst(lc_const));
+					clause = (Expr *) new_op;
+					break;
+				}
+			}
+		}
+
+		result = lappend(result, clause);
+	}
+
+	return result;
+}
+
+/*
+ * Constify the hashes of the values. With estate only the values using
+ * parameters set while executing are constified, with their current values.
+ * Values that are not constant are NULL.
+ */
+static List *
+constify_hash_values(PlannerInfo *root, EState *estate, List *hash_values)
+{
+	List *hash_value_consts = NIL;
+	ListCell *lc;
+
+	foreach (lc, hash_values)
+	{
+		Node *value = lfirst(lc);
+
+		if (estate != NULL)
+		{
+			value = ts_contains_join_param(value) ? constify_param_mutator(value, estate) : NULL;
+		}
+
+		if (value != NULL)
+		{
+			value = estimate_expression_value(root, value);
+		}
+
+		hash_value_consts =
+			lappend(hash_value_consts, value != NULL && IsA(value, Const) ? value : NULL);
+	}
+
+	return hash_value_consts;
+}
+
+/*
+ * Check whether startup exclusion removes the chunk. Otherwise the constified
+ * clauses are returned in const_clauses.
+ */
+static bool
+startup_exclude_chunk(PlannerInfo *root, List *constraints, List *clauses, List **const_clauses)
+{
+	List *restrictinfos = ts_constify_restrictinfos(root, make_restrictinfos(clauses));
+
+	if (can_exclude_chunk(constraints, restrictinfos))
+	{
+		return true;
+	}
+
+	*const_clauses = extract_actual_clauses(restrictinfos, false);
+
+	return false;
 }
 
 static void
@@ -218,6 +343,7 @@ do_startup_exclusion(ChunkAppendState *state)
 	List *filtered_children = NIL;
 	List *filtered_ri_clauses = NIL;
 	List *filtered_constraints = NIL;
+	List *filtered_valid_members = NIL;
 	ListCell *lc_plan;
 	ListCell *lc_clauses;
 	ListCell *lc_constraints;
@@ -235,7 +361,10 @@ do_startup_exclusion(ChunkAppendState *state)
 	};
 
 	/* Reset included subplans */
-	state->included_subplans_by_se = NULL;
+	state->subplans_after_startup = NULL;
+
+	/* the hashes of the values are computed once for all chunks */
+	List *hash_value_consts = constify_hash_values(&root, NULL, state->hash_values);
 
 	/*
 	 * clauses and constraints should always have the same length as initial_subplans
@@ -250,66 +379,71 @@ do_startup_exclusion(ChunkAppendState *state)
 			  lc_clauses,
 			  state->initial_ri_clauses)
 	{
-		List *restrictinfos = NIL;
-		List *ri_clauses = lfirst(lc_clauses);
-		ListCell *lc;
-		Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_plan));
+		List *ri_clauses = NIL;
+		Bitmapset *valid_members = NULL;
+		ListCell *lc_member_constraints, *lc_member_clauses;
+		int member = 0;
 
 		i++;
 
-		/*
-		 * If this is a base rel (chunk), check if it can be
-		 * excluded from the scan. Otherwise, fall through.
-		 */
-		if (scan != NULL && scan->scanrelid)
+		/* check every chunk of the child */
+		forboth (lc_member_constraints,
+				 lfirst(lc_constraints),
+				 lc_member_clauses,
+				 lfirst(lc_clauses))
 		{
-			foreach (lc, ri_clauses)
-			{
-				RestrictInfo *ri = makeNode(RestrictInfo);
-				ri->clause = lfirst(lc);
-				restrictinfos = lappend(restrictinfos, ri);
-			}
-			restrictinfos = ts_constify_restrictinfos(&root, restrictinfos);
+			List *member_clauses = lfirst(lc_member_clauses);
+			List *const_clauses = NIL;
 
-			if (can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
+			if (!startup_exclude_chunk(&root,
+									   lfirst(lc_member_constraints),
+									   replace_hash_values(state->hash_values,
+														   hash_value_consts,
+														   member_clauses),
+									   &const_clauses))
 			{
-				if (i < state->first_partial_plan)
+				valid_members = bms_add_member(valid_members, member);
+
+				/*
+				 * if this node does runtime exclusion on the children we keep the constified
+				 * expressions to save us some work during runtime exclusion
+				 */
+				if (state->runtime_exclusion_children)
 				{
-					filtered_first_partial_plan--;
+					member_clauses = const_clauses;
 				}
-
-				continue;
 			}
 
-			/*
-			 * if this node does runtime exclusion on the children we keep the constified
-			 * expressions to save us some work during runtime exclusion
-			 */
-			if (state->runtime_exclusion_children)
-			{
-				List *const_ri_clauses = NIL;
-				foreach (lc, restrictinfos)
-				{
-					RestrictInfo *ri = lfirst(lc);
-					const_ri_clauses = lappend(const_ri_clauses, ri->clause);
-				}
-				ri_clauses = const_ri_clauses;
-			}
+			ri_clauses = lappend(ri_clauses, member_clauses);
+			member++;
 		}
 
-		state->included_subplans_by_se = bms_add_member(state->included_subplans_by_se, i);
+		state->startup_number_exclusions += member - bms_num_members(valid_members);
+
+		if (valid_members == NULL)
+		{
+			if (i < state->first_partial_plan)
+			{
+				filtered_first_partial_plan--;
+			}
+
+			continue;
+		}
+
+		state->subplans_after_startup = bms_add_member(state->subplans_after_startup, i);
 		filtered_children = lappend(filtered_children, lfirst(lc_plan));
 		filtered_ri_clauses = lappend(filtered_ri_clauses, ri_clauses);
 		filtered_constraints = lappend(filtered_constraints, lfirst(lc_constraints));
+		filtered_valid_members = lappend(filtered_valid_members, valid_members);
 	}
 
 	state->filtered_subplans = filtered_children;
 	state->filtered_ri_clauses = filtered_ri_clauses;
 	state->filtered_constraints = filtered_constraints;
+	state->filtered_valid_members = filtered_valid_members;
 	state->filtered_first_partial_plan = filtered_first_partial_plan;
 
-	Assert(list_length(state->filtered_subplans) ==
-		   bms_num_members(state->included_subplans_by_se));
+	Assert(list_length(state->filtered_subplans) == bms_num_members(state->subplans_after_startup));
 }
 
 /*
@@ -346,34 +480,22 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 	initialize_constraints(state, list_nth(cscan->custom_private, CAP_RTIndexes));
 
-	/* In parallel mode with a parallel_aware plan, the parallel leader performs the startup
-	 * exclusion and stores the result in shared memory (the flag SUBPLAN_STATE_INCLUDED of
-	 * pstate->subplan_state is set for all included plans).
+	/*
+	 * In parallel mode, the leader performs startup exclusion and ships the
+	 * result to workers via SUBPLAN_STATE_INCLUDED flags in shared memory.
+	 * Workers must not perform startup exclusion themselves because they could
+	 * disagree with the leader (e.g., due to volatile functions), causing wrong
+	 * results.
 	 *
-	 * The parallel workers use the information from shared memory to include the same plans as the
-	 * parallel leader. This ensures that all workers work on the same subplans and we have an
-	 * agreement about the number of subplans. This is necessary to ensure that the parallel workers
-	 * work correctly and that the next subplan to be processed in the shared memory
-	 * (pstate->next_plan) pointers to the same plan in all workers.
+	 * The workers later pick up these results in chunk_append_initialize_worker().
 	 *
-	 * If the workers perform the startup exclusion individually, they may choose different subplans
-	 * (e.g., due to a "constant" function that claims to be constant but returns different
-	 * results). In that case, we have a disagreement about the plans between the workers. This
-	 * would lead to hard-to-debug problems and out-of-bounds reads when pstate->next_plan is used
-	 * for subplan selection.
-	 *
+	 * The debug_parallel_query debug GUC can run a non-parallel_aware
+	 * ChunkAppend inside a parallel worker. There's no actual parallelism
+	 * happening, so we must follow the usual single-process approach. We
+	 * recognize this case by the parallel_aware flag being false.
 	 */
 	if (IsParallelWorker() && node->ss.ps.plan->parallel_aware)
 	{
-		/* We are inside a parallel worker running a parallel plan. Chunk exclusion was performed by
-		 * the leader, and based on it, we will initialize the included subplans later, in
-		 * chunk_append_initialize_worker. We have to store estate and eflags here that are needed
-		 * for that initialization.
-		 *
-		 * Note: When force_parallel_mode debug GUC is set, a normal sequential ChunkAppend plan can
-		 * run inside a parallel worker. In this case, we have to perform the chunk exclusion right
-		 * away. We distinguish it by that the parallel_aware flag of the plan is not set.
-		 */
 		state->estate = estate;
 		state->eflags = eflags;
 		return;
@@ -383,22 +505,52 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		do_startup_exclusion(state);
 	}
+	else
+	{
+		/*
+		 * No startup exclusion -- all subplans are included.
+		 */
+		state->subplans_after_startup =
+			bms_add_range(NULL, 0, list_length(state->initial_subplans) - 1);
+	}
 
-	init_subplanstates(state, estate, eflags);
+	init_subplans(state, estate, eflags);
 }
 
 /*
- * Perform an initialization of the filtered_subplans.
+ * Restrict a MergeAppend to the given children. Without run-time partition
+ * pruning the MergeAppend keeps this set across rescans.
  */
 static void
-init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
+set_merge_append_members(PlanState *ps, Bitmapset *valid_members)
+{
+	MergeAppendState *ms = castNode(MergeAppendState, ps);
+
+	Assert(valid_members != NULL);
+
+	/* partition pruning numbers the children differently and resets them on rescan */
+	if (ms->ms_prune_state != NULL)
+	{
+		bms_free(valid_members);
+		return;
+	}
+
+	bms_free(ms->ms_valid_subplans);
+	ms->ms_valid_subplans = valid_members;
+}
+
+/*
+ * Initialize the child plans that were not filtered out by startup exclusion.
+ */
+static void
+init_subplans(ChunkAppendState *state, EState *estate, int eflags)
 {
 	ListCell *lc;
 	int i;
 
 #ifdef USE_ASSERT_CHECKING
-	Assert(state->init_done == false);
-	state->init_done = true;
+	Assert(state->child_exec_nodes_initialized == false);
+	state->child_exec_nodes_initialized = true;
 #endif
 
 	state->num_subplans = list_length(state->filtered_subplans);
@@ -409,7 +561,7 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 		return;
 	}
 
-	state->subplanstates = (PlanState **) palloc0(state->num_subplans * sizeof(PlanState *));
+	state->subplan_states = (PlanState **) palloc0(state->num_subplans * sizeof(PlanState *));
 
 	i = 0;
 	foreach (lc, state->filtered_subplans)
@@ -418,15 +570,19 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 		 * we use an array for the states but put it in custom_ps as well
 		 * so explain and planstate_tree_walker can find it
 		 */
-		state->subplanstates[i] = ExecInitNode(lfirst(lc), estate, eflags);
-		state->csstate.custom_ps = lappend(state->csstate.custom_ps, state->subplanstates[i]);
+		state->subplan_states[i] = ExecInitNode(lfirst(lc), estate, eflags);
+		state->csstate.custom_ps = lappend(state->csstate.custom_ps, state->subplan_states[i]);
 
-		/*
-		 * pass down limit to child nodes
-		 */
+		/* skip the chunks of a MergeAppend removed by startup exclusion */
+		if (IsA(state->subplan_states[i], MergeAppendState) && state->filtered_valid_members != NIL)
+		{
+			set_merge_append_members(state->subplan_states[i],
+									 bms_copy(list_nth(state->filtered_valid_members, i)));
+		}
+
 		if (state->limit)
 		{
-			ExecSetTupleBound(state->limit, state->subplanstates[i]);
+			ExecSetTupleBound(state->limit, state->subplan_states[i]);
 		}
 
 		i++;
@@ -434,11 +590,11 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 
 	if (state->runtime_exclusion_parent || state->runtime_exclusion_children)
 	{
-		state->params = state->subplanstates[0]->plan->allParam;
+		state->params = state->subplan_states[0]->plan->allParam;
 		/*
 		 * make sure all params are initialized for runtime exclusion
 		 */
-		state->csstate.ss.ps.chgParam = bms_copy(state->subplanstates[0]->plan->allParam);
+		state->csstate.ss.ps.chgParam = bms_copy(state->subplan_states[0]->plan->allParam);
 	}
 }
 
@@ -447,17 +603,14 @@ can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints
 									  PlannerInfo *root, PlanState *ps)
 {
 	bool can_exclude;
-	ListCell *lc;
 	MemoryContext old = MemoryContextSwitchTo(state->exclusion_ctx);
-	List *restrictinfos = NIL;
-
-	foreach (lc, clauses)
-	{
-		RestrictInfo *ri = makeNode(RestrictInfo);
-		ri->clause = lfirst(lc);
-		restrictinfos = lappend(restrictinfos, ri);
-	}
-	restrictinfos = ts_constify_restrictinfo_params(root, ps->state, restrictinfos);
+	List *restrictinfos =
+		ts_constify_restrictinfo_params(root,
+										ps->state,
+										make_restrictinfos(
+											replace_hash_values(state->hash_values,
+																state->hash_value_consts,
+																clauses)));
 
 	can_exclude = can_exclude_chunk(constraints, restrictinfos);
 
@@ -467,7 +620,44 @@ can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints
 }
 
 /*
- * build bitmap of valid subplans for runtime exclusion
+ * Run runtime exclusion on the chunks of a child. Only the chunks in candidates
+ * are checked, NULL checks all of them. Returns the chunks that cannot be
+ * excluded.
+ */
+static Bitmapset *
+runtime_exclude_members(ChunkAppendState *state, List *constraints, List *clauses,
+						Bitmapset *candidates, PlannerInfo *root, PlanState *ps)
+{
+	Bitmapset *valid_members = NULL;
+	ListCell *lc_constraints, *lc_clauses;
+	int member = 0;
+
+	forboth (lc_constraints, constraints, lc_clauses, clauses)
+	{
+		if (candidates == NULL || bms_is_member(member, candidates))
+		{
+			if (can_exclude_constraints_using_clauses(state,
+													  lfirst(lc_constraints),
+													  lfirst(lc_clauses),
+													  root,
+													  ps))
+			{
+				state->runtime_number_exclusions_children++;
+			}
+			else
+			{
+				valid_members = bms_add_member(valid_members, member);
+			}
+		}
+		member++;
+	}
+
+	return valid_members;
+}
+
+/*
+ * Perform runtime chunk exclusion, saving the passing subplans in the
+ * subplans_after_runtime bitmap.
  */
 static void
 do_runtime_exclusion(ChunkAppendState *state)
@@ -490,13 +680,14 @@ do_runtime_exclusion(ChunkAppendState *state)
 	}
 
 	state->runtime_number_loops++;
+	state->hash_value_consts = NIL;
 
 	if (state->runtime_exclusion_parent)
 	{
-		/* try to exclude all the chunks using the parents clauses.
-		 * here, all constraints are true but exclusion can still
-		 * happen because of things like ANY(empty set), and NULL
-		 * inference
+		/*
+		 * Try to exclude all chunks using the parent clauses.
+		 * All constraints are true but exclusion can still happen
+		 * because of things like ANY(empty set) and NULL inference.
 		 */
 		if (can_exclude_constraints_using_clauses(state,
 												  list_make1(makeBoolConst(true, false)),
@@ -513,10 +704,16 @@ do_runtime_exclusion(ChunkAppendState *state)
 	{
 		for (i = 0; i < state->num_subplans; i++)
 		{
-			state->valid_subplans = bms_add_member(state->valid_subplans, i);
+			state->subplans_after_runtime = bms_add_member(state->subplans_after_runtime, i);
 		}
 		return;
 	}
+
+	MemoryContextReset(state->hash_value_ctx);
+	MemoryContext old = MemoryContextSwitchTo(state->hash_value_ctx);
+	state->hash_value_consts =
+		constify_hash_values(&root, state->csstate.ss.ps.state, state->hash_values);
+	MemoryContextSwitchTo(old);
 
 	Assert(state->num_subplans == list_length(state->filtered_ri_clauses));
 
@@ -524,33 +721,33 @@ do_runtime_exclusion(ChunkAppendState *state)
 	lc_constraints = list_head(state->filtered_constraints);
 
 	/*
-	 * mark subplans as active/inactive in valid_subplans
+	 * mark subplans as active/inactive in subplans_after_runtime
 	 */
 	for (i = 0; i < state->num_subplans; i++)
 	{
-		PlanState *ps = state->subplanstates[i];
-		Scan *scan = ts_chunk_append_get_scan_plan(ps->plan);
+		PlanState *ps = state->subplan_states[i];
+		Bitmapset *valid_members =
+			runtime_exclude_members(state,
+									lfirst(lc_constraints),
+									lfirst(lc_clauses),
+									state->filtered_valid_members != NIL ?
+										list_nth(state->filtered_valid_members, i) :
+										NULL,
+									&root,
+									ps);
 
-		if (scan == NULL || scan->scanrelid == 0)
+		if (valid_members != NULL)
 		{
-			state->valid_subplans = bms_add_member(state->valid_subplans, i);
-		}
-		else
-		{
-			bool can_exclude = can_exclude_constraints_using_clauses(state,
-																	 lfirst(lc_constraints),
-																	 lfirst(lc_clauses),
-																	 &root,
-																	 ps);
-
-			if (!can_exclude)
+			if (IsA(ps, MergeAppendState))
 			{
-				state->valid_subplans = bms_add_member(state->valid_subplans, i);
+				set_merge_append_members(ps, valid_members);
 			}
 			else
 			{
-				state->runtime_number_exclusions_children++;
+				bms_free(valid_members);
 			}
+
+			state->subplans_after_runtime = bms_add_member(state->subplans_after_runtime, i);
 		}
 
 		lc_clauses = lnext(state->filtered_ri_clauses, lc_clauses);
@@ -573,7 +770,7 @@ chunk_append_exec(CustomScanState *node)
 	ProjectionInfo *projinfo = node->ss.ps.ps_ProjInfo;
 	TupleTableSlot *subslot;
 
-	Assert(state->init_done == true);
+	Assert(state->child_exec_nodes_initialized == true);
 
 	if (state->current == INVALID_SUBPLAN_INDEX)
 	{
@@ -592,7 +789,7 @@ chunk_append_exec(CustomScanState *node)
 		}
 
 		Assert(state->current >= 0 && state->current < state->num_subplans);
-		subnode = state->subplanstates[state->current];
+		subnode = state->subplan_states[state->current];
 
 		/*
 		 * get a tuple from the subplan
@@ -641,7 +838,7 @@ get_next_subplan(ChunkAppendState *state, int last_plan)
 		 * bms_next_member will return -2 (NO_MATCHING_SUBPLANS) if there are
 		 * no more members
 		 */
-		return bms_next_member(state->valid_subplans, last_plan);
+		return bms_next_member(state->subplans_after_runtime, last_plan);
 	}
 	else
 	{
@@ -743,6 +940,7 @@ choose_next_subplan_in_worker(ChunkAppendState *worker_state)
 
 	/* advance next_plan for next worker */
 	parallel_state->next_plan = get_next_subplan(worker_state, worker_state->current);
+
 	/*
 	 * if we reach the end of the list of subplans we set next_plan
 	 * to INVALID_SUBPLAN_INDEX to allow rechecking unfinished subplans
@@ -770,7 +968,7 @@ chunk_append_end(CustomScanState *node)
 
 	for (i = 0; i < state->num_subplans; i++)
 	{
-		ExecEndNode(state->subplanstates[i]);
+		ExecEndNode(state->subplan_states[i]);
 	}
 }
 
@@ -787,10 +985,10 @@ chunk_append_rescan(CustomScanState *node)
 	{
 		if (node->ss.ps.chgParam != NULL)
 		{
-			UpdateChangedParamSet(state->subplanstates[i], node->ss.ps.chgParam);
+			UpdateChangedParamSet(state->subplan_states[i], node->ss.ps.chgParam);
 		}
 
-		ExecReScan(state->subplanstates[i]);
+		ExecReScan(state->subplan_states[i]);
 	}
 	state->current = INVALID_SUBPLAN_INDEX;
 
@@ -800,8 +998,8 @@ chunk_append_rescan(CustomScanState *node)
 	if ((state->runtime_exclusion_parent || state->runtime_exclusion_children) &&
 		bms_overlap(node->ss.ps.chgParam, state->params))
 	{
-		bms_free(state->valid_subplans);
-		state->valid_subplans = NULL;
+		bms_free(state->subplans_after_runtime);
+		state->subplans_after_runtime = NULL;
 		state->runtime_initialized = false;
 	}
 }
@@ -842,7 +1040,7 @@ init_parallel_state(ChunkAppendState *state, ParallelChunkAppendState *parallel_
 
 	/* Mark active subplans in parallel state */
 	int plan = -1;
-	while ((plan = bms_next_member(state->included_subplans_by_se, plan)) >= 0)
+	while ((plan = bms_next_member(state->subplans_after_startup, plan)) >= 0)
 	{
 		parallel_state->subplan_state[plan] =
 			ts_set_flags_32(parallel_state->subplan_state[plan], CASS_Included);
@@ -861,8 +1059,8 @@ static void
 chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *coordinate)
 {
 	ChunkAppendState *state = (ChunkAppendState *) node;
-	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
-	init_parallel_state(state, pstate);
+	ParallelChunkAppendState *parallel_state = (ParallelChunkAppendState *) coordinate;
+	init_parallel_state(state, parallel_state);
 
 	state->lock = chunk_append_get_lock_pointer();
 
@@ -874,7 +1072,7 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
 	state->choose_next_subplan = choose_next_subplan_in_worker;
 	state->current = INVALID_SUBPLAN_INDEX;
 	state->pcxt = pcxt;
-	state->parallel_state = pstate;
+	state->parallel_state = parallel_state;
 }
 
 /*
@@ -891,8 +1089,8 @@ static void
 chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *coordinate)
 {
 	ChunkAppendState *state = (ChunkAppendState *) node;
-	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
-	init_parallel_state(state, pstate);
+	ParallelChunkAppendState *parallel_state = (ParallelChunkAppendState *) coordinate;
+	init_parallel_state(state, parallel_state);
 }
 
 /*
@@ -905,48 +1103,71 @@ chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void
 static void
 chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordinate)
 {
-	ChunkAppendState *state = (ChunkAppendState *) node;
-	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
+	ChunkAppendState *worker_state = (ChunkAppendState *) node;
+	ParallelChunkAppendState *parallel_state = (ParallelChunkAppendState *) coordinate;
 
 	Assert(IsParallelWorker());
 	Assert(node->ss.ps.plan->parallel_aware);
-	Assert(pstate != NULL);
-	Assert(state->estate != NULL);
+	Assert(parallel_state != NULL);
+	Assert(worker_state->estate != NULL);
 
 	/* Read information about included plans by startup exclusion from the parallel state */
-	state->filtered_first_partial_plan = pstate->filtered_first_partial_plan;
+	worker_state->filtered_first_partial_plan = parallel_state->filtered_first_partial_plan;
 
 	List *filtered_subplans = NIL;
 	List *filtered_ri_clauses = NIL;
 	List *filtered_constraints = NIL;
 
-	for (int plan = 0; plan < list_length(state->initial_subplans); plan++)
+	/*
+	 * The per-chunk clause lists can be empty if we don't have any chunk-based
+	 * exclusion, that is, only hypertable-based exclusion.
+	 */
+	const bool have_chunk_filters =
+		worker_state->startup_exclusion || worker_state->runtime_exclusion_children;
+
+	for (int plan = 0; plan < list_length(worker_state->initial_subplans); plan++)
 	{
-		if (ts_flags_are_set_32(pstate->subplan_state[plan], CASS_Included))
+		if (!ts_flags_are_set_32(parallel_state->subplan_state[plan], CASS_Included))
 		{
-			filtered_subplans =
-				lappend(filtered_subplans, list_nth(state->filtered_subplans, plan));
+			continue;
+		}
+
+		filtered_subplans =
+			lappend(filtered_subplans, list_nth(worker_state->filtered_subplans, plan));
+
+		if (have_chunk_filters)
+		{
 			filtered_ri_clauses =
-				lappend(filtered_ri_clauses, list_nth(state->filtered_ri_clauses, plan));
+				lappend(filtered_ri_clauses, list_nth(worker_state->filtered_ri_clauses, plan));
 			filtered_constraints =
-				lappend(filtered_constraints, list_nth(state->filtered_constraints, plan));
+				lappend(filtered_constraints, list_nth(worker_state->filtered_constraints, plan));
 		}
 	}
 
-	state->filtered_subplans = filtered_subplans;
-	state->filtered_ri_clauses = filtered_ri_clauses;
-	state->filtered_constraints = filtered_constraints;
+	worker_state->filtered_subplans = filtered_subplans;
+	worker_state->filtered_ri_clauses = filtered_ri_clauses;
+	worker_state->filtered_constraints = filtered_constraints;
 
-	Assert(list_length(state->filtered_subplans) == list_length(state->filtered_ri_clauses));
-	Assert(list_length(state->filtered_ri_clauses) == list_length(state->filtered_constraints));
+	if (have_chunk_filters)
+	{
+		Assert(list_length(worker_state->filtered_subplans) ==
+			   list_length(worker_state->filtered_ri_clauses));
+		Assert(list_length(worker_state->filtered_ri_clauses) ==
+			   list_length(worker_state->filtered_constraints));
+	}
+	else
+	{
+		Assert(worker_state->filtered_ri_clauses == NIL &&
+			   worker_state->filtered_constraints == NIL);
+	}
 
-	state->lock = chunk_append_get_lock_pointer();
-	state->choose_next_subplan = choose_next_subplan_in_worker;
-	state->current = INVALID_SUBPLAN_INDEX;
-	state->parallel_state = pstate;
+	worker_state->lock = chunk_append_get_lock_pointer();
+	worker_state->choose_next_subplan = choose_next_subplan_in_worker;
+	worker_state->current = INVALID_SUBPLAN_INDEX;
+	worker_state->parallel_state = parallel_state;
 
-	init_subplanstates(state, state->estate, state->eflags);
-	Assert(state->num_subplans == list_length(state->filtered_subplans));
+	init_subplans(worker_state, worker_state->estate, worker_state->eflags);
+	Assert(worker_state->num_subplans == list_length(worker_state->filtered_subplans));
 }
 
 /*
@@ -1263,10 +1484,36 @@ can_exclude_chunk(List *constraints, List *baserestrictinfo)
  * Fetch the constraints for a relation and adjust range table indexes
  * if necessary.
  */
+static List *
+get_chunk_constraints(EState *estate, Plan *plan, List *clauses, Index initial_index)
+{
+	Scan *scan = ts_chunk_append_get_scan_plan(plan);
+
+	if (scan == NULL || scan->scanrelid == 0)
+	{
+		return NIL;
+	}
+
+	Index scanrelid = scan->scanrelid;
+	RangeTblEntry *rte = rt_fetch(scanrelid, estate->es_range_table);
+
+	/*
+	 * Adjust the RangeTableEntry indexes in the restrictinfo
+	 * clauses because during planning subquery indexes may be
+	 * different from the final index after flattening.
+	 */
+	if (scanrelid != initial_index)
+	{
+		ChangeVarNodes((Node *) clauses, initial_index, scanrelid, 0);
+	}
+
+	return ca_get_relation_constraints(rte->relid, scanrelid, true);
+}
+
 static void
 initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 {
-	ListCell *lc_clauses, *lc_plan, *lc_relid;
+	ListCell *lc_clauses, *lc_plan, *lc_relids;
 	List *constraints = NIL;
 	EState *estate = state->csstate.ss.ps.state;
 
@@ -1282,30 +1529,26 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 			  state->initial_subplans,
 			  lc_clauses,
 			  state->initial_ri_clauses,
-			  lc_relid,
+			  lc_relids,
 			  initial_rt_indexes)
 	{
-		Scan *scan = ts_chunk_append_get_scan_plan(lfirst(lc_plan));
-		Index initial_index = lfirst_oid(lc_relid);
-		List *relation_constraints = NIL;
+		List *member_constraints = NIL;
+		ListCell *lc_member, *lc_member_clauses, *lc_member_relid;
 
-		if (scan != NULL && scan->scanrelid > 0)
+		forthree (lc_member,
+				  ts_chunk_append_get_members(lfirst(lc_plan)),
+				  lc_member_clauses,
+				  lfirst(lc_clauses),
+				  lc_member_relid,
+				  lfirst(lc_relids))
 		{
-			Index rt_index = scan->scanrelid;
-			RangeTblEntry *rte = rt_fetch(rt_index, estate->es_range_table);
-			relation_constraints = ca_get_relation_constraints(rte->relid, rt_index, true);
-
-			/*
-			 * Adjust the RangeTableEntry indexes in the restrictinfo
-			 * clauses because during planning subquery indexes may be
-			 * different from the final index after flattening.
-			 */
-			if (rt_index != initial_index)
-			{
-				ChangeVarNodes(lfirst(lc_clauses), initial_index, scan->scanrelid, 0);
-			}
+			member_constraints = lappend(member_constraints,
+										 get_chunk_constraints(estate,
+															   lfirst(lc_member),
+															   lfirst(lc_member_clauses),
+															   lfirst_oid(lc_member_relid)));
 		}
-		constraints = lappend(constraints, relation_constraints);
+		constraints = lappend(constraints, member_constraints);
 	}
 	state->initial_constraints = constraints;
 	state->filtered_constraints = constraints;
@@ -1344,7 +1587,7 @@ chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	{
 		ExplainPropertyInteger("Chunks excluded during startup",
 							   NULL,
-							   list_length(state->initial_subplans) - list_length(node->custom_ps),
+							   state->startup_number_exclusions,
 							   es);
 	}
 

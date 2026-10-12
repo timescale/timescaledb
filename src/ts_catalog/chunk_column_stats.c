@@ -611,15 +611,16 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 		compexprs = lappend(compexprs, ge_expr);
 	}
 
+	/* Use the inclusive max, the exclusive end can overflow or round down for dates */
 	if (info->range_end != PG_INT64_MAX)
 	{
 		A_Const *end_const = makeNode(A_Const);
 		memcpy(&end_const->val,
-			   makeString(ts_internal_to_time_string(info->range_end, col_type)),
+			   makeString(ts_internal_to_time_string(info->range_end - 1, col_type)),
 			   sizeof(end_const->val));
 		end_const->location = -1;
-		A_Expr *lt_expr = makeSimpleA_Expr(AEXPR_OP, "<", rangedef, (Node *) end_const, -1);
-		compexprs = lappend(compexprs, lt_expr);
+		A_Expr *le_expr = makeSimpleA_Expr(AEXPR_OP, "<=", rangedef, (Node *) end_const, -1);
+		compexprs = lappend(compexprs, le_expr);
 	}
 
 	constr = makeNode(Constraint);
@@ -1031,13 +1032,8 @@ ts_chunk_column_stats_insert(const Hypertable *ht, const Chunk *chunk)
 
 	for (range_index = 0; range_index < rs->num_range_cols; range_index++)
 	{
-		AttrNumber attno;
 		char *col_name = NameStr(rs->range_cols[range_index].column_name);
 		FormData_chunk_column_stats fd = { 0 };
-
-		/* Get the attribute number in the HT for this column, and map to the chunk */
-		attno = get_attnum(ht->main_table_relid, col_name);
-		attno = ts_map_attno(ht->main_table_relid, chunk->fd.relid, attno);
 
 		/* insert an entry for this ht_id, chunk_id for this col_name with -inf/+inf range */
 		fd.hypertable_id = ht->fd.id;
@@ -1516,7 +1512,9 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
 
 	fill_form_from_slot(ti->slot, &fd);
 
-	constr = create_col_stats_check_constraint(&fd, checklist->main_table_relid, NULL);
+	/* Invalid ranges no longer cover all rows in the chunk */
+	constr =
+		fd.valid ? create_col_stats_check_constraint(&fd, checklist->main_table_relid, NULL) : NULL;
 
 	if (constr)
 	{

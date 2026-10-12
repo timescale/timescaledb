@@ -17,6 +17,7 @@
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <storage/lmgr.h>
 #include <utils/tuplestore.h>
 
 #include "hypertable.h"
@@ -38,6 +39,9 @@ tsl_hypertable_get_tenant_tracking_info(PG_FUNCTION_ARGS)
 	{
 		/* Tracker state is per-hypertable data: restrict it to the owner. */
 		ts_hypertable_permissions_check(relid, GetUserId());
+		/* The deferred free at commit runs under AccessExclusiveLock on the
+		 * hypertable; hold this so the tracker cannot be freed while we read it. */
+		LockRelationOid(relid, AccessShareLock);
 		tracking = ts_tenant_tracker_lookup(hypertable_id);
 	}
 

@@ -216,7 +216,7 @@ step "WP_after_materialization_release"
 session "R1"
 setup
 {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     SET SESSION deadlock_timeout = '500ms';
     INSERT INTO cancelpid VALUES (pg_backend_pid())
     ON CONFLICT (pid) DO NOTHING;

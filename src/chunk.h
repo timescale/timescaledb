@@ -208,7 +208,6 @@ extern TSDLLEXPORT bool ts_chunk_unset_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_frozen(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed(Chunk *chunk);
-extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT void ts_chunk_drop_by_relid(Oid relid, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, Oid time_type, Oid arg_type,
@@ -244,7 +243,7 @@ extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_end(const Chunk *chunk);
 extern Chunk *ts_chunk_build_from_tuple(Chunk **chunkptr, TupleInfo *ti);
 
-extern TM_Result ts_chunk_lock_for_creating_compressed_chunk(Chunk *chunk);
+extern TSDLLEXPORT TM_Result ts_chunk_lock_for_creating_compressed_chunk(Chunk *chunk);
 extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);

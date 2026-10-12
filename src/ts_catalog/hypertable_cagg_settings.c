@@ -79,6 +79,15 @@ hypertable_cagg_settings_formdata_fill(FormData_hypertable_cagg_settings *fd, co
 	namestrcpy(&fd->granular_refresh_column,
 			   NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(
 				   Anum_hypertable_cagg_settings_granular_refresh_column)])));
+	/* The offsets are nullable in the catalog but every writer sets them, so a
+	 * NULL means the row was tampered with rather than written by ALTER TABLE. */
+	Ensure(!nulls[AttrNumberGetAttrOffset(
+			   Anum_hypertable_cagg_settings_granular_refresh_start_offset)] &&
+			   !nulls[AttrNumberGetAttrOffset(
+				   Anum_hypertable_cagg_settings_granular_refresh_end_offset)],
+		   "granular refresh offsets for hypertable %d are null",
+		   fd->hypertable_id);
+
 	fd->granular_refresh_start_offset = DatumGetTextPCopy(values[AttrNumberGetAttrOffset(
 		Anum_hypertable_cagg_settings_granular_refresh_start_offset)]);
 	fd->granular_refresh_end_offset = DatumGetTextPCopy(
@@ -109,18 +118,30 @@ hypertable_cagg_settings_formdata_make_tuple(const FormData_hypertable_cagg_sett
 	return heap_form_tuple(desc, values, nulls);
 }
 
+/*
+ * Callers who want to update the tuple later should pass in non-null tuplock argument.
+ * Then the caller can safely update the tuple.
+ */
 TSDLLEXPORT bool
-ts_hypertable_cagg_settings_get(int32 hypertable_id, FormData_hypertable_cagg_settings *form)
+ts_hypertable_cagg_settings_get(int32 hypertable_id, FormData_hypertable_cagg_settings *form,
+								const ScanTupLock *tuplock)
 {
 	bool found = false;
 	ScanIterator iterator =
-		ts_scan_iterator_create(HYPERTABLE_CAGG_SETTINGS, AccessShareLock, CurrentMemoryContext);
+		ts_scan_iterator_create(HYPERTABLE_CAGG_SETTINGS,
+								tuplock != NULL ? RowShareLock : AccessShareLock,
+								CurrentMemoryContext);
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	iterator.ctx.tuplock = tuplock;
 
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		if (tuplock != NULL && ti->lockresult == TM_Deleted)
+		{
+			continue;
+		}
 
 		hypertable_cagg_settings_formdata_fill(form, ti);
 		found = true;
@@ -147,24 +168,62 @@ ts_hypertable_cagg_settings_insert(const FormData_hypertable_cagg_settings *form
 }
 
 TSDLLEXPORT void
-ts_hypertable_cagg_settings_delete(int32 hypertable_id)
+ts_hypertable_cagg_settings_update(const FormData_hypertable_cagg_settings *form)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(HYPERTABLE_CAGG_SETTINGS, RowExclusiveLock, CurrentMemoryContext);
 
-	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	init_scan_by_hypertable_id(&iterator, form->hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		CatalogSecurityContext sec_ctx;
+		HeapTuple tuple =
+			hypertable_cagg_settings_formdata_make_tuple(form, ts_scanner_get_tupledesc(ti));
+
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), tuple);
+		ts_catalog_restore_user(&sec_ctx);
+		heap_freetuple(tuple);
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
+TSDLLEXPORT void
+ts_hypertable_cagg_settings_delete(int32 hypertable_id)
+{
+	/* Lock the row before deleting it . Protects against concurrent
+	 * updates to the row
+	 */
+	static const ScanTupLock tuplock = {
+		.lockmode = LockTupleExclusive,
+		.waitpolicy = LockWaitBlock,
+		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+	};
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE_CAGG_SETTINGS, RowExclusiveLock, CurrentMemoryContext);
+
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	iterator.ctx.tuplock = &tuplock;
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		/* already gone: another transaction deleted it */
+		if (ti->lockresult == TM_Deleted)
+		{
+			continue;
+		}
 
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 	ts_scan_iterator_close(&iterator);
 }
 
-static Datum
-cast_offset_from_text(const text *offset, Oid dimtype)
+TSDLLEXPORT Datum
+ts_hypertable_cagg_settings_cast_offset(const text *offset, Oid dimtype)
 {
 	Datum cstr = CStringGetDatum(text_to_cstring(offset));
 
@@ -203,7 +262,7 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 	*window_start = PG_INT64_MAX;
 	*window_end = PG_INT64_MIN;
 
-	if (!ts_hypertable_cagg_settings_get(hypertable_id, &settings))
+	if (!ts_hypertable_cagg_settings_get(hypertable_id, &settings, NULL))
 	{
 		return false;
 	}
@@ -214,8 +273,11 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 	{
 		const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 		Oid dimtype = ts_dimension_get_partition_type(open_dim);
-		Datum start_datum = cast_offset_from_text(settings.granular_refresh_start_offset, dimtype);
-		Datum end_datum = cast_offset_from_text(settings.granular_refresh_end_offset, dimtype);
+		Datum start_datum =
+			ts_hypertable_cagg_settings_cast_offset(settings.granular_refresh_start_offset,
+													dimtype);
+		Datum end_datum =
+			ts_hypertable_cagg_settings_cast_offset(settings.granular_refresh_end_offset, dimtype);
 
 		if (IS_INTEGER_TYPE(dimtype))
 		{
@@ -258,8 +320,41 @@ ts_hypertable_cagg_settings_get_tenant_tracking_window(int32 hypertable_id, int6
 													dimtype);
 			applicable = true;
 		}
+
+		/*
+		 * The offsets are compared against each other as microseconds when the
+		 * settings are validated and stored (a month counts as 30 days, a day as 24 hours),
+		 * while the bounds above come from calendar-aware subtraction. Therefore,
+		 * at runtime depending on now(), end offset can endup smaller than start
+		 * offset. For example, "1 month" end offset is smaller than
+		 * "29 days" start offset in February, while is valid with a general 30-day
+		 * month assumption. Similar for a 23-day when clock moves forward in Spring
+		 * offset in days, or a 23 hour day across a DST spring forward. In such a
+		 * case, treat the late window as empty: no tenant is recorded
+		 * into the generation and every invalidation keeps seqnum 0, which is the
+		 * full-refresh path.
+		 *
+		 * The applicable check separates a window that was computed and came out
+		 * crossed from one that was never computed at all -- an integer dimension
+		 * with no integer_now, say -- where the bounds are still the empty
+		 * sentinels and would compare the same way.
+		 */
+		if (applicable && *window_start >= *window_end)
+		{
+			ereport(LOG,
+					(errmsg("per-tenant tracking window for hypertable \"%s.%s\" is empty",
+							NameStr(ht->fd.schema_name),
+							NameStr(ht->fd.table_name)),
+					 errdetail("The configured offsets resolve to a window start at or after its "
+							   "end."),
+					 errhint("No tenant is tracked while the window is empty; continuous aggregate "
+							 "refreshes fall back to the full invalidation log.")));
+			*window_start = PG_INT64_MAX;
+			*window_end = PG_INT64_MIN;
+		}
 	}
 	ts_cache_release(&ht_cache);
+
 	return applicable;
 }
 
@@ -271,7 +366,7 @@ ts_hypertable_cagg_settings_get_tenant_tracking_column(int32 hypertable_id,
 	bool applicable = false;
 	*column_name = NULL;
 
-	if (!ts_hypertable_cagg_settings_get(hypertable_id, &settings))
+	if (!ts_hypertable_cagg_settings_get(hypertable_id, &settings, NULL))
 	{
 		return false;
 	}

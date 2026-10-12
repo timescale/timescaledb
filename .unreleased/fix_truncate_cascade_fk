@@ -1,0 +1,1 @@
+Fixes: #10718 Fix TRUNCATE CASCADE dropping foreign keys that reference a hypertable
