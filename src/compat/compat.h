@@ -30,7 +30,7 @@
  */
 
 #define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
-#define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
+#define is_supported_pg_version_17(version) ((version >= 170003) && (version < 180000))
 #define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
 #define is_supported_pg_version_19(version) ((version >= 190000) && (version < 200000))
 
@@ -626,34 +626,14 @@ murmurhash64(uint64 data)
 
 #if PG17_LT
 /* 'mergeActions' argument was added in 5f2e179bd31e */
-#define CheckValidResultRelCompat(resultRelInfo,                                                   \
-								  operation,                                                       \
-								  onConflictAction,                                                \
-								  mergeActions,                                                    \
-								  mtnode)                                                          \
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
 	CheckValidResultRel(resultRelInfo, operation)
 #elif PG18_LT
-#define CheckValidResultRelCompat(resultRelInfo,                                                   \
-								  operation,                                                       \
-								  onConflictAction,                                                \
-								  mergeActions,                                                    \
-								  mtnode)                                                          \
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
 	CheckValidResultRel(resultRelInfo, operation, mergeActions)
-#elif PG19_LT
-#define CheckValidResultRelCompat(resultRelInfo,                                                   \
-								  operation,                                                       \
-								  onConflictAction,                                                \
-								  mergeActions,                                                    \
-								  mtnode)                                                          \
-	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions)
 #else
-/* 'mtnode' argument was added in PG19 */
-#define CheckValidResultRelCompat(resultRelInfo,                                                   \
-								  operation,                                                       \
-								  onConflictAction,                                                \
-								  mergeActions,                                                    \
-								  mtnode)                                                          \
-	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions, mtnode)
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions)
 #endif
 
 #if PG17_LT

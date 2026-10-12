@@ -670,3 +670,73 @@ GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 5;
                                  Output: _hyper_4_20_chunk.ts, _hyper_4_20_chunk.sensor_id
 
 RESET enable_seqscan;
+-- Chunkwise aggregation with a parallel-restricted aggregate expression
+CREATE TABLE ticks(ts timestamptz NOT NULL, sym text NOT NULL);
+SELECT create_hypertable('ticks', 'ts', chunk_time_interval => interval '1 day');
+ create_hypertable  
+--------------------
+ (5,public,ticks,t)
+
+INSERT INTO ticks
+SELECT t, s
+FROM generate_series('2024-01-01 00:00+00'::timestamptz, '2024-01-03 23:59+00', '1 minute') t,
+     unnest(ARRAY['A','B','C']) s;
+VACUUM ANALYZE ticks;
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SET min_parallel_table_scan_size = 0;
+SET max_parallel_workers_per_gather = 2;
+SET parallel_leader_participation = on;
+-- Strip SubPlan names since PG19 prints them differently
+CREATE FUNCTION explain_subplan(query text) RETURNS SETOF text LANGUAGE plpgsql AS
+$$
+DECLARE
+    line text;
+BEGIN
+    FOR line IN EXECUTE 'EXPLAIN (costs off) ' || query LOOP
+        RETURN NEXT regexp_replace(line, 'SubPlan \S+', 'SubPlan');
+    END LOOP;
+END
+$$;
+SELECT explain_subplan($$
+SELECT sym, count(*) FILTER (WHERE EXISTS (SELECT FROM ticks t2 WHERE t2.sym = t1.sym AND t2.ts = t1.ts - interval '1 minute'))
+FROM ticks t1 GROUP BY sym
+$$);
+                                     explain_subplan                                     
+-----------------------------------------------------------------------------------------
+ GroupAggregate
+   Group Key: t1.sym
+   ->  Gather Merge
+         Workers Planned: 2
+         ->  Sort
+               Sort Key: t1.sym
+               ->  Parallel Append
+                     ->  Parallel Seq Scan on _hyper_5_21_chunk t1_1
+                     ->  Parallel Seq Scan on _hyper_5_22_chunk t1_2
+                     ->  Parallel Seq Scan on _hyper_5_23_chunk t1_3
+   SubPlan
+     ->  Custom Scan (ChunkAppend) on ticks t2
+           Chunks excluded during startup: 0
+           ->  Index Scan using _hyper_5_21_chunk_ticks_ts_idx on _hyper_5_21_chunk t2_1
+                 Index Cond: (ts = (t1.ts - '@ 1 min'::interval))
+                 Filter: (sym = t1.sym)
+           ->  Index Scan using _hyper_5_22_chunk_ticks_ts_idx on _hyper_5_22_chunk t2_2
+                 Index Cond: (ts = (t1.ts - '@ 1 min'::interval))
+                 Filter: (sym = t1.sym)
+           ->  Index Scan using _hyper_5_23_chunk_ticks_ts_idx on _hyper_5_23_chunk t2_3
+                 Index Cond: (ts = (t1.ts - '@ 1 min'::interval))
+                 Filter: (sym = t1.sym)
+
+SELECT sym, count(*) FILTER (WHERE EXISTS (SELECT FROM ticks t2 WHERE t2.sym = t1.sym AND t2.ts = t1.ts - interval '1 minute'))
+FROM ticks t1 GROUP BY sym ORDER BY sym;
+ sym | count 
+-----+-------
+ A   |  4319
+ B   |  4319
+ C   |  4319
+
+RESET parallel_setup_cost;
+RESET parallel_tuple_cost;
+RESET min_parallel_table_scan_size;
+SET max_parallel_workers_per_gather = 1;
+SET parallel_leader_participation = off;

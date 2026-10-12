@@ -414,7 +414,7 @@ check_period_is_daily(int64 period)
 {
 	int64 day = USECS_PER_DAY;
 
-	if (period < day)
+	if (period < day && period > -day)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

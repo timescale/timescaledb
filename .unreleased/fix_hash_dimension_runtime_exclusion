@@ -1,0 +1,1 @@
+Fixes: #10606 Exclude chunks of a hash partitioned dimension at runtime when the hypertable is on the parameterized side of a nested loop
