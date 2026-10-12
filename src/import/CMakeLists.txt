@@ -5,6 +5,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/commands/cluster.c
     ${CMAKE_CURRENT_SOURCE_DIR}/nodes/list.c
     ${CMAKE_CURRENT_SOURCE_DIR}/optimizer/util/plancat.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/optimizer/util/clauses.c
     ${CMAKE_CURRENT_SOURCE_DIR}/planner.c
     ${CMAKE_CURRENT_SOURCE_DIR}/optimizer/plan/setrefs.c
     ${CMAKE_CURRENT_SOURCE_DIR}/commands/explain.c

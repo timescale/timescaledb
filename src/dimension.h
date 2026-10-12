@@ -171,6 +171,8 @@ extern TSDLLEXPORT Dimension *ts_hyperspace_get_mutable_dimension(Hyperspace *hs
 																  DimensionType type, Index n);
 extern TSDLLEXPORT const Dimension *
 ts_hyperspace_get_dimension_by_name(const Hyperspace *hs, DimensionType type, const char *name);
+extern TSDLLEXPORT const Dimension *
+ts_hyperspace_get_dimension_by_attno(const Hyperspace *hs, DimensionType type, AttrNumber attno);
 extern TSDLLEXPORT Dimension *
 ts_hyperspace_get_mutable_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
 extern DimensionVec *ts_dimension_get_slices(const Dimension *dim);
@@ -199,7 +201,7 @@ extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData
 											Oid *intervaltype, int16 *num_slices,
 											Oid *integer_now_func);
 extern TSDLLEXPORT Point *ts_point_create(int16 num_dimensions);
-extern TSDLLEXPORT bool ts_is_equality_operator(Oid opno, Oid left, Oid right);
+extern TSDLLEXPORT bool ts_is_equality_operator(Oid opno, Oid type);
 extern TSDLLEXPORT Datum ts_dimension_info_in(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_dimension_info_out(PG_FUNCTION_ARGS);
 

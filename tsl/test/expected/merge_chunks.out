@@ -1260,3 +1260,387 @@ SELECT * FROM merge_layout_dead ORDER BY time;
  Thu Jan 01 21:00:00 2026 PST |    15
 
 DROP TABLE merge_layout_dead;
+-- Issue #10691: after merging compressed chunks with non-partition orderby columns
+-- the resulting chunk should be marked "unordered" as input chunks' batches may overlap
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, c1 int8 NOT NULL, c2 int8 NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+--
+
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '',
+                   timescaledb.compress_orderby = 'c1 DESC NULLS FIRST, ts ASC, c2 DESC');
+INSERT INTO t_10691 SELECT '2024-01-01'::timestamptz + i * interval '1 minute', (i * 7919) % 300, i
+              FROM generate_series(1, 2500) i;
+INSERT INTO t_10691 SELECT '2024-01-10'::timestamptz + i * interval '1 minute', (i * 104729) % 300, i
+              FROM generate_series(1, 2500) i;
+SET timescaledb.compression_batch_size_limit = 1000;
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+ count 
+-------
+     3
+
+-- 300
+SELECT count(DISTINCT c1) FROM t_10691;
+ count 
+-------
+   300
+
+-- merge the two oldest chunks by range, whatever their names
+SELECT array_agg(format('%I.%I', chunk_schema, chunk_name)::regclass) as cs
+FROM (SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 't_10691' ORDER BY range_start LIMIT 2) c \gset
+CALL merge_chunks(:'cs');
+-- Should be 300
+SELECT count(DISTINCT c1) FROM t_10691;
+ count 
+-------
+   300
+
+-- Merged chunk should be unordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+       chunk_status_text        
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+ {COMPRESSED}
+
+-- decompress both chunks, then compress one chunk only, then merge both chunks:
+-- result should be ordered as only one compressed chunk participates in the merge
+SELECT count(decompress_chunk(c)) FROM show_chunks('t_10691') c;
+ count 
+-------
+     2
+
+SELECT chunk FROM show_chunks('t_10691') chunk ORDER BY 1 LIMIT 1 \gset
+SELECT FROM compress_chunk(:'chunk');
+--
+
+SELECT array_agg(c ORDER BY c) as cs FROM show_chunks('t_10691') c \gset
+CALL merge_chunks(:'cs');
+-- Should be 300
+SELECT count(DISTINCT c1) FROM t_10691;
+ count 
+-------
+   300
+
+-- Merged chunk should be ordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+  chunk_status_text   
+----------------------
+ {COMPRESSED,PARTIAL}
+
+drop table t_10691 cascade;
+-- When 1st orderby column is time partition column we do not mark merged chunk UNORDERED for one-dimension merge
+-------------------------------------------------------------------------------------------------------------
+-- Orderby on time partition column only
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, c1 int8 NOT NULL, c2 int8 NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+--
+
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '',
+                   timescaledb.compress_orderby = 'ts ASC');
+INSERT INTO t_10691 SELECT '2024-01-01'::timestamptz + i * interval '1 minute', (i * 7919) % 300, i
+              FROM generate_series(1, 2500) i;
+INSERT INTO t_10691 SELECT '2024-01-10'::timestamptz + i * interval '1 minute', (i * 104729) % 300, i
+              FROM generate_series(1, 2500) i;
+SET timescaledb.compression_batch_size_limit = 1000;
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+ count 
+-------
+     3
+
+-- 300
+SELECT count(DISTINCT c1) FROM t_10691;
+ count 
+-------
+   300
+
+-- merge the two oldest chunks by range, whatever their names
+SELECT array_agg(format('%I.%I', chunk_schema, chunk_name)::regclass) as cs
+FROM (SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 't_10691' ORDER BY range_start LIMIT 2) c \gset
+CALL merge_chunks(:'cs');
+-- Should be 300
+SELECT count(DISTINCT c1) FROM t_10691;
+ count 
+-------
+   300
+
+-- Merged chunk should be ordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+  chunk_status_text   
+----------------------
+ {COMPRESSED,PARTIAL}
+ {COMPRESSED}
+
+drop table t_10691 cascade;
+-- 1st orderby column is time partition column, plus more orderby columns
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, c1 int8 NOT NULL, c2 int8 NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+--
+
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '',
+                   timescaledb.compress_orderby = 'ts, c1');
+INSERT INTO t_10691 SELECT '2024-01-01'::timestamptz + i * interval '1 minute', (i * 7919) % 300, i
+              FROM generate_series(1, 2500) i;
+INSERT INTO t_10691 SELECT '2024-01-10'::timestamptz + i * interval '1 minute', (i * 104729) % 300, i
+              FROM generate_series(1, 2500) i;
+SET timescaledb.compression_batch_size_limit = 1000;
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+ count 
+-------
+     3
+
+-- 300
+SELECT count(DISTINCT c1) FROM t_10691;
+ count 
+-------
+   300
+
+-- merge the two oldest chunks by range, whatever their names
+SELECT array_agg(format('%I.%I', chunk_schema, chunk_name)::regclass) as cs
+FROM (SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 't_10691' ORDER BY range_start LIMIT 2) c \gset
+CALL merge_chunks(:'cs');
+-- Should be 300
+SELECT count(DISTINCT c1) FROM t_10691;
+ count 
+-------
+   300
+
+-- Merged chunk should be ordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+  chunk_status_text   
+----------------------
+ {COMPRESSED,PARTIAL}
+ {COMPRESSED}
+
+drop table t_10691 cascade;
+-- When all orderby columns in multidimension merge are time partition or space partition columns,
+-- batches in different chunks can still overlap on space partition columns, mark the result UNORDERED
+-- Multi-dimension merge on batches ordered on time and space partitions
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, device int NOT NULL, temp int NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+--
+
+DO $$ BEGIN PERFORM add_dimension('t_10691', by_hash('device', 2)); EXCEPTION WHEN OTHERS THEN NULL; END $$;
+INSERT INTO t_10691 VALUES
+  ('2024-01-01 01:00+00', 5, 50),
+  ('2024-01-01 02:00+00', 6, 60),
+  ('2024-01-10 01:00+00', 1, 10),
+  ('2024-01-10 02:00+00', 8, 80);
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'device ASC, ts DESC');
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+ count 
+-------
+     2
+
+SET timescaledb.enable_merge_multidim_chunks = true;
+-- Merge every chunk into one
+SELECT array_agg(c ORDER BY c) as cs FROM show_chunks('t_10691') c \gset
+CALL merge_chunks(:'cs');
+RESET timescaledb.enable_merge_multidim_chunks;
+SELECT device, temp FROM t_10691 ORDER BY device;
+ device | temp 
+--------+------
+      1 |   10
+      5 |   50
+      6 |   60
+      8 |   80
+
+-- Merged chunk should be unordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+       chunk_status_text        
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+
+drop table t_10691 cascade;
+-- Multi-dimension merge on batches ordered on time partition only
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, device int NOT NULL, val int NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+--
+
+DO $$ BEGIN PERFORM add_dimension('t_10691', by_hash('device', 2)); EXCEPTION WHEN OTHERS THEN NULL; END $$;
+INSERT INTO t_10691
+  SELECT '2024-01-01'::timestamptz + make_interval(mins => 2*i - 1), 1, 2*i - 1
+  FROM generate_series(1, 500) i;
+INSERT INTO t_10691
+  SELECT '2024-01-01'::timestamptz + make_interval(mins => 2*i), 2, 2*i
+  FROM generate_series(1, 500) i;
+ALTER TABLE t_10691 SET (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'ts');
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+ count 
+-------
+     2
+
+SET timescaledb.enable_merge_multidim_chunks = true;
+-- Merge every chunk into one
+SELECT array_agg(c ORDER BY c) as cs FROM show_chunks('t_10691') c \gset
+CALL merge_chunks(:'cs');
+RESET timescaledb.enable_merge_multidim_chunks;
+SELECT val FROM t_10691 ORDER BY ts ASC LIMIT 10;
+ val 
+-----
+   1
+   2
+   3
+   4
+   5
+   6
+   7
+   8
+   9
+  10
+
+-- Merged chunk should be unordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+       chunk_status_text        
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+
+drop table t_10691 cascade;
+-- Flagged by LLM: When unordered and ordered chunks are merged, mark the result UNORDERED
+---------------------------------------------------------------------------------------
+CREATE TABLE t_10691 (ts timestamptz NOT NULL, val int NOT NULL);
+SELECT FROM create_hypertable('t_10691', 'ts', chunk_time_interval => interval '7 days');
+--
+
+ALTER TABLE t_10691 SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = '',
+  timescaledb.compress_orderby = 'ts ASC'
+);
+-- Chunk A: insert and compress normally (ordered batches)
+INSERT INTO t_10691
+  SELECT '2024-01-01'::timestamptz + make_interval(hours => i), i
+  FROM generate_series(1, 50) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('t_10691') c;
+ count 
+-------
+     1
+
+-- Chunk B: use direct-compress INSERT in two separate statements
+-- to create overlapping compressed batches inside one chunk.
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO t_10691
+  SELECT '2024-01-08'::timestamptz + make_interval(hours => i), 100 + i
+  FROM generate_series(1, 50) i;
+INSERT INTO t_10691
+  SELECT '2024-01-08 00:30:00'::timestamptz + make_interval(hours => i), 200 + i
+  FROM generate_series(1, 50) i;
+-- Merge every chunk into one
+SELECT array_agg(c ORDER BY c) as cs FROM show_chunks('t_10691') c \gset
+CALL merge_chunks(:'cs');
+WARNING:  missing compression chunk size stats for compressed chunk "_hyper_15_47_chunk"
+-- Read the overlapping-batch region. Correct result interleaves
+-- whole-hour (val 101..150) and half-hour (val 201..250) rows.
+SELECT ts, val
+  FROM t_10691
+ WHERE ts >= '2024-01-08'
+ ORDER BY ts ASC;
+              ts              | val 
+------------------------------+-----
+ Mon Jan 08 01:00:00 2024 PST | 101
+ Mon Jan 08 01:30:00 2024 PST | 201
+ Mon Jan 08 02:00:00 2024 PST | 102
+ Mon Jan 08 02:30:00 2024 PST | 202
+ Mon Jan 08 03:00:00 2024 PST | 103
+ Mon Jan 08 03:30:00 2024 PST | 203
+ Mon Jan 08 04:00:00 2024 PST | 104
+ Mon Jan 08 04:30:00 2024 PST | 204
+ Mon Jan 08 05:00:00 2024 PST | 105
+ Mon Jan 08 05:30:00 2024 PST | 205
+ Mon Jan 08 06:00:00 2024 PST | 106
+ Mon Jan 08 06:30:00 2024 PST | 206
+ Mon Jan 08 07:00:00 2024 PST | 107
+ Mon Jan 08 07:30:00 2024 PST | 207
+ Mon Jan 08 08:00:00 2024 PST | 108
+ Mon Jan 08 08:30:00 2024 PST | 208
+ Mon Jan 08 09:00:00 2024 PST | 109
+ Mon Jan 08 09:30:00 2024 PST | 209
+ Mon Jan 08 10:00:00 2024 PST | 110
+ Mon Jan 08 10:30:00 2024 PST | 210
+ Mon Jan 08 11:00:00 2024 PST | 111
+ Mon Jan 08 11:30:00 2024 PST | 211
+ Mon Jan 08 12:00:00 2024 PST | 112
+ Mon Jan 08 12:30:00 2024 PST | 212
+ Mon Jan 08 13:00:00 2024 PST | 113
+ Mon Jan 08 13:30:00 2024 PST | 213
+ Mon Jan 08 14:00:00 2024 PST | 114
+ Mon Jan 08 14:30:00 2024 PST | 214
+ Mon Jan 08 15:00:00 2024 PST | 115
+ Mon Jan 08 15:30:00 2024 PST | 215
+ Mon Jan 08 16:00:00 2024 PST | 116
+ Mon Jan 08 16:30:00 2024 PST | 216
+ Mon Jan 08 17:00:00 2024 PST | 117
+ Mon Jan 08 17:30:00 2024 PST | 217
+ Mon Jan 08 18:00:00 2024 PST | 118
+ Mon Jan 08 18:30:00 2024 PST | 218
+ Mon Jan 08 19:00:00 2024 PST | 119
+ Mon Jan 08 19:30:00 2024 PST | 219
+ Mon Jan 08 20:00:00 2024 PST | 120
+ Mon Jan 08 20:30:00 2024 PST | 220
+ Mon Jan 08 21:00:00 2024 PST | 121
+ Mon Jan 08 21:30:00 2024 PST | 221
+ Mon Jan 08 22:00:00 2024 PST | 122
+ Mon Jan 08 22:30:00 2024 PST | 222
+ Mon Jan 08 23:00:00 2024 PST | 123
+ Mon Jan 08 23:30:00 2024 PST | 223
+ Tue Jan 09 00:00:00 2024 PST | 124
+ Tue Jan 09 00:30:00 2024 PST | 224
+ Tue Jan 09 01:00:00 2024 PST | 125
+ Tue Jan 09 01:30:00 2024 PST | 225
+ Tue Jan 09 02:00:00 2024 PST | 126
+ Tue Jan 09 02:30:00 2024 PST | 226
+ Tue Jan 09 03:00:00 2024 PST | 127
+ Tue Jan 09 03:30:00 2024 PST | 227
+ Tue Jan 09 04:00:00 2024 PST | 128
+ Tue Jan 09 04:30:00 2024 PST | 228
+ Tue Jan 09 05:00:00 2024 PST | 129
+ Tue Jan 09 05:30:00 2024 PST | 229
+ Tue Jan 09 06:00:00 2024 PST | 130
+ Tue Jan 09 06:30:00 2024 PST | 230
+ Tue Jan 09 07:00:00 2024 PST | 131
+ Tue Jan 09 07:30:00 2024 PST | 231
+ Tue Jan 09 08:00:00 2024 PST | 132
+ Tue Jan 09 08:30:00 2024 PST | 232
+ Tue Jan 09 09:00:00 2024 PST | 133
+ Tue Jan 09 09:30:00 2024 PST | 233
+ Tue Jan 09 10:00:00 2024 PST | 134
+ Tue Jan 09 10:30:00 2024 PST | 234
+ Tue Jan 09 11:00:00 2024 PST | 135
+ Tue Jan 09 11:30:00 2024 PST | 235
+ Tue Jan 09 12:00:00 2024 PST | 136
+ Tue Jan 09 12:30:00 2024 PST | 236
+ Tue Jan 09 13:00:00 2024 PST | 137
+ Tue Jan 09 13:30:00 2024 PST | 237
+ Tue Jan 09 14:00:00 2024 PST | 138
+ Tue Jan 09 14:30:00 2024 PST | 238
+ Tue Jan 09 15:00:00 2024 PST | 139
+ Tue Jan 09 15:30:00 2024 PST | 239
+ Tue Jan 09 16:00:00 2024 PST | 140
+ Tue Jan 09 16:30:00 2024 PST | 240
+ Tue Jan 09 17:00:00 2024 PST | 141
+ Tue Jan 09 17:30:00 2024 PST | 241
+ Tue Jan 09 18:00:00 2024 PST | 142
+ Tue Jan 09 18:30:00 2024 PST | 242
+ Tue Jan 09 19:00:00 2024 PST | 143
+ Tue Jan 09 19:30:00 2024 PST | 243
+ Tue Jan 09 20:00:00 2024 PST | 144
+ Tue Jan 09 20:30:00 2024 PST | 244
+ Tue Jan 09 21:00:00 2024 PST | 145
+ Tue Jan 09 21:30:00 2024 PST | 245
+ Tue Jan 09 22:00:00 2024 PST | 146
+ Tue Jan 09 22:30:00 2024 PST | 246
+ Tue Jan 09 23:00:00 2024 PST | 147
+ Tue Jan 09 23:30:00 2024 PST | 247
+ Wed Jan 10 00:00:00 2024 PST | 148
+ Wed Jan 10 00:30:00 2024 PST | 248
+ Wed Jan 10 01:00:00 2024 PST | 149
+ Wed Jan 10 01:30:00 2024 PST | 249
+ Wed Jan 10 02:00:00 2024 PST | 150
+ Wed Jan 10 02:30:00 2024 PST | 250
+
+-- Merged chunk should be unordered
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('t_10691') chunk order by chunk;
+       chunk_status_text        
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+
+drop table t_10691 cascade;
+RESET timescaledb.enable_direct_compress_insert;

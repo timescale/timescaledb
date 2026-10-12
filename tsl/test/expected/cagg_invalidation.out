@@ -199,7 +199,6 @@ SELECT min(time), max(time) FROM conditions;
    1 | 100
 
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 1, 50 ]
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
  hypertable_id |  watermark  
@@ -218,7 +217,6 @@ SELECT * FROM cagg_invals;
 
 -- Refresh up to 50 from the beginning
 CALL refresh_continuous_aggregate('cond_10', 0, 50);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 50 ]
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
@@ -249,7 +247,6 @@ SELECT * FROM cagg_invals;
 
 -- Refreshing measure_10 moves the threshold only for the other hypertable:
 CALL refresh_continuous_aggregate('measure_10', 0, 30);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 30 ]
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
  hypertable_id | watermark 
@@ -274,7 +271,6 @@ SELECT min(time), max(time) FROM conditions;
    1 | 100
 
 CALL refresh_continuous_aggregate('cond_20', 60, 100);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 60, 100 ]
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
  hypertable_id | watermark 
@@ -357,7 +353,6 @@ SELECT * FROM hyper_invals_view WHERE hypertable_name = 'conditions';;
         1 | conditions      |    70 |  70
 
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 20, 60 ]
 -- Invalidation threshold remains at 100:
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
@@ -469,7 +464,6 @@ SELECT min(time), max(time) FROM conditions;
    1 | 100
 
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 20, 60 ]
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log.
 -- Note how invalidations for cagg inv log is combined together (the chunk separation is lost when
@@ -500,7 +494,6 @@ SELECT * FROM cagg_invals;
 
 -- Refresh also cond_20:
 CALL refresh_continuous_aggregate('cond_20', 20, 60);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 20, 60 ]
 -- The cond_20 cagg should also have its entries cut:
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
@@ -549,7 +542,6 @@ SELECT min(time), max(time) FROM conditions;
    1 | 100
 
 CALL refresh_continuous_aggregate('cond_10', 0, 20);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 20 ]
 -- The 1-19 invalidation should be deleted:
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
@@ -571,7 +563,6 @@ SELECT * FROM cagg_invals;
 -- invalidations
 -- Verifies whether the multiple entries were processed correctly.
 CALL refresh_continuous_aggregate('cond_10', 60, 110);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 60, 110 ]
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
@@ -614,9 +605,7 @@ WHERE (original.*) IS DISTINCT FROM (view.*);
 -------------------------------------------------------
 -- First, clear all existing invalidations so we start clean
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
@@ -661,7 +650,6 @@ SELECT * FROM hyper_invals;
 
 -- Refresh to process the invalidations
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 20, 60 ]
 -- Should see the cut results in the cagg invalidation log
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
@@ -714,7 +702,6 @@ SELECT * FROM cagg_invals;
 INSERT INTO conditions VALUES (20, 1, 23.4), (25, 1, 23.4);
 INSERT INTO conditions VALUES (30, 1, 23.4), (46, 1, 23.4);
 CALL refresh_continuous_aggregate('cond_10', 1, 40);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 1, 40 ]
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
@@ -759,7 +746,6 @@ SELECT * FROM cagg_invals;
 
 -- Test max refresh window
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
@@ -848,9 +834,7 @@ LIMIT 5;
       0 |      4 |             23.7
 
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 -- Both should now be empty after refresh
 SELECT * FROM cond_10
 ORDER BY 1,2;
@@ -869,9 +853,7 @@ INSERT INTO conditions VALUES
        (10, 3, 22.3), (11, 2, 34.9), (15, 2, 45.6),
        (21, 1, 15.3), (22, 2, 12.3), (29, 3, 16.3);
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 -- check the output of raw cagg query and the cagg
 \set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions GROUP BY 1, 2'
 \set VIEW_QUERY 'SELECT * FROM cond_10 '
@@ -950,7 +932,6 @@ ORDER BY 1,2;
 
 -- Refresh again to bring data back
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 -- The aggregate should be populated again
 SELECT * FROM cond_20
 ORDER BY 1,2;
@@ -973,7 +954,6 @@ SELECT * FROM conditions;
 ------+--------+------
 
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 SELECT * FROM cond_10
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -999,14 +979,12 @@ SELECT * FROM hyper_invals;
 
 -- Refreshing around the bucket should not update the aggregate
 CALL refresh_continuous_aggregate('cond_1', -1, 0);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -1, 0 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
 
 CALL refresh_continuous_aggregate('cond_1', 1, 2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 1, 2 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1014,7 +992,6 @@ ORDER BY 1,2;
 
 -- Refresh only the invalidated bucket
 CALL refresh_continuous_aggregate('cond_1', 0, 1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 1 ]
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_1_id;
  cagg_id |        start         |         end         
@@ -1031,7 +1008,6 @@ ORDER BY 1,2;
 -- Refresh 1 extra bucket on the left
 INSERT INTO conditions VALUES (0, 1, 2.0);
 CALL refresh_continuous_aggregate('cond_1', -1, 1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -1, 1 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1041,7 +1017,6 @@ ORDER BY 1,2;
 -- Refresh 1 extra bucket on the right
 INSERT INTO conditions VALUES (0, 1, 3.0);
 CALL refresh_continuous_aggregate('cond_1', 0, 2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 2 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1051,7 +1026,6 @@ ORDER BY 1,2;
 -- Refresh 1 extra bucket on each side
 INSERT INTO conditions VALUES (0, 1, 4.0);
 CALL refresh_continuous_aggregate('cond_1', -1, 2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -1, 2 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1061,12 +1035,10 @@ ORDER BY 1,2;
 -- Clear to reset aggregate
 TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 -- Test invalidation of size 2
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0);
 -- Refresh one bucket at a time
 CALL refresh_continuous_aggregate('cond_1', 0, 1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 1 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1074,7 +1046,6 @@ ORDER BY 1,2;
       0 |      1 |        1
 
 CALL refresh_continuous_aggregate('cond_1', 1, 2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 1, 2 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1085,10 +1056,8 @@ ORDER BY 1,2;
 -- Repeat the same thing but refresh the whole invalidation at once
 TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0);
 CALL refresh_continuous_aggregate('cond_1', 0, 2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 2 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1099,11 +1068,9 @@ ORDER BY 1,2;
 -- Test invalidation of size 3
 TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);
 -- Invalidation extends beyond the refresh window on both ends
 CALL refresh_continuous_aggregate('cond_1', 1, 2);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 1, 2 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1123,7 +1090,6 @@ WHERE cagg_id = :cond_1_id;
 
 -- Refresh the two remaining invalidations
 CALL refresh_continuous_aggregate('cond_1', 0, 1);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 1 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1132,7 +1098,6 @@ ORDER BY 1,2;
       1 |      1 |        2
 
 CALL refresh_continuous_aggregate('cond_1', 2, 3);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2, 3 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1146,10 +1111,8 @@ ORDER BY 1,2;
 -- DELETE instead of TRUNCATE to clear this time.
 DELETE FROM conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);
 CALL refresh_continuous_aggregate('cond_1', 0, 3);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 3 ]
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
@@ -1205,7 +1168,6 @@ ORDER BY 1,2;
 INSERT INTO threshold_test
 SELECT v, v FROM generate_series(1, 10) v;
 CALL refresh_continuous_aggregate('thresh_2', 0, 5);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 5 ]
 -- Threshold should move to end of the last refreshed bucket, which is
 -- the last bucket fully included in the window, i.e., the window
 -- shrinks to end of previous bucket.
@@ -1229,7 +1191,6 @@ NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 -- Now refresh with max end of the window to test that the
 -- invalidation threshold is capped at the last bucket of data
 CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 2147483647 ]
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
@@ -1291,7 +1252,6 @@ ORDER BY 1;
 
 -- Refresh the aggregate to bring it up-to-date
 CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 2147483647 ]
 -- Data also gone from the aggregate
 SELECT * FROM thresh_2
 ORDER BY 1;
@@ -1315,7 +1275,6 @@ ORDER BY 1,2;
 INSERT INTO threshold_test
 SELECT v, v FROM generate_series(7, 15) v;
 CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 2147483647 ]
 -- Aggregate now updated to reflect newly aggregated data
 SELECT * FROM thresh_2
 ORDER BY 1;
@@ -1397,7 +1356,6 @@ ORDER BY 1,2;
 -- Refresh the continuous aggregate to make the dropped data be
 -- reflected in the aggregate
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 -- Aggregate now up-to-date with the source hypertable
 SELECT * FROM cond_1
 ORDER BY 1,2;
@@ -1428,7 +1386,6 @@ WHERE cagg_id = :cond_1_id;
 ---------------------------------------------------------------------
 -- First clear invalidations in a range:
 CALL refresh_continuous_aggregate('cond_10', -20, 60);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -20, 60 ]
 -- The following three should be merged to one range 0-29
 INSERT INTO conditions VALUES (5, 1, 1.0);
 INSERT INTO conditions VALUES (15, 1, 1.0);
@@ -1456,7 +1413,6 @@ WHERE cagg_id = :cond_10_id;
 
 -- should trigger two individual refreshes
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 200 ]
 -- Insert into every second bucket
 INSERT INTO conditions VALUES (20, 1, 1.0);
 INSERT INTO conditions VALUES (40, 1, 1.0);
@@ -1466,7 +1422,6 @@ INSERT INTO conditions VALUES (100, 1, 1.0);
 INSERT INTO conditions VALUES (120, 1, 1.0);
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 20, 200 ]
 -- Test refresh with undefined invalidation threshold and variable sized buckets
 CREATE TABLE timestamp_ht (
   time timestamptz NOT NULL,
@@ -1543,16 +1498,12 @@ SELECT add_continuous_aggregate_policy('i5474_summary_daily',
     schedule_interval => INTERVAL '1 MINUTE'
 ) new_job_id \gset
 -- Check that start_offset = NULL is handled properly by the refresh job...
--- The refresh window is relative to now(), so hide the unstable statistics notice
-SET client_min_messages TO warning;
 CALL run_job(:new_job_id);
-RESET client_min_messages;
 -- ...and the CAgg can be refreshed afterward
 CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-03-21 05:00:00+00');
 NOTICE:  continuous aggregate "i5474_summary_daily" is already up-to-date
 INSERT INTO i5474 (time, sensor_id, cpu, temperature) VALUES ('2000-01-01 05:00:00+00', 1, 1.0, 1.0);
 CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-01-01 01:00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -infinity, 2023-01-01 01:00:00+00 ]
 -- CAgg should be up-to-date now
 CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-01-01 01:00:00+00');
 NOTICE:  continuous aggregate "i5474_summary_daily" is already up-to-date
@@ -1562,7 +1513,6 @@ NOTICE:  continuous aggregate "i5474_summary_daily" is already up-to-date
 -- Make sure to move the threshold for the insertions we are going to
 -- do.
 CALL refresh_continuous_aggregate('measure_10', 0, 200);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 0, 200 ]
 SELECT * FROM hypertable_invalidation_thresholds
  WHERE hypertable IN ('conditions'::regclass, 'measurements'::regclass);
   hypertable  | threshold 
@@ -1753,9 +1703,7 @@ WITH NO DATA;
 SET timezone = 'UTC';
 --Do the first refresh and check materialization invalidation log
 call refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ 2024-01-01 00:00:00+00, 2025-09-01 00:00:00+00 ]
 call refresh_continuous_aggregate ('test_cagg_1d_offset','2023-12-29 18:00:00', '2024-01-01 18:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2023-12-29 18:00:00+00, 2024-01-01 18:00:00+00 ]
 -- test_cagg uses 1-month buckets with buckets_per_batch=10. The inscribed window
 -- [2024-01-01, 2026-01-01) spans 24 months, producing two batches:
 -- [2024-01-01, 2024-11-01) and [2024-11-01, 2025-09-01).
@@ -1799,7 +1747,6 @@ ORDER BY lowest_modified_value, greatest_modified_value;
 -- Refresh the same range again, [2025-09-01 ─ 2026-01-01) was left.
 -- This time refresh will go into the single batch path, so it will process the whole range.
 CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2023-12-29 15:00:00+00, 2026-01-28 15:00:00+00 ]
 --Do the same refresh once again, it should say the cagg is already up to date
 CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
 NOTICE:  continuous aggregate "test_cagg" is already up-to-date
@@ -1812,7 +1759,6 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-12-31'::timestamptz, '10 d
 --should end with the last timestamp of the bucket (i.e., has the .999999 at the end),
 --rather than the start of the next bucket
 CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2024-03-15 15:00:00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2023-12-29 15:00:00+00, 2024-03-15 15:00:00+00 ]
 SELECT materialization_id,
        _timescaledb_functions.to_timestamp(lowest_modified_value) as low,
        _timescaledb_functions.to_timestamp(greatest_modified_value) as high
@@ -1873,7 +1819,6 @@ WHERE hypertable_id IN (
 INSERT INTO test_data values ('2026-01-05 00:00:00', 1);
 -- Setting buckets_per_batch to 0 as the intention is to test the capping when windew end is set to NULL, no need for batching.
 CALL refresh_continuous_aggregate ('test_cagg_1d_offset','2023-12-29 15:00:00', NULL, options => '{"buckets_per_batch": 0}'::jsonb);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2023-12-29 15:00:00+00, infinity ]
 --should be at the 18th hour
 SELECT  _timescaledb_functions.to_timestamp(watermark) as invalidation_threshold
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -1928,7 +1873,6 @@ WITH NO DATA;
 INSERT INTO test_data VALUES ('2020-01-01 02:30:00+00', 1);
 -- Refresh cagg_6hrs first: sets shared threshold to 2020-01-01 06:00 UTC.
 CALL refresh_continuous_aggregate('cagg_6hrs', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 3 batch(es) of 3 in window [ 4714-11-24 00:00:00+00 BC, infinity ]
 -- Stored threshold = 2020-01-01 06:00 UTC (cagg_6hrs boundary, NOT cagg_4hrs boundary).
 SELECT _timescaledb_functions.to_timestamp(watermark) AS threshold
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -1953,7 +1897,6 @@ LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materi
 DEBUG:  building index "_hyper_29_91_chunk__materialized_hypertable_29_bucket_idx" on table "_hyper_29_91_chunk" serially
 DEBUG:  index "_hyper_29_91_chunk__materialized_hypertable_29_bucket_idx" can safely use deduplication
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_29"
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 4714-11-24 00:00:00+00 BC, infinity ]
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 -- Show invalidations left in cagg_4hrs's invalidation log,
@@ -2011,7 +1954,6 @@ CREATE MATERIALIZED VIEW tenant_copy_daily WITH (tsdb.continuous) AS
   FROM tenant_copy GROUP BY bucket, sensor_id WITH NO DATA;
 ALTER MATERIALIZED VIEW tenant_copy_daily SET (timescaledb.enable_granular_refresh = true);
 CALL refresh_continuous_aggregate('tenant_copy_daily', NULL, '2025-05-01 00:00+00');
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 4714-11-24 00:00:00+00 BC, 2025-05-01 00:00:00+00 ]
 SET timescaledb.enable_direct_compress_copy = true;
 -- Two tenants, each at a distinct day, so each tracked range is a point.
 COPY tenant_copy FROM STDIN;
@@ -2028,7 +1970,6 @@ FROM show_chunks('tenant_copy') chunk;
 -- they are cleaned up later.
 INSERT INTO tenant_copy VALUES ('2025-01-01', 'sensor_z', 0);
 CALL refresh_continuous_aggregate('tenant_copy_daily', '2025-01-01 00:00+00', NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ 2025-01-01 00:00:00+00, infinity ]
 -- Expect sensor_a and sensor_b from the direct-compress COPY, each min == max.
 SELECT tt.tenant_id AS tenant_id,
        _timescaledb_functions.to_timestamp(tt.min_timestamp) AS min_timestamp,

@@ -190,9 +190,7 @@ SELECT device,
 FROM conditions
 GROUP BY device, time_bucket(INTERVAL '1 hour', "time") WITH NO DATA;
 
-SET client_min_messages TO warning;
 CALL refresh_continuous_aggregate('conditions_summary', NULL, NULL);
-RESET client_min_messages;
 
 ALTER TABLE conditions SET (timescaledb.compress);
 
