@@ -6,7 +6,7 @@ SET timezone TO 'UTC';
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- Helper to inspect the granular refresh configuration of a hypertable.
-\set GRC 'SELECT h.table_name, granular_refresh_column, granular_refresh_start_offset, granular_refresh_end_offset FROM _timescaledb_catalog.hypertable_cagg_settings s JOIN _timescaledb_catalog.hypertable h ON h.id = s.hypertable_id WHERE h.table_name = '
+\set GRC 'SELECT * FROM timescaledb_information.hypertable_granular_refresh_settings WHERE hypertable_name = '
 
 ----------------------------------------------------------------------
 -- ALTER TABLE <hypertable> SET (timescaledb.cagg_granular_refresh_*)
@@ -267,7 +267,7 @@ FROM sensors
 GROUP BY bucket, sensor_id
 WITH NO DATA;
 
-\set GRE 'SELECT user_view_name, granular_refresh_enabled FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = '
+\set GRE 'SELECT view_name, granular_refresh_enabled FROM timescaledb_information.continuous_aggregates WHERE view_name = '
 
 -- Disabled by default.
 :GRE 'sensors_hourly';
@@ -642,6 +642,18 @@ ALTER MATERIALIZED VIEW readings_hourly SET (timescaledb.enable_granular_refresh
 
 INSERT INTO readings VALUES (now(), 3, 3.0);
 
+CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
+SELECT count(*) FROM readings_hourly;
+
+-- Dropping the hypertable releases its tracker as well, and that free is
+-- deferred the same way, so a rolled back DROP TABLE leaves it alone.
+BEGIN;
+DROP TABLE readings CASCADE;
+ROLLBACK;
+:GRC 'readings';
+
+-- Tracking still works in this backend after the rolled back drop.
+INSERT INTO readings VALUES (now(), 4, 4.0);
 CALL refresh_continuous_aggregate('readings_hourly', NULL, NULL);
 SELECT count(*) FROM readings_hourly;
 

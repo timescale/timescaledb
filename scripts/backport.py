@@ -239,9 +239,34 @@ def should_backport_by_labels(number, title, labels):
     return None
 
 
+def should_backport_by_milestone(number, title, milestone):
+    """Should we backport the given PR, judging by its milestone?
+    Uses the same ternary logic as should_backport_by_labels: a milestone
+    for the backport target release means we must, a milestone for any other
+    release means we must not, and no parseable milestone means weak no."""
+    if not milestone:
+        return None
+
+    match = re.search(r"(\d+)\.(\d+)", milestone.title)
+    if not match:
+        return None
+
+    if list(match.group(1, 2)) == version_parts[:2]:
+        print(
+            f"#{number} '{title}' has the milestone '{milestone.title}' which requests automated backporting."
+        )
+        return True
+
+    print(
+        f"#{number} '{title}' has the milestone '{milestone.title}' which prevents automated backporting."
+    )
+    return False
+
+
 # Go through the commits unique to main, and build a dict(pr number -> PRInfo)
 # of PRs that we will consider for backporting.
 prs_to_backport = {}
+prs_blocked_by_milestone = {}
 for commit_sha, commit_title in main_commits:
     print()
 
@@ -299,17 +324,29 @@ for commit_sha, commit_title in main_commits:
         pull.number, pull.title, pull_labels
     )
 
-    # We backport if either the PR or the issue labels request the backport, and
-    # none of them prevent it. I'm writing it with `is True` because I don't
-    # remember python rules for ternary logic with None (do you?).
-    if (
-        should_backport_pr_ternary is True or should_backport_issue_ternary is True
-    ) and (
-        should_backport_pr_ternary is not False
-        and should_backport_issue_ternary is not False
-    ):
+    should_backport_milestone_ternary = should_backport_by_milestone(
+        pull.number, pull.title, pull.milestone
+    )
+
+    # We backport if the PR labels, the issue labels or the PR milestone request
+    # the backport, and none of them prevent it. I'm writing it with `is True`
+    # because I don't remember python rules for ternary logic with None (do you?).
+    ternaries = [
+        should_backport_pr_ternary,
+        should_backport_issue_ternary,
+        should_backport_milestone_ternary,
+    ]
+    if any(t is True for t in ternaries) and not any(t is False for t in ternaries):
         print(f"{commit_sha[:9]} '{commit_title}' will be considered for backporting.")
     else:
+        # Report PRs that would be backported if not for the milestone.
+        if (
+            should_backport_milestone_ternary is False
+            and should_backport_pr_ternary is not False
+            and should_backport_issue_ternary is not False
+            and any(t is True for t in ternaries)
+        ):
+            prs_blocked_by_milestone[pull.number] = pull
         continue
 
     # Remember the PR and the corresponding resulting commit in main.
@@ -376,6 +413,13 @@ def report_backport_not_done(original_pr, reason, details=None):
 
     original_pr.create_issue_comment(github_comment)
     original_pr.add_to_labels("auto-backport-not-done")
+
+
+for pull in prs_blocked_by_milestone.values():
+    report_backport_not_done(
+        pull,
+        f"the milestone '{pull.milestone.title}' does not match the release branch",
+    )
 
 
 # Set git name and email corresponding to the token user.

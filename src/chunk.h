@@ -243,7 +243,7 @@ extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_end(const Chunk *chunk);
 extern Chunk *ts_chunk_build_from_tuple(Chunk **chunkptr, TupleInfo *ti);
 
-extern TM_Result ts_chunk_lock_for_creating_compressed_chunk(Chunk *chunk);
+extern TSDLLEXPORT TM_Result ts_chunk_lock_for_creating_compressed_chunk(Chunk *chunk);
 extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);

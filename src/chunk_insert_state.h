@@ -28,6 +28,8 @@ typedef struct ScanKeyWithAttnos
 	int num_scankeys;
 	ScanKeyData *scankeys;
 	AttrNumber *attnos;
+	/* only set for the in-memory scan keys: */
+	bool vectorized;
 } ScanKeyWithAttnos;
 
 /*
