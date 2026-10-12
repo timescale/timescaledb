@@ -1,0 +1,1 @@
+Fixes: #10757 Rows written before ADD COLUMN with a default are compressed out of order when the column is an orderby column

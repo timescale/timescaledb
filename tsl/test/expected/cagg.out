@@ -705,7 +705,6 @@ WHERE user_view_name = 'mat_drop_test'
 \gset
 SET client_min_messages TO NOTICE;
 CALL refresh_continuous_aggregate('mat_drop_test', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 7 batch(es) of 7 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 --force invalidation
 insert into conditions
 select generate_series('2017-11-01 00:00'::timestamp, '2017-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL;
@@ -935,7 +934,6 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 -------------+-------
 
 CALL refresh_continuous_aggregate('space_view', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -951,7 +949,6 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 INSERT INTO space_table VALUES (3, 2, 1);
 CALL refresh_continuous_aggregate('space_view', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -967,7 +964,6 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 INSERT INTO space_table VALUES (2, 3, 1);
 CALL refresh_continuous_aggregate('space_view', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -9223372036854775808, 9223372036854775807 ]
 SELECT * FROM space_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
@@ -1081,7 +1077,6 @@ group by time_bucket(100, timec), location WITH NO DATA;
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ -2147483648, 2147483647 ]
 SELECT * FROM mat_refresh_test order by 1,2 ;
  location | max 
 ----------+-----
@@ -1206,7 +1201,6 @@ FROM water_consumption
 GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
 WITH NO DATA;
 CALL refresh_continuous_aggregate('water_consumption_aggregation_minute', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 923 batch(es) of 923 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- The results of the view and the query over hypertable should be the same
 SELECT * FROM water_consumption_aggregation_minute ORDER BY water_consumption;
  sensor_id |        timestamp         | water_consumption 
@@ -1239,7 +1233,6 @@ FROM water_consumption
 GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
 WITH NO DATA;
 CALL refresh_continuous_aggregate('water_consumption_no_select_bucket', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 923 batch(es) of 923 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- The results of the view and the query over hypertable should be the same
 SELECT * FROM water_consumption_no_select_bucket ORDER BY water_consumption;
  sensor_id | water_consumption 
@@ -1272,7 +1265,6 @@ FROM water_consumption
 GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
 WITH NO DATA;
 CALL refresh_continuous_aggregate('water_consumption_aggregation_no_addition', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 923 batch(es) of 923 in window [ Mon Nov 24 00:00:00 4714 BC, infinity ]
 -- The results of the view and the query over hypertable should be the same
 SELECT * FROM water_consumption_aggregation_no_addition ORDER BY water_consumption;
  sensor_id | water_consumption |        timestamp         
@@ -1345,7 +1337,6 @@ insert into raw_data select '2000-01-01 00:00+0','Q1', 3, 300;
 insert into raw_data select '2000-01-02 00:00+0','Q2', 10, 10;
 insert into raw_data select '2000-01-02 00:00+0','Q2', 20, 20;
 CALL refresh_continuous_aggregate('search_query_count_1m', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 97 batch(es) of 97 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM search_query_count_1m ORDER BY 1, 2;
  search_query | count |            bucket            
 --------------+-------+------------------------------
@@ -1356,7 +1347,6 @@ SELECT * FROM search_query_count_1m ORDER BY 1, 2;
 insert into raw_data select '2000-01-02 00:00+0','Q3', 0, 0;
 insert into raw_data select '2000-01-03 00:00+0','Q4', 20, 20;
 CALL refresh_continuous_aggregate('search_query_count_1m', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 145 batch(es) of 145 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM search_query_count_1m ORDER BY 1, 2;
  search_query | count |            bucket            
 --------------+-------+------------------------------
@@ -1366,7 +1356,6 @@ SELECT * FROM search_query_count_1m ORDER BY 1, 2;
 
 --refresh search_query_count_2---
 CALL refresh_continuous_aggregate('search_query_count_2', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 241 batch(es) of 241 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM search_query_count_2 ORDER BY 1, 2;
  search_query | count | sum |            bucket            
 --------------+-------+-----+------------------------------
@@ -1376,7 +1365,6 @@ SELECT * FROM search_query_count_2 ORDER BY 1, 2;
 
 --refresh search_query_count_3---
 CALL refresh_continuous_aggregate('search_query_count_3', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 241 batch(es) of 241 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 SELECT * FROM search_query_count_3 ORDER BY 1, 2, 3;
  search_query | count | sum |            bucket            
 --------------+-------+-----+------------------------------
@@ -1456,15 +1444,12 @@ insert into raw_data select '2000-05-01 00:00+0','Q3', 0, 0;
 -- On PG >= 14 the refresh test below will pass because we added support for UPDATE/DELETE on compressed chunks in PR #5339
 \set ON_ERROR_STOP 0
 CALL refresh_continuous_aggregate('search_query_count_3', NULL, '2000-06-01 00:00+0'::timestamptz);
-NOTICE:  continuous aggregate refresh: processed 3024 batch(es) of 3024 in window [ Sun Nov 23 16:07:02 4714 LMT BC, Sun May 07 17:00:00 2000 PDT ]
 CALL refresh_continuous_aggregate('search_query_count_3', '2000-05-01 00:00+0'::timestamptz, '2000-06-01 00:00+0'::timestamptz);
-NOTICE:  continuous aggregate refresh: processed 1 batch(es) of 1 in window [ Sun Apr 30 17:00:00 2000 PDT, Wed May 31 17:00:00 2000 PDT ]
 \set ON_ERROR_STOP 1
 --insert row
 insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;
 --this should succeed since it does not refresh any compressed regions in the cagg
 CALL refresh_continuous_aggregate('search_query_count_3', '2001-05-01 00:00+0'::timestamptz, '2001-06-01 00:00+0'::timestamptz);
-NOTICE:  continuous aggregate refresh: processed 2160 batch(es) of 2160 in window [ Wed May 02 17:00:00 2001 PDT, Thu May 17 17:00:00 2001 PDT ]
 --verify watermark and check that chunks are compressed
 SELECT _timescaledb_functions.to_timestamp(w) FROM _timescaledb_functions.cagg_watermark(:'MAT_HTID') w;
          to_timestamp         
@@ -2018,7 +2003,6 @@ WHERE user_view_name = 'mat_m1'
 -- Invalidate old region and refresh again
 DELETE FROM conditions WHERE timec < '2010-01-05 09:00:00-08';
 CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- Querying the cagg produce ordered records as expected
 SELECT * FROM mat_m1;
          time_bucket          | count | sum 
@@ -2087,7 +2071,6 @@ granular_refresh_enabled          | f
 
 \x OFF
 CALL refresh_continuous_aggregate('conditions_summary_new', NULL, NULL);
-NOTICE:  continuous aggregate refresh: processed 2 batch(es) of 2 in window [ Sun Nov 23 16:07:02 4714 LMT BC, infinity ]
 -- Check and compare number of returned rows
 SELECT count(*) FROM conditions_summary_new;
  count 
