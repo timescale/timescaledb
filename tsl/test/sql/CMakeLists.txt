@@ -75,6 +75,7 @@ set(TEST_FILES
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
     direct_compress_policy.sql
+    memoize.sql
     move.sql
     move_to_columnstore.sql
     plan_skip_scan_pg_partition.sql
@@ -106,12 +107,12 @@ set(TEST_TEMPLATES
     cagg_watermark.sql.in
     columnar_index_scan.sql.in
     columnar_scan_cost.sql.in
+    columnar_scan_metadata_only.sql.in
     compress_sort_transform.sql.in
     compress_bloom_sparse.sql.in
     compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
-    memoize.sql.in
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
@@ -127,6 +128,9 @@ endif()
 
 if(NOT APPLE)
   list(APPEND TEST_FILES direct_compress_copy.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES direct_compress_debug.sql)
+  endif()
 endif()
 
 list(
@@ -141,7 +145,7 @@ list(
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES cagg_granular_refresh_errors.sql
-       cagg_granular_refresh_config.sql)
+       cagg_granular_refresh_config.sql cagg_granular_refresh_policies.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)

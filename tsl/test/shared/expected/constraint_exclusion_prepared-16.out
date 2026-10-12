@@ -852,6 +852,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
@@ -859,14 +860,6 @@ FROM (
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space."time"
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space."time"
@@ -882,6 +875,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
@@ -889,14 +883,6 @@ FROM (
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space."time"
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space."time"
@@ -912,6 +898,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
@@ -919,14 +906,6 @@ FROM (
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space."time"
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space."time"
@@ -942,6 +921,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
@@ -949,14 +929,6 @@ FROM (
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space."time"
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space."time"
@@ -972,6 +944,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
@@ -979,14 +952,6 @@ FROM (
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21.00 loops=1)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space."time"
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space."time"
@@ -2478,6 +2443,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21.00 loops=1)
@@ -2500,26 +2466,6 @@ FROM (
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=3598.00 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (actual rows=4.00 loops=1)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space_compressed."time"
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
                                  Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
@@ -2547,6 +2493,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21.00 loops=1)
@@ -2569,26 +2516,6 @@ FROM (
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=3598.00 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (actual rows=4.00 loops=1)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space_compressed."time"
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
                                  Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
@@ -2616,6 +2543,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21.00 loops=1)
@@ -2638,26 +2566,6 @@ FROM (
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=3598.00 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (actual rows=4.00 loops=1)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space_compressed."time"
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
                                  Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
@@ -2685,6 +2593,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21.00 loops=1)
@@ -2707,26 +2616,6 @@ FROM (
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=3598.00 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (actual rows=4.00 loops=1)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space_compressed."time"
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
                                  Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
@@ -2754,6 +2643,7 @@ FROM (
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100.00 loops=1)
                Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21.00 loops=1)
@@ -2776,26 +2666,6 @@ FROM (
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=3598.00 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (actual rows=4.00 loops=1)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-         ->  Merge Append (never executed)
-               Sort Key: metrics_space_compressed."time"
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
-                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_X_X_chunk."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
-                           Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-                           ->  Index Scan using _hyper_X_X_chunk_compressed_device_id__ts_meta_v2_first_ti_idx on _hyper_X_X_chunk_compressed (never executed)
                                  Index Cond: (_ts_meta_v2_last_time < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
