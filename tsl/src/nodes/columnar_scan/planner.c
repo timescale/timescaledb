@@ -490,7 +490,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	 * needed. Check that we have all metadata columns required for this in the
 	 * compressed scan targetlist.
 	 */
-	context->first_row_from_metadata = !path->enable_bulk_decompression;
+	context->first_row_from_metadata = !path->enable_bulk_decompression && !path->metadata_only;
 	if (!path->enable_bulk_decompression)
 	{
 		foreach (lc, compressed_output_tlist)
