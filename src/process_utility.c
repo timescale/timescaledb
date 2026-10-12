@@ -1367,6 +1367,8 @@ process_truncate_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		.objectId = chunk_relid,
 	};
 
+	/* Drop FKs referencing the chunk so CASCADE does not drop the hypertable FK */
+	ts_chunk_drop_referencing_fk_by_relid(chunk_relid);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
@@ -1579,7 +1581,8 @@ process_truncate(ProcessUtilityArgs *args)
 								char *schema_name =
 									get_namespace_name(get_rel_namespace(compressed_relid));
 								char *table_name = get_rel_name(compressed_relid);
-								rv = makeRangeVar(schema_name, table_name, -1);
+								relations =
+									lappend(relations, makeRangeVar(schema_name, table_name, -1));
 								MemoryContextSwitchTo(oldctx);
 								list_changed = true;
 							}
@@ -5672,7 +5675,7 @@ ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc, Oid 
 
 	if (DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]) != newrole_oid)
 	{
-		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = Int32GetDatum(newrole_oid);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = ObjectIdGetDatum(newrole_oid);
 		replace[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = true;
 		new_tuple = heap_modify_tuple(tuple, tupledesc, values, isnull, replace);
 		ts_catalog_update(rel, new_tuple);
@@ -6470,8 +6473,7 @@ process_drop_table(EventTriggerDropObject *obj, DropBehavior behavior)
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
 	ts_chunk_delete_by_relid(table->relid, behavior);
-
-	ts_hypertable_delete_by_name(table->schema, table->name);
+	ts_hypertable_delete_by_name(table->schema, table->name, table->relid);
 	/*
 	 * Normally, dependent catalogs (like compression settings) are cleaned up
 	 * when deleting the hypertable or chunk. However, in some cases, e.g.,

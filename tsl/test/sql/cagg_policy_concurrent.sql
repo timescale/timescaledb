@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- Test creation of multiple refresh policies
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 SET timescaledb.current_timestamp_mock TO '2025-06-01 0:30:00+00';
 
@@ -741,7 +741,7 @@ JOIN (
 ORDER BY 1;
 
 /* Restore timezone and mock time */
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
 
 DROP MATERIALIZED VIEW mat_m1_rollup;
 DROP MATERIALIZED VIEW mat_m1;
@@ -907,4 +907,4 @@ DROP MATERIALIZED VIEW mat_3pol_m2;
 DROP TABLE test_3pol_timestamptz CASCADE;
 
 --restore time zone settings
-SET timezone TO PST8PDT;
+SET timezone TO 'America/Los_Angeles';
