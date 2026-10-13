@@ -2237,3 +2237,49 @@ execute onechunk_param(0);
 
 reset plan_cache_mode;
 deallocate onechunk_param;
+-- Sorted single chunk under ChunkAppend grouped by an expression.
+create table bucketsort(ts timestamptz not null, dev int, v float8);
+select create_hypertable('bucketsort', by_range('ts'));
+ create_hypertable 
+-------------------
+ (8,t)
+
+alter table bucketsort set (timescaledb.compress, timescaledb.compress_orderby = 'dev, ts');
+insert into bucketsort select '2026-01-01 00:00:00+00'::timestamptz + i * interval '10 sec', i % 10, i
+from generate_series(1, 1000) i;
+select count(compress_chunk(x)) from show_chunks('bucketsort') x;
+ count 
+-------
+     1
+
+vacuum analyze bucketsort;
+set enable_hashagg to off;
+explain (costs off)
+select time_bucket('1 minute', ts) b, count(*) from bucketsort
+where ts > now() - interval '10 years' group by b order by b limit 5;
+--- QUERY PLAN ---
+ Limit
+   ->  GroupAggregate
+         Group Key: (time_bucket('@ 1 min'::interval, bucketsort.ts))
+         ->  Custom Scan (ChunkAppend) on bucketsort
+               Order: time_bucket('@ 1 min'::interval, bucketsort.ts)
+               Chunks excluded during startup: 0
+               ->  Result
+                     ->  Sort
+                           Sort Key: (time_bucket('@ 1 min'::interval, _hyper_8_12_chunk.ts))
+                           ->  Custom Scan (ColumnarScan) on _hyper_8_12_chunk
+                                 Vectorized Filter: (ts > (now() - '@ 10 years'::interval))
+                                 ->  Seq Scan on _hyper_8_12_chunk_compressed
+                                       Filter: (_ts_meta_max_2 > (now() - '@ 10 years'::interval))
+
+select time_bucket('1 minute', ts) b, count(*) from bucketsort
+where ts > now() - interval '10 years' group by b order by b limit 5;
+              b               | count 
+------------------------------+-------
+ Wed Dec 31 16:00:00 2025 PST |     5
+ Wed Dec 31 16:01:00 2025 PST |     6
+ Wed Dec 31 16:02:00 2025 PST |     6
+ Wed Dec 31 16:03:00 2025 PST |     6
+ Wed Dec 31 16:04:00 2025 PST |     6
+
+reset enable_hashagg;

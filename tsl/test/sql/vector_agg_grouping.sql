@@ -299,3 +299,20 @@ execute onechunk_param(1);
 execute onechunk_param(0);
 reset plan_cache_mode;
 deallocate onechunk_param;
+
+-- Sorted single chunk under ChunkAppend grouped by an expression.
+create table bucketsort(ts timestamptz not null, dev int, v float8);
+select create_hypertable('bucketsort', by_range('ts'));
+alter table bucketsort set (timescaledb.compress, timescaledb.compress_orderby = 'dev, ts');
+insert into bucketsort select '2026-01-01 00:00:00+00'::timestamptz + i * interval '10 sec', i % 10, i
+from generate_series(1, 1000) i;
+select count(compress_chunk(x)) from show_chunks('bucketsort') x;
+vacuum analyze bucketsort;
+
+set enable_hashagg to off;
+explain (costs off)
+select time_bucket('1 minute', ts) b, count(*) from bucketsort
+where ts > now() - interval '10 years' group by b order by b limit 5;
+select time_bucket('1 minute', ts) b, count(*) from bucketsort
+where ts > now() - interval '10 years' group by b order by b limit 5;
+reset enable_hashagg;
