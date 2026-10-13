@@ -1,1 +1,0 @@
-Fixes: #10630 Fix wrong query results on a hash partitioned text column with a nondeterministic collation
