@@ -67,9 +67,9 @@ This release contains performance improvements and bug fixes since the 2.30.2 re
 
 **Thanks**
 * @AdrianAcala for fixing a crash with hypertable `COPY` when pgAudit is enabled [#10418](https://github.com/timescale/timescaledb/pull/10418)
-* @hyeokhee for reporting an error with parallel chunkwise aggregation and subqueries in aggregates [#10804](https://github.com/timescale/timescaledb/issues/10804)
-* @igor2x for reporting a performance regression with joins on segment-by columns with explicit casts [#10591](https://github.com/timescale/timescaledb/issues/10591)
-* @salmanazmat666 for reporting a refresh that could not be cancelled and ran out of memory [#10746](https://github.com/timescale/timescaledb/issues/10746)
+* @hyeokhee for reporting an error with parallel chunkwise aggregation and subqueries in aggregates [#10804](https://github.com/timescale/timescaledb/issues/10804) fixed via [#10806](https://github.com/timescale/timescaledb/pull/10806)
+* @igor2x for reporting a performance regression with joins on segment-by columns with explicit casts [#10591](https://github.com/timescale/timescaledb/issues/10591) fixed via [#10617](https://github.com/timescale/timescaledb/pull/10617)
+* @salmanazmat666 for reporting a refresh that could not be cancelled and ran out of memory [#10746](https://github.com/timescale/timescaledb/issues/10749) fixed via [#10806](https://github.com/timescale/timescaledb/pull/10749)
 
 ## 2.30.2 (2026-09-29)
 
