@@ -1,0 +1,1 @@
+Fixes: #10827 Validate the full 64-bit version of statement-tracking callbacks
