@@ -8,7 +8,7 @@ This release contains performance improvements and bug fixes since the 2.30.2 re
 
 **Highlighted features in TimescaleDB v2.31.0**
 * Improved performance for `UPDATE` and `DELETE` queries on the columnstore with vectorized key processing for bulk decompression. The vectorized aggregation makes DML and recompression operations faster through parallelism, when a single-chunk query groups by an expression, resulting in up to 6.5 times faster queries.
-* Preview or the new Adaptive Integer Compressor (AIC), which chooses the best encoding for each block of integer values. This leads to improved compression ratios for integers up to 20%, and faster decompression of up to 8x. AIC is disabled by by default this release and will become on by default in the `2.32.0` release.
+* Preview of the new Adaptive Integer Compressor (AIC), which chooses the best encoding for each block of integer values. This leads to improved compression ratios for integers of up to 20%, and queries benefiting from faster decompression perform up to two times better. AIC is disabled by default this release and will be enabled by default in the `2.32.0` release.
 
 **Backward-Incompatible Changes**
 * [#10666](https://github.com/timescale/timescaledb/pull/10666) Rename `timescaledb.enable_columnarscan` to `timescaledb.debug_enable_columnarscan` to make its debugging-only purpose explicit
