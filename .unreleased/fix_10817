@@ -1,0 +1,1 @@
+Fixes: #10817 Fix DeferredChunkAppend planning chunk queries with a restricted search_path
