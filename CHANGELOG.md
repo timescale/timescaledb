@@ -8,7 +8,10 @@ This release contains performance improvements and bug fixes since the 2.30.2 re
 
 **Highlighted features in TimescaleDB v2.31.0**
 * Improved performance for `UPDATE` and `DELETE` queries on the columnstore with vectorized key processing for bulk decompression. The vectorized aggregation makes DML and recompression operations faster through parallelism, when a single-chunk query groups by an expression, resulting in up to 6.5 times faster queries.
-* Preview of the new Adaptive Integer Compressor (AIC), which chooses the best encoding for each block of integer values. This leads to improved compression ratios for integers of up to 20%, and queries benefiting from faster decompression perform up to two times better. AIC is disabled by default this release and will be enabled by default in the `2.32.0` release.
+* Preview of the new Adaptive Integer Compressor (AIC), which chooses the best encoding for each block of integer values. This results in the up to 20% improvement in compression ratios for integers, while queries benefiting from faster decompression perform up to two times better. AIC is disabled by default in this release and will be enabled by default in the `2.32.0` release.
+
+**Loader changes**
+This release allows controling extension hook order to improve compatibility with other extensions. To ensure pgaudit hooks work together with timescaledb pgaudit should come after timescaledb in `shared_preload_libraries`. Since this is a loader change a PostgreSQL restart is needed to benefit from it but if you have no need to control hook order the previous loader will work fine with this version of timescaledb. 
 
 **Backward-Incompatible Changes**
 * [#10666](https://github.com/timescale/timescaledb/pull/10666) Rename `timescaledb.enable_columnarscan` to `timescaledb.debug_enable_columnarscan` to make its debugging-only purpose explicit
