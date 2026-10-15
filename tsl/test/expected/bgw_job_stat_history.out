@@ -379,6 +379,32 @@ ORDER BY id;
         |           |     "rows_materialized": 10+
         |           | }
 
+-- A refresh policy run that has nothing to refresh still records info, with
+-- no rows materialized or deleted.
+SELECT scheduled FROM alter_job(:job_id_4, next_start => now());
+ scheduled 
+-----------
+ t
+
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+
+SELECT test.wait_for_job_to_run(:job_id_4, 2);
+ wait_for_job_to_run 
+---------------------
+ t
+
+SELECT job_id, succeeded, data->'info' AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_4
+ORDER BY id DESC
+LIMIT 1;
+ job_id | succeeded |                                                            info                                                             
+--------+-----------+-----------------------------------------------------------------------------------------------------------------------------
+   1003 | t         | {"range_end": 100, "range_start": 0, "rows_deleted": 0, "total_batches": 1, "batches_processed": 1, "rows_materialized": 0}
+
 SELECT delete_job(:job_id_1);
  delete_job 
 ------------

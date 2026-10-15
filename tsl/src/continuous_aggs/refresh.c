@@ -833,18 +833,11 @@ cagg_refresh_stats_report_json(const CaggRefreshStats *stats)
 }
 
 /*
- * Report what a refresh did. A refresh run by a job also records it in the
- * execution history of that job.
+ * Report what a refresh did.
  */
 static void
-cagg_refresh_stats_report(int32 job_id, const CaggRefreshStats *stats)
+cagg_refresh_stats_report(const CaggRefreshStats *stats)
 {
-	/* Only jobs have an execution history, manual refreshes don't have a job id */
-	if (job_id > 0)
-	{
-		cagg_refresh_stats_report_json(stats);
-	}
-
 	if (ts_guc_cagg_refresh_stats_level == CAGG_REFRESH_STATS_OFF)
 	{
 		return;
@@ -998,21 +991,27 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 		}
 	}
 
+	stats.granular_enabled = cagg->data.granular_refresh_enabled;
+	stats.total_batches = context->execution.number_of_batches;
+	stats.batches_processed = context->execution.processing_batch;
+	stats.range_type = refresh_window->type;
+	stats.range_start = processed_range_start;
+	stats.range_end = processed_range_end;
+
+	/* Every execution of a job is recorded in its execution history, also
+	 * one that refreshed nothing. Manual refreshes don't have a job id. */
+	if (context->options.job_id > 0)
+	{
+		cagg_refresh_stats_report_json(&stats);
+	}
+
 	if (!any_refreshed)
 	{
-		/* Nothing was materialized, so there are no statistics worth reporting */
 		emit_up_to_date_notice(cagg, context);
 	}
 	else
 	{
-		stats.granular_enabled = cagg->data.granular_refresh_enabled;
-		stats.total_batches = context->execution.number_of_batches;
-		stats.batches_processed = context->execution.processing_batch;
-		stats.range_type = refresh_window->type;
-		stats.range_start = processed_range_start;
-		stats.range_end = processed_range_end;
-
-		cagg_refresh_stats_report(context->options.job_id, &stats);
+		cagg_refresh_stats_report(&stats);
 	}
 }
 
