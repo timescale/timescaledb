@@ -200,8 +200,10 @@ EXPLAIN (verbose, buffers off, costs off, timing off)
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
 --- QUERY PLAN ---
- Seq Scan on _timescaledb_internal._hyper_1_6_chunk
+ Result
    Output: uuid_timestamp(_hyper_1_6_chunk.id), _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
+   ->  Seq Scan on _timescaledb_internal._hyper_1_6_chunk
+         Output: _hyper_1_6_chunk.id, _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
 
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start') ORDER BY id;
