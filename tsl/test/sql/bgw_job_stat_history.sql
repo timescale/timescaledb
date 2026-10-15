@@ -204,6 +204,18 @@ FROM _timescaledb_internal.bgw_job_stat_history
 WHERE job_id = :job_id_4
 ORDER BY id;
 
+-- A refresh policy run that has nothing to refresh still records info, with
+-- no rows materialized or deleted.
+SELECT scheduled FROM alter_job(:job_id_4, next_start => now());
+SELECT pg_reload_conf();
+SELECT test.wait_for_job_to_run(:job_id_4, 2);
+
+SELECT job_id, succeeded, data->'info' AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_4
+ORDER BY id DESC
+LIMIT 1;
+
 SELECT delete_job(:job_id_1);
 SELECT delete_job(:job_id_2);
 SELECT delete_job(:job_id_3);
