@@ -50,9 +50,10 @@ UPDATE vect_dml SET value = value + 1 WHERE sensor = 7;
    Tuples decompressed: 1000
    ->  Update on vect_dml (actual rows=0.00 loops=1)
          Update on _hyper_1_1_chunk vect_dml_1
-         ->  Seq Scan on _hyper_1_1_chunk vect_dml_1 (actual rows=50.00 loops=1)
-               Filter: (sensor = 7)
-               Rows Removed by Filter: 950
+         ->  Result (actual rows=50.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk vect_dml_1 (actual rows=50.00 loops=1)
+                     Filter: (sensor = 7)
+                     Rows Removed by Filter: 950
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 DELETE FROM vect_dml WHERE sensor = 13;
@@ -82,9 +83,10 @@ UPDATE vect_dml SET value = value + 1 WHERE sensor = 7;
    Tuples decompressed: 1000
    ->  Update on vect_dml (actual rows=0.00 loops=1)
          Update on _hyper_1_1_chunk vect_dml_1
-         ->  Seq Scan on _hyper_1_1_chunk vect_dml_1 (actual rows=50.00 loops=1)
-               Filter: (sensor = 7)
-               Rows Removed by Filter: 950
+         ->  Result (actual rows=50.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk vect_dml_1 (actual rows=50.00 loops=1)
+                     Filter: (sensor = 7)
+                     Rows Removed by Filter: 950
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 DELETE FROM vect_dml WHERE sensor = 13;
@@ -188,9 +190,10 @@ UPDATE mixed_dml SET temp = temp + 1 WHERE label = 'label 7';
    Tuples decompressed: 12
    ->  Update on mixed_dml (actual rows=0.00 loops=1)
          Update on _hyper_2_2_chunk mixed_dml_1
-         ->  Seq Scan on _hyper_2_2_chunk mixed_dml_1 (actual rows=1.00 loops=1)
-               Filter: (label = 'label 7'::text)
-               Rows Removed by Filter: 22
+         ->  Result (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_2_2_chunk mixed_dml_1 (actual rows=1.00 loops=1)
+                     Filter: (label = 'label 7'::text)
+                     Rows Removed by Filter: 22
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 UPDATE mixed_dml SET temp = temp + 1 WHERE status = 'ok' AND device = 1;
@@ -201,10 +204,11 @@ UPDATE mixed_dml SET temp = temp + 1 WHERE status = 'ok' AND device = 1;
    Tuples decompressed: 12
    ->  Update on mixed_dml (actual rows=0.00 loops=1)
          Update on _hyper_2_2_chunk mixed_dml_1
-         ->  Index Scan using "2_mixed_dml_device_time_key" on _hyper_2_2_chunk mixed_dml_1 (actual rows=4.00 loops=1)
-               Index Cond: (device = 1)
-               Filter: (status = 'ok'::text)
-               Rows Removed by Filter: 8
+         ->  Result (actual rows=4.00 loops=1)
+               ->  Index Scan using "2_mixed_dml_device_time_key" on _hyper_2_2_chunk mixed_dml_1 (actual rows=4.00 loops=1)
+                     Index Cond: (device = 1)
+                     Filter: (status = 'ok'::text)
+                     Rows Removed by Filter: 8
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 UPDATE mixed_dml SET temp = temp + 1 WHERE seq = 13;
@@ -216,9 +220,10 @@ UPDATE mixed_dml SET temp = temp + 1 WHERE seq = 13;
    Tuples decompressed: 12
    ->  Update on mixed_dml (actual rows=0.00 loops=1)
          Update on _hyper_2_2_chunk mixed_dml_1
-         ->  Seq Scan on _hyper_2_2_chunk mixed_dml_1 (actual rows=1.00 loops=1)
-               Filter: (seq = 13)
-               Rows Removed by Filter: 46
+         ->  Result (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_2_2_chunk mixed_dml_1 (actual rows=1.00 loops=1)
+                     Filter: (seq = 13)
+                     Rows Removed by Filter: 46
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 INSERT INTO mixed_dml VALUES ('2024-01-01 00:24', 4, 24, 0, 'label 24', 'ok', true, md5('24')::uuid, 36, NULL)
@@ -273,9 +278,10 @@ UPDATE mixed_dml SET temp = temp + 1 WHERE label = 'label 7';
    Tuples decompressed: 12
    ->  Update on mixed_dml (actual rows=0.00 loops=1)
          Update on _hyper_2_2_chunk mixed_dml_1
-         ->  Seq Scan on _hyper_2_2_chunk mixed_dml_1 (actual rows=1.00 loops=1)
-               Filter: (label = 'label 7'::text)
-               Rows Removed by Filter: 22
+         ->  Result (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_2_2_chunk mixed_dml_1 (actual rows=1.00 loops=1)
+                     Filter: (label = 'label 7'::text)
+                     Rows Removed by Filter: 22
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 UPDATE mixed_dml SET temp = temp + 1 WHERE status = 'ok' AND device = 1;
@@ -286,10 +292,11 @@ UPDATE mixed_dml SET temp = temp + 1 WHERE status = 'ok' AND device = 1;
    Tuples decompressed: 12
    ->  Update on mixed_dml (actual rows=0.00 loops=1)
          Update on _hyper_2_2_chunk mixed_dml_1
-         ->  Index Scan using "2_mixed_dml_device_time_key" on _hyper_2_2_chunk mixed_dml_1 (actual rows=4.00 loops=1)
-               Index Cond: (device = 1)
-               Filter: (status = 'ok'::text)
-               Rows Removed by Filter: 8
+         ->  Result (actual rows=4.00 loops=1)
+               ->  Index Scan using "2_mixed_dml_device_time_key" on _hyper_2_2_chunk mixed_dml_1 (actual rows=4.00 loops=1)
+                     Index Cond: (device = 1)
+                     Filter: (status = 'ok'::text)
+                     Rows Removed by Filter: 8
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 UPDATE mixed_dml SET temp = temp + 1 WHERE seq = 13;
@@ -301,9 +308,10 @@ UPDATE mixed_dml SET temp = temp + 1 WHERE seq = 13;
    Tuples decompressed: 12
    ->  Update on mixed_dml (actual rows=0.00 loops=1)
          Update on _hyper_2_2_chunk mixed_dml_1
-         ->  Seq Scan on _hyper_2_2_chunk mixed_dml_1 (actual rows=1.00 loops=1)
-               Filter: (seq = 13)
-               Rows Removed by Filter: 46
+         ->  Result (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_2_2_chunk mixed_dml_1 (actual rows=1.00 loops=1)
+                     Filter: (seq = 13)
+                     Rows Removed by Filter: 46
 
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 INSERT INTO mixed_dml VALUES ('2024-01-01 00:24', 4, 24, 0, 'label 24', 'ok', true, md5('24')::uuid, 36, NULL)

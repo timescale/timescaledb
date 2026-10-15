@@ -2110,7 +2110,13 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		}
 	}
 
-	if (reltype == TS_REL_HYPERTABLE && ts_guc_enable_optimizations && !IS_DUMMY_REL(input_rel))
+	/*
+	 * Skip ORDERED and FINAL: they add input_rel paths to output_rel as they
+	 * are, and add_path frees the ones that lose to a cheaper path while
+	 * they are still in input_rel->pathlist.
+	 */
+	if (reltype == TS_REL_HYPERTABLE && ts_guc_enable_optimizations && !IS_DUMMY_REL(input_rel) &&
+		stage != UPPERREL_ORDERED && stage != UPPERREL_FINAL)
 	{
 		push_projection_below_single_child_append(root, input_rel->pathlist);
 		push_projection_below_single_child_append(root, input_rel->partial_pathlist);
