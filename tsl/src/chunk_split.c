@@ -1219,18 +1219,14 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			   NameStr(splitdim_name));
 
 		/*
-		 * Get the attribute numbers for the primary dimension's lower- and
-		 * upper-bound metadata columns in the compressed relation. We'll use
-		 * these to get the time range of compressed segments in order to
-		 * route segments to the right result chunk.
+		 * Use the min/max metadata to get the time range of compressed
+		 * segments. First/last metadata is not a range for non-leading
+		 * orderby columns.
 		 */
-		AttrNumber lower_attno;
-		AttrNumber upper_attno;
-		orderby_sparse_metadata_attnos(compress_settings,
-									   compress_settings->fd.compress_relid,
-									   orderby_pos,
-									   &lower_attno,
-									   &upper_attno);
+		AttrNumber lower_attno =
+			get_attnum(compress_settings->fd.compress_relid, column_segment_min_name(orderby_pos));
+		AttrNumber upper_attno =
+			get_attnum(compress_settings->fd.compress_relid, column_segment_max_name(orderby_pos));
 
 		CompressedSplitPoint csp = {
 			.base = {
