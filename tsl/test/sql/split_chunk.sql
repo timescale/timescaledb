@@ -826,3 +826,18 @@ call split_chunk(:'chunk_to_split', split_at => '2024-01-10');
 select s.orderby from _timescaledb_catalog.compression_settings s join show_chunks('split_add_col3') c on s.relid = c order by c;
 select count(*), min(v), max(v), count(v) from split_add_col3;
 drop table split_add_col3;
+
+-- Split a compressed chunk whose orderby does not start with the time column
+create table split_orderby(time timestamptz not null, device int, value float8);
+select create_hypertable('split_orderby', by_range('time', interval '1 day'));
+alter table split_orderby set (timescaledb.compress, timescaledb.compress_orderby = 'device, time');
+insert into split_orderby
+select '2024-01-01 00:00+00'::timestamptz + i * interval '1 minute', d, i
+from generate_series(0, 119) i, generate_series(1, 10) d;
+select count(*) from (select compress_chunk(c) from show_chunks('split_orderby') c) c;
+select show_chunks('split_orderby') chunk_to_split \gset
+call split_chunk_validate(:'chunk_to_split', split_at => '2024-01-01 01:00+00');
+select count(*) from split_orderby where time < '2024-01-01 01:00+00';
+select count(*) from split_orderby where time >= '2024-01-01 01:00+00';
+select tableoid::regclass, count(*), min(time), max(time) from split_orderby group by 1 order by 1;
+drop table split_orderby;
