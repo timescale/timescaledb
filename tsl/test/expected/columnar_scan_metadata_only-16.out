@@ -469,10 +469,11 @@ SELECT time, device, val FROM limit_one_more ORDER BY time, val LIMIT 1;
 EXPLAIN (costs off) SELECT device, length(txt), md5(txt) FROM limit_one_more ORDER BY time DESC, val DESC LIMIT 1;
 --- QUERY PLAN ---
  Limit
-   ->  Custom Scan (ColumnarScan) on _hyper_5_7_chunk
-         ->  Sort
-               Sort Key: _hyper_5_7_chunk_compressed._ts_meta_v2_last_time DESC, _hyper_5_7_chunk_compressed._ts_meta_v2_last_val DESC
-               ->  Seq Scan on _hyper_5_7_chunk_compressed
+   ->  Result
+         ->  Custom Scan (ColumnarScan) on _hyper_5_7_chunk
+               ->  Sort
+                     Sort Key: _hyper_5_7_chunk_compressed._ts_meta_v2_last_time DESC, _hyper_5_7_chunk_compressed._ts_meta_v2_last_val DESC
+                     ->  Seq Scan on _hyper_5_7_chunk_compressed
 
 SELECT device, length(txt), md5(txt) FROM limit_one_more ORDER BY time DESC, val DESC LIMIT 1;
  device | length |               md5                
