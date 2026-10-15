@@ -405,6 +405,46 @@ LIMIT 1;
 --------+-----------+-----------------------------------------------------------------------------------------------------------------------------
    1003 | t         | {"range_end": 100, "range_start": 0, "rows_deleted": 0, "total_batches": 1, "batches_processed": 1, "rows_materialized": 0}
 
+-- A refresh policy run that fails in its second batch records the error
+-- together with info for the first batch only, which committed before the
+-- error. The policy refreshes newest first, so that batch is [80, 100].
+UPDATE metrics SET value = value + 1;
+SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1');
+ debug_waitpoint_enable 
+------------------------
+ 
+
+SELECT scheduled FROM alter_job(:job_id_4, next_start => now());
+ scheduled 
+-----------
+ t
+
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+
+SELECT test.wait_for_job_to_run(:job_id_4, 3);
+INFO:  wait_for_job_to_run: job execution failed
+ wait_for_job_to_run 
+---------------------
+ f
+
+SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1');
+ debug_waitpoint_release 
+-------------------------
+ 
+
+SELECT job_id, succeeded, data->'error_data'->>'message' AS err_message,
+  data->'info' AS info
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_4
+ORDER BY id DESC
+LIMIT 1;
+ job_id | succeeded |                           err_message                           |                                                             info                                                             
+--------+-----------+-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------
+   1003 | f         | error injected at debug point 'cagg_policy_batch_2_after_txn_1' | {"range_end": 100, "range_start": 80, "rows_deleted": 2, "total_batches": 5, "batches_processed": 1, "rows_materialized": 2}
+
 SELECT delete_job(:job_id_1);
  delete_job 
 ------------
