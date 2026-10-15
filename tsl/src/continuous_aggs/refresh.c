@@ -833,6 +833,22 @@ cagg_refresh_stats_report_json(const CaggRefreshStats *stats)
 }
 
 /*
+ * Update the stats with the batches processed so far.
+ */
+static void
+cagg_refresh_stats_update(CaggRefreshStats *stats, const ContinuousAgg *cagg,
+						  const ContinuousAggRefreshContext *context, Oid range_type,
+						  int64 range_start, int64 range_end)
+{
+	stats->granular_enabled = cagg->data.granular_refresh_enabled;
+	stats->total_batches = context->execution.number_of_batches;
+	stats->batches_processed = context->execution.processing_batch;
+	stats->range_type = range_type;
+	stats->range_start = range_start;
+	stats->range_end = range_end;
+}
+
+/*
  * Report what a refresh did.
  */
 static void
@@ -937,66 +953,96 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	 * processed. */
 	int64 processed_range_start = refresh_window->start;
 	int64 processed_range_end = refresh_window->end;
-	for (int32 batch_idx = batch_start; batch_idx != batch_end; batch_idx += batch_step)
+	MemoryContext oldcontext = CurrentMemoryContext;
+	/* Stats as of the last batch that completed */
+	volatile CaggRefreshStats committed = { 0 };
+
+	PG_TRY();
 	{
-		InternalTimeRange *batch_window =
-			(InternalTimeRange *) list_nth(refresh_window_list, batch_idx);
-
-		elog(DEBUG1,
-			 "refreshing continuous aggregate \"%s\" from %s to %s",
-			 NameStr(cagg->data.user_view_name),
-			 ts_internal_to_time_string(batch_window->start, batch_window->type),
-			 ts_internal_to_time_string(batch_window->end, batch_window->type));
-
-		context->execution.processing_batch++;
-
-		if (context->execution.processing_batch == 1)
+		for (int32 batch_idx = batch_start; batch_idx != batch_end; batch_idx += batch_step)
 		{
-			processed_range_start = batch_window->start;
-			processed_range_end = batch_window->end;
-		}
-		else
-		{
-			processed_range_start = Min(processed_range_start, batch_window->start);
-			processed_range_end = Max(processed_range_end, batch_window->end);
-		}
+			InternalTimeRange *batch_window =
+				(InternalTimeRange *) list_nth(refresh_window_list, batch_idx);
 
-		/* extend_last_bucket must only apply to the boundary batch -- the one
-		 * whose window abuts the adjacent policy.  For newest-first ordering
-		 * that is batch 1; for oldest-first it is the final batch.
-		 * In non-batched mode (single batch) the one batch is always the boundary. */
-		bool apply_extend =
-			context->options.extend_last_bucket &&
-			(context->options.refresh_newest_first ?
-				 context->execution.processing_batch == 1 :
-				 context->execution.processing_batch == context->execution.number_of_batches);
+			elog(DEBUG1,
+				 "refreshing continuous aggregate \"%s\" from %s to %s",
+				 NameStr(cagg->data.user_view_name),
+				 ts_internal_to_time_string(batch_window->start, batch_window->type),
+				 ts_internal_to_time_string(batch_window->end, batch_window->type));
 
-		any_refreshed |= continuous_agg_refresh_internal(cagg,
-														 batch_window,
-														 context,
-														 apply_extend,
-														 &stats.mat_stats);
-		DEBUG_ERROR_INJECTION(
-			psprintf("cagg_policy_batch_%d_after_refresh", context->execution.processing_batch));
+			context->execution.processing_batch++;
 
-		if (context->options.max_batches_per_execution > 0 &&
-			context->execution.processing_batch >= context->options.max_batches_per_execution &&
-			context->execution.processing_batch < context->execution.number_of_batches)
-		{
-			elog(LOG,
-				 "reached maximum number of batches per execution (%d), batches not processed (%d)",
-				 context->options.max_batches_per_execution,
-				 context->execution.number_of_batches - context->execution.processing_batch);
-			break;
+			if (context->execution.processing_batch == 1)
+			{
+				processed_range_start = batch_window->start;
+				processed_range_end = batch_window->end;
+			}
+			else
+			{
+				processed_range_start = Min(processed_range_start, batch_window->start);
+				processed_range_end = Max(processed_range_end, batch_window->end);
+			}
+
+			/* extend_last_bucket must only apply to the boundary batch -- the one
+			 * whose window abuts the adjacent policy.  For newest-first ordering
+			 * that is batch 1; for oldest-first it is the final batch.
+			 * In non-batched mode (single batch) the one batch is always the boundary. */
+			bool apply_extend =
+				context->options.extend_last_bucket &&
+				(context->options.refresh_newest_first ?
+					 context->execution.processing_batch == 1 :
+					 context->execution.processing_batch == context->execution.number_of_batches);
+
+			any_refreshed |= continuous_agg_refresh_internal(cagg,
+															 batch_window,
+															 context,
+															 apply_extend,
+															 &stats.mat_stats);
+
+			/* Kept for the execution history in case a later batch fails */
+			cagg_refresh_stats_update(&stats,
+									  cagg,
+									  context,
+									  refresh_window->type,
+									  processed_range_start,
+									  processed_range_end);
+			committed = stats;
+
+			DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_refresh",
+										   context->execution.processing_batch));
+
+			if (context->options.max_batches_per_execution > 0 &&
+				context->execution.processing_batch >= context->options.max_batches_per_execution &&
+				context->execution.processing_batch < context->execution.number_of_batches)
+			{
+				elog(LOG,
+					 "reached maximum number of batches per execution (%d), batches not processed "
+					 "(%d)",
+					 context->options.max_batches_per_execution,
+					 context->execution.number_of_batches - context->execution.processing_batch);
+				break;
+			}
 		}
 	}
+	PG_CATCH();
+	{
+		/* A failed execution of a job still records in its execution history
+		 * what the batches before the error committed */
+		if (context->options.job_id > 0 && committed.batches_processed > 0)
+		{
+			MemoryContextSwitchTo(oldcontext);
+			cagg_refresh_stats_report_json((const CaggRefreshStats *) &committed);
+		}
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
-	stats.granular_enabled = cagg->data.granular_refresh_enabled;
-	stats.total_batches = context->execution.number_of_batches;
-	stats.batches_processed = context->execution.processing_batch;
-	stats.range_type = refresh_window->type;
-	stats.range_start = processed_range_start;
-	stats.range_end = processed_range_end;
+	cagg_refresh_stats_update(&stats,
+							  cagg,
+							  context,
+							  refresh_window->type,
+							  processed_range_start,
+							  processed_range_end);
 
 	/* Every execution of a job is recorded in its execution history, also
 	 * one that refreshed nothing. Manual refreshes don't have a job id. */
