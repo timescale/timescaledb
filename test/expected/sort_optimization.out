@@ -28,7 +28,8 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
 -- should use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
 --- QUERY PLAN ---
- Index Scan Backward using _hyper_1_1_chunk_order_test_time_idx on _hyper_1_1_chunk
+ Result
+   ->  Index Scan Backward using _hyper_1_1_chunk_order_test_time_idx on _hyper_1_1_chunk
 
 -- test sort optimization with ordering by multiple columns and time_bucket not last
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
@@ -44,7 +45,8 @@ SET enable_seqscan TO default;
 --- QUERY PLAN ---
  Sort
    Sort Key: (time_bucket(10, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device_id
-   ->  Seq Scan on _hyper_1_1_chunk
+   ->  Result
+         ->  Seq Scan on _hyper_1_1_chunk
 
 SET enable_seqscan TO off;
 -- test sort optimization with ordering by multiple columns and time_bucket as last member
@@ -58,7 +60,8 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
 -- should use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
 --- QUERY PLAN ---
- Index Scan using _hyper_1_1_chunk_order_test_device_id_time_idx on _hyper_1_1_chunk
+ Result
+   ->  Index Scan using _hyper_1_1_chunk_order_test_device_id_time_idx on _hyper_1_1_chunk
 
 -- test sort optimization with interval calculation with non-fixed interval
 -- #7097

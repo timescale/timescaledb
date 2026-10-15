@@ -343,15 +343,17 @@ SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
 VACUUM FULL ANALYZE deleteme_with_bytea;
 EXPLAIN (buffers off, costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_6_chunk
-   ->  Seq Scan on _hyper_5_6_chunk_compressed
-         Filter: (bdata = '\x'::bytea)
+ Result
+   ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+         ->  Seq Scan on _hyper_5_6_chunk_compressed
+               Filter: (bdata = '\x'::bytea)
 
 EXPLAIN (buffers off, costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_5_6_chunk
-   ->  Seq Scan on _hyper_5_6_chunk_compressed
-         Filter: ((bdata)::text = '123'::text)
+ Result
+   ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk
+         ->  Seq Scan on _hyper_5_6_chunk_compressed
+               Filter: ((bdata)::text = '123'::text)
 
 DROP table deleteme;
 DROP table deleteme_with_bytea;

@@ -308,8 +308,9 @@ RESET enable_indexscan;
  Custom Scan (ModifyHypertable)
    ->  Update on const_now
          Update on _hyper_X_X_chunk const_now_1
-         ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1
-               Index Cond: ("time" > ts_now_mock())
+         ->  Result
+               ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1
+                     Index Cond: ("time" > ts_now_mock())
 
 -- test DELETE
 :PREFIX DELETE FROM const_now WHERE time > now();
