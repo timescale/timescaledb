@@ -1,1 +1,0 @@
-Fixes: #10778 do not use skip scan in subqueries with pseudoconstant qualifiers applied to subquery results
