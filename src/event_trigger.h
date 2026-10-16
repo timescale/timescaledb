@@ -18,6 +18,7 @@ typedef enum EventTriggerDropType
 	EVENT_TRIGGER_DROP_SCHEMA,
 	EVENT_TRIGGER_DROP_TRIGGER,
 	EVENT_TRIGGER_DROP_FOREIGN_SERVER,
+	EVENT_TRIGGER_DROP_TABLE_COLUMN,
 } EventTriggerDropType;
 
 typedef struct EventTriggerDropObject
@@ -61,6 +62,14 @@ typedef struct EventTriggerDropTrigger
 	const char *schema;
 	const char *table;
 } EventTriggerDropTrigger;
+
+typedef struct EventTriggerDropTableColumn
+{
+	EventTriggerDropObject obj;
+	const char *schema;
+	const char *table;
+	const char *column;
+} EventTriggerDropTableColumn;
 
 typedef struct EventTriggerDropForeignServer
 {
