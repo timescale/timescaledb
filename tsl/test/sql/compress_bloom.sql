@@ -957,3 +957,19 @@ SELECT count(*) FROM int2_crosstype WHERE i2 = 1::smallint AND i4 = 1;
 SELECT count(*) FROM int2_crosstype WHERE i2 = 1::bigint AND i4 = 1;
 
 DROP TABLE int2_crosstype;
+
+-- renaming a column in a chunk composite bloom that the hypertable no longer has
+create table rename_bloom(ts int, a int, b int, v float);
+select create_hypertable('rename_bloom', 'ts', create_default_indexes=>false);
+insert into rename_bloom select x, x % 100, x % 7, x from generate_series(1, 5000) x;
+alter table rename_bloom set (
+    timescaledb.compress,
+    timescaledb.order_by='ts',
+    timescaledb.segment_by='',
+    timescaledb.compress_index = 'bloom(a,b)');
+select count(compress_chunk(x)) from show_chunks('rename_bloom') x;
+alter table rename_bloom set (timescaledb.compress_index = 'minmax(v)');
+alter table rename_bloom rename a to a2;
+select relname,attname from metacols where relname = 'rename_bloom' order by 1,2;
+explain (buffers off, costs off) select * from rename_bloom where a2 = 5 and b = 3;
+drop table rename_bloom;

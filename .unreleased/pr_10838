@@ -1,0 +1,1 @@
+Fixes: #10838 Fix bloom filters not being used on compressed chunks after renaming a column
