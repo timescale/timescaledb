@@ -110,3 +110,4 @@ select * from t1 where ts > 3 and b = false order by 1;
 ----+---
   5 | f
 
+-- Trigger the valgrind CI run for this test.

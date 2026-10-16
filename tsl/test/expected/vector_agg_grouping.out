@@ -18,6 +18,8 @@ select count(compress_chunk(x)) from show_chunks('onechunk') x;
 -------
      1
 
+-- boop --
+
 set timescaledb.debug_require_vector_agg = 'require';
 \set ON_ERROR_STOP 0
 select t, count(*) from onechunk group by t order by t limit 1;

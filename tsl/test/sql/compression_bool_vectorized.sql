@@ -38,3 +38,4 @@ select * from t1 where b = false order by 1;
 select * from t1 where ts > 3 and b is null order by 1;
 select * from t1 where ts > 3 and b = true order by 1;
 select * from t1 where ts > 3 and b = false order by 1;
+-- Trigger the valgrind CI run for this test.
