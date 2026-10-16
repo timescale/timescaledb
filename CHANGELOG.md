@@ -63,7 +63,9 @@ This release allows controling extension hook order to improve compatibility wit
 * [#10808](https://github.com/timescale/timescaledb/pull/10808) Speed up chunk creation in databases with many constraints
 * [#10817](https://github.com/timescale/timescaledb/pull/10817) Fix `DeferredChunkAppend` planning chunk queries with a restricted `search_path`
 * [#10783](https://github.com/timescale/timescaledb/pull/10783) Fix missing continuous aggregate invalidation when dropping a chunk by unqualified name
+* [#10827](https://github.com/timescale/timescaledb/pull/10827) Validate the full 64-bit version of statement-tracking callbacks
 * [#10830](https://github.com/timescale/timescaledb/pull/10830) Fix `split_chunk` routing rows to the wrong chunk
+* [#10883](https://github.com/timescale/timescaledb/pull/10838) Fix bloom filters not being used on compressed chunks after renaming a column
 
 * **New Settings**
 * `timescaledb.cagg_refresh_stats_level`: controls continuous aggregate refresh statistics. Valid values are `off` (the default), `summary`, and `verbose_log`.
