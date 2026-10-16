@@ -20,7 +20,8 @@ SELECT (CURRENT_DATE - DATE '2019-01-01')::text || ' days' AS granular_refresh_l
 --
 -- Encode (as record_tenant_invalidation does): store the tenant value's text
 -- form, like the tenant_id text column in continuous_aggs_tenant_tracking.
--- Decode (as build_tenant_predicate does): encoded::<type>.  This covers the
+-- Decode (as build_tenant_array does, with the type's input function):
+-- encoded::<type>.  This covers the
 -- encode/decode scheme for different tenant types.
 -- ============================================================================
 CREATE TABLE tenant_key(coltype text, encoded text);
@@ -75,7 +76,7 @@ DROP TABLE tenant_key;
 -- Demonstrate the DateStyle-dependent encode/decode MISMATCH (outside the cagg
 -- refresh).  DATE is the only supported type whose text form depends on a
 -- session GUC.  record_tenant_invalidation encodes at INSERT time under the
--- inserting session's DateStyle and build_tenant_predicate decodes at REFRESH
+-- inserting session's DateStyle and build_tenant_array decodes at REFRESH
 -- time under the refreshing session's DateStyle; a difference makes the stored
 -- text re-parse to a different value.  This is why the encode pins DateStyle to
 -- a canonical ISO form (proven end-to-end in the gm_daily test below).
@@ -367,7 +368,7 @@ DROP DOMAIN sensor_id_dom;
 -- char(n) additionally blank-pads: a 3-char tenant in char(10) is stored, and
 -- encoded by the type's output function, as 10 bytes.  Tenants shorter than n
 -- are used below on purpose so the padding round-trips through the tracker key
--- and back through the decode cast.
+-- and back through the decode.
 --
 -- A decode that truncated or lost the padding would match no rows
 -- ============================================================================
