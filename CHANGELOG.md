@@ -66,6 +66,7 @@ This release allows controling extension hook order to improve compatibility wit
 * [#10827](https://github.com/timescale/timescaledb/pull/10827) Validate the full 64-bit version of statement-tracking callbacks
 * [#10830](https://github.com/timescale/timescaledb/pull/10830) Fix `split_chunk` routing rows to the wrong chunk
 * [#10883](https://github.com/timescale/timescaledb/pull/10838) Fix bloom filters not being used on compressed chunks after renaming a column
+* [#10508](https://github.com/timescale/timescaledb/pull/10508) Fix missing CAgg invalidations during MERGE UPDATE/DELETE
 
 * **New Settings**
 * `timescaledb.cagg_refresh_stats_level`: controls continuous aggregate refresh statistics. Valid values are `off` (the default), `summary`, and `verbose_log`.
