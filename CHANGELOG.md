@@ -68,7 +68,7 @@ This release allows controling extension hook order to improve compatibility wit
 * [#10883](https://github.com/timescale/timescaledb/pull/10838) Fix bloom filters not being used on compressed chunks after renaming a column
 * [#10508](https://github.com/timescale/timescaledb/pull/10508) Fix missing CAgg invalidations during MERGE UPDATE/DELETE
 
-* **New Settings**
+**New Settings**
 * `timescaledb.cagg_refresh_stats_level`: controls continuous aggregate refresh statistics. Valid values are `off` (the default), `summary`, and `verbose_log`.
 * `timescaledb.enable_aic_compression`: enables the experimental Adaptive Integer Compressor. Off by default.
 * `timescaledb.enable_columnarscan_metadata_only`: answers eligible `LIMIT 1` queries on compressed chunks from batch metadata. On by default.
