@@ -30,6 +30,7 @@ set(TEST_FILES
     compress_bitmap_scan.sql
     compress_bloom.sql
     compress_bloom_dml.sql
+    compress_bytea.sql
     compress_default.sql
     compress_dml_aux.sql
     compress_dml_bitmap_rescan.sql
