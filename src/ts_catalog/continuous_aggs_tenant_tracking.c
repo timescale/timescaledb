@@ -8,6 +8,7 @@
 #include <access/htup_details.h>
 #include <access/table.h>
 #include <access/xact.h>
+#include <utils/builtins.h>
 #include <utils/rel.h>
 
 #include "debug_assert.h"
@@ -224,6 +225,56 @@ ts_cagg_tenant_tracking_exists(int32 hypertable_id, int32 seqnum)
 	ts_scan_iterator_close(&iterator);
 
 	return found;
+}
+
+/*
+ * Tenant keys (as tracked text) of one seqnum whose tracked range overlaps
+ * [start, end). Same overlap test as the tenant-scoped materialization.
+ */
+TSDLLEXPORT List *
+ts_cagg_tenant_tracking_get_overlapping(int32 hypertable_id, int32 seqnum, int64 start, int64 end)
+{
+	List *tenants = NIL;
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_TENANT_TRACKING,
+													AccessShareLock,
+													CurrentMemoryContext);
+
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_aggs_tenant_tracking_idx_seqnum,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(seqnum));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		int64 min_timestamp = DatumGetInt64(
+			slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_min_timestamp, &isnull));
+		Assert(!isnull);
+		int64 max_timestamp = DatumGetInt64(
+			slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_max_timestamp, &isnull));
+		Assert(!isnull);
+
+		if (min_timestamp >= end || max_timestamp < start)
+		{
+			continue;
+		}
+
+		Datum tenant_id =
+			slot_getattr(ti->slot, Anum_continuous_aggs_tenant_tracking_tenant_id, &isnull);
+
+		/* NULL tenants are never tracked; such a key could not match anyway */
+		Assert(!isnull);
+		if (!isnull)
+		{
+			tenants = lappend(tenants, TextDatumGetCString(tenant_id));
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return tenants;
 }
 
 /* Delete all tracking rows for a hypertable. */

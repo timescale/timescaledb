@@ -615,8 +615,8 @@ record_tenant_invalidation_values(const ContinuousAggsCacheInvalEntry *cache_ent
 
 	/*
 	 * Key the tenant by the text form produced by its type's output function,
-	 * so it round-trips through the decode in build_tenant_predicate
-	 * (tenant_id::<coltype>).  The output function, varlena flag and type are
+	 * so it round-trips through the type's input function in build_tenant_array
+	 * (materialize.c).  The output function, varlena flag and type are
 	 * cached per chunk (cache_entry->tenant_col).  Varlena values must be
 	 * detoasted before the output function is called.
 	 *
