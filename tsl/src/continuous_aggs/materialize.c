@@ -8,9 +8,12 @@
 #include <executor/spi.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
+#include <nodes/parsenodes.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/guc.h>
+#include <utils/lsyscache.h>
 #include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
@@ -27,6 +30,7 @@
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_tenant_tracking.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 
 /*********************
@@ -66,13 +70,17 @@ typedef struct MaterializationContext
 	/*
 	 * Tenant-scoped materialization: when tenant_column is non-NULL, only rows
 	 * whose tenant_column matches a tracked tenant (for raw_hypertable_id /
-	 * tenant_seqnum, overlapping this range) are re-materialized.
+	 * tenant_seqnum, overlapping this range) are re-materialized. Those tenants
+	 * are bound as one array parameter, built per range by build_tenant_array.
 	 */
 	bool tenant_scoped;
-	const char *tenant_column;	/* cagg group-by column used as the tenant key */
-	const char *tenant_coltype; /* its SQL type name, for the decode cast */
+	const char *tenant_column; /* cagg group-by column used as the tenant key */
+	Oid tenant_typid;		   /* its base type */
 	int32 raw_hypertable_id;
 	int32 tenant_seqnum;
+	Oid tenant_array_type;
+	Datum tenant_array;
+	int ntenants;
 	/* What this materialization wrote and removed, filled in as the plans run */
 	uint64 rows_materialized;
 	uint64 rows_deleted;
@@ -97,6 +105,10 @@ static char *create_materialization_delete_statement(MaterializationContext *con
 static char *create_materialization_exists_statement(MaterializationContext *context);
 static char *create_materialization_merge_statement(MaterializationContext *context);
 static char *create_materialization_merge_delete_statement(MaterializationContext *context);
+/*
+ * Plans are prepared and freed for every range. Tenant-scoped plans must never
+ * be reused across ranges: the bound tenant array is specific to one range.
+ */
 static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES + 1] = {
 	[PLAN_TYPE_INSERT] = { .nargs = 2,
 						   .create_statement = create_materialization_insert_statement,
@@ -146,18 +158,19 @@ static void update_watermark(MaterializationContext *context);
 static void execute_materializations(MaterializationContext *context);
 
 /*
- * Extra bind parameters appended for a tenant-scoped INSERT/DELETE on top of
- * the base $1/$2 time range: $3 raw hypertable id, $4 seqnum, $5/$6 the
- * internal (int8) range used by the tracking-overlap subquery.
+ * Extra bind parameter appended for a tenant-scoped INSERT/DELETE on top of
+ * the base $1/$2 time range: $3 the array of tenants to re-materialize.
  */
-#define MAT_TENANT_EXTRA_NARGS 4
+#define MAT_TENANT_EXTRA_NARGS 1
+
+static void build_tenant_array(MaterializationContext *context);
 
 /* API to update materializations from refresh code */
 void
 continuous_agg_update_materialization(
 	Hypertable *mat_ht, const ContinuousAgg *cagg, SchemaAndName partial_view,
 	SchemaAndName materialization_table, const NameData *time_column_name,
-	InternalTimeRange materialization_range, const char *tenant_column, const char *tenant_coltype,
+	InternalTimeRange materialization_range, const char *tenant_column, Oid tenant_typid,
 	int32 raw_hypertable_id, int32 tenant_seqnum, MaterializationStats *stats)
 {
 	MaterializationContext context = {
@@ -171,7 +184,7 @@ continuous_agg_update_materialization(
 		/* tenant_column non-NULL means this range is materialized tenant-scoped. */
 		.tenant_scoped = (tenant_column != NULL),
 		.tenant_column = tenant_column,
-		.tenant_coltype = tenant_coltype,
+		.tenant_typid = tenant_typid,
 		.raw_hypertable_id = raw_hypertable_id,
 		.tenant_seqnum = tenant_seqnum,
 	};
@@ -189,10 +202,32 @@ continuous_agg_update_materialization(
 	}
 
 	/* Then insert the materializations. Keep both range representations in sync
-	 * (the tenant-scoping subquery compares against the internal int8 range). */
+	 * (the tenant overlap test uses the internal int8 range). */
 	context.materialization_range = internal_time_range_to_time_range(materialization_range);
 	context.internal_materialization_range = materialization_range;
+
+	if (context.tenant_scoped)
+	{
+		build_tenant_array(&context);
+
+		/* The tenant array must be planned as a Const, which a generic plan would
+		 * not do. Reverted by AtEOXact_GUC below. */
+		set_config_option("plan_cache_mode",
+						  "force_custom_plan",
+						  PGC_USERSET,
+						  PGC_S_SESSION,
+						  GUC_ACTION_SAVE,
+						  true,
+						  0,
+						  false);
+	}
+
 	execute_materializations(&context);
+
+	if (context.tenant_scoped)
+	{
+		pfree(DatumGetPointer(context.tenant_array));
+	}
 
 	if (stats != NULL)
 	{
@@ -476,18 +511,15 @@ has_direct_compress_on_cagg_refresh_enabled(MaterializationContext *context)
 /*
  * Build the tenant-scoping predicate, or "" when not tenant-scoped.
  *
- * Restricts to rows whose tenant column matches a tracked tenant for this
- * (raw hypertable, seqnum) whose tracked range overlaps the materialization
- * range. The tracked tenant_id text holds the canonical text form of the tenant
- * key, so it is cast back to the column type; the column (alias.<col>) is left
- * bare so an index on it can be used. Params: $1/$2 are the time range (outer),
- * $3 = raw hypertable id, $4 = seqnum, $5/$6 = the internal (int8) range.
+ * Restricts to rows whose tenant column is in $3, the array of tracked tenants
+ * overlapping this range (see build_tenant_array). The column (alias.<col>) is
+ * left bare so an index on it can be used.
  *
- * The tenant list is wrapped in ARRAY() to keep the predicate a qual on the
- * tenant column. The planner can then push it into the aggregating partial view,
- * since the tenant column is a grouping key there, and use it as an index
- * condition. IN (subquery) instead becomes a semi-join, and a join cannot cross
- * an aggregate, so every tenant in the window would be aggregated first.
+ * As a qual on the tenant column, the planner can push it into the aggregating
+ * partial view, since the tenant column is a grouping key there, and use it as
+ * an index condition. The plan is always custom, so $3 is folded into a Const:
+ * selectivity is estimated from the actual tenants, and a large array is
+ * matched with a hashed ScalarArrayOpExpr.
  */
 static char *
 build_tenant_predicate(MaterializationContext *context, const char *alias)
@@ -501,14 +533,55 @@ build_tenant_predicate(MaterializationContext *context, const char *alias)
 
 	initStringInfo(&buf);
 	appendStringInfo(&buf,
-					 " AND %s.%s = ANY (ARRAY(SELECT tt.tenant_id::%s "
-					 "FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt "
-					 "WHERE tt.hypertable_id = $3 AND tt.seqnum = $4 "
-					 "AND tt.min_timestamp < $6 AND tt.max_timestamp >= $5))",
+					 " AND %s.%s = ANY ($3)",
 					 alias,
-					 quote_identifier(context->tenant_column),
-					 context->tenant_coltype);
+					 quote_identifier(context->tenant_column));
 	return buf.data;
+}
+
+/*
+ * Build the array of tracked tenants for this (raw hypertable, seqnum) whose
+ * tracked range overlaps the materialization range, bound as $3.
+ *
+ * Tracked keys hold the text form of the tenant key, so they are converted
+ * with the type's input function. The typmod is not applied: a key longer than
+ * a varchar(n) cannot match, so there is no need to reject it.
+ */
+static void
+build_tenant_array(MaterializationContext *context)
+{
+	List *tenants =
+		ts_cagg_tenant_tracking_get_overlapping(context->raw_hypertable_id,
+												context->tenant_seqnum,
+												context->internal_materialization_range.start,
+												context->internal_materialization_range.end);
+	int ntenants = list_length(tenants);
+	Datum *elems = (Datum *) palloc(Max(ntenants, 1) * sizeof(Datum));
+	Oid infunc;
+	Oid ioparam;
+	int16 typlen;
+	bool typbyval;
+	char typalign;
+	ListCell *lc;
+	int i = 0;
+
+	getTypeInputInfo(context->tenant_typid, &infunc, &ioparam);
+	foreach (lc, tenants)
+	{
+		elems[i++] = OidInputFunctionCall(infunc, lfirst(lc), ioparam, -1);
+	}
+
+	get_typlenbyvalalign(context->tenant_typid, &typlen, &typbyval, &typalign);
+	context->tenant_array = PointerGetDatum(
+		construct_array(elems, ntenants, context->tenant_typid, typlen, typbyval, typalign));
+	context->tenant_array_type = get_array_type(context->tenant_typid);
+	Ensure(OidIsValid(context->tenant_array_type),
+		   "no array type for tenant type %u",
+		   context->tenant_typid);
+	context->ntenants = ntenants;
+
+	pfree(elems);
+	list_free_deep(tenants);
 }
 
 /* Create INSERT statement */
@@ -689,13 +762,10 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 	argtypes[0] = context->materialization_range.type;
 	argtypes[1] = context->materialization_range.type;
 
-	/* Tenant-scoped INSERT/DELETE add: $3 raw ht id, $4 seqnum, $5/$6 int8 range. */
+	/* Tenant-scoped INSERT/DELETE add: $3 the tenant array. */
 	if (context->tenant_scoped)
 	{
-		argtypes[2] = INT4OID;
-		argtypes[3] = INT4OID;
-		argtypes[4] = INT8OID;
-		argtypes[5] = INT8OID;
+		argtypes[2] = context->tenant_array_type;
 	}
 
 	return argtypes;
@@ -717,6 +787,9 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 
 	MaterializationPlan *materialization = &materialization_plans[plan_type];
 
+	/* A tenant-scoped plan is prepared fresh for every range */
+	Assert(!context->tenant_scoped || materialization->plan == NULL);
+
 	if (materialization->plan == NULL)
 	{
 		char *query = materialization->create_statement(context);
@@ -724,7 +797,11 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 		Oid *argtypes = create_materialization_plan_argtypes(context, plan_type, nargs);
 
 		elog(DEBUG2, "%s: %s", __func__, query);
-		materialization->plan = SPI_prepare(query, nargs, argtypes);
+		materialization->plan =
+			SPI_prepare_cursor(query,
+							   nargs,
+							   argtypes,
+							   context->tenant_scoped ? CURSOR_OPT_CUSTOM_PLAN : 0);
 		if (materialization->plan == NULL)
 		{
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);
@@ -747,17 +824,11 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 	(*nulls)[0] = false;
 	(*nulls)[1] = false;
 
-	/* Tenant-scoped INSERT/DELETE add: $3 raw ht id, $4 seqnum, $5/$6 int8 range. */
+	/* Tenant-scoped INSERT/DELETE add: $3 the tenant array. */
 	if (context->tenant_scoped)
 	{
-		(*values)[2] = Int32GetDatum(context->raw_hypertable_id);
-		(*values)[3] = Int32GetDatum(context->tenant_seqnum);
-		(*values)[4] = Int64GetDatum(context->internal_materialization_range.start);
-		(*values)[5] = Int64GetDatum(context->internal_materialization_range.end);
-		(*nulls)[2] = false;
-		(*nulls)[3] = false;
-		(*nulls)[4] = false;
-		(*nulls)[5] = false;
+		(*values)[2] = context->tenant_array;
+		(*nulls)[2] = ' ';
 	}
 }
 
@@ -886,6 +957,16 @@ update_watermark(MaterializationContext *context)
 static void
 execute_materializations(MaterializationContext *context)
 {
+	/* No tracked tenant overlaps this range, so there is nothing to change */
+	if (context->tenant_scoped && context->ntenants == 0)
+	{
+		elog(DEBUG1,
+			 "no tracked tenant overlaps the range of materialization table \"%s.%s\"",
+			 NameStr(*context->materialization_table.schema),
+			 NameStr(*context->materialization_table.name));
+		return;
+	}
+
 	bool prev_enable_direct_compress_insert = ts_guc_enable_direct_compress_insert;
 	bool prev_enable_direct_compress_insert_client_sorted =
 		ts_guc_enable_direct_compress_insert_client_sorted;

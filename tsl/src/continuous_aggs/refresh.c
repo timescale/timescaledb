@@ -54,9 +54,9 @@ typedef struct ContinuousAggMaterializationState
 	InternalTimeRange refresh_window;
 	SchemaAndName partial_view;
 	bool bucketing_refresh_window;
-	/* Granular tenant tracking column name and sql type */
+	/* Granular tenant tracking column name and its base type */
 	const char *tenant_column;
-	const char *tenant_coltype;
+	Oid tenant_typid;
 	int32 raw_hypertable_id;
 	/*materialization stats, accumulated through the whole refresh, across batches*/
 	MaterializationStats *mat_stats;
@@ -519,15 +519,12 @@ continuous_agg_refresh_init(ContinuousAggMaterializationState *refresh, const Co
 		Oid tenant_collid;
 
 		refresh->tenant_column = pstrdup(tenant_column);
-		/* Keep the typmod: without it format_type renders char(10) as bare
-		 * "character", which re-parses as char(1) and truncates every tenant key. */
 		get_atttypetypmodcoll(refresh->cagg_ht->main_table_relid,
 							  attno,
 							  &tenant_typid,
 							  &tenant_typmod,
 							  &tenant_collid);
-		tenant_typid = getBaseTypeAndTypmod(tenant_typid, &tenant_typmod);
-		refresh->tenant_coltype = format_type_with_typemod(tenant_typid, tenant_typmod);
+		refresh->tenant_typid = getBaseTypeAndTypmod(tenant_typid, &tenant_typmod);
 	}
 }
 
@@ -598,7 +595,7 @@ continuous_agg_refresh_execute(const ContinuousAggMaterializationState *refresh,
 										  &time_dim->fd.column_name,
 										  *bucketed_refresh_window,
 										  tenant_column,
-										  refresh->tenant_coltype,
+										  refresh->tenant_typid,
 										  refresh->raw_hypertable_id,
 										  seqnum,
 										  refresh->mat_stats);
