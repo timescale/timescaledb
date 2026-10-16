@@ -1296,3 +1296,76 @@ DROP MATERIALIZED VIEW stats_agg;
 DROP TABLE stats;
 
 RESET timescaledb.cagg_refresh_stats_level;
+
+-- Test: granular refresh into a compressed materialization hypertable whose
+-- segmentby is the tenant column. Only the refreshed tenant's compressed batch
+-- may be decompressed; the other tenants' batches must stay compressed, and
+-- the cagg must still match its defining query.
+CREATE TABLE comp_mat(time timestamptz NOT NULL, sensor_id text, value float);
+SELECT create_hypertable('comp_mat', 'time');
+ALTER TABLE comp_mat SET (
+    timescaledb.cagg_enable_granular_refresh = true,
+    timescaledb.cagg_granular_refresh_column = 'sensor_id',
+    timescaledb.cagg_granular_refresh_start_offset = :'granular_refresh_lookback',
+    timescaledb.cagg_granular_refresh_end_offset = '1 day'
+);
+
+CREATE MATERIALIZED VIEW comp_mat_daily
+  WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, sensor_id, sum(value)
+  FROM comp_mat
+  GROUP BY bucket, sensor_id
+  WITH NO DATA;
+ALTER MATERIALIZED VIEW comp_mat_daily SET (timescaledb.enable_granular_refresh = true);
+ALTER MATERIALIZED VIEW comp_mat_daily SET (timescaledb.compress = true,
+    timescaledb.compress_segmentby = 'sensor_id',
+    timescaledb.compress_orderby = 'bucket');
+
+CALL refresh_continuous_aggregate('comp_mat_daily', NULL, '2025-05-01 00:00+00');
+
+INSERT INTO comp_mat VALUES
+  ('2020-01-01 00:00+00', 'sensor_a', 1),
+  ('2020-01-01 00:00+00', 'sensor_b', 2),
+  ('2020-01-01 00:00+00', 'sensor_c', 3),
+  ('2020-01-02 00:00+00', 'sensor_a', 4),
+  ('2020-01-02 00:00+00', 'sensor_b', 5),
+  ('2020-01-02 00:00+00', 'sensor_c', 6);
+CALL refresh_continuous_aggregate('comp_mat_daily', NULL, '2025-05-01 00:00+00');
+
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_mat_daily') c;
+
+-- The compressed chunk of the materialization hypertable
+SELECT cs.compress_relid AS comp_mat_compressed_chunk
+FROM _timescaledb_catalog.continuous_agg ca
+JOIN _timescaledb_catalog.chunk c ON c.hypertable_id = ca.mat_hypertable_id
+JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = c.relid
+WHERE ca.user_view_name = 'comp_mat_daily' \gset
+
+-- One compressed batch per tenant
+SELECT sensor_id FROM :comp_mat_compressed_chunk ORDER BY sensor_id;
+
+-- Late data for sensor_a only
+INSERT INTO comp_mat VALUES ('2020-01-01 00:00+00', 'sensor_a', 10);
+
+SET timescaledb.cagg_refresh_stats_level TO verbose_log;
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('comp_mat_daily', NULL, '2025-05-01 00:00+00');
+RESET client_min_messages;
+RESET timescaledb.cagg_refresh_stats_level;
+
+-- sensor_a's batch was decompressed; sensor_b and sensor_c stay compressed
+SELECT sensor_id FROM :comp_mat_compressed_chunk ORDER BY sensor_id;
+
+SELECT sensor_id, bucket, sum FROM comp_mat_daily ORDER BY sensor_id, bucket;
+
+-- Must be empty: the cagg matches its defining query
+(SELECT bucket, sensor_id, sum FROM comp_mat_daily
+ EXCEPT
+ SELECT time_bucket('1 day', time), sensor_id, sum(value) FROM comp_mat GROUP BY 1, 2)
+UNION ALL
+(SELECT time_bucket('1 day', time), sensor_id, sum(value) FROM comp_mat GROUP BY 1, 2
+ EXCEPT
+ SELECT bucket, sensor_id, sum FROM comp_mat_daily);
+
+DROP MATERIALIZED VIEW comp_mat_daily;
+DROP TABLE comp_mat;
