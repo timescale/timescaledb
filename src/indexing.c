@@ -256,8 +256,8 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 			ts_indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
 		}
 
-		/* Check for existence of "default" indexes */
-		if (create_default && NULL != time_dim)
+		/* Only non-partial indexes can replace the default indexes. */
+		if (create_default && NULL != time_dim && RelationGetIndexPredicate(idxrel) == NIL)
 		{
 			Form_pg_attribute idxattr_time, idxattr_space;
 
