@@ -1,0 +1,1 @@
+Fixes: #10508 Fix missing CAgg invalidations during MERGE UPDATE/DELETE
