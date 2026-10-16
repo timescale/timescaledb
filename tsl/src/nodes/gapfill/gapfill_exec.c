@@ -65,6 +65,7 @@ static void gapfill_state_initialize_columns(GapFillState *state, List *exec_tli
 static GapFillColumnState *gapfill_column_state_create(GapFillColumnType ctype, Oid typeid);
 static bool gapfill_is_group_column(GapFillState *state, TargetEntry *tle);
 static TargetEntry *gapfill_get_fixed_agg_expr_column(GapFillState *state, TargetEntry *tle);
+static bool is_integer_bucket(GapFillState *state);
 
 static CustomExecMethods gapfill_state_methods = {
 	.BeginCustomScan = gapfill_begin,
@@ -140,27 +141,13 @@ gapfill_internal_get_datum(int64 value, Oid type)
 static Expr *
 get_start_arg(GapFillState *state)
 {
-	if (!state->have_timezone)
-	{
-		return lthird(state->args);
-	}
-	else
-	{
-		return lfourth(state->args);
-	}
+	return list_nth(state->args, list_length(state->args) - 2);
 }
 
 static Expr *
 get_finish_arg(GapFillState *state)
 {
-	if (!state->have_timezone)
-	{
-		return lfourth(state->args);
-	}
-	else
-	{
-		return lfifth(state->args);
-	}
+	return llast(state->args);
 }
 
 static Expr *
@@ -168,6 +155,34 @@ get_timezone_arg(GapFillState *state)
 {
 	Assert(state->have_timezone);
 	return lthird(state->args);
+}
+
+static Expr *
+get_offset_arg(GapFillState *state)
+{
+	Assert(state->have_offset);
+	if (state->have_timezone)
+	{
+		return lfourth(state->args);
+	}
+	else
+	{
+		return lthird(state->args);
+	}
+}
+
+static Expr *
+get_origin_arg(GapFillState *state)
+{
+	Assert(state->have_offset && !is_integer_bucket(state));
+	if (state->have_timezone)
+	{
+		return lfifth(state->args);
+	}
+	else
+	{
+		return lfourth(state->args);
+	}
 }
 
 int64
@@ -217,6 +232,13 @@ gapfill_bucket_width_get_internal(Oid timetype, Oid argtype, Datum arg, Interval
 	}
 }
 
+static bool
+is_integer_bucket(GapFillState *state)
+{
+	Oid bucket_type = exprType(lsecond(state->args));
+	return (bucket_type == INT2OID || bucket_type == INT4OID || bucket_type == INT8OID);
+}
+
 /*
  * Create a GapFill node from this plan. This is the full execution
  * state that replaces the plan node as the plan moves from planning to
@@ -230,7 +252,17 @@ gapfill_state_create(CustomScan *cscan)
 	state->csstate.methods = &gapfill_state_methods;
 	state->subplan = linitial(cscan->custom_plans);
 	state->args = list_nth(cscan->custom_private, GFP_Args);
-	state->have_timezone = list_length(state->args) == 5;
+
+	/* Can have offset, cannot have origin or timezone */
+	if (is_integer_bucket(state))
+	{
+		state->have_offset = list_length(state->args) == 5;
+	}
+	else
+	{
+		state->have_timezone = (list_length(state->args) == 5 || list_length(state->args) == 7);
+		state->have_offset = list_length(state->args) >= 6;
+	}
 
 	return (Node *) state;
 }
@@ -365,8 +397,7 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 
 	if (state->have_timezone)
 	{
-		if (IsA(get_timezone_arg(state), Const) &&
-			castNode(Const, get_timezone_arg(state))->constisnull)
+		if (gapfill_is_const_null(get_timezone_arg(state)))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -380,6 +411,29 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 	{
 		time_bucket->args = list_make2(linitial(time_bucket->args), expr);
 	}
+
+	if (state->have_offset)
+	{
+		bool use_offset = true;
+		if (!is_integer_bucket(state))
+		{
+			Expr *origin = get_origin_arg(state);
+			if (!gapfill_is_const_null(origin))
+			{
+				time_bucket->args = lappend(time_bucket->args, origin);
+				use_offset = state->have_timezone;
+			}
+		}
+		if (use_offset)
+		{
+			Expr *offset = get_offset_arg(state);
+			if (!gapfill_is_const_null(offset))
+			{
+				time_bucket->args = lappend(time_bucket->args, offset);
+			}
+		}
+	}
+
 	value = gapfill_exec_expr(state, state->scanslot, (Expr *) time_bucket, &isnull);
 
 	/* start expression must not evaluate to NULL */

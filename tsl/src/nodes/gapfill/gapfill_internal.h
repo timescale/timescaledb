@@ -97,6 +97,7 @@ typedef struct GapFillState
 	/* arguments of the gapfill function call */
 	List *args;
 	bool have_timezone;
+	bool have_offset;
 	int64 gapfill_start;
 	int64 gapfill_end;
 	/* bucket width for fixed-size buckets */
