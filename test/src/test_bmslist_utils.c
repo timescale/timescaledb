@@ -51,9 +51,25 @@ test_non_empty_bmslist_contains_items(void)
 	ts_bmslist_free(bmslist);
 }
 
+static void
+test_bmslist_with_empty_set(void)
+{
+	TsBmsList bmslist = ts_bmslist_create();
+	int items[] = { 1, 2 };
+	bmslist = ts_bmslist_add_member(bmslist, items, 2);
+	bmslist = lappend(bmslist, NULL);
+	bmslist = ts_bmslist_add_member(bmslist, items, 1);
+
+	TestAssertInt64Eq(list_length(bmslist), 3);
+	TestAssertBoolEq(ts_bmslist_contains_items(bmslist, items, 1), true);
+
+	ts_bmslist_free(bmslist);
+}
+
 TS_TEST_FN(ts_test_bmslist_utils)
 {
 	test_empty_bmslist_contains_items();
 	test_non_empty_bmslist_contains_items();
+	test_bmslist_with_empty_set();
 	PG_RETURN_VOID();
 }
