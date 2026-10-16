@@ -889,6 +889,10 @@ deferred_chunk_append_chunk_sql(DeferredChunkAppendState *state, Oid reloid)
 static Oid
 next_chunk_reloid_ordered(DeferredChunkAppendState *state)
 {
+	/* Skip the OSM chunk when reading of tiered data is disabled. */
+	int32 osm_chunk_id = ts_guc_enable_osm_reads ? INVALID_CHUNK_ID :
+												   ts_chunk_get_osm_chunk_id(state->hypertable_id);
+
 	/* A slice's chunk may have been dropped since the slice was read; skip such
 	 * slices and keep going so a mid-scan drop can't truncate the result. Only
 	 * return InvalidOid once the slices are exhausted. */
@@ -912,20 +916,32 @@ next_chunk_reloid_ordered(DeferredChunkAppendState *state)
 		it.ctx.scandirection = state->descending ? BackwardScanDirection : ForwardScanDirection;
 		ts_scan_iterator_start_scan(&it);
 
-		TupleInfo *ti = ts_scan_iterator_next(&it);
-		if (ti == NULL)
+		int32 chunk_id = INVALID_CHUNK_ID;
+		bool found = false;
+		TupleInfo *ti;
+		while ((ti = ts_scan_iterator_next(&it)) != NULL)
 		{
-			ts_scan_iterator_close(&it);
+			bool isnull;
+			chunk_id =
+				DatumGetInt32(slot_getattr(ti->slot, Anum_dimension_slice_chunk_id, &isnull));
+			state->last_range_start =
+				DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
+			state->have_last = true;
+
+			if (chunk_id == osm_chunk_id)
+			{
+				continue;
+			}
+
+			found = true;
+			break;
+		}
+		ts_scan_iterator_close(&it);
+
+		if (!found)
+		{
 			return InvalidOid;
 		}
-
-		bool isnull;
-		int32 chunk_id =
-			DatumGetInt32(slot_getattr(ti->slot, Anum_dimension_slice_chunk_id, &isnull));
-		state->last_range_start =
-			DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
-		state->have_last = true;
-		ts_scan_iterator_close(&it);
 
 		Oid reloid = ts_chunk_get_relid(chunk_id, /* missing_ok = */ true);
 		if (OidIsValid(reloid))
@@ -978,6 +994,14 @@ next_chunk_reloid_unordered(DeferredChunkAppendState *state)
 		{
 			continue;
 		}
+
+		/* Skip OSM chunks when reading of tiered data is disabled */
+		bool is_osm_chunk = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_osm_chunk, &isnull));
+		if (!isnull && is_osm_chunk && !ts_guc_enable_osm_reads)
+		{
+			continue;
+		}
+
 		int32 id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_id, &isnull));
 		TimestampTz ct =
 			DatumGetTimestampTz(slot_getattr(ti->slot, Anum_chunk_creation_time, &isnull));

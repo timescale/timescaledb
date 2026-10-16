@@ -551,18 +551,25 @@ SELECT count(*) AS returned, count(*) FILTER (WHERE device <> 1) AS leaked FROM 
 
 RESET timescaledb.debug_require_deferred_chunk_append;
 RESET search_path;
--- A noncontiguous OSM (tiered) chunk must disqualify the node.
+-- Setup a fake OSM chunk
 CREATE EXTENSION postgres_fdw;
-CREATE SERVER dcs_osm_fdw FOREIGN DATA WRAPPER postgres_fdw;
+SELECT current_setting('port') AS "PORTNO" \gset
+CREATE SERVER dcs_osm_fdw FOREIGN DATA WRAPPER postgres_fdw OPTIONS (dbname :'TEST_DBNAME', port :'PORTNO');
+CREATE USER MAPPING FOR CURRENT_USER SERVER dcs_osm_fdw;
+CREATE TABLE metrics_osm_data (time timestamptz NOT NULL, device int, value float8);
+INSERT INTO metrics_osm_data VALUES ('2020-01-01 01:00', 100, 1000);
+CREATE FOREIGN TABLE metrics_osm_ft (time timestamptz NOT NULL, device int, value float8)
+    SERVER dcs_osm_fdw OPTIONS (schema_name 'public', table_name 'metrics_osm_data');
+-- Setup a tiered hypertable
 CREATE TABLE metrics_osm (time timestamptz NOT NULL, device int, value float8)
   WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
-INSERT INTO metrics_osm SELECT '2021-06-01'::timestamptz + g * interval '6 hours', g, g * 10 FROM generate_series(0, 8) g;
-CREATE FOREIGN TABLE metrics_osm_ft (time timestamptz NOT NULL, device int, value float8) SERVER dcs_osm_fdw;
+INSERT INTO metrics_osm SELECT '2021-06-01'::timestamptz + g * interval '6 hours', g, g * 10 FROM generate_series(0, 3) g;
 SELECT _timescaledb_functions.attach_osm_table_chunk('metrics_osm', 'metrics_osm_ft');
  attach_osm_table_chunk 
 ------------------------
  t
 
+-- A noncontiguous OSM (tiered) chunk must disqualify the node.
 SELECT _timescaledb_functions.hypertable_osm_range_update('metrics_osm');  -- mark the OSM range noncontiguous
  hypertable_osm_range_update 
 -----------------------------
@@ -571,6 +578,67 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('metrics_osm');  -- ma
 SET timescaledb.debug_require_deferred_chunk_append TO 'forbid';
 -- EXECUTE hides the version-specific foreign-scan plan; planning still trips the GUC.
 DO $$ BEGIN EXECUTE 'EXPLAIN (COSTS OFF) SELECT * FROM metrics_osm ORDER BY time LIMIT 3'; END $$;
+RESET timescaledb.debug_require_deferred_chunk_append;
+-- Mark the OSM range contiguous
+SELECT _timescaledb_functions.hypertable_osm_range_update('metrics_osm', '2020-01-01'::timestamptz, '2020-01-02');
+ hypertable_osm_range_update 
+-----------------------------
+ f
+
+-- A DeferredChunkAppend scan with a contiguous OSM chunk must work and respect
+-- the `timescaledb.enable_tiered_reads` setting in both unordered and ordered
+-- mode.
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+EXPLAIN (COSTS OFF) SELECT * FROM metrics_osm WHERE value >= 0 LIMIT 100;  -- unordered
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (DeferredChunkAppend) on metrics_osm
+         Filter: ((value >= '0'::double precision))
+
+EXPLAIN (COSTS OFF) SELECT * FROM metrics_osm WHERE value >= 0 ORDER BY time LIMIT 100;  -- ordered
+--- QUERY PLAN ---
+ Limit
+   ->  Custom Scan (DeferredChunkAppend) on metrics_osm
+         Order: "time"
+         Filter: ((value >= '0'::double precision))
+
+SET timescaledb.enable_tiered_reads TO off;
+SELECT * FROM metrics_osm WHERE value >= 0 LIMIT 100;
+             time             | device | value 
+------------------------------+--------+-------
+ Tue Jun 01 18:00:00 2021 PDT |      3 |    30
+ Tue Jun 01 00:00:00 2021 PDT |      0 |     0
+ Tue Jun 01 06:00:00 2021 PDT |      1 |    10
+ Tue Jun 01 12:00:00 2021 PDT |      2 |    20
+
+SELECT * FROM metrics_osm WHERE value >= 0 ORDER BY time LIMIT 100;
+             time             | device | value 
+------------------------------+--------+-------
+ Tue Jun 01 00:00:00 2021 PDT |      0 |     0
+ Tue Jun 01 06:00:00 2021 PDT |      1 |    10
+ Tue Jun 01 12:00:00 2021 PDT |      2 |    20
+ Tue Jun 01 18:00:00 2021 PDT |      3 |    30
+
+SET timescaledb.enable_tiered_reads TO on;
+SELECT * FROM metrics_osm WHERE value >= 0 LIMIT 100;
+             time             | device | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+ Tue Jun 01 18:00:00 2021 PDT |      3 |    30
+ Tue Jun 01 00:00:00 2021 PDT |      0 |     0
+ Tue Jun 01 06:00:00 2021 PDT |      1 |    10
+ Tue Jun 01 12:00:00 2021 PDT |      2 |    20
+
+SELECT * FROM metrics_osm WHERE value >= 0 ORDER BY time LIMIT 100;
+             time             | device | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+ Tue Jun 01 00:00:00 2021 PDT |      0 |     0
+ Tue Jun 01 06:00:00 2021 PDT |      1 |    10
+ Tue Jun 01 12:00:00 2021 PDT |      2 |    20
+ Tue Jun 01 18:00:00 2021 PDT |      3 |    30
+
+RESET timescaledb.enable_tiered_reads;
 RESET timescaledb.debug_require_deferred_chunk_append;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SET timescaledb.enable_deferred_chunk_append TO on;
@@ -1289,9 +1357,9 @@ EXPLAIN (COSTS OFF) SELECT kind::text FROM enum_metrics WHERE kind = CAST('Val2'
    ->  Result
          ->  Custom Scan (ChunkAppend) on enum_metrics
                Chunks excluded during startup: 0
-               ->  Seq Scan on _hyper_10_52_chunk
+               ->  Seq Scan on _hyper_10_51_chunk
                      Filter: (kind = ('Val2'::cstring)::dca_enum)
-               ->  Seq Scan on _hyper_10_53_chunk
+               ->  Seq Scan on _hyper_10_52_chunk
                      Filter: (kind = ('Val2'::cstring)::dca_enum)
 
 SELECT kind::text FROM enum_metrics WHERE kind = CAST('Val2'::text AS dca_enum) LIMIT 1;
