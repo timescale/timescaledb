@@ -91,24 +91,45 @@ ts_license_is_apache(void)
 TSDLLEXPORT void
 ts_license_enable_module_loading(void)
 {
-	int result;
+	int result = 0;
 
 	if (load_enabled)
 	{
 		return;
 	}
 
-	load_enabled = true;
+	/*
+	 * The assign hook must not throw, so a cancel is deferred across
+	 * set_config_option. errfinish() already resets InterruptHoldoffCount
+	 * before jumping to PG_CATCH, so the catch must not RESUME_INTERRUPTS.
+	 * If the load fails before the TSL registry is installed, clear
+	 * load_enabled so the next statement can retry.
+	 */
+	PG_TRY();
+	{
+		HOLD_INTERRUPTS();
+		load_enabled = true;
 
-	/* re-set the license to actually load the submodule if needed */
-	result = set_config_option(MAKE_EXTOPTION("license"),
-							   ts_guc_license,
-							   PGC_SUSET,
-							   load_source,
-							   GUC_ACTION_SET,
-							   true,
-							   0,
-							   false);
+		/* re-set the license to actually load the submodule if needed */
+		result = set_config_option(MAKE_EXTOPTION("license"),
+								   ts_guc_license,
+								   PGC_SUSET,
+								   load_source,
+								   GUC_ACTION_SET,
+								   true,
+								   0,
+								   false);
+		RESUME_INTERRUPTS();
+	}
+	PG_CATCH();
+	{
+		if (ts_cm_functions == &ts_cm_functions_default)
+		{
+			load_enabled = false;
+		}
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	if (result <= 0)
 	{
