@@ -51,8 +51,6 @@ jobs:
         choco config set commandExecutionTimeoutSeconds 600
         choco uninstall postgresql --yes
         winget install --id PostgreSQL.PostgreSQL.${{ matrix.pg }} --accept-source-agreements --accept-package-agreements --disable-interactivity
-        winget install --id=JernejSimoncic.Wget -e --accept-source-agreements --accept-package-agreements --disable-interactivity
-        wget --version
 
     - name: Add winget shims to PATH
       shell: pwsh
@@ -60,8 +58,12 @@ jobs:
         echo "$env:LOCALAPPDATA\Microsoft\WinGet\Links" >> $env:GITHUB_PATH
 
     - name: Download TimescaleDB
-      run: "wget --quiet --tries=6 --waitretry=15 -O timescaledb.zip 'https://github.com/timescale/timescaledb/releases/download/\
-        ${{ steps.version.outputs.version }}/timescaledb-postgresql-${{ matrix.pg}}-windows-amd64.zip'"
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release download '${{ steps.version.outputs.version }}' `
+          --pattern 'timescaledb-postgresql-${{ matrix.pg }}-windows-amd64.zip' `
+          --output timescaledb.zip
 
     - name: Install TimescaleDB
       run: |
