@@ -89,6 +89,7 @@ void
 _PG_init(void)
 {
 	static bool init_done = false;
+	static bool init_started = false;
 
 	/*
 	 * Check extension_is loaded to catch certain errors such as calls to
@@ -105,6 +106,19 @@ _PG_init(void)
 	{
 		return;
 	}
+
+	/*
+	 * A second call after a partial init would install hooks twice and can
+	 * point the saved hook at itself. Force a reconnect instead.
+	 */
+	if (init_started)
+	{
+		ereport(FATAL,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("extension \"%s\" initialization was interrupted", EXTENSION_NAME),
+				 errhint("Reconnect and run the statement again.")));
+	}
+	init_started = true;
 
 	_cache_init();
 	_hypertable_cache_init();
