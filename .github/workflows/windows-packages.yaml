@@ -50,7 +50,7 @@ jobs:
         choco config set webRequestTimeoutSeconds 120
         choco config set commandExecutionTimeoutSeconds 600
         choco uninstall postgresql --yes
-        winget install --id PostgreSQL.PostgreSQL.${{ matrix.pg }} --accept-source-agreements --accept-package-agreements --disable-interactivity
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.pg }} --force --accept-source-agreements --accept-package-agreements --disable-interactivity
 
     - name: Add winget shims to PATH
       shell: pwsh
