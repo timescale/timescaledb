@@ -836,10 +836,12 @@ deferred_chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->hypertable_id = ts_hypertable_relid_to_id(ht_relid);
 	state->primary_dimension_id = 0;
+	state->osm_chunk_id = INVALID_CHUNK_ID;
 	if (state->ordered)
 	{
 		Hypertable *ht = ts_hypertable_get_by_id(state->hypertable_id);
 		state->primary_dimension_id = hyperspace_get_open_dimension(ht->space, 0)->fd.id;
+		state->osm_chunk_id = ts_chunk_get_osm_chunk_id(state->hypertable_id);
 	}
 
 	/*
@@ -889,10 +891,6 @@ deferred_chunk_append_chunk_sql(DeferredChunkAppendState *state, Oid reloid)
 static Oid
 next_chunk_reloid_ordered(DeferredChunkAppendState *state)
 {
-	/* Skip the OSM chunk when reading of tiered data is disabled. */
-	int32 osm_chunk_id = ts_guc_enable_osm_reads ? INVALID_CHUNK_ID :
-												   ts_chunk_get_osm_chunk_id(state->hypertable_id);
-
 	/* A slice's chunk may have been dropped since the slice was read; skip such
 	 * slices and keep going so a mid-scan drop can't truncate the result. Only
 	 * return InvalidOid once the slices are exhausted. */
@@ -928,7 +926,7 @@ next_chunk_reloid_ordered(DeferredChunkAppendState *state)
 				DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
 			state->have_last = true;
 
-			if (chunk_id == osm_chunk_id)
+			if (!ts_guc_enable_osm_reads && chunk_id == state->osm_chunk_id)
 			{
 				continue;
 			}
