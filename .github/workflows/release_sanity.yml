@@ -34,6 +34,7 @@ jobs:
           repository: timescale/timescaledb
           ref: ${{ inputs.timescaledb-ref }}
           token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          fetch-depth: 0
 
       # The release branch must have the exact version the release manager
       # specified.
