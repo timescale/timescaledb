@@ -367,13 +367,10 @@ SELECT count(decompress_chunk(ch)) FROM show_chunks('test1') ch;
 
 VACUUM FULL ANALYZE test1;
 
-select add_compression_policy('test1', interval '1 day');
-\set ON_ERROR_STOP 0
+-- disabling the columnstore removes the columnstore policy
+select add_compression_policy('test1', interval '1 day') as compression_job_id \gset
 ALTER table test1 set (timescaledb.compress='f');
-\set ON_ERROR_STOP 1
-
-select remove_compression_policy('test1');
-ALTER table test1 set (timescaledb.compress='f');
+select count(*) from _timescaledb_catalog.bgw_job where id = :compression_job_id;
 
 --only one hypertable left
 SELECT count(*) = 1 FROM _timescaledb_catalog.hypertable hypertable;
