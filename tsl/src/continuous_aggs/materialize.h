@@ -48,11 +48,16 @@ typedef struct MaterializationStats
 	uint64 rows_deleted;
 } MaterializationStats;
 
+struct TenantSetCache;
+
 /*
  * stats accumulates what this materialization did; pass NULL to not collect.
+ * tenant_set_cache, when non-NULL, holds the loaded set for tenant_seqnum and
+ * selects the array form of the tenant-scoped DELETE.
  */
 void continuous_agg_update_materialization(
 	Hypertable *mat_ht, const ContinuousAgg *cagg, SchemaAndName partial_view,
 	SchemaAndName materialization_table, const NameData *time_column_name,
 	InternalTimeRange materialization_range, const char *tenant_column, const char *tenant_coltype,
-	int32 raw_hypertable_id, int32 tenant_seqnum, MaterializationStats *stats);
+	int32 raw_hypertable_id, int32 tenant_seqnum, struct TenantSetCache *tenant_set_cache,
+	MaterializationStats *stats);

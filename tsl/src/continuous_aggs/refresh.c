@@ -38,6 +38,7 @@
 #include "materialize.h"
 #include "process_utility.h"
 #include "refresh.h"
+#include "tenant_set.h"
 #include "tenant_tracker.h"
 #include "time_bucket.h"
 #include "time_utils.h"
@@ -57,10 +58,14 @@ typedef struct ContinuousAggMaterializationState
 	InternalTimeRange refresh_window;
 	SchemaAndName partial_view;
 	bool bucketing_refresh_window;
-	/* Granular tenant tracking column name and sql type */
+	/* Granular tenant tracking column name, sql type and base type */
 	const char *tenant_column;
 	const char *tenant_coltype;
+	Oid tenant_typid;
+	int32 tenant_typmod;
 	int32 raw_hypertable_id;
+	/* Array-DELETE arm: per-refresh cache of decoded tenant sets, or NULL */
+	TenantSetCache *tenant_set_cache;
 	/*materialization stats, accumulated through the whole refresh, across batches*/
 	MaterializationStats *mat_stats;
 } ContinuousAggMaterializationState;
@@ -76,11 +81,10 @@ static InternalTimeRange get_largest_bucketed_window(Oid timetype, int64 bucket_
 static InternalTimeRange
 compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
 										  const ContinuousAggBucketFunction *bucket_function);
-static void continuous_agg_refresh_init(ContinuousAggMaterializationState *refresh,
-										const ContinuousAgg *cagg,
-										const InternalTimeRange *refresh_window,
-										bool bucketing_refresh_window,
-										MaterializationStats *mat_stats);
+static void
+continuous_agg_refresh_init(ContinuousAggMaterializationState *refresh, const ContinuousAgg *cagg,
+							const InternalTimeRange *refresh_window, bool bucketing_refresh_window,
+							TenantSetCache *tenant_set_cache, MaterializationStats *mat_stats);
 static void continuous_agg_refresh_execute(const ContinuousAggMaterializationState *refresh,
 										   const InternalTimeRange *bucketed_refresh_window,
 										   int32 seqnum);
@@ -478,10 +482,11 @@ compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const ref
 static void
 continuous_agg_refresh_init(ContinuousAggMaterializationState *refresh, const ContinuousAgg *cagg,
 							const InternalTimeRange *refresh_window, bool bucketing_refresh_window,
-							MaterializationStats *mat_stats)
+							TenantSetCache *tenant_set_cache, MaterializationStats *mat_stats)
 {
 	MemSet(refresh, 0, sizeof(*refresh));
 	refresh->mat_stats = mat_stats;
+	refresh->tenant_set_cache = tenant_set_cache;
 	refresh->cagg = *cagg;
 	refresh->cagg_ht = cagg_get_hypertable_or_fail(cagg->data.mat_hypertable_id);
 	refresh->refresh_window = *refresh_window;
@@ -531,6 +536,8 @@ continuous_agg_refresh_init(ContinuousAggMaterializationState *refresh, const Co
 							  &tenant_collid);
 		tenant_typid = getBaseTypeAndTypmod(tenant_typid, &tenant_typmod);
 		refresh->tenant_coltype = format_type_with_typemod(tenant_typid, tenant_typmod);
+		refresh->tenant_typid = tenant_typid;
+		refresh->tenant_typmod = tenant_typmod;
 	}
 }
 
@@ -579,6 +586,15 @@ continuous_agg_refresh_execute(const ContinuousAggMaterializationState *refresh,
 		{
 			tenant_column = refresh->tenant_column;
 			strategy = "granular tenant-scoped refresh";
+
+			if (ts_guc_enable_cagg_tenant_set_cache && refresh->tenant_set_cache != NULL)
+			{
+				ts_tenant_set_cache_get(refresh->tenant_set_cache,
+										refresh->raw_hypertable_id,
+										seqnum,
+										refresh->tenant_typid,
+										refresh->tenant_typmod);
+			}
 		}
 
 		/* Part of the refresh statistics when those are enabled, otherwise only
@@ -604,6 +620,7 @@ continuous_agg_refresh_execute(const ContinuousAggMaterializationState *refresh,
 										  refresh->tenant_coltype,
 										  refresh->raw_hypertable_id,
 										  seqnum,
+										  tenant_column != NULL ? refresh->tenant_set_cache : NULL,
 										  refresh->mat_stats);
 }
 
@@ -755,6 +772,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								cagg,
 								refresh_window,
 								bucketing_refresh_window,
+								context->execution.tenant_set_cache,
 								mat_stats);
 
 	long count pg_attribute_unused();
@@ -960,6 +978,12 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	/* Stats as of the last batch that completed */
 	volatile CaggRefreshStats committed = { 0 };
 
+	/* The context current here outlives the per-batch commits: refresh_window_list
+	 * is allocated in it and read by every batch. The tenant set cache lives
+	 * under it for the same reason. */
+	context->execution.tenant_set_cache =
+		ts_guc_enable_cagg_tenant_set_cache ? ts_tenant_set_cache_create(oldcontext) : NULL;
+
 	PG_TRY();
 	{
 		for (int32 batch_idx = batch_start; batch_idx != batch_end; batch_idx += batch_step)
@@ -1029,6 +1053,11 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 	}
 	PG_CATCH();
 	{
+		if (context->execution.tenant_set_cache != NULL)
+		{
+			ts_tenant_set_cache_destroy(context->execution.tenant_set_cache);
+			context->execution.tenant_set_cache = NULL;
+		}
 		/* A failed execution of a job still records in its execution history
 		 * what the batches before the error committed */
 		if (context->options.job_id > 0 && committed.batches_processed > 0)
@@ -1039,6 +1068,12 @@ continuous_agg_refresh_batched(ContinuousAgg *cagg, InternalTimeRange *refresh_w
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
+	if (context->execution.tenant_set_cache != NULL)
+	{
+		ts_tenant_set_cache_destroy(context->execution.tenant_set_cache);
+		context->execution.tenant_set_cache = NULL;
+	}
 
 	cagg_refresh_stats_update(&stats,
 							  cagg,

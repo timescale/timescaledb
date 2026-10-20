@@ -172,6 +172,7 @@ bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 TSDLLEXPORT bool ts_guc_enable_cagg_tenant_delete_join = false;
+TSDLLEXPORT bool ts_guc_enable_cagg_tenant_set_cache = false;
 TSDLLEXPORT CaggRefreshStatsLevel ts_guc_cagg_refresh_stats_level = CAGG_REFRESH_STATS_OFF;
 
 bool ts_guc_enable_partitioned_hypertables = false;
@@ -1168,6 +1169,20 @@ _guc_init(void)
 							 "Use a join on the tenant tracking table for the tenant-scoped "
 							 "cagg refresh DELETE instead of an = ANY(ARRAY(subquery)) predicate",
 							 &ts_guc_enable_cagg_tenant_delete_join,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_tenant_set_cache"),
+							 "Bind the tenant-scoped cagg refresh DELETE's tenants as an array "
+							 "from a per-refresh cache",
+							 "Bind the tenant-scoped cagg refresh DELETE's tenants as an array "
+							 "from a per-refresh cache of the tenant tracking rows; takes "
+							 "precedence over enable_cagg_tenant_delete_join",
+							 &ts_guc_enable_cagg_tenant_set_cache,
 							 false,
 							 PGC_USERSET,
 							 0,

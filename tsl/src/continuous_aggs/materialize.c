@@ -23,6 +23,7 @@
 #include "materialize.h"
 #include "scan_iterator.h"
 #include "scanner.h"
+#include "tenant_set.h"
 #include "time_utils.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/compression_settings.h"
@@ -73,6 +74,15 @@ typedef struct MaterializationContext
 	const char *tenant_coltype; /* its SQL type name, for the decode cast */
 	int32 raw_hypertable_id;
 	int32 tenant_seqnum;
+	/*
+	 * Array arm of the tenant-scoped DELETE: the overlapping tenants from the
+	 * cache are bound as $3 instead of the tracking subquery. ntenants == 0
+	 * means no tracked tenant overlaps the range and the DELETE is skipped.
+	 */
+	TenantSetCache *tenant_set_cache;
+	bool tenant_array_arm;
+	Datum tenant_array;
+	int ntenants;
 	/* What this materialization wrote and removed, filled in as the plans run */
 	uint64 rows_materialized;
 	uint64 rows_deleted;
@@ -154,11 +164,14 @@ static void execute_materializations(MaterializationContext *context);
 
 /* API to update materializations from refresh code */
 void
-continuous_agg_update_materialization(
-	Hypertable *mat_ht, const ContinuousAgg *cagg, SchemaAndName partial_view,
-	SchemaAndName materialization_table, const NameData *time_column_name,
-	InternalTimeRange materialization_range, const char *tenant_column, const char *tenant_coltype,
-	int32 raw_hypertable_id, int32 tenant_seqnum, MaterializationStats *stats)
+continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
+									  SchemaAndName partial_view,
+									  SchemaAndName materialization_table,
+									  const NameData *time_column_name,
+									  InternalTimeRange materialization_range,
+									  const char *tenant_column, const char *tenant_coltype,
+									  int32 raw_hypertable_id, int32 tenant_seqnum,
+									  TenantSetCache *tenant_set_cache, MaterializationStats *stats)
 {
 	MaterializationContext context = {
 		.mat_ht = mat_ht,
@@ -174,6 +187,9 @@ continuous_agg_update_materialization(
 		.tenant_coltype = tenant_coltype,
 		.raw_hypertable_id = raw_hypertable_id,
 		.tenant_seqnum = tenant_seqnum,
+		.tenant_set_cache = tenant_set_cache,
+		.tenant_array_arm = (tenant_column != NULL && tenant_set_cache != NULL &&
+							 ts_guc_enable_cagg_tenant_set_cache),
 	};
 
 	/* Lock down search_path */
@@ -192,6 +208,15 @@ continuous_agg_update_materialization(
 	 * (the tenant-scoping subquery compares against the internal int8 range). */
 	context.materialization_range = internal_time_range_to_time_range(materialization_range);
 	context.internal_materialization_range = materialization_range;
+
+	if (context.tenant_array_arm)
+	{
+		context.ntenants = ts_tenant_set_cache_build_array(tenant_set_cache,
+														   materialization_range.start,
+														   materialization_range.end,
+														   &context.tenant_array);
+	}
+
 	execute_materializations(&context);
 
 	if (stats != NULL)
@@ -545,6 +570,25 @@ create_materialization_delete_statement(MaterializationContext *context)
 	StringInfoData query;
 	initStringInfo(&query);
 
+	/* Array arm (timescaledb.enable_cagg_tenant_set_cache): $3 is the array of
+	 * overlapping tenants from the cache, bound per range. */
+	if (context->tenant_array_arm)
+	{
+		if (ts_guc_enable_cagg_tenant_delete_join)
+		{
+			elog(DEBUG1, "both tenant DELETE GUCs are on, using the tenant set cache array form");
+		}
+		appendStringInfo(&query,
+						 "DELETE FROM %s.%s AS D "
+						 "WHERE D.%s >= $1 AND D.%s < $2 AND D.%s = ANY ($3);",
+						 quote_identifier(NameStr(*context->materialization_table.schema)),
+						 quote_identifier(NameStr(*context->materialization_table.name)),
+						 quote_identifier(NameStr(*context->time_column_name)),
+						 quote_identifier(NameStr(*context->time_column_name)),
+						 quote_identifier(context->tenant_column));
+		return query.data;
+	}
+
 	/*
 	 * Join form of the tenant-scoped DELETE (timescaledb.enable_cagg_tenant_delete_join):
 	 * the tracked tenants become a relation the planner has statistics for, so it
@@ -714,8 +758,13 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 	argtypes[0] = context->materialization_range.type;
 	argtypes[1] = context->materialization_range.type;
 
+	/* Array-arm DELETE: $3 the tenant array */
+	if (context->tenant_array_arm && plan_type == PLAN_TYPE_DELETE)
+	{
+		argtypes[2] = ts_tenant_set_cache_array_type(context->tenant_set_cache);
+	}
 	/* Tenant-scoped INSERT/DELETE add: $3 raw ht id, $4 seqnum, $5/$6 int8 range. */
-	if (context->tenant_scoped)
+	else if (context->tenant_scoped)
 	{
 		argtypes[2] = INT4OID;
 		argtypes[3] = INT4OID;
@@ -726,11 +775,17 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 	return argtypes;
 }
 
-/* number of bind-parameters: tenant-scoped statements have an extra MAT_TENANT_EXTRA_NARGS. */
+/* number of bind-parameters: tenant-scoped statements have an extra MAT_TENANT_EXTRA_NARGS,
+ * except the array-arm DELETE, which has only the array as $3. */
 static int
 materialization_plan_nargs(const MaterializationContext *context,
-						   const MaterializationPlan *materialization)
+						   const MaterializationPlan *materialization,
+						   MaterializationPlanType plan_type)
 {
+	if (context->tenant_array_arm && plan_type == PLAN_TYPE_DELETE)
+	{
+		return materialization->nargs + 1;
+	}
 	return materialization->nargs + (context->tenant_scoped ? MAT_TENANT_EXTRA_NARGS : 0);
 }
 
@@ -745,11 +800,16 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 	if (materialization->plan == NULL)
 	{
 		char *query = materialization->create_statement(context);
-		int nargs = materialization_plan_nargs(context, materialization);
+		int nargs = materialization_plan_nargs(context, materialization, plan_type);
 		Oid *argtypes = create_materialization_plan_argtypes(context, plan_type, nargs);
+		/* The array-arm DELETE is planned with $3 folded to a Const, so the
+		 * planner sees the real tenant count and can hash the lookup. */
+		int cursor_options = (context->tenant_array_arm && plan_type == PLAN_TYPE_DELETE) ?
+								 CURSOR_OPT_CUSTOM_PLAN :
+								 0;
 
 		elog(DEBUG2, "%s: %s", __func__, query);
-		materialization->plan = SPI_prepare(query, nargs, argtypes);
+		materialization->plan = SPI_prepare_cursor(query, nargs, argtypes, cursor_options);
 		if (materialization->plan == NULL)
 		{
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);
@@ -772,8 +832,14 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 	(*nulls)[0] = false;
 	(*nulls)[1] = false;
 
+	/* Array-arm DELETE: $3 the tenant array */
+	if (context->tenant_array_arm && plan_type == PLAN_TYPE_DELETE)
+	{
+		(*values)[2] = context->tenant_array;
+		(*nulls)[2] = false;
+	}
 	/* Tenant-scoped INSERT/DELETE add: $3 raw ht id, $4 seqnum, $5/$6 int8 range. */
-	if (context->tenant_scoped)
+	else if (context->tenant_scoped)
 	{
 		(*values)[2] = Int32GetDatum(context->raw_hypertable_id);
 		(*values)[3] = Int32GetDatum(context->tenant_seqnum);
@@ -790,7 +856,7 @@ static uint64
 execute_materialization_plan(MaterializationContext *context, MaterializationPlanType plan_type)
 {
 	MaterializationPlan *materialization = create_materialization_plan(context, plan_type);
-	int nargs = materialization_plan_nargs(context, materialization);
+	int nargs = materialization_plan_nargs(context, materialization, plan_type);
 
 	Datum *values = (Datum *) palloc(nargs * sizeof(Datum));
 	char *nulls = (char *) palloc(nargs * sizeof(char));
@@ -959,7 +1025,18 @@ execute_materializations(MaterializationContext *context)
 		}
 		else
 		{
-			context->rows_deleted += execute_materialization_plan(context, PLAN_TYPE_DELETE);
+			if (context->tenant_array_arm && context->ntenants == 0)
+			{
+				elog(DEBUG1,
+					 "no tracked tenant overlaps the range, skipping the DELETE on materialization "
+					 "table \"%s.%s\"",
+					 NameStr(*context->materialization_table.schema),
+					 NameStr(*context->materialization_table.name));
+			}
+			else
+			{
+				context->rows_deleted += execute_materialization_plan(context, PLAN_TYPE_DELETE);
+			}
 			context->rows_materialized += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 		}
 

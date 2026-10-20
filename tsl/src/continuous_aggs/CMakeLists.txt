@@ -11,6 +11,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/planner.c
     ${CMAKE_CURRENT_SOURCE_DIR}/refresh.c
     ${CMAKE_CURRENT_SOURCE_DIR}/rewrite_with_caggs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/tenant_set.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tenant_tracker.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tenant_tracker_function.c
     ${CMAKE_CURRENT_SOURCE_DIR}/utils.c)

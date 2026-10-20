@@ -103,6 +103,8 @@ typedef struct ContinuousAggRefreshExecutionState
 	bool batched;					 /* split windows are already bucket-aligned */
 	bool ht_invalidations_processed; /* only once per invocation */
 	bool tenant_tracking_flushed;	 /* only once per invocation */
+	/* Decoded tenant sets for the array-DELETE arm, NULL unless that arm is on */
+	struct TenantSetCache *tenant_set_cache;
 } ContinuousAggRefreshExecutionState;
 
 /*
