@@ -1631,11 +1631,9 @@ psql:include/cagg_query_common.sql:732: DEBUG:  hypertable 4 existing watermark 
 psql:include/cagg_query_common.sql:732: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Sat Jan 01 08:00:00 2000 UTC, Sun Jan 02 08:00:00 2000 UTC ]
 psql:include/cagg_query_common.sql:732: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
 psql:include/cagg_query_common.sql:732: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:732: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 946800000000000
 psql:include/cagg_query_common.sql:732: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Wed Jan 01 08:00:00 2020 UTC, Thu Jan 02 08:00:00 2020 UTC ]
 psql:include/cagg_query_common.sql:732: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
 psql:include/cagg_query_common.sql:732: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:732: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 1577952000000000
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:733: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:733: DEBUG:  refreshing continuous aggregate "cagg_4_hours_offset" from Mon Nov 24 00:00:00 4714 UTC BC to infinity
@@ -1643,11 +1641,9 @@ psql:include/cagg_query_common.sql:733: DEBUG:  hypertable 4 existing watermark 
 psql:include/cagg_query_common.sql:733: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Sat Jan 01 08:30:00 2000 UTC, Sun Jan 02 08:30:00 2000 UTC ]
 psql:include/cagg_query_common.sql:733: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
 psql:include/cagg_query_common.sql:733: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:733: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 946801800000000
 psql:include/cagg_query_common.sql:733: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Wed Jan 01 04:30:00 2020 UTC, Thu Jan 02 08:30:00 2020 UTC ]
 psql:include/cagg_query_common.sql:733: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
 psql:include/cagg_query_common.sql:733: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:733: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 1577953800000000
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:734: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL, options => '{"buckets_per_batch": 0}'::jsonb);
 psql:include/cagg_query_common.sql:734: DEBUG:  refreshing continuous aggregate "cagg_4_hours_origin" from Mon Nov 24 00:00:00 4714 UTC BC to infinity
@@ -1655,11 +1651,9 @@ psql:include/cagg_query_common.sql:734: DEBUG:  hypertable 4 existing watermark 
 psql:include/cagg_query_common.sql:734: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Sat Jan 01 09:00:00 2000 UTC, Sun Jan 02 09:00:00 2000 UTC ]
 psql:include/cagg_query_common.sql:734: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
 psql:include/cagg_query_common.sql:734: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:734: DEBUG:  hypertable 35 existing watermark >= new watermark 1577998800000000 946803600000000
 psql:include/cagg_query_common.sql:734: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_origin" in window [ Wed Jan 01 05:00:00 2020 UTC, Thu Jan 02 09:00:00 2020 UTC ]
 psql:include/cagg_query_common.sql:734: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_35"
 psql:include/cagg_query_common.sql:734: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_35"
-psql:include/cagg_query_common.sql:734: DEBUG:  hypertable 35 existing watermark >= new watermark 1577998800000000 1577955600000000
 RESET client_min_messages;
 psql:include/cagg_query_common.sql:735: LOG:  statement: RESET client_min_messages;
 SET timezone TO 'America/Los_Angeles';
