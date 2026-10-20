@@ -1,0 +1,1 @@
+Fixes: #10754 Duplicate rows from time_bucket_gapfill with a nondeterministic collation on a GROUP BY column

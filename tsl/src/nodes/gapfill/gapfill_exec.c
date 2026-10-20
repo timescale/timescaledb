@@ -1460,6 +1460,8 @@ gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist)
 			/* otherwise this is a normal group column */
 			state->columns[i] =
 				gapfill_column_state_create(GROUP_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+			((GapFillGroupColumnState *) state->columns[i])->collation =
+				exprCollation((Node *) expr);
 			state->multigroup = true;
 			state->groups_initialized = false;
 			continue;
@@ -1590,7 +1592,6 @@ gapfill_column_state_create(GapFillColumnType ctype, Oid typeid)
 		GapFillGroupColumnState *gcolumn = (GapFillGroupColumnState *) column;
 		Oid eq_opr_func = get_opcode(tce->eq_opr);
 		fmgr_info_cxt(eq_opr_func, &gcolumn->eq_func, CurrentMemoryContext);
-		gcolumn->collation = tce->typcollation;
 	}
 
 	return column;

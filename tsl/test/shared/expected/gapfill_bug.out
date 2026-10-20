@@ -585,3 +585,19 @@ DROP FUNCTION gf_userfn.time_bucket_gapfill(int, text);
 DROP FUNCTION gf_userfn.locf(int);
 DROP FUNCTION gf_userfn.interpolate(int);
 DROP SCHEMA gf_userfn;
+-- Issue #10754: group columns are compared with their collation
+CREATE COLLATION gf_nocase (provider = icu, locale = 'und-u-ks-level2', deterministic = false);
+CREATE TABLE gf_nocase_t(ts int8 NOT NULL, g text COLLATE gf_nocase, v int);
+INSERT INTO gf_nocase_t VALUES (0, 'a', 1), (2, 'A', 2), (4, 'a', 3);
+SELECT lower(g) AS g, time_bucket_gapfill(1, ts, 0, 5) AS b, count(*), locf(min(v))
+FROM gf_nocase_t GROUP BY g, b ORDER BY b, g;
+ g | b | count | locf 
+---+---+-------+------
+ a | 0 |     1 |    1
+ a | 1 |       |    1
+ a | 2 |     1 |    2
+ a | 3 |       |    2
+ a | 4 |     1 |    3
+
+DROP TABLE gf_nocase_t;
+DROP COLLATION gf_nocase;
