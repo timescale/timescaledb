@@ -1,0 +1,1 @@
+Fixes: #10190 Internal error on insert with CHECK constraint on a virtual generated column

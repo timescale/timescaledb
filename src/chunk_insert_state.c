@@ -16,6 +16,7 @@
 #include <nodes/plannodes.h>
 #include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
+#include <rewrite/rewriteHandler.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
@@ -64,11 +65,22 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 
 	ncheck = rel->rd_att->constr->num_check;
 	check = rel->rd_att->constr->check;
-	rri->ri_CheckConstraintExprs = (ExprState **) palloc(ncheck * sizeof(ExprState *));
+	rri->ri_CheckConstraintExprs = (ExprState **) palloc0(ncheck * sizeof(ExprState *));
 
 	for (i = 0; i < ncheck; i++)
 	{
+#if PG18_GE
+		if (!check[i].ccenforced)
+		{
+			continue;
+		}
+#endif
+
 		Expr *checkconstr = stringToNode(check[i].ccbin);
+
+#if PG18_GE
+		checkconstr = (Expr *) expand_generated_columns_in_expr((Node *) checkconstr, rel, 1);
+#endif
 
 		rri->ri_CheckConstraintExprs[i] = prepare_constr_expr(checkconstr);
 	}
