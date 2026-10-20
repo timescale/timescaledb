@@ -509,7 +509,7 @@ retry_generation:
  *
  *
  */
-void
+int
 ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id, int64 late_threshold_start,
 						int64 late_threshold_end)
 {
@@ -609,16 +609,16 @@ ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id, int64 lat
 		/* If generation is invalid, do not write any entry for this seqnum.
 		 * Refresh path falls back to full refresh when there are no tracker
 		 * entries. */
-		return;
+		return 0;
 	}
 
 	int occupied = (int) pg_atomic_read_u32(&old->nentries);
+	int count = 0;
 
 	if (occupied > 0)
 	{
 		CaggTenantTrackingInserter *inserter =
 			ts_cagg_tenant_tracking_insert_begin(hypertable_id, seqnum);
-		int count = 0;
 
 		for (int i = 0; i < TENANT_TRACKER_CAPACITY && count < occupied; i++)
 		{
@@ -639,6 +639,8 @@ ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id, int64 lat
 
 		ts_cagg_tenant_tracking_insert_end(inserter);
 	}
+
+	return count;
 }
 
 /*

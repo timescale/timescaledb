@@ -117,5 +117,6 @@ extern void ts_tenant_tracker_get_info(TenantTracking *tracking, TenantTrackerIn
  */
 extern int ts_tenant_tracker_map_get_entries(TenantTrackerMapEntry **entries);
 
-extern void ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id,
-									int64 late_threshold_start, int64 late_threshold_end);
+/* Returns the number of tracking rows persisted (0 for an empty or invalid generation). */
+extern int ts_tenant_tracker_flush(TenantTracking *tracking, int32 hypertable_id,
+								   int64 late_threshold_start, int64 late_threshold_end);

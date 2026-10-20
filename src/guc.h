@@ -70,6 +70,7 @@ extern TSDLLEXPORT bool ts_guc_enable_job_execution_logging;
 extern bool ts_guc_enable_tss_callbacks;
 extern TSDLLEXPORT bool ts_guc_enable_delete_after_compression;
 extern TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh;
+extern TSDLLEXPORT bool ts_guc_enable_cagg_tenant_delete_join;
 extern bool ts_guc_enable_chunk_skipping;
 extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_in_memory_recompression;

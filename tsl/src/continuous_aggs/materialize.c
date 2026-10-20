@@ -544,6 +544,31 @@ create_materialization_delete_statement(MaterializationContext *context)
 {
 	StringInfoData query;
 	initStringInfo(&query);
+
+	/*
+	 * Join form of the tenant-scoped DELETE (timescaledb.enable_cagg_tenant_delete_join):
+	 * the tracked tenants become a relation the planner has statistics for, so it
+	 * can choose between index probes per tenant and a hash join over the time
+	 * range. Same bind parameters as build_tenant_predicate.
+	 */
+	if (context->tenant_scoped && ts_guc_enable_cagg_tenant_delete_join)
+	{
+		appendStringInfo(&query,
+						 "DELETE FROM %s.%s AS D "
+						 "USING (SELECT DISTINCT tt.tenant_id::%s AS tenant "
+						 "FROM _timescaledb_catalog.continuous_aggs_tenant_tracking tt "
+						 "WHERE tt.hypertable_id = $3 AND tt.seqnum = $4 "
+						 "AND tt.min_timestamp < $6 AND tt.max_timestamp >= $5) t "
+						 "WHERE D.%s >= $1 AND D.%s < $2 AND D.%s = t.tenant;",
+						 quote_identifier(NameStr(*context->materialization_table.schema)),
+						 quote_identifier(NameStr(*context->materialization_table.name)),
+						 context->tenant_coltype,
+						 quote_identifier(NameStr(*context->time_column_name)),
+						 quote_identifier(NameStr(*context->time_column_name)),
+						 quote_identifier(context->tenant_column));
+		return query.data;
+	}
+
 	appendStringInfo(&query,
 					 "DELETE FROM %s.%s AS D "
 					 "WHERE D.%s >= $1 AND D.%s < $2 %s;",

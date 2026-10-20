@@ -6,11 +6,14 @@
 #include <postgres.h>
 
 #include <access/xact.h>
+#include <commands/vacuum.h>
 #include <executor/spi.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <miscadmin.h>
+#include <nodes/makefuncs.h>
+#include <parser/parse_node.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
@@ -1225,11 +1228,53 @@ flush_tenant_tracking(const ContinuousAgg *cagg)
 	 * invalid generation), reading shared memory in place with no intermediate
 	 * copies. */
 	PushActiveSnapshot(GetTransactionSnapshot());
-	ts_tenant_tracker_flush(tracking,
-							cagg->data.raw_hypertable_id,
-							late_window_start,
-							late_window_end);
+	int persisted = ts_tenant_tracker_flush(tracking,
+											cagg->data.raw_hypertable_id,
+											late_window_start,
+											late_window_end);
 	PopActiveSnapshot();
+
+	/*
+	 * The join-form DELETE estimates its tenant subquery from the tracking
+	 * table's MCV stats on seqnum. A per-generation flush rarely crosses
+	 * autovacuum's analyze threshold, so refresh the stats here for the rows
+	 * just persisted. ExecVacuum is called directly, bypassing ProcessUtility
+	 * and the TimescaleDB utility hook; a single-relation ANALYZE runs in the
+	 * refresh transaction. The table is catalog-owned, so act as the owner.
+	 */
+	if (persisted > 0 && ts_guc_enable_cagg_tenant_delete_join)
+	{
+		CatalogSecurityContext sec_ctx;
+		RangeVar *rv = makeRangeVar(CATALOG_SCHEMA_NAME, "continuous_aggs_tenant_tracking", -1);
+		Oid relid = catalog_get_table_id(ts_catalog_get(), CONTINUOUS_AGGS_TENANT_TRACKING);
+		VacuumStmt stmt = {
+			.type = T_VacuumStmt,
+			.options = NIL,
+			.rels = list_make1(makeVacuumRelation(rv, relid, NIL)),
+			.is_vacuumcmd = false,
+		};
+		ParseState *pstate = make_parsestate(NULL);
+
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		/* Functions in indexes may want a snapshot; the outer-transaction
+		 * ANALYZE path does not push one itself. */
+		PushActiveSnapshot(GetTransactionSnapshot());
+		PG_TRY();
+		{
+			ExecVacuum(pstate, &stmt, false /* isTopLevel */);
+		}
+		PG_FINALLY();
+		{
+			PopActiveSnapshot();
+			ts_catalog_restore_user(&sec_ctx);
+		}
+		PG_END_TRY();
+		/* ProcessUtility would do this after the statement; make the new
+		 * statistics visible to the plans that follow in this transaction. */
+		CommandCounterIncrement();
+		free_parsestate(pstate);
+		elog(DEBUG1, "analyzed tenant tracking table after persisting %d rows", persisted);
+	}
 
 	/* Empty and invalid generations also advance the tracker and its window. */
 	return true;
