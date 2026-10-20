@@ -1,0 +1,1 @@
+Fixes: #10263 Respect collation and constant type in bloom filter DML batch filtering

@@ -216,6 +216,43 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 	}
 }
 
+/*
+ * Check that a value of value_type has the same bloom filter hash as the equal
+ * value of column_type, so that it can be looked up in a bloom filter built for
+ * column_type.
+ */
+bool
+bloom1_hash_types_compatible(Oid column_type, Oid value_type)
+{
+	if (column_type == value_type)
+	{
+		return true;
+	}
+
+	FmgrInfo *column_finfo = NULL;
+	FmgrInfo *value_finfo = NULL;
+	PGFunction column_fn = bloom1_get_hash_function(column_type, &column_finfo);
+	PGFunction value_fn = bloom1_get_hash_function(value_type, &value_finfo);
+	if (column_fn == NULL || value_fn == NULL)
+	{
+		return false;
+	}
+
+	/* our integer hashes hash the value sign-extended to 64 bits */
+	if ((column_fn == bloom1_hash_2 || column_fn == bloom1_hash_4 || column_fn == bloom1_hash_8) &&
+		(value_fn == bloom1_hash_2 || value_fn == bloom1_hash_4 || value_fn == bloom1_hash_8))
+	{
+		return true;
+	}
+
+	if (column_finfo == NULL || value_finfo == NULL)
+	{
+		return column_finfo == value_finfo && column_fn == value_fn;
+	}
+
+	return column_finfo->fn_oid == value_finfo->fn_oid;
+}
+
 static void
 bloom1_reset(void *builder_, Datum *compressed_values, bool *compressed_is_null)
 {

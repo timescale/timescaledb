@@ -242,3 +242,37 @@ DELETE FROM dml_test WHERE foo = 1002;
                Rows Removed by Filter: 999
 
 ROLLBACK;
+-- a constant of another type with a different hash function cannot be
+-- checked against the bloom filter of the column
+create table dml_name(ts int, label text);
+select create_hypertable('dml_name', 'ts', create_default_indexes=>false);
+   create_hypertable   
+-----------------------
+ (2,public,dml_name,t)
+
+alter table dml_name set (timescaledb.compress, timescaledb.order_by = 'ts',
+    timescaledb.compress_index = 'bloom(label)');
+insert into dml_name select x, 'v' || x from generate_series(1, 100) x;
+select count(compress_chunk(x)) from show_chunks('dml_name') x;
+ count 
+-------
+     1
+
+update dml_name set label = 'w5' where label = 'v5'::name;
+select count(*) from dml_name where label = 'w5';
+ count 
+-------
+     1
+
+select count(compress_chunk(x)) from show_chunks('dml_name') x;
+ count 
+-------
+     1
+
+delete from dml_name where label = 'w5'::name;
+select count(*) from dml_name where label = 'w5';
+ count 
+-------
+     0
+
+drop table dml_name;

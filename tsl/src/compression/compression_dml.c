@@ -2231,7 +2231,8 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 				 * bloom filter matching pass.
 				 */
 				if (op_strategy == BTEqualStrategyNumber && !arg_value->constisnull &&
-					ts_guc_enable_dml_bloom_filter)
+					ts_guc_enable_dml_bloom_filter && collation_is_deterministic(collation) &&
+					bloom1_hash_types_compatible(var->vartype, arg_value->consttype))
 				{
 					EqualityPredicate *ep = palloc(sizeof(EqualityPredicate));
 					ep->attno = var->varattno;

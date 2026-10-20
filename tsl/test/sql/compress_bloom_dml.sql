@@ -103,3 +103,18 @@ BEGIN;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 DELETE FROM dml_test WHERE foo = 1002;
 ROLLBACK;
+
+-- a constant of another type with a different hash function cannot be
+-- checked against the bloom filter of the column
+create table dml_name(ts int, label text);
+select create_hypertable('dml_name', 'ts', create_default_indexes=>false);
+alter table dml_name set (timescaledb.compress, timescaledb.order_by = 'ts',
+    timescaledb.compress_index = 'bloom(label)');
+insert into dml_name select x, 'v' || x from generate_series(1, 100) x;
+select count(compress_chunk(x)) from show_chunks('dml_name') x;
+update dml_name set label = 'w5' where label = 'v5'::name;
+select count(*) from dml_name where label = 'w5';
+select count(compress_chunk(x)) from show_chunks('dml_name') x;
+delete from dml_name where label = 'w5'::name;
+select count(*) from dml_name where label = 'w5';
+drop table dml_name;

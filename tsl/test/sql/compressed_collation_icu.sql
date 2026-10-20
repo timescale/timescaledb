@@ -117,7 +117,25 @@ insert into t10297_det_first values (10, 'merlot', 85);
 \set ON_ERROR_STOP 1
 select count(*) from t10297_det_first;
 
-drop table t_nocase, t10297, t10297_segmentby, t10297_orderby, t10297_dml, t10297_det_first, t10297_mixed cascade;
+-- the bloom filter hashes bytes, so UPDATE and DELETE cannot use it to find
+-- a case variant
+create table t10263 (
+    ts int not null,
+    actor text collate nocase,
+    val int
+);
+select count(*) from create_hypertable('t10263', 'ts', chunk_time_interval => 1000);
+alter table t10263 set (timescaledb.compress, timescaledb.compress_orderby = 'ts',
+    timescaledb.compress_index = 'bloom(actor)');
+insert into t10263 values (1, 'alice', 1);
+select count(compress_chunk(ch)) from show_chunks('t10263') ch;
+update t10263 set val = 99 where actor = 'ALICE';
+select * from t10263;
+select count(compress_chunk(ch)) from show_chunks('t10263') ch;
+delete from t10263 where actor = 'ALICE';
+select count(*) from t10263;
+
+drop table t_nocase, t10297, t10263, t10297_segmentby, t10297_orderby, t10297_dml, t10297_det_first, t10297_mixed cascade;
 drop collation noaccent;
 drop collation nocase;
 
