@@ -1,2 +1,0 @@
-Fixes: #10844 Keep owner of user-defined jobs when hypertable owner changes
-Thanks: @jf0x3f for reporting a security issue when changing hypertable owner
