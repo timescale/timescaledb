@@ -132,14 +132,14 @@ jobs:
           milestone_title="v${{ inputs.version }}"
 
           milestone_number="$(
-            gh api "repos/${GITHUB_REPOSITORY}/milestones?state=all&per_page=100" \
+            gh api "repos/timescale/timescaledb/milestones?state=all&per_page=100" \
               --paginate \
               --jq ".[] | select(.title == \"$milestone_title\") | .number" \
               | head -n 1
           )"
 
           prs="$(
-            gh api "repos/${GITHUB_REPOSITORY}/issues?milestone=${milestone_number}&state=closed&per_page=100" \
+            gh api "repos/timescale/timescaledb/issues?milestone=${milestone_number}&state=closed&per_page=100" \
               --paginate \
               --jq '.[] | select(.pull_request.merged_at != null) | .number'
           )"
@@ -148,7 +148,7 @@ jobs:
           missing=0
 
           for pr in $prs; do
-            sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr}" --jq '.merge_commit_sha')"
+            sha="$(gh api "repos/timescale/timescaledb/pulls/${pr}" --jq '.merge_commit_sha')"
 
             if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
               continue
@@ -162,7 +162,7 @@ jobs:
               continue
             fi
 
-            title="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}" --jq '.commit.message | split("\n")[0]')"
+            title="$(gh api "repos/timescale/timescaledb/commits/${sha}" --jq '.commit.message | split("\n")[0]')"
             if grep -qxF -- "$title" <<< "$branch_titles"; then
               continue
             fi
