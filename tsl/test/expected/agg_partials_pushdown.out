@@ -700,3 +700,42 @@ RESET parallel_tuple_cost;
 RESET min_parallel_table_scan_size;
 SET max_parallel_workers_per_gather = 1;
 SET parallel_leader_participation = off;
+-- Partial aggregates of first() and last() serialize their arguments with the
+-- send and receive functions of their types, which do not work for anonymous
+-- records
+SET max_parallel_workers_per_gather = 0;
+CREATE TABLE anon_record(ts timestamptz NOT NULL, v int);
+SELECT table_name FROM create_hypertable('anon_record', 'ts', chunk_time_interval => interval '1 day');
+ table_name  
+-------------
+ anon_record
+
+INSERT INTO anon_record VALUES ('2024-01-01', 1), ('2024-01-02', 2);
+EXPLAIN (costs off) SELECT first(v, ROW(ts)) FROM anon_record;
+--- QUERY PLAN ---
+ Aggregate
+   ->  Append
+         ->  Seq Scan on _hyper_6_24_chunk
+         ->  Seq Scan on _hyper_6_25_chunk
+
+SELECT first(v, ROW(ts)), last(v, ROW(ts)) FROM anon_record;
+ first | last 
+-------+------
+     1 |    2
+
+SELECT first(ROW(v), ts), last(ROW(v), ts) FROM anon_record;
+ first | last 
+-------+------
+ (1)   | (2)
+
+EXPLAIN (costs off) SELECT first(v, ts), count(*) FROM anon_record;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   ->  Append
+         ->  Partial Aggregate
+               ->  Seq Scan on _hyper_6_24_chunk
+         ->  Partial Aggregate
+               ->  Seq Scan on _hyper_6_25_chunk
+
+DROP TABLE anon_record;
+RESET max_parallel_workers_per_gather;

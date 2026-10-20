@@ -249,3 +249,17 @@ RESET parallel_tuple_cost;
 RESET min_parallel_table_scan_size;
 SET max_parallel_workers_per_gather = 1;
 SET parallel_leader_participation = off;
+
+-- Partial aggregates of first() and last() serialize their arguments with the
+-- send and receive functions of their types, which do not work for anonymous
+-- records
+SET max_parallel_workers_per_gather = 0;
+CREATE TABLE anon_record(ts timestamptz NOT NULL, v int);
+SELECT table_name FROM create_hypertable('anon_record', 'ts', chunk_time_interval => interval '1 day');
+INSERT INTO anon_record VALUES ('2024-01-01', 1), ('2024-01-02', 2);
+EXPLAIN (costs off) SELECT first(v, ROW(ts)) FROM anon_record;
+SELECT first(v, ROW(ts)), last(v, ROW(ts)) FROM anon_record;
+SELECT first(ROW(v), ts), last(ROW(v), ts) FROM anon_record;
+EXPLAIN (costs off) SELECT first(v, ts), count(*) FROM anon_record;
+DROP TABLE anon_record;
+RESET max_parallel_workers_per_gather;

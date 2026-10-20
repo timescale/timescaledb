@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 
+#include <nodes/nodeFuncs.h>
 #include <optimizer/appendinfo.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
@@ -12,6 +13,7 @@
 #include <optimizer/paths.h>
 #include <optimizer/prep.h>
 #include <optimizer/tlist.h>
+#include <parser/parse_agg.h>
 #include <utils/selfuncs.h>
 
 #include "chunkwise_agg.h"
@@ -54,6 +56,29 @@ get_existing_agg_path(const RelOptInfo *relation)
 {
 	Node *node = find_node(relation, T_AggPath);
 	return node ? castNode(AggPath, node) : NULL;
+}
+
+/*
+ * Check for an aggregate with an internal transition state that is serialized
+ * with the send and receive functions of its arguments, which cannot be done
+ * for anonymous records and types without these functions. Postgres makes the
+ * same check for array_agg().
+ */
+static bool
+contains_agg_without_sendreceive_args(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, Aggref))
+	{
+		Aggref *aggref = castNode(Aggref, node);
+		return aggref->aggtranstype == INTERNALOID && !agg_args_support_sendreceive(aggref);
+	}
+
+	return expression_tree_walker(node, contains_agg_without_sendreceive_args, context);
 }
 
 /*
@@ -672,6 +697,12 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 
 	/* Don't replan aggregation if it contains already partials or non-serializable aggregates */
 	if (root->hasNonPartialAggs || root->hasNonSerialAggs)
+	{
+		return;
+	}
+
+	if (contains_agg_without_sendreceive_args((Node *) output_rel->reltarget->exprs, NULL) ||
+		contains_agg_without_sendreceive_args(parse->havingQual, NULL))
 	{
 		return;
 	}

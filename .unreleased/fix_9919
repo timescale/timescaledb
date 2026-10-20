@@ -1,0 +1,1 @@
+Fixes: #9919 Error for first and last with anonymous record arguments under chunkwise aggregation
