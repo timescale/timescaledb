@@ -1,0 +1,1 @@
+Fixes: #10753 Wrong query results for bloom sparse index with a constant of a type with a different hash function

@@ -693,6 +693,11 @@ extract_var_for_bloom1(OpExpr *opexpr, QualPushdownContext *context, Expr **valu
 		return NULL;
 	}
 
+	if (!bloom1_hash_types_compatible(chosen_var->vartype, exprType((Node *) value_expr_tmp)))
+	{
+		return NULL;
+	}
+
 	*value_out = value_expr_tmp;
 	*op_oid_out = op_oid_tmp;
 	return chosen_var;
@@ -801,9 +806,9 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	Assert(pushed_down_rightop != NULL);
 
 	/*
-	 * We can have cross-type equality operator, but in this case the our hashes
-	 * or Postgres hashes for the respective types are guaranteed to have the
-	 * same result for both types, so we don't need any type conversion here.
+	 * We can have cross-type equality operator, but extract_var_for_bloom1()
+	 * checked that the bloom filter hashes for both types are the same, so we
+	 * don't need any type conversion here.
 	 * The only special case is composite types. The right-hand constant would
 	 * have the anonymous type "record" and would be compared polymorphically
 	 * at runtime with the record_eq() function. However, this type doesn't have
@@ -906,6 +911,13 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 		lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
 	const int strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
 	if (strategy != HTEqualStrategyNumber)
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+
+	if (!bloom1_hash_types_compatible(var_with_segment_meta->vartype,
+									  get_base_element_type(exprType((Node *) orig_rightop))))
 	{
 		context->can_pushdown = false;
 		return orig_saop;
@@ -1098,6 +1110,11 @@ extract_var_for_composite_bloom(OpExpr *opexpr, QualPushdownContext *context, Ex
 
 		/* Cannot use non-deterministic collations */
 		if (OidIsValid(op_collation) && !get_collation_isdeterministic(op_collation))
+		{
+			return NULL;
+		}
+
+		if (!bloom1_hash_types_compatible(chosen_var->vartype, exprType((Node *) value_expr_tmp)))
 		{
 			return NULL;
 		}

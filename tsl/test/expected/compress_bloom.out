@@ -2220,3 +2220,62 @@ explain (buffers off, costs off) select * from rename_bloom where a2 = 5 and b =
          Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9309_a2_b, TEST-HASHES::bigint[])
 
 drop table rename_bloom;
+-- a constant of another type is only checked against the bloom filter when it
+-- hashes the same as the column type
+create table bloom_name(ts int, c2 varchar not null, c3 text not null, k int);
+select create_hypertable('bloom_name', 'ts', create_default_indexes=>false);
+WARNING:  column type "character varying" used for "c2" does not follow best practices
+    create_hypertable     
+--------------------------
+ (25,public,bloom_name,t)
+
+alter table bloom_name set (
+    timescaledb.compress,
+    timescaledb.order_by='ts',
+    timescaledb.segment_by='k',
+    timescaledb.compress_index = 'bloom(c2), bloom(c2,c3)');
+insert into bloom_name select x, case when x % 5 = 0 then 'abc' else 'v' || x end,
+    case when x % 5 = 0 then 'def' else 'w' || x end, x % 3
+from generate_series(1, 1000) x;
+select count(compress_chunk(x)) from show_chunks('bloom_name') x;
+ count 
+-------
+     1
+
+explain (buffers off, costs off) select count(*) from bloom_name where c2 = cast('abc'::varchar as name);
+--- QUERY PLAN ---
+ Aggregate
+   ->  Custom Scan (ColumnarScan) on _hyper_25_36_chunk
+         Filter: ((c2)::text = 'abc'::name COLLATE "default")
+         ->  Seq Scan on _hyper_25_36_chunk_compressed
+
+select count(*) from bloom_name where c2 = cast('abc'::varchar as name);
+ count 
+-------
+   200
+
+select count(*) from bloom_name where c2 = any(array[cast('abc'::varchar as name), 'x'::name] collate "default");
+ count 
+-------
+   200
+
+select count(*) from bloom_name where c2 = cast('abc'::varchar as name) and c3 = cast('def'::varchar as name);
+ count 
+-------
+   200
+
+-- the same type still uses the bloom filter
+explain (buffers off, costs off) select count(*) from bloom_name where c2 = 'abc';
+--- QUERY PLAN ---
+ Aggregate
+   ->  Custom Scan (ColumnarScan) on _hyper_25_36_chunk
+         Filter: ((c2)::text = 'abc'::text)
+         ->  Seq Scan on _hyper_25_36_chunk_compressed
+               Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_c2, TEST-HASHES::bigint[])
+
+select count(*) from bloom_name where c2 = 'abc';
+ count 
+-------
+   200
+
+drop table bloom_name;

@@ -973,3 +973,25 @@ alter table rename_bloom rename a to a2;
 select relname,attname from metacols where relname = 'rename_bloom' order by 1,2;
 explain (buffers off, costs off) select * from rename_bloom where a2 = 5 and b = 3;
 drop table rename_bloom;
+
+-- a constant of another type is only checked against the bloom filter when it
+-- hashes the same as the column type
+create table bloom_name(ts int, c2 varchar not null, c3 text not null, k int);
+select create_hypertable('bloom_name', 'ts', create_default_indexes=>false);
+alter table bloom_name set (
+    timescaledb.compress,
+    timescaledb.order_by='ts',
+    timescaledb.segment_by='k',
+    timescaledb.compress_index = 'bloom(c2), bloom(c2,c3)');
+insert into bloom_name select x, case when x % 5 = 0 then 'abc' else 'v' || x end,
+    case when x % 5 = 0 then 'def' else 'w' || x end, x % 3
+from generate_series(1, 1000) x;
+select count(compress_chunk(x)) from show_chunks('bloom_name') x;
+explain (buffers off, costs off) select count(*) from bloom_name where c2 = cast('abc'::varchar as name);
+select count(*) from bloom_name where c2 = cast('abc'::varchar as name);
+select count(*) from bloom_name where c2 = any(array[cast('abc'::varchar as name), 'x'::name] collate "default");
+select count(*) from bloom_name where c2 = cast('abc'::varchar as name) and c3 = cast('def'::varchar as name);
+-- the same type still uses the bloom filter
+explain (buffers off, costs off) select count(*) from bloom_name where c2 = 'abc';
+select count(*) from bloom_name where c2 = 'abc';
+drop table bloom_name;

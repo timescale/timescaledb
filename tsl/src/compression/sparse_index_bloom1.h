@@ -17,6 +17,8 @@ Datum bloom1_hash(PG_FUNCTION_ARGS);
 
 PGFunction bloom1_get_hash_function(Oid type, FmgrInfo **finfo);
 
+bool bloom1_hash_types_compatible(Oid column_type, Oid value_type);
+
 extern char const *bloom1_column_prefix;
 
 /*
