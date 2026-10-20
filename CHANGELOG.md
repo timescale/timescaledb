@@ -11,7 +11,7 @@ This release contains performance improvements and bug fixes since the 2.30.2 re
 * Preview of the new Adaptive Integer Compressor (AIC), which chooses the best encoding for each block of integer values. This results in the up to 20% improvement in compression ratios for integers, while queries benefiting from faster decompression perform up to two times better. AIC is disabled by default in this release and will be enabled by default in the `2.32.0` release.
 
 **Loader changes**
-This release allows controling extension hook order to improve compatibility with other extensions. To ensure pgaudit hooks work together with timescaledb, pgaudit must come after timescaledb in `shared_preload_libraries` setting. This loader change, requires a PostgreSQL restart to enable the compatibility, but if you have no need to control the hook order, the previous loader version is enough, and you don't require a service restart.
+This release allows controlling extension hook order to improve compatibility with other extensions. To ensure pgaudit hooks work together with timescaledb, pgaudit must come after timescaledb in `shared_preload_libraries` setting. This loader change, requires a PostgreSQL restart to enable the compatibility, but if you have no need to control the hook order, the previous loader version is enough, and you don't require a service restart.
 
 **Backward-Incompatible Changes**
 * [#10666](https://github.com/timescale/timescaledb/pull/10666) Rename `timescaledb.enable_columnarscan` to `timescaledb.debug_enable_columnarscan` to make its debugging-only purpose explicit
@@ -67,6 +67,7 @@ This release allows controling extension hook order to improve compatibility wit
 * [#10830](https://github.com/timescale/timescaledb/pull/10830) Fix `split_chunk` routing rows to the wrong chunk
 * [#10883](https://github.com/timescale/timescaledb/pull/10838) Fix bloom filters not being used on compressed chunks after renaming a column
 * [#10508](https://github.com/timescale/timescaledb/pull/10508) Fix missing CAgg invalidations during MERGE UPDATE/DELETE
+* [#10844](https://github.com/timescale/timescaledb/pull/10844) Keep owner of user-defined jobs when hypertable owner changes
 
 **New Settings**
 * `timescaledb.cagg_refresh_stats_level`: controls continuous aggregate refresh statistics. Valid values are `off` (the default), `summary`, and `verbose_log`.
@@ -79,6 +80,7 @@ This release allows controling extension hook order to improve compatibility wit
 * @hyeokhee for reporting an error with parallel chunkwise aggregation and subqueries in aggregates [#10804](https://github.com/timescale/timescaledb/issues/10804) fixed via [#10806](https://github.com/timescale/timescaledb/pull/10806)
 * @igor2x for reporting a performance regression with joins on segment-by columns with explicit casts [#10591](https://github.com/timescale/timescaledb/issues/10591) fixed via [#10617](https://github.com/timescale/timescaledb/pull/10617)
 * @salmanazmat666 for reporting a refresh that could not be cancelled and ran out of memory [#10746](https://github.com/timescale/timescaledb/issues/10749) fixed via [#10806](https://github.com/timescale/timescaledb/pull/10749)
+* @jf0x3f for reporting a security issue when changing hypertable owner fixed via [#10844](https://github.com/timescale/timescaledb/pull/10844)
 
 ## 2.30.2 (2026-09-29)
 
