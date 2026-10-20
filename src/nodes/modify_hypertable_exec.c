@@ -807,6 +807,9 @@ ExecInsert(ModifyTableContext *context,
 			 (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row)))
 			ExecPartitionCheck(resultRelInfo, slot, estate, true);
 
+		if (ctr)
+			ts_chunk_insert_state_set_partial(ctr->cis);
+
 		if (onconflict != ONCONFLICT_NONE && resultRelInfo->ri_NumIndices > 0)
 		{
 			/* Perform a speculative insertion. */

@@ -141,3 +141,40 @@ alter table test2 set (
 	  timescaledb.compress_orderby = 'created_at',
 	  timescaledb.compress_segmentby = 'location_id'
 );
+
+-- AFTER INSERT triggers see the rows their statement wrote into a
+-- compressed chunk
+create table trg_count (t timestamptz not null, v int);
+select create_hypertable('trg_count', 't', chunk_time_interval => interval '1 day');
+alter table trg_count set (timescaledb.compress);
+create table trg_count_log (stmt text, visible bigint);
+create function trg_count_rows() returns trigger language plpgsql as $$
+begin
+    insert into trg_count_log select tg_argv[0], count(*) from trg_count;
+    return null;
+end $$;
+create trigger trg_count_stmt after insert on trg_count
+    for each statement execute function trg_count_rows('statement');
+
+insert into trg_count values ('2025-01-01 00:00+00', 1);
+select count(compress_chunk(c)) from show_chunks('trg_count') c;
+insert into trg_count values ('2025-01-01 01:00+00', 2);
+
+select count(compress_chunk(c)) from show_chunks('trg_count') c;
+drop trigger trg_count_stmt on trg_count;
+create trigger trg_count_copy after insert on trg_count
+    for each statement execute function trg_count_rows('copy');
+copy trg_count from stdin;
+2025-01-01 02:00+00	3
+\.
+
+select count(compress_chunk(c)) from show_chunks('trg_count') c;
+drop trigger trg_count_copy on trg_count;
+create trigger trg_count_row after insert on trg_count
+    for each row execute function trg_count_rows('row');
+insert into trg_count values ('2025-01-01 03:00+00', 4), ('2025-01-01 04:00+00', 5);
+
+select * from trg_count_log;
+select count(*) from trg_count;
+drop table trg_count, trg_count_log;
+drop function trg_count_rows();

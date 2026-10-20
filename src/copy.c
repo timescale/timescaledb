@@ -1144,6 +1144,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		MemoryContextSwitchTo(oldcontext);
 
 		buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo, cis, point, insertMethod);
+		ts_chunk_insert_state_set_partial(cis);
 
 		/*
 		 * If the insert method has changed, we need to flush the

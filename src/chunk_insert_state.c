@@ -599,23 +599,33 @@ ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
 	}
 }
 
-extern void
-ts_chunk_insert_state_destroy(ChunkInsertState *state, bool single_chunk_insert)
+/*
+ * Check if we need to mark the chunk as partial.
+ * We need to change chunk status to partial in the following cases:
+ * - rowstore insert into compressed chunk
+ * - columnstore insert into uncompressed chunk that is not a new chunk (flagged as
+ * needs_partial in chunk_tuple_routing.c)
+ *
+ * This is done before the first rowstore tuple is inserted, so that queries
+ * run by triggers of the same statement scan the rowstore of the chunk.
+ */
+void
+ts_chunk_insert_state_set_partial(ChunkInsertState *state)
 {
-	/*
-	 * Check if we need to mark the chunk as partial.
-	 * We need to change chunk status to partial in the following cases:
-	 * - rowstore insert into compressed chunk
-	 * - columnstore insert into uncompressed chunk that is not a new chunk (flagged as
-	 * needs_partial in chunk_tuple_routing.c)
-	 */
 	if (state->chunk_compressed && !state->chunk_partial &&
 		(!state->columnstore_insert || state->needs_partial))
 	{
 		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		ts_chunk_set_partial(chunk);
+		state->chunk_partial = true;
 	}
+}
+
+extern void
+ts_chunk_insert_state_destroy(ChunkInsertState *state, bool single_chunk_insert)
+{
+	ts_chunk_insert_state_set_partial(state);
 
 	table_close(state->rel, NoLock);
 	if (state->slot)
