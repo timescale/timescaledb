@@ -177,7 +177,7 @@ jobs:
   regression:
     name: Regression
     needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/linux-build-and-test.yaml@main
+    uses: timescale/timescaledb/.github/workflows/linux-build-and-test.yaml@3ab731e8a8e87a6f0e26587f28d79bb81175b04a # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
@@ -185,7 +185,7 @@ jobs:
   regression_linux_i386:
     name: Regression Linux i386
     needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/linux-32bit-build-and-test.yaml@main
+    uses: timescale/timescaledb/.github/workflows/linux-32bit-build-and-test.yaml@3ab731e8a8e87a6f0e26587f28d79bb81175b04a # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
@@ -193,7 +193,7 @@ jobs:
   regression_windows:
     name: Regression Windows
     needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/windows-build-and-test.yaml@main
+    uses: timescale/timescaledb/.github/workflows/windows-build-and-test.yaml@3ab731e8a8e87a6f0e26587f28d79bb81175b04a # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
@@ -201,7 +201,7 @@ jobs:
   update_and_downgrade:
     name: Update and Downgrade
     needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/update-test.yaml@main
+    uses: timescale/timescaledb/.github/workflows/update-test.yaml@3ab731e8a8e87a6f0e26587f28d79bb81175b04a # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
@@ -209,7 +209,7 @@ jobs:
   pg_upgrade:
     name: pg_upgrade test
     needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/pg_upgrade-test.yaml@main
+    uses: timescale/timescaledb/.github/workflows/pg_upgrade-test.yaml@3ab731e8a8e87a6f0e26587f28d79bb81175b04a # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
@@ -217,7 +217,7 @@ jobs:
   abi:
     name: ABI Test
     needs: release_sanity
-    uses: timescale/timescaledb/.github/workflows/abi.yaml@main
+    uses: timescale/timescaledb/.github/workflows/abi.yaml@3ab731e8a8e87a6f0e26587f28d79bb81175b04a # main
     with:
       timescaledb-ref: ${{ inputs.timescaledb-ref }}
     secrets: inherit
