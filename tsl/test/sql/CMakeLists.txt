@@ -74,6 +74,7 @@ set(TEST_FILES
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
     direct_compress_policy.sql
+    lastpoint_rewrite.sql
     memoize.sql
     move.sql
     move_to_columnstore.sql

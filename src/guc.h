@@ -37,6 +37,7 @@ extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
+extern TSDLLEXPORT bool ts_guc_enable_lastpoint_rewrite;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_merge;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;

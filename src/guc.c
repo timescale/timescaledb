@@ -114,6 +114,7 @@ TSDLLEXPORT bool ts_guc_skip_cagg_invalidation = false;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_foreign_key_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
+TSDLLEXPORT bool ts_guc_enable_lastpoint_rewrite = false;
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
@@ -1133,6 +1134,18 @@ _guc_init(void)
 							 "Enable pushdown of ORDER BY clause for continuous aggregates",
 							 &ts_guc_enable_cagg_sort_pushdown,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_lastpoint_rewrite"),
+							 "Enable the last point query rewrite",
+							 "Rewrite SELECT DISTINCT ON (k) ... ORDER BY k, time DESC on a "
+							 "hypertable into a lateral join over the distinct keys",
+							 &ts_guc_enable_lastpoint_rewrite,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,

@@ -1,0 +1,2 @@
+Implements: #10874 Rewrite last point queries into a lateral join
+Setting: `timescaledb.enable_lastpoint_rewrite`: rewrite DISTINCT ON queries over a hypertable into a lateral join over the distinct keys. Off by default.
