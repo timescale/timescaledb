@@ -378,6 +378,52 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 }
 
 /*
+ * Each per-chunk Partial Aggregate has a fixed executor setup cost (several
+ * expression contexts and memory contexts, plus JIT code when enabled) that
+ * the planner does not model. Below a few hundred rows per chunk this costs
+ * more than the per-row work it saves. With few chunks the difference is
+ * negligible, so only large chunk counts are considered. Columnar scans are
+ * exempt because vectorized aggregation needs the per-chunk aggregation node.
+ */
+#define CHUNKWISE_AGG_MIN_ROWS_PER_CHUNK 500
+#define CHUNKWISE_AGG_MANY_CHUNKS 100
+
+static bool
+chunkwise_agg_pays_off(List *subpaths)
+{
+	double rows = 0;
+	ListCell *lc;
+
+	if (list_length(subpaths) < CHUNKWISE_AGG_MANY_CHUNKS)
+	{
+		return true;
+	}
+
+	foreach (lc, subpaths)
+	{
+		Path *subpath = lfirst(lc);
+		List *nested_subpaths = NIL;
+		Path *nested_append = NULL;
+		Path *nested_gather = NULL;
+
+		if (ts_is_columnar_scan_path(subpath))
+		{
+			return true;
+		}
+
+		get_subpaths_from_append_path(subpath, &nested_subpaths, &nested_append, &nested_gather);
+		if (nested_append != NULL)
+		{
+			return true;
+		}
+
+		rows += subpath->rows;
+	}
+
+	return rows >= CHUNKWISE_AGG_MIN_ROWS_PER_CHUNK * list_length(subpaths);
+}
+
+/*
  * Generate a total aggregation path for partial aggregations.
  *
  * The generated paths contain partial aggregations (created by using AGGSPLIT_INITIAL_SERIAL).
@@ -419,6 +465,11 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		 * Doesn't make sense to add per-chunk aggregation paths if there's
 		 * only one chunk.
 		 */
+		return;
+	}
+
+	if (!chunkwise_agg_pays_off(subpaths))
+	{
 		return;
 	}
 

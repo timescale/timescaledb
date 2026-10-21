@@ -249,3 +249,41 @@ RESET parallel_tuple_cost;
 RESET min_parallel_table_scan_size;
 SET max_parallel_workers_per_gather = 1;
 SET parallel_leader_participation = off;
+
+-- No chunk-wise aggregation over many tiny uncompressed chunks
+SET max_parallel_workers_per_gather = 0;
+CREATE FUNCTION explain_head(query text) RETURNS SETOF text LANGUAGE plpgsql AS
+$$
+DECLARE
+    line text;
+    n int := 0;
+BEGIN
+    FOR line IN EXECUTE 'EXPLAIN (costs off) ' || query LOOP
+        n := n + 1;
+        EXIT WHEN n > 5;
+        RETURN NEXT line;
+    END LOOP;
+END
+$$;
+
+CREATE TABLE many_chunks(time timestamptz NOT NULL, device int, value float)
+WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 hour');
+INSERT INTO many_chunks
+SELECT t, 1, 1 FROM generate_series('2025-01-01'::timestamptz, '2025-01-01'::timestamptz + interval '149 hours', interval '1 hour') t;
+ANALYZE many_chunks;
+
+SELECT count(*) FROM show_chunks('many_chunks');
+SELECT explain_head('SELECT count(*) FROM many_chunks');
+SELECT explain_head('SELECT device, sum(value) FROM many_chunks GROUP BY device');
+SELECT count(*) FROM many_chunks;
+
+-- Enough rows per chunk keeps the chunk-wise plan
+INSERT INTO many_chunks
+SELECT t, 1, 1 FROM generate_series('2025-01-01'::timestamptz, '2025-01-01'::timestamptz + interval '149 hours', interval '5 seconds') t;
+ANALYZE many_chunks;
+SELECT explain_head('SELECT count(*) FROM many_chunks');
+SELECT count(*) FROM many_chunks;
+
+DROP TABLE many_chunks;
+DROP FUNCTION explain_head(text);
+RESET max_parallel_workers_per_gather;
