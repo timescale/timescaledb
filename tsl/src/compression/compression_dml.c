@@ -376,7 +376,6 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 
 		Relation in_rel = relation_open(compression_settings->fd.compress_relid, RowExclusiveLock);
 
-		Bitmapset *columns_with_null_check = NULL;
 		Bitmapset *key_columns = constraints->key_columns;
 		Bitmapset *index_columns = NULL;
 		Relation index_rel = NULL;
@@ -428,7 +427,6 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 														   compression_settings,
 														   key_columns,
 														   constraints->key_collations,
-														   &columns_with_null_check,
 														   slot,
 														   &cdst->heap_scankeys.num_scankeys,
 														   &cdst->heap_scankeys.attnos);
@@ -436,11 +434,9 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		if (index_rel)
 		{
 			cdst->index_relid = RelationGetRelid(index_rel);
-			columns_with_null_check = NULL;
 			index_close(index_rel, AccessShareLock);
 		}
 
-		cdst->columns_with_null_check = columns_with_null_check;
 		table_close(in_rel, NoLock);
 	}
 
@@ -470,6 +466,51 @@ update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flag
 			scankeys->scankeys[i].sk_argument = value;
 		}
 	}
+}
+
+/*
+ * Heap scans cannot search for NULL, so the heap scan keys of the key columns
+ * that are NULL in the slot are left out. A NULL segmentby value is checked
+ * manually instead, and a NULL orderby value cannot use the min/max metadata.
+ * Returns the cached scan keys when none are left out, otherwise a copy.
+ */
+static ScanKeyData *
+heap_scankeys_for_slot(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int *num_scankeys,
+					   Bitmapset **null_columns)
+{
+	ScanKeyData *result = scankeys->scankeys;
+
+	*num_scankeys = 0;
+	for (int i = 0; i < scankeys->num_scankeys; i++)
+	{
+		ScanKey key = &scankeys->scankeys[i];
+		bool isnull;
+		Datum value = slot_getattr(slot, scankeys->attnos[i], &isnull);
+
+		if (isnull)
+		{
+			if (result == scankeys->scankeys)
+			{
+				result = palloc(sizeof(ScanKeyData) * scankeys->num_scankeys);
+				memcpy(result, scankeys->scankeys, sizeof(ScanKeyData) * i);
+			}
+
+			if (key->sk_strategy == BTEqualStrategyNumber)
+			{
+				*null_columns = bms_add_member(*null_columns, key->sk_attno);
+			}
+			continue;
+		}
+
+		key->sk_argument = value;
+		if (result != scankeys->scankeys)
+		{
+			result[*num_scankeys] = *key;
+		}
+		(*num_scankeys)++;
+	}
+
+	return result;
 }
 
 void
@@ -524,18 +565,22 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		index_rel = index_open(cdst->index_relid, AccessShareLock);
 	}
 
-	update_scankeys(&cdst->index_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
-	update_scankeys(&cdst->heap_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
-	update_scankeys(&cdst->mem_scankeys, slot, SK_ISNULL);
+	CachedDecompressionState row_cdst = *cdst;
+	row_cdst.heap_scankeys.scankeys = heap_scankeys_for_slot(&cdst->heap_scankeys,
+															 slot,
+															 &row_cdst.heap_scankeys.num_scankeys,
+															 &row_cdst.columns_with_null_check);
+	update_scankeys(&row_cdst.index_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
+	update_scankeys(&row_cdst.mem_scankeys, slot, SK_ISNULL);
 
 	if (ts_guc_debug_compression_path_info)
 	{
 		elog(INFO,
 			 "Using %s scan with scan keys: index %d, heap %d, memory %d. ",
 			 OidIsValid(cdst->index_relid) ? "index" : "table",
-			 cdst->index_scankeys.num_scankeys,
-			 cdst->heap_scankeys.num_scankeys,
-			 cdst->mem_scankeys.num_scankeys);
+			 row_cdst.index_scankeys.num_scankeys,
+			 row_cdst.heap_scankeys.num_scankeys,
+			 row_cdst.mem_scankeys.num_scankeys);
 	}
 
 	stats = decompress_batches_scan(in_rel,
@@ -545,7 +590,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									false,
 									NIL,
 									NULL /* no CAgg invalidation for inserts */,
-									cdst,
+									&row_cdst,
 									slot,
 									CMD_INSERT);
 

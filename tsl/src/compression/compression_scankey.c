@@ -153,8 +153,7 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 ScanKeyData *
 build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 					CompressionSettings *settings, Bitmapset *key_columns, Oid *key_collations,
-					Bitmapset **null_columns, TupleTableSlot *slot, int *num_scankeys,
-					AttrNumber **slot_attnos)
+					TupleTableSlot *slot, int *num_scankeys, AttrNumber **slot_attnos)
 {
 	int key_index = 0;
 	ScanKeyData *scankeys = NULL;
@@ -210,9 +209,9 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 												  InvalidOid,
 												  scankeys,
 												  &key_index,
-												  null_columns,
+												  NULL,
 												  value,
-												  isnull,
+												  false,
 												  false))
 				{
 					(*slot_attnos)[key_index - 1] = ht_attno;
@@ -223,12 +222,10 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 			if (ts_array_is_member(settings->fd.orderby, attname))
 			{
 				/*
-				 * Cannot optimize orderby columns with NULL values since those
-				 * are not visible in metadata. The min/max metadata follow the
-				 * column collation and cannot filter for a non-deterministic
-				 * unique index collation.
+				 * The min/max metadata follow the column collation and cannot
+				 * filter for a non-deterministic unique index collation.
 				 */
-				if (isnull || !collation_is_deterministic(key_collations[attno]))
+				if (!collation_is_deterministic(key_collations[attno]))
 				{
 					continue;
 				}
@@ -242,7 +239,7 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 												  InvalidOid,
 												  scankeys,
 												  &key_index,
-												  null_columns,
+												  NULL,
 												  value,
 												  false,
 												  false /* is_null_check */
@@ -258,7 +255,7 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 												  InvalidOid,
 												  scankeys,
 												  &key_index,
-												  null_columns,
+												  NULL,
 												  value,
 												  false,
 												  false /* is_null_check */

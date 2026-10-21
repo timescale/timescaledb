@@ -714,3 +714,64 @@ INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', 'd2', 'l1', 1);
 
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE nulls_not_distinct;
+
+-- NULL in a segmentby key column of one row must not change the batch
+-- filtering for the other rows of the statement
+CREATE TABLE null_segby(ts int8 NOT NULL, s int, k text, v int);
+SELECT table_name FROM create_hypertable('null_segby', 'ts', chunk_time_interval => 1000000);
+CREATE UNIQUE INDEX ON null_segby (ts, k);
+ALTER TABLE null_segby SET (timescaledb.compress, timescaledb.compress_segmentby = 's, k', timescaledb.compress_orderby = 'ts');
+INSERT INTO null_segby VALUES (10, 1, 'a', 1);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+
+INSERT INTO null_segby VALUES (20, 1, NULL, 2), (10, 1, 'b', 3);
+INSERT INTO null_segby VALUES (10, 1, 'c', 4), (20, 1, NULL, 5);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+INSERT INTO null_segby VALUES (30, 1, NULL, 6), (10, 1, 'd', 7) ON CONFLICT DO NOTHING;
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+INSERT INTO null_segby VALUES (40, 1, NULL, 8), (10, 1, 'a', 9) ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v;
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+COPY null_segby FROM STDIN;
+50	1	\N	10
+10	1	e	11
+\.
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+\set ON_ERROR_STOP 0
+INSERT INTO null_segby VALUES (60, 1, NULL, 12), (10, 1, 'b', 13);
+\set ON_ERROR_STOP 1
+SELECT * FROM null_segby ORDER BY ts, k, v;
+DROP TABLE null_segby;
+
+CREATE TABLE null_segby_nnd(ts int8 NOT NULL, s int, k text, v int);
+SELECT table_name FROM create_hypertable('null_segby_nnd', 'ts', chunk_time_interval => 1000000);
+CREATE UNIQUE INDEX ON null_segby_nnd (ts, k) NULLS NOT DISTINCT;
+ALTER TABLE null_segby_nnd SET (timescaledb.compress, timescaledb.compress_segmentby = 's, k', timescaledb.compress_orderby = 'ts');
+INSERT INTO null_segby_nnd VALUES (10, 1, 'a', 1), (10, 1, NULL, 2);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby_nnd') c;
+
+\set ON_ERROR_STOP 0
+INSERT INTO null_segby_nnd VALUES (20, 1, 'x', 3), (10, 1, NULL, 4);
+INSERT INTO null_segby_nnd VALUES (20, 1, NULL, 3), (10, 1, 'a', 4);
+\set ON_ERROR_STOP 1
+INSERT INTO null_segby_nnd VALUES (20, 1, NULL, 5), (10, 1, 'b', 6);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby_nnd') c;
+INSERT INTO null_segby_nnd VALUES (30, 1, 'x', 7), (10, 1, NULL, 8) ON CONFLICT DO NOTHING;
+SELECT * FROM null_segby_nnd ORDER BY ts, k, v;
+DROP TABLE null_segby_nnd;
+
+-- same for NULL in an orderby key column
+CREATE TABLE null_orderby_nnd(ts int8 NOT NULL, s int, o int, v int);
+SELECT table_name FROM create_hypertable('null_orderby_nnd', 'ts', chunk_time_interval => 1000000);
+CREATE UNIQUE INDEX ON null_orderby_nnd (ts, o) NULLS NOT DISTINCT;
+ALTER TABLE null_orderby_nnd SET (timescaledb.compress, timescaledb.compress_segmentby = 's', timescaledb.compress_orderby = 'o, ts');
+INSERT INTO null_orderby_nnd VALUES (10, 1, 1, 1), (10, 1, NULL, 2);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_orderby_nnd') c;
+
+\set ON_ERROR_STOP 0
+INSERT INTO null_orderby_nnd VALUES (20, 1, 3, 3), (10, 1, NULL, 4);
+\set ON_ERROR_STOP 1
+INSERT INTO null_orderby_nnd VALUES (20, 1, NULL, 5), (10, 1, 2, 6);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_orderby_nnd') c;
+INSERT INTO null_orderby_nnd VALUES (30, 1, 7, 7), (10, 1, NULL, 8) ON CONFLICT DO NOTHING;
+SELECT * FROM null_orderby_nnd ORDER BY ts, o, v;
+DROP TABLE null_orderby_nnd;

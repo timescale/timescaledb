@@ -1024,3 +1024,136 @@ INFO:  Using index scan with scan keys: index 1, heap 4, memory 2.
 INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 0.
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE nulls_not_distinct;
+-- NULL in a segmentby key column of one row must not change the batch
+-- filtering for the other rows of the statement
+CREATE TABLE null_segby(ts int8 NOT NULL, s int, k text, v int);
+SELECT table_name FROM create_hypertable('null_segby', 'ts', chunk_time_interval => 1000000);
+ table_name 
+------------
+ null_segby
+
+CREATE UNIQUE INDEX ON null_segby (ts, k);
+ALTER TABLE null_segby SET (timescaledb.compress, timescaledb.compress_segmentby = 's, k', timescaledb.compress_orderby = 'ts');
+INSERT INTO null_segby VALUES (10, 1, 'a', 1);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+ count 
+-------
+     1
+
+INSERT INTO null_segby VALUES (20, 1, NULL, 2), (10, 1, 'b', 3);
+INSERT INTO null_segby VALUES (10, 1, 'c', 4), (20, 1, NULL, 5);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+ count 
+-------
+     1
+
+INSERT INTO null_segby VALUES (30, 1, NULL, 6), (10, 1, 'd', 7) ON CONFLICT DO NOTHING;
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+ count 
+-------
+     1
+
+INSERT INTO null_segby VALUES (40, 1, NULL, 8), (10, 1, 'a', 9) ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v;
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+ count 
+-------
+     1
+
+COPY null_segby FROM STDIN;
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby') c;
+ count 
+-------
+     1
+
+\set ON_ERROR_STOP 0
+INSERT INTO null_segby VALUES (60, 1, NULL, 12), (10, 1, 'b', 13);
+ERROR:  duplicate key value violates unique constraint "_hyper_17_20_chunk_null_segby_ts_k_idx"
+\set ON_ERROR_STOP 1
+SELECT * FROM null_segby ORDER BY ts, k, v;
+ ts | s | k | v  
+----+---+---+----
+ 10 | 1 | a |  9
+ 10 | 1 | b |  3
+ 10 | 1 | c |  4
+ 10 | 1 | d |  7
+ 10 | 1 | e | 11
+ 20 | 1 |   |  2
+ 20 | 1 |   |  5
+ 30 | 1 |   |  6
+ 40 | 1 |   |  8
+ 50 | 1 |   | 10
+
+DROP TABLE null_segby;
+CREATE TABLE null_segby_nnd(ts int8 NOT NULL, s int, k text, v int);
+SELECT table_name FROM create_hypertable('null_segby_nnd', 'ts', chunk_time_interval => 1000000);
+   table_name   
+----------------
+ null_segby_nnd
+
+CREATE UNIQUE INDEX ON null_segby_nnd (ts, k) NULLS NOT DISTINCT;
+ALTER TABLE null_segby_nnd SET (timescaledb.compress, timescaledb.compress_segmentby = 's, k', timescaledb.compress_orderby = 'ts');
+INSERT INTO null_segby_nnd VALUES (10, 1, 'a', 1), (10, 1, NULL, 2);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby_nnd') c;
+ count 
+-------
+     1
+
+\set ON_ERROR_STOP 0
+INSERT INTO null_segby_nnd VALUES (20, 1, 'x', 3), (10, 1, NULL, 4);
+ERROR:  duplicate key value violates unique constraint "_hyper_18_21_chunk_null_segby_nnd_ts_k_idx"
+INSERT INTO null_segby_nnd VALUES (20, 1, NULL, 3), (10, 1, 'a', 4);
+ERROR:  duplicate key value violates unique constraint "_hyper_18_21_chunk_null_segby_nnd_ts_k_idx"
+\set ON_ERROR_STOP 1
+INSERT INTO null_segby_nnd VALUES (20, 1, NULL, 5), (10, 1, 'b', 6);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_segby_nnd') c;
+ count 
+-------
+     1
+
+INSERT INTO null_segby_nnd VALUES (30, 1, 'x', 7), (10, 1, NULL, 8) ON CONFLICT DO NOTHING;
+SELECT * FROM null_segby_nnd ORDER BY ts, k, v;
+ ts | s | k | v 
+----+---+---+---
+ 10 | 1 | a | 1
+ 10 | 1 | b | 6
+ 10 | 1 |   | 2
+ 20 | 1 |   | 5
+ 30 | 1 | x | 7
+
+DROP TABLE null_segby_nnd;
+-- same for NULL in an orderby key column
+CREATE TABLE null_orderby_nnd(ts int8 NOT NULL, s int, o int, v int);
+SELECT table_name FROM create_hypertable('null_orderby_nnd', 'ts', chunk_time_interval => 1000000);
+    table_name    
+------------------
+ null_orderby_nnd
+
+CREATE UNIQUE INDEX ON null_orderby_nnd (ts, o) NULLS NOT DISTINCT;
+ALTER TABLE null_orderby_nnd SET (timescaledb.compress, timescaledb.compress_segmentby = 's', timescaledb.compress_orderby = 'o, ts');
+INSERT INTO null_orderby_nnd VALUES (10, 1, 1, 1), (10, 1, NULL, 2);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_orderby_nnd') c;
+ count 
+-------
+     1
+
+\set ON_ERROR_STOP 0
+INSERT INTO null_orderby_nnd VALUES (20, 1, 3, 3), (10, 1, NULL, 4);
+ERROR:  duplicate key value violates unique constraint "_hyper_19_22_chunk_null_orderby_nnd_ts_o_idx"
+\set ON_ERROR_STOP 1
+INSERT INTO null_orderby_nnd VALUES (20, 1, NULL, 5), (10, 1, 2, 6);
+SELECT count(compress_chunk(c)) FROM show_chunks('null_orderby_nnd') c;
+ count 
+-------
+     1
+
+INSERT INTO null_orderby_nnd VALUES (30, 1, 7, 7), (10, 1, NULL, 8) ON CONFLICT DO NOTHING;
+SELECT * FROM null_orderby_nnd ORDER BY ts, o, v;
+ ts | s | o | v 
+----+---+---+---
+ 10 | 1 | 1 | 1
+ 10 | 1 | 2 | 6
+ 10 | 1 |   | 2
+ 20 | 1 |   | 5
+ 30 | 1 | 7 | 7
+
+DROP TABLE null_orderby_nnd;

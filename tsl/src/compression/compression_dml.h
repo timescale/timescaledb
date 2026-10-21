@@ -55,7 +55,7 @@ ScanKeyData *build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_r
 											 int *num_scan_keys, AttrNumber **slot_attnos);
 ScanKeyData *build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 								 CompressionSettings *settings, Bitmapset *key_columns,
-								 Oid *key_collations, Bitmapset **null_columns,
-								 TupleTableSlot *slot, int *num_scankeys, AttrNumber **slot_attnos);
+								 Oid *key_collations, TupleTableSlot *slot, int *num_scankeys,
+								 AttrNumber **slot_attnos);
 ScanKeyData *build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scankeys,
 										  Bitmapset **null_columns, bool *delete_only);

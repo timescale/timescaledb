@@ -1,0 +1,1 @@
+Fixes: #10721 Fix INSERT conflict check on compressed chunks after a row with NULL key columns
