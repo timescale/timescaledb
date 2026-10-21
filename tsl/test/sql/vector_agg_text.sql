@@ -124,4 +124,18 @@ order by explain, condition.n, variable, function, grouping.n
 -- Test grouping by long strings
 select count(*) from long group by a order by 1 limit 10;
 
+-- Test the portable carryless multiplication used by UMASH on aarch64 CPUs
+-- without PMULL. Elsewhere, these functions do nothing.
+create function ts_test_umash_portable_clmul() returns void
+as :TSL_MODULE_PATHNAME language c volatile;
+create function ts_test_umash_disable_pmull() returns void
+as :TSL_MODULE_PATHNAME language c volatile;
+
+select ts_test_umash_portable_clmul();
+
+select x, ss, count(*), min(cint4) from agggroup group by x, ss order by x, ss limit 10;
+select ts_test_umash_disable_pmull();
+select x, ss, count(*), min(cint4) from agggroup group by x, ss order by x, ss limit 10;
+select count(*) from long group by a order by 1 limit 10;
+
 reset timescaledb.debug_require_vector_agg;

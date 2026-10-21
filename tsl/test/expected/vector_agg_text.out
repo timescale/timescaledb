@@ -333,4 +333,57 @@ select count(*) from long group by a order by 1 limit 10;
      1
      1
 
+-- Test the portable carryless multiplication used by UMASH on aarch64 CPUs
+-- without PMULL. Elsewhere, these functions do nothing.
+create function ts_test_umash_portable_clmul() returns void
+as :TSL_MODULE_PATHNAME language c volatile;
+create function ts_test_umash_disable_pmull() returns void
+as :TSL_MODULE_PATHNAME language c volatile;
+select ts_test_umash_portable_clmul();
+ ts_test_umash_portable_clmul 
+------------------------------
+ 
+
+select x, ss, count(*), min(cint4) from agggroup group by x, ss order by x, ss limit 10;
+ x  | ss | count |  min   
+----+----+-------+--------
+ 0  |  0 | 20000 | -16383
+ 11 | 11 | 20019 | -16382
+ 3  |  3 | 19981 | -16382
+ 4  |  4 | 19981 | -16382
+ 5  |  5 | 20000 | -16380
+ 6  |  6 | 20000 | -16382
+ 7  |  7 | 20000 | -16383
+ 8  |  8 | 20000 | -16382
+ 9  |  9 | 20000 | -16382
+    |    | 20019 | -16383
+
+select ts_test_umash_disable_pmull();
+ ts_test_umash_disable_pmull 
+-----------------------------
+ 
+
+select x, ss, count(*), min(cint4) from agggroup group by x, ss order by x, ss limit 10;
+ x  | ss | count |  min   
+----+----+-------+--------
+ 0  |  0 | 20000 | -16383
+ 11 | 11 | 20019 | -16382
+ 3  |  3 | 19981 | -16382
+ 4  |  4 | 19981 | -16382
+ 5  |  5 | 20000 | -16380
+ 6  |  6 | 20000 | -16382
+ 7  |  7 | 20000 | -16383
+ 8  |  8 | 20000 | -16382
+ 9  |  9 | 20000 | -16382
+    |    | 20019 | -16383
+
+select count(*) from long group by a order by 1 limit 10;
+ count 
+-------
+     1
+     1
+     1
+     1
+     1
+
 reset timescaledb.debug_require_vector_agg;

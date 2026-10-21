@@ -5,7 +5,8 @@ set(SOURCES
     test_fastlanes.c
     compression_sql_test.c
     decompress_text_test_impl.c
-    test_continuous_agg.c)
+    test_continuous_agg.c
+    test_umash.c)
 
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 
@@ -20,3 +21,6 @@ target_include_directories(${TSL_TESTS_LIB_NAME}
                            PRIVATE ${CMAKE_SOURCE_DIR}/test/src)
 target_include_directories(${TSL_TESTS_LIB_NAME} PRIVATE ${PG_INCLUDEDIR})
 target_compile_definitions(${TSL_TESTS_LIB_NAME} PUBLIC TS_SUBMODULE)
+if(USE_UMASH)
+  target_compile_definitions(${TSL_TESTS_LIB_NAME} PRIVATE TS_USE_UMASH)
+endif()

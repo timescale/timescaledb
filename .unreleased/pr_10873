@@ -1,0 +1,1 @@
+Implements: #10873 Detect PMULL at run time for UMASH on aarch64 Linux

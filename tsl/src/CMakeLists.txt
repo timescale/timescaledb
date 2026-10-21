@@ -77,6 +77,19 @@ int main() { (void) _mm_cvtsi64_si128((uint64_t) 0); return 0; }
 #elif defined(__ARM_FEATURE_CRYPTO)
 /* OK */
 int main() { return 0; }
+#elif defined(__aarch64__) && defined(__linux__)
+/* PMULL is detected at run time, see umash.c */
+#include <stdint.h>
+#include <arm_neon.h>
+#include <sys/auxv.h>
+#if defined(__clang__)
+__attribute__((target(\"aes\")))
+#else
+__attribute__((target(\"+crypto\")))
+#endif
+static uint64x2_t clmul(uint64_t x, uint64_t y)
+{ return vreinterpretq_u64_p128(vmull_p64(x, y)); }
+int main() { return (int) vgetq_lane_u64(clmul(getauxval(AT_HWCAP), 3), 0); }
 #else
 #error Unsupported platform for UMASH
 #endif

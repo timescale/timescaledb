@@ -51,6 +51,16 @@
 #error "UMASH usage is disabled, but the header is included"
 #endif
 
+/*
+ * On aarch64 Linux without compile-time crypto extensions, PMULL is detected at
+ * run time. Tests can clear this flag to exercise the portable fallback.
+ */
+#if !defined(__PCLMUL__) && !defined(__ARM_FEATURE_CRYPTO) && defined(__aarch64__) && \
+    defined(__linux__)
+#define TS_UMASH_RUNTIME_PMULL
+extern bool ts_umash_use_pmull;
+#endif
+
 /**
  * # UMASH: a non-cryptographic hash function with collision bounds
  *

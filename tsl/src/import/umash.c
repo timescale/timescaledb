@@ -196,6 +196,86 @@ v128_clmul_cross(v128 x)
 	return v128_clmul(vgetq_lane_u64(x, 0), vgetq_lane_u64(swapped, 0));
 }
 
+#elif defined(TS_UMASH_RUNTIME_PMULL)
+
+/*
+ * PMULL is optional on aarch64, e.g. Cortex-A72 doesn't have it. Check for it
+ * at run time and fall back to a portable carryless multiplication, which
+ * gives the same hash values.
+ */
+#include <arm_neon.h>
+#include <sys/auxv.h>
+
+#ifndef HWCAP_PMULL
+#define HWCAP_PMULL (1 << 4)
+#endif
+
+typedef uint64x2_t v128;
+
+#define V128_ZERO { 0 };
+
+bool ts_umash_use_pmull;
+
+__attribute__((constructor)) static void
+ts_umash_detect_pmull(void)
+{
+	ts_umash_use_pmull = (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
+}
+
+static inline v128
+v128_create(uint64_t lo, uint64_t hi)
+{
+	return vcombine_u64(vcreate_u64(lo), vcreate_u64(hi));
+}
+
+static inline v128
+v128_shift(v128 x)
+{
+	return vshlq_n_u64(x, 1);
+}
+
+#if defined(__clang__)
+__attribute__((target("aes")))
+#else
+__attribute__((target("+crypto")))
+#endif
+static v128
+v128_clmul_pmull(uint64_t x, uint64_t y)
+{
+	return vreinterpretq_u64_p128(vmull_p64(x, y));
+}
+
+static v128
+v128_clmul_portable(uint64_t x, uint64_t y)
+{
+	uint64_t lo = x & -(y & 1);
+	uint64_t hi = 0;
+
+	for (int i = 1; i < 64; i++) {
+		const uint64_t mask = -((y >> i) & 1);
+
+		lo ^= (x << i) & mask;
+		hi ^= (x >> (64 - i)) & mask;
+	}
+
+	return v128_create(lo, hi);
+}
+
+static inline v128
+v128_clmul(uint64_t x, uint64_t y)
+{
+	if (__builtin_expect(ts_umash_use_pmull, 1))
+		return v128_clmul_pmull(x, y);
+
+	return v128_clmul_portable(x, y);
+}
+
+static inline v128
+v128_clmul_cross(v128 x)
+{
+	return v128_clmul(vgetq_lane_u64(x, 0), vgetq_lane_u64(x, 1));
+}
+
 #else
 
 #error \

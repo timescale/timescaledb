@@ -218,10 +218,11 @@ if os.environ.get("GITHUB_REPOSITORY") == "timescale/timescaledb":
             {
                 "pg": PG18_LATEST,
                 "os": "timescaledb-runner-arm64",
-                # We need to enable ARM crypto extensions to build the vectorized grouping
-                # code. The actual architecture for our ARM CI runner is reported as:
+                # Build without the ARM crypto extensions, so that UMASH detects
+                # PMULL at run time and the portable fallback is tested as well.
+                # The actual architecture for our ARM CI runner is reported as:
                 # -imultiarch aarch64-linux-gnu - -mlittle-endian -mabi=lp64 -march=armv8.2-a+crypto+fp16+rcpc+dotprod
-                "pg_extra_args": "--enable-debug --enable-cassert --without-llvm CFLAGS=-march=armv8.2-a+crypto",
+                "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
             }
         )
     )
