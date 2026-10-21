@@ -193,6 +193,11 @@ group by cint2 order by cint2 limit 10
 
 select round(stddev(cint4)), count(cint4), sum(cint4), round(avg(cint4)) from aggfns;
 
+select s, round(var_pop(cfloat4)::numeric), round(avg(cfloat4)::numeric, 3),
+    round(avg(cfloat8)::numeric, 3), round((avg(cfloat8) filter (where cint2 > 0))::numeric, 3),
+    round(stddev(cfloat8)::numeric)
+from aggfns group by s order by s;
+
 -- Stable function in CASE condition
 select count(*) from aggfns where s = (case when ctstz > now() then 1 else 2 end);
 
@@ -217,5 +222,48 @@ select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
 -- NaNs go first in the source data, because some potentially buggy conditions
 -- can be only triggered in this case.
 select ss, min(cfloat4), max(cfloat4) from aggfns where cfloat4 = any(array['nan'::float4, 33.308792]) group by ss order by ss;
+
+-- Edge cases for avg(float), with compressed and uncompressed chunks, so that
+-- vectorized and Postgres partial states are combined.
+set timescaledb.debug_require_vector_agg = 'allow';
+create table avgedge(t int, s int, g int, f4 float4, f8 float8);
+select create_hypertable('avgedge', 't', chunk_time_interval => 1000);
+alter table avgedge set (timescaledb.compress, timescaledb.compress_segmentby = 's');
+insert into avgedge select t, s, t % 3, t, t * 0.5
+from generate_series(0, 2999) t, generate_series(0, 4) s;
+update avgedge set f4 = null, f8 = null where s = 1;
+update avgedge set f4 = 'inf', f8 = 'inf' where s = 2 and t = 501;
+update avgedge set f4 = '-inf', f8 = '-inf' where s = 3 and t = 1502;
+update avgedge set f4 = 'inf', f8 = 'inf' where s = 3 and t = 2503;
+update avgedge set f4 = 'nan', f8 = 'nan' where s = 4 and t = 1;
+update avgedge set f8 = 'inf' where s = 4 and t = 1004;
+insert into avgedge select t, 5, t % 3, null, 1e308 from generate_series(0, 9) t;
+select count(compress_chunk(x)) from show_chunks('avgedge', older_than => 2000) x;
+vacuum analyze avgedge;
+
+select s, avg(f4), avg(f8), count(f8) from avgedge where s < 5 group by s order by s;
+select g, avg(f4), avg(f8), count(f8) from avgedge where s < 5 group by g order by g;
+select s, g, avg(f4), avg(f8) from avgedge where s < 5 group by s, g order by s, g;
+select avg(f8), avg(f8) filter (where s = 1), avg(f8) filter (where t > 1000) from avgedge where s < 5;
+select avg(f8) from avgedge where s = 0 and t > 10000;
+\set ON_ERROR_STOP 0
+select avg(f8) from avgedge where s = 5;
+select g, avg(f8) from avgedge where s = 5 group by g;
+\set ON_ERROR_STOP 1
+select avg(f8) from avgedge where s = 5 and t < 1;
+
+set timescaledb.enable_vectorized_aggregation to off;
+select s, avg(f4), avg(f8), count(f8) from avgedge where s < 5 group by s order by s;
+select g, avg(f4), avg(f8), count(f8) from avgedge where s < 5 group by g order by g;
+select s, g, avg(f4), avg(f8) from avgedge where s < 5 group by s, g order by s, g;
+select avg(f8), avg(f8) filter (where s = 1), avg(f8) filter (where t > 1000) from avgedge where s < 5;
+select avg(f8) from avgedge where s = 0 and t > 10000;
+\set ON_ERROR_STOP 0
+select avg(f8) from avgedge where s = 5;
+select g, avg(f8) from avgedge where s = 5 group by g;
+\set ON_ERROR_STOP 1
+select avg(f8) from avgedge where s = 5 and t < 1;
+reset timescaledb.enable_vectorized_aggregation;
+reset timescaledb.debug_require_vector_agg;
 
 reset max_parallel_workers_per_gather;

@@ -244,3 +244,25 @@ get_vector_aggregate(Oid aggfnoid, Oid collation)
 			return NULL;
 	}
 }
+
+extern VectorAggFunctions accum_no_squares_FLOAT4_argdef;
+extern VectorAggFunctions accum_no_squares_FLOAT8_argdef;
+
+/*
+ * Return a cheaper vector aggregate definition that can be used instead of the
+ * one returned by get_vector_aggregate() when the transition state is not
+ * shared with other aggregate functions, or NULL if there is none.
+ */
+VectorAggFunctions *
+get_unshared_vector_aggregate(Oid aggfnoid)
+{
+	switch (aggfnoid)
+	{
+		case F_AVG_FLOAT4:
+			return &accum_no_squares_FLOAT4_argdef;
+		case F_AVG_FLOAT8:
+			return &accum_no_squares_FLOAT8_argdef;
+		default:
+			return NULL;
+	}
+}

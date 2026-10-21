@@ -1,0 +1,1 @@
+Implements: #10872 Skip the sum of squares in vectorized avg(float4) and avg(float8)

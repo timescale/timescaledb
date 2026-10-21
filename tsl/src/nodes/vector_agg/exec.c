@@ -962,6 +962,33 @@ reset_expr_cache(struct expr_cache_hash *cache)
 	}
 }
 
+/*
+ * Check whether the transition state of the given aggregate is shared with a
+ * different aggregate function, like avg() and stddev() of the same float
+ * argument.
+ */
+static bool
+transition_state_is_shared(List *aggregated_tlist, Aggref *aggref)
+{
+	ListCell *lc;
+	foreach (lc, aggregated_tlist)
+	{
+		TargetEntry *tlentry = lfirst_node(TargetEntry, lc);
+		if (!IsA(tlentry->expr, Aggref))
+		{
+			continue;
+		}
+
+		Aggref *other = castNode(Aggref, tlentry->expr);
+		if (other->aggtransno == aggref->aggtransno && other->aggfnoid != aggref->aggfnoid)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void
 vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 {
@@ -1051,6 +1078,12 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid, aggref->inputcollid);
 			Assert(func != NULL);
+
+			VectorAggFunctions *unshared_func = get_unshared_vector_aggregate(aggref->aggfnoid);
+			if (unshared_func != NULL && !transition_state_is_shared(aggregated_tlist, aggref))
+			{
+				func = unshared_func;
+			}
 
 			if (def->func.agg_init != NULL)
 			{

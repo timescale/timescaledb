@@ -58,3 +58,4 @@ typedef struct
 } VectorAggFunctions;
 
 VectorAggFunctions *get_vector_aggregate(Oid aggfnoid, Oid collation);
+VectorAggFunctions *get_unshared_vector_aggregate(Oid aggfnoid);

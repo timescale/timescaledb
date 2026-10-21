@@ -10,6 +10,7 @@
  */
 
 #ifdef GENERATE_DISPATCH_TABLE
+#ifdef NEED_SXX
 /*
  * Forward declaration for the vectorized aggregate function definition.
  */
@@ -34,6 +35,7 @@ extern VectorAggFunctions FUNCTION_NAME(argdef);
  */
 ACCUM_CASE(PG_TYPE)
 return &FUNCTION_NAME(argdef);
+#endif
 #else
 
 /*
@@ -44,7 +46,9 @@ typedef struct
 {
 	double N;
 	double Sx;
+#ifdef NEED_SXX
 	double Sxx;
+#endif
 } FUNCTION_NAME(state);
 
 static void
@@ -77,12 +81,22 @@ FUNCTION_NAME(emit)(void *agg_state, Datum *out_result, bool *out_isnull)
 	 */
 	((float8 *) ARR_DATA_PTR(result))[0] = state->N;
 	((float8 *) ARR_DATA_PTR(result))[1] = state->Sx;
+#ifdef NEED_SXX
 	((float8 *) ARR_DATA_PTR(result))[2] = state->Sxx;
+#else
+	/*
+	 * Postgres float8_accum() makes Sxx NaN after an infinite or NaN input.
+	 * Do the same so that float8_combine() doesn't report an overflow when
+	 * combining it with other partial states.
+	 */
+	((float8 *) ARR_DATA_PTR(result))[2] = isfinite(state->Sx) ? 0 : get_float8_nan();
+#endif
 
 	*out_result = PointerGetDatum(result);
 	*out_isnull = false;
 }
 
+#ifdef NEED_SXX
 /*
  * Youngs-Cramer update for rows after the first.
  */
@@ -263,6 +277,100 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 	state->Sx = newSx;
 }
 
+#undef UPDATE
+#undef COMBINE
+#else
+
+/*
+ * Postgres float8_accum() reports an overflow when the sum of finite inputs is
+ * infinite. Check this only after summing up the entire batch, which is more
+ * coarse than checking each row, but the summation order is different from
+ * Postgres anyway.
+ */
+static pg_noinline void
+FUNCTION_NAME(check_overflow)(const CTYPE *values, size_t n, const uint64 *filter)
+{
+	for (size_t row = 0; row < n; row++)
+	{
+		if (arrow_row_is_valid(filter, row) && !isfinite(values[row]))
+		{
+			return;
+		}
+	}
+
+	float_overflow_error();
+}
+
+static pg_attribute_always_inline void
+FUNCTION_NAME(vector_impl)(void *agg_state, size_t n, const CTYPE *values, const uint64 *filter,
+						   MemoryContext agg_extra_mctx)
+{
+	/*
+	 * Vector registers can be up to 512 bits wide.
+	 */
+#define UNROLL_SIZE ((int) (512 / 8 / sizeof(double)))
+
+	/*
+	 * Each inner iteration works with its own accumulators to avoid data
+	 * dependencies. The rows that don't pass the filter are masked out to
+	 * allow for branchless code, same as in the vectorized sum(float).
+	 */
+	double Narray[UNROLL_SIZE] = { 0 };
+	double Sxarray[UNROLL_SIZE] = { 0 };
+
+#define INNER_LOOP                                                                                 \
+	const bool row_valid = arrow_row_is_valid(filter, row);                                        \
+	union                                                                                          \
+	{                                                                                              \
+		double f;                                                                                  \
+		uint64 m;                                                                                  \
+	} u = { .f = values[row] };                                                                    \
+	u.m &= row_valid ? ~(uint64) 0 : (uint64) 0;                                                   \
+	Narray[inner] += row_valid;                                                                    \
+	Sxarray[inner] += u.f;
+
+	for (size_t outer = 0; outer < UNROLL_SIZE * (n / UNROLL_SIZE); outer += UNROLL_SIZE)
+	{
+		for (size_t inner = 0; inner < UNROLL_SIZE; inner++)
+		{
+			const size_t row = outer + inner;
+			INNER_LOOP
+		}
+	}
+
+	for (size_t row = UNROLL_SIZE * (n / UNROLL_SIZE); row < n; row++)
+	{
+		const size_t inner = 0;
+		INNER_LOOP
+	}
+#undef INNER_LOOP
+
+	for (int i = 1; i < UNROLL_SIZE; i++)
+	{
+		Narray[0] += Narray[i];
+		Sxarray[0] += Sxarray[i];
+	}
+#undef UNROLL_SIZE
+
+	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
+	if (unlikely(!isfinite(Sxarray[0])) && isfinite(state->Sx))
+	{
+		FUNCTION_NAME(check_overflow)(values, n, filter);
+	}
+
+	state->N += Narray[0];
+	state->Sx = float8_pl(state->Sx, Sxarray[0]);
+}
+
+static pg_attribute_always_inline void
+FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
+{
+	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
+	state->N += 1.0;
+	state->Sx = float8_pl(state->Sx, value);
+}
+#endif
+
 #include "agg_many_vector_helper.c"
 #include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
@@ -275,8 +383,6 @@ VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.agg_vector = FUNCTION_NAME(vector),
 	.agg_many_vector = FUNCTION_NAME(many_vector),
 };
-#undef UPDATE
-#undef COMBINE
 
 #endif
 
