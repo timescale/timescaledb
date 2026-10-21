@@ -1137,8 +1137,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		ts_chunk_tuple_routing_decompress_for_insert(cis,
 													 ccstate->ctr->root_rri,
 													 myslot,
-													 ccstate->ctr->estate,
-													 false);
+													 ccstate->ctr->estate);
 
 		/* Triggers and stuff need to be invoked in query context. */
 		MemoryContextSwitchTo(oldcontext);

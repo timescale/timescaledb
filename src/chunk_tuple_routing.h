@@ -34,6 +34,12 @@ typedef struct ChunkTupleRouting
 	SharedCounters *counters; /* shared counters for the current statement */
 
 	/*
+	 * Command id for writing the batches decompressed by INSERT ON CONFLICT
+	 * DO UPDATE, InvalidCommandId to use the current one.
+	 */
+	CommandId decompress_cid;
+
+	/*
 	 * Cached ON CONFLICT DO UPDATE unique-column check. The check is statement-constant,
 	 * so it runs once on the first compressed-chunk route and is reused for every later row.
 	 * conflict_update_col is the attribute number of a changed unique column to report,
@@ -50,5 +56,4 @@ void ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr);
 ChunkInsertState *ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point);
 extern void ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis,
 														 ResultRelInfo *root_rri,
-														 TupleTableSlot *slot, EState *estate,
-														 bool update_counter);
+														 TupleTableSlot *slot, EState *estate);

@@ -65,7 +65,7 @@ static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
-						TupleTableSlot *insert_slot, CmdType cmd_type);
+						TupleTableSlot *insert_slot, CmdType cmd_type, CommandId cid);
 
 static BatchQualSummary batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys,
 									  int num_scankeys, tuple_filtering_constraints *constraints,
@@ -547,7 +547,10 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									NULL /* no CAgg invalidation for inserts */,
 									cdst,
 									slot,
-									CMD_INSERT);
+									CMD_INSERT,
+									cis->decompress_cid != InvalidCommandId ?
+										cis->decompress_cid :
+										GetCurrentCommandId(true));
 
 	if (index_rel)
 	{
@@ -987,7 +990,8 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 									ht_state->has_continuous_aggregate ? &invalidation_ctx : NULL,
 									&temp_cdst,
 									NULL,
-									ht_state->mt->operation);
+									ht_state->mt->operation,
+									GetCurrentCommandId(true));
 
 	/* close the selected index */
 	if (matching_index_rel)
@@ -1121,7 +1125,7 @@ static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
-						TupleTableSlot *insert_slot, CmdType cmd_type)
+						TupleTableSlot *insert_slot, CmdType cmd_type, CommandId cid)
 {
 	HeapTuple compressed_tuple;
 	BulkWriter writer;
@@ -1279,6 +1283,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 
 			decompressor_initialized = true;
 			writer = bulk_writer_build(out_rel, 0);
+			writer.mycid = cid;
 			meta_count_attno = TupleDescGetAttrNumber(decompressor.in_desc,
 													  COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 			Assert(meta_count_attno != InvalidAttrNumber);
@@ -1379,7 +1384,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel,
 		TM_FailureData tmfd;
 		result = table_tuple_delete_compat(in_rel,
 										   &compressed_tuple->t_self,
-										   GetCurrentCommandId(true),
+										   cid,
 										   0, /* options (not changing partition) */
 										   snapshot,
 										   InvalidSnapshot,

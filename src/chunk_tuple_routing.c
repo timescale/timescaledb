@@ -34,6 +34,7 @@ ts_chunk_tuple_routing_create(EState *estate, Hypertable *ht, ResultRelInfo *rri
 	ctr->root_rel = rri->ri_RelationDesc;
 	ctr->estate = estate;
 	ctr->counters = palloc0(sizeof(SharedCounters));
+	ctr->decompress_cid = InvalidCommandId;
 	ctr->hypertable = ht;
 	/*
 	 * If the relid of ResultRelInfo does not match the Hypertable this is an operation
@@ -223,8 +224,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 extern void
 ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, ResultRelInfo *root_rri,
-											 TupleTableSlot *slot, EState *estate,
-											 bool update_counter)
+											 TupleTableSlot *slot, EState *estate)
 {
 	if (!cis->chunk_compressed || (cis->cached_decompression_state &&
 								   !cis->cached_decompression_state->has_primary_or_unique_index))
@@ -252,12 +252,6 @@ ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, ResultRelInf
 		ExecComputeStoredGenerated(root_rri, estate, slot, CMD_INSERT);
 	}
 	ts_cm_functions->decompress_batches_for_insert(cis, slot);
-
-	/* mark rows visible */
-	if (update_counter)
-	{
-		estate->es_output_cid = GetCurrentCommandId(true);
-	}
 
 	if (ts_guc_max_tuples_decompressed_per_dml > 0)
 	{

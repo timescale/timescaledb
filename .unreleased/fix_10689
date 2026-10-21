@@ -1,0 +1,1 @@
+Fixes: #10689 Raise an error when ON CONFLICT DO UPDATE affects a row of a compressed chunk twice

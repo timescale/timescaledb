@@ -2638,6 +2638,22 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	{
 		fireBSTriggers(node);
 		node->fireBSTriggers = false;
+
+		/*
+		 * INSERT ON CONFLICT DO UPDATE has to lock and update the rows it
+		 * decompresses for the conflict check, so they are written with an
+		 * earlier command id than the rows of the statement. A row the
+		 * statement has already inserted or updated stays invisible to the
+		 * lock, which raises the "cannot affect row a second time" error.
+		 */
+		if (operation == CMD_INSERT && ht_state->mt->onConflictAction == ONCONFLICT_UPDATE &&
+			TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht_state->ht))
+		{
+			CommandCounterIncrement();
+			ctr->decompress_cid = GetCurrentCommandId(true);
+			CommandCounterIncrement();
+			estate->es_output_cid = GetCurrentCommandId(true);
+		}
 	}
 
 	/* Preload local variables */
@@ -2757,8 +2773,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			/* Find or create the insert state matching the point */
 			ctr->cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
 			error_on_compressed_unique_conflict_update(ctr);
-			bool update_counter = ctr->cis->onConflictAction == ONCONFLICT_UPDATE;
-			ts_chunk_tuple_routing_decompress_for_insert(ctr->cis, ctr->root_rri, hypertable_slot, ctr->estate, update_counter);
+			ts_chunk_tuple_routing_decompress_for_insert(ctr->cis, ctr->root_rri, hypertable_slot, ctr->estate);
 			MemoryContextSwitchTo(oldctx);
 
 			/* ON CONFLICT DO NOTHING optimization for columnstore */

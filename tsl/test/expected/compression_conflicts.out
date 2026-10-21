@@ -1024,3 +1024,87 @@ INFO:  Using index scan with scan keys: index 1, heap 4, memory 2.
 INFO:  Number of compressed rows fetched from index: 1. Number of compressed rows filtered by heap filters: 0.
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE nulls_not_distinct;
+-- ON CONFLICT DO UPDATE cannot affect a row twice, also when the row was
+-- decompressed by the statement
+CREATE TABLE upsert_twice(ts timestamptz NOT NULL, k int, v int);
+SELECT table_name FROM create_hypertable('upsert_twice', 'ts');
+  table_name  
+--------------
+ upsert_twice
+
+CREATE UNIQUE INDEX ON upsert_twice (ts, k);
+ALTER TABLE upsert_twice SET (timescaledb.compress, timescaledb.compress_segmentby = 'k');
+INSERT INTO upsert_twice VALUES ('2024-01-01', 1, 0), ('2024-01-01', 2, 0), ('2024-02-01', 1, 0);
+SELECT count(compress_chunk(c)) FROM show_chunks('upsert_twice') c;
+ count 
+-------
+     2
+
+\set ON_ERROR_STOP 0
+INSERT INTO upsert_twice VALUES ('2024-01-01', 1, 10), ('2024-01-01', 1, 20)
+  ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v;
+ERROR:  ON CONFLICT DO UPDATE command cannot affect row a second time
+INSERT INTO upsert_twice VALUES ('2024-01-01', 5, 10), ('2024-01-01', 5, 20)
+  ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v;
+ERROR:  ON CONFLICT DO UPDATE command cannot affect row a second time
+INSERT INTO upsert_twice VALUES ('2024-01-01', 1, 10), ('2024-01-01', 2, 10), ('2024-01-01', 1, 20)
+  ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v;
+ERROR:  ON CONFLICT DO UPDATE command cannot affect row a second time
+INSERT INTO upsert_twice VALUES ('2024-03-01', 1, 10), ('2024-02-01', 1, 10), ('2024-03-01', 1, 20)
+  ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v;
+ERROR:  ON CONFLICT DO UPDATE command cannot affect row a second time
+\set ON_ERROR_STOP 1
+SELECT * FROM upsert_twice ORDER BY ts, k;
+              ts              | k | v 
+------------------------------+---+---
+ Mon Jan 01 00:00:00 2024 PST | 1 | 0
+ Mon Jan 01 00:00:00 2024 PST | 2 | 0
+ Thu Feb 01 00:00:00 2024 PST | 1 | 0
+
+-- rows written by earlier commands of the transaction can be updated
+BEGIN;
+INSERT INTO upsert_twice VALUES ('2024-01-01', 7, 0);
+INSERT INTO upsert_twice VALUES ('2024-01-01', 1, 30), ('2024-01-01', 7, 30), ('2024-01-01', 2, 30), ('2024-01-01', 8, 30)
+  ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v RETURNING *;
+              ts              | k | v  
+------------------------------+---+----
+ Mon Jan 01 00:00:00 2024 PST | 1 | 30
+ Mon Jan 01 00:00:00 2024 PST | 7 | 30
+ Mon Jan 01 00:00:00 2024 PST | 2 | 30
+ Mon Jan 01 00:00:00 2024 PST | 8 | 30
+
+INSERT INTO upsert_twice VALUES ('2024-01-01', 1, 40), ('2024-01-01', 8, 40)
+  ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v RETURNING *;
+              ts              | k | v  
+------------------------------+---+----
+ Mon Jan 01 00:00:00 2024 PST | 1 | 40
+ Mon Jan 01 00:00:00 2024 PST | 8 | 40
+
+COMMIT;
+SELECT * FROM upsert_twice ORDER BY ts, k;
+              ts              | k | v  
+------------------------------+---+----
+ Mon Jan 01 00:00:00 2024 PST | 1 | 40
+ Mon Jan 01 00:00:00 2024 PST | 2 | 30
+ Mon Jan 01 00:00:00 2024 PST | 7 | 30
+ Mon Jan 01 00:00:00 2024 PST | 8 | 40
+ Thu Feb 01 00:00:00 2024 PST | 1 |  0
+
+-- batches compressed by a statement trigger of the upsert
+CREATE FUNCTION upsert_twice_compress() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM count(compress_chunk(c)) FROM show_chunks('upsert_twice') c;
+  RETURN NULL;
+END $$;
+CREATE TRIGGER upsert_twice_compress BEFORE INSERT ON upsert_twice
+  FOR EACH STATEMENT EXECUTE FUNCTION upsert_twice_compress();
+INSERT INTO upsert_twice VALUES ('2024-01-01', 1, 50), ('2024-01-01', 2, 50)
+  ON CONFLICT (ts, k) DO UPDATE SET v = excluded.v RETURNING *;
+NOTICE:  chunk "_hyper_17_21_chunk" is already converted to columnstore
+              ts              | k | v  
+------------------------------+---+----
+ Mon Jan 01 00:00:00 2024 PST | 1 | 50
+ Mon Jan 01 00:00:00 2024 PST | 2 | 50
+
+DROP TABLE upsert_twice;
+DROP FUNCTION upsert_twice_compress();

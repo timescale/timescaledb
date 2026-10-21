@@ -514,6 +514,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->counters = ctr->counters;
+	state->decompress_cid = ctr->decompress_cid;
 	if (ctr->mht_state)
 	{
 		state->onConflictAction = ctr->mht_state->mt->onConflictAction;

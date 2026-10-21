@@ -133,6 +133,7 @@ typedef struct ChunkInsertState
 	CachedDecompressionState *cached_decompression_state;
 
 	OnConflictAction onConflictAction;
+	CommandId decompress_cid;
 	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
 	bool skip_current_tuple;
 	SharedCounters *counters;
