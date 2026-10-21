@@ -837,11 +837,58 @@ deferred_chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	state->hypertable_id = ts_hypertable_relid_to_id(ht_relid);
 	state->primary_dimension_id = 0;
 	state->osm_chunk_id = INVALID_CHUNK_ID;
+	state->skip_osm_chunk = false;
 	if (state->ordered)
 	{
 		Hypertable *ht = ts_hypertable_get_by_id(state->hypertable_id);
-		state->primary_dimension_id = hyperspace_get_open_dimension(ht->space, 0)->fd.id;
+		const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+		state->primary_dimension_id = time_dim->fd.id;
 		state->osm_chunk_id = ts_chunk_get_osm_chunk_id(state->hypertable_id);
+
+		if (state->osm_chunk_id != INVALID_CHUNK_ID)
+		{
+			if (!ts_guc_enable_osm_reads)
+			{
+				/* Tiered reads disabled */
+				state->skip_osm_chunk = true;
+			}
+			else
+			{
+				/*
+				 * The position of the OSM chunk in the ordering depends on its range, so
+				 * lock the slice up front to keep the range and the non-contiguous flag
+				 * stable until the end of the transaction, and decide once. The GUC can
+				 * change between fetches (e.g. with a cursor), so the iterator relies on
+				 * this decision and doesn't read it again.
+				 */
+				DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(state->osm_chunk_id,
+																		time_dim->fd.id,
+																		LockTupleKeyShare,
+																		RowShareLock);
+
+				/*
+				 * The planner doesn't use DeferredChunkAppend for a non-contiguous OSM chunk,
+				 * but the flag could have been set after the plan was made. E.g. a cached
+				 * plan for a prepared statement.
+				 */
+				ht = ts_hypertable_get_by_id(state->hypertable_id);
+				if (ts_flags_are_set_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS))
+				{
+					ereport(ERROR,
+							errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							errmsg("query plan is no longer valid for hypertable \"%s\"",
+								   NameStr(ht->fd.table_name)),
+							errdetail("The range of the tiered chunk became non-contiguous after "
+									  "the query was planned."),
+							errhint("Run the query again; for a prepared statement, deallocate "
+									"it and prepare it again."));
+				}
+
+				/* Empty OSM chunk: invalid range and the non-contiguous flag is not set */
+				state->skip_osm_chunk =
+					ts_osm_chunk_range_is_invalid(slice->fd.range_start, slice->fd.range_end);
+			}
+		}
 	}
 
 	/*
@@ -926,7 +973,8 @@ next_chunk_reloid_ordered(DeferredChunkAppendState *state)
 				DatumGetInt64(slot_getattr(ti->slot, Anum_dimension_slice_range_start, &isnull));
 			state->have_last = true;
 
-			if (!ts_guc_enable_osm_reads && chunk_id == state->osm_chunk_id)
+			/* Decided once in begin, see there for the reasons */
+			if (state->skip_osm_chunk && chunk_id == state->osm_chunk_id)
 			{
 				continue;
 			}
@@ -993,14 +1041,36 @@ next_chunk_reloid_unordered(DeferredChunkAppendState *state)
 			continue;
 		}
 
-		/* Skip OSM chunks when reading of tiered data is disabled */
+		int32 id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_id, &isnull));
+
 		bool is_osm_chunk = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_osm_chunk, &isnull));
-		if (!isnull && is_osm_chunk && !ts_guc_enable_osm_reads)
+		if (!isnull && is_osm_chunk)
 		{
-			continue;
+			/* Tiered reads disabled */
+			if (!ts_guc_enable_osm_reads)
+			{
+				continue;
+			}
+
+			/*
+			 * Empty OSM chunk: invalid range and the non-contiguous flag is not set. Lock the
+			 * slice to keep the range stable until the end of the transaction, same as in
+			 * ts_hypertable_restrict_info_get_chunks().
+			 */
+			Hypertable *ht = ts_hypertable_get_by_id(state->hypertable_id);
+			const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+			DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(id,
+																	time_dim->fd.id,
+																	LockTupleKeyShare,
+																	RowShareLock);
+
+			if (ts_osm_chunk_range_is_invalid(slice->fd.range_start, slice->fd.range_end) &&
+				!ts_flags_are_set_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS))
+			{
+				continue;
+			}
 		}
 
-		int32 id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_id, &isnull));
 		TimestampTz ct =
 			DatumGetTimestampTz(slot_getattr(ti->slot, Anum_chunk_creation_time, &isnull));
 
