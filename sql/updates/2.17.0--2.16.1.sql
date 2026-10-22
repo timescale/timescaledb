@@ -25,31 +25,31 @@ BEGIN
     END IF;
 
 	-- Add sequence number column to compressed chunk
-	EXECUTE format('ALTER TABLE %s.%s ADD COLUMN _ts_meta_sequence_num INT DEFAULT NULL', comp_ch_schema_name, comp_ch_table_name);
+	EXECUTE format('ALTER TABLE %I.%I ADD COLUMN _ts_meta_sequence_num INT DEFAULT NULL', comp_ch_schema_name, comp_ch_table_name);
 
 	-- Remove all indexes from compressed chunk
 	FOR index_name IN
-		SELECT format('%s.%s', i.schemaname, i.indexname)
+		SELECT format('%I.%I', i.schemaname, i.indexname)
 		FROM pg_indexes i
 		WHERE i.schemaname = comp_ch_schema_name
 		AND i.tablename = comp_ch_table_name
 	LOOP
-		EXECUTE format('DROP INDEX %s;', index_name);
+		EXECUTE format('DROP INDEX %s', index_name);
 	END LOOP;
 
 	-- Fetch the segmentby columns from compression settings
-	SELECT string_agg(cs.segmentby_column, ',') INTO segmentby_columns
+	SELECT string_agg(quote_ident(cs.segmentby_column), ',') INTO segmentby_columns
 	FROM (
 		SELECT unnest(segmentby)
 		FROM _timescaledb_catalog.compression_settings
-		WHERE relid = format('%s.%s', comp_ch_schema_name, comp_ch_table_name)::regclass::oid
+		WHERE relid = format('%I.%I', comp_ch_schema_name, comp_ch_table_name)::regclass::oid
 		AND segmentby IS NOT NULL
 	) AS cs(segmentby_column);
 
 	-- Create compressed chunk index based on sequence num metadata column
 	-- If there is no segmentby columns, we can skip creating the index
     IF FOUND AND segmentby_columns IS NOT NULL THEN
-		EXECUTE format('CREATE INDEX ON %s.%s (%s, _ts_meta_sequence_num);', comp_ch_schema_name, comp_ch_table_name, segmentby_columns);
+		EXECUTE format('CREATE INDEX ON %I.%I (%s, _ts_meta_sequence_num)', comp_ch_schema_name, comp_ch_table_name, segmentby_columns);
     END IF;
 
 	-- Mark compressed chunk as unordered
