@@ -10,9 +10,27 @@ CREATE OR REPLACE FUNCTION test.setup_tss_hook_version(BIGINT) RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_setup_tss_hook_version' LANGUAGE C VOLATILE STRICT;
 CREATE OR REPLACE FUNCTION test.teardown_tss_hook_v1() RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_teardown_tss_hook_v1' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.setup_tss_scope_hook_v1() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_setup_tss_scope_hook_v1' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.teardown_tss_scope_hook_v1() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_teardown_tss_scope_hook_v1' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.setup_tss_scope_hook_invalid(INTEGER) RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_setup_tss_scope_hook_invalid' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.arm_tss_scope_disable_guc() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_arm_tss_scope_disable_guc' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.arm_tss_scope_reject_entry() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_arm_tss_scope_reject_entry' LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.set_tss_tracking_enabled(BOOLEAN) RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_set_tss_tracking_enabled' LANGUAGE C VOLATILE STRICT;
 SELECT test.setup_tss_hook_v1();
  setup_tss_hook_v1 
 -------------------
+ 
+
+-- The mock returns tokens above 32 bits to verify enter/exit round trips.
+SELECT test.setup_tss_scope_hook_v1();
+ setup_tss_scope_hook_v1 
+-------------------------
  
 
 CREATE TABLE copy_test (
@@ -24,25 +42,97 @@ SELECT create_hypertable('copy_test', 'time');
 ------------------------
  (1,public,copy_test,t)
 
--- We should se a mock message
+-- A current provider scopes COPY's internal statements and stores the synthetic COPY.
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): enter scope 1099511627777
+NOTICE:  test_tss_callbacks (mock): exit scope 1099511627777
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+-- Errors unwind the scope before the next statement starts.
+\set ON_ERROR_STOP 0
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): enter scope 1099511627778
+NOTICE:  test_tss_callbacks (mock): exit scope 1099511627778
+ERROR:  invalid input syntax for type double precision: "not-a-double"
+\set ON_ERROR_STOP 1
+-- The begin decision is stable even if enable_tss_callbacks changes in the scope.
+SELECT test.arm_tss_scope_disable_guc();
+ arm_tss_scope_disable_guc 
+---------------------------
+ 
+
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): enter scope 1099511627779
+NOTICE:  test_tss_callbacks (mock): exit scope 1099511627779
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+-- A statement beginning while callbacks are disabled invokes neither ABI.
+COPY copy_test FROM STDIN DELIMITER ',';
+SET timescaledb.enable_tss_callbacks = on;
+-- A declined scope still stores COPY, without calling scope exit.
+SELECT test.arm_tss_scope_reject_entry();
+ arm_tss_scope_reject_entry 
+----------------------------
+ 
+
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): scope entry declined
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+-- A provider declining tracking invokes neither scope entry nor storage.
+SELECT test.set_tss_tracking_enabled(false);
+ set_tss_tracking_enabled 
+--------------------------
+ 
+
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): tracking declined
+SELECT test.set_tss_tracking_enabled(true);
+ set_tss_tracking_enabled 
+--------------------------
+ 
+
+-- An old provider has no scope ABI, but synthetic COPY storage continues to work.
+SELECT test.teardown_tss_scope_hook_v1();
+ teardown_tss_scope_hook_v1 
+----------------------------
+ 
+
 COPY copy_test FROM STDIN DELIMITER ',';
 NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+-- Invalid optional scope callbacks silently preserve legacy synthetic storage.
+DO $$ BEGIN PERFORM test.setup_tss_scope_hook_invalid(0); END $$;
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+DO $$ BEGIN PERFORM test.setup_tss_scope_hook_invalid(1); END $$;
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+DO $$ BEGIN PERFORM test.setup_tss_scope_hook_invalid(2); END $$;
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+-- Complete v1 requires reset and exit even when COPY itself only enters/exits.
+DO $$ BEGIN PERFORM test.setup_tss_scope_hook_invalid(3); END $$;
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+DO $$ BEGIN PERFORM test.setup_tss_scope_hook_invalid(4); END $$;
+COPY copy_test FROM STDIN DELIMITER ',';
+NOTICE:  test_tss_callbacks (mock): query=COPY copy_test FROM STDIN DELIMITER ',';, len=39, id=0, rows=2
+-- A provider with only the scope ABI has no synthetic statement to protect.
+SELECT test.setup_tss_scope_hook_v1();
+ setup_tss_scope_hook_v1 
+-------------------------
+ 
+
 SELECT test.teardown_tss_hook_v1();
  teardown_tss_hook_v1 
 ----------------------
  
 
--- Without the hook registered we cannot see the mock message
 COPY copy_test FROM STDIN DELIMITER ',';
--- Test for mismatch version
+-- A legacy ABI version mismatch warns once, when the operation begins.
 SELECT test.setup_tss_hook_v0();
  setup_tss_hook_v0 
 -------------------
  
 
--- Warning because the mismatch versions
 COPY copy_test FROM STDIN DELIMITER ',';
-WARNING:  statement-tracking callback version mismatch
 WARNING:  statement-tracking callback version mismatch
 -- Check all 64 version bits, not just the low 32 bits that match version 1.
 SELECT test.setup_tss_hook_version(4294967297);
@@ -52,8 +142,6 @@ SELECT test.setup_tss_hook_version(4294967297);
 
 \set VERBOSITY default
 COPY copy_test FROM STDIN DELIMITER ',';
-WARNING:  statement-tracking callback version mismatch
-DETAIL:  Expected callback version 1; provider version 4294967297.
 WARNING:  statement-tracking callback version mismatch
 DETAIL:  Expected callback version 1; provider version 4294967297.
 \set VERBOSITY terse
