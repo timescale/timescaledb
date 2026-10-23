@@ -249,18 +249,71 @@ SELECT count(*) AS returned, count(*) FILTER (WHERE device <> 1) AS leaked FROM 
 RESET timescaledb.debug_require_deferred_chunk_append;
 RESET search_path;
 
--- A noncontiguous OSM (tiered) chunk must disqualify the node.
+-- Setup a fake OSM chunk
 CREATE EXTENSION postgres_fdw;
-CREATE SERVER dcs_osm_fdw FOREIGN DATA WRAPPER postgres_fdw;
+SELECT current_setting('port') AS "PORTNO" \gset
+CREATE SERVER dcs_osm_fdw FOREIGN DATA WRAPPER postgres_fdw OPTIONS (dbname :'TEST_DBNAME', port :'PORTNO');
+CREATE USER MAPPING FOR CURRENT_USER SERVER dcs_osm_fdw;
+
+CREATE TABLE metrics_osm_data (time timestamptz NOT NULL, device int, value float8);
+INSERT INTO metrics_osm_data VALUES ('2020-01-01 01:00', 100, 1000);
+CREATE FOREIGN TABLE metrics_osm_ft (time timestamptz NOT NULL, device int, value float8)
+    SERVER dcs_osm_fdw OPTIONS (schema_name 'public', table_name 'metrics_osm_data');
+
+-- Setup a tiered hypertable
 CREATE TABLE metrics_osm (time timestamptz NOT NULL, device int, value float8)
   WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.chunk_interval = '1 day');
-INSERT INTO metrics_osm SELECT '2021-06-01'::timestamptz + g * interval '6 hours', g, g * 10 FROM generate_series(0, 8) g;
-CREATE FOREIGN TABLE metrics_osm_ft (time timestamptz NOT NULL, device int, value float8) SERVER dcs_osm_fdw;
+INSERT INTO metrics_osm SELECT '2021-06-01'::timestamptz + g * interval '6 hours', g, g * 10 FROM generate_series(0, 3) g;
 SELECT _timescaledb_functions.attach_osm_table_chunk('metrics_osm', 'metrics_osm_ft');
+
+-- A noncontiguous OSM (tiered) chunk must disqualify the node.
 SELECT _timescaledb_functions.hypertable_osm_range_update('metrics_osm');  -- mark the OSM range noncontiguous
 SET timescaledb.debug_require_deferred_chunk_append TO 'forbid';
 -- EXECUTE hides the version-specific foreign-scan plan; planning still trips the GUC.
 DO $$ BEGIN EXECUTE 'EXPLAIN (COSTS OFF) SELECT * FROM metrics_osm ORDER BY time LIMIT 3'; END $$;
+RESET timescaledb.debug_require_deferred_chunk_append;
+
+-- Mark the OSM range contiguous
+SELECT _timescaledb_functions.hypertable_osm_range_update('metrics_osm', '2020-01-01'::timestamptz, '2020-01-02');
+
+-- A DeferredChunkAppend scan with a contiguous OSM chunk must work and respect
+-- the `timescaledb.enable_tiered_reads` setting in both unordered and ordered
+-- mode.
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+EXPLAIN (COSTS OFF) SELECT * FROM metrics_osm WHERE value >= 0 LIMIT 100;  -- unordered
+EXPLAIN (COSTS OFF) SELECT * FROM metrics_osm WHERE value >= 0 ORDER BY time LIMIT 100;  -- ordered
+SET timescaledb.enable_tiered_reads TO off;
+SELECT * FROM metrics_osm WHERE value >= 0 LIMIT 100;
+SELECT * FROM metrics_osm WHERE value >= 0 ORDER BY time LIMIT 100;
+SET timescaledb.enable_tiered_reads TO on;
+SELECT * FROM metrics_osm WHERE value >= 0 LIMIT 100;
+SELECT * FROM metrics_osm WHERE value >= 0 ORDER BY time LIMIT 100;
+RESET timescaledb.enable_tiered_reads;
+RESET timescaledb.debug_require_deferred_chunk_append;
+
+-- An ordered plan that was made while the OSM chunk was contiguous must not be
+-- executed once the chunk became noncontiguous, because the OSM chunk can't be
+-- put in the right place in the order.
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+SET plan_cache_mode TO force_generic_plan;
+PREPARE stale_plan AS SELECT * FROM metrics_osm WHERE value >= 0 ORDER BY time LIMIT 100;
+EXECUTE stale_plan;
+SELECT _timescaledb_functions.hypertable_osm_range_update('metrics_osm');  -- mark the OSM range noncontiguous
+\set ON_ERROR_STOP 0
+EXECUTE stale_plan;
+\set ON_ERROR_STOP 1
+DEALLOCATE stale_plan;
+RESET plan_cache_mode;
+RESET timescaledb.debug_require_deferred_chunk_append;
+
+-- An empty OSM chunk (invalid range, noncontiguous flag not set) must be skipped
+-- in both unordered and ordered mode, even when tiered reads are enabled.
+SELECT _timescaledb_functions.hypertable_osm_range_update('metrics_osm', NULL::timestamptz, NULL, true);
+SET timescaledb.debug_require_deferred_chunk_append TO 'require';
+SET timescaledb.enable_tiered_reads TO on;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_osm WHERE value >= 0 LIMIT 100;  -- unordered
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF) SELECT * FROM metrics_osm WHERE value >= 0 ORDER BY time LIMIT 100;  -- ordered
+RESET timescaledb.enable_tiered_reads;
 RESET timescaledb.debug_require_deferred_chunk_append;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
